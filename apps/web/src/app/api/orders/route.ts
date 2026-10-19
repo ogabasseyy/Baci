@@ -7,6 +7,12 @@ import {
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
+import {
+  ORDER_BINDING_RPC_NAMES,
+  selectOrderBindingVariant,
+} from '@/lib/cart/order-binding';
+import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
+import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -22,15 +28,19 @@ import {
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
-import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
+import { loadCheckoutReplaySnapshot } from '@/lib/checkout/has-existing-checkout-order';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
+import { conditionOfferUnavailableResponse } from '@/lib/checkout/order-condition-response';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
+import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { revalidateOrderProductCaches } from '@/lib/checkout/revalidate-order-product-caches';
+import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
@@ -58,6 +68,7 @@ import {
   toFiniteNumber,
 } from '@/lib/immediate-order-notification';
 import { logger } from '@/lib/logger';
+import { getMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
 import {
@@ -88,7 +99,6 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -518,6 +528,8 @@ export async function POST(request: NextRequest) {
       savings_goal_id,
       // User ID
       user_id,
+      // Shared server cart binding (optional; absent for legacy checkouts)
+      shared_cart,
     } = body;
 
     if (user && user_id && user_id !== user.id) {
@@ -527,6 +539,22 @@ export async function POST(request: NextRequest) {
     // SECURITY: Only use user_id from authenticated session.
     // Do NOT trust user_id from body if user is unauthenticated (guest).
     const resolvedUserId = user?.id || null;
+
+    const cartAuthority = await resolveSharedCartOrderAuthority(
+      request,
+      shared_cart,
+      merchant_id,
+      async () => {
+        const access = await getMerchantFeatureAccess(
+          supabase,
+          merchant_id,
+          'shared_cart'
+        );
+        return access.error ? true : access.allowed;
+      }
+    );
+    if (!cartAuthority.ok) return cartAuthority.response;
+    const sharedCartPrincipalId = cartAuthority.principalId;
 
     const hasVoucherItem = hasQuizVoucherItem(items);
     const requestIdempotencyKey = hasVoucherItem
@@ -548,6 +576,7 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
+        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,
@@ -708,13 +737,19 @@ export async function POST(request: NextRequest) {
       const voucherAwardRowById = new Map(
         (voucherAwardRows ?? []).map((row) => [row.id, row] as const)
       );
-      // A redeemable award is approved AND store-credit-typed — the same gate
-      // create_storefront_order_with_quiz_voucher enforces in the DB. Anything
-      // else (claimed, void, wrong type, or missing) is a bad line, not a
+      // Bound claimed awards must reach the binding RPC, which alone may
+      // replay this cart generation. It rejects a fresh claim transaction.
+      // Unbound redeemable awards remain approved AND store-credit-typed.
+      // Fresh claims are still enforced in the voucher RPC. Void, wrong-type
+      // or missing awards remain a bad line, not a
       // "too many prizes" conflict.
       const validVoucherAwardIds = voucherAwardIds.filter((awardId) => {
         const row = voucherAwardRowById.get(awardId);
-        return row?.status === 'approved' && row.award_type === 'store_credit';
+        return (
+          (row?.status === 'approved' ||
+            (Boolean(shared_cart) && row?.status === 'claimed')) &&
+          row.award_type === 'store_credit'
+        );
       });
 
       // Validate award status BEFORE reporting a multi-voucher conflict: prune
@@ -771,7 +806,7 @@ export async function POST(request: NextRequest) {
               claimedOrderId = claimedItem?.order_id ?? null;
             }
             if (claimedOrderId) {
-              const { data: claimedOrder, error: claimedOrderError } =
+              let { data: claimedOrder, error: claimedOrderError } =
                 await supabase
                   .from('orders')
                   .select(
@@ -828,6 +863,40 @@ export async function POST(request: NextRequest) {
                       { status: 503 }
                     );
                   }
+                  // A successful RPC call is not proof of transition:
+                  // re-read the stored row and only report paid when
+                  // the finalizer actually marked it paid.
+                  const { data: refreshedOrder, error: refreshError } =
+                    await supabase
+                      .from('orders')
+                      .select(
+                        'id, order_number, tracking_token, subtotal, shipping_fee, discount_amount, tax_amount, total, customer_id, customer_email, customer_name, customer_phone, payment_status, shipping_status, payment_method, shipping_address, merchant_id'
+                      )
+                      .eq('id', claimedOrder.id)
+                      .eq('customer_id', soleRow.customer_id)
+                      .maybeSingle();
+                  if (
+                    refreshError ||
+                    !refreshedOrder ||
+                    refreshedOrder.payment_status !== 'paid'
+                  ) {
+                    logger.error({
+                      message:
+                        'Quiz voucher replay finalize did not transition the order',
+                      error: refreshError,
+                      orderId: claimedOrder.id,
+                      awardId: soleAwardId,
+                    });
+                    return NextResponse.json(
+                      {
+                        code: 'QUIZ_VOUCHER_LOOKUP_FAILED',
+                        error:
+                          'Could not verify your quiz prize right now. Please try again.',
+                      },
+                      { status: 503 }
+                    );
+                  }
+                  claimedOrder = refreshedOrder;
                 }
                 return NextResponse.json(
                   {
@@ -947,6 +1016,9 @@ export async function POST(request: NextRequest) {
 
       return {
         product_id: getOrderItemProductId(item),
+        // Shared-cart line provenance for bound orders (traceability;
+        // the binding RPC revalidates the cart version itself).
+        ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
@@ -1127,12 +1199,34 @@ export async function POST(request: NextRequest) {
     // The helper uses the caller's standard scoped client. The
     // single RLS-bypassing path (variant override lookup) goes
     // through the `get_order_variant_overrides` SECURITY DEFINER
-    // RPC, granted to anon/authenticated/service_role — the trust
-    // boundary lives in the database, not the Next.js layer
-    // (CodeRabbit High on PR #1622 round 7).
+    // RPC returns only the committed order id and line composition
+    // for the (merchant, idempotency key) pair on the route's normal
+    // client; the key is a random UUID, so the scoped function is
+    // the boundary — no service-role client on this guest path.
+    // A response-loss retry of an already-created order must replay
+    // it even if the merchant has since deactivated a condition
+    // offer: resolve the existing order first and let the condition
+    // pricing recompute price that offer at its stored price instead
+    // of failing closed before the RPC's replay path can run.
+    const replaySnapshot = requestIdempotencyKey
+      ? await loadCheckoutReplaySnapshot({
+          client: createStorefrontOrderRpcClient({
+            fallbackClient: supabase,
+            hasCanonicalDeliveryMetadata: false,
+            merchantId: merchant_id,
+            userId: null,
+          }),
+          merchantId: merchant_id,
+          requestIdempotencyKey,
+        })
+      : null;
+    const isConditionReplay = replaySnapshot !== null;
+    const conditionPriceOverrides = replaySnapshot?.conditionPriceOverrides;
     let serverComputedTaxAmount: number;
     try {
       serverComputedTaxAmount = await computeAgenticOrderTax({
+        allowUnavailableConditionPrices: isConditionReplay,
+        conditionPriceOverrides,
         items: items.map((item) => ({
           product_id: item.product_id || item.productId || item.id,
           quantity: item.quantity,
@@ -1142,6 +1236,8 @@ export async function POST(request: NextRequest) {
         supabase,
       });
     } catch (taxError) {
+      if (taxError instanceof OrderConditionUnavailableError)
+        return conditionOfferUnavailableResponse();
       // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
       // validates as `string`) cascade into Postgres's UUID parser
       // as code 22P02. Pre-route-side-recompute, the RPC's own
@@ -1186,8 +1282,7 @@ export async function POST(request: NextRequest) {
     const orderTaxAmount = serverComputedTaxAmount;
 
     const merchantCanAutoNegotiate = hasPriceNegotiationEntitlement(
-      merchant.plan_tier,
-      merchant.slug
+      merchant.plan_tier
     );
     const vatRegistered = merchant.vat_registration_status === 'registered';
     const redvaultRequested = payment_method === 'uba_redvault';
@@ -1203,12 +1298,16 @@ export async function POST(request: NextRequest) {
     >;
     try {
       negotiationDiscount = await computeOrderNegotiationDiscount({
+        allowUnavailableConditionPrices: isConditionReplay,
+        conditionPriceOverrides,
         items: orderItemsPayload,
         merchantId: merchant_id,
         supabase,
         vatRegistered,
       });
     } catch (negotiationDiscountError) {
+      if (negotiationDiscountError instanceof OrderConditionUnavailableError)
+        return conditionOfferUnavailableResponse();
       if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
         logger.warn({
           error: negotiationDiscountError,
@@ -1388,6 +1487,10 @@ export async function POST(request: NextRequest) {
             isIdempotentLocalAirportReplay || isIdempotentOrderReplay
               ? null
               : resolvedShippingProvider,
+        },
+        {
+          persistAttestedCoordinates:
+            !isIdempotentLocalAirportReplay && !isIdempotentOrderReplay,
         }
       );
     } catch (error) {
@@ -1518,13 +1621,15 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
+        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error:
-              'REDVAULT cannot be combined with another discount or redemption',
+            error: shared_cart
+              ? 'Choose a different payment method for this shared cart.'
+              : 'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );
@@ -1584,111 +1689,43 @@ export async function POST(request: NextRequest) {
     // merchant shipping-rate fee verification below.
     let canonicalOrderSubtotal: number | null = null;
 
-    // Resolve + validate the discount code server-side, then compute the amount
-    // from the CANONICAL subtotal (never the client cart total). Eligibility /
-    // targeting is enforced authoritatively + replay-safely in the wrapper RPC.
+    // Discount/loyalty economics (code resolution, cap conversion, and
+    // amount computation) live in prepareLoyaltyCheckout; exactly one of
+    // discountCodeId / loyaltyRedemptionId is set when a code applies.
     let discountCodeId: string | null = null;
+    let loyaltyRedemptionId: string | null = null;
     let discountCodeAmount = 0;
     if (requestedDiscountCode) {
-      if (hasVoucherItem) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_VOUCHER_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
+      const preparedCheckout = await prepareLoyaltyCheckout({
+        supabase,
+        merchantId: merchant_id,
+        requestedDiscountCode,
+        hasVoucherItem,
+        requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
+        items: orderItemsPayload,
+      });
+      if (!preparedCheckout.ok) {
+        return preparedCheckout.response;
       }
-      if (requestedSavingsRedemption) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_SAVINGS_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
-      }
+      canonicalOrderSubtotal = preparedCheckout.canonicalOrderSubtotal;
+      discountCodeId = preparedCheckout.discountCodeId;
+      loyaltyRedemptionId = preparedCheckout.loyaltyRedemptionId;
+      discountCodeAmount = preparedCheckout.discountCodeAmount;
+    }
 
-      // include_inactive=true: resolve even a deactivated code so a retry can
-      // reach the replay-aware wrapper; the wrapper decides replay vs a fresh
-      // `code_inactive` rejection.
-      const { data: discountRows, error: discountLookupError } =
-        await supabase.rpc('get_storefront_discount_code', {
-          p_merchant_id: merchant_id,
-          p_code: requestedDiscountCode,
-          p_include_inactive: true,
-        });
-      if (discountLookupError) {
-        // Don't mask a server/DB failure as an invalid-code 400.
-        logger.error({
-          message: 'Discount code lookup failed',
-          error: discountLookupError,
-          merchantId: merchant_id,
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-      const parsedDiscountArray = storefrontDiscountCodeRowSchema
-        .array()
-        .safeParse(discountRows);
-      const parsedDiscountSingle = parsedDiscountArray.success
-        ? null
-        : storefrontDiscountCodeRowSchema.safeParse(discountRows);
-      const discountRow = parsedDiscountArray.success
-        ? (parsedDiscountArray.data[0] ?? null)
-        : parsedDiscountSingle?.success
-          ? parsedDiscountSingle.data
-          : null;
-      if (!discountRow) {
-        return NextResponse.json(
-          { code: 'discount_code_invalid', error: 'Invalid discount code' },
-          { status: 400 }
-        );
-      }
-      discountCodeId = discountRow.id;
-
-      try {
-        canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-          items: orderItemsPayload,
-          merchantId: merchant_id,
-          supabase,
-        });
-      } catch (subtotalError) {
-        if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        logger.error({
-          error: subtotalError,
-          merchantId: merchant_id,
-          message: 'Discount canonical subtotal recompute failed',
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-      if (canonicalOrderSubtotal == null) {
-        return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
-        );
-      }
-
-      discountCodeAmount = computeDiscountAmountForSubtotal(
+    // A loyalty code claim is single-use and only replayable through
+    // the checkout idempotency key: without one, a response lost after
+    // commit leaves the shopper retrying into loyalty_code_already_used
+    // against an order that already exists (and dropping the code can
+    // then duplicate the order). Fail closed before creating anything.
+    if (loyaltyRedemptionId && !requestIdempotencyKey) {
+      return NextResponse.json(
         {
-          discount_type:
-            discountRow.discount_type === 'fixed_amount'
-              ? 'fixed'
-              : 'percentage',
-          discount_value: Number(discountRow.discount_value),
-          maximum_discount_amount: discountRow.maximum_discount_amount,
+          code: 'IDEMPOTENCY_KEY_REQUIRED',
+          error:
+            'An Idempotency-Key header is required to check out with a loyalty code.',
         },
-        canonicalOrderSubtotal
+        { status: 400 }
       );
     }
 
@@ -1744,11 +1781,15 @@ export async function POST(request: NextRequest) {
       if (canonicalOrderSubtotal == null) {
         try {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+            allowUnavailableConditionPrices: isConditionReplay,
+            conditionPriceOverrides,
             items: orderItemsPayload,
             merchantId: merchant_id,
             supabase,
           });
         } catch (subtotalError) {
+          if (subtotalError instanceof OrderConditionUnavailableError)
+            return conditionOfferUnavailableResponse();
           if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
             return NextResponse.json(
               { error: 'Failed to create order', details: 'invalid_items' },
@@ -1918,6 +1959,31 @@ export async function POST(request: NextRequest) {
       (isIdempotentLocalAirportReplay ? null : localAirportShippingFee) ??
       shippingFeeValue;
 
+    // Pilot gate runs on the SERVER-verified shipping fee: validating the
+    // client value before merchant-rate verification would let a spoofed
+    // zero-fee payload pass the app layer and fail only at the DB guards.
+    // (Tax and assurance are already server-computed inputs; wrapping has
+    // no server-computed counterpart, and wallet/savings are rechecked
+    // from server records at initialization.)
+    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
+      redvaultRequested,
+      redvaultQuote,
+      userId: resolvedUserId,
+      merchantId: merchant_id,
+      currency: merchantResolvedCurrency,
+      shippingFee: effectiveShippingFee,
+      wrappingFee: giftWrappingFeeValue,
+      orderItems: orderItemsPayload,
+      useWalletCredit: use_wallet_credit,
+      walletAmount: wallet_amount,
+      useSavingsCredit: use_savings_credit,
+      savingsAmount: savings_amount,
+      taxAmount: orderTaxAmount,
+    });
+    if (pilotOrderRejection) {
+      return pilotOrderRejection;
+    }
+
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({
         canonicalAirportType,
@@ -1934,7 +2000,10 @@ export async function POST(request: NextRequest) {
               // STABLE code identity, NOT the recomputed amount, so a merchant
               // editing the code between a checkout and its retry can't trip
               // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
+              discount_amount:
+                discountCodeId || loyaltyRedemptionId
+                  ? 0
+                  : serverDerivedDiscountAmount,
               discount_code: requestedDiscountCode,
               delivery_method: canonicalDeliveryMethod,
               gift_wrapping_fee: giftWrappingFeeValue,
@@ -1989,9 +2058,10 @@ export async function POST(request: NextRequest) {
       p_customer_phone: customer_phone || null,
       p_items: orderItemsRpcPayload,
       p_shipping_fee: effectiveShippingFee,
-      p_discount_amount: discountCodeId
-        ? discountCodeAmount
-        : serverDerivedDiscountAmount,
+      p_discount_amount:
+        discountCodeId || loyaltyRedemptionId
+          ? discountCodeAmount
+          : serverDerivedDiscountAmount,
       p_tax_amount: orderTaxAmount,
       p_payment_method: effectivePaymentMethod,
       p_payment_status: effectivePaymentStatus,
@@ -2054,13 +2124,15 @@ export async function POST(request: NextRequest) {
         : {}),
     };
 
-    const orderCreateRpcName = requestedSavingsRedemption
-      ? 'create_storefront_order_with_savings'
-      : hasVoucherItem
-        ? 'create_storefront_order_with_quiz_voucher'
-        : discountCodeId
-          ? 'create_storefront_order_with_discount_code'
-          : 'create_storefront_order';
+    // One variant rule for both paths: legacy checkouts call the variant
+    // RPC directly, bound checkouts route it through the cart binding.
+    const orderVariant = selectOrderBindingVariant({
+      discountCodeId,
+      hasVoucherItem,
+      loyaltyRedemptionId,
+      requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
+    });
+    const orderCreateRpcName = ORDER_BINDING_RPC_NAMES[orderVariant];
 
     const orderCreateRpcArgs = requestedSavingsRedemption
       ? {
@@ -2071,7 +2143,12 @@ export async function POST(request: NextRequest) {
         }
       : discountCodeId
         ? { ...orderRpcArgs, p_discount_code_id: discountCodeId }
-        : orderRpcArgs;
+        : loyaltyRedemptionId
+          ? {
+              ...orderRpcArgs,
+              p_loyalty_redemption_id: loyaltyRedemptionId,
+            }
+          : orderRpcArgs;
 
     const orderRpcClient =
       redvaultOrderRpcClient ??
@@ -2113,12 +2190,23 @@ export async function POST(request: NextRequest) {
       // revalidation as the standard branch so listings and PDP pages do
       // not keep advertising pre-reservation stock.
       if (redvaultCheckoutResponse.status === 201) {
-        await revalidateOrderProductCaches({
-          merchantId: merchant_id,
-          orderId: null,
-          productIds: orderItemsPayload.map((item) => item.product_id),
-          supabase,
-        });
+        try {
+          await scheduleCheckoutProductBlogPurge({
+            merchantId: merchant_id,
+            merchantSlug: merchant.slug,
+            orderId: null,
+            orderItems: orderItemsPayload,
+            supabase,
+          });
+        } catch (revalidateError) {
+          logger.error({
+            message:
+              'Failed to revalidate product caches after REDVAULT order creation',
+            error: revalidateError,
+            orderId: null,
+            merchantId: merchant_id,
+          });
+        }
         // First-time REDVAULT creations return before the shared platform
         // event call below, so emit the idempotent order-created event
         // here. Replays answer 200 and stay suppressed: the event keys
@@ -2161,10 +2249,21 @@ export async function POST(request: NextRequest) {
       }
       return redvaultCheckoutResponse;
     }
-    const { data: orderRows, error: orderError } = await orderRpcClient.rpc(
-      orderCreateRpcName,
-      orderCreateRpcArgs
-    );
+    // Shared-cart checkouts submit through the binding RPC, which runs
+    // the same variant RPC inside the final transaction and closes the
+    // reviewed cart generation atomically. Binding-level failures return
+    // early; inner order rejections keep their message and fall through
+    // to the existing mapper below.
+    const dispatched = await dispatchOrderCreation({
+      args: orderCreateRpcArgs as Record<string, unknown>,
+      binding: shared_cart,
+      client: orderRpcClient,
+      principalId: sharedCartPrincipalId,
+      rpcName: orderCreateRpcName,
+      variant: orderVariant,
+    });
+    if (dispatched.failure) return dispatched.failure;
+    const { orderRows, orderError } = dispatched;
 
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
 
@@ -2233,7 +2332,8 @@ export async function POST(request: NextRequest) {
       // input — surface as 409 so the client shows "no longer available".
       if (
         message === 'usage_limit_reached' ||
-        message === 'per_customer_limit_reached'
+        message === 'per_customer_limit_reached' ||
+        message === 'loyalty_code_already_used'
       ) {
         return NextResponse.json(
           { code: message, error: 'Discount code is no longer available' },
@@ -2244,6 +2344,9 @@ export async function POST(request: NextRequest) {
         'invalid_items',
         'invalid_quantity',
         'invalid_variant',
+        'invalid_condition_offer',
+        'condition_offer_price_changed',
+        'insufficient_condition_offer_stock',
         'insufficient_stock',
         'insufficient_variant_stock',
         'merchant_not_found',
@@ -2264,6 +2367,15 @@ export async function POST(request: NextRequest) {
         'code_expired',
         'minimum_purchase_not_met',
         'discount_amount_mismatch',
+        // Loyalty-code bridge client errors (issue #3165; → 400). The
+        // loyalty wrapper RPC raises these for fresh orders; safe for
+        // the client to fix and retry. (loyalty_code_already_used maps
+        // to 409 above as a race/state conflict.)
+        'loyalty_redemption_not_found',
+        'loyalty_code_not_applicable',
+        'loyalty_code_expired',
+        'loyalty_code_currency_mismatch',
+        'loyalty_reward_inactive',
         // B3 (plan §5 B3): RPC raises when shipping_provider is set
         // without a quote id. Map to 4xx so the client gets the right
         // re-quote signal instead of a generic 500.
@@ -2596,12 +2708,22 @@ export async function POST(request: NextRequest) {
     // effects — so it is never gated on downstream success. Skip on
     // idempotent replay (no re-decrement). Best-effort: never breaks checkout.
     if (!idempotencyReplayed) {
-      await revalidateOrderProductCaches({
-        merchantId: merchant_id,
-        orderId: order.id,
-        productIds: orderItemsPayload.map((item) => item.product_id),
-        supabase,
-      });
+      try {
+        await scheduleCheckoutProductBlogPurge({
+          merchantId: merchant_id,
+          merchantSlug: merchant.slug,
+          orderId: order.id,
+          orderItems: orderItemsPayload,
+          supabase,
+        });
+      } catch (revalidateError) {
+        logger.error({
+          message: 'Failed to revalidate product caches after order creation',
+          error: revalidateError,
+          orderId: order.id,
+          merchantId: merchant_id,
+        });
+      }
     }
 
     const orderTotal = Number(order.total ?? 0);

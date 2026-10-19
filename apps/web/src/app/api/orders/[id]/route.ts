@@ -26,6 +26,12 @@ import {
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
+import { appendCancelledStatusFences } from './append-cancelled-status-fences';
+import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
+import {
+  evaluateOrderCancelledTransition,
+  writesNonCancelledStatusValue,
+} from './evaluate-order-cancelled-transition';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
@@ -178,6 +184,33 @@ export async function PATCH(
       );
     }
 
+    // Terminal states are terminal in both directions (policy lives in
+    // the extracted helper; see its header for the two-step bypass).
+    const cancelledRejection = evaluateOrderCancelledTransition({
+      existingPaymentStatus: existingOrder.payment_status,
+      existingShippingStatus: existingOrder.shipping_status,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
+    if (cancelledRejection) {
+      return NextResponse.json(cancelledRejection, { status: 409 });
+    }
+
+    // The terminal-state predicates ride on the UPDATEs below so a
+    // cancellation committing after this read cannot be resurrected
+    // (fencing and raced-reread policy live in the extracted helpers).
+    const writesStatusValue = writesNonCancelledStatusValue({
+      paymentStatus: payment_status,
+      shippingStatus: shipping_status,
+    });
+    const racedCancellationRejection = createRacedCancellationRejection({
+      supabase,
+      merchantId,
+      orderId: id,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
+
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
     if (
       shipping_status === 'processing' &&
@@ -297,15 +330,30 @@ export async function PATCH(
 
     if (needsPreUpdateInventoryConfirmation) {
       const paidStatus = updates.payment_status;
-      const { error: paidUpdateError } = await supabase
+      // Atomic with the write: the terminal-state predicates ride on
+      // the UPDATE itself, so a cancellation that commits after the
+      // read above cannot be resurrected by this write (zero rows
+      // match instead of a stale-status update landing).
+      let paidUpdateQuery = supabase
         .from('orders')
         .update({ payment_status: paidStatus })
         .eq('id', id)
-        .eq('merchant_id', merchantId)
+        .eq('merchant_id', merchantId);
+      if (writesStatusValue) {
+        paidUpdateQuery = appendCancelledStatusFences(paidUpdateQuery);
+      }
+      const { error: paidUpdateError } = await paidUpdateQuery
         .select('id')
         .single();
 
       if (paidUpdateError) {
+        const racedRejection =
+          paidUpdateError.code === 'PGRST116'
+            ? await racedCancellationRejection()
+            : null;
+        if (racedRejection) {
+          return NextResponse.json(racedRejection, { status: 409 });
+        }
         logger.error({
           message:
             'PATCH orders/[id] failed to persist paid status before inventory confirmation',
@@ -450,12 +498,17 @@ export async function PATCH(
       );
     }
 
-    // Update order
+    // Update order. Terminal-state predicates ride on the UPDATE (see
+    // the pre-update note): a cancellation racing this write matches
+    // zero rows instead of being overwritten back to an active state.
     let updateQuery = supabase
       .from('orders')
       .update(updates)
       .eq('id', id)
       .eq('merchant_id', merchantId);
+    if (writesStatusValue) {
+      updateQuery = appendCancelledStatusFences(updateQuery);
+    }
 
     if (shipmentBookingLockToken) {
       updateQuery = updateQuery.eq(
@@ -470,6 +523,17 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      // A raced cancellation owns the row now: answer the terminal 409
+      // BEFORE any rollback — restoring the stale pre-cancellation
+      // statuses here would reopen the cancelled order after its
+      // loyalty claim was already released.
+      const racedRejection =
+        updateError.code === 'PGRST116'
+          ? await racedCancellationRejection()
+          : null;
+      if (racedRejection) {
+        return NextResponse.json(racedRejection, { status: 409 });
+      }
       if (inventoryConfirmedBeforeOrderUpdate) {
         try {
           await rollbackOrderStatusAfterInventoryConfirmationFailure(

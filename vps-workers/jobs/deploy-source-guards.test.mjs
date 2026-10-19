@@ -59,6 +59,17 @@ esac
 `
     );
     writeExecutable(
+      join(binDirectory, 'gh'),
+      `#!/usr/bin/env bash
+# deploy.sh refuses promotion while a production run is in flight;
+# the harness owns this answer so no test depends on the network.
+if [ "\${TEST_SCENARIO:-}" = "inflight-deploy" ]; then
+  echo '184400111 in_progress abc12345 push https://example.invalid/runs/184400111'
+fi
+exit 0
+`
+    );
+    writeExecutable(
       join(binDirectory, 'rsync'),
       `#!/usr/bin/env bash
 touch "\${TEST_RSYNC_MARKER}"
@@ -128,6 +139,11 @@ exit 74
       encoding: 'utf8',
       env: {
         ...process.env,
+        BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
+        // The inflight guard fails closed without a resolvable repo;
+        // the stub git answers no origin, so pin the override (the
+        // stub gh swallows the query either way).
+        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
         PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
         TEST_RSYNC_MARKER: rsyncMarker,
         TEST_PROMOTION_MARKER: promotionMarker,
@@ -170,6 +186,16 @@ describe('deploy source guards', () => {
     assert.equal(outcome.sshCalled, true);
   });
 
+  it('refuses clean source while a production deploy is in flight', () => {
+    const outcome = runDeployGuardScenario('inflight-deploy');
+
+    assert.equal(outcome.result.status, 1);
+    assert.match(outcome.result.stderr, /Refusing worker promotion/);
+    assert.match(outcome.result.stderr, /184400111/);
+    assert.equal(outcome.rsyncCalled, false);
+    assert.equal(outcome.sshCalled, false);
+  });
+
   it('does not replace live workers when the staged preflight fails', () => {
     const outcome = runDeployGuardScenario('remote-preflight-failure');
 
@@ -198,27 +224,40 @@ describe('deploy source guards', () => {
     assert.equal(outcome.promotionCalled, false);
   });
 
-  it('serializes live promotion and runtime-directory creation under one lock', () => {
-    const source = readFileSync(releaseHelper, 'utf8');
-    const promotionStart = source.indexOf(
-      'flock -x /tmp/baci-workers-deploy.lock'
-    );
-    const promotionEnd = source.indexOf('REMOTE_SH\n\n', promotionStart);
-    const promotionSource = source.slice(promotionStart, promotionEnd);
+  // The GIGL exit-42 deferral scenarios live in
+  // deploy-gigl-42-deferral.test.mjs (extracted to keep both suites under
+  // the 300-line limit).
 
-    assert.notEqual(promotionStart, -1);
-    assert.match(promotionSource, /rsync -a --delete/);
-    assert.match(promotionSource, /mkdir -p.*logs.*locks/);
-  });
+  // Promotion locking/quiesce coverage lives in
+  // deploy-promotion-guards.test.mjs (extracted to keep both suites
+  // under the 300-line limit).
 
-  it('validates the direct worker toolchain without allowing pnpm to mutate it', () => {
+  it('provisions the immutable checkout before smoking it', () => {
     const source = readFileSync(releaseHelper, 'utf8');
 
     assert.match(
       source,
+      /lib\/provision-immutable-checkout\.sh' '\$STAGING_DIR' '\$APP_SHA'/
+    );
+    assert.ok(
+      source.indexOf('provision-immutable-checkout.sh') <
+        source.indexOf('Verifying the live GIGL database capability')
+    );
+  });
+
+  it('validates the direct worker toolchain without allowing pnpm to mutate it', () => {
+    const provisioner = readFileSync(
+      join(workerRoot, 'lib', 'provision-immutable-checkout.sh'),
+      'utf8'
+    );
+
+    assert.match(
+      provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.match(source, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
-    assert.doesNotMatch(source, /pnpm .*exec tsx/);
+    assert.match(provisioner, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
+    assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
+    assert.match(provisioner, /worktree add --detach/);
+    assert.match(provisioner, /pnpm install --frozen-lockfile/);
   });
 });

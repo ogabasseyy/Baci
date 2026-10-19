@@ -1,4 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 
 // Codex P1 (PR #1622 round 5): agentic checkout dispatch builds its
 // payload from `calculateCheckoutSession`, which currently computes
@@ -56,6 +60,7 @@ interface AgenticTaxItem {
   // missing IDs and returns 400 before we get here). The helper
   // itself skips items with missing product_id defensively.
   product_id?: string;
+  condition?: string | null;
   variant_id?: string | null;
   quantity: number;
 }
@@ -94,13 +99,8 @@ export function isTaxComputeUuidError(err: unknown): boolean {
 
 interface VariantPriceRow {
   id: string;
-  // High finding (PR #1622 review): variants must be validated to
-  // belong to the same product the order line claims. The RPC's
-  // LEFT JOIN enforces `v.product_id = p.id` (so a mismatched
-  // variant_id falls through to NULL and price_override defaults to
-  // base price). The helper must mirror that or it can apply the
-  // wrong override and trip the parity guard for orders containing
-  // a spoofed cross-product variant_id.
+  // Mirrors the RPC's variant-belongs-to-product join: a mismatched
+  // variant_id falls through to the base price instead of an override.
   product_id: string;
   price_override: number | string | null;
 }
@@ -113,28 +113,22 @@ export async function computeAgenticOrderTax({
   items,
   merchantId,
   supabase,
+  allowUnavailableConditionPrices,
+  conditionPriceOverrides,
 }: {
   items: AgenticTaxItem[];
   merchantId: string;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
+  conditionPriceOverrides?: Map<string, number>;
 }): Promise<number> {
   if (items.length === 0 || !merchantId) {
     return 0;
   }
 
-  // Codex P2 (PR #1622 round 5): destructuring `{ data: merchant }`
-  // alone drops the `error` field, so a transient DB/RLS failure
-  // looks identical to "merchant not registered" — helper returned
-  // 0, dispatch sent `p_tax_amount: 0`, RPC RAISEd
-  // `tax_amount_mismatch`, dispatch reported 400. That made
-  // server-side infra failures look like client validation errors
-  // and the caller (GPT agent) would not retry. Throw on real
-  // errors so the dispatch's catch maps to 500 and the caller
-  // retries the call as an infrastructure issue. NULL `data` with
-  // no error is still treated as "not registered" — the merchant
-  // may have been deleted mid-flow; `create_storefront_order` will
-  // RAISE `merchant_not_found` shortly after and the dispatch will
-  // map that to 400, which is correct.
+  // Throw on real merchant lookup errors (so dispatch maps them to
+  // a retryable 500) instead of treating them as "not registered";
+  // null data with no error still means unregistered/deleted.
   const { data: merchant, error: merchantError } = await supabase
     .from('merchants')
     .select('vat_registration_status')
@@ -226,6 +220,16 @@ export async function computeAgenticOrderTax({
     );
   }
 
+  const conditionPrices = await loadOrderConditionPrices(
+    items,
+    merchantId,
+    supabase,
+    {
+      allowUnavailable: allowUnavailableConditionPrices,
+      priceOverrides: conditionPriceOverrides,
+    }
+  );
+
   const productMap = new Map((products ?? []).map((p) => [p.id, p]));
   const variantMap = new Map((variantsData ?? []).map((v) => [v.id, v]));
 
@@ -253,7 +257,11 @@ export async function computeAgenticOrderTax({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
-    const priceRaw = variant?.price_override ?? product.price ?? 0;
+    const priceRaw =
+      orderConditionPrice(conditionPrices, item) ??
+      variant?.price_override ??
+      product.price ??
+      0;
     const price = Number(priceRaw);
     if (!Number.isFinite(price) || price <= 0) continue;
 

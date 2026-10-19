@@ -104,4 +104,14 @@ describe('getIntegrationStatus', () => {
       state: 'feed_ready',
     });
   });
+
+  it('labels Muse as owners-only instead of claiming a connection state', () => {
+    const merchant = makeMerchant();
+
+    expect(getIntegrationStatus('muse', merchant)).toMatchObject({
+      actionLabel: 'Open',
+      label: 'Owners only',
+      state: 'partial',
+    });
+  });
 });

@@ -79,9 +79,15 @@ export function navigateFromPushScreen(
       break;
     case 'wallet': {
       if (params?.action === 'savings') {
+        // Forward the reminder's named goal so the wallet opens that exact
+        // owned plan; WalletScreen falls back to the default active goal
+        // when the id is absent or no longer matches an owned plan.
+        const savingsGoalId = params?.savingsGoalId?.trim();
         router.push({
           pathname: '/wallet',
-          params: { action: 'savings' },
+          params: savingsGoalId
+            ? { action: 'savings', savingsGoalId }
+            : { action: 'savings' },
         });
         break;
       }

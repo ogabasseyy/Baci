@@ -14,7 +14,7 @@ const mockScheduleVoucherPinBackfill = vi.fn();
 const mockFrom = vi.fn();
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
 
   return {
     ...actual,
@@ -36,7 +36,7 @@ vi.mock('@/lib/csrf', () => ({
 }));
 
 vi.mock('@/lib/paystack', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/paystack')>();
+  const actual = await importOriginal<PaystackModule>();
 
   return {
     ...actual,
@@ -93,6 +93,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 import { POST } from './route';
+
+type ServerModule = typeof import('next/server');
+type PaystackModule = typeof import('@/lib/paystack');
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost:3000/api/vtu/checkout/confirm', {

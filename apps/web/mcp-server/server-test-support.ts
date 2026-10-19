@@ -3,13 +3,13 @@ import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
+import { serveCatalogFixture } from './server-catalog-fixtures';
 
-interface JsonRpcResponse {
-  result?: unknown;
-}
+type JsonRpcResponse = { result?: unknown };
 
 interface McpToolDefinition {
   name: string;
+  description?: string;
   inputSchema: { properties: Record<string, unknown> };
 }
 
@@ -21,10 +21,7 @@ interface StartedMcpServer {
 const webRootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRootDirectory = dirname(dirname(webRootDirectory));
 const tsxExecutable = join(
-  repoRootDirectory,
-  'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  repoRootDirectory, 'node_modules/.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
 );
 
 async function postMcpJsonRpc(
@@ -63,37 +60,54 @@ function getResultRecord(payload: JsonRpcResponse): Record<string, unknown> {
   return payload.result as Record<string, unknown>;
 }
 
-async function startPostgrestStub() {
+async function startPostgrestStub(
+  merchantAvailable = true,
+  productQueryFails = false,
+  workerRpcFails = false
+) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
+    // The startup capability probe (and any cart read) arrives with the
+    // worker JWT, not the anon key: answer the cart-get RPC with the
+    // empty set for any Bearer credential like the anchor-policies fixture
+    // does, or with a gateway-style 403 when the test stages a
+    // mis-issued capability.
+    if (
+      url.pathname.endsWith('/rest/v1/rpc/get_mcp_guest_cart') &&
+      (request.headers.authorization ?? '').startsWith('Bearer ')
+    ) {
+      request.on('data', () => {});
+      request.on('end', () => {
+        if (workerRpcFails) {
+          response.statusCode = 403;
+          response.end(JSON.stringify({ message: 'Invalid worker JWT' }));
+          return;
+        }
+        response.end(JSON.stringify([]));
+      });
+      return;
+    }
+    if (request.headers.authorization !== 'Bearer test-anon-key') {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Expected anonymous client' }));
+      return;
+    }
+    if (url.pathname.endsWith('/rest/v1/orders') || url.pathname.endsWith('/rest/v1/chat_orders')) {
+      response.statusCode = 403;
+      response.end(JSON.stringify({ message: 'Private tables are unavailable' }));
+      return;
+    }
     if (url.pathname.endsWith('/rest/v1/merchants')) {
-      response.end(JSON.stringify({ id: 'merchant-1' }));
+      response.end(JSON.stringify(merchantAvailable ? { id: 'merchant-1' } : null));
       return;
     }
-    if (url.pathname.endsWith('/rest/v1/chat_orders')) {
-      const emailFilter = url.searchParams.get('customer_email') ?? '';
-      const completeMetadata = {
-        account_name: 'Test Buyer',
-        account_number: '1234567890',
-        bank_name: 'Test Bank',
-      };
-      response.end(
-        JSON.stringify([
-          {
-            id: 'chat-order-1',
-            metadata: emailFilter.includes('incomplete')
-              ? { account_number: '1234567890' }
-              : completeMetadata,
-            paid_at: null,
-            payment_reference: 'CHAT-TEST-1',
-            status: 'pending_payment',
-            total: 500000,
-          },
-        ])
-      );
+    if (productQueryFails && url.pathname.endsWith('/rest/v1/products')) {
+      response.statusCode = 503;
+      response.end(JSON.stringify({ code: 'PGRST000', message: 'Fixture database unavailable' }));
       return;
     }
+    if (serveCatalogFixture(request, response, url)) return;
     response.statusCode = 404;
     response.end(JSON.stringify({ message: 'not found' }));
   });
@@ -116,9 +130,18 @@ async function startPostgrestStub() {
 }
 
 async function startMcpServerWithPostgrest(
-  envOverrides: NodeJS.ProcessEnv
+  envOverrides: NodeJS.ProcessEnv,
+  options: {
+    merchantAvailable?: boolean;
+    productQueryFails?: boolean;
+    workerRpcFails?: boolean;
+  } = {}
 ): Promise<StartedMcpServer & { close: () => Promise<void> }> {
-  const postgrest = await startPostgrestStub();
+  const postgrest = await startPostgrestStub(
+    options.merchantAvailable,
+    options.productQueryFails,
+    options.workerRpcFails
+  );
   let server: StartedMcpServer;
   try {
     server = await startMcpServer({
@@ -166,7 +189,11 @@ function buildMcpServerEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     OPENAI_AGENTIC_API_KEY: 'test-agentic-key',
     OPENAI_AGENTIC_SIGNING_KEY: 'test-signing-key',
     PAYSTACK_SECRET_KEY: 'test-paystack-key',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
+    // A structurally-valid worker JWT (role + far-future exp): the
+    // server checks its shape at startup, never its signature.
+    MCP_GUEST_CART_WORKER_TOKEN:
+      'eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoibWNwX2d1ZXN0X2NhcnRfd29ya2VyIiwiZXhwIjoyMDAwMDAwMDAwMH0.test-signature',
     ...overrides,
   };
   if (!Object.hasOwn(overrides, 'MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS')) {

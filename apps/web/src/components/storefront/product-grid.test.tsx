@@ -3,9 +3,10 @@
 // after it is evaluated.
 import {
   mockMerchantState,
+  mockStorefrontUiState,
   resetProductGridTestState,
 } from './product-grid-test-fixtures';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet } from '@/lib/api-client';
 import { StorefrontProductGrid } from './product-grid';
@@ -54,6 +55,33 @@ describe('StorefrontProductGrid', () => {
       const allButton = screen.getByText('All').closest('button');
       expect(allButton).toHaveAttribute('aria-pressed', 'true');
     });
+  });
+
+  it('records an explicit submission when the did-you-mean suggestion is chosen', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      mockStorefrontUiState.searchQuery = 'iphon';
+      mockMerchantState.basePath = '/test-merchant';
+      render(<StorefrontProductGrid />);
+      const suggestion = await screen.findByRole('button', {
+        name: /did you mean iphone/i,
+      });
+      fireEvent.click(suggestion);
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        '/api/search/submissions',
+        expect.objectContaining({
+          body: JSON.stringify({
+            query: 'iphone',
+            pathPrefix: '/test-merchant',
+            source: 'did-you-mean',
+          }),
+          keepalive: true,
+        })
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('renders live region with correct status text', async () => {

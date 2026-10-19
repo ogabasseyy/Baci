@@ -23,6 +23,7 @@ describe('shouldReleaseBookingLock', () => {
 
   it('releases locks for pre-provider quote and origin failures', () => {
     for (const code of [
+      'NO_SHIPPABLE_ITEMS',
       'QUOTE_REFRESH_PERSIST_FAILED',
       'QUOTE_ORDER_MISMATCH',
       'QUOTE_METADATA_LOOKUP_FAILED',
@@ -30,6 +31,7 @@ describe('shouldReleaseBookingLock', () => {
       'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED',
       'MERCHANT_WALLET_INSUFFICIENT',
       'QUOTE_PRICE_CHANGED',
+      'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       'MERCHANT_LOOKUP_FAILED',
       'MERCHANT_SENDER_REQUIRED',
       'MERCHANT_ORIGIN_MISSING',

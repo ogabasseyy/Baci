@@ -5,7 +5,7 @@ import type { ProductImageAltPayload } from '@baci/shared';
 /**
  * Product condition enum - shared across the application
  */
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
 
 export type ProductCondition = 'new' | 'used' | 'open_box' | 'refurbished';
 
@@ -134,6 +134,7 @@ export function normalizeProductCondition(
 
 export interface ProductVariant {
   id: string;
+  inventory_tracking_policy?: string | null;
   name?: string;
   condition?: ProductCondition;
   price_override?: number;

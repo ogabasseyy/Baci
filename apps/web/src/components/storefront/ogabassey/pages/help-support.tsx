@@ -54,6 +54,8 @@ const FAQS: FaqItem[] = [
 interface MerchantInfo {
   business_name?: string;
   email?: string;
+  support_email?: string;
+  support_phone?: string;
   phone?: string;
   address?: string;
   faq_items?: { question: string; answer: string }[];
@@ -69,8 +71,14 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const businessName = merchant?.business_name || 'Ogabassey';
-  const email = merchant?.email || 'support@ogabassey.com';
-  const phone = merchant?.phone || '+234 814 697 8921';
+  const email =
+    merchant?.support_email?.trim() ||
+    merchant?.email?.trim() ||
+    'support@ogabassey.com';
+  const phone =
+    merchant?.support_phone?.trim() ||
+    merchant?.phone?.trim() ||
+    '+234 814 697 8921';
   const address = merchant?.address || 'Lagos, Nigeria';
 
   // Get FAQs from structured items or legacy content
@@ -230,7 +238,7 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
 
                   <div className="space-y-3">
                     <a
-                      href={`tel:${phone}`}
+                      href={`tel:${phone.replace(/\s/g, '')}`}
                       className="flex items-center gap-3 p-3 bg-white/10 rounded-xl hover:bg-white/20 transition-colors border border-white/5"
                     >
                       <Phone size={18} className="text-red-500" />

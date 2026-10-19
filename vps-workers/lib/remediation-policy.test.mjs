@@ -246,4 +246,24 @@ describe('remediation policy', () => {
     assert.match(prompt, /"project": "mobile-api"/);
     assert.doesNotMatch(prompt, /Customer phone 08031234567/);
   });
+
+  it('includes a PostHog source category without arbitrary provider metadata', () => {
+    const prompt = buildCodexRemediationPrompt({
+      candidate: {
+        category: 'posthog_issue',
+        fingerprint: 'posthog-issue',
+        occurrences: 3,
+        sample: {
+          issueId: 'posthog-123',
+          source: 'posthog',
+          providerMetadata: 'alice@example.com must-not-be-copied',
+        },
+      },
+    });
+
+    assert.match(prompt, /"category": "posthog_issue"/);
+    assert.match(prompt, /"source": "posthog"/);
+    assert.match(prompt, /"issueId": "posthog-123"/);
+    assert.doesNotMatch(prompt, /must-not-be-copied/);
+  });
 });

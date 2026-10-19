@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { readSupabaseHistoryEffects } from './read-supabase-history-effects';
 import { replayRepository } from './replay-repository-root';
+import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 import { supabaseHistoryEffectQueryContract } from './supabase-history-effect-query-contract';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 import type {
@@ -10,6 +11,7 @@ import type {
   SupabaseHistoryEffectComparisonMode,
 } from './supabase-history-replay-types';
 import { createSupabaseReplayDatabaseEnvironment } from './supabase-replay-contract';
+import { supabaseReplayFailureDiagnostic } from './supabase-replay-failure-diagnostic';
 
 export type ReplayCommandLimits = {
   stderrBytes: number;
@@ -47,6 +49,9 @@ function boundedPsqlDiagnostic(
   stderr: readonly Buffer[]
 ): string {
   const commandName = sanitizedCommandName(command);
+  if (commandName === 'supabase') {
+    return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
+  }
   if (!/^psql(?:-[A-Za-z0-9._-]+)?$/.test(commandName)) {
     return '';
   }
@@ -67,7 +72,13 @@ function commandFailure(
   stderr: readonly Buffer[] = []
 ): Error {
   const diagnostic =
-    failure === 'non-zero-exit' ? boundedPsqlDiagnostic(command, stderr) : '';
+    failure !== 'non-zero-exit'
+      ? ''
+      : sanitizedCommandName(command) === 'supabase'
+        ? supabaseReplayFailureDiagnostic(
+            Buffer.concat(stderr).toString('utf8')
+          )
+        : boundedPsqlDiagnostic(command, stderr);
   return new Error(
     `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
   );

@@ -14,7 +14,7 @@ const checkedSources = Object.fromEntries([
   '.github/scripts/cwv-runner-authority.mjs', '.github/scripts/canonical-json.mjs', '.github/scripts/cwv-runner-authority-core.mjs', '.github/scripts/cwv-runner-authority-filters.mjs', '.github/scripts/cwv-runner-authority-runtime.mjs', '.github/scripts/policy.schema.mjs', '.github/scripts/cwv-runner-stable-attestation-builder.mjs',
   ...readdirSync(new URL('.github/workflows/', root)).filter((name) => /^[a-z0-9][a-z0-9-]*\.ya?ml$/.test(name)).map((name) => `.github/workflows/${name}`),
 ].map((path) => [`${workspace}/${path}`, readFileSync(new URL(path, root), 'utf8')]));
-const pins = { checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', uploadArtifact: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a', downloadArtifact: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c', createGithubAppToken: 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1' };
+const pins = { checkout: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1', uploadArtifact: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9', downloadArtifact: 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333', createGithubAppToken: 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1' };
 const raw = readFileSync(new URL('../../infra/cwv-runner/policy.json', import.meta.url), 'utf8');
 const policy = parseRunnerPolicy(JSON.parse(raw));
 class FakeFs {

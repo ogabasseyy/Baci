@@ -3,13 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DvaModal } from './DvaModal';
 import type { DvaData } from '../types';
 
-// Mock window.location.reload
-const mockReload = vi.fn();
-Object.defineProperty(window, 'location', {
-  value: { reload: mockReload },
-  writable: true,
-});
-
 describe('DvaModal', () => {
   const mockDvaData: DvaData = {
     account_number: '1234567890',
@@ -22,93 +15,69 @@ describe('DvaModal', () => {
 
   const mockOnCopyToClipboard = vi.fn();
   const mockOnClose = vi.fn();
+  const mockOnConfirmTransfer = vi.fn();
 
   beforeEach(() => {
     mockOnCopyToClipboard.mockReset();
     mockOnClose.mockReset();
-    mockReload.mockReset();
+    mockOnConfirmTransfer.mockReset();
   });
+
+  const renderDvaModal = (
+    data: DvaData = mockDvaData,
+    copiedText: string | null = null,
+    isVerifying = false
+  ) =>
+    render(
+      <DvaModal
+        copiedText={copiedText}
+        data={data}
+        formatCurrency={(amount) => `₦${amount.toLocaleString()}`}
+        isVerifying={isVerifying}
+        onClose={mockOnClose}
+        onConfirmTransfer={mockOnConfirmTransfer}
+        onCopyToClipboard={mockOnCopyToClipboard}
+      />
+    );
 
   describe('Rendering', () => {
     it('renders bank transfer modal with title', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Bank Transfer')).toBeInTheDocument();
       expect(screen.getByText('Automatic verification')).toBeInTheDocument();
     });
 
     it('renders the amount to pay formatted correctly', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Send Exactly')).toBeInTheDocument();
       expect(screen.getByText('₦50,000')).toBeInTheDocument();
     });
 
     it('renders account number', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Account Number')).toBeInTheDocument();
       expect(screen.getByText('1234567890')).toBeInTheDocument();
     });
 
     it('renders bank name', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Bank Name')).toBeInTheDocument();
       expect(screen.getByText('Test Bank')).toBeInTheDocument();
     });
 
     it('renders account name', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Account Name')).toBeInTheDocument();
       expect(screen.getByText('John Doe')).toBeInTheDocument();
     });
 
     it('renders transfer expiry message', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Transfer expires in 60:00')).toBeInTheDocument();
       expect(
@@ -119,27 +88,23 @@ describe('DvaModal', () => {
     });
 
     it('renders waiting for transfer status', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
-      expect(screen.getByText('Waiting for transfer…')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Waiting for transfer…'
+      );
+    });
+
+    it('announces verification progress in the status region', () => {
+      renderDvaModal(mockDvaData, null, true);
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Verifying transfer…'
+      );
     });
 
     it('renders reference number', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(screen.getByText('Reference: REF-123456')).toBeInTheDocument();
     });
@@ -147,14 +112,7 @@ describe('DvaModal', () => {
 
   describe('Copy to Clipboard', () => {
     it('renders copy button for account number when text is not copied', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       // Find the copy button (there's only one copy button in the modal)
       const buttons = screen.getAllByRole('button');
@@ -166,14 +124,7 @@ describe('DvaModal', () => {
     });
 
     it('shows check icon when account number is copied', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText="1234567890"
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, '1234567890');
 
       // Find the button with check icon
       const buttons = screen.getAllByRole('button');
@@ -185,14 +136,7 @@ describe('DvaModal', () => {
     });
 
     it('calls onCopyToClipboard with account number when copy button is clicked', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       // Find and click the copy button
       const buttons = screen.getAllByRole('button');
@@ -209,14 +153,7 @@ describe('DvaModal', () => {
     });
 
     it('does not show check icon when a different text is copied', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText="different-text"
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, 'different-text');
 
       // Should show copy icon, not check
       const buttons = screen.getAllByRole('button');
@@ -234,14 +171,7 @@ describe('DvaModal', () => {
 
   describe('Close Functionality', () => {
     it('calls onClose when X button is clicked', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       // Find the X button in the header
       const buttons = screen.getAllByRole('button');
@@ -257,14 +187,7 @@ describe('DvaModal', () => {
     });
 
     it('calls onClose when "Close and check later" button is clicked', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       const closeButton = screen.getByRole('button', {
         name: /close and check later/i,
@@ -278,29 +201,15 @@ describe('DvaModal', () => {
 
   describe('Confirm Transfer Button', () => {
     it('renders "Confirm Transfer Sent" button', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       expect(
         screen.getByRole('button', { name: /confirm transfer sent/i })
       ).toBeInTheDocument();
     });
 
-    it('reloads the page when "Confirm Transfer Sent" is clicked', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+    it('runs transfer verification when "Confirm Transfer Sent" is clicked', () => {
+      renderDvaModal(mockDvaData, null);
 
       const confirmButton = screen.getByRole('button', {
         name: /confirm transfer sent/i,
@@ -308,7 +217,7 @@ describe('DvaModal', () => {
 
       fireEvent.click(confirmButton);
 
-      expect(mockReload).toHaveBeenCalledTimes(1);
+      expect(mockOnConfirmTransfer).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -319,14 +228,7 @@ describe('DvaModal', () => {
         amount: 9999999,
       };
 
-      render(
-        <DvaModal
-          data={largeAmountData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(largeAmountData, null);
 
       expect(screen.getByText('₦9,999,999')).toBeInTheDocument();
     });
@@ -337,14 +239,7 @@ describe('DvaModal', () => {
         amount: 100,
       };
 
-      render(
-        <DvaModal
-          data={smallAmountData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(smallAmountData, null);
 
       expect(screen.getByText('₦100')).toBeInTheDocument();
     });
@@ -355,14 +250,7 @@ describe('DvaModal', () => {
         account_name: 'Very Long Account Name That Should Be Truncated',
       };
 
-      render(
-        <DvaModal
-          data={longNameData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(longNameData, null);
 
       expect(
         screen.getByText('Very Long Account Name That Should Be Truncated')
@@ -375,14 +263,7 @@ describe('DvaModal', () => {
         reference: 'REF-2024-01-15_SPECIAL#123',
       };
 
-      render(
-        <DvaModal
-          data={specialRefData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(specialRefData, null);
 
       expect(
         screen.getByText('Reference: REF-2024-01-15_SPECIAL#123')
@@ -392,28 +273,14 @@ describe('DvaModal', () => {
 
   describe('Accessibility', () => {
     it('renders modal with proper backdrop', () => {
-      const { container } = render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      const { container } = renderDvaModal(mockDvaData, null);
 
       const backdrop = container.querySelector('.bg-black\\/50');
       expect(backdrop).toBeInTheDocument();
     });
 
     it('has all interactive buttons with proper type attribute', () => {
-      render(
-        <DvaModal
-          data={mockDvaData}
-          copiedText={null}
-          onCopyToClipboard={mockOnCopyToClipboard}
-          onClose={mockOnClose}
-        />
-      );
+      renderDvaModal(mockDvaData, null);
 
       const buttons = screen.getAllByRole('button');
       buttons.forEach((button) => {

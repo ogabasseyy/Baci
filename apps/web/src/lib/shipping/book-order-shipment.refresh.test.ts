@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
 
+type EnvModule = typeof import('@/env');
+type OrderShipmentBookingUtilsModule =
+  typeof import('@/lib/shipping/order-shipment-booking-utils');
+
 vi.mock('@/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/env')>();
+  const actual = await importOriginal<EnvModule>();
   return { ...actual, ...shippingQuoteEnvTestMock };
 });
 
@@ -16,10 +20,7 @@ vi.mock('@/lib/shipping', () => ({
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/order-shipment-booking-utils')
-      >();
+    const actual = await importOriginal<OrderShipmentBookingUtilsModule>();
     return {
       ...actual,
       buildReceiver: vi.fn().mockReturnValue({
@@ -54,38 +55,26 @@ describe('bugfix: expired domestic quote refresh sender', () => {
     stubShippingService();
   });
 
-  it('refreshes expired domestic quotes with the server-resolved merchant sender', async () => {
-    await bookOrderShipment(createSupabase(), 'merchant-1', 'order-1');
-
-    expect(shippingService.getProviderQuotes).toHaveBeenCalledWith(
-      'GIGL',
-      expect.objectContaining({
-        shipmentType: 'domestic',
-        sender: correctedSender,
-      })
-    );
-    expect(shippingService.bookShipment).toHaveBeenCalledWith(
-      'GIGL',
-      expect.objectContaining({ sender: correctedSender })
-    );
+  it('requires confirmation when the expired quote has a changed merchant origin', async () => {
+    await expect(
+      bookOrderShipment(createSupabase(), 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
 
-  it('does not book when persisting the refreshed quote fails', async () => {
+  it('does not persist a replacement for an unchanged expired paid quote', async () => {
+    const client = createSupabase({
+      storedSender: correctedSender,
+      upsertError: { message: 'must not be called' },
+    });
     await expect(
-      bookOrderShipment(
-        createSupabase({ upsertError: { message: 'upsert failed' } }),
-        'merchant-1',
-        'order-1'
-      )
-    ).rejects.toEqual(
-      expect.objectContaining({
-        code: 'QUOTE_REFRESH_PERSIST_FAILED',
-        status: 500,
-      })
-    );
-
-    expect(shippingService.getProviderQuotes).toHaveBeenCalled();
-    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).resolves.toMatchObject({ quoteId: 'quote-1' });
+    expect(shippingService.getProviderQuotes).toHaveBeenCalledOnce();
   });
 
   it('requires wallet quote reconfirmation instead of refreshing an expired quote', async () => {
@@ -110,30 +99,22 @@ describe('bugfix: unexpired domestic quote sender mismatch', () => {
     stubShippingService();
   });
 
-  it('refreshes an unexpired quote when the stored sender differs from the registered merchant origin', async () => {
-    await bookOrderShipment(
-      createSupabase({
-        quoteExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
-        storedSender: mismatchedCallerSender,
-      }),
-      'merchant-1',
-      'order-1'
-    );
-
-    expect(shippingService.getProviderQuotes).toHaveBeenCalledWith(
-      'GIGL',
-      expect.objectContaining({
-        shipmentType: 'domestic',
-        sender: correctedSender,
-      })
-    );
-    expect(shippingService.bookShipment).toHaveBeenCalledWith(
-      'GIGL',
-      expect.objectContaining({ sender: correctedSender })
-    );
+  it('requires confirmation when an unexpired quote origin has changed', async () => {
+    await expect(
+      bookOrderShipment(
+        createSupabase({
+          quoteExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+          storedSender: mismatchedCallerSender,
+        }),
+        'merchant-1',
+        'order-1'
+      )
+    ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
 
-  it('does not refresh an unexpired quote when the stored sender already matches', async () => {
+  it('checks the price and reuses an unexpired quote when the stored sender matches', async () => {
     await bookOrderShipment(
       createSupabase({
         quoteExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
@@ -143,7 +124,7 @@ describe('bugfix: unexpired domestic quote sender mismatch', () => {
       'order-1'
     );
 
-    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.getProviderQuotes).toHaveBeenCalledOnce();
     expect(shippingService.bookShipment).toHaveBeenCalledWith(
       'GIGL',
       expect.objectContaining({ sender: correctedSender })

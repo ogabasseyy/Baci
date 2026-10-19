@@ -44,6 +44,17 @@ vi.mock('next/navigation', () => ({
 const { default: WalletPage, metadata } = await import('./page');
 
 describe('WalletPage', () => {
+  it('contains its own Suspense boundary before reading runtime search parameters', () => {
+    const page = WalletPage({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+      searchParams: Promise.resolve({ fund: '1' }),
+    });
+    expect(page.type).toBe(Suspense);
+    render(page.props.fallback);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Preparing your wallet'
+    );
+  });
   beforeEach(() => {
     vi.mocked(getCachedMerchant).mockReset();
     vi.mocked(isValidMerchantIdentifier).mockReturnValue(true);

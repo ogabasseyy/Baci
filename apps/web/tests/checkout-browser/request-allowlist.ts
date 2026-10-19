@@ -6,13 +6,24 @@ interface FixtureRequest {
 }
 export function isFixtureAssetRequest(request: FixtureRequest): boolean {
   const url = new URL(request.url);
-  if (url.origin !== 'http://127.0.0.1:3217' || request.method !== 'GET')
+  const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
+  const fixturePort = Number(configuredPort || 3217);
+  if (
+    url.origin !== `http://127.0.0.1:${fixturePort}` ||
+    request.method !== 'GET'
+  )
     return false;
   const isPage = [
     '/catalog',
     '/cart',
+    '/cart-navigation-start',
     '/checkout',
+    '/checkout-shared',
+    '/crypto-payment-modal',
+    '/dva-modal',
     '/payment-handoff',
+    '/products/test-phone',
+    '/unlock-orders',
   ].includes(url.pathname);
   if (isPage)
     return (

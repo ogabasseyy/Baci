@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { createClient, type Session } from '@supabase/supabase-js';
+import type { FetchImplementation } from '@/types/fetch';
 
 function accessToken(userId: string): string {
   const encode = (value: object) =>
@@ -45,7 +46,7 @@ describe('Supabase Auth session commit guard', () => {
         if (!key.endsWith('-code-verifier')) stored = value;
       }),
     };
-    const fetchImpl = jest.fn<typeof fetch>(
+    const fetchImpl = jest.fn<FetchImplementation>(
       () =>
         new Promise<Response>((resolve) => {
           finishProviderRefresh = resolve;

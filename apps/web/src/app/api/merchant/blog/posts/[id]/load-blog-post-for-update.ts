@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type ExistingBlogPost = {
+  author_image_url: string | null;
   category: string | null;
   content: string;
   excerpt: string | null;
@@ -31,7 +32,7 @@ export async function loadBlogPostForUpdate({
   const { data, error } = await supabase
     .from('blog_posts')
     .select(
-      'id, slug, status, content, title, excerpt, category, published_at, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
+      'id, slug, status, content, title, excerpt, category, published_at, author_image_url, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
     )
     .eq('id', postId)
     .eq('merchant_id', merchantId)

@@ -213,6 +213,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
         ios: {
           deploymentTarget: '16.4',
+          // Workspace native patches must compile against the patched core API.
+          usePrecompiledModules: false,
           // Force module-map generation for the Objective-C Google pods that
           // AppCheckCore (pulled in transitively by
           // @react-native-google-signin/google-signin) imports from Swift.

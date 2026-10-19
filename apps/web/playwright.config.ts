@@ -2,7 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { defineConfig } from '@playwright/test';
 
-const port = 3217;
+const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
+const port = Number(configuredPort || 3217);
 export default defineConfig({
   testDir: './tests/checkout-browser',
   testMatch: '**/*.pw.ts',

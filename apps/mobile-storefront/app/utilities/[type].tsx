@@ -29,8 +29,13 @@ import type {
   ValidUtilityType,
 } from '@/components/utilities/utility-purchase.types';
 import Colors from '@/constants/Colors';
-import { walletKeys } from '@/hooks/use-wallet';
+import {
+  invalidateWalletBalanceQueries,
+  useInvalidateWalletOnSuccess,
+} from '@/hooks/use-invalidate-wallet-on-success';
+import { useVtuRetainedSettlement } from '@/hooks/use-vtu-retained-settlement';
 import { CONFIG } from '@/lib/config';
+import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { RouteRepeatParamsSchema } from '@/schemas/utility-purchase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -67,7 +72,12 @@ export default function UtilityPurchaseScreen() {
   const insets = useSafeAreaInsets();
   const headerOffset = Math.max(insets.top, 42);
   const isAuthenticated = useAuthStore((state) => !!state.session);
-  const customerId = useAuthStore((state) => state.customer?.id);
+  // Share useWallet's read-owner policy (customer-first) so the
+  // post-purchase invalidation hits the same query key the wallet read
+  // uses while customer hydration is still pending.
+  const walletOwnerId = useAuthStore((state) =>
+    resolveWalletReadOwnerId(state.customer?.id, state.user?.id)
+  );
   const merchantId = useAuthStore((state) => state.merchantId);
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
   const routeType =
@@ -113,8 +123,12 @@ export default function UtilityPurchaseScreen() {
     routeType,
   });
   const resolvedSuccessData = successData ?? getParamSuccessData(params);
-  const successCashbackAmount = resolvedSuccessData?.cashback?.amount ?? 0;
   const successReference = resolvedSuccessData?.reference;
+
+  // Settle retained idempotency entries whose rows reached terminality
+  // after the backfill stopped polling, before the customer can repeat
+  // (Codex R57 6rsvy7). No-op without retained references.
+  useVtuRetainedSettlement({ enabled: true });
 
   const pagerRef = useRef<PagerView>(null);
 
@@ -146,30 +160,12 @@ export default function UtilityPurchaseScreen() {
     }
   }, [routeType]);
 
-  useEffect(() => {
-    if (
-      !currentType ||
-      !customerId ||
-      !successReference ||
-      successCashbackAmount <= 0
-    ) {
-      return;
-    }
-
-    void queryClient.invalidateQueries({
-      queryKey: walletKeys.data({
-        merchantId: activeMerchantId,
-        ownerId: customerId,
-      }),
-    });
-  }, [
+  useInvalidateWalletOnSuccess({
     activeMerchantId,
     currentType,
-    customerId,
-    queryClient,
-    successCashbackAmount,
     successReference,
-  ]);
+    walletOwnerId,
+  });
 
   const handleGoBack = () => {
     if (router.canGoBack()) {
@@ -214,8 +210,17 @@ export default function UtilityPurchaseScreen() {
           data={resolvedSuccessData}
           headerOffset={headerOffset}
           isAuthenticated={isAuthenticated}
+          onBackfillSettled={() =>
+            invalidateWalletBalanceQueries({
+              merchantId: activeMerchantId,
+              ownerId: walletOwnerId,
+              queryClient,
+            })
+          }
           onCreateAccount={() => router.push('/auth/login')}
-          type={currentType}
+          // Submitted type wins: a mid-flight swipe must not repoint
+          // the result view + history poll at the newly selected type.
+          type={resolvedSuccessData.utilityType ?? currentType}
         />
       </StorefrontScreenShell>
     );

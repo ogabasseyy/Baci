@@ -4,6 +4,10 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
+vi.mock('./CheckoutShippingRecoveryPanel', () => ({
+  CheckoutShippingRecoveryPanel: () => null,
+}));
+
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
 vi.mock('@/config/runtime-platform', () => ({
   isRuntimePlatform: () => false,

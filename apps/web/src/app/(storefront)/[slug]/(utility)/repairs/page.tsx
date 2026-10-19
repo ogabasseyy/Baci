@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 import {
   getCachedMerchant,
@@ -73,6 +74,10 @@ async function RepairsPageResolved(props: RepairsPageRouteProps) {
   if (!merchant || !shouldRenderRepairsPage(merchant)) {
     notFound();
   }
+
+  // This catalog is uncached. Keep its read out of prerendering while the
+  // committed hero remains in the static shell above this Suspense boundary.
+  await connection();
 
   const groups = isCatalogEnabledForMerchant(merchant)
     ? await getRepairDevicesForMerchant(merchant.id).catch((error) => {

@@ -15,6 +15,7 @@ import {
 } from './checkout-page-test-support';
 
 it('records the full order total for DVA completion after wallet credits', async () => {
+  let resolveTrackOrder: ((response: Response) => void) | undefined;
   const completedEvents: unknown[][] = [];
   mockCaptureCheckoutFunnelEventOnce.mockImplementation(
     (...args: unknown[]) => {
@@ -61,17 +62,9 @@ it('records the full order total for DVA completion after wallet credits', async
     .mockImplementation(async (input) => {
       const url = String(input);
       if (url.startsWith('/api/storefront/orders/track-order')) {
-        return {
-          ok: true,
-          json: async () => ({
-            order: {
-              id: 'order-dva',
-              order_number: 'ORD-DVA',
-              payment_status: 'paid',
-              total: 5750,
-            },
-          }),
-        } as Response;
+        return new Promise<Response>((resolve) => {
+          resolveTrackOrder = resolve;
+        });
       }
       if (url === '/api/payments/initialize') {
         return {
@@ -148,9 +141,26 @@ it('records the full order total for DVA completion after wallet credits', async
         .getAllByRole('button', { name: /place order/i })
         .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
     );
+    expect(await screen.findByText('₦750')).toBeInTheDocument();
     fireEvent.click(
-      await screen.findByRole('button', { name: /confirm transfer sent/i })
+      screen.getByRole('button', { name: /confirm transfer sent/i })
     );
+    const verifyingButton = await screen.findByRole('button', {
+      name: /verifying transfer/i,
+    });
+    expect(verifyingButton).toBeDisabled();
+    expect(resolveTrackOrder).toBeDefined();
+    resolveTrackOrder?.({
+      ok: true,
+      json: async () => ({
+        order: {
+          id: 'order-dva',
+          order_number: 'ORD-DVA',
+          payment_status: 'paid',
+          total: 5750,
+        },
+      }),
+    } as Response);
 
     // The confirmed transfer records the FULL order total, not the
     // 750 residual the DVA received.

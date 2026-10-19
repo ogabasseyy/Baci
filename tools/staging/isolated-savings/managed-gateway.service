@@ -1,0 +1,30 @@
+[Unit]
+Description=Bounded isolated savings Unix-socket gateway
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=baci-savings-gateway
+Group=baci-savings-ingress
+RuntimeDirectory=baci-savings-gateway
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=no
+UMask=0007
+ExecStart=/usr/bin/node /opt/baci-savings-gateway/managed-gateway-cli.mjs --managed
+Restart=no
+KillMode=control-group
+TimeoutStopSec=5s
+LimitCORE=0
+RuntimeMaxSec=24h
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+ReadWritePaths=/run/baci-savings-gateway
+StandardOutput=journal
+StandardError=journal

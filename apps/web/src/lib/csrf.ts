@@ -1,7 +1,7 @@
 // CSRF Protection Utilities
 // Implements Double Submit Cookie pattern for CSRF protection
 
-import { type NextRequest, NextResponse } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 const PRIMARY_CSRF_TOKEN_NAME = IS_PROD ? '__Host-csrf-token' : 'csrf-token';
@@ -168,6 +168,7 @@ export async function checkCsrfProtection(request: NextRequest): Promise<{
   const isValid = await verifyCsrfToken(request);
 
   if (!isValid) {
+    const { NextResponse } = await import('next/server');
     const response = NextResponse.json(
       {
         error: 'Invalid CSRF token',

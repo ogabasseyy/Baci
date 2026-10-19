@@ -99,6 +99,22 @@ test('stand-in is refused when the sensitive var is absent from Vercel', () => {
   assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
 
+test('refuses marker lookalikes, real values, and duplicate redacted entries', () => {
+  for (const assignment of [
+    `${KEY}="[SENSITIVE]extra"`,
+    `${KEY}=" [SENSITIVE] "`,
+    `${KEY}="[sensitive]"`,
+    `${KEY}="actual-runtime-value"`,
+    `${KEY}="[SENSITIVE]"\n${KEY}=""`,
+  ]) {
+    const contents = `${assignment}\n`;
+    const file = makeEnvFile(contents);
+    const { status } = runExpectFailure([KEY, file, STANDIN]);
+    assert.equal(status, 1);
+    assert.equal(fs.readFileSync(file, 'utf8'), contents);
+  }
+});
+
 test('refuses a value containing a dollar sign because dotenv-expand can mangle it', () => {
   const file = makeEnvFile();
   const before = fs.readFileSync(file, 'utf8');

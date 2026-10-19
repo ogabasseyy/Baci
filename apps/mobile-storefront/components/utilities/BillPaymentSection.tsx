@@ -64,19 +64,11 @@ export function BillPaymentSection({
       <UtilityPaymentOptions
         amount={numericAmount}
         canFundByBankTransfer={payment.canFundByBankTransfer}
-        cards={payment.cards}
-        isLoadingCards={payment.isLoadingCards}
-        onSelectGateway={payment.selectGateway}
-        onSelectSavedCard={payment.selectSavedCard}
         returnToHref={returnToHref}
-        selectedGateway={payment.selectedGateway}
-        selectedSavedCardId={payment.selectedSavedCardId}
-        supportedGateways={payment.supportedGateways}
-        walletBalance={payment.walletBalance}
+        walletBalance={payment.getWalletBalance()}
         walletError={payment.walletError}
         walletIsLoading={payment.walletIsLoading}
-        walletSelection={payment.walletSelection}
-        onWalletToggle={payment.setWalletSelection}
+        walletIsSettled={payment.isWalletSettled()}
       />
     </View>
   );

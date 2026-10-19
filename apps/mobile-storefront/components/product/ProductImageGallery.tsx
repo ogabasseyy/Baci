@@ -97,7 +97,9 @@ export function ProductImageGallery({
           >
             {images.map((img, idx) => (
               <Pressable
-                key={`${img}-${idx}`}
+                // Gallery entries are distinct product image URLs; a repeated
+                // URL renders an identical thumbnail, so URL keys stay correct.
+                key={img}
                 onPress={() => setSelectedImageIndex(idx)}
                 style={[
                   styles.thumbnail,

@@ -1,25 +1,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { REPLAYABLE_PAID_ORDER_SIDE_EFFECT_STEPS } from '@/lib/payments/replayable-paid-order-side-effect-steps';
-import {
+import type {
   retireWedgeWithReview,
-  type WedgeCandidateRef,
+  WedgeCandidateRef,
 } from '@/lib/payments/retire-wedge-with-review';
 
 export async function retireTerminalSideEffectDrain({
+  fileWedgeReview,
   orderId,
   reason,
   resolution,
   supabase,
   transaction,
 }: {
+  fileWedgeReview: typeof retireWedgeWithReview;
   orderId: string;
   reason: string;
   resolution: string;
   supabase: SupabaseClient;
   transaction: WedgeCandidateRef;
 }): Promise<boolean> {
-  const reviewFiled = await retireWedgeWithReview({
+  const reviewFiled = await fileWedgeReview({
     candidate: transaction,
     reason,
     resolution,

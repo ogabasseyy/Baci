@@ -1,6 +1,6 @@
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
 import { getForwardableSelectedQuoteId } from './get-forwardable-selected-quote-id';
-import type { DeliveryMethod } from './types';
+import type { DeliveryMethod, SharedCartOrderBinding } from './types';
 
 export interface CheckoutOrderRequestInput {
   merchantId: string;
@@ -34,6 +34,8 @@ export interface CheckoutOrderRequestInput {
       country: string;
     };
   };
+  /** Prepared shared-cart binding; absent for legacy checkouts. */
+  sharedCart?: SharedCartOrderBinding;
 }
 
 /** Client parity snapshot only: the order API recomputes authoritative money.
@@ -46,6 +48,7 @@ export function buildCheckoutOrderRequest({
   customer,
   money,
   delivery,
+  sharedCart,
 }: CheckoutOrderRequestInput) {
   const expectedTotal = Math.max(
     0,
@@ -83,17 +86,15 @@ export function buildCheckoutOrderRequest({
       ? { shipping_rate_id: delivery.merchantRateId }
       : {}),
     selected_quote_id:
-      delivery.method === 'airport'
-        ? delivery.quoteMatchesMethod
-          ? delivery.selectedQuoteId || null
-          : null
-        : (getForwardableSelectedQuoteId(
-            delivery.method,
-            delivery.selectedQuoteId
-          ) ?? null),
+      getForwardableSelectedQuoteId(
+        delivery.method,
+        delivery.selectedQuoteId,
+        delivery.quoteMatchesMethod
+      ) ?? null,
     use_wallet_credit: money.useWalletCredit,
     wallet_amount: money.walletAmount,
     user_id: customer.userId,
     accepts_marketing: acceptsMarketing,
+    ...(sharedCart ? { shared_cart: sharedCart } : {}),
   };
 }

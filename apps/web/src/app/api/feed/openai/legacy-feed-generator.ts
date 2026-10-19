@@ -6,6 +6,7 @@ import {
   buildAgentProductUrl,
   trimTrailingSlash,
 } from '@/lib/storefront-agent-urls';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import {
   DEFAULT_RETURN_DAYS,
@@ -16,6 +17,8 @@ import type { Merchant, OpenAIFeedItem, Product } from './feed-types';
 import { resolveLegacyFeedImages } from './legacy-feed-images';
 
 const UNLIMITED_STOCK_QUANTITY = 9999;
+const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
+  productManufacturerIdentifiers;
 
 function getVariantStockCount(
   product: Pick<Product, 'manage_stock'>,
@@ -78,14 +81,15 @@ function buildVariantFeedItem({
     stockCount > 0 ? 'in_stock' : 'out_of_stock';
   const color = variant.attributes?.color || variant.attributes?.Color;
   const size = variant.attributes?.size || variant.attributes?.Size;
+  const identifiers = resolveVariantProductIdentifiers(variant.attributes);
 
   return {
     enable_search: true,
     enable_checkout: true,
     id: itemId,
     item_group_id: product.id,
-    gtin: product.gtin || undefined,
-    mpn: product.mpn || undefined,
+    gtin: identifiers.gtin,
+    mpn: identifiers.mpn,
     title: buildVariantTitle(product, variant),
     description: buildPlainDescription(product),
     link: buildAgentProductUrl({ baseUrl, product }),
@@ -126,6 +130,8 @@ function buildSimpleFeedItem({
     return null;
   }
 
+  const productIdentifiers = normalizeParentProductIdentifiers(product);
+
   const stockCount =
     product.manage_stock === false
       ? UNLIMITED_STOCK_QUANTITY
@@ -150,8 +156,8 @@ function buildSimpleFeedItem({
     enable_search: true,
     enable_checkout: true,
     id: itemId,
-    gtin: product.gtin || undefined,
-    mpn: product.mpn || undefined,
+    gtin: productIdentifiers.gtin,
+    mpn: productIdentifiers.mpn,
     title: product.name,
     description: buildPlainDescription(product),
     link: buildAgentProductUrl({ baseUrl, product }),

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 
 const notFound = vi.fn(() => {
@@ -18,9 +19,9 @@ vi.mock('@/hooks/merchant/storefront-merchant-provider', () => ({
 }));
 
 vi.mock('@/hooks/cart/storefront-cart-provider', () => ({
-  StorefrontCartProvider: ({ children }: { children: ReactNode }) => (
+  StorefrontCartProvider: vi.fn(({ children }: { children: ReactNode }) => (
     <>{children}</>
-  ),
+  )),
 }));
 
 vi.mock('@/components/storefront/webmcp-storefront-tools', () => ({
@@ -70,5 +71,64 @@ describe('StorefrontShellFrame', () => {
       )
     ).toThrow('NEXT_NOT_FOUND');
     expect(notFound).toHaveBeenCalled();
+  });
+});
+
+describe('StorefrontShellFrame cart wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('enables the shared cart for merchants with an explicit grant', () => {
+    render(
+      <StorefrontShellFrame
+        preloadHeroLcpImages={false}
+        shellSnapshot={
+          {
+            merchant: {
+              id: 'merchant-1',
+              plan_tier: 'free',
+              premium_features: ['shared_cart'],
+              slug: 'ogabassey',
+            },
+            routingMode: 'domain',
+          } as never
+        }
+      >
+        <main>Shell body</main>
+      </StorefrontShellFrame>
+    );
+
+    expect(vi.mocked(StorefrontCartProvider).mock.calls[0]?.[0]).toMatchObject({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      sharedCartEnabled: true,
+    });
+  });
+
+  it('keeps the legacy cart without the grant', () => {
+    render(
+      <StorefrontShellFrame
+        preloadHeroLcpImages={false}
+        shellSnapshot={
+          {
+            merchant: {
+              id: 'merchant-1',
+              plan_tier: 'pro',
+              premium_features: [],
+              slug: 'ogabassey',
+            },
+            routingMode: 'domain',
+          } as never
+        }
+      >
+        <main>Shell body</main>
+      </StorefrontShellFrame>
+    );
+
+    expect(vi.mocked(StorefrontCartProvider).mock.calls[0]?.[0]).toMatchObject({
+      merchantId: 'merchant-1',
+      sharedCartEnabled: false,
+    });
   });
 });

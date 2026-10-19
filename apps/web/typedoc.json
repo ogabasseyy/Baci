@@ -20,6 +20,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",
+    "**/css-modules.d.ts",
     "**/node_modules/**"
   ],
   "hideGenerator": true,

@@ -12,6 +12,7 @@ import type {
   ShippingAddress,
   ShippingProviderCode,
 } from '@/lib/shipping/types';
+import { validateSavedGiglCheckoutQuote } from './validate-saved-gigl-checkout-quote';
 
 export type OrderShipmentQuoteRecord = {
   id: string;
@@ -34,6 +35,7 @@ export type OrderShipmentQuoteRecord = {
 
 export type RefreshOrderShipmentQuoteOptions = {
   allowRefresh?: boolean;
+  preserveSavedGiglCheckoutQuote?: boolean;
   /** Order identity required by the proof-bound quote persistence RPC. */
   orderId?: string;
   /**
@@ -50,6 +52,13 @@ export async function refreshOrderShipmentQuote(
   senderOverride?: ShippingAddress,
   options: RefreshOrderShipmentQuoteOptions = {}
 ): Promise<OrderShipmentQuoteRecord> {
+  if (provider === 'GIGL' && options.preserveSavedGiglCheckoutQuote) {
+    return validateSavedGiglCheckoutQuote(
+      quote,
+      senderOverride,
+      options.expectedShippingFee
+    );
+  }
   const quoteRequest = parseStoredQuoteRequest(quote.quote_request);
   const domesticSenderNeedsRefresh = Boolean(
     senderOverride &&

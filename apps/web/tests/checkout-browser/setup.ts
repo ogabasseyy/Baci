@@ -3,10 +3,17 @@ import { cartItem, contact } from './fixtures';
 
 export async function seedCheckout(
   page: Page,
-  options: { authenticated?: boolean; emptyCart?: boolean } = {}
+  options: {
+    authenticated?: boolean;
+    customerEmail?: string;
+    emptyCart?: boolean;
+    startAtContact?: boolean;
+  } = {}
 ) {
   await page.addInitScript(
-    ({ item, details, emptyCart }) => {
+    ({ item, details, emptyCart, startAtContact }) => {
+      if (sessionStorage.getItem('checkout-browser-fixture-seeded')) return;
+      sessionStorage.setItem('checkout-browser-fixture-seeded', '1');
       if (!localStorage.getItem('baci-cart-ogabassey-guest')) {
         localStorage.setItem(
           'baci-cart-ogabassey-guest',
@@ -18,15 +25,25 @@ export async function seedCheckout(
           'checkout-form',
           JSON.stringify({
             ...details,
-            currentStep: 'payment',
-            completedSteps: { contact: true, delivery: true },
+            currentStep: startAtContact ? 'contact' : 'payment',
+            completedSteps: startAtContact
+              ? { contact: false, delivery: false }
+              : { contact: true, delivery: true },
             newAddressState: 'Lagos',
             newAddressCity: 'Ikeja',
-            deliveryMethod: 'pickup',
+            deliveryMethod: startAtContact ? 'door' : 'pickup',
           })
         );
     },
-    { item: cartItem, details: contact, emptyCart: Boolean(options.emptyCart) }
+    {
+      item: cartItem,
+      details: {
+        ...contact,
+        customerEmail: options.customerEmail ?? contact.customerEmail,
+      },
+      emptyCart: Boolean(options.emptyCart),
+      startAtContact: Boolean(options.startAtContact),
+    }
   );
   if (options.authenticated)
     await page.route('**/api/storefront/auth/session?**', (route) =>

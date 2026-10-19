@@ -141,4 +141,49 @@ describe('UtilityPurchasePager', () => {
       recentRecipients: [],
     });
   });
+
+  it('stamps the submitted utility type onto each form success', () => {
+    const onSuccess = jest.fn();
+    renderPager({ onSuccess });
+
+    // The pager stays swipeable in flight: without the stamp, a swipe
+    // would repoint the result + history poll at the new selection.
+    type SuccessFn = (result: { amount: number; reference: string }) => void;
+    const airtimeOnSuccess = (
+      mockAirtimeForm.mock.calls[0][0] as unknown as {
+        onSuccess: SuccessFn;
+      }
+    ).onSuccess;
+    const dataOnSuccess = (
+      mockDataForm.mock.calls[0][0] as unknown as { onSuccess: SuccessFn }
+    ).onSuccess;
+    const billCallbacks = mockBillForm.mock.calls.map(
+      ([props]) =>
+        [
+          (props as unknown as { type: string }).type,
+          (props as unknown as { onSuccess: SuccessFn }).onSuccess,
+        ] as const
+    );
+
+    airtimeOnSuccess({ amount: 100, reference: 'ref-air' });
+    expect(onSuccess).toHaveBeenCalledWith({
+      amount: 100,
+      reference: 'ref-air',
+      utilityType: 'airtime',
+    });
+    dataOnSuccess({ amount: 200, reference: 'ref-data' });
+    expect(onSuccess).toHaveBeenCalledWith({
+      amount: 200,
+      reference: 'ref-data',
+      utilityType: 'data',
+    });
+    for (const [type, callback] of billCallbacks) {
+      callback({ amount: 300, reference: `ref-${type}` });
+      expect(onSuccess).toHaveBeenCalledWith({
+        amount: 300,
+        reference: `ref-${type}`,
+        utilityType: type,
+      });
+    }
+  });
 });

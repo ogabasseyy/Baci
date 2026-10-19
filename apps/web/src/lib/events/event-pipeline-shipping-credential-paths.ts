@@ -28,7 +28,17 @@ const orderRoutePath = 'apps/web/src/app/api/orders/[id]/route.ts';
 const giglQuoteRoutePath =
   'apps/web/src/app/api/orders/[id]/shipping/gigl-quote/route.ts';
 
+const recoveryPreparePath =
+  'apps/web/src/lib/shipping/prepare-checkout-shipping-recovery.ts';
+const recoveryRoutePath =
+  'apps/web/src/app/api/orders/[id]/shipping/checkout-recovery/route.ts';
+
 export const eventPipelineShippingCredentialPaths = [
+  // Audited fixed-action recovery boundary: authenticated owner route, same
+  // paid fee, verified destination, DB snapshot/ownership/proof rechecks.
+  // No generic route-to-signer path, service client, or sibling route grant.
+  [recoveryPreparePath, proofPath, envPath],
+  [recoveryRoutePath, recoveryPreparePath, proofPath, envPath],
   [proofPath, envPath],
   [persistRefreshedPath, proofPath, envPath],
   [persistAdminPath, proofPath, envPath],

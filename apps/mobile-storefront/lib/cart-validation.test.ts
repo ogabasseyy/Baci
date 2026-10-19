@@ -159,6 +159,29 @@ describe('isValidCartStore', () => {
         clearCart: () => {},
         toggleAssurance: () => {},
       })
+      // A free (fully discounted) negotiation hydrates at zero and is
+      // valid now that the canonical flow supports zero-price lines.
+    ).toBe(true);
+    expect(
+      isValidCartStore({
+        items: [
+          {
+            id: 'cart-item-4',
+            product_id: 'product-4',
+            slug: 'negative-deal',
+            name: 'Negative Deal',
+            price: 1000,
+            quantity: 1,
+            negotiatedPrice: -5,
+          },
+        ],
+        itemCount: () => 0,
+        subtotal: () => 0,
+        updateQuantity: () => {},
+        removeItem: () => {},
+        clearCart: () => {},
+        toggleAssurance: () => {},
+      })
     ).toBe(false);
   });
 });

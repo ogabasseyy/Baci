@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { utilityModalTestHarness as harness } from './utility-modal-test-support';
+import {
+  forgetPendingVtuPurchase,
+  notePendingVtuReference,
+  rememberPendingVtuPurchase,
+} from './utility-pending-idempotency';
 import { UtilityModal } from './UtilityModal';
 
 function submitAirtimePurchase() {
@@ -13,18 +18,36 @@ function submitAirtimePurchase() {
   fireEvent.click(screen.getByText('Mock Submit'));
 }
 
+/** Installs a trivial in-process Web Locks stand-in for the mint runner. */
+function installTestLockManager(): void {
+  Object.defineProperty(globalThis.navigator, 'locks', {
+    configurable: true,
+    writable: true,
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+  });
+}
+
 describe('UtilityModal checkout routing', () => {
   beforeEach(() => {
+    // Locks first (R152 P1): checkout mints under the runner, which
+    // fails closed in a lockless jsdom browser.
+    installTestLockManager();
     harness.reset();
   });
 
   it('sends full wallet coverage to wallet-only checkout with idempotency', async () => {
     const setWalletBalance = vi.fn();
     harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       payWithWallet: true,
       setPayWithWallet: vi.fn(),
       setWalletBalance,
       walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
 
@@ -46,60 +69,128 @@ describe('UtilityModal checkout routing', () => {
       type: 'airtime',
       walletAmount: 100,
     });
-    expect(setWalletBalance).toHaveBeenCalledWith(expect.any(Function));
-    const applyBalanceUpdate = setWalletBalance.mock.calls[0]?.[0];
-    expect(typeof applyBalanceUpdate).toBe('function');
-    expect((applyBalanceUpdate as (balance: number) => number)(500)).toBe(400);
+    // Value update (500 - 100), never an updater function (Codex
+    // R109 P2: updaters must be pure).
+    expect(setWalletBalance).toHaveBeenCalledWith(400);
   });
 
-  it('sends partial wallet coverage to Paystack for the residual', async () => {
+  it('says top-up is unavailable when the wallet cannot cover the bill and the store has no funding rail', async () => {
     harness.amount.current = 1000;
-    harness.checkoutFetch.mockResolvedValue(
-      harness.createJsonResponse({
-        checkout_url: 'https://checkout.paystack.com/pay',
-        reference: 'VTU-GATEWAY',
-      })
-    );
 
     submitAirtimePurchase();
 
     await waitFor(() => {
-      expect(harness.checkoutFetch).toHaveBeenCalledWith(
-        '/api/vtu/checkout/initialize',
-        expect.objectContaining({ method: 'POST' })
-      );
+      expect(harness.toast).toHaveBeenCalledWith({
+        title: 'Insufficient wallet balance',
+        description:
+          "Your wallet balance of ₦500 is ₦500 short. Wallet top-up isn't available for this store.",
+        variant: 'destructive',
+      });
     });
-    expect(JSON.parse(String(harness.checkoutFetch.mock.calls[0]?.[1]?.body))).toMatchObject({
-      amount: 1000,
-      gateway: 'paystack',
-      merchantSlug: 'ogabassey',
-      walletAmount: 500,
-    });
-    expect(harness.redirect).toHaveBeenCalledWith(
-      'https://checkout.paystack.com/pay'
-    );
+    expect(harness.checkoutFetch).not.toHaveBeenCalled();
   });
 
-  it('does not apply wallet credit when the customer chooses card', async () => {
+  it('opens the funding panel on insufficient balance when bank-transfer funding is available', async () => {
     harness.useWallet.mockReturnValue({
-      payWithWallet: false,
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      fundingAccount: {
+        accountName: 'OGB / TEST',
+        accountNumber: '9099887766',
+        bankName: 'Wema Bank',
+        provider: 'paystack',
+      },
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: false,
+      setFundingAccount: vi.fn(),
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletDvaEnabled: true,
       walletLoading: false,
+      walletTransactions: [],
     });
-    harness.checkoutFetch.mockResolvedValue(
-      harness.createJsonResponse({ checkout_url: 'https://checkout.paystack.com/pay' })
-    );
+    harness.amount.current = 1000;
 
     submitAirtimePurchase();
 
     await waitFor(() => {
-      expect(harness.checkoutFetch).toHaveBeenCalled();
+      expect(harness.toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Insufficient wallet balance' })
+      );
     });
-    expect(JSON.parse(String(harness.checkoutFetch.mock.calls[0]?.[1]?.body))).not.toHaveProperty(
-      'walletAmount'
+    expect(harness.checkoutFetch).not.toHaveBeenCalled();
+    expect(screen.getByText('9099887766')).toBeInTheDocument();
+  });
+
+  it('opens the funding panel without auto-creating a DVA on insufficient balance (consent stays with the panel CTA)', async () => {
+    harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      fundingAccount: null,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: true,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletDvaEnabled: true,
+      walletLoading: false,
+      walletTransactions: [],
+    });
+    harness.amount.current = 1000;
+
+    submitAirtimePurchase();
+
+    // Panel opens with the manual consent CTA…
+    await waitFor(() => {
+      expect(screen.getByText('Get my account number')).toBeInTheDocument();
+    });
+    // …but no DVA provisioning request fires until the customer clicks it.
+    expect(
+      harness.checkoutFetch.mock.calls.some(([url]) =>
+        String(url).includes('funding-account')
+      )
+    ).toBe(false);
+  });
+
+  it('auto-creates a DVA only after the customer explicitly picks Pay with Bank Transfer', async () => {
+    harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      fundingAccount: null,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: true,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletDvaEnabled: true,
+      walletLoading: false,
+      walletTransactions: [],
+    });
+
+    render(
+      <UtilityModal
+        isOpen={true}
+        onClose={harness.onClose}
+      />
     );
+    fireEvent.click(screen.getByText('Pay with Bank Transfer'));
+
+    await waitFor(() => {
+      expect(
+        harness.checkoutFetch.mock.calls.some(([url]) =>
+          String(url).includes('funding-account')
+        )
+      ).toBe(true);
+    });
   });
 
   it('requires a signed-in customer before starting checkout', async () => {
@@ -160,6 +251,21 @@ describe('UtilityModal checkout routing', () => {
     harness.checkoutFetch.mockResolvedValue(
       harness.createJsonResponse({ error: 'Insufficient funds' }, { ok: false, status: 400 })
     );
+    // A failed vend may have restored the debit: the next balance check
+    // must refetch instead of trusting the possibly-stale cache.
+    const refreshWallet = vi.fn();
+    harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      payWithWallet: true,
+      refreshWallet,
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletLoading: false,
+    });
 
     submitAirtimePurchase();
 
@@ -170,6 +276,137 @@ describe('UtilityModal checkout routing', () => {
         variant: 'destructive',
       });
     });
+    expect(refreshWallet).toHaveBeenCalled();
+  });
+
+  it('shows the pending screen while a checkout is processing', async () => {
+    harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      payWithWallet: true,
+      refreshWallet: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletLoading: false,
+    });
+    harness.checkoutFetch.mockResolvedValue(
+      harness.createJsonResponse({
+        amount: 100,
+        reference: 'REF-PROC-1',
+        status: 'processing',
+      })
+    );
+
+    submitAirtimePurchase();
+
+    await waitFor(() => {
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Success!')).not.toBeInTheDocument();
+  });
+
+  it('locks the utility tabs while a checkout is in flight', async () => {
+    harness.useWallet.mockReturnValue({
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      payWithWallet: true,
+      refreshWallet: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
+      walletLoading: false,
+    });
+    // Never resolves: the request stays in flight for the assertion.
+    harness.checkoutFetch.mockImplementation(() => new Promise(() => {}));
+
+    submitAirtimePurchase();
+
+    // A switch here would render the result + history poll under the
+    // wrong utility type (e.g. airtime polled as data, never settling).
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Data' })).toBeDisabled();
+    });
+    for (const name of ['Airtime', 'TV', 'Power', 'Betting']) {
+      expect(screen.getByRole('tab', { name })).toBeDisabled();
+    }
+  });
+
+  it('locks the utility tabs while a submit waits on the settlement gate', async () => {
+    // Codex R81 P2: loading flips only AFTER the retained-settlement
+    // await, so tabs used to stay enabled during the wait — a switch
+    // there charged the original utility while the success view and
+    // backfill followed the new tab.
+    rememberPendingVtuPurchase('held-settle-scope', 'held-settle-key');
+    notePendingVtuReference('held-settle-scope', 'REF-HELD');
+    let releaseHistory!: (response: Response) => void;
+    const historyGate = new Promise<Response>((resolve) => {
+      releaseHistory = resolve;
+    });
+    const historyFetch = vi.fn(() => historyGate);
+    vi.stubGlobal('fetch', historyFetch);
+    try {
+      render(<UtilityModal isOpen={true} onClose={harness.onClose} />);
+      await waitFor(() => {
+        expect(historyFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/vtu/history'),
+          expect.anything()
+        );
+      });
+
+      fireEvent.click(screen.getByText('Mock Submit'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Data' })).toBeDisabled();
+      });
+      // Still gated: the checkout must not have dispatched yet.
+      expect(harness.checkoutFetch).not.toHaveBeenCalled();
+
+      releaseHistory({
+        ok: true,
+        status: 200,
+        json: async () => ({ transactions: [] }),
+      } as Response);
+      await waitFor(() => {
+        expect(screen.getByText('Success!')).toBeInTheDocument();
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      forgetPendingVtuPurchase('held-settle-scope');
+    }
+  });
+
+  it('keeps the utility tabs locked on the processing view after loading settles', async () => {
+    // loading flips false while step is still 'processing': an enabled
+    // tab switch would unmount the settlement poll (key never settles,
+    // wallet never refetches, late token/refund never surfaces).
+    harness.checkoutFetch.mockResolvedValue(
+      harness.createJsonResponse({
+        amount: 100,
+        reference: 'REF-PROC-2',
+        status: 'processing',
+      })
+    );
+
+    submitAirtimePurchase();
+
+    await waitFor(() => {
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
+    });
+    for (const name of ['Airtime', 'Data', 'TV', 'Power', 'Betting']) {
+      expect(screen.getByRole('tab', { name })).toBeDisabled();
+    }
+    // fireEvent bypasses native disabled, so this also exercises the
+    // onSelect step guard: the processing view must survive the click.
+    fireEvent.click(screen.getByRole('tab', { name: 'Data' }));
+
+    expect(screen.getByText('Processing…')).toBeInTheDocument();
+    expect(screen.queryByTestId('airtime-data-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bill-payment-form')).not.toBeInTheDocument();
   });
 
   it('rejects failed non-JSON checkout responses', async () => {

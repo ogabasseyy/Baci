@@ -1,67 +1,83 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { WALLET_COLORS } from './wallet.colors';
 import { styles } from './wallet.styles';
 
 type WalletColors = (typeof Colors)['light'];
 
 type WalletActionsRowProps = {
+  hasSavedCards?: boolean;
   colors: WalletColors;
   hasActiveSavingsGoal: boolean;
+  needsVariantResolution?: boolean;
   onManageCards: () => void;
   onQuickSave: () => void;
   onStartSavings: () => void;
+  showPrimaryAction?: boolean;
   showQuickSave: boolean;
 };
 
 export function WalletActionsRow({
+  hasSavedCards = false,
   colors,
   hasActiveSavingsGoal,
+  needsVariantResolution = false,
   onManageCards,
   onQuickSave,
   onStartSavings,
+  showPrimaryAction = true,
   showQuickSave,
 }: WalletActionsRowProps) {
-  const primaryActionLabel = hasActiveSavingsGoal
-    ? 'Add to Savings'
-    : 'Start Savings';
+  const primaryActionLabel = needsVariantResolution
+    ? 'Choose exact variant'
+    : hasActiveSavingsGoal
+      ? 'Add to Savings'
+      : 'Start Savings';
 
   return (
     <>
-      <View style={styles.primaryActionRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={primaryActionLabel}
-          onPress={onStartSavings}
-          style={styles.primaryActionButton}
-        >
-          <Ionicons name="sparkles-outline" size={16} color={colors.white} />
-          <Text style={styles.primaryActionButtonText}>
-            {primaryActionLabel}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Manage Cards"
-          onPress={onManageCards}
-          style={styles.secondaryActionButton}
-        >
-          <Ionicons
-            name="card-outline"
-            size={16}
-            color={WALLET_COLORS.darkText}
-          />
-          <Text
-            style={[
-              styles.secondaryActionButtonText,
-              { color: WALLET_COLORS.darkText },
-            ]}
-          >
-            Manage Cards
-          </Text>
-        </Pressable>
-      </View>
+      {showPrimaryAction || hasSavedCards ? (
+        <View style={styles.primaryActionRow}>
+          {showPrimaryAction ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={primaryActionLabel}
+              onPress={onStartSavings}
+              style={styles.primaryActionButton}
+            >
+              <Ionicons
+                name="sparkles-outline"
+                size={16}
+                color={colors.white}
+              />
+              <Text style={styles.primaryActionButtonText}>
+                {primaryActionLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+          {hasSavedCards ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage Cards"
+              onPress={onManageCards}
+              style={[
+                styles.secondaryActionButton,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="card-outline" size={16} color={colors.text} />
+              <Text
+                style={[
+                  styles.secondaryActionButtonText,
+                  { color: colors.text },
+                ]}
+              >
+                Manage Cards
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {showQuickSave ? (
         <Pressable
           accessibilityRole="button"

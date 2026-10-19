@@ -1,8 +1,12 @@
+import { fetchJsonWithDeadline } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { DEFAULT_TIMEOUT, fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import {
-  buildVtuRequestBody,
+  DEFAULT_TIMEOUT,
+  fetchWithTimeout,
+  HttpError,
+} from '@/lib/fetch-with-timeout';
+import {
   getAccessToken,
   getResponseErrorMessage,
   normalizeConfirmCheckoutStatus,
@@ -10,15 +14,8 @@ import {
   parseJsonResponse,
 } from './vtu-checkout-helpers';
 import {
-  ChargeSavedCardGatewaySchema,
-  ChargeSavedCardProcessingSchema,
-  ChargeSavedCardSuccessSchema,
   ConfirmCheckoutResponseSchema,
-  InitCheckoutResponseSchema,
   SavedCardsResponseSchema,
-  type SavedVtuCardChargeAuthorizationRequired,
-  type SavedVtuCardChargeProcessing,
-  type SavedVtuCardChargeResult,
   type VTUCheckoutPayload,
   type VtuCheckoutConfirmation,
   type VtuConfirmationGateway,
@@ -26,25 +23,19 @@ import {
 } from './vtu-checkout-response-schemas';
 
 export {
-  computeVtuWalletAmount,
+  creditedVtuCashback,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
 } from './vtu-checkout-helpers';
 export type {
   SavedVtuCard,
-  SavedVtuCardChargeAuthorizationRequired,
-  SavedVtuCardChargeProcessing,
-  SavedVtuCardChargeResult,
-  SavedVtuCardChargeSuccess,
   VTUCheckoutPayload,
-  VTUPaymentGateway,
   VtuCheckoutConfirmation,
   VtuConfirmationGateway,
   WalletOnlyVtuResult,
 } from './vtu-checkout-response-schemas';
 
 const API_URL = EXPO_PUBLIC_API_URL;
-export const VTU_CHECKOUT_INITIALIZE_URL = `${API_URL}/api/vtu/checkout/initialize`;
 export const VTU_CHECKOUT_WALLET_ONLY_URL = `${API_URL}/api/vtu/checkout/wallet-only`;
 
 export class VtuPaymentStillProcessingError extends Error {
@@ -70,46 +61,51 @@ export class VtuPaymentStillProcessingError extends Error {
   }
 }
 
-export async function initializeVtuCheckout(payload: VTUCheckoutPayload) {
-  const accessToken = await getAccessToken();
-  const response = await fetchWithTimeout(VTU_CHECKOUT_INITIALIZE_URL, {
-    method: 'POST',
-    timeout: DEFAULT_TIMEOUT,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(buildVtuRequestBody(payload)),
-  });
-
-  const data = await parseJsonResponse(response);
-  return InitCheckoutResponseSchema.parse(data);
-}
-
 export async function chargeWalletForVtu(
-  payload: Omit<VTUCheckoutPayload, 'gateway'> & {
+  payload: VTUCheckoutPayload & {
     walletAmount: number;
     idempotencyKey: string;
+    /**
+     * Auth user id captured by the handler before dispatch. When
+     * provided, the acquired token must belong to this user or the
+     * checkout aborts before any POST — otherwise a mid-flight
+     * account switch would debit the wrong customer's wallet. Also
+     * sent in the body so the route's 409 guard backstops both
+     * clients identically.
+     */
+    expectedUserId?: string | null;
   }
 ) {
-  const accessToken = await getAccessToken();
-  const { idempotencyKey, ...rest } = payload;
+  const { expectedUserId, idempotencyKey, ...rest } = payload;
+  const accessToken = await getAccessToken(expectedUserId, {
+    requireSubmitterBinding: true,
+  });
   const normalized = normalizeVtuCheckoutPayload(rest);
-  const response = await fetchWithTimeout(VTU_CHECKOUT_WALLET_ONLY_URL, {
-    method: 'POST',
-    timeout: DEFAULT_TIMEOUT,
+  // One shared deadline for headers + body (Codex R77 6sNGOy):
+  // fetchWithTimeout resolves on headers, so a stalled body used to
+  // hang the submitting guard forever even after the debit landed.
+  // fetchJsonWithDeadline aborts the fetch itself on expiry.
+  const deadlineMs = Date.now() + DEFAULT_TIMEOUT;
+  const { data, response } = await fetchJsonWithDeadline<
+    Record<string, unknown>
+  >(VTU_CHECKOUT_WALLET_ONLY_URL, {
+    body: JSON.stringify({
+      ...normalized,
+      ...(expectedUserId ? { expectedUserId } : {}),
+      merchantSlug: CONFIG.MERCHANT_SLUG,
+    }),
+    deadlineMs,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({
-      ...normalized,
-      merchantSlug: CONFIG.MERCHANT_SLUG,
-    }),
+    method: 'POST',
   });
+  if (!response.ok) {
+    throw new HttpError(response.status, getResponseErrorMessage(data));
+  }
 
-  const data = await parseJsonResponse(response);
   return WalletOnlyVtuResponseSchema.parse({
     ...data,
     status: normalizeConfirmCheckoutStatus(data.status),
@@ -124,24 +120,25 @@ export async function confirmVtuCheckout({
   reference: string;
 }) {
   const accessToken = await getAccessToken();
-  const response = await fetchWithTimeout(
-    `${API_URL}/api/vtu/checkout/confirm`,
-    {
-      method: 'POST',
-      timeout: DEFAULT_TIMEOUT,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        gateway,
-        merchantSlug: CONFIG.MERCHANT_SLUG,
-        reference,
-      }),
-    }
-  );
+  // Shared headers+body deadline (Codex R77 6sNGOy): the history-sync
+  // guard held across this call must not hang on a stalled body.
+  const deadlineMs = Date.now() + DEFAULT_TIMEOUT;
+  const { data, response } = await fetchJsonWithDeadline<
+    Record<string, unknown>
+  >(`${API_URL}/api/vtu/checkout/confirm`, {
+    body: JSON.stringify({
+      gateway,
+      merchantSlug: CONFIG.MERCHANT_SLUG,
+      reference,
+    }),
+    deadlineMs,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
 
-  const data = (await response.json()) as Record<string, unknown>;
   if (!response.ok) {
     const gatewayStatus =
       typeof data.status === 'string' ? data.status.toLowerCase() : '';
@@ -199,20 +196,6 @@ export async function waitForVtuConfirmation({
   });
 }
 
-export function requiresSavedVtuCardAuthorization(
-  result: SavedVtuCardChargeResult
-): result is SavedVtuCardChargeAuthorizationRequired {
-  return (
-    'requires_authorization' in result && result.requires_authorization === true
-  );
-}
-
-export function isSavedVtuCardChargeProcessing(
-  result: SavedVtuCardChargeResult
-): result is SavedVtuCardChargeProcessing {
-  return 'status' in result && result.status === 'processing';
-}
-
 export async function listSavedVtuCards({
   signal,
 }: {
@@ -232,42 +215,4 @@ export async function listSavedVtuCards({
 
   const data = await parseJsonResponse(response);
   return SavedCardsResponseSchema.parse(data).cards;
-}
-
-export async function chargeSavedVtuCard(
-  payload: Omit<VTUCheckoutPayload, 'gateway'> & {
-    savedPaymentMethodId: string;
-  }
-): Promise<SavedVtuCardChargeResult> {
-  const accessToken = await getAccessToken();
-  const response = await fetchWithTimeout(
-    `${API_URL}/api/vtu/checkout/charge-saved-card`,
-    {
-      method: 'POST',
-      timeout: DEFAULT_TIMEOUT,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(
-        buildVtuRequestBody({
-          ...payload,
-          gateway: 'paystack',
-        })
-      ),
-    }
-  );
-
-  const data = await parseJsonResponse(response);
-  const immediateSuccess = ChargeSavedCardSuccessSchema.safeParse(data);
-  if (immediateSuccess.success) {
-    return immediateSuccess.data;
-  }
-
-  const gatewayChallenge = ChargeSavedCardGatewaySchema.safeParse(data);
-  if (gatewayChallenge.success) {
-    return gatewayChallenge.data;
-  }
-
-  return ChargeSavedCardProcessingSchema.parse(data);
 }

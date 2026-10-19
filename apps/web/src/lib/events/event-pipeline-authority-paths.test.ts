@@ -5,6 +5,9 @@ import { eventPipelineLegacySdkImporters } from './event-pipeline-legacy-sdk-imp
 describe('event-pipeline authority paths', () => {
   it('keeps the privileged importer allowlist explicit', () => {
     expect(eventPipelineAdminImporters).toContain(
+      'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts'
+    );
+    expect(eventPipelineAdminImporters).not.toContain(
       'apps/web/src/app/api/platform/events/platform-event-forwarding.ts'
     );
     expect(eventPipelineAdminImporters).toContain(

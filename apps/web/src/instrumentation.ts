@@ -7,6 +7,7 @@
  * This file is automatically loaded by Next.js 16 at startup.
  * See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
  */
+
 import type { Instrumentation } from 'next';
 import { getNextErrorDigest } from '@/lib/errors/next-error-digest';
 
@@ -51,6 +52,16 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Merchant pilot startup gate (own module under the line ceiling).
+    const { registerPilotStartupGate } = await import(
+      './instrumentation-pilot-boot'
+    );
+    await registerPilotStartupGate();
+    // The Places Legacy routes must put the API key in the URL. Their fetch
+    // calls opt out of @vercel/otel spans, so disable Next's separate fetch
+    // spans too; those spans include the full URL and do not honor that option.
+    process.env.NEXT_OTEL_FETCH_DISABLED = '1';
+
     const { registerOTel } = await import('@vercel/otel');
 
     registerOTel({

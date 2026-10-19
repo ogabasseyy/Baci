@@ -3,12 +3,11 @@ import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 export interface StorefrontPriceNegotiationMerchant {
   /**
    * Derived capability hint from the public merchant snapshot. Authoritative
-   * for storefront presentation when present: the server already evaluated
-   * plan tier plus the legacy slug fallback before deriving it.
+   * for storefront presentation when present: the server already evaluated the
+   * merchant's plan tier before deriving it.
    */
   price_negotiation_enabled?: boolean | null;
   plan_tier?: string | null;
-  slug?: string | null;
 }
 
 /**
@@ -26,5 +25,5 @@ export function hasStorefrontPriceNegotiation(
   if (typeof merchant.price_negotiation_enabled === 'boolean') {
     return merchant.price_negotiation_enabled;
   }
-  return hasPriceNegotiationEntitlement(merchant.plan_tier, merchant.slug);
+  return hasPriceNegotiationEntitlement(merchant.plan_tier);
 }

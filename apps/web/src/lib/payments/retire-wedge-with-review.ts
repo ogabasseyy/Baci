@@ -46,22 +46,22 @@ export async function retireWedgeWithReview({
 }
 
 // Terminal outcomes are stamped so the hourly query never recycles them.
+// The stamp merges database-side: spreading the stale in-memory metadata
+// snapshot would clobber a concurrent charge.success completion and erase
+// the abandoned_sweep_resolution a duplicate-capture filing just stamped.
 export async function stampWedgeResolution(
   supabase: SupabaseClient,
   candidate: WedgeCandidateRef,
   resolution: string
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('transactions')
-    .update({
-      metadata: {
-        ...(candidate.metadata ?? {}),
-        wedge_sweep_resolution: resolution,
-        wedge_sweep_resolved_at: new Date().toISOString(),
-      },
-    })
-    .eq('id', candidate.id);
-  if (error) {
+  const { data: stamped, error } = await supabase.rpc(
+    'stamp_wedge_sweep_resolution_v1',
+    {
+      p_transaction_id: candidate.id,
+      p_resolution: resolution,
+    }
+  );
+  if (error || stamped !== true) {
     // Non-fatal: the row shows up again next hour.
     logger.warn({
       error,

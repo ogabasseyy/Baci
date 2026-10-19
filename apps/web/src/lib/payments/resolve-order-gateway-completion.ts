@@ -7,6 +7,7 @@ import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault
 
 export async function resolveOrderGatewayCompletion({
   actor,
+  expectedOutstandingMinor,
   gateway,
   gatewayResponse,
   merchantId,
@@ -16,6 +17,7 @@ export async function resolveOrderGatewayCompletion({
   transactionId,
 }: {
   actor: string;
+  expectedOutstandingMinor?: number | null;
   gateway: 'juicyway' | 'paystack' | 'korapay';
   gatewayResponse: Record<string, unknown>;
   merchantId: string;
@@ -136,6 +138,7 @@ export async function resolveOrderGatewayCompletion({
   }
   const result = await completeOrderGatewayPayment({
     actor,
+    expectedOutstandingMinor,
     gatewayResponse,
     orderId,
     supabase,

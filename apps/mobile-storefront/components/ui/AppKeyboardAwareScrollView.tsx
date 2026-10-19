@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import {
   KeyboardAwareScrollView,
   type KeyboardAwareScrollViewProps,
+  type KeyboardAwareScrollViewRef,
 } from 'react-native-keyboard-controller';
 
 const DEFAULT_KEYBOARD_BOTTOM_OFFSET = 24;
@@ -10,6 +11,7 @@ const DEFAULT_INSET_ADJUSTMENT = 'automatic';
 
 type AppKeyboardAwareScrollViewProps = KeyboardAwareScrollViewProps & {
   children?: ReactNode;
+  ref?: Ref<KeyboardAwareScrollViewRef>;
 };
 
 export default function AppKeyboardAwareScrollView({

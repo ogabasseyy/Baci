@@ -70,7 +70,6 @@ describe('getStorefrontAutocompleteProducts', () => {
       expect.objectContaining({
         query: 'iphnoe',
         limit: 10,
-        trackAnalytics: false,
       })
     );
     expect(result.popularSearches).toEqual([]);

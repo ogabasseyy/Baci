@@ -178,14 +178,23 @@ export async function notifyStorefrontUpdateAvailable(
   let okTokenIds: string[] = [];
   let stampFailed = false;
   try {
-    const tickets = await sendPushNotifications(messages);
-    okTokenIds = tokens
-      .filter((_, i) => tickets[i]?.status === 'ok')
-      .map((t) => t.id);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
+    // Uncertain dispatch may have delivered: throttle the whole batch
+    // so possibly-nudged devices are not immediately reselected and
+    // duplicated. Definitively-bad tokens are deactivated by ticket
+    // processing regardless, so the stamp only delays (never strands)
+    // tokens whose send never started.
+    okTokenIds = (
+      deliveryUncertain
+        ? tokens
+        : tokens.filter((_, i) => tickets[i]?.status === 'ok')
+    ).map((t) => t.id);
     sendResult = await processTickets(tickets, tokens, supabase, {
       appType,
       channel: 'general',
       notificationType: 'mobile_update_available',
+      deliveryUncertain,
     });
   } catch (err) {
     sendResult = {

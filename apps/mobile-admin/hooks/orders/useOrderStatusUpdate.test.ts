@@ -186,8 +186,10 @@ describe('useUpdateOrderStatus', () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },
     });
-    networkMock.fetch.mockRejectedValue(
-      new Error('Cannot ship cancelled order')
+    networkMock.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Cannot ship cancelled order' }), {
+        status: 400,
+      })
     );
 
     const mutationOptions =
@@ -207,7 +209,7 @@ describe('useUpdateOrderStatus', () => {
     expect(networkMock.fetch).toHaveBeenCalledOnce();
   });
 
-  it('maps aborted status updates to the timeout message', async () => {
+  it('treats aborted shipping updates as unconfirmed outcomes', async () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },
     });
@@ -224,9 +226,7 @@ describe('useUpdateOrderStatus', () => {
 
     await expect(
       mutation.mutationFn({ orderId: 'order-1', status: 'shipped' })
-    ).rejects.toThrow(
-      'Request timed out. Please check your connection and try again.'
-    );
+    ).rejects.toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
   });
 
   it('optimistically updates and rolls back all scoped order detail caches', async () => {
@@ -312,6 +312,9 @@ describe('useUpdateOrderStatus', () => {
     });
     expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['transaction-review', 'merchant-1'],
+    });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count', 'merchant-1'],
     });
   });
 });

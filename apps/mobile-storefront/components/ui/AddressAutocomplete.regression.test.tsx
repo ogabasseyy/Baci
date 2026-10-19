@@ -8,6 +8,7 @@ import {
 } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet, View } from 'react-native';
+import type { FetchImplementation } from '@/types/fetch';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { clearPredictionCache } from './AddressAutocomplete.api';
 import { AddressSuggestionsProvider } from './address-suggestions-portal';
@@ -25,7 +26,7 @@ const prediction = {
   placeId: 'place-1',
   secondaryText: 'Ikeja, Lagos',
 };
-const fetchMock = jest.fn<typeof fetch>();
+const fetchMock = jest.fn<FetchImplementation>();
 type MeasureFn = (
   callback: (x: number, y: number, width: number, height: number) => void
 ) => void;

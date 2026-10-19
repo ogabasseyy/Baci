@@ -20,7 +20,10 @@ vi.mock('@/lib/cached-data', () => ({
   sanitizeLookupLogValue: (value: unknown) => String(value ?? '').slice(0, 100),
 }));
 
-import { getProductCached } from './product-page-resolution';
+import {
+  getCategorizedRedirectTarget,
+  getProductCached,
+} from './product-page-resolution';
 
 const merchant = {
   id: 'merchant-1',
@@ -92,5 +95,40 @@ describe('getProductCached', () => {
     await expect(getProductCached('test-store', 'snapshot-phone')).rejects.toBe(
       timeout
     );
+  });
+});
+
+describe('getCategorizedRedirectTarget', () => {
+  const categorizedProduct = {
+    id: 'product-1',
+    name: 'Snapshot Phone',
+    slug: 'snapshot-phone',
+    category_slug: 'smartphones',
+  };
+
+  it('preserves the matched option params through the categorized redirect', () => {
+    expect(
+      getCategorizedRedirectTarget('test-store', categorizedProduct as never, {
+        variantId: 'variant-256',
+        condition: 'used',
+      })
+    ).toBe('/smartphones/snapshot-phone?variantId=variant-256&condition=used');
+  });
+
+  it('returns a bare path without params and null for generic products', () => {
+    expect(
+      getCategorizedRedirectTarget('test-store', categorizedProduct as never)
+    ).toBe('/smartphones/snapshot-phone');
+    expect(
+      getCategorizedRedirectTarget(
+        'test-store',
+        {
+          id: 'product-2',
+          name: 'Mystery Item',
+          slug: 'mystery-item',
+        } as never,
+        { condition: 'used' }
+      )
+    ).toBeNull();
   });
 });

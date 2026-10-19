@@ -1,7 +1,7 @@
 'use client';
 // Template preview
 
-import { getProductImageAlt } from '@baci/shared/lib';
+import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
 import {
   Check,
   ChevronLeft,

@@ -32,6 +32,13 @@ export type StorefrontNotificationNavigationTarget =
          */
         credited?: 'true';
         returnTo?: string;
+        /**
+         * The savings goal named by a `customer_savings_reminder` tap.
+         * `WalletScreen` opens this exact owned plan (falling back to the
+         * default active goal for unknown ids) instead of whichever goal
+         * happens to be the default when an older retained reminder fires.
+         */
+        savingsGoalId?: string;
       };
     }
   | { screen: 'unlock-orders' }
@@ -118,6 +125,8 @@ export function getAdminNotificationNavigationTarget(
     case 'new_order':
     case 'new_invoice':
     case 'payment_received':
+    case 'paystack_refund_processed':
+    case 'paystack_refund_needs_attention':
     case 'shipment_tracking': {
       const orderId = readString(payload, 'order_id', 'orderId');
       return orderId
@@ -197,8 +206,15 @@ export function getStorefrontNotificationNavigationTarget(
     }
     case 'vtu_cashback_monthly_summary':
       return { screen: 'wallet' };
-    case 'customer_savings_reminder':
-      return { screen: 'wallet', params: { action: 'savings' } };
+    case 'customer_savings_reminder': {
+      // Local reminders carry the goal they were scheduled for. Forward it
+      // so the tap opens that exact plan; without it an older retained
+      // reminder would land on whichever goal is the default now.
+      const savingsGoalId = readString(payload, 'goalId', 'goal_id');
+      return savingsGoalId
+        ? { screen: 'wallet', params: { action: 'savings', savingsGoalId } }
+        : { screen: 'wallet', params: { action: 'savings' } };
+    }
     case 'wallet_credited': {
       // Newer clients deep-link to the wallet and, when the interrupted
       // purchase supplied one, carry a returnTo for onward navigation. Older

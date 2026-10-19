@@ -37,9 +37,11 @@ module.exports = {
     const name = hashNames[algorithm];
     if (!name) throw new Error('Unsupported digest algorithm');
     const digest = createHash(name).update(String(data)).digest();
-    return options?.encoding === 'base64'
-      ? digest.toString('base64')
-      : digest.toString('hex');
+    const encoding = options?.encoding ?? 'hex';
+    if (encoding === 'base64') return digest.toString('base64');
+    if (encoding === 'utf8') return digest.toString('utf8');
+    if (encoding === 'hex') return digest.toString('hex');
+    throw new Error(`Unsupported digest encoding: ${String(encoding)}`);
   },
   digest: async (algorithm, data) => {
     const name = hashNames[algorithm];

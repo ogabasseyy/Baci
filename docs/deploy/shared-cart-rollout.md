@@ -4,6 +4,16 @@ Status: prepared only. Nothing in this document has been executed
 against production. Migrations are registered as pending, feature
 flags remain disabled by default, and no merchant is enrolled.
 
+Authoritative pending-migration count: **81** cart migrations are
+registered in
+`apps/web/tools/db/expected-cart-pending-sources.test-support.ts`
+(asserted by `supabase-history-replay-cart-pending-sources.test.ts`).
+Any other count in PR descriptions or earlier notes is superseded by
+that registry. Merge requires fresh CI green on the merge head,
+including the full Supabase history replay (DB Replay) applying all
+81 in timestamp order; activation additionally requires the replay
+and enrollment gates in the release sequence below.
+
 ## Controls that already exist
 
 - Merchant-scoped enrollment flags (`shared_cart`, `shared_cart_realtime`,

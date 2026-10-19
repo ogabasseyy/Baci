@@ -18,6 +18,16 @@ interface Owner {
 let owner: Owner | null = null;
 let generation = 0;
 let suspended = false;
+const listeners = new Set<() => void>();
+function notifyWriterPresence(): void {
+  for (const listener of [...listeners]) listener();
+}
+export function subscribeSharedCartWriter(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 const retirements = new WeakMap<Owner, Promise<boolean>>();
 export function sharedCartWriterGeneration(): number {
   return generation;
@@ -46,8 +56,12 @@ export function installSharedCartWriter(next: Owner): () => void {
   generation += 1;
   owner = next;
   suspended = false;
+  notifyWriterPresence();
   return () => {
-    if (owner === next) owner = null;
+    if (owner === next) {
+      owner = null;
+      notifyWriterPresence();
+    }
   };
 }
 export function hasSharedCartWriter(): boolean {

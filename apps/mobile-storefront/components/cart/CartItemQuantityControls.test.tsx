@@ -1,5 +1,6 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { installSharedCartWriter } from '@/stores/shared-cart-writer';
 import CartItemQuantityControls from './CartItemQuantityControls';
 
 jest.mock('@react-native-vector-icons/ionicons', () => 'Icon');
@@ -79,6 +80,30 @@ it('allows incrementing past 10 when shared cart is disabled and no product max_
   );
   fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
   expect(props.handleQuantityChange).toHaveBeenCalledWith(legacyItem, 1);
+});
+it('reacts to writer install and retire while mounted without the enabled flag changing', () => {
+  useNativeSharedCartStore.setState({ enabled: false });
+  const cappedItem = { ...item, quantity: 10 };
+  const view = render(
+    <CartItemQuantityControls {...props} item={cappedItem} />
+  );
+  fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
+  expect(props.handleQuantityChange).toHaveBeenCalledWith(cappedItem, 1);
+  jest.clearAllMocks();
+  let uninstall: (() => void) | undefined;
+  act(() => {
+    uninstall = installSharedCartWriter({
+      write: jest.fn(async () => {}),
+      onError: jest.fn(),
+    });
+  });
+  fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
+  expect(props.handleQuantityChange).not.toHaveBeenCalled();
+  act(() => {
+    uninstall?.();
+  });
+  fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
+  expect(props.handleQuantityChange).toHaveBeenCalledWith(cappedItem, 1);
 });
 it('does not decrement an ordinary line below one', () => {
   const view = render(

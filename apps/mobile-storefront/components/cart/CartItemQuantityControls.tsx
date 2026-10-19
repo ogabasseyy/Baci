@@ -1,9 +1,13 @@
 import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useSyncExternalStore } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { CartItem } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
-import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
+import {
+  hasSharedCartWriter,
+  subscribeSharedCartWriter,
+} from '@/stores/shared-cart-writer';
 import CartQuantityInput from './CartQuantityInput';
 import styles from './styles';
 
@@ -30,8 +34,13 @@ export default function CartItemQuantityControls({
   surfaceInset,
   disabledIconColor,
 }: CartItemQuantityControlsProps) {
+  const writerPresent = useSyncExternalStore(
+    subscribeSharedCartWriter,
+    hasSharedCartWriter,
+    hasSharedCartWriter
+  );
   const sharedCartEnabled =
-    useNativeSharedCartStore((state) => state.enabled) || hasSharedCartWriter();
+    useNativeSharedCartStore((state) => state.enabled) || writerPresent;
   const itemMaxQuantity =
     item.max_quantity && item.max_quantity > 0 ? item.max_quantity : undefined;
   const maxQuantity = sharedCartEnabled

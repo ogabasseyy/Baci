@@ -213,8 +213,18 @@ jobs:
             local cs cr
             cs="$(status_state "$1" "$3")"
             cr="$(check_state "$2" "$3")"
-            case "$cs" in success|failure) printf '%s' "$cs" ; return ;; esac
-            case "$cr" in success|failure) printf '%s' "$cr" ; return ;; esac
+            case "$cs" in
+              success|failure)
+                printf '%s' "$cs"
+                return
+                ;;
+            esac
+            case "$cr" in
+              success|failure)
+                printf '%s' "$cr"
+                return
+                ;;
+            esac
             if [ "$cs" = "pending" ] || [ "$cr" = "pending" ]; then printf 'pending' ; return ; fi
             if [ "$cs" = "error" ] || [ "$cr" = "abstain" ]; then printf 'abstain' ; return ; fi
             printf 'missing'

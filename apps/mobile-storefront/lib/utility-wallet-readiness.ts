@@ -1,0 +1,153 @@
+import { router } from 'expo-router';
+import { Alert } from 'react-native';
+import type { WalletReturnHref } from './sanitize-wallet-return-to';
+import { promptUtilityWalletFunding } from './utility-wallet-funding-prompt';
+
+interface UtilityWalletReadinessPayment {
+  canFundByBankTransfer: boolean;
+  /**
+   * Raw auth user id at gate time — NOT session presence. Startup can
+   * publish a session before the user object hydrates, and the
+   * charge's submitter binding aborts without it, so the gate must
+   * wait for the id instead of letting the submit fail post-dispatch.
+   */
+  captureSubmittingUserId: () => string | undefined;
+  /**
+   * Raw session presence — NOT customer-record presence. Startup publishes
+   * session/user with customer:null while hydration finishes in the
+   * background, and the wallet still resolves by user ID, so gating on the
+   * customer record would send signed-in customers to sign in again.
+   */
+  isAuthenticated: boolean;
+  refetchWallet: () => void;
+  /**
+   * Live wallet-balance reader (Codex R78 6sN80p), invoked at gate
+   * time — NOT a render-time snapshot. A refetch completing during
+   * the settlement-gate await refreshes the cache while the purchase
+   * closure still holds the old number; reading live admits the
+   * refreshed verdict instead.
+   */
+  getWalletBalance: () => number;
+  /**
+   * Live wallet-error reader (Codex R80), invoked at gate time —
+   * NOT the render-time snapshot. A refetch failing during the
+   * settlement-gate await leaves stale data (settled) with no fetch
+   * running; only the cache knows the latest request failed.
+   */
+  getWalletError: () => Error | null;
+  walletIsLoading: boolean;
+  /**
+   * Live wallet-fetch reader (Codex R75 6r486a), invoked at gate
+   * time — NOT a render-time snapshot. The payment object is
+   * captured before the settlement-gate await; a refetch starting
+   * during that await must still block. Mirrors web's
+   * walletRefreshPending live read.
+   */
+  isWalletRefetching: () => boolean;
+  /**
+   * Live settled reader (Muse R2), invoked at gate time — NOT a
+   * render-time snapshot. A DISABLED wallet query (identity
+   * mid-switch, owner not yet resolved) reports not-loading with no
+   * data and no error, which reads as a zero balance; the gate must
+   * wait for enabled query + cached data instead of opening funding.
+   */
+  isWalletSettled: () => boolean;
+}
+
+/**
+ * Shared pre-submit gate for wallet-only utility purchases (airtime, data,
+ * bills). A zero balance is ambiguous — it also reads while the wallet query
+ * is loading or after it errors — so each state gets its own verdict instead
+ * of every short read opening the funding prompt. Signed-out customers have
+ * no wallet at all and are sent to sign in. Returns true only when the wallet
+ * is settled, healthy, and covers the amount.
+ */
+export function ensureUtilityWalletReady({
+  amount,
+  isRetainedReplay = false,
+  payment,
+  returnToHref,
+}: {
+  amount: number;
+  /**
+   * Retained replays bypass the balance gate (Codex R65 6ru4mK):
+   * the wallet was already debited for this exact intent — the
+   * server replays the original outcome without charging again,
+   * so a post-debit balance dip must not strand recovery behind
+   * top-up. Auth/loading/error gates still apply.
+   */
+  isRetainedReplay?: boolean;
+  payment: UtilityWalletReadinessPayment;
+  returnToHref?: WalletReturnHref | null;
+}): boolean {
+  if (!payment.isAuthenticated) {
+    Alert.alert(
+      'Sign in required',
+      'Please sign in to buy utilities from your wallet.',
+      [
+        {
+          text: 'Sign In',
+          onPress: () => router.push('/auth/login'),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+    return false;
+  }
+  // The charge binds its token to the submitting user id; without
+  // the id it aborts post-dispatch ("Account still loading"), so
+  // wait for hydration here instead of attempting a doomed submit.
+  if (!payment.captureSubmittingUserId()) {
+    Alert.alert('Account still loading', 'Please wait a moment and try again.');
+    return false;
+  }
+  // A refetch in flight means fresh data is seconds away — never
+  // submit against the balance it is about to replace. Merely stale
+  // data with no fetch running still stands (the server stays
+  // authoritative); blocking on that would brick purchases.
+  if (payment.walletIsLoading || payment.isWalletRefetching()) {
+    Alert.alert(
+      'Checking wallet balance',
+      'Please wait a moment and try again.'
+    );
+    return false;
+  }
+  // Live failure (Codex R80 P2), checked BEFORE settled: a refetch
+  // failing mid-await leaves stale data behind, so settled is true
+  // while the latest request failed — submitting on it would spend
+  // a balance the server just refused to confirm. Offer a refetch,
+  // not funding: the money may already be there.
+  if (payment.getWalletError()) {
+    Alert.alert('Wallet unavailable', "We couldn't load your wallet balance.", [
+      {
+        text: 'Try Again',
+        onPress: () => payment.refetchWallet(),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+    return false;
+  }
+  // UNSETTLED wallet (disabled query, no cached data yet) has no
+  // balance at all — its zero read must wait, never open funding.
+  // Runs after the error branch so an errored wallet offers Try
+  // Again instead of a dead-end wait.
+  if (!payment.isWalletSettled()) {
+    Alert.alert(
+      'Checking wallet balance',
+      'Please wait a moment and try again.'
+    );
+    return false;
+  }
+  // Read the balance at gate time, not from the pre-await snapshot.
+  const walletBalance = payment.getWalletBalance();
+  if (!isRetainedReplay && walletBalance < amount) {
+    promptUtilityWalletFunding({
+      amount,
+      balance: walletBalance,
+      canFundByBankTransfer: payment.canFundByBankTransfer,
+      returnToHref,
+    });
+    return false;
+  }
+  return true;
+}

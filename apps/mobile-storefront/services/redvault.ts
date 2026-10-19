@@ -17,6 +17,7 @@ const API_URL = resolveApiBaseUrl(
 const availabilitySchema = z.object({
   available: z.literal(true),
   reason: z.string(),
+  expiresAt: z.number().optional(),
 });
 
 const verificationSchema = z.object({
@@ -40,21 +41,48 @@ export async function getCheckoutAuthorizationHeaders() {
   return auth.authorizationHeaders;
 }
 
-export async function getRedvaultPaymentAvailability(merchantId: string) {
+export type RedvaultPaymentAvailability = {
+  available: boolean;
+  reason: string;
+  expiresAt?: number;
+};
+
+const UNAVAILABLE: RedvaultPaymentAvailability = {
+  available: false,
+  reason: 'unavailable',
+};
+
+export async function getRedvaultPaymentAvailability(
+  merchantId: string,
+  productId?: string
+): Promise<RedvaultPaymentAvailability> {
   try {
-    if (merchantId !== '6b5cb8a4-5575-456c-b936-8cdfae30db74') return false;
+    if (merchantId !== '6b5cb8a4-5575-456c-b936-8cdfae30db74')
+      return { available: false, reason: 'merchant_unavailable' };
     const authorizationHeaders = await getCheckoutAuthorizationHeaders();
     const url = new URL('/api/payments/redvault/availability', API_URL);
     url.searchParams.set('merchant_id', merchantId);
+    if (productId) url.searchParams.set('product_id', productId);
     const response = await fetch(url, {
       headers: authorizationHeaders,
       cache: 'no-store',
       signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) return false;
-    return availabilitySchema.safeParse(await response.json()).success;
+    if (!response.ok) return UNAVAILABLE;
+    const parsed = availabilitySchema.safeParse(await response.json());
+    if (!parsed.success) return UNAVAILABLE;
+    const expiresAt =
+      typeof parsed.data.expiresAt === 'number' &&
+      Number.isFinite(parsed.data.expiresAt)
+        ? parsed.data.expiresAt
+        : undefined;
+    return {
+      available: true,
+      reason: parsed.data.reason,
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    };
   } catch {
-    return false;
+    return UNAVAILABLE;
   }
 }
 

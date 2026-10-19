@@ -9,6 +9,9 @@ const ucpCurrencySchema = z
 export const ucpCartLineItemSchema = z.looseObject({
   item: z.looseObject({
     id: z.string().trim().min(1, 'Item id is required'),
+    variant_id: z.string().trim().min(1).optional(),
+    variant_attributes: z.record(z.string(), z.string()).optional(),
+    condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
   }),
   quantity: z.int().positive('Quantity must be positive'),
 });

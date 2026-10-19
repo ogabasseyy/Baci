@@ -13,6 +13,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
+import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
 import { showCartToast } from './cart-notifications';
 import { getCachedProductStock } from './cart-query-cache';
 import {
@@ -30,6 +31,7 @@ export function useCart() {
   // Get store actions
   const {
     items,
+    isLoading,
     addItem: addItemToStore,
     removeItem: removeItemFromStore,
     updateQuantity: updateQuantityInStore,
@@ -40,6 +42,7 @@ export function useCart() {
   } = useCartStore(
     useShallow((state) => ({
       items: state.items,
+      isLoading: state.isLoading,
       addItem: state.addItem,
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
@@ -103,7 +106,8 @@ export function useCart() {
       // Store rollback function (L11 fix: uses trackRollback to enforce size limit)
       trackRollback(rollbackId, () => {
         // Restore previous state
-        useCartStore.setState({ items: previousItems });
+        if (!hasSharedCartWriter())
+          useCartStore.setState({ items: previousItems });
       });
 
       return { rollbackId, previousItems };
@@ -163,7 +167,8 @@ export function useCart() {
 
     onError: (_error, _id, context) => {
       if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
+        if (!hasSharedCartWriter())
+          useCartStore.setState({ items: context.previousItems });
       }
       showCartToast('Failed to remove item', 'error');
     },
@@ -207,7 +212,8 @@ export function useCart() {
 
     onError: (_error, _, context) => {
       if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
+        if (!hasSharedCartWriter())
+          useCartStore.setState({ items: context.previousItems });
       }
       showCartToast(
         'Stock Error: Quantity adjusted to available stock',
@@ -229,14 +235,26 @@ export function useCart() {
 
   // Wrapped functions for easier consumption
   const addToCart = (item: AddToCartInput) => {
+    if (hasSharedCartWriter()) {
+      addItemToStore(item);
+      return;
+    }
     addToCartMutation.mutate(item);
   };
 
   const removeFromCart = (id: string) => {
+    if (hasSharedCartWriter()) {
+      void removeItemFromStore(id);
+      return;
+    }
     removeFromCartMutation.mutate(id);
   };
 
   const updateQuantity = (id: string, quantity: number) => {
+    if (hasSharedCartWriter()) {
+      void updateQuantityInStore(id, quantity);
+      return;
+    }
     updateQuantityMutation.mutate({ id, quantity });
   };
 
@@ -252,9 +270,15 @@ export function useCart() {
     updateQuantity,
 
     // Mutation states for UI feedback
-    isAddingToCart: addToCartMutation.isPending,
-    isRemovingFromCart: removeFromCartMutation.isPending,
-    isUpdatingQuantity: updateQuantityMutation.isPending,
+    isAddingToCart: hasSharedCartWriter()
+      ? isLoading
+      : addToCartMutation.isPending,
+    isRemovingFromCart: hasSharedCartWriter()
+      ? isLoading
+      : removeFromCartMutation.isPending,
+    isUpdatingQuantity: hasSharedCartWriter()
+      ? isLoading
+      : updateQuantityMutation.isPending,
 
     // Direct store access for non-optimistic operations
     getItem,

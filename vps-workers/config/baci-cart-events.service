@@ -1,0 +1,28 @@
+[Unit]
+Description=Baci scoped cart notification outbox
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/bassey/baci-workers/cart-events.env
+
+[Service]
+Type=simple
+User=bassey
+Group=bassey
+WorkingDirectory=/home/bassey/baci-workers
+Environment=NODE_ENV=production
+Environment=BACI_REPO_DIR=/home/bassey/baci-workers/app-live
+Environment=BACI_WORKER_ENV=/home/bassey/baci-workers/cart-events.env
+ExecStart=/home/bassey/baci-workers/bin/process-cart-events.sh --loop
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

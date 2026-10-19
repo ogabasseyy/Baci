@@ -1,3 +1,5 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
  * Ogabassey ChatGPT MCP Server
  *
@@ -13,7 +15,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { prepareCartHandoff } from './cart-handoff';
+import { GuestCartStore } from './guest-cart-store';
+import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
+import { createGuestCartWorkerClient } from './guest-cart-worker-client';
+import { describeGuestCartStoreHealth } from './guest-cart-health';
+import { registerCartLinkTools } from './cart-link-tool';
+import { registerGuestCartTool } from './guest-cart-tool';
+import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
@@ -27,7 +35,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
 import {
@@ -47,8 +55,8 @@ import {
 } from './agentic-checkout-client';
 import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
-import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { discoverMcpProducts } from './discover-products';
+import { formatSearchProductsResponse } from './format-search-products-response';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
 import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
 import { getMcpOfferAvailability } from './product-offer-availability';
@@ -57,6 +65,12 @@ import { loadMcpProductVariants } from './product-variants';
 import { serveProductImage } from './product-image-proxy';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { createSearchProductsToolConfig } from './search-products-tool-config';
+import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
+import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
+import { GiglProvider } from '../src/lib/shipping/providers/gigl';
+import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.constants';
 
 // =============================================================================
 // CONFIGURATION
@@ -64,7 +78,14 @@ import { STORE_WIDGET_URI } from './widget-resource-uri';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Worker JWT for guest-cart storage: minted offline with the
+// mcp_guest_cart_worker role claim, it can invoke only the three cart
+// RPCs. Neither the public anon key nor the RLS-bypassing service key
+// may back user-facing cart operations.
+const GUEST_CART_WORKER_TOKEN = process.env.MCP_GUEST_CART_WORKER_TOKEN;
 const OGABASSEY_SLUG = 'ogabassey';
+// Preserve GIG authentication and station caches across stateless MCP requests.
+const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -181,16 +202,48 @@ const productLookupInputSchema = {
 };
 
 // Validate required environment variables at startup (fail closed)
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !GUEST_CART_WORKER_TOKEN) {
   console.error('FATAL: Missing required environment variables');
   console.error(
-    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+    'Required: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, MCP_GUEST_CART_WORKER_TOKEN'
   );
   process.exit(1);
 }
+// Log the effective trust-proxy mode once: when false behind a proxy,
+// rate limiting and the cart quota key on the proxy socket address and
+// every caller shares one bucket (see README). The value is explicit
+// per deploy; this line keeps it visible in deploy logs.
+console.log(
+  JSON.stringify({
+    type: 'lifecycle',
+    event: 'mcp-trust-proxy-mode',
+    trustProxyRealIp: process.env.MCP_TRUST_PROXY_REAL_IP === 'true',
+    timestamp: new Date().toISOString(),
+  })
+);
 
 // Public shopping tools use the normal RLS-scoped anonymous client.
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Guest carts persist through worker-scoped Postgres RPCs: no local
+// volume, no writer lock, safe to scale past one replica. (The
+// creation quota stays per-process, so N replicas admit N times the
+// single-host burst: over-admission, never over-refusal.)
+let guestCartClient: SupabaseClient;
+try {
+  guestCartClient = createGuestCartWorkerClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    GUEST_CART_WORKER_TOKEN
+  );
+} catch (error) {
+  // Static messages only: the token and its claims never reach logs.
+  console.error('FATAL: Invalid guest-cart worker token');
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+// The startup probe authenticates this same client before the store
+// below serves traffic; the probe needs no store state.
+const guestCartStore = new GuestCartStore(guestCartClient);
 
 // =============================================================================
 // RATE LIMITING
@@ -1028,6 +1081,16 @@ const widgetHtml = `<!DOCTYPE html>
     const openLink = (url) => window.openai?.openExternal?.({ href: url }) || window.open(url, '_blank');
     const productUrl = (slug) => 'https://ogabassey.com/products/' + encodeURIComponent(slug);
     const cartUrl = (productId) => 'https://ogabassey.com/cart?item_id=' + encodeURIComponent(productId);
+    const hasOptionParams = (url) => {
+      if (typeof url !== 'string' || url === '') return false;
+      try {
+        const params = new URL(url).searchParams;
+        return params.has('variantId') || params.has('condition');
+      } catch { return false; }
+    };
+    // Option-bearing results open the PDP: the cart handoff rejects
+    // variant/condition products with "Choose product options".
+    const purchaseUrl = (p) => (hasOptionParams(p.url) ? p.url : cartUrl(p.id));
 
     const renderProducts = (products) => {
       if (!products?.length) {
@@ -1068,10 +1131,10 @@ const widgetHtml = `<!DOCTYPE html>
             '</div>' +
           '</div>';
 
-        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(productUrl(p.slug)));
-        card.querySelector('.product-name')?.addEventListener('click', () => openLink(productUrl(p.slug)));
-        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
-        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(cartUrl(p.id)); });
+        card.querySelector('.product-img-wrap')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
+        card.querySelector('.product-name')?.addEventListener('click', () => openLink(p.url || productUrl(p.slug)));
+        card.querySelector('.btn-cart')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
+        card.querySelector('.btn-buy')?.addEventListener('click', (e) => { e.stopPropagation(); openLink(purchaseUrl(p)); });
         return card;
       });
 
@@ -1164,7 +1227,7 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
-function createOgabasseyServer() {
+function createOgabasseyServer(options: { clientIp?: string } = {}) {
   const server = new McpServer({
     name: 'ogabassey-store',
     version: '1.0.0',
@@ -1209,41 +1272,7 @@ function createOgabasseyServer() {
   // Tool: Search products
   server.registerTool(
     'search_products',
-    {
-      title: 'Search Products',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Use this when a buyer wants to find real Ogabassey products. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, options, and reported availability; it does not reserve stock.',
-      inputSchema: {
-        query: z
-          .string()
-          .max(100)
-          .optional()
-          .describe('Search query (product name, brand, or keywords)'),
-        condition: z
-          .enum(['new', 'used', 'open_box', 'refurbished'])
-          .optional()
-          .describe('Product condition'),
-        category: z
-          .string()
-          .max(50)
-          .optional()
-          .describe('Catalog category. Use Smartphones for phone requests, Tablets for tablet requests, and Laptops for laptop requests.'),
-        brand: z.string().max(50).optional().describe('Brand name'),
-        min_price: z.number().min(0).optional(),
-        max_price: z.number().min(0).optional(),
-        sort: z
-          .enum(['price_asc', 'price_desc', 'newest', 'relevance'])
-          .optional()
-          .default('relevance'),
-        limit: z.number().min(1).max(20).optional().default(10),
-      },
-      _meta: {
-        'openai/outputTemplate': STORE_WIDGET_URI,
-        'openai/toolInvocation/invoking': 'Searching catalog...',
-        'openai/toolInvocation/invoked': 'Search complete',
-      },
-    },
+    createSearchProductsToolConfig(STORE_WIDGET_URI),
     async (args) => {
       try {
         const merchantId = await getMerchantId();
@@ -1251,8 +1280,7 @@ function createOgabasseyServer() {
         const semanticApiKey = process.env.GEMINI_API_KEY;
         let queryEmbedding: Promise<number[]> | undefined;
 
-        const { priceScanComplete, sanitizedQuery, selectedProducts } =
-          await discoverMcpProducts({
+        const discovery = await discoverMcpProducts({
             args,
             merchantId,
             sanitizeString,
@@ -1269,84 +1297,31 @@ function createOgabasseyServer() {
             supabase,
           });
 
+        const { priceScanComplete, sanitizedQuery, selectedProducts } = discovery;
+        const coverage = 'coverage' in discovery ? discovery.coverage : undefined;
+        if ('invalidIntentMessage' in discovery && discovery.invalidIntentMessage) {
+          const message = discovery.invalidIntentMessage;
+          return formatInvalidDiscoveryIntent(message);
+        }
         if (!priceScanComplete) {
-          const message = 'This price search has too many matching products to check accurately. Add a category, brand, or more specific product name and try again.';
+          const message = 'incompleteReason' in discovery && discovery.incompleteReason === 'option_lookup_failed'
+            ? 'Product options are temporarily unavailable, so this search could not check all matching prices. Please try again.'
+            : 'This search could not check all matching products to confirm the requested prices or order. Add a category, brand, or more specific product name and try again.';
           return {
             content: [{ type: 'text', text: message }],
-            structuredContent: { products: [], status: 'incomplete', message },
+            structuredContent: { products: [], status: 'incomplete', coverage: 'partial', message },
           };
         }
 
-        const formatted = selectedProducts.map(({ product: p, displayPrice, displayCondition, displayCompareAtPrice, stockSummary, availableVariants: variants }) => {
-          // A compare-at price indicates a listed discount, not a price trend.
-          const isDiscounted = typeof displayPrice === 'number' &&
-            displayCompareAtPrice && displayCompareAtPrice > displayPrice;
-
-          // Variant Summary (e.g., "Available in: Black, White")
-          const variantOptions: Record<string, Set<string>> = {};
-          variants.forEach((v) => {
-            Object.entries(v.attributes || {}).forEach(([key, val]) => {
-              if (!variantOptions[key]) variantOptions[key] = new Set();
-              variantOptions[key].add(String(val));
-            });
-          });
-          const availableOptions = Object.entries(variantOptions)
-            .map(([key, vals]) => `${key}: ${Array.from(vals).join(', ')}`)
-            .join(' | ');
-
-          return {
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            price: displayPrice,
-            compare_at_price: displayCompareAtPrice,
-            image: getSafeCatalogImageUrl(p.images?.[0]?.url || p.images?.[0]),
-            condition: displayCondition || resolveMcpSearchProductCondition(p, args.condition),
-            brand: p.brand,
-            category: p.category,
-            in_stock: stockSummary.inStock,
-
-            // New Intelligence Fields
-            stock_level: stockSummary.level,
-            stock_confidence: stockSummary.confidence,
-            price_status: isDiscounted ? 'discounted' : 'regular',
-            available_variants: availableOptions || 'Standard',
-            last_updated: p.updated_at,
-          };
+        return formatSearchProductsResponse({
+          selectedProducts,
+          sanitizedQuery,
+          coverage,
+          searchMode: 'structured',
+          semanticUnavailable: 'semanticUnavailable' in discovery ? discovery.semanticUnavailable : undefined,
+          requestedCondition: args.condition,
+          getSafeCatalogImageUrl,
         });
-
-        // 4. Construct Response
-        const count = formatted.length;
-        if (count === 0) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
-              },
-            ],
-            structuredContent: { products: [], status: 'empty' },
-          };
-        }
-        const resultText = [
-          `Found ${count} Ogabassey products. Prices are listed in NGN; confirm availability before checkout.`,
-          ...formatted.map((product) =>
-            `${product.name} — ₦${Number(product.price).toLocaleString('en-NG')} (${product.stock_level}); ${product.available_variants}.`
-          ),
-        ].join('\n');
-
-        return {
-          content: [{ type: 'text', text: resultText }],
-          structuredContent: {
-            status: 'success',
-            products: formatted,
-            meta: { total: count, query: sanitizedQuery },
-          },
-          _meta: {
-            'openai/outputTemplate': STORE_WIDGET_URI,
-            'openai/widgetPrefersBorder': true,
-          },
-        };
       } catch (err: any) {
         console.error('Search Critical Error:', err);
         // Graceful Degradation (Unbreakable)
@@ -1367,57 +1342,9 @@ function createOgabasseyServer() {
     }
   );
 
-  // Tool: Add to Cart (Widget-accessible)
-  // This tool can be called from the widget iframe using window.openai.callTool
-  server.registerTool(
-    'add_to_cart',
-    {
-      title: 'Add to Cart',
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
-      inputSchema: {
-        product_id: z.string().describe('The product ID to add to cart'),
-        quantity: z
-          .number()
-          .int()
-          .min(1)
-          .max(10)
-          .optional()
-          .default(1)
-          .describe('Quantity to add'),
-      },
-      _meta: {
-        'openai/widgetAccessible': true, // Enable widget-initiated calls
-        'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',
-        'openai/toolInvocation/invoked': 'Ready to add on Ogabassey',
-      },
-    },
-    async (args) => {
-      try {
-        const merchantId = await getMerchantId();
-        if (!merchantId) {
-          return {
-            content: [{ type: 'text', text: '❌ Unable to access store.' }],
-          };
-        }
-
-        return prepareCartHandoff({
-          supabase,
-          merchantId,
-          productId: args.product_id,
-          quantity: args.quantity,
-          formatPrice,
-        });
-      } catch (error) {
-        console.error('Add to cart error:', error);
-        return {
-          content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
-        };
-      }
-    }
-  );
+  registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {
@@ -1716,10 +1643,11 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product',
     {
+      outputSchema: mcpToolOutputSchemas.get_product,
       title: 'Get Product Details',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/outputTemplate': STORE_WIDGET_URI,
@@ -1732,7 +1660,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1752,7 +1680,7 @@ function createOgabasseyServer() {
               text: 'Please provide a valid product ID or product name.',
             },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'invalid_input' as const, message: 'Please provide a valid product ID or product name.' },
         };
       }
 
@@ -1762,7 +1690,7 @@ function createOgabasseyServer() {
         .select(`
           id, name, slug, price, compare_at_price, images, description, stock_quantity, manage_stock,
           condition, condition_detail, brand, category, has_variants, has_condition_offers,
-          weight_value, weight_unit, dimensions, schema_markup
+          color, color_images, weight_value, weight_unit, dimensions, schema_markup
         `)
         .eq('merchant_id', merchantId)
         .eq('status', 'active');
@@ -1784,12 +1712,17 @@ function createOgabasseyServer() {
               message: productError.message,
             })
           );
+          const message = 'Product lookup is temporarily unavailable.';
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'unavailable' as const, message },
+          };
         }
         return {
           content: [
             { type: 'text', text: `Product "${lookupLabel}" not found.` },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'not_found' as const, message: `Product "${lookupLabel}" not found.` },
         };
       }
 
@@ -1922,6 +1855,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_store_info',
     {
+      outputSchema: mcpToolOutputSchemas.get_store_info,
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
@@ -1951,6 +1885,7 @@ function createOgabasseyServer() {
       };
       return {
         content: [{ type: 'text', text: info[args.topic || 'general'] }],
+        structuredContent: { topic: args.topic || 'general', message: info[args.topic || 'general'] },
       };
     }
   );
@@ -1959,10 +1894,11 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product_variants',
     {
+      outputSchema: mcpToolOutputSchemas.get_product_variants,
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/toolInvocation/invoking': 'Loading variants...',
@@ -1974,10 +1910,11 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { variants: [], condition_offers: [], status: 'unavailable', message: 'Store temporarily unavailable.' },
         };
       }
 
-      return loadMcpProductVariants({ args, merchantId, supabase, sanitizeString, formatPrice });
+      return loadMcpProductVariants({ args, merchantId, supabase, sanitizeString, formatPrice, getSafeCatalogImageUrl });
     }
   );
 
@@ -1985,6 +1922,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'browse_categories',
     {
+      outputSchema: mcpToolOutputSchemas.browse_categories,
       title: 'Browse Categories',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of product categories available in the store.',
@@ -1999,6 +1937,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -2006,8 +1945,13 @@ function createOgabasseyServer() {
         supabase, merchantId, facet: 'category',
       });
 
+      if (categories === null) {
+        const message = 'Category lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
+      }
+
       if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }] };
+        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
       }
 
       const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
@@ -2023,6 +1967,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_brands',
     {
+      outputSchema: mcpToolOutputSchemas.get_brands,
       title: 'Get Available Brands',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of brands available in the store.',
@@ -2043,6 +1988,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { brands: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -2051,8 +1997,13 @@ function createOgabasseyServer() {
         category: args.category ? sanitizeString(args.category, 50) : undefined,
       });
 
+      if (brands === null) {
+        const message = 'Brand lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { brands: [], status: 'unavailable' as const, message } };
+      }
+
       if (brands.length === 0) {
-        return { content: [{ type: 'text', text: 'No brands found.' }] };
+        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [], status: 'empty' as const } };
       }
 
       const categoryText = args.category ? ` in ${args.category}` : '';
@@ -2073,44 +2024,13 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  // The public shipping policy does not publish a fixed fee schedule.
-  server.registerTool(
-    'get_shipping_quote',
-    {
-      title: 'Check Delivery Fee Information',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        'Explain how to obtain the final Ogabassey delivery fee for a Nigerian destination. The public policy does not specify fixed rates, so this tool cannot provide a numeric quote; the buyer must confirm the fee and timing at checkout.',
-      inputSchema: {
-        state: z.string().min(2).max(50).describe('Nigerian delivery state'),
-        city: z.string().min(2).max(100).optional().describe('Delivery city'),
-      },
-      _meta: {
-        'openai/toolInvocation/invoking': 'Checking delivery information...',
-        'openai/toolInvocation/invoked': 'Delivery information ready',
-      },
-    },
-    async (args) => {
-      const state = sanitizeString(args.state, 50);
-      const city = args.city ? sanitizeString(args.city, 100) : null;
-      const destination = city ? `${city}, ${state}` : state;
-      const policyUrl = 'https://ogabassey.com/shipping';
-      return {
-        content: [{
-          type: 'text',
-          text: `Ogabassey does not publish a fixed delivery fee for ${destination}. Enter the delivery address at checkout to confirm the fee, eligibility for any free delivery, and timing. Read the current shipping policy: ${policyUrl}`,
-        }],
-        structuredContent: {
-          city,
-          fee: null,
-          policy_url: policyUrl,
-          quote_available: false,
-          state,
-          status: 'requires_checkout',
-        },
-      };
+  registerDeliveryFeeInfoTool(server, sanitizeString, async (input) => {
+    const merchantId = await getMerchantId();
+    if (!merchantId || !isGiglRuntimeConfigured()) {
+      return { status: 'unavailable', message: 'Live GIG quotes are unavailable. Confirm delivery at checkout.', quotes: [] };
     }
-  );
+    return loadDeliveryGiglQuotes(input, { supabase, merchantId, getQuotes: (request) => gigl.getQuotes(request) });
+  });
 
   // [REMOVED] ask_santa
 
@@ -2573,26 +2493,40 @@ const httpServer = createServer(
       return;
     }
 
-    // Readiness probe
+    // Readiness probe. Guest-cart storage rides along as a signal only: a
+    // degraded cart store must not flip the probe red, or catalog traffic
+    // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
+      const carts = describeGuestCartStoreHealth(guestCartStore);
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ status: 'healthy', database: 'connected' }));
+          res.end(
+            JSON.stringify({
+              status: 'healthy',
+              database: 'connected',
+              ...carts,
+            })
+          );
         } else {
           res.writeHead(503, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
               status: 'unhealthy',
               database: 'merchant not found',
+              ...carts,
             })
           );
         }
       } catch {
         res.writeHead(503, { 'content-type': 'application/json' });
         res.end(
-          JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
+          JSON.stringify({
+            status: 'unhealthy',
+            database: 'connection failed',
+            ...carts,
+          })
         );
       }
       return;
@@ -2645,7 +2579,7 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Allow-Headers', MCP_ALLOWED_HEADERS);
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const server = createOgabasseyServer();
+      const server = createOgabasseyServer({ clientIp: ip });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -2701,28 +2635,17 @@ const httpServer = createServer(
   }
 );
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+// Graceful shutdown (see server-shutdown.ts): drain in-flight requests,
+// then exit. Guest carts need no lock release: the Postgres version gate
+// serializes writers, so a replacement cannot corrupt a draining update.
+const gracefulShutdown = () =>
+  createGracefulShutdown({
+    closeServer: (done) => httpServer.close(done),
+    exit: (code) => process.exit(code),
+  })();
 
-process.on('SIGINT', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  httpServer.close(() => process.exit(0));
-});
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Unhandled rejection handler (fail closed - log and continue)
 process.on('unhandledRejection', (reason) => {
@@ -2735,7 +2658,7 @@ process.on('unhandledRejection', (reason) => {
   );
 });
 
-httpServer.listen(PORT, () => {
+function onListening() {
   const address = httpServer.address();
   const actualPort =
     typeof address === 'object' && address !== null ? address.port : PORT;
@@ -2765,4 +2688,12 @@ httpServer.listen(PORT, () => {
 ║    • Graceful shutdown                                         ║
 ╚════════════════════════════════════════════════════════════════╝
 `);
+}
+
+// The server listens only after the capability probe passes (see
+// guest-cart-startup-gate): a hung boot fails closed rather than
+// idling past the deploy's /health curl loop.
+gateStartupOnGuestCartCapability({
+  client: guestCartClient,
+  onReady: () => httpServer.listen(PORT, onListening),
 });

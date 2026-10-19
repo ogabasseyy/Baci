@@ -25,6 +25,7 @@ function hasValidCronSecret(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const invocationStartedAt = Date.now();
   const auth = hasValidCronSecret(request);
   if (!auth.configured) {
     return NextResponse.json(
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const summary = await reconcileProcessingVtuTransactions({
+      deadlineMs: invocationStartedAt + maxDuration * 1000,
       supabase: createAdminClient(),
     });
     if (summary.errored > 0) {

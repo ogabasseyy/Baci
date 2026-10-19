@@ -12,11 +12,10 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }));
 
-function buildSupabase() {
-  const eq = vi.fn().mockResolvedValue({ error: null });
-  const update = vi.fn(() => ({ eq }));
-  const from = vi.fn(() => ({ update }));
-  return { eq, from, supabase: { from }, update };
+function buildSupabase(stamped: unknown = true) {
+  const rpc = vi.fn().mockResolvedValue({ data: stamped, error: null });
+  const from = vi.fn();
+  return { from, rpc, supabase: { from, rpc } };
 }
 
 describe('retireWedgeWithReview', () => {
@@ -26,7 +25,7 @@ describe('retireWedgeWithReview', () => {
 
   it('files a transaction-scoped review before stamping the wedge resolved', async () => {
     mocks.handlePaymentForCancelledOrder.mockResolvedValue(true);
-    const { supabase, update } = buildSupabase();
+    const { from, rpc, supabase } = buildSupabase();
 
     const result = await retireWedgeWithReview({
       candidate: {
@@ -48,12 +47,21 @@ describe('retireWedgeWithReview', () => {
         transactionId: 'txn-1',
       })
     );
-    expect(update).toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.objectContaining({
+        p_resolution: 'gateway_reference_invalid',
+        p_transaction_id: 'txn-1',
+      })
+    );
+    // The stamp merges database-side: no read-modify-write spreads the
+    // stale metadata snapshot over concurrent completions.
+    expect(from).not.toHaveBeenCalled();
   });
 
   it('does not retire a wedge when its review is not durable', async () => {
     mocks.handlePaymentForCancelledOrder.mockResolvedValue(false);
-    const { supabase, update } = buildSupabase();
+    const { rpc, supabase } = buildSupabase();
 
     const result = await retireWedgeWithReview({
       candidate: {
@@ -69,6 +77,30 @@ describe('retireWedgeWithReview', () => {
     });
 
     expect(result).toBe(false);
-    expect(update).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('reports failure when the atomic stamp misses', async () => {
+    mocks.handlePaymentForCancelledOrder.mockResolvedValue(true);
+    const { rpc, supabase } = buildSupabase(false);
+
+    const result = await retireWedgeWithReview({
+      candidate: {
+        gateway: 'paystack',
+        gateway_reference: 'ref-1',
+        id: 'txn-1',
+        metadata: null,
+        order_id: 'order-1',
+      },
+      reason: 'manual reconciliation required',
+      resolution: 'gateway_reference_invalid',
+      supabase: supabase as never,
+    });
+
+    expect(result).toBe(false);
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
   });
 });

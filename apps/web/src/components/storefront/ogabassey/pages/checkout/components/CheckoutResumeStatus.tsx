@@ -12,6 +12,50 @@ type CheckoutResumeStatusProps =
       onContactSupport: () => void;
     };
 
+/**
+ * Blocking gate for resumed checkouts: renders the loading or recovery
+ * state that applies, or nothing while the checkout form may render.
+ */
+export function CheckoutResumeGate({
+  cartEmpty,
+  isAutoTriggerProcessing,
+  isLoadingResumedOrder,
+  onContactSupport,
+  onGoHome,
+  onRetry,
+  resumeOrderError,
+  resumeOrderId,
+}: {
+  cartEmpty: boolean;
+  isAutoTriggerProcessing: boolean | null;
+  isLoadingResumedOrder: boolean | null;
+  onContactSupport: () => void;
+  onGoHome: () => void;
+  onRetry: () => void;
+  resumeOrderError: string | null | undefined;
+  resumeOrderId: string | null | undefined;
+}) {
+  if ((cartEmpty && isLoadingResumedOrder) || isAutoTriggerProcessing) {
+    return (
+      <CheckoutResumeStatus
+        status={isLoadingResumedOrder ? 'loading' : 'initializing'}
+      />
+    );
+  }
+  if (cartEmpty && resumeOrderId && resumeOrderError) {
+    return (
+      <CheckoutResumeStatus
+        status="error"
+        message={resumeOrderError}
+        onRetry={onRetry}
+        onGoHome={onGoHome}
+        onContactSupport={onContactSupport}
+      />
+    );
+  }
+  return null;
+}
+
 /** Presents the blocking loading and recovery states for resumed checkouts. */
 export function CheckoutResumeStatus(props: CheckoutResumeStatusProps) {
   if (props.status !== 'error') {

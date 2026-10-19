@@ -47,6 +47,10 @@ import {
 } from '@/components/ui/form';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { useCart } from '@/hooks/use-cart';
+import {
+  type CheckoutCustomerData,
+  useCheckoutCustomerLifecycle,
+} from '@/hooks/use-checkout-customer-lifecycle';
 import { useCurrency } from '@/hooks/use-currency';
 import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
@@ -59,8 +63,15 @@ import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShippingQuote } from '@/types/shipping-quote';
+import {
+  beginLegacyCheckoutKey,
+  type LegacyCheckoutKeySession,
+} from './begin-legacy-checkout-key';
+import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
+import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
+import { recordLegacyCheckoutRedirect } from './legacy-checkout-redirect-retirement';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
 import { openLegacyCreditDirectPopup } from './open-legacy-credit-direct-popup';
 import { prepareLegacyCreditDirectCheckout } from './prepare-legacy-credit-direct-checkout';
@@ -97,24 +108,6 @@ const otpAuthSchema = z.object({
 
 type OtpAuthFormValues = z.infer<typeof otpAuthSchema>;
 
-// Customer data interface for pre-filling form
-interface CustomerData {
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone?: string;
-  saved_addresses?: Array<{
-    first_name: string;
-    last_name: string;
-    full_name?: string;
-    phone: string;
-    address: string;
-    city: string;
-    state: string;
-    is_default?: boolean;
-  }>;
-}
-
 // Module-scope network helpers keep the try/catch/finally + throw control
 // flow out of the component body so React Compiler can memoize Step0_Auth.
 type SendOtpResult = { ok: true } | { ok: false; message: string };
@@ -136,11 +129,11 @@ async function sendOtpCode(
 }
 
 type VerifyOtpResult =
-  | { ok: true; user: SupabaseUser; customer?: CustomerData }
+  | { ok: true; user: SupabaseUser; customer?: CheckoutCustomerData }
   | { ok: false; message: string };
 
 interface VerifyOtpResponse {
-  customer?: CustomerData;
+  customer?: CheckoutCustomerData;
 }
 
 async function verifyOtpCode(
@@ -189,6 +182,7 @@ interface CreateCheckoutOrderInput {
   selectedShippingQuote: ShippingQuote;
   shippingSessionId: string;
   discountCode?: string | null;
+  idempotencyKey?: string | null;
 }
 
 interface CheckoutOrderResponse {
@@ -201,37 +195,48 @@ interface CheckoutOrderResponse {
 function createCheckoutOrder(
   input: CreateCheckoutOrderInput
 ): Promise<CheckoutOrderResponse> {
-  return apiPost<CheckoutOrderResponse>('/api/orders', {
-    merchant_id: input.merchantId,
-    customer_email: input.data.email,
-    customer_name: `${input.data.firstName} ${input.data.lastName}`,
-    customer_phone: input.data.phone,
-    items: input.orderItems,
-    subtotal: input.subtotal,
-    shipping_fee: input.finalShippingFee,
-    payment_method: input.selectedGateway,
-    payment_status: 'unpaid', // Order starts unpaid, changes to pending when payment initiated, then paid on confirmation
-    shipping_status: 'pending',
-    shipping_address: {
-      firstName: input.data.firstName,
-      lastName: input.data.lastName,
-      address: input.data.address,
-      city: input.data.city,
-      state: input.data.state,
+  return apiPost<CheckoutOrderResponse>(
+    '/api/orders',
+    {
+      merchant_id: input.merchantId,
+      customer_email: input.data.email,
+      customer_name: `${input.data.firstName} ${input.data.lastName}`,
+      customer_phone: input.data.phone,
+      items: input.orderItems,
+      subtotal: input.subtotal,
+      shipping_fee: input.finalShippingFee,
+      payment_method: input.selectedGateway,
+      payment_status: 'unpaid', // Order starts unpaid, changes to pending when payment initiated, then paid on confirmation
+      shipping_status: 'pending',
+      shipping_address: {
+        firstName: input.data.firstName,
+        lastName: input.data.lastName,
+        address: input.data.address,
+        city: input.data.city,
+        state: input.data.state,
+      },
+      source: 'online_store',
+      // The submit guard guarantees a selected quote. Carrier quotes reference
+      // their persisted quote row; merchant rates send their bare configured
+      // rate id and intentionally null the carrier fields.
+      ...buildCheckoutShippingSelectionPayload(
+        input.selectedShippingQuote,
+        input.shippingSessionId
+      ),
+      // Only the trusted code string is sent; the route recomputes + validates
+      // the amount server-side. No expected_total here (this legacy flow has no
+      // VAT-aware total object), so the wrapper's two-sided amount check guards.
+      ...(input.discountCode ? { discount_code: input.discountCode } : {}),
     },
-    source: 'online_store',
-    // The submit guard guarantees a selected quote. Carrier quotes reference
-    // their persisted quote row; merchant rates send their bare configured
-    // rate id and intentionally null the carrier fields.
-    ...buildCheckoutShippingSelectionPayload(
-      input.selectedShippingQuote,
-      input.shippingSessionId
-    ),
-    // Only the trusted code string is sent; the route recomputes + validates
-    // the amount server-side. No expected_total here (this legacy flow has no
-    // VAT-aware total object), so the wrapper's two-sided amount check guards.
-    ...(input.discountCode ? { discount_code: input.discountCode } : {}),
-  });
+    // Code-bearing checkouts carry the persisted idempotency key so a
+    // response lost after commit replays the original order instead of
+    // failing against the now-claimed single-use code.
+    {
+      ...(input.idempotencyKey
+        ? { headers: { 'Idempotency-Key': input.idempotencyKey } }
+        : {}),
+    }
+  );
 }
 
 interface CreditDirectSignResult {
@@ -348,6 +353,9 @@ type CheckoutPreparation =
       order: Record<string, unknown>;
       sign: CreditDirectSignResult;
       orderItems: ReturnType<typeof buildCheckoutOrderItems>;
+      // Retained BNPL loyalty key, cleared when payment handoff
+      // completes (popup success) so the next purchase starts fresh.
+      keyInput: LegacyCheckoutKeyInput | null;
     }
   | {
       kind: 'redirect';
@@ -367,6 +375,7 @@ interface PrepareCheckoutInput {
   currencyCode: string;
   merchantSlug: string | null;
   discountCode?: string | null;
+  discountCodeIsLoyalty?: boolean;
 }
 
 type CheckoutCartItem = Parameters<typeof buildCheckoutOrderItems>[0][number];
@@ -374,13 +383,51 @@ type CheckoutCartItem = Parameters<typeof buildCheckoutOrderItems>[0][number];
 // Create the order, persist the success-page snapshot, fire analytics, and
 // (for BNPL) fetch the Credit Direct signature. Returns a description of the
 // next step for the component to perform.
+// The orders route's CHECKOUT_ORDER_NOT_REUSABLE copy: the claimed
+// order was cancelled, so the retained key can never succeed again.
+const CHECKOUT_ORDER_NOT_REUSABLE_MESSAGE =
+  'This checkout order can no longer be reused.';
+
 async function prepareCheckout(
   input: PrepareCheckoutInput
 ): Promise<CheckoutPreparation> {
+  let keySession: LegacyCheckoutKeySession | null = null;
   try {
     const orderItems = buildCheckoutOrderItems(input.cart);
     const subtotal = input.cartTotal;
     const finalShippingFee = input.shippingFee ?? DEFAULT_SHIPPING_FEE;
+
+    // Code-bearing checkouts must carry a persisted idempotency key:
+    // the loyalty wrapper only replays a committed create when the key
+    // is present, and the route rejects code checkouts without one.
+    // Resolution throws when browser storage is unavailable, failing
+    // the submit closed (error kind below) rather than risking a
+    // duplicate order against a single-use code.
+    keySession = input.discountCode
+      ? await beginLegacyCheckoutKey({
+          merchantId: input.merchantId,
+          customerEmail: input.data.email,
+          customerName: `${input.data.firstName} ${input.data.lastName}`,
+          customerPhone: input.data.phone,
+          gateway: input.selectedGateway,
+          shippingFee: finalShippingFee,
+          discountCode: input.discountCode,
+          discountCodeIsLoyalty: Boolean(input.discountCodeIsLoyalty),
+          orderItems,
+          shippingAddress: {
+            firstName: input.data.firstName,
+            lastName: input.data.lastName,
+            address: input.data.address,
+            city: input.data.city,
+            state: input.data.state,
+          },
+          shippingSelection: buildCheckoutShippingSelectionPayload(
+            input.selectedShippingQuote,
+            input.shippingSessionId
+          ),
+        })
+      : null;
+    const idempotencyKey = keySession?.idempotencyKey ?? null;
 
     const { order, paystackAuthUrl } = await createCheckoutOrder({
       merchantId: input.merchantId,
@@ -392,6 +439,7 @@ async function prepareCheckout(
       selectedShippingQuote: input.selectedShippingQuote,
       shippingSessionId: input.shippingSessionId,
       discountCode: input.discountCode,
+      idempotencyKey,
     });
 
     // Store order data for success page (fallback)
@@ -439,16 +487,40 @@ async function prepareCheckout(
         };
       }
 
+      // Checkout completed: rotate the persisted key so a repeated
+      // identical cart with a reusable code creates a fresh order
+      // instead of replaying this one. BNPL loyalty keys are retained
+      // inside the session (popup resume); the component clears them
+      // when payment handoff completes. Error paths keep the key so a
+      // resubmit still replays the in-flight attempt.
+      if (keySession) await keySession.completeCheckout();
       return {
         kind: 'credit_direct',
         order,
         sign: signResult.data,
         orderItems,
+        keyInput: keySession?.keyInput ?? null,
       };
     }
 
+    if (keySession) await keySession.completeCheckout();
+    if (keySession && input.discountCodeIsLoyalty) {
+      // The success page has no checkout session to retire the
+      // retained loyalty key after a full-page redirect; record the
+      // handoff so it can clear exactly this key once this order is
+      // confirmed there.
+      recordLegacyCheckoutRedirect(order.id as string, keySession.keyInput);
+    }
     return { kind: 'redirect', order, paystackAuthUrl };
   } catch (error) {
+    // The claimed order was cancelled: the retained key can never
+    // succeed again, so retire it and let the next submit start fresh.
+    if (
+      keySession &&
+      (error as Error).message?.includes(CHECKOUT_ORDER_NOT_REUSABLE_MESSAGE)
+    ) {
+      await clearLegacyCheckoutIdempotencyKey(keySession.keyInput);
+    }
     return {
       kind: 'error',
       title: 'Order Failed',
@@ -462,7 +534,10 @@ function Step0_Auth({
   onGuestCheckout,
   merchantSlug,
 }: {
-  onAuthSuccess: (user: SupabaseUser, customerData?: CustomerData) => void;
+  onAuthSuccess: (
+    user: SupabaseUser,
+    customerData?: CheckoutCustomerData
+  ) => void;
   onGuestCheckout: () => void;
   merchantSlug: string;
 }) {
@@ -1125,6 +1200,9 @@ interface DiscountResult {
   // Server-computed amount from the validate endpoint — the display source of
   // truth so caps/rounding match the order route and the redemption RPC.
   discount_amount?: number;
+  // Validate tags loyalty codes with an explicit null id; merchant
+  // codes carry their row id. Drives BNPL key retention.
+  discount_code_id?: string | null;
   minimum_order?: number;
   description?: string;
 }
@@ -1146,12 +1224,7 @@ function CheckoutPageContent() {
   const { clearCart, cart, cartCount, cartTotal, merchantSlug } = useCart();
   const { merchant, basePath } = useMerchant();
   const { currencyCode, formatCurrency } = useCurrency();
-  const [step, setStep] = useState(0); // 0: Auth, 1: Shipping, 2: Payment
-  const [pageLoading, setPageLoading] = useState(true);
   const [formIsLoading, setFormIsLoading] = useState(false);
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [customerData, setCustomerData] = useState<CustomerData | null>(null);
-  const [_isGuestCheckout, setIsGuestCheckout] = useState(false);
   const [shippingFee, setShippingFee] = useState<number | null>(null);
   const [selectedShippingQuote, setSelectedShippingQuote] =
     useState<ShippingQuote | null>(null);
@@ -1165,7 +1238,6 @@ function CheckoutPageContent() {
     'paystack' | 'korapay' | 'pod' | 'credit_direct'
   >('paystack');
   const totalSteps = 2;
-  const supabase = createClient();
 
   // Load Credit Direct script when BNPL is enabled. The injected <script> tag
   // is the source of truth for "already loaded" — guarding on its presence in
@@ -1210,34 +1282,6 @@ function CheckoutPageContent() {
 
   // Calculate loyalty points (1 point per 100 NGN spent)
   const _loyaltyPointsEarned = Math.floor((cartTotal - discountAmount) / 100);
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        setUser(data.user);
-
-        // Also fetch customer data for this merchant if logged in
-        if (merchantSlug) {
-          try {
-            const response = await fetch(
-              `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-            );
-            const sessionData = await response.json();
-            if (sessionData.authenticated && sessionData.customer) {
-              setCustomerData(sessionData.customer);
-            }
-          } catch (err) {
-            console.error('Failed to fetch customer data:', err);
-          }
-        }
-
-        setStep(1); // User is logged in, skip to shipping
-      }
-      setPageLoading(false);
-    };
-    checkUser();
-  }, [supabase.auth, merchantSlug]);
 
   // Fetch payment gateway settings
   useEffect(() => {
@@ -1289,7 +1333,7 @@ function CheckoutPageContent() {
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: user?.email || '',
+      email: '',
       phone: '',
       address: '',
       city: '',
@@ -1298,123 +1342,12 @@ function CheckoutPageContent() {
     mode: 'onSubmit', // Only validate on submit - best practice for checkout
   });
 
-  useEffect(() => {
-    // If user changes, autofill email and name fields from user metadata or customer data
-    if (user) {
-      shippingForm.setValue('email', user.email || '', {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
-
-      // First, try to fill from customer data (more up-to-date)
-      if (customerData) {
-        if (customerData.first_name) {
-          shippingForm.setValue('firstName', customerData.first_name, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-        if (customerData.last_name) {
-          shippingForm.setValue('lastName', customerData.last_name, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-        if (customerData.phone) {
-          shippingForm.setValue('phone', customerData.phone, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-        }
-
-        // Use default saved address if available
-        const defaultAddress = customerData.saved_addresses?.find(
-          (a) => a.is_default
-        );
-        if (defaultAddress) {
-          shippingForm.setValue('address', defaultAddress.address, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          shippingForm.setValue('city', defaultAddress.city, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          shippingForm.setValue('state', defaultAddress.state, {
-            shouldValidate: true,
-            shouldDirty: true,
-          });
-          if (defaultAddress.phone) {
-            shippingForm.setValue('phone', defaultAddress.phone, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-          // Override name with address name if different
-          if (defaultAddress.full_name) {
-            const nameParts = defaultAddress.full_name.split(' ');
-            if (nameParts.length > 0) {
-              shippingForm.setValue('firstName', nameParts[0], {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-              if (nameParts.length > 1) {
-                shippingForm.setValue(
-                  'lastName',
-                  nameParts.slice(1).join(' '),
-                  { shouldValidate: true, shouldDirty: true }
-                );
-              }
-            }
-          }
-        }
-      } else {
-        // Fall back to user metadata
-        const metadata = user.user_metadata;
-        if (metadata) {
-          if (metadata.first_name) {
-            shippingForm.setValue('firstName', metadata.first_name, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          } else if (metadata.full_name) {
-            // Try to split full_name if first_name is not available
-            const nameParts = metadata.full_name.split(' ');
-            if (nameParts.length > 0) {
-              shippingForm.setValue('firstName', nameParts[0], {
-                shouldValidate: true,
-                shouldDirty: true,
-              });
-              if (nameParts.length > 1) {
-                shippingForm.setValue(
-                  'lastName',
-                  nameParts.slice(1).join(' '),
-                  { shouldValidate: true, shouldDirty: true }
-                );
-              }
-            }
-          } else if (metadata.name) {
-            const parts = metadata.name.split(' ');
-            shippingForm.setValue('firstName', parts[0] || '', {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-            shippingForm.setValue('lastName', parts.slice(1).join(' ') || '', {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-
-          if (metadata.last_name) {
-            shippingForm.setValue('lastName', metadata.last_name, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }
-        }
-      }
-    }
-  }, [user, customerData, shippingForm]);
+  const { handleAuthSuccess, handleGuestCheckout, pageLoading, setStep, step } =
+    useCheckoutCustomerLifecycle(
+      merchantSlug,
+      shippingForm.setValue,
+      shippingForm.getValues
+    );
 
   useEffect(() => {
     // Redirect if cart is empty after initial load
@@ -1422,23 +1355,6 @@ function CheckoutPageContent() {
       router.replace('/');
     }
   }, [cartCount, pageLoading, router]);
-
-  const handleAuthSuccess = (
-    authedUser: SupabaseUser,
-    customer?: CustomerData
-  ) => {
-    setUser(authedUser);
-    if (customer) {
-      setCustomerData(customer);
-    }
-    setIsGuestCheckout(false);
-    setStep(1);
-  };
-
-  const handleGuestCheckout = () => {
-    setIsGuestCheckout(true);
-    setStep(1);
-  };
 
   const handleNext = async () => {
     const isValid = await shippingForm.trigger();
@@ -1500,7 +1416,8 @@ function CheckoutPageContent() {
     order: Record<string, unknown>,
     sign: CreditDirectSignResult,
     orderItems: ReturnType<typeof buildCheckoutOrderItems>,
-    data: ShippingFormValues
+    data: ShippingFormValues,
+    keyInput: LegacyCheckoutKeyInput | null
   ) => {
     // SDK orchestration (guard, transaction build, fail-closed handling, cancel
     // wiring, open) lives in the focused helper; the page injects its own
@@ -1520,6 +1437,13 @@ function CheckoutPageContent() {
             orderId: order.id,
           });
           return;
+        }
+
+        // Payment handoff completed: retire the retained key so the
+        // next purchase starts fresh. Popup close without success
+        // keeps it, so the shopper can resume this order.
+        if (keyInput) {
+          void clearLegacyCheckoutIdempotencyKey(keyInput);
         }
 
         handoffLegacyCreditDirectSuccess({
@@ -1619,6 +1543,9 @@ function CheckoutPageContent() {
       currencyCode,
       merchantSlug,
       discountCode: appliedDiscount?.code ?? null,
+      discountCodeIsLoyalty: appliedDiscount
+        ? appliedDiscount.discount_code_id == null
+        : false,
     });
 
     if (result.kind === 'error') {
@@ -1635,7 +1562,13 @@ function CheckoutPageContent() {
       // Popup callbacks drive the rest of the flow — don't proceed to the
       // success page yet. Matching the prior behavior, the submit spinner is
       // cleared now; the popup's onClose re-clears it if reopened.
-      openCreditDirectPopup(result.order, result.sign, result.orderItems, data);
+      openCreditDirectPopup(
+        result.order,
+        result.sign,
+        result.orderItems,
+        data,
+        result.keyInput
+      );
       setFormIsLoading(false);
       return;
     }
@@ -1667,7 +1600,11 @@ function CheckoutPageContent() {
 
   if (pageLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        aria-label="Loading checkout"
+        className="flex min-h-screen items-center justify-center bg-background"
+        role="status"
+      >
         <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );

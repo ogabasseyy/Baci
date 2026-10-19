@@ -1,6 +1,6 @@
 'use client';
 
-import { getProductImageAlt } from '@baci/shared/lib';
+import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
 import Link from 'next/link';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';

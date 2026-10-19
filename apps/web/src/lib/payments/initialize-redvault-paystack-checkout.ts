@@ -9,6 +9,7 @@ export function initializeRedvaultPaystackCheckout({
   fallbackClient,
   merchantId,
   orderId,
+  preserveAttempts = false,
   redirectUrl,
   userId,
 }: {
@@ -16,6 +17,7 @@ export function initializeRedvaultPaystackCheckout({
   fallbackClient: Pick<SupabaseClient, 'rpc'>;
   merchantId: string;
   orderId: string;
+  preserveAttempts?: boolean;
   redirectUrl: string;
   userId: string | null;
 }) {
@@ -30,6 +32,7 @@ export function initializeRedvaultPaystackCheckout({
     attemptAdapter,
     customerEmail,
     orderId,
+    preserveAttempts,
     provider: {
       async initialize(input) {
         // The split collects the base platform fee plus the frozen GIGL

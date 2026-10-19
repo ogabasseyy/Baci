@@ -114,6 +114,23 @@ describe('buildEmailExecutor', () => {
     );
   });
 
+  it('bounds the platform-sender fallback to the pass deadline', async () => {
+    await buildEmailExecutor({
+      actor: 'cron:reconcile-gateway-paid-orders',
+      fallbackDeadlineMs: 1_700_000,
+      merchantDetails,
+      merchantFetchError: null,
+      order: richOrder,
+    })(stepContext);
+
+    // Without the bound the fallback loop can overrun the pass and the
+    // finalize signal aborts mid-send, stranding the step
+    // delivery_uncertain instead of retrying next sweep.
+    expect(mocks.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackDeadlineMs: 1_700_000 })
+    );
+  });
+
   it('threads a non-NGN order currency through to the confirmation email', async () => {
     await buildEmailExecutor({
       actor: 'webhook:paystack',

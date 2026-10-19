@@ -478,4 +478,13 @@ describe('useProductDetailsState', () => {
       expect(result.current.selectedCondition).toBe('new');
     });
   });
+  it('rejects a depleted strict-serialized variant under an unmanaged parent', () => {
+    const { result } = renderHook(() => useProductDetailsState({
+      ...baseProduct, manage_stock: false, has_variants: true,
+      variants: [{ id: 'strict-empty', attributes: { storage: '128GB' },
+        inventory_tracking_policy: 'serialized_strict', stock_quantity: 0 }],
+    } as Product));
+    expect(result.current.canPurchase).toBe(false);
+  });
+
 });

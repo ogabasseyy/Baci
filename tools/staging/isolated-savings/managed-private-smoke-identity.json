@@ -1,0 +1,26 @@
+{
+  "host": "staging-auth.ogabassey.com",
+  "containers": {
+    "auth": {
+      "id": "d18b947aa6f7231c38ce030000ba80bf96eb8347c0332943e20bef3cd9bee50c",
+      "ip": "172.23.0.3",
+      "endpointId": "44ea0cbed7076b2a9ee06897db4247d254558cff201d31d95b9e7ca42a8a098b"
+    },
+    "rest": {
+      "id": "4462229a3bf517b0fa316105366b35f1ff605a02755f85d4c01a8f01fccd4db9",
+      "ip": "172.23.0.4",
+      "endpointId": "1ea8f51b828d416ae1773405a2ff9ee0e80171e9ba282ba78533646f58153c64"
+    }
+  },
+  "networks": {
+    "database": {
+      "id": "c8fdbe178c2abdab8cd27b98f40de95267f883296fb6b1266c9bce6576a33b8e",
+      "subnet": "172.23.0.0/16"
+    },
+    "mail": {
+      "id": "c112fbf4dab726de8c33fbdf91f277753c9a7bce6067489650ee28c01102cef7",
+      "subnet": "172.22.0.0/16"
+    }
+  },
+  "restRoutes": [{ "path": "/rest/v1/products", "methods": ["GET", "HEAD"] }]
+}

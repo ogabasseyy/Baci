@@ -17,16 +17,51 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/tiktok/route.ts':
     '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
   'apps/web/src/app/api/platform/events/route.ts':
-    '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
+    '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.
-  // Refreshed for malformed-JSON rejection before business data access, then
-  // for the plan-tier-authoritative entitlement call (slug fallback removed);
-  // the inherited notification/payment authority and database operations are
-  // unchanged.
+  // Refreshed for malformed-JSON rejection before business data access; the
+  // inherited notification/payment authority and database operations are unchanged.
+  // Re-pinned after merging main (#3525/#3504): keeps this branch's checkout
+  // blog-purge scheduling plus main's tracking-link, redvault, and
+  // plan-tier-authoritative entitlement additions.
+  // Re-pinned for the origin/main merge combining this branch's REDVAULT
+  // pilot validation gate with main's live related-product pricing (#3419).
+  // Re-pinned for derived pilot tax totals: the route now passes
+  // server-computed tax kobo into the pilot validator; notification and
+  // payment authority are unchanged.
+  // Re-pinned after extracting the pilot order gate into
+  // redvault-live-pilot-order-gate.ts; the route is now a thin call
+  // site and inherited authority is unchanged.
+  // Re-pinned after moving the pilot gate below server-verified fee
+  // computation; it now judges the effective shipping fee.
+  // Re-pinned for reviewed canonical-cart transaction binding. Existing
+  // payment/notification authority is unchanged; no service grants are added.
+  // Re-pinned for the shared-cart binding invalid_item status correction
+  // (500 -> 400, a client error); payment/notification authority unchanged.
+  // Re-pinned for condition-offer validation errors as client errors;
+  // payment, notification and credential authority are unchanged.
+  // Re-pinned for early cart-proof checks and claimed-voucher binding replay;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting reviewed cart proof/binding response orchestration;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned for the claimed-voucher replay re-read of the stored order;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting bound-order dispatch and the shared
+  // condition-offer response from the route; payment, notification
+  // and credential authority remain unchanged. Re-pinned again after
+  // merging the GIGL checkout-pin changes from main; the cart binding
+  // dispatch is unchanged. Re-pinned after the orders replay probe moved
+  // to the scoped storefront_checkout_replay_snapshot RPC (no service-role
+  // client on the route); order authority paths are unchanged. Re-pinned
+  // after shared-cart orders were barred from the REDVAULT draft rail.
+  // Re-pinned after the replay-snapshot probe moved to the admin client
+  // and the RPC was restricted to service_role. Re-pinned again after
+  // the probe returned to the normal client with a minimized snapshot
+  // projection (no service-role client on the guest checkout path).
   'apps/web/src/app/api/orders/route.ts':
-    '434c5975bc54f4afb4b2b4c4a5f6839cfe973ce28800f7051f87a20df05ae585',
+    '14db80c5b09cc8b051e99967915ab7665b971a7f994f2a14d507794995836936',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

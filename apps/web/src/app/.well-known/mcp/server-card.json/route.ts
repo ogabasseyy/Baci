@@ -19,7 +19,7 @@ export function GET(): NextResponse {
         version: '1.0.0',
       },
       description:
-        'Search products, inspect variants, add items to cart, estimate shipping, browse categories, and get store information for Ogabassey.',
+        'Search products, inspect variants, add items to cart, confirm delivery-fee information, browse categories, and get store information for Ogabassey.',
       transport: {
         type: 'streamable-http',
         endpoint: BACI_MCP_SERVER_URL,

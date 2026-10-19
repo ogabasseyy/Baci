@@ -52,6 +52,7 @@ export function OrderDetailsScreenModals({
       />
 
       <ShipmentFlowSheet
+        recoveryOrder={order}
         canUseProvider={controller.providerBookingAvailable}
         fulfillmentDetails={controller.fulfillmentDetails}
         fulfillmentItemIndex={controller.fulfillmentItemIndex}
@@ -66,7 +67,7 @@ export function OrderDetailsScreenModals({
         isSubmitting={controller.isShipmentSubmitting}
         onClose={controller.closeShipmentFlow}
         onContinueFromDetails={controller.proceedFromFulfillmentDetails}
-        onContinueFromMethod={() => void controller.proceedFromShipmentMethod()}
+        onContinueFromMethod={controller.proceedFromShipmentMethod}
         onConfirmSelfFulfillment={() =>
           void controller.handleSubmitSelfFulfillment()
         }

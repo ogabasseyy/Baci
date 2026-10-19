@@ -5,7 +5,7 @@ import {
   type PublicSerializedVariantSummary,
 } from '@/lib/public-serialized-variant-summary';
 
-const SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY = 9999;
+export const SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY = 9999;
 
 type PublicVariantRecord = { id: string; [key: string]: unknown };
 

@@ -3,219 +3,67 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
-import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { useToast } from '@/hooks/use-toast';
-import {
-  getPrimaryProductImage,
-  PRODUCT_IMAGE_PLACEHOLDER_URL,
-} from '@/lib/product-image';
-import { createClient } from '@/lib/supabase/client';
+import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
+import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
+import { CartAccountLink } from '../../cart/cart-account-link';
+import { CartHandoff } from '../../cart/cart-handoff';
+import { loadActiveHandoff } from '../../cart/cart-handoff-support';
+import { CartImportConflicts } from '../../cart/cart-import-conflicts';
 import { CartPage } from './cart-page';
-
-const QUIZ_PRIZE_PLATFORM = 'quiz_prize';
 
 interface CartPageWrapperProps {
   merchantId: string;
+  merchantSlug?: string;
   vatEnabled?: boolean;
   vatRate?: number;
-}
-
-interface FetchAndAddCartItemsOptions {
-  itemIds: string;
-  quantity: number;
-  quizAwardId: string | null;
-  quizVoucherToken: string | null;
-  variantId?: string;
-  condition?: string;
-  merchantId: string;
-  cart: ReturnType<typeof useCart>['cart'];
-  addToCart: ReturnType<typeof useCart>['addToCart'];
-  toast: ReturnType<typeof useToast>['toast'];
-  setIsLoading: (loading: boolean) => void;
-}
-
-// Module-scope helper: keeps the try/finally out of the component body so
-// React Compiler can memoize CartPageWrapper.
-async function fetchAndAddCartItems({
-  itemIds,
-  quantity,
-  quizAwardId,
-  quizVoucherToken,
-  variantId,
-  condition,
-  merchantId,
-  cart,
-  addToCart,
-  toast,
-  setIsLoading,
-}: FetchAndAddCartItemsOptions): Promise<void> {
-  const hasQuizPrizeVoucher = Boolean(quizAwardId && quizVoucherToken);
-
-  // The mixed-cart guard runs in the caller BEFORE the prize link is marked
-  // processed (see CartPageWrapper), so a blocked claim can still be redeemed
-  // once the shopper empties/checks out their other items. By the time we get
-  // here the cart is safe to add the prize to.
-
-  setIsLoading(true);
-
-  try {
-    // Support comma-separated IDs: item_id=123,456,789
-    const ids = itemIds.split(',').map(id => id.trim()).filter(Boolean);
-
-    if (ids.length === 0) return;
-
-    const supabase = createClient();
-
-    // Fetch products by ID
-    const { data: products, error } = await supabase
-      .from('products')
-      .select(
-        'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint'
-      )
-      .eq('merchant_id', merchantId)
-      .in('id', ids)
-      .eq('status', 'active');
-
-    if (error) {
-      console.error('Error fetching products:', error);
-      toast({
-        title: 'Error',
-        description: 'Could not add items to cart. Please try again.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!products || products.length === 0) {
-      toast({
-        title: 'Product not found',
-        description: 'The requested product could not be found.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const activeProducts = products.filter(
-      (product) => product.status === 'active'
-    );
-    if (activeProducts.length === 0) {
-      toast({
-        title: 'Product not found',
-        description: 'The requested product could not be found.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Add each product to cart
-    let addedCount = 0;
-    let firstAddedProductName: string | null = null;
-    const rejectedIds: string[] = [];
-    for (const product of activeProducts) {
-      const resolvedImage =
-        getPrimaryProductImage(product.images) ||
-        PRODUCT_IMAGE_PLACEHOLDER_URL;
-      // Prize awards are single-use; ordinary cart lines merge in addToCart.
-      const alreadyClaimedPrize = hasQuizPrizeVoucher &&
-        cart.some(item => item.quizAwardId === quizAwardId);
-      if (!alreadyClaimedPrize) {
-        if (!hasQuizPrizeVoucher && (product.has_variants || product.has_condition_offers)) {
-          toast({
-            title: 'Choose product options',
-            description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
-            variant: 'destructive',
-          });
-          continue;
-        }
-        const effectiveStock = Number(product.stock_quantity ?? 0);
-        const productForCart = {
-          ...product,
-          image: resolvedImage,
-          imageLarge: resolvedImage,
-          stock: product.manage_stock ? effectiveStock : product.stock,
-        };
-        const existingIndex = findMergingCartLineIndex(cart, productForCart);
-        const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantity > effectiveStock) {
-          rejectedIds.push(product.id);
-          toast({
-            title: 'Not enough stock',
-            description: `Only ${effectiveStock} unit${effectiveStock === 1 ? '' : 's'} of ${product.name} are currently available. Adjust your cart, then reload to retry this link.`,
-            variant: 'destructive',
-          });
-          continue;
-        }
-        addToCart(
-          productForCart,
-          hasQuizPrizeVoucher ? 1 : quantity,
-          hasQuizPrizeVoucher
-            ? {
-                condition,
-                platform: QUIZ_PRIZE_PLATFORM,
-                quizAwardId: quizAwardId ?? undefined,
-                quizVoucherToken: quizVoucherToken ?? undefined,
-                variantId,
-              }
-            : undefined
-        );
-        addedCount++;
-        firstAddedProductName ??= product.name;
-      }
-    }
-
-    if (addedCount > 0) {
-      toast({
-        title: addedCount === 1 ? 'Added to cart' : `${addedCount} items added`,
-        description: addedCount === 1
-          ? `${firstAddedProductName} has been added to your cart.`
-          : `${addedCount} products have been added to your cart.`,
-      });
-    }
-
-    // Keep only retryable stock failures in the handoff URL.
-    const url = new URL(window.location.href);
-    if (rejectedIds.length > 0) {
-      url.searchParams.set('item_id', rejectedIds.join(','));
-    } else {
-      url.searchParams.delete('item_id');
-      url.searchParams.delete('qty');
-    }
-    url.searchParams.delete('quiz_award_id');
-    url.searchParams.delete('quiz_voucher_token');
-    url.searchParams.delete('variant_id');
-    url.searchParams.delete('condition');
-    window.history.replaceState(
-      {},
-      '',
-      `${url.pathname}${url.search}${url.hash}`
-    );
-  } catch (err) {
-    console.error('Error adding products to cart:', err);
-    toast({
-      title: 'Error',
-      description: 'Something went wrong. Please try again.',
-      variant: 'destructive',
-    });
-  } finally {
-    setIsLoading(false);
-  }
 }
 
 /**
  * Cart page wrapper that handles item_id query parameter for direct add-to-cart links.
  * Supports URLs like: /cart?item_id=123 or /cart?item_id=123,456,789
  * Used by ChatGPT MCP integration and Google Shopping.
+ *
+ * A shared-cart pairing fragment (`/cart#handoff=<token>&hid=<id>`) mounts
+ * the handoff continuation instead: the secret lives in the fragment so it
+ * never reaches the server, and the one-time transfer links keep working
+ * unchanged when no pairing is present.
  */
-export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
+export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
   const searchParams = useSearchParams();
   const { addToCart, cart, isHydrated } = useCart();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  // Both server and browser render the same initial tree; read the fragment
+  // after hydration and retain it when the continuation strips the URL.
+  const [pairing, setPairing] = useState<ReturnType<typeof parseHandoffPairing>>(null);
+  const [pairingChecked, setPairingChecked] = useState(false);
+  useEffect(() => {
+    // After a reload the fragment is already redacted; fall back to
+    // the tab-scoped locator recorded before redaction so an
+    // unresolved handoff (and its persisted attempt) stays reachable.
+    // A locator scoped to a different merchant must not restore on
+    // this merchant's cart page.
+    const locator = loadActiveHandoff();
+    const scopedLocator =
+      locator &&
+      (!merchantSlug ||
+        !locator.merchantSlug ||
+        locator.merchantSlug === merchantSlug)
+        ? locator
+        : null;
+    setPairing(parseHandoffPairing(window.location.hash) ?? scopedLocator);
+    setPairingChecked(true);
+  }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
 
   useEffect(() => {
-    const itemIds = searchParams.get('item_id');
+    // A pairing owns the surface: importing link items into the local cart
+    // underneath the continuation choice would corrupt the merge decision.
+    if (pairing || parseHandoffPairing(window.location.hash)) return;
+    const guestTransfer = resolveGuestCartTransfer(searchParams.get('guest_cart'));
+    const itemIds = guestTransfer ? guestTransfer.itemIds : searchParams.get('item_id');
     const rawQuantity = searchParams.get('qty');
     const parsedQuantity = rawQuantity && /^\d+$/.test(rawQuantity) ? Number(rawQuantity) : 1;
     const quantity = Number.isSafeInteger(parsedQuantity) && parsedQuantity >= 1 && parsedQuantity <= 10
@@ -243,10 +91,10 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     // effect reruns (cart is a dep) and the prize can still be claimed, instead
     // of being permanently stuck behind `processedRef`. Re-claiming the SAME
     // award is fine (deduped in fetchAndAddCartItems).
-    const hasQuizPrizeVoucher = Boolean(quizAwardId && quizVoucherToken);
+    const hasQuizPrizeVoucher = Boolean(!guestTransfer && quizAwardId && quizVoucherToken);
     if (
-      hasQuizPrizeVoucher &&
-      cart.some((item) => item.quizAwardId !== quizAwardId)
+      (hasQuizPrizeVoucher && cart.some((item) => item.quizAwardId !== quizAwardId)) ||
+      (guestTransfer && cart.some((item) => item.quizAwardId))
     ) {
       if (!blockedNoticeRef.current) {
         blockedNoticeRef.current = true;
@@ -262,9 +110,12 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     blockedNoticeRef.current = false;
     processedRef.current = true;
 
+    // A failed attempt releases the link so a later effect run (e.g. after the
+    // cart changes) retries it instead of forcing a full page reload.
     void fetchAndAddCartItems({
       itemIds,
       quantity,
+      guestQuantities: guestTransfer?.quantities,
       quizAwardId,
       quizVoucherToken,
       variantId,
@@ -274,11 +125,20 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
       addToCart,
       toast,
       setIsLoading,
-    });
-  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated]);
+    }).then((succeeded) => { if (!succeeded) processedRef.current = false; });
+  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated, pairing]);
 
-  // Wait for persisted items before deciding whether the cart is empty.
-  if (!isHydrated || isLoading) {
+  // The pairing needs no local cart: mount the continuation immediately so
+  // the transfer screen and its third-party scripts never see the secret.
+  if (pairing) {
+    return <CartHandoff token={pairing.token} handoffId={pairing.handoffId} />;
+  }
+
+  // Until the fragment check completes, the ordinary subtree (whose
+  // account panel bootstraps on mount) must stay unmounted: its
+  // uncancellable bootstrap could land after handoff redemption and
+  // overwrite the cart-bound proof with a cart-less one.
+  if (!pairingChecked || !isHydrated || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-store-background">
         <div className="text-center" role="status">
@@ -291,5 +151,20 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     );
   }
 
-  return <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />;
+  return (
+    <>
+      <CartImportConflicts />
+      <CartAccountLink merchantSlug={merchantSlug} />
+      <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />
+    </>
+  );
+}
+
+function parseHandoffPairing(hash: string): { token: string; handoffId: string } | null {
+  if (!hash || hash === '#') return null;
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const token = params.get('handoff');
+  const handoffId = params.get('hid');
+  if (!token || !handoffId) return null;
+  return { token, handoffId };
 }

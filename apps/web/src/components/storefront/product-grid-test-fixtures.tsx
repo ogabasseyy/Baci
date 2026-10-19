@@ -153,6 +153,9 @@ vi.mock('@/lib/api-client', () => ({
     if (url.includes('/api/products/count')) {
       return Promise.resolve({ count: 1, recommendedMethod: 'client' });
     }
+    if (url.includes('/api/search?')) {
+      return Promise.resolve({ productIds: [], didYouMean: 'iphone' });
+    }
     return Promise.resolve({});
   }),
 }));
@@ -166,7 +169,18 @@ vi.mock('@/lib/color-utils', () => ({
 }));
 
 vi.mock('./did-you-mean-banner', () => ({
-  DidYouMeanBanner: () => <div>Did you mean banner</div>,
+  DidYouMeanBanner: ({
+    suggestion,
+    onSuggestionClick,
+  }: {
+    originalQuery: string;
+    suggestion: string;
+    onSuggestionClick: (suggestion: string) => void;
+  }) => (
+    <button type="button" onClick={() => onSuggestionClick(suggestion)}>
+      Did you mean {suggestion}
+    </button>
+  ),
 }));
 
 vi.mock('./product-card', () => ({

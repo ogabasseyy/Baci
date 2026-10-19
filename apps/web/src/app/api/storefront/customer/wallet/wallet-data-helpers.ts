@@ -24,6 +24,8 @@ export function formatFundingAccount(row: WalletFundingAccountRow | null) {
 }
 
 export function emptyWalletResponse({
+  earningsAvailable = false,
+  earningsBalance = null,
   fundingAccount = null,
   loyaltyPoints = 0,
   requiresFundingAccountConsent,
@@ -31,6 +33,8 @@ export function emptyWalletResponse({
   usdtBalance = 0,
   walletDvaEnabled = false,
 }: {
+  earningsAvailable?: boolean;
+  earningsBalance?: number | null;
   fundingAccount?: ReturnType<typeof formatFundingAccount>;
   loyaltyPoints?: number;
   requiresFundingAccountConsent?: boolean;
@@ -41,7 +45,8 @@ export function emptyWalletResponse({
   return {
     balance: 0,
     balances: { NGN: 0, USDT: usdtBalance },
-    earningsBalance: 0,
+    earningsAvailable,
+    earningsBalance,
     fundingAccount,
     hasWallet: usdtBalance > 0,
     loyaltyPoints,

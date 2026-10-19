@@ -156,6 +156,146 @@ describe('calculateCheckoutSession', () => {
     );
   });
 
+  it('prices an explicit variant lane from the variant, not the parent', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 500000,
+        stock: 0,
+        stock_quantity: 0,
+      },
+    ]);
+    const variantQuery = createQueryChain([
+      {
+        attributes: { color: 'Black' },
+        id: VARIANT_ID,
+        merchant_id: MERCHANT_ID,
+        price_override: 550000,
+        product: { manage_stock: false, name: 'Phone', price: 500000 },
+        product_id: PRODUCT_ID,
+        stock_quantity: 0,
+      },
+    ]);
+    const supabase = createCheckoutSupabase(productQuery, variantQuery);
+
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [{ id: PRODUCT_ID, quantity: 2, variant_id: VARIANT_ID }],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.messages).toEqual([]);
+    expect(result.lineItems[0]?.total).toBe(1100000);
+    expect(result.lineItems[0]?.item).toMatchObject({
+      product_id: PRODUCT_ID,
+      variant_id: VARIANT_ID,
+    });
+  });
+
+  it('rejects an explicit variant lane that does not belong to the product', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 500000,
+        stock: 0,
+        stock_quantity: 0,
+      },
+    ]);
+    const variantQuery = createQueryChain([]);
+    const supabase = createCheckoutSupabase(productQuery, variantQuery);
+
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [{ id: PRODUCT_ID, quantity: 1, variant_id: VARIANT_ID }],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems).toEqual([]);
+    expect(result.messages).toContainEqual(
+      expect.objectContaining({ code: 'invalid', type: 'error' })
+    );
+  });
+
+  it('preserves requested option-only attributes without a variant lane', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 500000,
+        stock: 0,
+        stock_quantity: 0,
+      },
+    ]);
+    const variantQuery = createQueryChain([]);
+    const supabase = createCheckoutSupabase(productQuery, variantQuery);
+
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [
+        {
+          id: PRODUCT_ID,
+          quantity: 1,
+          variant_attributes: { engraving: 'Ada' },
+        },
+      ],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.item.variant_attributes).toEqual({
+      engraving: 'Ada',
+    });
+  });
+
+  it('prices a condition lane from the active condition offer', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 500000,
+        stock: 0,
+        stock_quantity: 0,
+      },
+    ]);
+    const variantQuery = createQueryChain([]);
+    const supabase = {
+      ...createCheckoutSupabase(productQuery, variantQuery),
+      rpc: vi.fn().mockResolvedValue({
+        data: [
+          {
+            condition: 'used',
+            price: 300000,
+            product_id: PRODUCT_ID,
+            status: 'active',
+          },
+        ],
+        error: null,
+      }),
+    };
+
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [{ condition: 'used', id: PRODUCT_ID, quantity: 1 }],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.total).toBe(300000);
+    expect(result.lineItems[0]?.item).toMatchObject({ condition: 'used' });
+  });
+
   it('fails when product lookup returns a database error', async () => {
     const productQuery = createQueryChain([], { message: 'query failed' });
     const variantQuery = createQueryChain([]);

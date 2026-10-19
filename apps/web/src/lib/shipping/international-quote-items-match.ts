@@ -66,7 +66,7 @@ function dimensionsMatch(
   );
 }
 
-function matchesQuoteItem(
+export function matchesQuoteItem(
   orderItem: QuoteComparableOrderItem,
   quoteItem: QuoteRequest['items'][number]
 ): boolean {

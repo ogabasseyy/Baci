@@ -45,10 +45,10 @@ describe('event pipeline authority importer boundary', () => {
     );
 
     expect(manifest.authority.adminImporters).toEqual([
+      'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
       'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
-      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts',
       'apps/web/src/app/api/shipping/quotes/route.ts',
       'apps/web/src/lib/events/record-platform-order-created-event.ts',
       'apps/web/src/lib/expo-push.ts',
@@ -64,7 +64,6 @@ describe('event pipeline authority importer boundary', () => {
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking/route.ts',
       'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
@@ -75,6 +74,8 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      'apps/web/src/lib/piggyvest/server-intake-client.ts',
+      'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ]);

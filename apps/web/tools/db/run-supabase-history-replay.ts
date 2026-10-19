@@ -5,8 +5,11 @@ import { applySupabaseCurrentTreeSources } from './apply-supabase-current-tree-s
 import { applySupabaseReplaySql } from './apply-supabase-replay-sql';
 import { canonicalJsonValue } from './canonical-json-value';
 import { createSupabaseReplayProjectId } from './create-supabase-replay-project-id';
+import { createSupabaseReplaySqlApplier } from './create-supabase-replay-sql-applier';
+import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
+import { runSupabaseReplayStage } from './run-supabase-replay-stage';
 import {
   createSupabaseHistoryReplayRuntimeDependencies,
   type ReplayRuntimeDependencies,
@@ -83,7 +86,9 @@ export async function runSupabaseHistoryReplay(
   try {
     if (hasResources(await runtime.inspectResources(projectId, run)))
       throw new Error('Supabase replay project id collision');
-    await run('supabase', ['init', '--workdir', workdir]);
+    await runSupabaseReplayStage('init', () =>
+      run('supabase', ['init', '--workdir', workdir])
+    );
     const configPath = path.join(workdir, 'supabase/config.toml');
     const original = await runtime.readText(configPath);
     const originalConfig = runtime.parseConfig(original);
@@ -128,9 +133,15 @@ export async function runSupabaseHistoryReplay(
       runtime.parseConfig(rewritten),
       projectId
     );
-    await run('supabase', ['db', 'start', '--workdir', workdir]);
-    await run('supabase', ['migration', 'up', '--local', '--workdir', workdir]);
-    const databaseUrl = await readSupabaseReplayDatabaseUrl(run, workdir);
+    await runSupabaseReplayStage('db start', () =>
+      run('supabase', ['db', 'start', '--workdir', workdir])
+    );
+    await runSupabaseReplayStage('migration up', () =>
+      run('supabase', ['migration', 'up', '--local', '--workdir', workdir])
+    );
+    const databaseUrl = await runSupabaseReplayStage('status', () =>
+      readSupabaseReplayDatabaseUrl(run, workdir)
+    );
     assertSupabaseReplayDatabaseUrl(databaseUrl, ports['db.port']);
     await runtime.verifyBootstrapHistory({
       databaseUrl,
@@ -162,10 +173,11 @@ export async function runSupabaseHistoryReplay(
         )
     )
       throw new Error('Replay bootstrap order mismatch');
-    // biome-ignore format: keep this orchestration module within its 300-line cap.
-    const fileArgs = ['-X', '-w', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=sqlstate', '-f'];
-    const apply = (sqlPath: string) =>
-      run(contract.psqlBin, [...fileArgs, sqlPath], { env });
+    const apply = createSupabaseReplaySqlApplier(
+      run,
+      contract.psqlBin,
+      databaseUrl
+    );
     for (const [index, source] of orderedSources.slice(125).entries()) {
       const ordinal = index + 126;
       const sqlPath = await runtime.materializeSource(
@@ -218,15 +230,7 @@ export async function runSupabaseHistoryReplay(
     if ((await version()) !== '170006')
       throw new Error('Local server version mismatch');
     if (options.typesOutput) {
-      const generated = await run('supabase', [
-        'gen',
-        'types',
-        'typescript',
-        '--db-url',
-        databaseUrl,
-        '--schema',
-        'public',
-      ]);
+      const generated = await generateSupabaseReplayTypes(run, databaseUrl);
       const output = await runtime.output(root, options.typesOutput);
       await output.replace(generated.stdout, { mode: 0o600 });
     }

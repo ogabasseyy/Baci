@@ -6,8 +6,10 @@ import {
   domesticSenderShipmentInsertPayloads,
 } from './route.domestic-sender.test-fixtures';
 
+type EnvModule = typeof import('@/env');
+
 vi.mock('@/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/env')>();
+  const actual = await importOriginal<EnvModule>();
   return { ...actual, ...shippingQuoteEnvTestMock };
 });
 

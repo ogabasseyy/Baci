@@ -1,0 +1,25 @@
+export const draftFixture = {
+  draftId: '20000000-0000-4000-8000-000000000001',
+  requestId: '20000000-0000-4000-8000-000000000002',
+  revisionId: '20000000-0000-4000-8000-000000000003',
+  productId: '10000000-0000-4000-8000-000000000003',
+  variantId: '10000000-0000-4000-8000-000000000004',
+  status: 'draft' as const,
+  device: {
+    name: 'Synthetic phone',
+    condition: 'new',
+    price: 250000,
+    image: null,
+    selectionStatus: 'exact' as const,
+    variantId: '10000000-0000-4000-8000-000000000004',
+    variantLabel: '256GB · Black',
+  },
+  terms: {
+    version: 'local-v1',
+    hash: 'a'.repeat(64),
+    text: 'Synthetic draft only. No money movement.',
+  },
+  consent: 'required' as const,
+  createdAt: '2026-09-13T07:00:00Z',
+  acceptedAt: null,
+};

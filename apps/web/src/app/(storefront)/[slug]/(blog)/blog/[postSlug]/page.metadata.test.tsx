@@ -120,6 +120,30 @@ describe('storefront blog post metadata', () => {
     expect(metadata.description).toBe(descriptiveSummary);
   });
 
+  it('resolves catalog tokens in the metadata description', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    mockGetRequestScopedBlogPost.mockResolvedValue({
+      ...liveBlogPost,
+      merchant: {
+        ...liveBlogPost.merchant,
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      post: {
+        ...liveBlogPost.post,
+        seo_description: `Compare the {{catalog-price:${productId}}} with rival displays across camera quality, battery life, warranty confidence, delivery timing, and everyday value.`,
+      },
+      relatedProducts: [
+        { id: productId, name: 'Phone', price: 250000, manage_stock: false },
+      ],
+    });
+
+    const metadata = await generateBlogPostMetadata('token-description');
+
+    expect(metadata.description).toContain('₦250,000.00');
+    expect(metadata.description).not.toContain('{{catalog-price');
+  });
+
   it('returns noindex fallback metadata when the public cache lookup throws', async () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')

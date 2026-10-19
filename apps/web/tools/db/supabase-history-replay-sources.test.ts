@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EXPECTED_PENDING_SOURCES } from './expected-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { REPLAY_SOURCE_DATA } from './supabase-history-replay-sources';
 
@@ -201,5 +202,23 @@ describe('supabase-history-replay sources', () => {
     } of EXPECTED_QUIZ_LIVE_PENDING_SOURCES) {
       expect(pendingByPath.get(repositoryPath)).toBe(sha256);
     }
+  });
+
+  it('keeps pending migration versions unique across replay sources', () => {
+    // Migration history is keyed by the 14-digit version: two pending
+    // files sharing one (e.g. after a rebase) cannot both be recorded,
+    // so one set of changes silently goes unapplied. Scoped to pending
+    // sources: applied history carries grandfathered duplicates that a
+    // rename can no longer fix.
+    const byVersion = new Map<string, string[]>();
+    for (const { repositoryPath } of EXPECTED_PENDING_SOURCES) {
+      const filename = repositoryPath.split('/').pop() ?? repositoryPath;
+      const version = filename.slice(0, 14);
+      byVersion.set(version, [...(byVersion.get(version) ?? []), filename]);
+    }
+    const duplicates = [...byVersion.entries()].filter(
+      ([, names]) => names.length > 1
+    );
+    expect(duplicates).toEqual([]);
   });
 });

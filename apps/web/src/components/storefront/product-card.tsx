@@ -27,6 +27,12 @@ interface StorefrontProductCardProps {
   onQuickView: (product: Product) => void;
   basePath?: string;
   priority?: boolean;
+  // Lab-only href suffix, pinned to the exact arm queries at the type
+  // level: a dynamic or malformed suffix is a compile error, never a
+  // render-time throw in the production grid. Production callers omit
+  // it; getStorefrontProductHref keeps its runtime allowlist as the
+  // last line against injection.
+  hrefSuffix?: '' | '?arm=pilot' | '?arm=control';
 }
 
 /**
@@ -42,6 +48,7 @@ export function StorefrontProductCard({
   onQuickView,
   basePath = '',
   priority = false,
+  hrefSuffix = '',
 }: StorefrontProductCardProps) {
   const { formatCurrency } = useCurrency();
 
@@ -120,7 +127,7 @@ export function StorefrontProductCard({
     >
       <div className="relative group/image">
         <Link
-          href={getStorefrontProductHref(product, basePath)}
+          href={getStorefrontProductHref(product, basePath, hrefSuffix)}
           className="block"
         >
           <ProductCardImage

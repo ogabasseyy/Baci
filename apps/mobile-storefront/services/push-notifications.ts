@@ -1,15 +1,17 @@
 import { getStorefrontNotificationNavigationTarget } from '@baci/shared/lib';
 import * as Application from 'expo-application';
-import Constants from 'expo-constants';
 import type {
+  DevicePushToken,
   NotificationResponse,
   PermissionStatus,
 } from 'expo-notifications';
 import { Platform } from 'react-native';
 import { requestMobileUpdateCheck } from '@/components/updates/mobile-update-events';
+import { getNativePushRegistration } from '@/lib/hosted-staging-push-capability';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import { ensureAndroidNotificationChannels } from '@/services/push-notification-channels';
+import { getSavingsPushNavigationTarget } from '@/services/savings-push-navigation';
 
 const log = createLogger('PushNotifications');
 
@@ -38,6 +40,7 @@ let Notifications: typeof import('expo-notifications') | null = null;
 
 const loadNativeModules = async () => {
   if (Platform.OS === 'web') return;
+  if (!getNativePushRegistration()) return;
   try {
     const [dev, notif] = await Promise.all([
       import('expo-device'),
@@ -81,7 +84,14 @@ export async function requestPermissions(): Promise<PermissionStatus | null> {
   return existingStatus;
 }
 
-export async function registerForPushNotifications(): Promise<string | null> {
+export async function registerForPushNotifications(
+  options: {
+    devicePushToken?: DevicePushToken;
+    requestPermission?: boolean;
+  } = {}
+): Promise<string | null> {
+  const nativePushRegistration = getNativePushRegistration();
+  if (!nativePushRegistration) return null;
   if (!Device || !Notifications) {
     await loadNativeModules();
   }
@@ -93,7 +103,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  const permissionStatus = await requestPermissions();
+  if (Platform.OS === 'android') await ensureAndroidNotificationChannels();
+  const permissionStatus =
+    options.requestPermission === false
+      ? (await Notifications.getPermissionsAsync()).status
+      : await requestPermissions();
 
   if (permissionStatus !== 'granted') {
     log.warn('Push notification permission not granted');
@@ -101,26 +115,22 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   try {
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId = nativePushRegistration.projectId;
 
     if (!projectId) {
       log.warn('EAS project ID not configured in app.json');
     }
 
-    if (Platform.OS === 'android') {
-      await ensureAndroidNotificationChannels();
-    }
-
     const tokenResponse = await Notifications.getExpoPushTokenAsync({
       projectId: projectId || undefined,
+      ...(options.devicePushToken
+        ? { devicePushToken: options.devicePushToken }
+        : {}),
     });
 
-    const token = tokenResponse.data;
-    log.debug('Expo Push Token:', token);
-
-    return token;
-  } catch (error) {
-    log.error('Failed to get push token:', error);
+    return tokenResponse.data;
+  } catch {
+    log.error('Failed to get push token');
     return null;
   }
 }
@@ -197,7 +207,9 @@ export function handleNotificationResponse(
   ) => void | Promise<void>,
   requestUpdateCheck: (
     reason: 'push-notification'
-  ) => void = requestMobileUpdateCheck
+  ) => void = requestMobileUpdateCheck,
+  activeMerchantId: string | null = null,
+  invalidateSavingsWallet?: () => void | Promise<void>
 ): void | Promise<void> {
   const data = response.notification.request.content.data as Record<
     string,
@@ -207,6 +219,20 @@ export function handleNotificationResponse(
   if (data.type === 'mobile_update_available') {
     requestUpdateCheck('push-notification');
     return;
+  }
+
+  const savingsTarget = getSavingsPushNavigationTarget(data, activeMerchantId);
+  if (savingsTarget) {
+    if (invalidateSavingsWallet) {
+      try {
+        return Promise.resolve(invalidateSavingsWallet())
+          .catch(() => undefined)
+          .then(() => navigate(savingsTarget.screen, savingsTarget.params));
+      } catch {
+        return navigate(savingsTarget.screen, savingsTarget.params);
+      }
+    }
+    return navigate(savingsTarget.screen, savingsTarget.params);
   }
 
   const target = getStorefrontNotificationNavigationTarget(data);

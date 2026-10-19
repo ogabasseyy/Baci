@@ -134,4 +134,34 @@ describe('useProductDetailsSelectionState', () => {
 
     expect(result.current.selectedColor).toBe(1);
   });
+
+  it('reseeds when a refreshed inventory policy changes which variant is purchasable', () => {
+    const product = {
+      ...variantProduct,
+      manage_stock: false,
+      variants: [
+        { id: 'cheap', attributes: { color: 'Black' }, price_override: 100, stock_quantity: 0 },
+        { id: 'available', attributes: { color: 'Silver' }, price_override: 200, stock_quantity: 1 },
+      ],
+    } as Product;
+    const refreshedProduct = {
+      ...product,
+      variants: product.variants?.map((variant) =>
+        variant.id === 'cheap'
+          ? { ...variant, inventory_tracking_policy: 'serialized_strict' }
+          : variant
+      ),
+    } as Product;
+    const { result, rerender } = renderHook(
+      ({ value }: { value: Product }) =>
+        useProductDetailsSelectionState(value, makeSearchParams()),
+      { initialProps: { value: product } }
+    );
+
+    expect(result.current.currentVariantDisplaySelection?.variant.id).toBe('cheap');
+
+    rerender({ value: refreshedProduct });
+
+    expect(result.current.currentVariantDisplaySelection?.variant.id).toBe('available');
+  });
 });

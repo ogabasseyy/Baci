@@ -17,7 +17,7 @@ vi.mock('./config', () => ({
   getSnapchatAdsConfig: (...args: unknown[]) => config(...args),
 }));
 vi.mock('./provider', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./provider')>()),
+  ...(await importOriginal<ProviderModule>()),
   fetchSnapchatAdsDailyReport: (...args: unknown[]) => reports(...args),
   listSnapchatAdsAccounts: (...args: unknown[]) => accounts(...args),
 }));
@@ -27,6 +27,8 @@ import {
   snapchatAdsTrailingStartDate,
   syncSnapchatAdsSpendForMerchant,
 } from './sync';
+
+type ProviderModule = typeof import('./provider');
 
 describe('Snapchat Ads sync', () => {
   const rpc = vi.fn();

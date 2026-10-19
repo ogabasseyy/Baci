@@ -153,4 +153,24 @@ export const searchDropdownStyles = StyleSheet.create({
   resultBrand: {
     fontSize: 12,
   },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: SPACING.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  hintContainer: {
+    paddingVertical: SPACING.sm,
+  },
+  hintText: {
+    fontSize: 13,
+  },
 });

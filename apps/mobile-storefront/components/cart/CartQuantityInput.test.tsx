@@ -36,6 +36,20 @@ describe('CartQuantityInput', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  it('clamps committed values to maxValue when provided', () => {
+    const onChange = jest.fn();
+
+    render(<CartQuantityInput value={3} onChange={onChange} maxValue={10} />);
+
+    const input = screen.getByLabelText('Quantity input');
+    fireEvent.changeText(input, '99');
+    fireEvent(input, 'endEditing');
+
+    expect(onChange).toHaveBeenCalledWith(10);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue('10')).toBeTruthy();
+  });
+
   it('does not commit on blur alone', () => {
     const onChange = jest.fn();
 

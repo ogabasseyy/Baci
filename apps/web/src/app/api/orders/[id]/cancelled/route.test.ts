@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   revalidateDashboard: vi.fn(),
   revalidateProductSlugs: vi.fn(),
   revalidateProducts: vi.fn(),
+  scheduleOrderProductBlogPurgeAfterResponse: vi
+    .fn()
+    .mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/api-auth', () => ({
@@ -20,6 +23,10 @@ vi.mock('@/lib/product-cache-revalidation', () => ({
     revalidateProductSlugs: mocks.revalidateProductSlugs,
     revalidateProducts: mocks.revalidateProducts,
   },
+}));
+vi.mock('@/lib/schedule-order-product-blog-purge-after-response', () => ({
+  scheduleOrderProductBlogPurgeAfterResponse:
+    mocks.scheduleOrderProductBlogPurgeAfterResponse,
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.checkCsrfProtection,
@@ -36,8 +43,9 @@ function createSupabase() {
     data: [{ product_id: 'product-1' }],
     error: null,
   });
+  const variantsIn = vi.fn().mockResolvedValue({ data: [], error: null });
   const productsIn = vi.fn().mockResolvedValue({
-    data: [{ manage_stock: true, slug: 'phone' }],
+    data: [{ id: 'product-1', manage_stock: true, slug: 'phone' }],
     error: null,
   });
   const supabase = {
@@ -52,14 +60,45 @@ function createSupabase() {
           })),
         };
       }
+      if (table === 'product_variants') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ in: variantsIn })),
+          })),
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     }),
     rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
   };
-  return { orderItemsEq, productsIn, supabase };
+  return { orderItemsEq, productsIn, supabase, variantsIn };
 }
 
 describe('POST /api/orders/[id]/cancelled', () => {
+  it('keeps product invalidation after a committed restock and failed product read', async () => {
+    const { supabase, productsIn } = createSupabase();
+    productsIn.mockResolvedValueOnce({
+      data: [],
+      error: { message: 'read failed' },
+    } as never);
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+    const response = await POST(
+      request({ cancelled_by: 'merchant', confirm_cancellation: true }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+    expect(response.status).toBe(202);
+    expect(
+      mocks.scheduleOrderProductBlogPurgeAfterResponse
+    ).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      productIds: ['product-1'],
+      supabase,
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.checkCsrfProtection.mockResolvedValue({ valid: true });
@@ -117,6 +156,15 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(mocks.revalidateProductSlugs).toHaveBeenCalledWith('merchant-1', [
       'phone',
     ]);
+    expect(
+      mocks.scheduleOrderProductBlogPurgeAfterResponse
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-1',
+        productIds: ['product-1'],
+        supabase,
+      })
+    );
     await expect(response.json()).resolves.toMatchObject({
       message: 'Cancellation completed; side effects are queued',
       sideEffects: { customerEmail: 'queued', refund: 'queued_if_required' },
@@ -143,6 +191,56 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(mocks.revalidateProducts).not.toHaveBeenCalled();
   });
 
+  it('identifies a pending payment that must be reconciled before cancellation', async () => {
+    const { supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'payment_capture_in_flight' },
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(request({ confirm_cancellation: true }), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_RECONCILIATION_REQUIRED',
+      error:
+        'A payment attempt needs to be checked before this order can be cancelled. Please contact support.',
+    });
+    expect(mocks.revalidateDashboard).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles when PostgREST wraps the capture-in-flight sentinel', async () => {
+    const { supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'cancel_order: payment_capture_in_flight (order order-1)',
+      },
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(request({ confirm_cancellation: true }), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_RECONCILIATION_REQUIRED',
+    });
+  });
+
   it('keeps an idempotent retry queued without using the new request reason', async () => {
     const { supabase } = createSupabase();
     supabase.rpc.mockResolvedValue({ data: false, error: null });
@@ -163,7 +261,6 @@ describe('POST /api/orders/[id]/cancelled', () => {
       success: true,
     });
   });
-
   it('avoids product and feed cache churn for unlimited-inventory items', async () => {
     const { productsIn, supabase } = createSupabase();
     productsIn.mockResolvedValue({

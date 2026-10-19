@@ -125,6 +125,13 @@ describe('GiglProvider quote rate IDs', () => {
       `${baseUrl}/price/v3`,
     ]);
 
+    expect(resolutionSpy.mock.calls[0]?.[0]).toEqual({
+      city: quoteRequest.sender?.city,
+      state: quoteRequest.sender?.state,
+    });
+    expect(resolutionSpy.mock.calls[0]?.[1]?.signal).toBeInstanceOf(
+      AbortSignal
+    );
     const pricePayload = JSON.parse(
       String(fetchMock.mock.calls[2]?.[1]?.body ?? '{}')
     );
@@ -150,7 +157,7 @@ describe('GiglProvider quote rate IDs', () => {
     expect(pricePayload).not.toHaveProperty('CustomerCode');
     expect(pricePayload).not.toHaveProperty('CustomerType');
     expect(
-      resolutionSpy.mock.calls.map((call) => call[1]?.preferNearest)
+      resolutionSpy.mock.calls.slice(1).map((call) => call[1]?.preferNearest)
     ).toEqual([false]);
   });
 
@@ -194,7 +201,7 @@ describe('GiglProvider quote rate IDs', () => {
       maxDays: 3,
     });
     expect(
-      resolutionSpy.mock.calls.map((call) => call[1]?.preferNearest)
+      resolutionSpy.mock.calls.slice(1).map((call) => call[1]?.preferNearest)
     ).toEqual([false, true]);
   });
 
@@ -243,6 +250,7 @@ describe('GiglProvider quote rate IDs', () => {
       City: 'LAGOS',
     };
     vi.spyOn(GiglStationsService.prototype, 'resolveStationForLocation')
+      .mockResolvedValueOnce({ station: lagosStation })
       .mockResolvedValueOnce({ station: portHarcourtStation })
       .mockResolvedValueOnce({
         station: lagosStation,
@@ -266,7 +274,6 @@ describe('GiglProvider quote rate IDs', () => {
     });
     mockGiglFetchSequence(
       jsonResponse(loginResponse),
-      jsonResponse(stationsResponse),
       unavailable.clone(),
       unavailable.clone(),
       jsonResponse(priceResponse),

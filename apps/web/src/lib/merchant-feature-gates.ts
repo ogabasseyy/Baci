@@ -12,6 +12,10 @@ const FEATURE_MESSAGES: Record<MerchantFeatureGate, string> = {
   custom_domain: 'Custom domains require Baci Starter or higher',
   growth_integrations: 'Growth integrations require Baci Pro',
   marketplace_sync: 'Marketplace sync requires Baci Pro',
+  shared_cart: 'Shared cart is not enabled for this store',
+  shared_cart_accounts: 'Cart account linking is not enabled for this store',
+  shared_cart_realtime:
+    'Shared cart live updates are not enabled for this store',
 };
 export const MERCHANT_FEATURE_GATE_SELECT =
   'id, plan_tier, plan_expires_at, premium_features';

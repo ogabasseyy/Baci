@@ -7,6 +7,10 @@ type AuthStoreSnapshot = {
 };
 
 type AuthStoreSelector = (state: AuthStoreSnapshot) => unknown;
+let mockAuthSnapshot: AuthStoreSnapshot = {
+  merchantId: '',
+  user: { id: 'user-1' },
+};
 
 const mockRegisterForPushNotifications =
   jest.fn<() => Promise<string | null>>();
@@ -27,6 +31,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   addNotificationResponseReceivedListener: jest.fn(() => ({
     remove: jest.fn(),
@@ -54,15 +59,24 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: jest.fn(),
   isPushOptedOut: mockIsPushOptedOut,
   setPushOptOut: jest.fn(),
+  getRegisteredPushToken: jest.fn(async () => null),
+  setRegisteredPushToken: jest.fn(async () => {}),
+  clearRegisteredPushToken: jest.fn(async () => {}),
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: jest.fn(),
+  useAuthStore: Object.assign(jest.fn(), {
+    getState: () => mockAuthSnapshot,
+  }),
 }));
 
 const mockedUseAuthStore = (
   jest.requireMock('@/stores/auth-store') as {
-    useAuthStore: jest.MockedFunction<(selector: AuthStoreSelector) => unknown>;
+    useAuthStore: jest.MockedFunction<
+      (selector: AuthStoreSelector) => unknown
+    > & {
+      getState: () => AuthStoreSnapshot;
+    };
   }
 ).useAuthStore;
 
@@ -72,8 +86,9 @@ const { usePushNotifications } =
 describe('usePushNotifications merchant config fallback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthSnapshot = { merchantId: '', user: { id: 'user-1' } };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({ merchantId: '', user: { id: 'user-1' } })
+      selector(mockAuthSnapshot)
     );
     mockRegisterForPushNotifications.mockResolvedValue(
       'ExponentPushToken[fresh]'

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { vi } from 'vitest';
+import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import { toast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 
@@ -9,7 +10,6 @@ const {
   mockBillMountCount,
   mockCaptureClientEvent,
   mockFetchWithCsrf,
-  mockRedirectToPaymentCheckout,
   mockUseCustomerAuth,
   mockUseWallet,
 } = vi.hoisted(() => ({
@@ -18,10 +18,31 @@ const {
   mockBillMountCount: { current: 0 },
   mockCaptureClientEvent: vi.fn(),
   mockFetchWithCsrf: vi.fn(),
-  mockRedirectToPaymentCheckout: vi.fn(),
   mockUseCustomerAuth: vi.fn(),
   mockUseWallet: vi.fn(),
 }));
+
+// Live settlement identity (Codex R95 P1, R101 P2): the modal suites
+// use the REAL customer-live-identity module — every mocked auth
+// assignment also publishes, so submit/settle paths exercise
+// production comparison logic (a vi.mock of the getter cannot work:
+// hasUtilityPurchaseIdentityMoved binds the module-internal getter).
+const baseAuthMockReturnValue = mockUseCustomerAuth.mockReturnValue.bind(
+  mockUseCustomerAuth
+);
+mockUseCustomerAuth.mockReturnValue = ((
+  auth: {
+    customer?: { id?: string } | null;
+    user?: { id?: string } | null;
+  } | null
+) => {
+  publishCustomerIdentity(
+    auth?.user?.id ? { id: auth.user.id } : null,
+    auth?.customer?.id ? { id: auth.customer.id } : null,
+    'ogabassey'
+  );
+  return baseAuthMockReturnValue(auth);
+}) as typeof mockUseCustomerAuth.mockReturnValue;
 
 vi.mock('@/lib/posthog/capture-client-event', () => ({
   captureClientEvent: mockCaptureClientEvent,
@@ -33,16 +54,6 @@ vi.mock('@/env', () => ({
   getSupabaseServiceRoleKey: () => 'test-service-role-key',
   getRootDomain: () => 'localhost',
 }));
-
-vi.mock('./utility-checkout', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./utility-checkout')>();
-
-  return {
-    ...original,
-    redirectToPaymentCheckout: mockRedirectToPaymentCheckout,
-  };
-});
 
 vi.mock('./utility/AirtimeDataForm', () => ({
   AirtimeDataForm: ({
@@ -157,7 +168,9 @@ vi.mock('./utility/BillPaymentForm', () => ({
 }));
 
 vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: () => ({ merchant: { slug: 'ogabassey' } }),
+  useMerchantSafe: () => ({
+    merchant: { id: 'merchant-1', slug: 'ogabassey' },
+  }),
 }));
 
 vi.mock('@/contexts/customer-auth-context', () => ({
@@ -199,7 +212,6 @@ export const utilityModalTestHarness = {
   checkoutFetch: vi.mocked(fetchWithCsrf),
   createJsonResponse,
   onClose: mockOnClose,
-  redirect: mockRedirectToPaymentCheckout,
   toast: vi.mocked(toast),
   useAuth: mockUseCustomerAuth,
   useWallet: mockUseWallet,
@@ -207,7 +219,6 @@ export const utilityModalTestHarness = {
     mockOnClose.mockClear();
     this.toast.mockClear();
     this.checkoutFetch.mockReset();
-    mockRedirectToPaymentCheckout.mockReset();
     mockCaptureClientEvent.mockReset();
     mockAirtimeMountCount.current = 0;
     mockBillMountCount.current = 0;
@@ -230,9 +241,14 @@ export const utilityModalTestHarness = {
     });
     mockUseWallet.mockReturnValue({
       payWithWallet: true,
+      isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
+      refreshWallet: vi.fn(),
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
     this.checkoutFetch.mockResolvedValue(

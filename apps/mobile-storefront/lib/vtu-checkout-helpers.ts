@@ -1,8 +1,7 @@
-import { CONFIG } from '@/lib/config';
-import { HttpError } from '@/lib/fetch-with-timeout';
+import { withTimeout } from '@baci/shared';
+import { DEFAULT_TIMEOUT, HttpError } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import { supabase } from '@/lib/supabase';
-import type { VTUCheckoutPayload } from './vtu-checkout-response-schemas';
 
 const ALLOWED_CONFIRM_CHECKOUT_STATUSES = ['successful', 'processing'] as const;
 
@@ -49,7 +48,26 @@ export function normalizeVtuCheckoutPayload<T extends object>(payload: T): T {
   };
 }
 
-export async function getAccessToken() {
+export function getAccessToken(
+  expectedUserId?: string | null,
+  options?: { requireSubmitterBinding?: boolean }
+): Promise<string> {
+  // Bounded (Codex R96 P2): a stalled Supabase auth call used to hang
+  // the module-wide checkout guard forever — callers create their
+  // POST deadline only after the token resolves, so the stall bricked
+  // every utility purchase until restart. Same 30s budget as the
+  // POST; the timeout error releases the guard via handler finally.
+  return withTimeout(
+    getAccessTokenInner(expectedUserId, options),
+    DEFAULT_TIMEOUT,
+    'Authentication timed out. Please try again.'
+  );
+}
+
+async function getAccessTokenInner(
+  expectedUserId?: string | null,
+  options?: { requireSubmitterBinding?: boolean }
+) {
   const {
     data: { user },
     error: userError,
@@ -64,6 +82,26 @@ export async function getAccessToken() {
 
   if (!session?.access_token) {
     throw new Error('Authentication required. Please sign in again.');
+  }
+
+  if (options?.requireSubmitterBinding && !expectedUserId) {
+    // A session user exists (proven above) but the caller captured
+    // none: the store hasn't hydrated the user id yet. Submitting
+    // unbound would skip the server-side account-change guard, so
+    // abort pre-POST instead of debiting an unverified account. The
+    // key is untouched (no HTTP status), so the retry replays safely
+    // once hydration lands.
+    throw new Error('Account still loading. Please try again.');
+  }
+
+  // Bind the token to the submitter when the caller captured one: an
+  // account switch between getUser and getSession (or before both)
+  // would otherwise hand back another customer's token, and the
+  // server debits whoever the token belongs to. Compare against the
+  // SESSION's user — atomic with the token object — not getUser's,
+  // which a mid-flight switch can already have invalidated.
+  if (expectedUserId && session.user?.id !== expectedUserId) {
+    throw new Error('Account changed during checkout. Please try again.');
   }
 
   return session.access_token;
@@ -84,38 +122,54 @@ export async function parseJsonResponse(response: Response) {
   return data;
 }
 
-export function buildVtuRequestBody<T extends VTUCheckoutPayload>(payload: T) {
-  const normalized = normalizeVtuCheckoutPayload(payload);
-  const { walletAmount, ...rest } = normalized;
-  return {
-    ...rest,
-    merchantSlug: CONFIG.MERCHANT_SLUG,
-    ...(typeof walletAmount === 'number' && walletAmount > 0
-      ? { walletAmount }
-      : {}),
-  };
-}
+/**
+ * Statuses that must NOT rotate the key: the proxy security stage
+ * (429 rate limit, 413 payload, 415 content, 403 guard), the
+ * in-route auth/CSRF guards (401/403), and ambiguous timeout
+ * infrastructure responses (408 timeout, 425 too early — either can
+ * arrive after the handler accepted the request or even committed
+ * the debit). No terminal outcome is recorded for these, so the key
+ * must be kept — rotating after a 429 retry would mint a fresh key
+ * for an already-committed attempt and debit twice. Mirrors web's
+ * shouldRotateVtuKeyForStatus carve-out.
+ */
+const PRE_ROUTE_NO_ROTATION_STATUSES: ReadonlySet<number> = new Set([
+  401, 403, 408, 413, 415, 425, 429,
+]);
 
-export function computeVtuWalletAmount(
-  selectionAmount: number | undefined,
-  currentTotal: number
-): number {
-  if (
-    typeof selectionAmount !== 'number' ||
-    selectionAmount <= 0 ||
-    !Number.isFinite(selectionAmount) ||
-    !Number.isFinite(currentTotal) ||
-    currentTotal <= 0
-  ) {
-    return 0;
-  }
-  return Math.min(selectionAmount, currentTotal);
-}
-
+/**
+ * True when a checkout error proves the attempt terminal: a definitive
+ * route response (validation, insufficient balance, key collision, …)
+ * whose outcome the server recorded under this key. Pre-route
+ * 401/403/413/415/429 responses, 408/425 timeouts, 5xx, and
+ * non-responses stay ambiguous — keep the key so the retry dedupes.
+ */
 export function shouldRotateWalletIdempotencyKeyForError(
   error: unknown
 ): boolean {
   return (
-    error instanceof HttpError && error.status >= 400 && error.status < 500
+    error instanceof HttpError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    !PRE_ROUTE_NO_ROTATION_STATUSES.has(error.status)
   );
+}
+
+interface VtuCashbackBlock {
+  amount: number;
+  credited?: boolean;
+  newBalance: number;
+}
+
+/**
+ * Returns the cashback block only when the server actually credited it.
+ * On `credit_customer_wallet` RPC failure the route still returns a
+ * successful purchase with `credited: false` and a default `newBalance`
+ * of 0 — surfacing that would tell the customer they received cashback
+ * and show a wrong wallet balance.
+ */
+export function creditedVtuCashback<T extends VtuCashbackBlock>(
+  cashback: T | null | undefined
+): T | undefined {
+  return cashback?.credited === true ? cashback : undefined;
 }

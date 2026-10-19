@@ -30,12 +30,27 @@ const IsoDateSchema = z
   .string()
   .trim()
   .refine(isValidIsoDate, 'Date must be in YYYY-MM-DD format');
-const PositiveAmountSchema = z.number().finite().int().positive();
-const NonNegativeAmountSchema = z.number().finite().int().min(0);
+// Balances are naira with kobo precision: the ledger stores numeric(12, 2),
+// so a 101-kobo transfer lands as 1.01. Integer-only parsing would reject
+// the entire goals response for that customer.
+function hasKoboPrecision(value: number) {
+  const scaled = value * 100;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}
+const PositiveAmountSchema = z
+  .number()
+  .finite()
+  .positive()
+  .refine(hasKoboPrecision, 'Amount must have at most two decimal places');
+const NonNegativeAmountSchema = z
+  .number()
+  .finite()
+  .min(0)
+  .refine(hasKoboPrecision, 'Amount must have at most two decimal places');
 
 export const SavingsGoalSummarySchema = z.object({
-  contributionAmount: PositiveAmountSchema,
-  contributionFrequency: SavingsFrequencySchema,
+  contributionAmount: PositiveAmountSchema.optional(),
+  contributionFrequency: SavingsFrequencySchema.optional(),
   currentAmount: NonNegativeAmountSchema,
   goalId: z.string(),
   goalStatus: SavingsGoalStatusSchema,
@@ -89,6 +104,12 @@ export const SavingsDeviceSwapResponseSchema = z.object({
   targetAmount: PositiveAmountSchema,
 });
 
+export const SavingsVariantResolutionResponseSchema = z.object({
+  goalId: z.string(),
+  goalStatus: z.literal('completed'),
+  success: z.literal(true),
+});
+
 export const SavingsAuthorizationResponseSchema = z.object({
   authorization_url: z.url(),
   checkout_url: z.url(),
@@ -129,3 +150,22 @@ export const CustomerPaymentMethodsResponseSchema = z.object({
 
 export type CustomerPaymentMethod = z.infer<typeof CustomerPaymentMethodSchema>;
 export type SavingsGoal = z.infer<typeof SavingsGoalSchema>;
+
+export const SavingsPlanFundingAccountSchema = z.object({
+  accountName: z.string().min(1),
+  accountNumber: z.string().min(1),
+  bankName: z.string().min(1),
+});
+
+export const SavingsPlanFundingResponseSchema = z.object({
+  accounts: z.array(SavingsPlanFundingAccountSchema).max(32).optional(),
+  code: z.string().min(1).max(64).optional(),
+  status: z.enum(['ready', 'pending', 'unavailable']),
+});
+
+export type SavingsPlanFundingAccount = z.infer<
+  typeof SavingsPlanFundingAccountSchema
+>;
+export type SavingsPlanFundingResponse = z.infer<
+  typeof SavingsPlanFundingResponseSchema
+>;

@@ -29,7 +29,6 @@ describe('initializeCheckoutDva', () => {
     await initializeCheckoutDva({
       ...base,
       setDvaData,
-      setDvaCountdown: vi.fn(),
       setIsProcessing: vi.fn(),
       setIsInitializingDva: vi.fn(),
       releaseSubmitLock,
@@ -68,7 +67,6 @@ describe('initializeCheckoutDva', () => {
     await initializeCheckoutDva({
       ...base,
       setDvaData: vi.fn(),
-      setDvaCountdown: vi.fn(),
       setIsProcessing: vi.fn(),
       setIsInitializingDva: vi.fn(),
       releaseSubmitLock,

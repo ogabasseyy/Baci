@@ -58,6 +58,10 @@ vi.mock('@/components/transactions/transactions.styles', () => ({
   ),
 }));
 
+vi.mock('@/lib/search-transaction-review-orders', () => ({
+  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
+}));
+
 describe('TransactionListState', () => {
   it('renders a retryable error state', () => {
     const onRetry = vi.fn();
@@ -106,5 +110,108 @@ describe('TransactionListState', () => {
     );
 
     expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
+  });
+
+  it('shows no-matching instead of no-transactions for empty searches', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={false}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searching={true}
+        visibleOrderCount={0}
+      />
+    );
+
+    expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
+    expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument();
+  });
+
+  it('discloses truncated search results', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={100}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 100 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('names the displayed count when refinement shrinks truncated results', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={60}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 60 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('uses the singular when one truncated match is displayed', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={1}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 1 match (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('reports partial results instead of no matches when truncation empties the list', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={false}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searching={true}
+        searchTruncated={true}
+        visibleOrderCount={0}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 0 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
   });
 });

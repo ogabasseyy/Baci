@@ -46,7 +46,12 @@ function buildSupabase(data: unknown[]) {
   ]) {
     builder[method] = vi.fn().mockReturnValue(builder);
   }
-  builder.limit = vi.fn().mockResolvedValue({ data, error: null });
+  // The sweep runs two candidate queries (main, then filing-only
+  // retries): the canned rows belong to the main query only.
+  builder.limit = vi
+    .fn()
+    .mockResolvedValueOnce({ data, error: null })
+    .mockResolvedValue({ data: [], error: null });
   return {
     from: vi.fn().mockReturnValue(builder),
   } as unknown as SupabaseClient;
@@ -87,12 +92,18 @@ describe('reconcileWedgedGatewayOrders Juicyway', () => {
       supabase,
     });
 
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('session-1');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'session-1',
+      undefined
+    );
     expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         gateway: 'juicyway',
         orderId: 'order-1',
         reference: 'BAC-JUICY',
+        // The pending candidate keeps its fresh-capture signal; a
+        // same-transaction replay is distinguished downstream by the
+        // outbox payer evidence.
         wonTransactionFlip: true,
       })
     );
@@ -160,7 +171,10 @@ describe('reconcileWedgedGatewayOrders Juicyway', () => {
       supabase,
     });
 
-    expect(mocks.getJuicywaySession).toHaveBeenCalledWith('legacy-session');
+    expect(mocks.getJuicywaySession).toHaveBeenCalledWith(
+      'legacy-session',
+      undefined
+    );
     expect(summary.healed).toEqual([
       { orderId: 'order-1', orderNumber: 'ORD-JUICY-LEGACY' },
     ]);

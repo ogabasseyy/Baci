@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-auth';
 import { logger } from '@/lib/logger';
 
+type RouteAuthModule = typeof import('@/app/api/quiz/_shared/route-auth');
+
 vi.mock('@/app/api/quiz/_shared/route-auth', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/app/api/quiz/_shared/route-auth')>();
+  const actual = await importOriginal<RouteAuthModule>();
   return { ...actual, requireQuizUser: vi.fn() };
 });
 vi.mock('@/lib/logger', () => ({

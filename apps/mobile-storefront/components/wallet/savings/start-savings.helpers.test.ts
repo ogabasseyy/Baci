@@ -152,13 +152,13 @@ describe('start savings helpers', () => {
 
   it('computes the required top-up difference', () => {
     expect(
-      getRequiredTopUp({ earningsBalance: 6000, requiredContribution: 20000 })
+      getRequiredTopUp({ availableBalance: 6000, requiredContribution: 20000 })
     ).toBe(14000);
   });
 
   it('does not return a negative top-up', () => {
     expect(
-      getRequiredTopUp({ earningsBalance: 50000, requiredContribution: 20000 })
+      getRequiredTopUp({ availableBalance: 50000, requiredContribution: 20000 })
     ).toBe(0);
   });
 

@@ -14,6 +14,7 @@ import { useStorefront } from '@/contexts/storefront-context';
 import { useCart } from '@/hooks/use-cart';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { asRoute, routes } from '@/lib/routes';
+import { recordSearchSubmission } from '@/lib/search-submission';
 
 import { SearchAutocomplete } from './search-autocomplete';
 
@@ -96,6 +97,9 @@ export function StorefrontHeader() {
             merchantId={merchant.id}
             value={searchQuery}
             onChange={setSearchQuery}
+            onPopularSearchSelect={(query) =>
+              recordSearchSubmission(query, basePath, 'popular-search')
+            }
             onSelectProduct={handleProductSelect}
             placeholder="Search products..."
             className="w-full max-w-md"

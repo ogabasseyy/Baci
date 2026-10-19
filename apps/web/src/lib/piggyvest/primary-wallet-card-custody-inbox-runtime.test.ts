@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
+import { readPrimaryCardCustodyInboxRuntime } from './primary-wallet-card-custody-inbox-runtime';
+
+describe('explicit signed custody intake capability deployment', () => {
+  it('requires approved payload and mapping contracts rather than inferring provider reference semantics', () => {
+    expect(
+      readPrimaryCardCustodyInboxRuntime(fixture.environment, fixture.now)
+    ).toEqual({ ...fixture.configuration, retainedWebhookSecrets: [] });
+  });
+  it('loads past expiry so the worker drains acknowledged receipts instead of stranding them', () => {
+    const parsed = readPrimaryCardCustodyInboxRuntime(
+      {
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-10-01T00:00:00Z',
+      },
+      fixture.now
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.expiresAt).toBe('2026-10-01T00:00:00Z');
+  });
+  it.each([
+    { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined },
+    { PIGGYVEST_PRIMARY_CARD_SIGNED_PAYLOAD_CONTRACT: 'guessed' },
+    { PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT: undefined },
+    { PIGGYVEST_PRIMARY_CARD_SIGNED_BATCH_SIZE: '11' },
+    { PIGGYVEST_PRIMARY_CARD_CROSSWALK_ISSUER: undefined },
+  ])('reports unavailable configuration %# without any network or storage', (change) => {
+    expect(
+      readPrimaryCardCustodyInboxRuntime(
+        { ...fixture.environment, ...change },
+        fixture.now
+      )
+    ).toBeNull();
+  });
+  it('drains queued receipts after an inbox rollback while keeping contract validation', () => {
+    const rolledBack = {
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+      PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false',
+    };
+    expect(
+      readPrimaryCardCustodyInboxRuntime(rolledBack, fixture.now)
+    ).toBeNull();
+    const parsed = readPrimaryCardCustodyInboxRuntime(
+      rolledBack,
+      fixture.now,
+      'drain'
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.signedInbox.batchSize).toBe(
+      fixture.configuration.signedInbox.batchSize
+    );
+    expect(
+      readPrimaryCardCustodyInboxRuntime(
+        {
+          ...rolledBack,
+          PIGGYVEST_PRIMARY_CARD_SIGNED_MAPPING_CONTRACT: undefined,
+        },
+        fixture.now,
+        'drain'
+      )
+    ).toBeNull();
+  });
+});

@@ -49,6 +49,14 @@ export class HttpError extends Error {
 }
 
 interface FetchWithTimeoutOptions extends RequestInit {
+  /**
+   * Absolute wall-clock deadline (Date.now() ms). When present, the
+   * abort timer uses the REMAINING budget instead of timeout, so
+   * headers + body can share one per-request deadline (Codex R70
+   * 6ryArL): pass the same deadlineMs here and to withDeadline for
+   * the body read. Takes precedence over timeout.
+   */
+  deadlineMs?: number;
   /** Timeout in milliseconds. Defaults to 30000 (30 seconds) */
   timeout?: number;
 }
@@ -74,14 +82,17 @@ export async function fetchWithTimeout(
   options: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
   const {
+    deadlineMs,
     timeout = DEFAULT_TIMEOUT,
     signal: callerSignal,
     ...fetchOptions
   } = options;
+  const effectiveTimeout =
+    deadlineMs === undefined ? timeout : Math.max(deadlineMs - Date.now(), 0);
 
   // Create AbortController for timeout
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
   // H22 fix: Compose caller signal with internal timeout signal.
   // AbortSignal.any() is NOT available in Hermes (React Native), so we
@@ -122,7 +133,7 @@ export async function fetchWithTimeout(
     if (isAbortLike) {
       if (controller.signal.aborted && !callerSignal?.aborted) {
         // Our timeout controller fired — surface it as the timeout it is.
-        throw new TimeoutError(timeout);
+        throw new TimeoutError(effectiveTimeout);
       }
       // Caller-initiated (unmount/navigation) or OS-level cancellation:
       // rethrow so classifiers can treat it as an intentional cancel.

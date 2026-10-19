@@ -213,7 +213,22 @@ describe('submitNewOrder', () => {
       variant_name: null,
     });
 
-    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(3);
+    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(8);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count', 'merchant-1'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['transaction-review', 'merchant-1'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['analytics-overview'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['analytics-detail'],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['top-selling-products'],
+    });
     expect(setLastOrderId).toHaveBeenCalledWith('order-1');
     expect(setShowSuccessModal).toHaveBeenCalledWith(true);
     expect(setIsSubmitting).toHaveBeenCalledWith(true);

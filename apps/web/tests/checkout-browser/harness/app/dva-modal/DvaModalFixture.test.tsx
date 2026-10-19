@@ -79,6 +79,7 @@ it('keeps the modal open without copied feedback when clipboard access rejects',
       })
   );
   stubClipboard(writeText);
+  vi.spyOn(console, 'error').mockImplementation(() => {});
   render(<DvaModalFixture />);
   fireEvent.click(screen.getByRole('button', { name: 'Open DVA modal' }));
   fireEvent.click(screen.getByRole('button', { name: 'Copy account number' }));
@@ -99,7 +100,7 @@ it('keeps the modal open without copied feedback when clipboard access rejects',
   expect(screen.getByRole('heading', { name: 'Bank Transfer' })).toBeVisible();
 });
 
-it('ignores a clipboard result from a modal session that has closed', async () => {
+it('shows shared feedback when a clipboard write completes after close and reopen', async () => {
   let resolveWrite: (() => void) | undefined;
   const writeText = vi.fn(
     () =>
@@ -124,5 +125,5 @@ it('ignores a clipboard result from a modal session that has closed', async () =
 
   expect(
     screen.getByRole('button', { name: 'Copy account number' })
-  ).not.toHaveClass('border-green-300');
+  ).toHaveClass('border-green-300');
 });

@@ -3,10 +3,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import {
+  clearPendingVtuKeys,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+  PENDING_VTU_STALE_AFTER_MS,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import {
+  FAST_POLL_ATTEMPTS,
   MAX_POLL_ATTEMPTS,
   POLL_INTERVAL_MS,
+  POLL_PATIENT_INTERVAL_MS,
+  POLL_SLOW_INTERVAL_MS,
+  SLOW_POLL_ATTEMPTS,
   useVtuVoucherPinBackfill,
 } from './use-vtu-voucher-pin-backfill';
+import * as backfillFetchModule from './use-vtu-voucher-pin-backfill-fetch';
 
 const mockGetSession =
   jest.fn<
@@ -15,8 +28,8 @@ const mockGetSession =
       error: null | { message: string };
     }>
   >();
-const mockFetchWithTimeout =
-  jest.fn<(url: string, options: RequestInit) => Promise<Response>>();
+// Real shared helper under test (R72): global fetch is the seam.
+const fetchSpy = jest.spyOn(global, 'fetch');
 const mockUseAuthStore = jest.fn<() => string | null>();
 
 jest.mock('@/lib/supabase', () => ({
@@ -26,28 +39,34 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 jest.mock('@/lib/fetch-with-timeout', () => ({
-  fetchWithTimeout: (url: string, options: RequestInit) =>
-    mockFetchWithTimeout(url, options),
   SHORT_TIMEOUT: 5000,
 }));
 
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (
-    selector: (state: { user?: { id: string } | null }) => string | null
-  ) => {
-    const id = mockUseAuthStore();
-    return selector(id ? { user: { id } } : { user: null });
-  },
-}));
+jest.mock('@/stores/auth-store', () => {
+  const hook = Object.assign(
+    (selector: (state: { user?: { id: string } | null }) => string | null) => {
+      const id = mockUseAuthStore();
+      return selector(id ? { user: { id } } : { user: null });
+    },
+    {
+      getState: () => {
+        const id = mockUseAuthStore();
+        return id ? { user: { id } } : { user: null };
+      },
+    }
+  );
+  return { useAuthStore: hook };
+});
 
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'http://localhost:3001' }));
 jest.mock('@/lib/config', () => ({
   CONFIG: { MERCHANT_SLUG: 'test-merchant' },
 }));
 
-function makeResponse(body: unknown, ok = true): Response {
+function makeResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
+    status,
     json: jest.fn<() => Promise<unknown>>().mockResolvedValue(body),
   } as unknown as Response;
 }
@@ -72,6 +91,7 @@ const BASE_INPUT = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  clearPendingVtuKeys();
   jest.useFakeTimers();
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
   mockUseAuthStore.mockReturnValue('user-1');
@@ -88,7 +108,7 @@ afterEach(() => {
 
 describe('useVtuVoucherPinBackfill', () => {
   it('returns the voucher pin once the poll finds a match', async () => {
-    mockFetchWithTimeout.mockResolvedValue(
+    fetchSpy.mockResolvedValue(
       makeResponse({
         transactions: [
           { request_reference: 'REF-001', voucher_pin: '1234-5678' },
@@ -100,12 +120,15 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    await waitFor(() => expect(result.current).toBe('1234-5678'));
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current.pin).toBe('1234-5678'));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // Reference scope: the target row is returned even when 20+
+    // newer rows of the type would otherwise push it out.
+    expect(fetchSpy.mock.calls[0][0]).toContain('reference=REF-001');
   });
 
   it('polls up to MAX_POLL_ATTEMPTS then stops', async () => {
-    mockFetchWithTimeout.mockResolvedValue(
+    fetchSpy.mockResolvedValue(
       makeResponse({
         transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
       })
@@ -115,19 +138,105 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    // Drain initial fetch then advance one interval per remaining attempt
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
-    for (let i = 1; i < MAX_POLL_ATTEMPTS; i++) {
+    // Drain initial fetch, then one interval per remaining attempt:
+    // fast phase first, slow phase after.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    for (let i = 1; i < FAST_POLL_ATTEMPTS; i++) {
       await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
-      await waitFor(() =>
-        expect(mockFetchWithTimeout).toHaveBeenCalledTimes(i + 1)
-      );
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+    for (let i = FAST_POLL_ATTEMPTS; i < SLOW_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+    for (let i = SLOW_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
     }
 
-    // Advance two more intervals — cap must prevent any additional fetches
-    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS);
-    expect(result.current).toBeNull();
+    // Advance two more patient intervals — cap must prevent more fetches.
+    await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS * 2);
+    expect(fetchSpy).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS);
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+  });
+
+  it('resets the poll budget when the query identity changes', async () => {
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+      })
+    );
+
+    const { rerender } = renderHook(
+      () => useVtuVoucherPinBackfill(BASE_INPUT),
+      { wrapper }
+    );
+
+    // Exhaust user-1's budget first.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    for (let i = 1; i < FAST_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+    for (let i = FAST_POLL_ATTEMPTS; i < SLOW_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_SLOW_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+    for (let i = SLOW_POLL_ATTEMPTS; i < MAX_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_PATIENT_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+
+    // Switching accounts starts a fresh query with a fresh budget —
+    // without the reset the new query inherits the spent count and
+    // starves after a single fetch.
+    mockUseAuthStore.mockReturnValue('user-2');
+    rerender(() => useVtuVoucherPinBackfill(BASE_INPUT));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 1)
+    );
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 2)
+    );
+
+    // And switching back resumes the original purchase too.
+    mockUseAuthStore.mockReturnValue('user-1');
+    rerender(() => useVtuVoucherPinBackfill(BASE_INPUT));
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledTimes(MAX_POLL_ATTEMPTS + 3)
+    );
+  });
+
+  it('backs off to the slow interval after the fast attempts', async () => {
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+      })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    for (let i = 1; i <= FAST_POLL_ATTEMPTS; i++) {
+      await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(i + 1));
+    }
+    // Past the fast window a short advance fetches nothing...
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    expect(fetchSpy).toHaveBeenCalledTimes(FAST_POLL_ATTEMPTS + 1);
+    // ...while a full slow interval fires the next attempt.
+    await jest.advanceTimersByTimeAsync(
+      POLL_SLOW_INTERVAL_MS - POLL_INTERVAL_MS
+    );
+    await waitFor(() =>
+      expect(fetchSpy).toHaveBeenCalledTimes(FAST_POLL_ATTEMPTS + 2)
+    );
   });
 
   it('returns null and does not fetch when enabled is false', () => {
@@ -136,8 +245,13 @@ describe('useVtuVoucherPinBackfill', () => {
       { wrapper }
     );
 
-    expect(result.current).toBeNull();
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns null immediately when apiType is null (unsupported utility type)', () => {
@@ -145,13 +259,319 @@ describe('useVtuVoucherPinBackfill', () => {
       () =>
         useVtuVoucherPinBackfill({
           ...BASE_INPUT,
-          utilityType: 'airtime' as never,
+          utilityType: 'unknown-type' as never,
         }),
       { wrapper }
     );
 
-    expect(result.current).toBeNull();
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('polls telco types for settlement and forgets the retained entry', async () => {
+    rememberPendingVtuPurchase('hook-telco', 'key-hook-telco');
+    notePendingVtuReference('hook-telco', 'REF-001');
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(
+      () => useVtuVoucherPinBackfill({ ...BASE_INPUT, utilityType: 'airtime' }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    // Terminal observation stops the loop (no pin expected for telco).
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: 'successful',
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+    // ...and forgets the retained entry so an identical repeat
+    // mints fresh instead of replaying the old vend.
+    expect(recallPendingVtuKey('hook-telco')).toBeNull();
+  });
+
+  it('retains the entry when the success view unmounts before resolution', async () => {
+    rememberPendingVtuPurchase('hook-unmount', 'key-hook-unmount');
+    notePendingVtuReference('hook-unmount', 'REF-001');
+    let resolveFetch!: (response: Response) => void;
+    fetchSpy.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+
+    const { unmount } = renderHook(
+      () => useVtuVoucherPinBackfill({ ...BASE_INPUT, utilityType: 'airtime' }),
+      { wrapper }
+    );
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    // Leave the success screen while the fetch is in flight: the
+    // promise still resolves, but the result was never shown.
+    unmount();
+    resolveFetch(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+          },
+        ],
+      })
+    );
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    // No further polls after unmount, and the terminal observation
+    // must NOT forget — a later identical purchase recalls the key
+    // and replays instead of minting fresh and debiting twice.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('hook-unmount')).toBe('key-hook-unmount');
+  });
+
+  it('forgets the retained entry when history reports failure', async () => {
+    rememberPendingVtuPurchase('hook-fail', 'key-hook-fail');
+    notePendingVtuReference('hook-fail', 'REF-001');
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'failed',
+            refund_pending: false,
+            refund_skipped: false,
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: 'failed',
+      refundConfirmed: true,
+      refundSkipped: false,
+    });
+    expect(recallPendingVtuKey('hook-fail')).toBeNull();
+  });
+
+  it('waits for refund confirmation before settling a failure', async () => {
+    rememberPendingVtuPurchase('hook-failpend', 'key-hook-failpend');
+    notePendingVtuReference('hook-failpend', 'REF-001');
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'failed',
+            refund_pending: true,
+            refund_skipped: false,
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    // Unconfirmed failure is non-terminal: keep polling, no settle.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+    expect(recallPendingVtuKey('hook-failpend')).toBe('key-hook-failpend');
+  });
+
+  it('settles a skipped failure as failed without confirming a refund', async () => {
+    // Codex R110 P2: skipped rows were never charged — terminal
+    // (pollers stop, key forgotten) but refundConfirmed stays false
+    // so the copy never claims a refund landed.
+    rememberPendingVtuPurchase('hook-skip', 'key-hook-skip');
+    notePendingVtuReference('hook-skip', 'REF-001');
+    // Once (not persistent): mockResolvedValue leaks into the next
+    // test's extra fetches, and this terminal body would wrongly
+    // settle them.
+    fetchSpy.mockResolvedValueOnce(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'failed',
+            refund_pending: false,
+            refund_skipped: true,
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: 'failed',
+      refundConfirmed: false,
+      refundSkipped: true,
+    });
+    expect(recallPendingVtuKey('hook-skip')).toBeNull();
+  });
+
+  it('publishes no observation and skips registry cleanup when the account switches mid-flight', async () => {
+    // Codex R96 P1: a switch after dispatch suppresses BOTH the
+    // registry mutation and the returned observation — user-1's
+    // cache entry must never carry the switched-away success.
+    // (gcTime 0 reaps the unobserved entry, so the queryFn's
+    // resolved value — not the cache entry — is the deterministic
+    // assertion.)
+    rememberPendingVtuPurchase('hook-switch', 'key-hook-switch');
+    notePendingVtuReference('hook-switch', 'REF-001');
+    const queryFnSpy = jest.spyOn(backfillFetchModule, 'fetchVoucherPin');
+    try {
+      let resolveFetch: (response: Response) => void = () => undefined;
+      fetchSpy.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve;
+          })
+      );
+
+      renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+        wrapper,
+      });
+
+      // user-1's terminal response is in flight; the account switches
+      // before it lands.
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      mockUseAuthStore.mockReturnValue('user-2');
+      resolveFetch(
+        makeResponse({
+          transactions: [
+            {
+              request_reference: 'REF-001',
+              voucher_pin: null,
+              status: 'successful',
+              refund_pending: null,
+            },
+          ],
+        })
+      );
+
+      // The continuation ran (user-2's query mounted) but published a
+      // blank, and the superseded account left the registry alone.
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      const [firstCall] = queryFnSpy.mock.results;
+      await expect(firstCall?.value).resolves.toEqual({
+        pin: null,
+        status: null,
+        refundPending: null,
+        refundSkipped: null,
+      });
+      expect(recallPendingVtuKey('hook-switch')).toBe('key-hook-switch');
+    } finally {
+      queryFnSpy.mockRestore();
+    }
+  });
+
+  it('keeps hunting a token for pin-less bill successes', async () => {
+    rememberPendingVtuPurchase('hook-token', 'key-hook-token');
+    notePendingVtuReference('hook-token', 'REF-001');
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'successful',
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(
+      () => useVtuVoucherPinBackfill({ ...BASE_INPUT, utilityType: 'power' }),
+      { wrapper }
+    );
+
+    // Success forgets the retained entry and reports immediately...
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        pin: null,
+        status: 'successful',
+        refundConfirmed: false,
+        refundSkipped: false,
+      })
+    );
+    expect(recallPendingVtuKey('hook-token')).toBeNull();
+    // ...but the pin hunt continues while a token may still arrive.
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps polling while history reports a non-terminal status', async () => {
+    rememberPendingVtuPurchase('hook-proc', 'key-hook-proc');
+    notePendingVtuReference('hook-proc', 'REF-001');
+    fetchSpy.mockResolvedValue(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'processing',
+          },
+        ],
+      })
+    );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    // Non-terminal: the retained entry is untouched.
+    expect(
+      isStalePendingVtuSuccess(
+        'hook-proc',
+        'REF-001',
+        Date.now() + PENDING_VTU_STALE_AFTER_MS + 1
+      )
+    ).toBe(false);
   });
 
   it('returns null immediately when userId is absent (unauthenticated)', () => {
@@ -161,8 +581,13 @@ describe('useVtuVoucherPinBackfill', () => {
       wrapper,
     });
 
-    expect(result.current).toBeNull();
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns null and skips fetch when getSession returns an error', async () => {
@@ -176,70 +601,154 @@ describe('useVtuVoucherPinBackfill', () => {
     });
 
     await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1));
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-    expect(result.current).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
   });
 
   it('halts polling immediately on a non-retriable HTTP error', async () => {
-    mockFetchWithTimeout.mockResolvedValue(makeResponse({}, false));
+    fetchSpy.mockResolvedValue(makeResponse({}, false, 401));
 
     const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
       wrapper,
     });
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
 
     // Two more intervals must not trigger additional fetches
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
   });
 
-  it('halts polling immediately when fetchWithTimeout rejects (network/timeout)', async () => {
-    mockFetchWithTimeout.mockRejectedValue(new Error('Network timeout'));
+  it('retries transient 5xx responses within the attempt budget', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(makeResponse({}, false, 503))
+      .mockResolvedValue(
+        makeResponse({
+          transactions: [
+            {
+              request_reference: 'REF-001',
+              voucher_pin: '1234-5678',
+              status: 'successful',
+            },
+          ],
+        })
+      );
 
     const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
       wrapper,
     });
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
-
-    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        pin: '1234-5678',
+        status: 'successful',
+        refundConfirmed: false,
+        refundSkipped: false,
+      })
+    );
   });
 
-  it('halts polling immediately when response.json() throws', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: jest
-        .fn<() => Promise<unknown>>()
-        .mockRejectedValue(new Error('Invalid JSON')),
-    } as unknown as Response);
+  it('retries 429 responses within the attempt budget', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(makeResponse({}, false, 429))
+      .mockResolvedValue(
+        makeResponse({
+          transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+        })
+      );
+
+    renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), { wrapper });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+  });
+
+  it('retries when fetch rejects (network/timeout)', async () => {
+    fetchSpy
+      .mockRejectedValueOnce(new Error('Network timeout'))
+      .mockResolvedValue(
+        makeResponse({
+          transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+        })
+      );
 
     const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
       wrapper,
     });
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
+  });
 
-    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+  it('retries when response.json() throws', async () => {
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: jest
+          .fn<() => Promise<unknown>>()
+          .mockRejectedValue(new Error('Invalid JSON')),
+      } as unknown as Response)
+      .mockResolvedValue(
+        makeResponse({
+          transactions: [{ request_reference: 'REF-001', voucher_pin: null }],
+        })
+      );
+
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
   });
 
   it('halts polling immediately when response schema does not match', async () => {
-    mockFetchWithTimeout.mockResolvedValue(makeResponse({ unexpected: true }));
+    fetchSpy.mockResolvedValue(makeResponse({ unexpected: true }));
 
     const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
       wrapper,
     });
 
-    await waitFor(() => expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
 
     // Schema mismatch now throws → error state → polling stops
     await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
-    expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
-    expect(result.current).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: null,
+      refundConfirmed: false,
+      refundSkipped: false,
+    });
   });
 });

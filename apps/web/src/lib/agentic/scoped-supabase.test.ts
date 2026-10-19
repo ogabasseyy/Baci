@@ -4,7 +4,10 @@ import {
   verify as verifyWithPublicKey,
 } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
+import {
+  createAgenticMerchantContextClient,
+  createAgenticScopedSupabaseClient,
+} from '@/lib/agentic/scoped-supabase';
 
 const mockClient = { from: vi.fn() };
 const mockCreateClient = vi.fn(
@@ -235,3 +238,24 @@ function getAuthorizationHeader() {
   }
   return authorization;
 }
+
+it('mints only slug-bound merchant-context authority', () => {
+  createAgenticMerchantContextClient(
+    ' Ogabassey ',
+    new Date('2026-10-19T00:00:00Z')
+  );
+  const options = mockCreateClient.mock.calls.at(-1)?.[2] as {
+    global: { headers: { Authorization: string } };
+  };
+  const payload = JSON.parse(
+    Buffer.from(
+      options.global.headers.Authorization.split('.')[1],
+      'base64url'
+    ).toString('utf8')
+  );
+  expect(payload.role).toBe('agentic_merchant_context');
+  expect(payload.agentic_merchant_slug).toBe('ogabassey');
+  expect(payload.exp - payload.iat).toBe(300);
+  expect(payload.agentic_merchant_id).toBeUndefined();
+  expect(() => createAgenticMerchantContextClient(' ')).toThrow();
+});

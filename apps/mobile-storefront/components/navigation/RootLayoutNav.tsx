@@ -7,6 +7,8 @@ import {
 import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';
+import { NativeCartPairingPanel } from '@/components/cart/NativeCartPairingPanel';
+import { SharedCartBridge } from '@/components/cart/SharedCartBridge';
 import { ChatWidget } from '@/components/chat/ChatWidget';
 import { GlobalErrorBoundary } from '@/components/ErrorBoundary';
 import { NegotiationModal } from '@/components/modals/NegotiationModal';
@@ -20,6 +22,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
 import { useAuthGuard } from '@/hooks/use-auth-guard';
+import { useRouteDiagnostics } from '@/hooks/use-route-diagnostics';
 import { CONFIG } from '@/lib/config';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { QueryProvider } from '@/lib/QueryProvider';
@@ -74,6 +77,7 @@ export function RootLayoutNav({
 
   // Auth guard handles sign out redirects before protected screens render.
   useAuthGuard();
+  useRouteDiagnostics();
 
   return (
     <QueryProvider persistenceEnabled={persistenceEnabled}>
@@ -107,6 +111,8 @@ export function RootLayoutNav({
                         shouldResume={shouldResumeNavigation}
                       />
                       <MobileUpdateController />
+                      <SharedCartBridge />
+                      <NativeCartPairingPanel />
                       {/*
                        * No custom `header` function in screenOptions — that would
                        * make react-native-screens NativeStack reserve a header zone
@@ -124,6 +130,10 @@ export function RootLayoutNav({
                        */}
                       <Stack
                         screenOptions={{
+                          // Suspend older covered routes without discarding
+                          // state. Native-stack keeps transition-adjacent
+                          // Fabric screens live until it is safe to freeze.
+                          freezeOnBlur: true,
                           headerStyle: {
                             backgroundColor: colors.background,
                           },

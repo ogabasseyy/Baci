@@ -153,7 +153,30 @@ describe('PATCH /api/orders/[id]/edit', () => {
     ['order_edit_forbidden', 403, undefined],
     ['order_financial_edit_has_payments', 409, undefined],
     ['order_financial_edit_after_fulfillment', 409, undefined],
-    ['order_terminal_not_editable', 409, undefined],
+    [
+      'order_terminal_not_editable',
+      409,
+      {
+        code: 'order_not_editable',
+        error: 'This order is cancelled or returned and cannot be edited.',
+      },
+    ],
+    [
+      'order_date_in_future',
+      400,
+      {
+        code: 'order_date_in_future',
+        error: 'Order date cannot be in the future',
+      },
+    ],
+    [
+      'order_date_invalid',
+      400,
+      {
+        code: 'order_date_invalid',
+        error: 'Invalid order date',
+      },
+    ],
     ['order_item_replacement_has_historical_state', 409, undefined],
     [
       'order_item_replacement_has_accounting_metadata',

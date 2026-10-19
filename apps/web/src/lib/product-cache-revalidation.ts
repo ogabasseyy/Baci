@@ -181,7 +181,8 @@ function revalidateProducts(
 
 function revalidateProductSlugs(
   merchantId: string,
-  slugs: readonly (string | null | undefined)[]
+  slugs: readonly (string | null | undefined)[],
+  options: ProductRevalidationOptions = {}
 ): void {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
@@ -192,6 +193,11 @@ function revalidateProductSlugs(
     return;
   }
 
+  // Callers that evict the Cloudflare edge immediately after this returns
+  // must pass `expireImmediately`: stale-while-revalidate would serve the
+  // pre-mutation PDP snapshot to the first post-purge request and re-seed
+  // the edge with stale stock.
+  const profile = resolveProfile('products', options);
   const seen = new Set<string>();
   for (const rawSlug of slugs) {
     const slug = rawSlug?.trim();
@@ -199,7 +205,7 @@ function revalidateProductSlugs(
     seen.add(slug);
     revalidateProductTag(
       getProductScopedCacheTag('product', normalizedMerchantId, slug),
-      'products'
+      profile
     );
   }
 }

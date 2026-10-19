@@ -7,7 +7,7 @@ vi.mock('@/lib/rate-limit', () => ({
 }));
 vi.mock('@/lib/slug-alias-cache', () => ({ getCurrentSlugForAlias: vi.fn() }));
 vi.mock('./host', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./host')>();
+  const actual = await importOriginal<HostModule>();
   return {
     ...actual,
     getSlugForOriginCustomDomain: vi.fn().mockResolvedValue(null),
@@ -15,6 +15,8 @@ vi.mock('./host', async (importOriginal) => {
 });
 
 import { getApiSecurityContext, runApiSecurityStage } from './api-security';
+
+type HostModule = typeof import('./host');
 
 describe('API security stage', () => {
   it('maps legacy analytics POST and alias API paths to their guarded route', () => {
@@ -26,6 +28,32 @@ describe('API security stage', () => {
       getApiSecurityContext('/old-shop/api/orders', 'usebaci.com', 'GET')
         .apiRateLimitPathname
     ).toBe('/api/orders');
+  });
+
+  it('enforces the submissions budget before the route handles the write', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    vi.mocked(checkRateLimit).mockResolvedValueOnce({
+      allowed: false,
+      limit: 20,
+      remaining: 0,
+      resetTime: Date.now(),
+    });
+    const request = new NextRequest(
+      'https://ogabassey.com/api/search/submissions',
+      {
+        method: 'POST',
+        headers: {
+          origin: 'https://ogabassey.com',
+          'content-type': 'application/json',
+        },
+      }
+    );
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/search/submissions', 'ogabassey.com', 'POST')
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(request);
+    expect(response?.status).toBe(429);
   });
 
   it('blocks unsafe cross-origin mutations before a route handles them', async () => {

@@ -1,4 +1,4 @@
-import { type NextRequest, type NextResponse } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 import type { JumiaOAuthPersistenceResult } from './oauth-persistence';
 import { jumiaOAuthCallbackRedirect } from './oauth-redirect';
 

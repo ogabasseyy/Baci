@@ -16,10 +16,13 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
   const isPage = [
     '/catalog',
     '/cart',
+    '/cart-navigation-start',
     '/checkout',
+    '/checkout-shared',
     '/crypto-payment-modal',
     '/dva-modal',
     '/payment-handoff',
+    '/products/test-phone',
     '/unlock-orders',
   ].includes(url.pathname);
   if (isPage)

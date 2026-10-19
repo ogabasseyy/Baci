@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BlogFeaturedImageError } from '@/lib/blog-featured-image-variants';
 import {
   extractManagedBlogStoragePath,
@@ -154,6 +154,13 @@ describe('generateFeaturedImageVariants', () => {
 });
 
 describe('managed blog storage path helpers', () => {
+  // Managed-path extraction trusts only the configured CDN and
+  // Supabase origins, so the storage-URL cases run under a stubbed
+  // Supabase origin.
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
+  });
+  afterEach(vi.unstubAllEnvs);
   const merchantId = '11111111-1111-4111-8111-111111111111';
 
   it('accepts legacy and variant paths for the same merchant', () => {

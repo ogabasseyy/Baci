@@ -1,0 +1,30 @@
+# R1 staging transport: path-allowlist proxy in front of the connector gateway.
+#
+# Only Muse discovery/tool paths are exposed to the HTTPS endpoint.
+# Owner-secret endpoints (/v0/issue-token, /v0/refresh, /v0/revoke) and
+# /health stay reachable ONLY on 127.0.0.1:3201 (direct to gateway).
+#
+# Usage (from apps/web):
+#   caddy run --config tools/connector-gateway/Caddyfile
+{
+
+	auto_https off
+	admin off
+}
+
+:3220 {
+	bind 127.0.0.1
+
+	@allowed {
+		path /docs /openapi.json /v0/tools/*
+	}
+
+	handle @allowed {
+		reverse_proxy 127.0.0.1:3201
+	}
+
+	# Default deny: everything else (issue/refresh/revoke/health/unknown).
+	handle {
+		respond "Not found." 404
+	}
+}

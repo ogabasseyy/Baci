@@ -1,0 +1,107 @@
+{
+  "postgresImage": "supabase/postgres:17.6.1.136",
+  "postgresImageDigest": "sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00",
+  "assets": {
+    "auth.sql": "55127a01bc862eb1a5e0bf2d324520059077bce516fc0a84a767399c2b049c3a",
+    "graphql.sql": "778dba48243517e4e181ecd60be88f87d57c902fa5a2bd7cabe62a9fe5209b5c",
+    "realtime.sql": "bf3a0b1a29b940a0a3438f6eef83abd71e8b68b2549e852e9c6b50c24b835143"
+  },
+  "sources": [
+    {
+      "id": "postSetup",
+      "repo": "supabase/postgres",
+      "revision": "d156ba65c14694c12cc5e782bc15b9b8ed2d1376",
+      "path": "migrations/db/init-scripts/00000000000003-post-setup.sql",
+      "url": "https://raw.githubusercontent.com/supabase/postgres/d156ba65c14694c12cc5e782bc15b9b8ed2d1376/migrations/db/init-scripts/00000000000003-post-setup.sql",
+      "sha256": "f38552008ac577b3e65fbcab784a612b72d079f6695871c84b045a1a921f7096"
+    },
+    {
+      "id": "auth",
+      "repo": "supabase/auth",
+      "revision": "0204331ca41a5b49f076b6fa3dc6c0d20b996590",
+      "path": "migrations/20220531120530_add_auth_jwt_function.up.sql",
+      "url": "https://raw.githubusercontent.com/supabase/auth/0204331ca41a5b49f076b6fa3dc6c0d20b996590/migrations/20220531120530_add_auth_jwt_function.up.sql",
+      "sha256": "91d2d5e47f19e65a63ec411f6cbb18755ec1792cb4249694dc261ef59cc78a10"
+    },
+    {
+      "id": "graphql",
+      "repo": "supabase/postgres",
+      "revision": "d156ba65c14694c12cc5e782bc15b9b8ed2d1376",
+      "path": "migrations/db/migrations/20260421000001_rescope_pg_graphql_access_trigger.sql",
+      "url": "https://raw.githubusercontent.com/supabase/postgres/d156ba65c14694c12cc5e782bc15b9b8ed2d1376/migrations/db/migrations/20260421000001_rescope_pg_graphql_access_trigger.sql",
+      "sha256": "c9c3986d040d8f2545c5faf97ce57804408bf2465105cb8c7c6a6dcea8ec6535"
+    },
+    {
+      "id": "messages",
+      "repo": "supabase/realtime",
+      "revision": "4ab775b8fc5dd60020ebd3bf62d6d91debf69dea",
+      "path": "lib/realtime/tenants/repo/migrations/20241030150047_messages_partitioning.ex",
+      "url": "https://raw.githubusercontent.com/supabase/realtime/4ab775b8fc5dd60020ebd3bf62d6d91debf69dea/lib/realtime/tenants/repo/migrations/20241030150047_messages_partitioning.ex",
+      "sha256": "f7db29b7e25252e202d7719be047e61d4394bdbaa18bd2bb898fd9fd1fff9b35"
+    },
+    {
+      "id": "uuid",
+      "repo": "supabase/realtime",
+      "revision": "4ab775b8fc5dd60020ebd3bf62d6d91debf69dea",
+      "path": "lib/realtime/tenants/repo/migrations/20241108114728_messages_using_uuid.ex",
+      "url": "https://raw.githubusercontent.com/supabase/realtime/4ab775b8fc5dd60020ebd3bf62d6d91debf69dea/lib/realtime/tenants/repo/migrations/20241108114728_messages_using_uuid.ex",
+      "sha256": "2978d4eb63ff5c6244f391a9b06e0423519295de039d5df44a3a86bed9967b2a"
+    },
+    {
+      "id": "topic",
+      "repo": "supabase/realtime",
+      "revision": "4ab775b8fc5dd60020ebd3bf62d6d91debf69dea",
+      "path": "lib/realtime/tenants/repo/migrations/20240523004032_redefine_authorization_tables.ex",
+      "url": "https://raw.githubusercontent.com/supabase/realtime/4ab775b8fc5dd60020ebd3bf62d6d91debf69dea/lib/realtime/tenants/repo/migrations/20240523004032_redefine_authorization_tables.ex",
+      "sha256": "d3348fed7bc56d62cb856c490450751118499ad5e77f9180d1f6eae22f7074c0"
+    },
+    {
+      "id": "send",
+      "repo": "supabase/realtime",
+      "revision": "4ab775b8fc5dd60020ebd3bf62d6d91debf69dea",
+      "path": "lib/realtime/tenants/repo/migrations/20251103001201_broadcast_send_include_payload_id.ex",
+      "url": "https://raw.githubusercontent.com/supabase/realtime/4ab775b8fc5dd60020ebd3bf62d6d91debf69dea/lib/realtime/tenants/repo/migrations/20251103001201_broadcast_send_include_payload_id.ex",
+      "sha256": "4c2ab8e391054bcbfdabcd757daa8756cb07ecdf18d3e713ccf7a0a97386dc6a"
+    },
+    {
+      "id": "index",
+      "repo": "supabase/realtime",
+      "revision": "4ab775b8fc5dd60020ebd3bf62d6d91debf69dea",
+      "path": "lib/realtime/tenants/repo/migrations/20250905041441_create_messages_replay_index.ex",
+      "url": "https://raw.githubusercontent.com/supabase/realtime/4ab775b8fc5dd60020ebd3bf62d6d91debf69dea/lib/realtime/tenants/repo/migrations/20250905041441_create_messages_replay_index.ex",
+      "sha256": "41ab36ff0996efb8f56808d74c819980e8b5f9693d8f9e34862c1b4c10cf9618"
+    },
+    {
+      "id": "postgresSchema",
+      "repo": "supabase/postgres",
+      "revision": "d156ba65c14694c12cc5e782bc15b9b8ed2d1376",
+      "path": "migrations/schema-17.sql",
+      "url": "https://raw.githubusercontent.com/supabase/postgres/d156ba65c14694c12cc5e782bc15b9b8ed2d1376/migrations/schema-17.sql",
+      "sha256": "d0c4554e4b31747fa6f61d81a81ed8862767c0a7a0dcbdf9cf48cb6a77a1a442"
+    },
+    {
+      "id": "versions",
+      "repo": "supabase/postgres",
+      "revision": "d156ba65c14694c12cc5e782bc15b9b8ed2d1376",
+      "path": "nix/ext/versions.json",
+      "url": "https://raw.githubusercontent.com/supabase/postgres/d156ba65c14694c12cc5e782bc15b9b8ed2d1376/nix/ext/versions.json",
+      "sha256": "e3461ea447f05d2ea3bc4bdde02f6361cf685f72a8afb8d353bc92d4da2194a6"
+    },
+    {
+      "id": "net",
+      "repo": "supabase/pg_net",
+      "revision": "0ab4bae33a306316f9056fc9c87ba3f977fc6b7e",
+      "path": "src/worker.c",
+      "url": "https://raw.githubusercontent.com/supabase/pg_net/0ab4bae33a306316f9056fc9c87ba3f977fc6b7e/src/worker.c",
+      "sha256": "720988c6d2760a22bc694c09f227ac67dafe5ed349e928ffbc64f911d0f613b8"
+    },
+    {
+      "id": "cron",
+      "repo": "citusdata/pg_cron",
+      "revision": "9490f9cc9803f75105f2f7d89839a998f011f8d8",
+      "path": "src/pg_cron.c",
+      "url": "https://raw.githubusercontent.com/citusdata/pg_cron/9490f9cc9803f75105f2f7d89839a998f011f8d8/src/pg_cron.c",
+      "sha256": "9b94eab54595356aea28a4f0cfb08224d7458b4f4a8fcac56fa2cab9c2a47a69"
+    }
+  ]
+}

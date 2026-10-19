@@ -20,6 +20,9 @@ export interface DiscountResult {
   code: string;
   discount_type: 'percentage' | 'fixed';
   discount_value: number;
+  // Loyalty codes validate with an explicit null id; merchant codes
+  // carry their row id.
+  discount_code_id?: string | null;
   // Server-computed amount — the UI source of truth so caps + rounding stay
   // aligned with the order route and the redemption RPC.
   discount_amount?: number;

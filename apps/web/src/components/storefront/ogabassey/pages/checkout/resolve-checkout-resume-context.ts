@@ -11,7 +11,7 @@ interface ResolveCheckoutResumeContextInput {
   merchantSlug?: string;
 }
 
-interface CheckoutResumeContext {
+export interface CheckoutResumeContext {
   resumeOrderId: string | null;
   resumeTrackingToken: string | null;
   resumeLookupEmail: string | null;

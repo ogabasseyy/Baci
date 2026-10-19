@@ -1,18 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const STORE_ACTION = join(ROOT, '.github/actions/setup-pnpm-store/action.yml');
 const INSTALL_ACTION = join(ROOT, '.github/actions/pnpm-install-cached/action.yml');
-
-function actionText(path) {
-  return readFileSync(path, 'utf8');
-}
 
 function runBlock(actionPath, stepName) {
   const lines = readFileSync(actionPath, 'utf8').split('\n');
@@ -51,11 +47,42 @@ function dispatch(script, installCommand, cwd, extraEnv = {}) {
 
 const INSTALL_STEP = 'Install Dependencies';
 
+function allRunBodies(actionPath) {
+  const lines = readFileSync(actionPath, 'utf8').split('\n');
+  const bodies = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const block = lines[i].match(/^(\s*)run:\s*(\|.*)?$/);
+    if (block && block[2] !== undefined) {
+      const base = block[1].length;
+      const body = [];
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const line = lines[j];
+        if (line.trim() === '') {
+          body.push('');
+          continue;
+        }
+        if (/^\s/.test(line) && line.search(/\S/) > base) {
+          body.push(line);
+          continue;
+        }
+        break;
+      }
+      bodies.push(body.join('\n'));
+      continue;
+    }
+    const single = lines[i].match(/^\s*run:\s+(.+)$/);
+    if (single) bodies.push(single[1]);
+  }
+  return bodies;
+}
+
 test('run blocks contain no expression interpolation (injection vector gone)', () => {
   for (const actionPath of [STORE_ACTION, INSTALL_ACTION]) {
-    const text = actionText(actionPath);
-    const runs = [...text.matchAll(/run:\s*(\$\{\{[^}]+\}\})/g)];
-    assert.deepEqual(runs.map((m) => m[1]), [], `run: must not interpolate contexts in ${actionPath}`);
+    const bodies = allRunBodies(actionPath);
+    assert.ok(bodies.length > 0, `expected run blocks in ${actionPath}`);
+    for (const body of bodies) {
+      assert.ok(!body.includes('${{'), `run block must not interpolate contexts in ${actionPath}:\n${body}`);
+    }
   }
 });
 
@@ -78,6 +105,7 @@ test('every workflow caller command is allowlisted (contract test)', () => {
 test('enumerated commands execute, hostile inputs fail closed', () => {
   const script = runBlock(INSTALL_ACTION, INSTALL_STEP);
   const { dir, log } = sandbox();
+  const sentinel = join(dir, 'exec-proof-sentinel');
   try {
     const good = [
       './.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline',
@@ -97,39 +125,45 @@ test('enumerated commands execute, hostile inputs fail closed', () => {
       'PNPM INSTALL',
       'pnpm install --frozen-lockfile --prefer-offline\ntouch /tmp/pwned-allowlist',
       'npm ci',
+      `x"; touch "${sentinel}"; echo "`,
     ];
     for (const cmd of evil) {
       const before = readFileSync(log, 'utf8');
-      const r = dispatch(script, cmd, dir);
+      const r = dispatch(script, cmd, dir, { SENTINEL: sentinel });
       assert.notEqual(r.status, 0, `hostile input must fail closed: ${JSON.stringify(cmd)}`);
       assert.equal(readFileSync(log, 'utf8'), before, `hostile input must not execute: ${JSON.stringify(cmd)}`);
+      assert.ok(!existsSync(sentinel), `hostile input must leave no side effects: ${JSON.stringify(cmd)}`);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('env write keeps hostile values inside one assignment', () => {
-  const script = runBlock(STORE_ACTION, 'Export PNPM_STORE_DIR');
-  const dir = mkdtempSync(join(tmpdir(), 'pnpm-store-env-'));
+function assertEnvRoundTrip(script, cwd, label) {
+  const envFile = join(cwd, 'github_env');
+  writeFileSync(envFile, '');
+  const hostile = 'x\nEOF\nINJECTED=1';
+  const r = spawnSync('bash', ['-c', script], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, STORE_DIR: hostile, GITHUB_ENV: envFile, GITHUB_PATH: join(cwd, 'github_path'), PATH: `${cwd}:${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, `${label}: ${r.stderr}`);
+  const lines = readFileSync(envFile, 'utf8').split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  assert.ok(lines[0].startsWith('PNPM_STORE_DIR<<'), `${label}: multiline-safe delimiter form`);
+  const delimiter = lines[0].slice('PNPM_STORE_DIR<<'.length);
+  assert.ok(delimiter !== '' && delimiter !== 'EOF', `${label}: delimiter must not be static`);
+  assert.equal(lines[lines.length - 1], delimiter, `${label}: value stays inside one assignment`);
+  const value = lines.slice(1, -1).join('\n');
+  assert.equal(value, hostile, `${label}: hostile value round-trips as one variable`);
+}
+
+test('env writes keep hostile values inside one assignment (both actions)', () => {
+  assertEnvRoundTrip(runBlock(STORE_ACTION, 'Export PNPM_STORE_DIR'), mkdtempSync(join(tmpdir(), 'pnpm-store-env-')), STORE_ACTION);
+  const { dir } = sandbox();
   try {
-    const envFile = join(dir, 'github_env');
-    writeFileSync(envFile, '');
-    const hostile = 'x\nEOF\nINJECTED=1';
-    const r = spawnSync('bash', ['-c', script], {
-      cwd: dir,
-      encoding: 'utf8',
-      env: { ...process.env, STORE_DIR: hostile, GITHUB_ENV: envFile },
-    });
-    assert.equal(r.status, 0, r.stderr);
-    const lines = readFileSync(envFile, 'utf8').split('\n');
-    if (lines[lines.length - 1] === '') lines.pop();
-    assert.ok(lines[0].startsWith('PNPM_STORE_DIR<<'), 'multiline-safe delimiter form');
-    const delimiter = lines[0].slice('PNPM_STORE_DIR<<'.length);
-    assert.ok(delimiter !== '' && delimiter !== 'EOF', 'delimiter must not be static');
-    assert.equal(lines[lines.length - 1], delimiter, 'value stays inside one assignment');
-    const value = lines.slice(1, -1).join('\n');
-    assert.equal(value, hostile, 'hostile value round-trips as one variable');
+    assertEnvRoundTrip(runBlock(INSTALL_ACTION, 'Configure pnpm store directory'), dir, INSTALL_ACTION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

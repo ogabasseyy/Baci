@@ -52,7 +52,7 @@ jobs:
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test pnpm store action input hardening
-        run: node --test .github/scripts/setup-pnpm-store-allowlist.test.mjs
+        run: node --test .github/actions/setup-pnpm-store/setup-pnpm-store-allowlist.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test pilot change-detection contract

@@ -26,7 +26,9 @@ scripts/
 /apps/web/tools/search/
 /apps/web/tools/seo/
 /apps/web/tools/shipping/
-/apps/web/tools/connector-http.ts
+# NOTE: connector-http.ts is intentionally NOT excluded: it defines the
+# production gateway's token helpers (issueTokenSchema, bearerToken,
+# secretsEqual) and is imported by connector-gateway/server.ts et al.
 /apps/web/tools/connector-http.test.ts
 /apps/web/tools/typedoc-portable-paths.test.mjs
 /apps/web/tools/typedoc-typescript6.mjs

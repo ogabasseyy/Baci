@@ -88,7 +88,12 @@ runs:
 
         "$PNPM_CMD" config set store-dir "$STORE_DIR"
         "$PNPM_CMD" --version
-        echo "PNPM_STORE_DIR=$STORE_DIR" >> "$GITHUB_ENV"
+        delimiter="EOF-$RANDOM-$RANDOM"
+        {
+          echo "PNPM_STORE_DIR<<${delimiter}"
+          echo "$STORE_DIR"
+          echo "${delimiter}"
+        } >> "$GITHUB_ENV"
 
     - name: Install Dependencies
       shell: bash

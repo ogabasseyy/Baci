@@ -1,6 +1,6 @@
 # Shared-code consolidation audit (Step 1)
 
-Date: 2026-10-19. Base: `main` at `390da149c3` (post-#3693).
+Date: 2026-10-19. Base: `main` at `390da149c3` (post-#3693). Consumer counts below were re-run with the stated pipeline against merge head `0bbde3fd68` and are unchanged (459/147/121).
 Scope per the amended consolidation plan: only domains where at least
 two apps hold same-concept modules. Method: side-by-side reading of
 representative module pairs plus symbol/format inventories. `knip`
@@ -68,28 +68,34 @@ work below extends it.
 
 ## Definitions
 
-**Activation gate** (used for post-activation sequencing below): the
-cart pilot activation is complete when the 81 registered cart
-migrations have applied to production, the final privilege state is
-verified (anon cannot execute preview/replay RPCs), the terminal
-purge has been explicitly scheduled per rollout step 4 (the earlier
-"no purge job in `cron.job`" check is an interim pre-enrollment
-verification, not the completion state), the pre-enrollment
-telemetry/quota gates in the rollout doc are closed — explicitly:
-`x-handoff-token` redaction verified like `Authorization` in
-proxy/APM/error reporting, database/APM logging proven not to
-persist pairing-token RPC arguments, compatible server adapters
-deployed, and cart roles/signing material provisioned including a
-deployment-unique `CART_PROOF_ENVIRONMENT`, an operator alert on
-the `Cart quota store degraded` warning with the per-instance
-budget multiplication during Redis degradation explicitly accepted
-for the pilot, outbox publisher qualification during the
-authorized release, and the rollout's dashboards/observability in
-place. (This list incorporates the rollout doc's pre-enrollment
-gates; if that doc adds gates, they are included by reference.)
-— the pilot
-merchant is enrolled, and the acceptance
-matrix in `docs/qa/shared-cart-acceptance.md` passes — per
+**Activation gate** (used for post-activation sequencing below):
+the cart pilot activation is complete only when **every** item in
+this checklist is done, in this order:
+
+1. The 81 registered cart migrations have applied to production.
+2. The final privilege state is verified (anon cannot execute
+   preview/replay RPCs).
+3. The pre-enrollment telemetry/quota gates in the rollout doc are
+   closed: `x-handoff-token` redaction verified like `Authorization`
+   in proxy/APM/error reporting; database/APM logging proven not to
+   persist pairing-token RPC arguments; compatible server adapters
+   deployed; cart roles/signing material provisioned including a
+   deployment-unique `CART_PROOF_ENVIRONMENT`; an operator alert on
+   the `Cart quota store degraded` warning, with the per-instance
+   budget multiplication during Redis degradation explicitly
+   accepted for the pilot; outbox publisher qualification during the
+   authorized release; and the rollout's dashboards/observability in
+   place. (This incorporates the rollout doc's pre-enrollment gates;
+   if that doc adds gates, they are included by reference.)
+4. The terminal purge has been explicitly scheduled per rollout
+   step 4. The earlier "no purge job in `cron.job`" check is an
+   interim pre-enrollment verification, not the completion state;
+   scheduling precedes enrollment.
+5. The pilot merchant is enrolled.
+6. The acceptance matrix in `docs/qa/shared-cart-acceptance.md`
+   passes.
+
+All six are conjunctive completion criteria, per
 `docs/deploy/shared-cart-rollout.md`. The rollout's *expansion*
 criteria (second merchant, deployed convergence/checkout-binding/
 isolation evidence) gate merchant expansion, not these code
@@ -101,7 +107,7 @@ green CI and change no activation state.
 1. **Wallet-funding contract (rows 9, 13) — first, ahead of
    formatting:** the mobile `z.iso.datetime()` offset divergence is
    a present-tense payment-path bug, not future drift, so this wave
-   leads. Share the intent/poll subshape **and** a canonical *order-funding-scoped* account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same order-funding endpoint payload, so for that endpoint the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. Scope limit: the mobile `WalletFundingAccountSchema` is also reused by the piggyvest primary-wallet snapshot (`piggyvest-primary-wallet.ts` extends it with `provider: z.literal('piggyvest')`, and its 200-char caps mirror the server snapshot schema in `apps/web/src/schemas/piggyvest-primary-wallet-snapshot.ts`) — that is a different payload with its own legitimate contract, so the piggyvest snapshot schema stays distinct (or a separate extension) and is not aligned to the order-funding builder. The wave adds a characterization fixture for each of the two account payloads before any unification. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
+   leads. Share the intent/poll subshape **and** a canonical *order-funding-scoped* account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same order-funding endpoint payload, so for that endpoint the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. Scope limit: the mobile `WalletFundingAccountSchema` is also reused by the piggyvest primary-wallet snapshot (`piggyvest-primary-wallet.ts` extends it with `provider: z.literal('piggyvest')`, and its 200-char caps mirror the server snapshot schema in `apps/web/src/schemas/piggyvest-primary-wallet-snapshot.ts`) — that is a different payload with its own legitimate contract, so the piggyvest snapshot schema stays distinct (or a separate extension) and is not aligned to the order-funding builder. A third consumer must also be preserved: `WalletFundingAccountResponseSchema` (same schema file) parses the standalone legacy `/wallet/funding-account` GET/POST responses via `lib/wallet-funding-account.ts`, which is outside this wave — so the wave splits out an order-intent-specific account schema, or explicitly includes and characterizes the legacy funding-account response before altering the shared base. The wave adds a characterization fixture for each of the three account payloads (order-funding, piggyvest snapshot, standalone funding-account) before any unification. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
    protocol — the failure classifier is
    `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
    (every non-consent error invokes `onFallback`), and
@@ -141,8 +147,8 @@ green CI and change no activation state.
 
    | Class | Examples | Behavior |
    |---|---|---|
-   | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent; on grant, create the funding account (`createWalletFundingAccount`), then retry intent create once (the current client's actual sequence in `wallet-funded-bank-transfer.ts`) |
-   | Confirmed no-intent (safe to fall back) | **Server-verifiable no-intent for the order** — not a client-side attempt count. Today this proof is *not obtainable*: settings/eligibility/account resolution in `createOrderWalletFundingIntent` all run (and can return fallback codes) *before* `findActiveOrderIntent`, and no order-scoped lookup endpoint exists, so no received code — on a first attempt or a retry — proves no intent exists (a prior session may have created one). The wallet wave therefore includes a server change as an explicit deliverable: move the existing-intent lookup ahead of *every* fallback-producing branch — payment-settings (`getPaymentSettings`), order-eligibility (`validateOrderEligibility`), and account resolution — returning the intent if present, or add an explicit no-intent signal / order-scoped lookup. (A lookup placed only before account resolution is insufficient: on a recovery retry, settings or eligibility can still return a fallback code while the original intent is active.) Only with that proof does a received rejection carrying a named server code qualify — eligibility keys on the code plus the no-intent proof, never on HTTP status class, since `WALLET_DVA_SETUP_FAILED` is emitted as HTTP 502 (see `getFallbackStatus` in the response builder). | Legacy DVA fallback allowed only with server-verifiable no-intent |
+   | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Require a **real affirmative consent action** before provisioning: the current `requestWalletFundingAccountConsent()` in `components/checkout/checkout-wallet-funded-bank-transfer.ts` is a stub returning `Promise.resolve(true)`, so the wave must add an actual consent prompt. Only an affirmative action posts `consent: true`, creates the funding account (`createWalletFundingAccount`), and retries intent create once; cancellation leaves the account unprovisioned and does not retry. |
+   | Confirmed no-intent (safe to fall back) | **Server-verifiable no-intent for the order** — not a client-side attempt count, and not an early intent return. Today this proof is *not obtainable*: settings, eligibility, and account resolution in `createOrderWalletFundingIntent` all run (and can return fallback codes) *before* `findActiveOrderIntent`, and no order-scoped lookup endpoint exists, so no received code — on a first attempt or a retry — proves no intent exists. The wallet wave therefore includes a server change as an explicit deliverable, with a **proof-only design**: the lookup attaches a `noActiveIntent` proof to the fallback result (or an order-scoped lookup endpoint returns that proof), scoped to the resolved `customerId` and `merchantId` — the current `findActiveOrderIntent({ orderId })` filters only `order_id` (`order-wallet-funding-intent-repository.ts:139-147`) and must not be reused unchanged for this, or a shopper could recover another merchant's intent by submitting its order ID. Settings, eligibility, and account checks still run before any intent is returned (the response builder needs `result.account`, which exists only after account resolution), and the pinned tests in `order-wallet-funding-intents.test.ts` ('does not reuse an active intent when the order is no longer payable' / 'already has wallet redemption', asserting `findActiveOrderIntent` is not called before eligibility) must remain green. Only a proof-carrying rejection with a fallback-eligible code qualifies — eligibility keys on the code plus the proof, never on HTTP status class, since `WALLET_DVA_SETUP_FAILED` is emitted as HTTP 502 (see `getFallbackStatus` in the response builder). **Fallback-eligible codes:** `WALLET_DVA_DISABLED`, `WALLET_ORDER_AUTO_DEBIT_DISABLED`, `WALLET_DVA_SETUP_FAILED`. Every other confirmed code is terminal or wallet-only, never DVA: `ORDER_NOT_FOUND` and `ORDER_NOT_PAYABLE` are terminal; `ORDER_ALREADY_HAS_WALLET_REDEMPTION` and `WALLET_BALANCE_COVERS_ORDER` are wallet-only; `CUSTOMER_NAME_REQUIRED` and `CUSTOMER_PHONE_REQUIRED` stop for profile completion, then retry the intent create. | Legacy DVA fallback allowed only with server-verifiable no-intent **and** a fallback-eligible code |
    | Unknown-after-POST | Transport failure, timeout, or any failure with **no received response** after the mutating POST (a received 5xx is classified by its server code first, per the row above) | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
    | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
    | Unenumerated received code (default) | Any server code not enumerated above | **Fail closed:** treat as unknown-after-POST; never fall back on an unclassified code |
@@ -154,8 +160,8 @@ green CI and change no activation state.
    locks the order row `FOR UPDATE` before re-checking for an
    existing active intent, so a second concurrent create waits and
    returns the first intent. That concurrency proof does **not**
-   supply the no-intent proof above, so the pre-branch
-   existing-intent lookup (or explicit no-intent signal) remains an
+   supply the no-intent proof above, so the proof-only no-intent
+   lookup (scoped to the resolved customer and merchant) remains an
    explicit server deliverable of this wave. The wave's full scope
    is therefore: that server change, the prerequisite Zod
    peer-range decision above, the shared subshape, and the client

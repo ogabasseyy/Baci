@@ -166,7 +166,7 @@ green CI and change no activation state.
    first) and the decision rule (≥2 consumers, platform-free, ≤~400
    changed lines per PR) recorded in `packages/shared/README` or
    repo guidance.
-4. **Post-activation (per the gate defined above):** cart display
+4. **Post-activation (per the gate defined above):** cart pricing
    math, then cart-payload schemas, then the checkout transport
    subshape (row 6).
 5. **Tracked candidates, own waves when scheduled:** VTU

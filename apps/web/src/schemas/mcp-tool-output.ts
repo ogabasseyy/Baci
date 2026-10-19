@@ -23,6 +23,7 @@ const product = z.object({
   base_price: money.nullable().optional(),
   base_condition: z.string().optional(),
   base_in_stock: z.boolean().nullable().optional(),
+  base_compare_at_price: money.nullable().optional(),
   slug: z.string().nullable().optional(),
   url: z.string().optional(),
   compare_at_price: money.nullable().optional(),

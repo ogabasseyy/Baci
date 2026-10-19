@@ -73,7 +73,7 @@ export function createCatalogRenderer(
                   throw new Error('Base option no longer available');
                 }
                 price = product.base_price ?? (!product.has_condition_offers ? product.price : null) ?? undefined;
-                compareAtPrice = product.compare_at_price;
+                compareAtPrice = product.base_compare_at_price;
                 condition = baseCondition;
                 availability = serializedStock === 'in_stock' || product.base_in_stock === true
                   ? 'in_stock'
@@ -91,7 +91,7 @@ export function createCatalogRenderer(
                 price = matched.price;
                 // The storefront PDP falls back to the parent comparison
                 // price because the public variants RPC omits variant values.
-                compareAtPrice = matched.compare_at_price ?? product.compare_at_price;
+                compareAtPrice = matched.compare_at_price ?? product.base_compare_at_price;
                 condition = matchedCondition;
                 availability = matched.availability;
                 variantId = option.option_id;
@@ -130,14 +130,14 @@ export function createCatalogRenderer(
                   price = pairedVariant.price;
                   // The PDP sources the comparison price from the selected
                   // variant or the parent product, never the offer row.
-                  compareAtPrice = pairedVariant.compare_at_price ?? product.compare_at_price;
+                  compareAtPrice = pairedVariant.compare_at_price ?? product.base_compare_at_price;
                   availability = pairedVariant.availability;
                 } else {
                   if (matched.availability === 'out_of_stock') throw new Error('Offer no longer available');
                   price = matched.price;
                   // Condition-offer compare-at prices are not used by the PDP;
                   // bare offers retain the parent product comparison price.
-                  compareAtPrice = product.compare_at_price;
+                  compareAtPrice = product.base_compare_at_price;
                   availability = matched.availability;
                 }
                 condition = matchedCondition;

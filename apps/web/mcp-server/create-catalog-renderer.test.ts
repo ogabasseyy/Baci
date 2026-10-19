@@ -168,7 +168,7 @@ it('requires an explicit matched option for option-bearing products', async () =
 it('uses the matched offer comparison price', async () => {
   const render = createCatalogRenderer(async () => ({
     structuredContent: {
-      products: [{ id: 'phone', name: 'Phone', price: 80, base_price: 100, compare_at_price: 110, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_condition_offers: true }],
+      products: [{ id: 'phone', name: 'Phone', price: 80, base_price: 100, compare_at_price: null, base_compare_at_price: 110, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_condition_offers: true }],
       condition_offers: [{ offer_id: 'o1', condition: 'used', price: 80, compare_at_price: 95, stock_quantity: 1, availability: 'in_stock' }],
     },
   }));

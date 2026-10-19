@@ -138,6 +138,10 @@ export async function buildMcpProductDetail({
     base_in_stock: product.manage_stock === true
       ? Number(product.stock_quantity ?? 0) > 0
       : null,
+    // Unmasked parent comparison price: the generic compare_at_price is
+    // nulled when the display price comes from an option, but option
+    // branches need the authoritative parent value for PDP parity.
+    base_compare_at_price: product.compare_at_price,
     compare_at_price: displayCompareAtPrice,
     image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
     condition: displayCondition,

@@ -133,4 +133,9 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
       'supabase/migrations/20261010000026_reconcile_rdm_on_claim_release.sql',
     sha256: '4d61ae6e21094fb97bafb45c47407fc74afaf4375782bfb7353463c22b546cd3',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019000000_revoke_loyalty_resolver_anon_execute.sql',
+    sha256: 'de0d0068dd3f3fbc6b42f8067acebea6c4f0512e57cb05670349cf3b1f92d376',
+  },
 ] as const;

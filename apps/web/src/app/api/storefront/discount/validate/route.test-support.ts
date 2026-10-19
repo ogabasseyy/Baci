@@ -5,6 +5,10 @@
 import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: vi.fn(),
 }));
@@ -13,12 +17,14 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
+import { createAnonClient } from '@/lib/supabase/anon';
 import { createServiceClient } from '@/lib/supabase/service';
 
 // Dynamic import AFTER the mocks register (never a static re-export:
-// the route module must evaluate against the mocked service client).
+// the route module must evaluate against the mocked clients).
 export const { POST } = await import('./route');
 
+const mockCreateAnonClient = vi.mocked(createAnonClient);
 const mockCreateServiceClient = vi.mocked(createServiceClient);
 
 let merchantRow: unknown = null;
@@ -27,30 +33,35 @@ export function setMerchantRow(row: unknown): void {
   merchantRow = row;
 }
 
-export function setServiceClient(client: unknown): void {
-  mockCreateServiceClient.mockReturnValue(client as never);
-}
-
 export function mockRpc(
   impl: (fn: string, args: Record<string, unknown>) => unknown,
   errors: { merchant?: unknown; rpc?: Record<string, unknown> } = {}
 ) {
-  const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
-    data: errors.rpc?.[fn] ? null : impl(fn, args),
-    error: errors.rpc?.[fn] ?? null,
-  }));
-  const from = vi.fn(() => ({
-    select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        maybeSingle: vi.fn(async () => ({
-          data: errors.merchant ? null : merchantRow,
-          error: errors.merchant ?? null,
+  const buildClient = () => {
+    const rpc = vi.fn(async (fn: string, args: Record<string, unknown>) => ({
+      data: errors.rpc?.[fn] ? null : impl(fn, args),
+      error: errors.rpc?.[fn] ?? null,
+    }));
+    const from = vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({
+            data: errors.merchant ? null : merchantRow,
+            error: errors.merchant ?? null,
+          })),
         })),
       })),
-    })),
-  }));
-  mockCreateServiceClient.mockReturnValue({ rpc, from } as never);
-  return rpc;
+    }));
+    return { rpc, from };
+  };
+  // The route splits privilege (issue #3696): merchant RPC + reads on
+  // the anon client, the loyalty resolver RPC on the service client.
+  // Both fakes share the impl so existing fn-switch assertions hold.
+  const anon = buildClient();
+  const service = buildClient();
+  mockCreateAnonClient.mockReturnValue(anon as never);
+  mockCreateServiceClient.mockReturnValue(service as never);
+  return { rpc: anon.rpc, serviceRpc: service.rpc };
 }
 
 export function request(body: unknown): NextRequest {

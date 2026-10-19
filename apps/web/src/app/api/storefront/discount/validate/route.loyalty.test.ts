@@ -6,7 +6,6 @@ import {
   POST,
   request,
   setMerchantRow,
-  setServiceClient,
 } from './route.test-support';
 
 describe('POST /api/storefront/discount/validate loyalty fallback', () => {
@@ -101,12 +100,12 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
   it('returns 500 when the loyalty lookup errors', async () => {
-    const rpc = vi.fn(async (fn: string) =>
-      fn === 'get_storefront_discount_code'
-        ? { data: [], error: null }
-        : { data: null, error: { message: 'boom' } }
-    );
-    setServiceClient({ rpc });
+    // Merchant lookup succeeds on the anon client; only the
+    // service-client loyalty call fails: the 500 must come from the
+    // lookupErrorResponse branch, not a missing client.
+    mockRpc(() => [], {
+      rpc: { get_loyalty_redemption_for_checkout: { message: 'boom' } },
+    });
 
     const response = await POST(request(baseBody));
     const body = await response.json();

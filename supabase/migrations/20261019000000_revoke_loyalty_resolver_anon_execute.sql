@@ -6,10 +6,12 @@
 -- anon caller could invoke this SECURITY DEFINER RPC directly through
 -- PostgREST, bypassing the Next proxy entirely.
 --
--- Revoke anon EXECUTE. Both server-side callers now resolve through
+-- Revoke anon AND authenticated EXECUTE. Authenticated is no trust
+-- boundary here (self-registration is open), so it is the same
+-- enumeration oracle. Both server-side callers now resolve through
 -- the service-role client behind the rate-limited routes:
 -- POST /api/storefront/discount/validate and the orders checkout path
--- (resolveLoyaltyCheckoutCode). Authenticated callers are unaffected.
+-- (resolveLoyaltyCheckoutCode).
 --
 -- Deliberately NOT touched: create_storefront_order_with_loyalty_code
 -- stays anon-granted by design (guest checkout needs it; the wrapper
@@ -18,3 +20,4 @@
 -- shape and stays as-is (out of scope for #3696).
 
 REVOKE EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM authenticated;

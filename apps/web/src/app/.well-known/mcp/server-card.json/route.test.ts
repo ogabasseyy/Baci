@@ -11,6 +11,7 @@ const PUBLIC_TOOL_NAMES = [
   'get_product_variants',
   'get_store_info',
   'prepare_storefront_cart_link',
+  'render_ogabassey_catalog',
   'search_products',
   'update_ogabassey_guest_cart',
 ];
@@ -192,5 +193,39 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     expect(tool.description).toContain('does not modify a cart');
     expect(tool.inputSchema.properties).not.toHaveProperty('address');
     expect(tool.inputSchema.properties).not.toHaveProperty('estimated_weight');
+  });
+});
+
+it('serializes the renderer contract with native Zod 4 JSON Schema support', async () => {
+  const { GET } = await import('./route');
+  const body = await GET().json();
+  const renderer = body.tools.find(
+    (tool: { name: string }) => tool.name === 'render_ogabassey_catalog'
+  );
+  // Cross-item product_id uniqueness is a runtime refinement; discovery
+  // consumers receive the rule in the description instead of uniqueItems,
+  // which would compare whole objects rather than product_id values.
+  expect(renderer.description).toContain('Pass each product_id once');
+  expect(renderer.inputSchema.properties.products.uniqueItems).toBeUndefined();
+  expect(renderer.inputSchema).toMatchObject({
+    type: 'object',
+    additionalProperties: false,
+    required: ['products'],
+    properties: {
+      products: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['product_id'],
+          properties: {
+            product_id: { type: 'string', minLength: 1, maxLength: 80 },
+            matched_option: expect.objectContaining({ type: 'object' }),
+          },
+        },
+      },
+    },
   });
 });

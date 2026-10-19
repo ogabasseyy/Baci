@@ -1,6 +1,6 @@
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import type { DeliveryInput, DeliveryQuoteResult } from './delivery-gigl-quotes';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from "@modelcontextprotocol/server";
 import { MCP_DELIVERY_FEE_INFO_DESCRIPTION, mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 
 type SanitizeString = (value: string, maxLength: number) => string;
@@ -10,6 +10,7 @@ export function registerDeliveryFeeInfoTool(
   sanitizeString: SanitizeString,
   loadQuotes?: (input: DeliveryInput) => Promise<DeliveryQuoteResult>
 ) {
+
   server.registerTool(
     'get_delivery_fee_info',
     {
@@ -17,7 +18,7 @@ export function registerDeliveryFeeInfoTool(
       title: 'Check Delivery Fee Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       description: MCP_DELIVERY_FEE_INFO_DESCRIPTION,
-      inputSchema: mcpDeliveryFeeInfoInputSchema.shape,
+      inputSchema: mcpDeliveryFeeInfoInputSchema,
       _meta: {
         'openai/toolInvocation/invoking': 'Checking delivery information...',
         'openai/toolInvocation/invoked': 'Delivery information ready',

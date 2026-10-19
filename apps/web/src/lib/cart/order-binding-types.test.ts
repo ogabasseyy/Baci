@@ -9,6 +9,7 @@ describe('order binding variants', () => {
       'savings',
       'quiz_voucher',
       'discount_code',
+      'loyalty_code',
     ]);
   });
 

@@ -3,7 +3,7 @@ import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount
 import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
 import { formatPayoutOnlyCurrency } from '@/lib/resolve-merchant-currency';
-import { createAnonClient } from '@/lib/supabase/anon';
+import { createServiceClient } from '@/lib/supabase/service';
 import {
   loyaltyCheckoutCodeRowSchema,
   storefrontDiscountCodeRowSchema,
@@ -19,8 +19,12 @@ function invalidCodeResponse(message = 'Invalid discount code') {
 
 /**
  * POST /api/storefront/discount/validate
- * Validates a discount code via the anon client + SECURITY DEFINER
- * RPC. CSRF exemption: proxy rate limiting + read-only RPC mitigate.
+ * Validates a discount code via the service-role client + SECURITY
+ * DEFINER RPC. CSRF exemption: proxy rate limiting + read-only RPC
+ * mitigate. Service-role (issue #3696): the loyalty resolver no
+ * longer grants anon EXECUTE (enumeration oracle), so even this
+ * public route resolves server-side; abuse control stays at the
+ * proxy, not the DB role.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -47,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { merchant_id, code, cart_total } = parsed.data;
-    const supabase = createAnonClient();
+    const supabase = createServiceClient();
 
     const { data, error } = await supabase.rpc('get_storefront_discount_code', {
       p_merchant_id: merchant_id,

@@ -5,8 +5,8 @@ import {
   mockRpc,
   POST,
   request,
-  setAnonClient,
   setMerchantRow,
+  setServiceClient,
 } from './route.test-support';
 
 describe('POST /api/storefront/discount/validate loyalty fallback', () => {
@@ -106,7 +106,7 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
         ? { data: [], error: null }
         : { data: null, error: { message: 'boom' } }
     );
-    setAnonClient({ rpc });
+    setServiceClient({ rpc });
 
     const response = await POST(request(baseBody));
     const body = await response.json();

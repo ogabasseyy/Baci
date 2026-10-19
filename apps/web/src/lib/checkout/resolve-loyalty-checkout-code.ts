@@ -1,7 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
+import { createServiceClient } from '@/lib/supabase/service';
 import { loyaltyCheckoutCodeRowSchema } from '@/schemas/storefront-discount';
 
 export type LoyaltyCheckoutCodeResolution =
@@ -23,16 +23,20 @@ export type LoyaltyCheckoutCodeResolution =
  * replay-first idempotent retries. Only the bridgeable shape (discount
  * type + positive value) is filtered: other reward types are honored
  * through manual/fulfillment channels.
+ *
+ * Privilege (issue #3696): the resolver RPC no longer grants anon
+ * EXECUTE (enumeration oracle), so this helper builds its own
+ * service-role client instead of taking the caller's scoped client.
+ * Callers stay behind the proxy-rate-limited routes.
  */
 export async function resolveLoyaltyCheckoutCode({
-  supabase,
   merchantId,
   code,
 }: {
-  supabase: SupabaseClient;
   merchantId: string;
   code: string;
 }): Promise<LoyaltyCheckoutCodeResolution> {
+  const supabase = createServiceClient();
   const { data: loyaltyRows, error: loyaltyLookupError } = await supabase.rpc(
     'get_loyalty_redemption_for_checkout',
     {

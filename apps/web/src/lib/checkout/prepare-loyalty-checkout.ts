@@ -125,7 +125,6 @@ export async function prepareLoyaltyCheckout({
     codeMaximumDiscountAmount = discountRow.maximum_discount_amount;
   } else {
     const loyaltyResolution = await resolveLoyaltyCheckoutCode({
-      supabase,
       merchantId,
       code: requestedDiscountCode,
     });

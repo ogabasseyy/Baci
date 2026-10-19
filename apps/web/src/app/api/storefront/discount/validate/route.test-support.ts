@@ -1,24 +1,25 @@
-// Shared mocks for the storefront discount-validate suites (issue
-// #3165): registers the anon-client/logger mocks and re-exports POST
-// (same pattern as route.order-test-mocks.test-support.ts).
+// Shared mocks for the storefront discount-validate suites (issues
+// #3165, #3696): registers the service-client/logger mocks and
+// re-exports POST (same pattern as
+// route.order-test-mocks.test-support.ts).
 import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 
-vi.mock('@/lib/supabase/anon', () => ({
-  createAnonClient: vi.fn(),
+vi.mock('@/lib/supabase/service', () => ({
+  createServiceClient: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-import { createAnonClient } from '@/lib/supabase/anon';
+import { createServiceClient } from '@/lib/supabase/service';
 
 // Dynamic import AFTER the mocks register (never a static re-export:
-// the route module must evaluate against the mocked anon client).
+// the route module must evaluate against the mocked service client).
 export const { POST } = await import('./route');
 
-const mockCreateAnonClient = vi.mocked(createAnonClient);
+const mockCreateServiceClient = vi.mocked(createServiceClient);
 
 let merchantRow: unknown = null;
 
@@ -26,8 +27,8 @@ export function setMerchantRow(row: unknown): void {
   merchantRow = row;
 }
 
-export function setAnonClient(client: unknown): void {
-  mockCreateAnonClient.mockReturnValue(client as never);
+export function setServiceClient(client: unknown): void {
+  mockCreateServiceClient.mockReturnValue(client as never);
 }
 
 export function mockRpc(
@@ -48,7 +49,7 @@ export function mockRpc(
       })),
     })),
   }));
-  mockCreateAnonClient.mockReturnValue({ rpc, from } as never);
+  mockCreateServiceClient.mockReturnValue({ rpc, from } as never);
   return rpc;
 }
 

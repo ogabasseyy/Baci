@@ -6,7 +6,10 @@
 -- covered every funded leg — and with no external gateway no side
 -- effect or worker ever revisits it, so the stale paid-family
 -- status stuck forever. The flip derives the paid total from
--- funded internal legs when NULL. Split per the 300-line boundary;
+-- funded internal legs when NULL. A legacy NULL order currency
+-- prices in NGN like the manager and the label trigger, so NGN
+-- internal legs still count toward that derivation. Split per the
+-- 300-line boundary;
 -- self-contained fixtures use the 9ef1 namespace and roll back.
 --
 -- USAGE:
@@ -75,6 +78,15 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000094', v_merchant_id, 'REFUND-094',
       100, 0, 'paid', 'cancelled', pg_catalog.now());
 
+  -- Legacy NULL currency beside a NULL total and a fully reversed
+  -- NGN wallet leg: the derivation prices the order in NGN and flips.
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid, currency,
+    payment_status, shipping_status, cancelled_at
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000095', v_merchant_id, 'REFUND-095',
+      100, NULL, NULL, 'paid', 'cancelled', pg_catalog.now());
+
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
     status, gateway, gateway_reference, metadata
@@ -90,7 +102,10 @@ BEGIN
       'completed', 'wallet', 'r50-93', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000094', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000094', 'payment', 100, 'NGN',
-      'completed', 'wallet', 'r50-94', '{}'::jsonb);
+      'completed', 'wallet', 'r50-94', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000095', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000095', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'r50-95', '{}'::jsonb);
 
   INSERT INTO public.customer_wallet_transactions (
     wallet_id, customer_id, merchant_id, type, amount, balance_after,
@@ -117,6 +132,13 @@ BEGIN
     'order_reversal', '9ef11000-0000-4000-8000-000000000093');
   ALTER TABLE public.customer_wallet_transactions
     ENABLE TRIGGER sync_internal_only_refund_status_wallet;
+
+  INSERT INTO public.customer_wallet_transactions (
+    wallet_id, customer_id, merchant_id, type, amount, balance_after,
+    source_type, source_id
+  ) VALUES
+    (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 540,
+      'order_reversal', '9ef11000-0000-4000-8000-000000000095');
 END;
 $fixtures$;
 
@@ -161,6 +183,12 @@ BEGIN
   WHERE id = '9ef11000-0000-4000-8000-000000000094';
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'zero-paid full reversal left status %, want refunded',
+      v_status;
+  END IF;
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000095';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'NULL-currency full reversal left status %, want refunded',
       v_status;
   END IF;
   -- The in-function role check rejects non-service JWT roles: call

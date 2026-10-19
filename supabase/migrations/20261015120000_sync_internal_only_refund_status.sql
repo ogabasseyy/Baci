@@ -37,8 +37,10 @@ REVOKE ALL ON FUNCTION private.internal_reversal_coverage_v1(uuid, uuid)
 -- Unlike the manager's effective_amount_paid_v1 (which excludes
 -- wallet/savings because they reverse through their own ledgers),
 -- the internal set counts here: wallet/savings legs ARE the funded
--- evidence for these orders. Missing currency or no funded legs
--- derives zero, which fails the flip's positive-paid gate.
+-- evidence for these orders. A legacy NULL or blank order currency
+-- prices in NGN like the manager and the label trigger, so NGN
+-- internal legs still count; no funded legs derives zero, which
+-- fails the flip's positive-paid gate.
 CREATE OR REPLACE FUNCTION private.internal_only_effective_paid_v1(
   p_order_id uuid, p_merchant_id uuid
 ) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
@@ -53,7 +55,8 @@ CREATE OR REPLACE FUNCTION private.internal_only_effective_paid_v1(
        AND leg.transaction_type = 'payment'
        AND leg.status IN ('completed', 'refund_pending', 'refunded')
        AND leg.amount > 0
-       AND UPPER(BTRIM(leg.currency)) = UPPER(BTRIM(o.currency))
+       AND UPPER(BTRIM(leg.currency)) = UPPER(BTRIM(
+             COALESCE(NULLIF(BTRIM(o.currency), ''), 'NGN')))
        AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
            IN ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
                'PAY_ON_DELIVERY')), 0));

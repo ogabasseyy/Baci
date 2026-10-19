@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-19T15:13:37.577246+00:00",
-  "source_revision": "e81c146425e836d39c1373815f78c7b08dac8950",
-  "evidence_digest": "72c1859c5624f1ada4ff300c383598eaad6ae6b310a091f36adca90c1381db7e",
-  "claims_digest": "044d493518cc51a9704f99f7bf4cd911e43ca151ea9c53fbc1f523e28d64de78",
+  "reviewed_at": "2026-10-19T15:02:10.384116+00:00",
+  "source_revision": "a6038aac91e012cf7b1646a108c05ab13709fc3a",
+  "evidence_digest": "86762ac733ebf640abb4b9dd8c12009fb6d06b89610a48e712878a0be0305333",
+  "claims_digest": "b031e42f52fbe900bd6b623cfaffd2654b6e9de6f07bf3cf93a5ef52823f17af",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {

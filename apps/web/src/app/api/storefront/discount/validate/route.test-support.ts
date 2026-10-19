@@ -59,6 +59,13 @@ export function mockRpc(
   // Both fakes share the impl so existing fn-switch assertions hold.
   const anon = buildClient();
   const service = buildClient();
+  // The resolver client exists only for the loyalty RPC: fail loudly if
+  // table reads ever route through it (CodeRabbit nit on #3719).
+  service.from = vi.fn(() => {
+    throw new Error(
+      'The loyalty resolver service client must not query tables'
+    );
+  });
   mockCreateAnonClient.mockReturnValue(anon as never);
   mockCreateServiceClient.mockReturnValue(service as never);
   return { rpc: anon.rpc, serviceRpc: service.rpc };

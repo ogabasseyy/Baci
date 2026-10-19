@@ -1,15 +1,20 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
+import { widgetHost } from './widget-host';
 
 const products = [
   { id: '11111111-1111-4111-8111-111111111111', name: 'Phone One', slug: 'phone-one', price: 100000 },
 ];
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.style.padding = '';
+});
+beforeEach(() => {
+  widgetHost.reset();
 });
 describe('Ogabassey inline result presentation', () => {
   it('reports compact content height after a resize and never opens fullscreen automatically', () => {
@@ -185,4 +190,32 @@ describe('Ogabassey inline result presentation', () => {
       'Search service temporarily unavailable.'
     );
   });
+});
+
+it('renders all twenty accepted catalog selections', () => {
+  const selection = Array.from({ length: 20 }, (_, i) => ({ ...products[0], id: `phone-${i}`, name: `Selected phone ${i}` }));
+  window.openai = { toolOutput: { products: selection } };
+  render(<App />);
+  expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(20);
+});
+it('shows catalog failures as actionable alerts', () => {
+  window.openai = { toolOutput: { products: [], status: 'unavailable', message: 'Search again before rendering.' } };
+  render(<App />);
+  expect(screen.getByRole('alert').textContent).toBe('Search again before rendering.');
+});
+
+it('disables negotiation when the host cannot accept follow-up messages', () => {
+  window.openai = {
+    toolOutput: { products },
+    widgetState: { cart: [{ product: products[0], quantity: 1 }], cartUrl: 'https://ogabassey.com/cart?guest_cart=[]' },
+  };
+  render(<App />);
+  expect(screen.getByRole('button', { name: 'Negotiate Price' })).toBeDisabled();
+});
+it('uses the hardened browser fallback for storefront navigation', () => {
+  window.openai = { toolOutput: { products } };
+  const open = vi.spyOn(window, 'open').mockReturnValue(null);
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'Browse All Products →' }));
+  expect(open).toHaveBeenCalledWith('https://ogabassey.com', '_blank', 'noopener,noreferrer');
 });

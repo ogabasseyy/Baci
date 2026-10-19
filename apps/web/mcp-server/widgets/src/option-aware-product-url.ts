@@ -8,9 +8,11 @@ export function resolveOptionAwareProductUrl(product: Product): {
   url: string;
   hasOptions: boolean;
 } {
+  const requiresSelection =
+    product.has_variants === true || product.has_condition_offers === true;
   const fallback = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
   if (typeof product.url !== 'string' || product.url === '') {
-    return { url: fallback, hasOptions: false };
+    return { url: fallback, hasOptions: requiresSelection };
   }
   try {
     const parsed = new URL(product.url);
@@ -20,15 +22,16 @@ export function resolveOptionAwareProductUrl(product: Product): {
       !parsed.username &&
       !parsed.password;
     if (!valid) {
-      return { url: fallback, hasOptions: false };
+      return { url: fallback, hasOptions: requiresSelection };
     }
     return {
       url: parsed.toString(),
       hasOptions:
+        requiresSelection ||
         parsed.searchParams.has('variantId') ||
         parsed.searchParams.has('condition'),
     };
   } catch {
-    return { url: fallback, hasOptions: false };
+    return { url: fallback, hasOptions: requiresSelection };
   }
 }

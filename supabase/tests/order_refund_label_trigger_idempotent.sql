@@ -63,8 +63,8 @@ $fixtures$;
 DO $idempotent_label$
 DECLARE
   v_status text;
-  v_updated_at timestamptz;
-  v_sentinel timestamptz := '2001-02-03 04:05:06+00'::timestamptz;
+  v_ctid_before tid;
+  v_ctid_after tid;
 BEGIN
   SELECT payment_status INTO v_status FROM public.orders
   WHERE id = 'd7201000-0000-4000-8000-000000000001';
@@ -72,21 +72,25 @@ BEGIN
     RAISE EXCEPTION 'terminal refund did not flip label, got %', v_status;
   END IF;
 
-  -- Sentinel the label timestamp, then refire the trigger with a
-  -- same-status update: the guard must leave the row untouched.
-  UPDATE public.orders SET updated_at = v_sentinel
+  -- Tuple-version the flipped order, then refire the trigger with
+  -- a same-status update: the guard must leave the row unrewritten.
+  -- (updated_at cannot carry the probe inside one transaction:
+  -- now() is constant there and the generic
+  -- update_orders_updated_at trigger stamps it on any write; ctid
+  -- changes on every real rewrite.)
+  SELECT ctid INTO v_ctid_before FROM public.orders
   WHERE id = 'd7201000-0000-4000-8000-000000000001';
   UPDATE public.transactions SET status = 'completed'
   WHERE id = 'd7202000-0000-4000-8000-000000000002';
 
-  SELECT payment_status, updated_at INTO v_status, v_updated_at
+  SELECT payment_status, ctid INTO v_status, v_ctid_after
   FROM public.orders
   WHERE id = 'd7201000-0000-4000-8000-000000000001';
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'refire changed the label, got %', v_status;
   END IF;
-  IF v_updated_at IS DISTINCT FROM v_sentinel THEN
-    RAISE EXCEPTION 'refire bumped updated_at, got %', v_updated_at;
+  IF v_ctid_after IS DISTINCT FROM v_ctid_before THEN
+    RAISE EXCEPTION 'refire rewrote the order row';
   END IF;
 END;
 $idempotent_label$;

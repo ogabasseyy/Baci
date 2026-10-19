@@ -55,6 +55,22 @@ describe('Ogabassey cart handoff widget', () => {
     expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
   });
 
+  it('reveals fullscreen support when the legacy host injects it late', () => {
+    window.openai = { toolOutput: { products } };
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Expand catalog' })).toBeNull();
+
+    act(() => {
+      if (window.openai) window.openai.requestDisplayMode = vi.fn().mockResolvedValue(undefined);
+      window.dispatchEvent(new CustomEvent('openai:set_globals', {
+        detail: { globals: { requestDisplayMode: window.openai?.requestDisplayMode } },
+      }));
+    });
+
+    expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
+  });
+
   it('reports inline height again when standard host actions become ready', () => {
     vi.stubGlobal('ResizeObserver', undefined);
     const notifyIntrinsicHeight = vi.fn();

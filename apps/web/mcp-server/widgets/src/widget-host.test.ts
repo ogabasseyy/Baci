@@ -69,6 +69,15 @@ it('notifies subscribers with native values when the adapter resets', () => {
   expect(widgetHost.get()).toBe(window.openai);
 });
 
+it('returns a stable bound reference for native methods', () => {
+  window.openai = { requestDisplayMode: () => Promise.resolve({}) };
+  widgetHost.update({ theme: 'dark' });
+  const first = widgetHost.get()?.requestDisplayMode;
+  const second = widgetHost.get()?.requestDisplayMode;
+  expect(first).toBe(second);
+  expect(first).not.toBe(window.openai.requestDisplayMode);
+});
+
 it('dispatches nothing when resetting without adapter state', () => {
   const listener = vi.fn();
   window.addEventListener('openai:set_globals', listener);

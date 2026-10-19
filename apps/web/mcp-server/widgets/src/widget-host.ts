@@ -5,6 +5,11 @@ type WidgetHostOverrides = Partial<WidgetHost>;
 
 let overrides: WidgetHostOverrides | undefined;
 
+// Bound native methods must be referentially stable: useSyncExternalStore
+// snapshots compare with Object.is, and a fresh .bind() per read would
+// re-render subscribed components in an infinite loop.
+const boundMethods = new WeakMap<(...args: never[]) => unknown, unknown>();
+
 const adapter: WidgetHost = new Proxy({} as WidgetHost, {
   get(_target, key) {
     if (overrides && Object.hasOwn(overrides, key))
@@ -12,7 +17,13 @@ const adapter: WidgetHost = new Proxy({} as WidgetHost, {
     const native = window.openai;
     if (!native) return undefined;
     const value: unknown = Reflect.get(native, key, native);
-    return typeof value === 'function' ? value.bind(native) : value;
+    if (typeof value !== 'function') return value;
+    let bound = boundMethods.get(value as (...args: never[]) => unknown);
+    if (bound === undefined) {
+      bound = value.bind(native);
+      boundMethods.set(value as (...args: never[]) => unknown, bound);
+    }
+    return bound;
   },
 });
 

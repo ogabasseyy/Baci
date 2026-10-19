@@ -22,6 +22,9 @@ interface OpenAiGlobals {
   };
   locale: string;
   mcpAppReady: boolean;
+  requestDisplayMode: (options: {
+    mode: 'inline' | 'fullscreen' | 'pip';
+  }) => Promise<unknown>;
 }
 
 declare global {

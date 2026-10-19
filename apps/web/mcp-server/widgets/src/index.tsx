@@ -26,7 +26,9 @@ export function App() {
   const safeArea = useOpenAiGlobal('safeArea');
   const mcpAppReady = useOpenAiGlobal('mcpAppReady') === true;
   const products = toolOutput?.products || [];
-  const requestDisplayMode = widgetHost.get()?.requestDisplayMode;
+  // Subscribed (not read opportunistically) so late capability changes
+  // re-render the expand control on every host path.
+  const requestDisplayMode = useOpenAiGlobal('requestDisplayMode');
   const canExpand =
     Boolean(requestDisplayMode) &&
     (mcpAppReady || typeof window.openai?.requestDisplayMode === 'function');

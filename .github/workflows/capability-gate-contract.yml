@@ -47,7 +47,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: adeefcff3363e350c986d3fb35d064b18292ecd332156766b62af6c31dacdca6
+  PINNED_CHECKER_SHA256: 2ae118f036ee81c22a4b69fa0d08a36262346058ff48bd30c3cb624e96b95aef
 
 jobs:
   gate-contract:
@@ -56,7 +56,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Reviewed: head is contract-check DATA only, never executed; the
+      # running checker always comes from the base revision (see header).
+      - name: Checkout head tree as data # nosemgrep: yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1

@@ -34,7 +34,8 @@ EXPECTED_RUN = [
 
 # The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
 EXPECTED_FIRST_STEP = [
-    "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+    "- name: Checkout head tree as data # nosemgrep: yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout",
+    "uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
     "with:",
     "ref: ${{ github.event.pull_request.head.sha }}",
     "fetch-depth: 1",

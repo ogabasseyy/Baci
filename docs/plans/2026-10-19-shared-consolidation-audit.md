@@ -15,7 +15,9 @@ comment-only, `jest.mock`, and test-config alias matches):
 `apps/web/src` 459, `apps/mobile-storefront` 147,
 `apps/mobile-admin` 121. Reproduce exactly with:
 `grep -rlE "(from\s+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared)" --include="*.ts" --include="*.tsx" <base>`
-per base below, excluding paths containing `.test.`; other precise
+per base below, excluding paths containing `.test.` via
+`grep -v '\.test\.'` and `--exclude-dir=node_modules` on the
+mobile app-root bases; other precise
 counts in this doc are from the same session's `find`/`wc`/`grep`
 pass on this base and should be treated as ±1 file at file
 boundaries (tests vs fixtures classification). Bases differ
@@ -29,7 +31,7 @@ consumes it directly. Per-domain subpath exports already exist
 (`./cart`, `./schemas`, `./contracts`, …). The pattern is proven; the
 work below extends it.
 
-## Ranked inventory
+## Inventory (grouped by theme; execution order is the Recommended sequence below, not row number)
 
 | # | Domain | Evidence (side-by-side) | Consumers | Verdict |
 |---|--------|-------------------------|-----------|---------|
@@ -101,12 +103,14 @@ green CI and change no activation state.
    `findActiveOrderIntent` returns the existing active intent for
    the order before inserting), so the correct client behavior is
    an idempotent re-create for the same order, never a parallel
-   gateway payment. The wave must also handle the concurrent-create
-   race the current server path leaves open: two simultaneous
-   creates can both miss `findActiveOrderIntent` and collide on
-   insert, so the conflict outcome must resolve to the existing
-   intent (conflict-then-fetch), not surface as a create failure
-   that falls back to gateway payment.
+   gateway payment. No server change is needed for the concurrent
+   case: the insert path's RPC
+   (`create_order_wallet_funding_intent_for_customer`,
+   `supabase/migrations/20260526233646_order_wallet_funding_intents.sql`)
+   locks the order row `FOR UPDATE` before re-checking for an
+   existing active intent, so a second concurrent create waits and
+   returns the first intent. The wave's scope is therefore only the
+   client behavior: re-create instead of gateway fallback.
 2. **Formatting wave: currency/price formatting.** One shared `Intl`
    formatting module, characterization fixtures pinning each app's
    current outputs, semantic unification decision recorded in the

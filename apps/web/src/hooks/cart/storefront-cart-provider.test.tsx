@@ -152,6 +152,30 @@ describe('StorefrontCartProvider', () => {
     expect(result.current.totalItems).toBe(0);
   });
 
+  it('keeps a product with unknown stock metadata addable', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // Template-local display products omit both fields: only a KNOWN
+    // depleted value rejects. Unknown stock resolves downstream.
+    act(() => {
+      result.current.addToCart(
+        {
+          ...mockProduct,
+          manage_stock: undefined as unknown as boolean,
+          stock: undefined as unknown as number,
+        },
+        1
+      );
+    });
+    expect(result.current.totalItems).toBe(1);
+  });
+
   it('prunes expired voucher lines during mount hydration and persists the result', async () => {
     localStorageMock.setItem(
       'baci-cart-ogabassey-guest',

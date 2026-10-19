@@ -5,6 +5,7 @@ import { useMerchant } from '@/hooks/use-merchant';
 import {
   type CartConditionChange,
   type CartPriceChange,
+  type CartUnavailableLine,
   pickChangedConditionById,
   pickChangedOfferIdById,
   pickChangedPriceById,
@@ -38,6 +39,9 @@ export function useCartReprice() {
   const [priceChanges, setPriceChanges] = useState<CartPriceChange[]>([]);
   const [conditionChanges, setConditionChanges] = useState<
     CartConditionChange[]
+  >([]);
+  const [unavailableLines, setUnavailableLines] = useState<
+    CartUnavailableLine[]
   >([]);
   const lastRepriceKeyRef = useRef<string | null>(null);
 
@@ -75,6 +79,11 @@ export function useCartReprice() {
         if (cancelled) {
           return;
         }
+        // Unavailable lines surface independently of price drift: a
+        // vanished product/allocation must reach the shopper in the
+        // cart, not only at the checkout guard. Set unconditionally so
+        // a later clean reprice clears a stale warning.
+        setUnavailableLines(result.unavailable ?? []);
         if (
           result.changes.length > 0 ||
           result.conditionChanges.length > 0 ||
@@ -107,9 +116,11 @@ export function useCartReprice() {
   return {
     priceChanges,
     conditionChanges,
+    unavailableLines,
     dismissPriceChanges: () => {
       setPriceChanges([]);
       setConditionChanges([]);
+      setUnavailableLines([]);
     },
   };
 }

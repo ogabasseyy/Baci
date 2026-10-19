@@ -406,10 +406,16 @@ export function StorefrontCartProvider({
     const isQuizPrizeVoucherLine = Boolean(
       normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
     );
+    // Scalar out-of-stock guard: NULL manage_stock means managed (legacy
+    // rows, mirroring search/PDP/native), but an UNKNOWN stock value must
+    // not reject — template-local display products omit both fields, and
+    // legacy NULL/NULL rows resolve through live data downstream. Only a
+    // known depleted value rejects here.
     if (
       !isQuizPrizeVoucherLine &&
       (productForCart.manage_stock ?? true) &&
-      (productForCart.stock ?? 0) <= 0
+      productForCart.stock != null &&
+      productForCart.stock <= 0
     ) {
       logger.warn({
         message: 'Attempted to add out-of-stock product to cart',

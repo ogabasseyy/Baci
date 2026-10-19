@@ -336,6 +336,32 @@ describe('useCartReprice', () => {
     expect(result.current.conditionChanges).toEqual([]);
   });
 
+  it('surfaces unavailable lines even without price drift', async () => {
+    const unavailable = [{ id: 'cart-1', name: 'iPhone 15 Pro' }];
+    mockRepriceCartItems.mockResolvedValue({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable,
+    });
+
+    const { result } = renderHook(() => useCartReprice());
+
+    await waitFor(() => {
+      expect(result.current.unavailableLines).toEqual(unavailable);
+      expect(result.current.priceChanges).toEqual([]);
+    });
+
+    act(() => {
+      result.current.dismissPriceChanges();
+    });
+
+    expect(result.current.unavailableLines).toEqual([]);
+  });
+
   it('fails open without mutating cart state when repricing rejects', async () => {
     mockRepriceCartItems.mockRejectedValue(new Error('network unavailable'));
 

@@ -166,10 +166,16 @@ export default function CartScreen() {
   } = useCartNegotiation({ items, grandTotal });
 
   // Reconcile cart prices against the live catalog when the cart opens.
-  const { priceChanges, conditionChanges, dismissPriceChanges } =
-    useCartReprice();
+  const {
+    priceChanges,
+    conditionChanges,
+    unavailableLines,
+    dismissPriceChanges,
+  } = useCartReprice();
   const isPriceChangeVisible =
-    priceChanges.length > 0 || conditionChanges.length > 0;
+    priceChanges.length > 0 ||
+    conditionChanges.length > 0 ||
+    unavailableLines.length > 0;
 
   useEffect(() => {
     if (isPriceChangeVisible) setPriceChangeDismissed(false);
@@ -282,6 +288,7 @@ export default function CartScreen() {
         visible={isPriceChangeVisible}
         changes={priceChanges}
         conditionChanges={conditionChanges}
+        unavailableLines={unavailableLines}
         onClose={dismissPriceChanges}
         onDismissed={() => setPriceChangeDismissed(true)}
         colors={colors}

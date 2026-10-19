@@ -78,6 +78,25 @@ describe('PriceChangeModal', () => {
     expect(screen.queryByText('Prices updated')).toBeNull();
   });
 
+  it('renders unavailable lines with a removal prompt', () => {
+    render(
+      <PriceChangeModal
+        visible
+        changes={[]}
+        unavailableLines={[{ id: 'cart-9', name: 'Vanished Phone' }]}
+        onClose={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    expect(screen.getByText('Items unavailable')).toBeTruthy();
+    expect(screen.getByText('Vanished Phone')).toBeTruthy();
+    expect(screen.getByText('Unavailable')).toBeTruthy();
+    expect(
+      screen.getByLabelText('Vanished Phone: no longer available')
+    ).toBeTruthy();
+  });
+
   it('renders the header but no line rows when there are no changes', () => {
     render(
       <PriceChangeModal

@@ -1,75 +1,25 @@
 'use client';
 
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
-import { Check, Info, Minus, Plus } from 'lucide-react';
-import dynamic from 'next/dynamic';
-import Image from 'next/image';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Breadcrumbs } from '@/components/storefront/breadcrumbs';
 import { DeferredStickyAddToCart } from '@/components/storefront/deferred-sticky-add-to-cart';
-import { ThemedBadge, ThemedButton } from '@/components/themed';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useRecentlyViewed } from '@/hooks/use-recently-viewed';
 import { trackEvent } from '@/lib/event-tracking';
-import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
-import { asRoute } from '@/lib/routes';
-import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
-import { ProductOfferSelector } from './product-offer-selector';
-import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
-import { isVariantAvailable } from './product-variant-availability';
+import { ProductDetailBelowFold } from './product-detail-below-fold';
+import { ProductDetailConditionPanel } from './product-detail-condition-panel';
+import { ProductDetailGallery } from './product-detail-gallery';
+import { ProductDetailHeader } from './product-detail-header';
+import { ProductDetailPurchasePanel } from './product-detail-purchase-panel';
+import { ProductDetailStockPanel } from './product-detail-stock-panel';
+import { ProductDetailVariantSelectors } from './product-detail-variant-selectors';
 import { useProductCartSubmission } from './use-product-cart-submission';
 import { useProductOfferSelection } from './use-product-offer-selection';
-
-// Lazy load heavy components to reduce initial bundle size
-const ReviewsSection = dynamic(
-  () =>
-    import('@/components/storefront/reviews-section').then(
-      (mod) => mod.ReviewsSection
-    ),
-  {
-    loading: () => <Skeleton className="h-[400px] w-full rounded-xl" />,
-  }
-);
-
-// Koray-aligned semantic product sections
-const BrandProducts = dynamic(
-  () =>
-    import('@/components/storefront/brand-products').then(
-      (mod) => mod.BrandProducts
-    ),
-  {
-    loading: () => <Skeleton className="h-[300px] w-full rounded-xl" />,
-  }
-);
-
-const PriceRangeProducts = dynamic(
-  () =>
-    import('@/components/storefront/price-range-products').then(
-      (mod) => mod.PriceRangeProducts
-    ),
-  {
-    loading: () => <Skeleton className="h-[300px] w-full rounded-xl" />,
-  }
-);
-
-const RecentlyViewedProducts = dynamic(
-  () =>
-    import('@/components/storefront/recently-viewed').then(
-      (mod) => mod.RecentlyViewedProducts
-    ),
-  {
-    loading: () => <Skeleton className="h-[300px] w-full rounded-xl" />,
-  }
-);
 
 export default function ProductDetailClient({
   product,
@@ -207,460 +157,72 @@ export default function ProductDetailClient({
 
           <div className="grid md:grid-cols-2 gap-8 lg:gap-12 max-w-4xl mx-auto">
             {/* Image Gallery */}
-            <div className="space-y-4">
-              <div className="bg-muted/50 rounded-lg overflow-hidden aspect-square relative border border-border/50">
-                <Image
-                  src={selectedImage || PLACEHOLDER_IMAGE}
-                  alt={product.name}
-                  data-ai-hint={product.imageHint}
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  priority
-                  className="object-cover"
-                />
-              </div>
-              {product.images && product.images.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSelectedImage(product.imageLarge || product.image)
-                    }
-                    className={cn(
-                      'relative w-20 h-20 rounded-md overflow-hidden border-2 shrink-0',
-                      selectedImage === (product.imageLarge || product.image)
-                        ? 'border-primary'
-                        : 'border-transparent'
-                    )}
-                  >
-                    <Image
-                      src={
-                        product.imageLarge || product.image || PLACEHOLDER_IMAGE
-                      }
-                      alt={`${product.name} - Main image`}
-                      fill
-                      sizes="80px"
-                      className="object-cover"
-                    />
-                  </button>
-                  {product.images
-                    .filter((img) => img.url)
-                    .map((img, idx) => (
-                      <button
-                        key={img.url || `img-${idx}`}
-                        type="button"
-                        onClick={() => setSelectedImage(img.url)}
-                        className={cn(
-                          'relative w-20 h-20 rounded-md overflow-hidden border-2 shrink-0',
-                          selectedImage === img.url
-                            ? 'border-primary'
-                            : 'border-transparent'
-                        )}
-                      >
-                        <Image
-                          src={img.url}
-                          alt={img.alt || `Product image ${idx + 1}`}
-                          fill
-                          sizes="80px"
-                          className="object-cover"
-                        />
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
+            <ProductDetailGallery
+              product={product}
+              selectedImage={selectedImage}
+              onSelectImage={setSelectedImage}
+            />
 
             <div className="flex flex-col justify-center gap-y-6 py-4">
-              <div>
-                <h1
-                  className="text-3xl lg:text-4xl font-bold font-headline"
-                  style={{ color: 'var(--store-primary)' }}
-                >
-                  {product.name}
-                </h1>
-
-                {/* SKU / MPN Display */}
-                {(product.sku || product.mpn) && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    SKU: {product.sku || product.mpn}
-                  </p>
-                )}
-
-                {product.fulfillmentFields &&
-                  product.fulfillmentFields.length > 0 && (
-                    <div className="text-sm text-gray-500 mt-2">
-                      <p className="font-medium">Requires:</p>
-                      <ul className="list-disc list-inside">
-                        {product.fulfillmentFields.map((field) => (
-                          <li key={field.name}>{field.name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                <div className="flex items-baseline gap-3 mt-2">
-                  <p
-                    className="text-3xl font-bold"
-                    style={{ color: 'var(--store-secondary)' }}
-                  >
-                    {formatCurrency(currentPrice)}
-                  </p>
-                  {currentCompareAtPrice &&
-                    currentCompareAtPrice > currentPrice && (
-                      <p className="text-lg text-muted-foreground line-through decoration-red-500/50">
-                        {formatCurrency(currentCompareAtPrice)}
-                      </p>
-                    )}
-                </div>
-              </div>
-
-              <div className="prose prose-sm text-muted-foreground text-lg leading-relaxed">
-                <p>{product.description}</p>
-              </div>
+              <ProductDetailHeader
+                product={product}
+                formatCurrency={formatCurrency}
+                currentPrice={currentPrice}
+                currentCompareAtPrice={currentCompareAtPrice}
+              />
 
               {/* Condition Selector */}
-              {usesVariantConditions && availableConditionOptions.length > 0 ? (
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium block">
-                    Condition:{' '}
-                    <span style={{ color: 'var(--store-primary)' }}>
-                      {conditionLabels[selectedCondition] || selectedCondition}
-                    </span>
-                  </Label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableConditionOptions.map((condition) => (
-                      <button
-                        key={condition}
-                        type="button"
-                        onClick={() => handleConditionChange(condition)}
-                        className={cn(
-                          'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-                          selectedCondition === condition
-                            ? 'border-store-primary text-store-primary bg-store-primary/5'
-                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                        )}
-                      >
-                        {conditionLabels[condition] || condition}
-                      </button>
-                    ))}
-                  </div>
-                  {conditionDescriptions[selectedCondition] && (
-                    <p className="text-xs text-muted-foreground">
-                      {conditionDescriptions[selectedCondition]}
-                    </p>
-                  )}
-                </div>
-              ) : product.has_condition_offers &&
-                product.offers &&
-                product.offers.length > 0 ? (
-                <ProductOfferSelector
-                  conditionDescriptions={conditionDescriptions}
-                  conditionLabels={conditionLabels}
-                  formatCurrency={formatCurrency}
-                  onConditionChange={handleConditionChange}
-                  product={product}
-                  selectedCondition={selectedCondition}
-                  selectedOffer={selectedOffer}
-                />
-              ) : product.condition && product.condition !== 'new' ? (
-                <p className="text-sm">
-                  <strong>Condition:</strong>{' '}
-                  <span className="capitalize">{product.condition}</span>
-                  {product.condition_detail && ` - ${product.condition_detail}`}
-                </p>
-              ) : null}
-
-              {/* Exact-offer links whose offer is gone must not silently
-                  sell the parent/default selection instead. */}
-              {routeOfferMissing && (
-                <p
-                  role="alert"
-                  className="flex items-start gap-2 rounded-md border border-store-accent bg-store-secondary px-3 py-2 text-sm text-store-secondary-text"
-                >
-                  <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  This offer is no longer available. It may have been removed or
-                  sold — choose a condition to continue.
-                </p>
-              )}
-              {routeVariantMissing && (
-                <p
-                  role="alert"
-                  className="flex items-start gap-2 rounded-md border border-store-accent bg-store-secondary px-3 py-2 text-sm text-store-secondary-text"
-                >
-                  <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  This option is no longer available. It may have been removed
-                  or sold — choose an option to continue.
-                </p>
-              )}
+              <ProductDetailConditionPanel
+                product={product}
+                usesVariantConditions={usesVariantConditions}
+                availableConditionOptions={availableConditionOptions}
+                conditionLabels={conditionLabels}
+                conditionDescriptions={conditionDescriptions}
+                selectedCondition={selectedCondition}
+                onConditionChange={handleConditionChange}
+                selectedOffer={selectedOffer}
+                formatCurrency={formatCurrency}
+                routeOfferMissing={routeOfferMissing}
+                routeVariantMissing={routeVariantMissing}
+              />
 
               {/* Variant Selection */}
-              {product.has_variants && attributeOptions.length > 0 && (
-                <div className="space-y-4">
-                  {attributeOptions.map(({ key, values }) => (
-                    <div key={key}>
-                      <Label className="text-sm font-medium mb-2 block capitalize">
-                        {key}:{' '}
-                        <span className="font-normal">
-                          {effectiveVariantAttributes[key]}
-                        </span>
-                      </Label>
-                      <div className="flex flex-wrap gap-2">
-                        {values.map((value) => {
-                          const isSelected =
-                            effectiveVariantAttributes[key] === value;
-                          const isAvailable = isVariantAvailable(
-                            product.variants || [],
-                            { ...effectiveVariantAttributes, [key]: value },
-                            isStockManaged,
-                            getEffectiveStock(product),
-                            {
-                              condition: usesVariantConditions
-                                ? selectedCondition
-                                : undefined,
-                              usesVariantConditions,
-                            }
-                          );
+              <ProductDetailVariantSelectors
+                product={product}
+                attributeOptions={attributeOptions}
+                effectiveVariantAttributes={effectiveVariantAttributes}
+                onAttributeChange={handleAttributeChange}
+                isStockManaged={isStockManaged}
+                selectedCondition={selectedCondition}
+                usesVariantConditions={usesVariantConditions}
+              />
 
-                          return (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => handleAttributeChange(key, value)}
-                              disabled={!isAvailable}
-                              className={cn(
-                                'px-4 py-2 rounded-md text-sm font-medium transition-all',
-                                isSelected
-                                  ? 'bg-store-primary text-store-primary-text ring-2 ring-store-primary ring-offset-2'
-                                  : isAvailable
-                                    ? 'bg-muted hover:bg-muted/80'
-                                    : 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed line-through'
-                              )}
-                            >
-                              {isSelected && (
-                                <Check className="size-3 inline mr-1" />
-                              )}
-                              {value}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ProductDetailStockPanel
+                product={product}
+                isOutOfStock={isOutOfStock}
+                isStockManaged={isStockManaged}
+                currentStock={currentStock}
+              />
 
-              <div>
-                {isOutOfStock ? (
-                  <ThemedBadge colorRole="primary" variant="destructive">
-                    Out of Stock
-                  </ThemedBadge>
-                ) : (
-                  <ThemedBadge colorRole="primary" variant="outline">
-                    {isStockManaged ? 'In Stock' : 'Unlimited stock'}
-                  </ThemedBadge>
-                )}
-                {isStockManaged ? (
-                  currentStock > 0 && Number.isFinite(currentStock) ? (
-                    <p
-                      className={cn(
-                        'text-sm mt-2',
-                        currentStock <= (product.low_stock_threshold || 5)
-                          ? 'text-amber-600 font-medium'
-                          : 'text-muted-foreground'
-                      )}
-                    >
-                      {currentStock} units available
-                      {currentStock <= (product.low_stock_threshold || 5) &&
-                        ' (Low Stock)'}
-                    </p>
-                  ) : null
-                ) : (
-                  <p className="text-sm mt-2 text-muted-foreground">
-                    Unlimited stock available
-                  </p>
-                )}
-              </div>
-
-              {product.minimum_order_quantity &&
-                product.minimum_order_quantity > 1 && (
-                  <Alert className="bg-blue-50 border-blue-200 text-blue-800">
-                    <Info className="size-4 text-blue-600" />
-                    <AlertDescription>
-                      Minimum order quantity:{' '}
-                      <strong>{product.minimum_order_quantity} units</strong>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-              <div className="flex flex-col gap-2">
-                {cartItem ? (
-                  <div className="flex flex-col gap-2">
-                    {effectiveVariant && (
-                      <p className="text-sm text-muted-foreground">
-                        Selected:{' '}
-                        {Object.values(cartItem.variantAttributes || {}).join(
-                          ', '
-                        )}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <ThemedButton
-                        colorRole="accent"
-                        size="icon"
-                        variant="outline"
-                        className="size-10"
-                        onClick={() =>
-                          updateQuantity(
-                            effectiveVariantId
-                              ? product.id
-                              : (cartItem.cartItemId ?? product.id),
-                            cartItem.quantity - 1,
-                            effectiveVariantId
-                          )
-                        }
-                        aria-label={`Decrease quantity of ${product.name}`}
-                      >
-                        <Minus className="size-4" aria-hidden="true" />
-                      </ThemedButton>
-                      <Input
-                        type="number"
-                        value={cartItem.quantity}
-                        onChange={(e) =>
-                          updateQuantity(
-                            effectiveVariantId
-                              ? product.id
-                              : (cartItem.cartItemId ?? product.id),
-                            Math.max(
-                              Number.parseInt(e.target.value, 10) ||
-                                product.minimum_order_quantity ||
-                                1,
-                              product.minimum_order_quantity || 1
-                            ),
-                            effectiveVariantId
-                          )
-                        }
-                        className="h-10 w-16 text-center text-base remove-arrow"
-                        min={product.minimum_order_quantity || 1}
-                        aria-label={`Quantity for ${product.name}`}
-                      />
-                      <ThemedButton
-                        colorRole="accent"
-                        size="icon"
-                        variant="default"
-                        className="size-10"
-                        onClick={() =>
-                          updateQuantity(
-                            effectiveVariantId
-                              ? product.id
-                              : (cartItem.cartItemId ?? product.id),
-                            cartItem.quantity + 1,
-                            effectiveVariantId
-                          )
-                        }
-                        aria-label={`Increase quantity of ${product.name}`}
-                      >
-                        <Plus className="size-4" aria-hidden="true" />
-                      </ThemedButton>
-                    </div>
-                    {/* Route through the cart, not checkout: the cart carries
-                        the optional-service (assurance) disclosure and
-                        toggle, so a direct checkout link would let a
-                        default-on fee reach payment without an opt-out. */}
-                    <Link href={asRoute(getHref('/cart'))}>
-                      <ThemedButton
-                        size="lg"
-                        colorRole="primary"
-                        className="w-full"
-                      >
-                        View Cart and Checkout
-                      </ThemedButton>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <div className="flex items-center gap-1">
-                      <ThemedButton
-                        colorRole="accent"
-                        size="icon"
-                        variant="outline"
-                        className="size-10"
-                        onClick={() => handleQuantityChange(quantity - 1)}
-                        aria-label={`Decrease quantity of ${product.name}`}
-                      >
-                        <Minus className="size-4" aria-hidden="true" />
-                      </ThemedButton>
-                      <Input
-                        type="number"
-                        value={quantity}
-                        onChange={(e) =>
-                          handleQuantityChange(
-                            Number.parseInt(e.target.value, 10) || 0
-                          )
-                        }
-                        className="h-10 w-16 text-center text-base remove-arrow"
-                        min={product.minimum_order_quantity || 1}
-                        aria-label={`Quantity for ${product.name}`}
-                      />
-                      <ThemedButton
-                        colorRole="accent"
-                        size="icon"
-                        variant="default"
-                        className="size-10"
-                        onClick={() => handleQuantityChange(quantity + 1)}
-                        aria-label={`Increase quantity of ${product.name}`}
-                      >
-                        <Plus className="size-4" aria-hidden="true" />
-                      </ThemedButton>
-                    </div>
-                    <ThemedButton
-                      size="lg"
-                      colorRole="primary"
-                      className="w-full"
-                      disabled={
-                        isOutOfStock ||
-                        routeOfferMissing ||
-                        routeVariantMissing ||
-                        (product.has_variants && !currentVariantSelection)
-                      }
-                      onClick={handleAddToCart}
-                    >
-                      Add to Cart
-                    </ThemedButton>
-                  </div>
-                )}
-              </div>
+              <ProductDetailPurchasePanel
+                product={product}
+                cartItem={cartItem}
+                hasEffectiveVariant={Boolean(effectiveVariant)}
+                effectiveVariantId={effectiveVariantId}
+                quantity={quantity}
+                onQuantityChange={handleQuantityChange}
+                updateQuantity={updateQuantity}
+                getHref={getHref}
+                isOutOfStock={isOutOfStock}
+                routeOfferMissing={routeOfferMissing}
+                routeVariantMissing={routeVariantMissing}
+                hasCurrentVariantSelection={Boolean(currentVariantSelection)}
+                onAddToCart={handleAddToCart}
+              />
             </div>
           </div>
 
-          {/* Customer Reviews */}
-          <ReviewsSection
-            productId={product.id}
-            productName={product.name}
-            className="mt-8 border-t pt-8 max-w-4xl mx-auto"
-          />
-
-          {/* Koray-aligned semantic sections: Same brand, same category */}
-          <BrandProducts
-            product={product}
-            maxProducts={4}
-            className="mt-8 border-t"
-          />
-
-          {/* Koray-aligned semantic sections: Same category, similar price */}
-          <PriceRangeProducts
-            product={product}
-            maxProducts={4}
-            className="border-t"
-          />
-
-          {/* Recently Viewed Products - User convenience only, no SEO value */}
-          <div data-nosnippet>
-            <RecentlyViewedProducts
-              excludeProductId={product.id}
-              maxProducts={6}
-              className="border-t"
-            />
-          </div>
+          <ProductDetailBelowFold product={product} />
         </main>
       </div>
 

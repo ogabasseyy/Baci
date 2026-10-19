@@ -60,17 +60,23 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
 
 /**
  * Total units in the store for this product across the base line and
- * every variant/offer line. Under strict serialized tracking all of
- * those lines claim the same hidden-anchor units, so the aggregate —
- * not just the per-identity total — must fit the pool. Pre-reserved
- * voucher lines are excluded: their units left the pool at award time.
+ * every offer line. Under strict serialized tracking all of those
+ * lines claim the same hidden-anchor units, so the aggregate — not
+ * just the per-identity total — must fit the pool. Variant lines are
+ * excluded (variant inventory is separate from the base pool, so
+ * counting them would reject valid base/offer adds merely because
+ * independently stocked variants share the cart); pre-reserved
+ * voucher lines are excluded too (their units left the pool at award
+ * time). Mirrors reconcileStrictBasePools, which skips the same lines.
  */
 export function getExistingProductQuantityForStock(productId: string): number {
   return useCartStore
     .getState()
     .items.reduce(
       (total, cartItem) =>
-        !isReservedVoucherLine(cartItem) && cartItem.product_id === productId
+        !isReservedVoucherLine(cartItem) &&
+        cartItem.product_id === productId &&
+        cartItem.variant_id == null
           ? total + cartItem.quantity
           : total,
       0

@@ -1081,6 +1081,37 @@ describe('cart-stock helpers', () => {
     expect(getExistingProductQuantityForStock('product-1')).toBe(1);
   });
 
+  it('excludes variant lines from the strict shared-pool total', () => {
+    // Variant inventory is separate from the base pool: a stocked
+    // variant in the cart must not consume base-pool headroom and
+    // reject an otherwise valid base/offer add.
+    useCartStore.setState({
+      items: [
+        {
+          id: 'variant-line',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 5,
+          variant_id: 'variant-128',
+        },
+        {
+          id: 'base-line',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 2,
+        },
+      ],
+      isLoading: false,
+      lineSequence: 2,
+    });
+
+    expect(getExistingProductQuantityForStock('product-1')).toBe(2);
+  });
+
   it('excludes pre-reserved voucher lines from the per-identity total', () => {
     useCartStore.setState({
       items: [

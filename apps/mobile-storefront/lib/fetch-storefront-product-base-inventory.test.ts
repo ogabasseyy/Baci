@@ -79,4 +79,39 @@ describe('fetch-storefront-product-base-inventory', () => {
       getStorefrontProductBaseInventoryByProductIds(['product-1'])
     ).resolves.toBeNull();
   });
+
+  it('chunks requests at the 500-id RPC cap and merges rows', async () => {
+    const ids = Array.from({ length: 501 }, (_, i) => `product-${i}`);
+    mockRpc.mockImplementation(async (_name: unknown, args: unknown) => {
+      const chunk = (args as { p_product_ids: string[] }).p_product_ids;
+      expect(chunk.length).toBeLessThanOrEqual(500);
+      return {
+        data: chunk.map((id: string) => ({
+          product_id: id,
+          effective_policy: 'managed',
+          available_units: null,
+        })),
+        error: null,
+      };
+    });
+
+    const result = await getStorefrontProductBaseInventoryByProductIds(ids);
+
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(Object.keys(result ?? {})).toHaveLength(501);
+    expect(result?.['product-500']?.product_id).toBe('product-500');
+  });
+
+  it('returns null when any chunk fails', async () => {
+    const ids = Array.from({ length: 501 }, (_, i) => `product-${i}`);
+    mockRpc
+      .mockReturnValueOnce(Promise.resolve({ data: [], error: null }))
+      .mockReturnValueOnce(
+        Promise.resolve({ data: null, error: { message: 'boom' } })
+      );
+
+    await expect(
+      getStorefrontProductBaseInventoryByProductIds(ids)
+    ).resolves.toBeNull();
+  });
 });

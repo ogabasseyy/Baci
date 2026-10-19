@@ -101,7 +101,7 @@ green CI and change no activation state.
 1. **Wallet-funding contract (rows 9, 13) — first, ahead of
    formatting:** the mobile `z.iso.datetime()` offset divergence is
    a present-tense payment-path bug, not future drift, so this wave
-   leads. Share the intent/poll subshape **and** a canonical account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same endpoint payload, so the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
+   leads. Share the intent/poll subshape **and** a canonical *order-funding-scoped* account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same order-funding endpoint payload, so for that endpoint the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. Scope limit: the mobile `WalletFundingAccountSchema` is also reused by the piggyvest primary-wallet snapshot (`piggyvest-primary-wallet.ts` extends it with `provider: z.literal('piggyvest')`, and its 200-char caps mirror the server snapshot schema in `apps/web/src/schemas/piggyvest-primary-wallet-snapshot.ts`) — that is a different payload with its own legitimate contract, so the piggyvest snapshot schema stays distinct (or a separate extension) and is not aligned to the order-funding builder. The wave adds a characterization fixture for each of the two account payloads before any unification. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
    protocol — the failure classifier is
    `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
    (every non-consent error invokes `onFallback`), and
@@ -142,22 +142,24 @@ green CI and change no activation state.
    | Class | Examples | Behavior |
    |---|---|---|
    | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent; on grant, create the funding account (`createWalletFundingAccount`), then retry intent create once (the current client's actual sequence in `wallet-funded-bank-transfer.ts`) |
-   | Confirmed no-intent (safe to fall back) | **Server-verifiable no-intent for the order** — not a client-side attempt count. Today this proof is *not obtainable*: settings/eligibility/account resolution in `createOrderWalletFundingIntent` all run (and can return fallback codes) *before* `findActiveOrderIntent`, and no order-scoped lookup endpoint exists, so no received code — on a first attempt or a retry — proves no intent exists (a prior session may have created one). The wallet wave therefore includes a server change: check for an existing intent before account resolution (returning it if present), or add an explicit no-intent signal / order-scoped lookup. Only with that proof does a received business rejection (4xx, `WALLET_DVA_SETUP_FAILED`) qualify. | Legacy DVA fallback allowed only with server-verifiable no-intent |
+   | Confirmed no-intent (safe to fall back) | **Server-verifiable no-intent for the order** — not a client-side attempt count. Today this proof is *not obtainable*: settings/eligibility/account resolution in `createOrderWalletFundingIntent` all run (and can return fallback codes) *before* `findActiveOrderIntent`, and no order-scoped lookup endpoint exists, so no received code — on a first attempt or a retry — proves no intent exists (a prior session may have created one). The wallet wave therefore includes a server change as an explicit deliverable: move the existing-intent lookup ahead of *every* fallback-producing branch — payment-settings (`getPaymentSettings`), order-eligibility (`validateOrderEligibility`), and account resolution — returning the intent if present, or add an explicit no-intent signal / order-scoped lookup. (A lookup placed only before account resolution is insufficient: on a recovery retry, settings or eligibility can still return a fallback code while the original intent is active.) Only with that proof does a received rejection carrying a named server code qualify — eligibility keys on the code plus the no-intent proof, never on HTTP status class, since `WALLET_DVA_SETUP_FAILED` is emitted as HTTP 502 (see `getFallbackStatus` in the response builder). | Legacy DVA fallback allowed only with server-verifiable no-intent |
    | Unknown-after-POST | Transport failure, timeout, or any failure with **no received response** after the mutating POST (a received 5xx is classified by its server code first, per the row above) | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
    | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
    | Unenumerated received code (default) | Any server code not enumerated above | **Fail closed:** treat as unknown-after-POST; never fall back on an unclassified code |
 
-   No server change is
-   needed for the concurrent
-   case: the insert path's RPC
+   For concurrent-insert safety only, no server change is needed:
+   the insert path's RPC
    (`create_order_wallet_funding_intent_for_customer`,
    `supabase/migrations/20260526233646_order_wallet_funding_intents.sql`)
    locks the order row `FOR UPDATE` before re-checking for an
    existing active intent, so a second concurrent create waits and
-   returns the first intent. Server behavior therefore needs no
-   change; the wave's scope is the prerequisite Zod peer-range
-   decision above, the shared subshape, and the client behavior
-   (re-create instead of the legacy DVA fallback).
+   returns the first intent. That concurrency proof does **not**
+   supply the no-intent proof above, so the pre-branch
+   existing-intent lookup (or explicit no-intent signal) remains an
+   explicit server deliverable of this wave. The wave's full scope
+   is therefore: that server change, the prerequisite Zod
+   peer-range decision above, the shared subshape, and the client
+   behavior (re-create instead of the legacy DVA fallback).
 2. **Formatting wave: currency/price formatting.** One shared `Intl`
    formatting module, characterization fixtures pinning each app's
    current outputs, semantic unification decision recorded in the

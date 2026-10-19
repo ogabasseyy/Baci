@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 19 October 2026 against source revision
-`62368e45ee0862d45f6f0aad555a715234044176`. This is a navigation map, not
+`9c30e0c666c498ad02739c31742757a234979cc7`. This is a navigation map, not
 authorization or proof of current deployment. Check the current implementation,
 live tool discovery and merchant entitlement before calling or claiming a tool.
 

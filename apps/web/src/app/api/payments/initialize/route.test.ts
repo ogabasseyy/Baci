@@ -27,6 +27,8 @@ vi.mock('@/lib/api-auth', () => ({
 
 vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
   getRedvaultPaymentAvailability: routeMocks.getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason: (reason: string) =>
+    reason === 'private_live_pilot' || reason === 'public_product_test',
 }));
 
 vi.mock('@/lib/checkout/redvault-live-pilot', () => ({

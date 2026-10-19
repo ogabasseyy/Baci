@@ -126,6 +126,10 @@ export function RootLayoutNav({
                        */}
                       <Stack
                         screenOptions={{
+                          // Suspend older covered routes without discarding
+                          // state. Native-stack keeps transition-adjacent
+                          // Fabric screens live until it is safe to freeze.
+                          freezeOnBlur: true,
                           headerStyle: {
                             backgroundColor: colors.background,
                           },

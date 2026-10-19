@@ -80,7 +80,8 @@ export function useCheckoutRedvaultAvailability({
   // the method only when the resolved reason is the pilot and a fee applies.
   // Toggling a fee re-renders into (or out of) this override immediately.
   const pilotFeeBlocked =
-    availability.reason === 'private_live_pilot' &&
+    (availability.reason === 'private_live_pilot' ||
+      availability.reason === 'public_product_test') &&
     (pilotFeeBlockers?.hasAssurance === true ||
       (pilotFeeBlockers?.shippingFee ?? 0) > 0 ||
       (pilotFeeBlockers?.giftWrappingCost ?? 0) > 0);

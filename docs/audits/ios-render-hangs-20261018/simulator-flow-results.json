@@ -1,0 +1,69 @@
+{
+  "simulator": "iPhone 18 Pro / iOS 27.0",
+  "build": "Debug, source-built RN 0.86.2, temporary separate app ID",
+  "comparison": "same patched native binary, freezeOnBlur true versus false; not a native renderer before/after trace",
+  "reactNativePatchSha256": "2195f51d6e511aa8cfdf381a78af5c68be776590ff88dbff5aa5da86a914ee71",
+  "runs": {
+    "freeze_enabled": {
+      "covered-end": {
+        "phase": "covered-end",
+        "freeze": true,
+        "homeRenders": 98,
+        "homeInstances": 1,
+        "keyboardShows": 0,
+        "nativeFocus": 1,
+        "webFocus": 0,
+        "webLoads": 1,
+        "webDomReady": 1,
+        "coveredRenderDelta": 0,
+        "frameCount": 121,
+        "maxFrameGapMs": 16.66666666790843
+      },
+      "returned-home": {
+        "phase": "returned-home",
+        "freeze": true,
+        "homeRenders": 124,
+        "homeInstances": 1,
+        "keyboardShows": 0,
+        "nativeFocus": 1,
+        "webFocus": 0,
+        "webLoads": 1,
+        "webDomReady": 1,
+        "resumedRenderDelta": 26
+      }
+    },
+    "freeze_disabled": {
+      "covered-end": {
+        "phase": "covered-end",
+        "freeze": false,
+        "homeRenders": 204,
+        "homeInstances": 1,
+        "keyboardShows": 0,
+        "nativeFocus": 1,
+        "webFocus": 0,
+        "webLoads": 1,
+        "webDomReady": 1,
+        "coveredRenderDelta": 19,
+        "frameCount": 130,
+        "maxFrameGapMs": 16.66666666790843
+      },
+      "returned-home": {
+        "phase": "returned-home",
+        "freeze": false,
+        "homeRenders": 225,
+        "homeInstances": 1,
+        "keyboardShows": 0,
+        "nativeFocus": 1,
+        "webFocus": 0,
+        "webLoads": 1,
+        "webDomReady": 1,
+        "resumedRenderDelta": 40
+      }
+    }
+  },
+  "limitations": [
+    "Local HTTP page, no provider/account/payment requests",
+    "Native input focused; software keyboard and web input focus were not observed",
+    "Frame gaps are diagnostic simulator results, not production latency evidence"
+  ]
+}

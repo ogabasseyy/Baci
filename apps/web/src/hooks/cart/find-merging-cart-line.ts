@@ -1,4 +1,4 @@
-import { resolveDefaultVariantSelection } from '@baci/shared/lib';
+import { resolveDefaultVariantSelection } from '@baci/shared/lib/product-default-variant';
 import type { Product } from '@/lib/products';
 import { generateCartItemId } from './cart-storage';
 import type { AddToCartOptions, CartItem } from './cart-types';

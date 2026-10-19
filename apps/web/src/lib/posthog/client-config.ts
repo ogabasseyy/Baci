@@ -565,9 +565,14 @@ const LIGHTWEIGHT_PUBLIC_BLOG_CONFIG_OVERRIDES: Partial<PostHogConfig> = {
   capture_heatmaps: false,
   capture_performance: false,
   disable_session_recording: true,
+  disable_surveys: true,
   rageclick: false,
 };
 
+/**
+ * Builds the PostHog browser client configuration with storefront privacy,
+ * sampling, and external script restrictions applied.
+ */
 export function buildPostHogClientConfig(
   env: PostHogEnv = process.env,
   projectToken: string | undefined = getPublicPostHogProjectToken(),
@@ -607,6 +612,7 @@ export function buildPostHogClientConfig(
     // transitions.
     capture_performance: false,
     disable_session_recording: false,
+    disable_surveys: true,
     session_recording: {
       maskAllInputs: true,
       maskTextFn: () => REDACTED_VALUE,

@@ -20,7 +20,10 @@ import {
   rejectInvalidRedvaultLivePilotSnapshot,
   rejectUnauthorizedRedvaultLivePilot,
 } from '@/lib/checkout/redvault-live-pilot-initialize-gate';
-import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import {
+  getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason,
+} from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
   capturePaymentWithCrypto,
@@ -1070,8 +1073,9 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      redvaultLivePilotInitialize =
-        availability.reason === 'private_live_pilot';
+      redvaultLivePilotInitialize = isRedvaultLivePilotReason(
+        availability.reason
+      );
       const pilotAuthRejection = rejectUnauthorizedRedvaultLivePilot({
         reason: availability.reason,
         userId: redvaultCustomerAuth?.user?.id,

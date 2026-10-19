@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { RedvaultOrderQuote } from './compute-redvault-order-quote';
 import { validateRedvaultLivePilotOrder } from './redvault-live-pilot';
-import { getRedvaultPaymentAvailability } from './redvault-payment-availability';
+import {
+  getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason,
+} from './redvault-payment-availability';
 
 // Pilot gate for order creation, extracted from the orders route so the
 // high-risk handler stays a thin wiring layer: policy detection, fee
@@ -21,10 +24,11 @@ export function rejectDisallowedRedvaultLivePilotOrder(input: {
   savingsAmount: unknown;
   taxAmount: number;
 }): NextResponse | null {
+  const reason = getRedvaultPaymentAvailability().reason;
   if (
     !input.redvaultRequested ||
     !input.redvaultQuote ||
-    getRedvaultPaymentAvailability().reason !== 'private_live_pilot'
+    !isRedvaultLivePilotReason(reason)
   ) {
     return null;
   }

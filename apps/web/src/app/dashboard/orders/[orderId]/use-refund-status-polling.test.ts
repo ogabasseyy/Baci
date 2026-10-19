@@ -142,7 +142,7 @@ describe('useRefundStatusPolling', () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
-  it('watches settled orders slowly, then stops and relies on tab return', async () => {
+  it('watches settled orders slowly, then stops (tab returns share the cap)', async () => {
     render(
       React.createElement(Harness, {
         settledWatch: true,
@@ -175,12 +175,13 @@ describe('useRefundStatusPolling', () => {
     });
     await act(async () => {});
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
-    // Returning to the tab still refreshes after the watch ends.
+    // Tab returns share the cap: past the watch's billed loads a
+    // refocus refreshes nothing.
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await act(async () => {});
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(14);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
   });
   it('pauses while the tab is hidden and refreshes on return', async () => {
     render(React.createElement(Harness, { terminal: false }));

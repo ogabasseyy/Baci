@@ -14,8 +14,9 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
 // contradiction watch instead of the 30s poll: a later provider
 // verdict can re-open the balance, but the server-side
 // completed-refund sweep owns long-term detection, so one order
-// view watches for an hour, then stops and relies on the sweep
-// plus refresh-on-tab-return.
+// view watches for an hour, then stops. Interval polls and tab
+// returns share the twelve-load cap, so refocusing the tab cannot
+// bill the RPC past the bound either.
 const SETTLED_WATCH_INTERVAL_MS = 300_000;
 const SETTLED_WATCH_MAX_POLLS = 12;
 export function useRefundStatusPolling({
@@ -116,6 +117,15 @@ export function useRefundStatusPolling({
     );
     const onVisibility = () => {
       if (!document.hidden) {
+        // Tab returns bill the same RPC as interval polls, so the
+        // settled watch counts them against its cap: past twelve
+        // billed loads a refocus refreshes nothing.
+        if (settledWatch) {
+          if (settledPolls >= SETTLED_WATCH_MAX_POLLS) {
+            return;
+          }
+          settledPolls += 1;
+        }
         void load();
       }
     };

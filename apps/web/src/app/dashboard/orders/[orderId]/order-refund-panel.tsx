@@ -84,9 +84,8 @@ export function OrderRefundPanel({
   // go stale without the poll. A refunded Paystack-backed order is
   // settled but still watched: a later contradictory provider
   // verdict can re-open the balance, so those pages keep a slow
-  // bounded watch past refunded instead of the 30s poll. The flag
-  // (not the outstanding-leg list, which empties exactly at full
-  // refund) carries the provider-backed signal.
+  // bounded watch past refunded instead of the 30s poll; the flag
+  // carries the provider-backed signal.
   const terminal =
     summary?.status === 'refunded' && !summary?.hasPaystackPayment;
   const settledWatch =

@@ -20,6 +20,7 @@ describe('maskRefundWorkerText', () => {
       events: [],
       eventsTruncated: false,
       historyTruncated: false,
+      hasPaystackPayment: true,
       legs: [],
     });
   });
@@ -123,6 +124,20 @@ describe('maskRefundWorkerText', () => {
       }).hasPaystackPayment
     ).toBe(true);
   });
+  it('keeps the watch armed when the polling flag is missing', () => {
+    // A partial payload without the flag must not read as 'no
+    // Paystack payment' (that would end the contradiction watch);
+    // only an explicit false disarms it.
+    expect(
+      maskRefundWorkerText({ status: 'refunded' }).hasPaystackPayment
+    ).toBe(true);
+    expect(
+      maskRefundWorkerText({
+        status: 'refunded',
+        hasPaystackPayment: false,
+      }).hasPaystackPayment
+    ).toBe(false);
+  });
   it('passes truncation flags through as booleans', () => {
     expect(
       maskRefundWorkerText({ eventsTruncated: true, historyTruncated: true })
@@ -146,6 +161,7 @@ describe('maskRefundWorkerText', () => {
       eventsTruncated: false,
       history: [null, ['nested'], { id: 'refund-2' }],
       historyTruncated: false,
+      hasPaystackPayment: true,
       legs: [],
     });
   });

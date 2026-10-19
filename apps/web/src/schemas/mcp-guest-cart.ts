@@ -23,6 +23,23 @@ export const mcpGuestCartInputSchema = z
       .describe(
         'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
       ),
+    expectedVersion: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        'Expected canonical cart version for shared-cart writes; omit for legacy guest carts'
+      ),
+    operationId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe(
+        'Idempotency key for shared-cart writes; omit for legacy guest carts'
+      ),
   })
   .refine((value) => value.quantity !== 0 || value.cart_token !== undefined, {
     message: 'cart_token is required to remove a product',
@@ -41,6 +58,12 @@ export const mcpGuestCartOutputSchema = z
     items: z.array(guestCartLineSchema).max(20).optional(),
     expires_at: z.string().datetime().optional(),
     cart_url: z.string().url().optional(),
+    retryable: z.boolean().optional(),
+    code: z.string().optional(),
+    cart_migrated: z.boolean().optional(),
+    migrated_cart_id: z.string().uuid().nullable().optional(),
+    canonical_cart_id: z.string().uuid().optional(),
+    version: z.number().int().positive().optional(),
     requires_variant_selection: z.literal(true).optional(),
     product_unavailable: z.literal(true).optional(),
     cart_expired: z.literal(true).optional(),

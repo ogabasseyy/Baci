@@ -12,7 +12,6 @@ import {
   resolveExistingPaymentState,
 } from '@/lib/agentic/checkout-completion-response';
 import { resolveCheckoutCompletionSessionState } from '@/lib/agentic/checkout-completion-session-state';
-import { finalizeAgenticPayOnDeliveryCheckout } from '@/lib/agentic/checkout-pay-on-delivery-finalize';
 import { prepareAgenticCheckoutPayment } from '@/lib/agentic/checkout-payment-setup';
 import { getAgenticCheckoutSession } from '@/lib/agentic/checkout-session-record';
 import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
@@ -33,6 +32,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutCompleteSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
 import type { CheckoutSessionCompleteRouteOptions } from './checkout-session-complete-handler-types';
+import {
+  agenticCompleteFailureResponse,
+  completeAgenticPayOnDelivery,
+  resolveAgenticSharedCartPrincipalId,
+} from './checkout-session-complete-helpers';
 
 export async function handleAgenticCheckoutSessionComplete(
   request: NextRequest,
@@ -101,8 +105,10 @@ export async function handleAgenticCheckoutSessionComplete(
     const supabase = createAgenticScopedSupabaseClient({
       merchantId: merchant.id,
       merchantSlug: merchant.slug,
+      sessionId,
     });
     const idempotency = await reserveAgenticIdempotencyKey({
+      agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
       body: mutation.rawBody,
       key: mutation.idempotencyKey,
@@ -131,6 +137,7 @@ export async function handleAgenticCheckoutSessionComplete(
     }
     respondWithIdempotency = async (response: unknown, status: number) =>
       buildStoredAgenticIdempotencyResponse({
+        agentId: mutation.agentId,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         requestId: mutation.requestId,
@@ -222,21 +229,18 @@ export async function handleAgenticCheckoutSessionComplete(
     }
 
     if (payment_data.provider === 'pay_on_delivery') {
-      if (merchant.pay_on_delivery_enabled !== true) {
-        return await respond(
-          { error: 'Pay on delivery is not enabled for this merchant' },
-          403
-        );
-      }
-
-      return await finalizeAgenticPayOnDeliveryCheckout({
+      return await completeAgenticPayOnDelivery({
+        agentId: mutation.agentId,
+        bootstrap,
         buyer,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         metadata: completionState.metadata,
         orderSession: session,
         orderSessionCalc: completionState.sessionCalc,
+        payOnDeliveryEnabled: merchant.pay_on_delivery_enabled === true,
         requestId: mutation.requestId,
+        respond,
         route: CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE,
         sessionId,
         supabase,
@@ -261,7 +265,15 @@ export async function handleAgenticCheckoutSessionComplete(
       return await respond(preparedPayment.body, preparedPayment.status);
     }
 
+    const sharedCartPrincipalId = await resolveAgenticSharedCartPrincipalId({
+      client: supabase,
+      agenticSessionId: sessionId,
+      merchantId: merchant.id,
+      metadata: preparedPayment.payment.metadata,
+    });
+
     return await finalizeAgenticCheckoutPayment({
+      agentId: mutation.agentId,
       buyer,
       dvaAccount: preparedPayment.payment.dvaAccount,
       idempotencyKey: mutation.idempotencyKey,
@@ -272,22 +284,14 @@ export async function handleAgenticCheckoutSessionComplete(
       requestId: mutation.requestId,
       route: CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE,
       sessionId,
+      sharedCartPrincipalId,
       supabase,
     });
   } catch (error: unknown) {
-    const body = { error: 'Internal Server Error' };
-    logger.error({
-      message: 'Agentic checkout complete failed',
-      error: sanitizeForLog(error),
+    return await agenticCompleteFailureResponse({
+      error,
+      respondWithIdempotency,
       sessionId,
     });
-    if (respondWithIdempotency) {
-      try {
-        return await respondWithIdempotency(body, 500);
-      } catch {
-        return NextResponse.json(body, { status: 500 });
-      }
-    }
-    return NextResponse.json(body, { status: 500 });
   }
 }

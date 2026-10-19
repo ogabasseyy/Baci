@@ -9,6 +9,7 @@ import {
   type SavingsSelection,
   type WalletSelection,
 } from '@/lib/wallet-payment-helpers';
+import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import type { CreateOrderRequest } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
@@ -30,6 +31,7 @@ export type CheckoutSubmitOrderRequestInput = {
   selectedQuote: ShippingQuote | undefined;
   shippingProvider: string | undefined;
   snapshot: CheckoutSnapshot;
+  sharedCartBinding?: CartCheckoutBinding;
 };
 
 export function buildCheckoutSubmitOrderRequest({
@@ -46,6 +48,7 @@ export function buildCheckoutSubmitOrderRequest({
   selectedQuote,
   shippingProvider,
   snapshot,
+  sharedCartBinding,
 }: CheckoutSubmitOrderRequestInput): {
   creditFields: Record<string, unknown>;
   orderRequest: CreateOrderRequest;
@@ -73,6 +76,7 @@ export function buildCheckoutSubmitOrderRequest({
         selectedQuote,
         shippingProvider,
         snapshot,
+        sharedCartBinding,
       }),
       ...creditFields,
     },

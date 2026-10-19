@@ -7,6 +7,7 @@ import {
   useCustomerAuth,
   useOptionalCustomerAuth,
 } from '@/contexts/customer-auth-context';
+import { resetRememberedCustomerSessionsForTests } from '@/contexts/customer-auth-session';
 import {
   getLiveCustomerIdentity,
   publishCustomerIdentity,
@@ -38,6 +39,7 @@ function OptionalAuthProbe() {
 
 describe('CustomerAuthProvider', () => {
   afterEach(() => {
+    resetRememberedCustomerSessionsForTests();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

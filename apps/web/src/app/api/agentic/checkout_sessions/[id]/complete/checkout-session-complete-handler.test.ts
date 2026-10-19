@@ -238,7 +238,8 @@ describe('checkout session complete handler in paused DVA mode', () => {
     expect(createDedicatedVirtualAccount).not.toHaveBeenCalled();
     expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
       expect.objectContaining({ payment_method: 'pay_on_delivery' }),
-      expect.any(Object)
+      expect.any(Object),
+      { boundPrincipalId: null }
     );
   });
 });

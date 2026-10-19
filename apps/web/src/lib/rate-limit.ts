@@ -5,20 +5,27 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { checkLegacyBridgeRateLimit } from './legacy-bridge-rate-limit';
+import {
+  getClientIdentifier,
+  getTrustedClientIdentifier,
+} from './rate-limit-client';
 import { rateLimitDiagnostics } from './rate-limit-diagnostics';
 import { getRateLimitConfig } from './rate-limit-routes';
 import { getRedis } from './redis';
+
+export { getClientIdentifier, getTrustedClientIdentifier };
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -32,50 +39,6 @@ const IMEI_POLL_RATE_LIMIT: RateLimitConfig = {
   maxRequests: 120,
   windowMs: 60_000,
 };
-
-// ---------------------------------------------------------------------------
-// IP validation (Edge-compatible, no Node.js 'net' module)
-// ---------------------------------------------------------------------------
-
-const IPV4_REGEX =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-
-const IPV6_REGEX =
-  /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^::$/;
-
-function isValidIP(ip: string): boolean {
-  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
-}
-
-// ---------------------------------------------------------------------------
-// Client identifier (IP)
-// ---------------------------------------------------------------------------
-
-export function getClientIdentifier(request: NextRequest): string {
-  // Prefer Next.js/Vercel trusted IP
-  const requestWithIp = request as NextRequest & { ip?: string };
-  const requestIp = requestWithIp.ip;
-  if (requestIp && isValidIP(requestIp)) {
-    return requestIp;
-  }
-
-  const realIp = request.headers.get('x-real-ip');
-  const forwarded = request.headers.get('x-forwarded-for');
-
-  if (realIp && isValidIP(realIp)) return realIp;
-
-  if (forwarded) {
-    const ips = forwarded.split(',').map((ip) => ip.trim());
-    for (let i = ips.length - 1; i >= 0; i--) {
-      const candidate = ips[i];
-      if (candidate && isValidIP(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  return 'unknown';
-}
 
 // ---------------------------------------------------------------------------
 // Upstash Ratelimit instances (one per unique config, created lazily)
@@ -155,12 +118,24 @@ function checkMemoryRateLimit(
 // Main entry point (async — uses Redis when available, memory fallback)
 // ---------------------------------------------------------------------------
 
+const LEGACY_BRIDGE_PATH = '/api/storefront/cart/legacy';
+
 export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
-  const identifier = getClientIdentifier(request);
   const pathname = request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
+  const clientIdentifier = getClientIdentifier(request);
 
-  return applyRateLimit(identifier, pattern, config);
+  if (pathname === LEGACY_BRIDGE_PATH) {
+    return checkLegacyBridgeRateLimit(
+      request,
+      pattern,
+      config,
+      getTrustedClientIdentifier(request),
+      applyRateLimit
+    );
+  }
+
+  return applyRateLimit(clientIdentifier, pattern, config);
 }
 
 async function applyRateLimit(

@@ -108,6 +108,22 @@ describe('ucp shopping profile builders', () => {
     expect(capabilities).not.toHaveProperty('dev.ucp.shopping.catalog.search');
   });
 
+  it('advertises cart transfer independently of native checkout readiness', () => {
+    const transferOnly: AgentCommerceManifest = {
+      ...baseManifest,
+      auth: checkoutAuth,
+      capabilities: ['catalog.read'],
+      links: { ...baseManifest.links },
+    };
+    const capabilities = buildUcpCapabilities({
+      agentCommerceManifestUrl: 'https://ogabassey.com/agent-commerce.json',
+      agenticApiBaseUrl: 'https://ogabassey.com/api/agentic',
+      manifest: transferOnly,
+    });
+    expect(capabilities).toHaveProperty('dev.ucp.shopping.cart');
+    expect(capabilities).not.toHaveProperty('dev.ucp.shopping.checkout');
+  });
+
   it('builds cart and catalog operations without slash drift', () => {
     const capabilities = buildUcpCapabilities({
       agentCommerceManifestUrl: 'https://ogabassey.com/agent-commerce.json',

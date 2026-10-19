@@ -1,3 +1,7 @@
+import {
+  GuestCartBridgePendingError,
+  GuestCartPersistedError,
+} from './guest-cart-errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { McpServer } from "@modelcontextprotocol/server";
 import {
@@ -120,59 +124,72 @@ export function registerGuestCartTool(
         // options like its lowercase twin instead of missing every
         // variant and reporting the product unavailable.
         const productId = args.product_id.toLowerCase();
-        const cart = await options.store.update(
-          args.cart_token,
-          { ...args, product_id: productId },
-          async () => {
-            // Only the changed line is validated: a stale survivor must not
-            // freeze unrelated adds. Stale lines stay visible in the chat
-            // cart and the website re-checks stock at transfer, so handoff
-            // can only carry lines the catalog still honors.
-            if (args.quantity === 0) return;
-            // Resolve the merchant inside the positive-quantity path: a
-            // removal needs only the cart token and the local file, so it
-            // must stay available when the catalog is unreachable.
-            const merchantId = await options.getMerchantId();
-            if (!merchantId) throw new Error('Store unavailable');
-            const result = await prepareCartHandoff({
-              supabase: options.supabase,
-              merchantId,
-              productId,
-              quantity: args.quantity,
-              formatPrice: options.formatPrice,
-            });
-            const handoff = result.structuredContent;
-            if (handoff?.success !== true) {
-              if (
-                handoff?.requires_variant_selection === true &&
-                typeof handoff?.product_url === 'string'
-              ) {
-                throw new VariantSelectionRequired(
-                  productId,
-                  handoff.product_url
+        const cart = await options.store
+          .update(
+            args.cart_token,
+            { ...args, product_id: productId },
+            async () => {
+              // Only the changed line is validated: a stale survivor must not
+              // freeze unrelated adds. Stale lines stay visible in the chat
+              // cart and the website re-checks stock at transfer, so handoff
+              // can only carry lines the catalog still honors.
+              if (args.quantity === 0) return;
+              // Resolve the merchant inside the positive-quantity path: a
+              // removal needs only the cart token and the local file, so it
+              // must stay available when the catalog is unreachable.
+              const merchantId = await options.getMerchantId();
+              if (!merchantId) throw new Error('Store unavailable');
+              const result = await prepareCartHandoff({
+                supabase: options.supabase,
+                merchantId,
+                productId,
+                quantity: args.quantity,
+                formatPrice: options.formatPrice,
+              });
+              const handoff = result.structuredContent;
+              if (handoff?.success !== true) {
+                if (
+                  handoff?.requires_variant_selection === true &&
+                  typeof handoff?.product_url === 'string'
+                ) {
+                  throw new VariantSelectionRequired(
+                    productId,
+                    handoff.product_url
+                  );
+                }
+                if (handoff?.product_unavailable === true) {
+                  throw new ProductUnavailable(productId);
+                }
+                throw new Error(
+                  'A product is unavailable or requires option selection'
                 );
               }
-              if (handoff?.product_unavailable === true) {
-                throw new ProductUnavailable(productId);
-              }
-              throw new Error(
-                'A product is unavailable or requires option selection'
-              );
             }
-          }
-        ).catch((error: unknown) => {
-          // No cart was persisted, so return the pre-write reservation
-          // instead of burning budget on a failed validation or store
-          // error. A persisted cart keeps its reservation: the quota was
-          // already consumed atomically by the reserve call above.
-          if (!args.cart_token)
-            refundGuestCartCreation(options.clientIp ?? 'unknown', quota?.windowStart);
-          throw error;
-        });
-        const url = new URL('https://ogabassey.com/cart');
+          )
+          .catch((error: unknown) => {
+            // No cart was persisted, so return the pre-write reservation
+            // instead of burning budget on a failed validation or store
+            // error. A persisted cart keeps its reservation: the quota was
+            // already consumed atomically by the reserve call above.
+            if (
+              !args.cart_token &&
+              !(error instanceof GuestCartBridgePendingError) &&
+              !(error instanceof GuestCartPersistedError)
+            )
+              refundGuestCartCreation(
+                options.clientIp ?? 'unknown',
+                quota?.windowStart
+              );
+            throw error;
+          });
+        const canonicalUrl =
+          'cart_url' in cart && typeof cart.cart_url === 'string'
+            ? cart.cart_url
+            : null;
+        const url = new URL(canonicalUrl ?? 'https://ogabassey.com/cart');
         // An emptied cart transfers nothing, so advertise the bare cart
         // page instead of a guest_cart=[] link the website would reject.
-        if (cart.items.length > 0)
+        if (!canonicalUrl && cart.items.length > 0)
           url.searchParams.set('guest_cart', JSON.stringify(cart.items));
         return {
           content: [

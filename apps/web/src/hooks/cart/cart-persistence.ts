@@ -1,5 +1,13 @@
 import { logger } from '@/lib/logger';
-import type { AddToCartOptions, CartItem } from './cart-types';
+import {
+  bumpCartSessionGeneration,
+  clearSharedCartImportReceipt,
+} from './cart-storage';
+import type {
+  AddToCartOptions,
+  CartItem,
+  SharedCartDisplayItem,
+} from './cart-types';
 
 const CART_STORAGE_KEY = 'baci-cart';
 const GUEST_CART_SUFFIX = 'guest';
@@ -26,6 +34,9 @@ export const clearCartStorage = (
   merchantSlug?: string | null,
   userId?: string | null
 ): void => {
+  // Fence any in-flight shared-cart work first: logout and cart clears must
+  // invalidate late server responses even when storage itself is unavailable.
+  bumpCartSessionGeneration();
   if (typeof window === 'undefined') return;
   try {
     // Clear cart for specific merchant + user combination
@@ -35,6 +46,8 @@ export const clearCartStorage = (
       window.localStorage.removeItem(
         getCartStorageKey(merchantSlug, GUEST_CART_SUFFIX)
       );
+      // A cleared merchant re-imports from scratch on the next link.
+      clearSharedCartImportReceipt(merchantSlug);
     }
     // Also clear the default cart keys (for legacy/fallback)
     window.localStorage.removeItem(CART_STORAGE_KEY);
@@ -120,7 +133,9 @@ function getStoredVariantAttributes(
   );
 }
 
-function normalizeStoredCartItem(item: Record<string, unknown>): CartItem {
+function normalizeStoredCartItem(
+  item: Record<string, unknown>
+): SharedCartDisplayItem {
   const productId = getStoredStringValue(item, 'id') ?? '';
   const variantId =
     getStoredStringValue(item, 'variantId') ??
@@ -158,8 +173,17 @@ function normalizeStoredCartItem(item: Record<string, unknown>): CartItem {
       variantId,
     });
 
+  // Temp optimistic markers never survive storage: an unconfirmed line
+  // must not resurrect after reload. The stable server id is kept so a
+  // re-adopted cache still matches its confirmed lines.
+  const {
+    pendingTempId: _pendingTempId,
+    hydrationFailed: _hydrationFailed,
+    ...rest
+  } = item;
+
   return {
-    ...item,
+    ...rest,
     cartItemId,
     price: getStoredNumberValue(item, 'price', 0),
     quantity: getStoredNumberValue(item, 'quantity', 1),
@@ -171,13 +195,14 @@ function normalizeStoredCartItem(item: Record<string, unknown>): CartItem {
     condition,
     variantAttributes,
     variantId,
-  } as CartItem;
+    serverLineId: getStoredStringValue(item, 'serverLineId'),
+  } as SharedCartDisplayItem;
 }
 
 export const getCartFromStorage = (
   slug?: string | null,
   userId?: string | null
-): CartItem[] => {
+): SharedCartDisplayItem[] => {
   if (typeof window === 'undefined') return [];
   try {
     const item = window.localStorage.getItem(getCartStorageKey(slug, userId));

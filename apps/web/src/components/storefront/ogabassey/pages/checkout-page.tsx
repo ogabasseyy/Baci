@@ -7,16 +7,10 @@ import { useAuthSafe } from '@/contexts/auth-context';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import {
-  isBankTransferCheckoutAvailable,
-  isKorapayCheckoutAvailable,
-  isPaystackCheckoutAvailable,
-} from '@/lib/checkout/payment-gateway-availability';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
-import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
+import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
 import { CheckoutScreen } from './checkout/components/CheckoutScreen';
-import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
@@ -24,8 +18,18 @@ import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delive
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
+import { checkoutPaymentRails } from './checkout/payment-rail-availability';
 export const CheckoutPage: React.FC = () => {
-  const { cart, clearCart, isHydrated, removeFromCart } = useCart();
+  const {
+    cart,
+    clearCart,
+    isHydrated,
+    removeFromCart,
+    sharedCartRef,
+    sharedCartEnabled,
+    refreshSharedCart,
+    syncStatus: sharedCartSyncStatus,
+  } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
 
@@ -47,20 +51,14 @@ export const CheckoutPage: React.FC = () => {
     checkoutCartTotal,
     itemSubtotal,
     quoteItemsFingerprint,
-  } = deriveCheckoutCartModel(cart, hasPriceNegotiation);
+    sharedCartRef: checkoutSharedCartRef,
+  } = deriveCheckoutCartModel(cart, hasPriceNegotiation, sharedCartRef);
 
-  // Paystack (and its DVA-backed bank transfer) settle NGN only — mirror the
-  // PaymentStep gating so a non-NGN checkout never renders rails the
-  // initialize API would reject with UNSUPPORTED_CURRENCY.
-  const ngnRailsAvailable = isNgnChargeCurrency(currencyCode);
-  const paystackCheckoutAvailable =
-    ngnRailsAvailable && isPaystackCheckoutAvailable(merchant);
-  const korapayCheckoutAvailable = isKorapayCheckoutAvailable(
-    merchant,
-    currencyCode
-  );
-  const bankTransferCheckoutAvailable =
-    ngnRailsAvailable && isBankTransferCheckoutAvailable(merchant);
+  const {
+    paystackCheckoutAvailable,
+    korapayCheckoutAvailable,
+    bankTransferCheckoutAvailable,
+  } = checkoutPaymentRails(merchant, currencyCode);
   const basePath = merchantContext?.basePath;
   const router = useRouter();
 
@@ -215,6 +213,10 @@ export const CheckoutPage: React.FC = () => {
       checkoutCartTotal,
       clearCart,
       removeFromCart,
+      sharedCartRef: checkoutSharedCartRef,
+      sharedCartEnabled,
+      refreshSharedCart,
+      sharedCartSyncStatus,
     },
     delivery: {
       session: delivery,
@@ -250,24 +252,19 @@ export const CheckoutPage: React.FC = () => {
 
   if (
     (checkoutCart.length === 0 && isLoadingResumedOrder) ||
-    isAutoTriggerProcessing
+    isAutoTriggerProcessing ||
+    (checkoutCart.length === 0 && resumeOrderId && resumeOrderError)
   ) {
     return (
-      <CheckoutResumeStatus
-        status={isLoadingResumedOrder ? 'loading' : 'initializing'}
-      />
-    );
-  }
-
-  // Error state for order resumption
-  if (checkoutCart.length === 0 && resumeOrderId && resumeOrderError) {
-    return (
-      <CheckoutResumeStatus
-        status="error"
-        message={resumeOrderError}
-        onRetry={() => window.location.reload()}
-        onGoHome={() => router.push(asRoute(getHref('/')))}
+      <CheckoutResumeGate
+        cartEmpty={checkoutCart.length === 0}
+        isAutoTriggerProcessing={isAutoTriggerProcessing}
+        isLoadingResumedOrder={isLoadingResumedOrder}
         onContactSupport={() => router.push(asRoute(getHref('/contact')))}
+        onGoHome={() => router.push(asRoute(getHref('/')))}
+        onRetry={() => window.location.reload()}
+        resumeOrderError={resumeOrderError}
+        resumeOrderId={resumeOrderId}
       />
     );
   }
@@ -292,7 +289,10 @@ export const CheckoutPage: React.FC = () => {
     actions: {
       onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
     },
-    availability: { redvaultAvailable },
+    availability: {
+      redvaultAvailable,
+      sharedCartActive: Boolean(checkoutSharedCartRef),
+    },
   });
 
   return <CheckoutScreen {...screenModel} />;

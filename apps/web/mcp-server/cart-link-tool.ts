@@ -53,7 +53,7 @@ export function registerCartLinkTools(
 
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     description:
-      'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
+      'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This is a one-time transfer, not a live linked cart: opening the URL copies the item into the website cart and does not link the two surfaces. This tool does not save an item inside ChatGPT or start checkout.',
     // The registration takes a shape, not an object: share the schema
     // module's shape so runtime and card stay on one contract.
     inputSchema: cartLinkInputSchema,

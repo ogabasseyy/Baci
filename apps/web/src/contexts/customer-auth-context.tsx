@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
 import {
+  commitCustomerAuthSession,
   loadCustomerSession,
   performCustomerLogout,
 } from './customer-auth-session';
@@ -122,7 +123,12 @@ export function CustomerAuthProvider({
 
   // Check session on demand (e.g. refreshCustomer).
   const checkSession = () =>
-    loadCustomerSession(merchantSlug, { setUser, setCustomer, setIsLoading });
+    loadCustomerSession(merchantSlug, {
+      currentUserId: user?.id,
+      setUser,
+      setCustomer,
+      setIsLoading,
+    });
 
   // Publish the storefront reset commit-synchronously (Codex R129
   // P2, R133 P2): a layout effect leaves no post-commit window in
@@ -205,11 +211,25 @@ export function CustomerAuthProvider({
         return { success: false, error: data.error || 'Verification failed' };
       }
 
-      // Set user and customer from response
-      setUser(data.user);
-      setCustomer(data.customer);
-      publishCustomerIdentity(data.user, data.customer, merchantSlug);
-      setOtpState(null);
+      // Set user and customer from response, retiring any previous
+      // customer's device cart authority before switching identities.
+      const committed = await commitCustomerAuthSession(
+        merchantSlug,
+        { customer: data.customer, user: data.user },
+        {
+          currentUserId: user?.id,
+          setCustomer,
+          setOtpState,
+          setUser,
+        }
+      );
+      if (!committed) {
+        return {
+          success: false,
+          error:
+            'Could not safely switch accounts. Please retry when connected.',
+        };
+      }
 
       return { success: true };
     } catch (error) {
@@ -220,7 +240,13 @@ export function CustomerAuthProvider({
 
   // Logout
   const logout = () =>
-    performCustomerLogout(merchantSlug, setUser, setCustomer, setOtpState);
+    performCustomerLogout(
+      merchantSlug,
+      setUser,
+      setCustomer,
+      setOtpState,
+      user?.id
+    );
 
   // Shared OAuth sign-in helper
   const signInWithOAuth = async (
@@ -229,6 +255,12 @@ export function CustomerAuthProvider({
     providerLabel: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      // Cart authority is NOT retired here: if the endpoint errors or
+      // the shopper cancels at the provider, the existing session must
+      // keep its cart. Retirement happens when the callback commits a
+      // different identity (loadCustomerSession /
+      // commitCustomerAuthSession retire the previous account then,
+      // with auth rollback when revocation fails).
       // Use the current browser origin to support custom domains (e.g., ogabassey.com)
       // This automatically handles: localhost, subdomains (*.usebaci.com), and custom domains
       // We redirect to /account/callback which exchanges the OAuth code for a session

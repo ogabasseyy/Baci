@@ -102,8 +102,16 @@ export default function CustomerSettingsPage() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    router.push(asRoute('/'));
+    try {
+      await logout();
+      router.push(asRoute('/'));
+    } catch {
+      toast({
+        title: 'Could not sign out',
+        description: 'Please reconnect and try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (merchantLoading || authLoading) {

@@ -51,6 +51,39 @@ describe('mcpGuestCartInputSchema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('accepts optional canonical operation fields for shared-cart writes', () => {
+    const result = mcpGuestCartInputSchema.safeParse({
+      product_id: id,
+      quantity: 1,
+      cart_token: token,
+      expectedVersion: 3,
+      operationId: 'op-1',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.expectedVersion).toBe(3);
+      expect(result.data.operationId).toBe('op-1');
+    }
+    expect(mcpGuestCartInputSchema.safeParse({ product_id: id }).success).toBe(
+      true
+    );
+  });
+
+  it('rejects blank operation ids and non-positive versions', () => {
+    expect(
+      mcpGuestCartInputSchema.safeParse({
+        product_id: id,
+        operationId: '   ',
+      }).success
+    ).toBe(false);
+    expect(
+      mcpGuestCartInputSchema.safeParse({
+        product_id: id,
+        expectedVersion: 0,
+      }).success
+    ).toBe(false);
+  });
 });
 
 describe('mcpGuestCartOutputSchema', () => {

@@ -63,6 +63,24 @@ describe('pay-on-delivery finalization compensation', () => {
     );
   });
 
+  it('preserves a bound order and only releases the claim', async () => {
+    await compensatePayOnDeliveryFinalizationFailure({
+      ...input,
+      bound: true,
+    });
+
+    expect(mocks.markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
+    expect(mocks.releasePayOnDeliveryFinalizationClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ finalizationClaim: 'claim-1' })
+    );
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Pay-on-delivery finalization failed after bound order creation; order preserved',
+      })
+    );
+  });
+
   it('does not release the claim when order cancellation fails', async () => {
     mocks.markAgenticCheckoutOrderCanceled.mockResolvedValue({
       error: { message: 'db failed' },

@@ -271,3 +271,45 @@ describe('cart-store', () => {
     ]);
   });
 });
+
+describe('canonical writer fencing', () => {
+  it('routes every legacy mutation to its owner without editing confirmed display', async () => {
+    const { installSharedCartWriter } = await import('./shared-cart-writer');
+    const write = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const release = installSharedCartWriter({ write, onError: jest.fn() });
+    const item = {
+      id: 'confirmed',
+      product_id: 'product-1',
+      slug: 'phone',
+      name: 'Phone',
+      price: 10,
+      quantity: 1,
+    };
+    useCartStore.setState({
+      items: [item],
+      checkoutGeneration: 'confirmed-generation',
+    });
+    try {
+      const store = useCartStore.getState();
+      store.addItem({ ...item, quantity: 2 });
+      await store.removeItem(item.id);
+      await store.updateQuantity(item.id, 3);
+      await store.clearCart();
+      store.applyNegotiatedPrice(item.id, 2);
+      store.applyCartWideNegotiation(2);
+      store.clearNegotiatedPrice(item.id);
+      store.repriceItems({ [item.id]: 2 });
+      store.toggleAssurance(item.id);
+      await store.restoreItems([]);
+      await store.advanceCheckoutGeneration();
+      await Promise.resolve();
+      expect(useCartStore.getState().items).toEqual([item]);
+      expect(useCartStore.getState().checkoutGeneration).toBe(
+        'confirmed-generation'
+      );
+      expect(write).toHaveBeenCalledTimes(11);
+    } finally {
+      release();
+    }
+  });
+});

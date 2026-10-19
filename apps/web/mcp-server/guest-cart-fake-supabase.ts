@@ -4,6 +4,7 @@ interface FakeRow {
   items: unknown;
   expires_at: string;
   version: number;
+  migrated_to_cart_id?: string | null;
 }
 
 interface RpcCall {
@@ -42,6 +43,13 @@ export function createFakeGuestCartSupabase() {
       const row = rows.get(params.p_token as string);
       return { data: row ? [{ ...row }] : [], error: null };
     }
+    if (name === 'get_mcp_guest_cart_migration') {
+      const row = rows.get(params.p_token as string);
+      return {
+        data: [{ migrated_to_cart_id: row?.migrated_to_cart_id ?? null }],
+        error: null,
+      };
+    }
     if (name === 'upsert_mcp_guest_cart') {
       const token = params.p_token as string;
       if (!/^[a-f0-9]{64}$/.test(token))
@@ -75,6 +83,16 @@ export function createFakeGuestCartSupabase() {
         return fail({ code: '22023', message: 'guest cart payload exceeds size budget' });
       const expected = params.p_expected_version as number | null;
       const row = rows.get(token);
+      // Mirror the migrated-write fence trigger: migrated rows reject
+      // updates no matter which writer attempts them.
+      if (row?.migrated_to_cart_id) {
+        if (expected === null || expected === undefined)
+          return { data: [{ version: null, outcome: 'conflict' }], error: null };
+        return fail({
+          code: 'P0001',
+          message: 'migrated cart is read-only',
+        });
+      }
       if (expected === null || expected === undefined) {
         if (rows.size >= capacityLimit)
           return { data: [{ version: null, outcome: 'full' }], error: null };
@@ -129,6 +147,11 @@ export function createFakeGuestCartSupabase() {
     /** Lowers the creation capacity gate so a test can stage a full table. */
     setCapacityLimit(limit: number) {
       capacityLimit = limit;
+    },
+    /** Fences a row as migrated to the given canonical cart id. */
+    migrate(token: string, cartId: string) {
+      const row = rows.get(token);
+      if (row) rows.set(token, { ...row, migrated_to_cart_id: cartId });
     },
   };
 }

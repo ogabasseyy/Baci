@@ -7,7 +7,12 @@ import {
   saveCartToStorage,
   saveMerchantSlugToStorage,
 } from './cart-persistence';
-import type { CartItem } from './cart-types';
+import {
+  getCartSessionGeneration,
+  getSharedCartImportReceipt,
+  saveSharedCartImportReceipt,
+} from './cart-storage';
+import type { CartItem, SharedCartDisplayItem } from './cart-types';
 
 function makeLine(overrides: Record<string, unknown> = {}): CartItem {
   return {
@@ -128,6 +133,44 @@ describe('cart-persistence', () => {
       expect(
         window.localStorage.getItem('baci-cart-other-user-1')
       ).not.toBeNull();
+    });
+
+    it('clears the import receipt and fences the session generation', () => {
+      saveSharedCartImportReceipt('acme', {
+        cartId: '22222222-2222-4222-8222-222222222222',
+        importedAt: '2026-10-12T08:00:00.000Z',
+        lineCount: 1,
+      });
+      const start = getCartSessionGeneration();
+
+      clearCartStorage('acme', 'user-1');
+
+      expect(getSharedCartImportReceipt('acme')).toBeNull();
+      expect(getCartSessionGeneration()).toBe(start + 1);
+    });
+  });
+
+  describe('shared-cart markers', () => {
+    it('drops temp optimistic markers when normalizing stored lines', () => {
+      window.localStorage.setItem(
+        'baci-cart-acme-guest',
+        JSON.stringify([
+          {
+            id: 'prod-1',
+            name: 'Temp line',
+            price: 1000,
+            quantity: 1,
+            pendingTempId: 'temp-1',
+            hydrationFailed: true,
+            serverLineId: 'line-1',
+          },
+        ])
+      );
+
+      const [line] = getCartFromStorage('acme') as SharedCartDisplayItem[];
+      expect(line.pendingTempId).toBeUndefined();
+      expect(line.hydrationFailed).toBeUndefined();
+      expect(line.serverLineId).toBe('line-1');
     });
   });
 

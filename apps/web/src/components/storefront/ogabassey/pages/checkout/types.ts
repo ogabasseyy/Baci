@@ -103,6 +103,18 @@ export type CryptoCurrency = 'USDT' | 'USDC';
 export type CryptoVerificationStatus = 'idle' | 'checking' | 'confirmed' | 'pending' | 'failed';
 
 export type DeliveryMethod = 'pickup' | 'door' | 'airport' | 'pickup_station';
+
+/**
+ * Prepared shared-cart binding attached to the order request. The orders
+ * route submits through the bound-create RPC, which revalidates the
+ * session, generation and reviewed version inside the final transaction.
+ */
+export interface SharedCartOrderBinding {
+  cart_id: string;
+  checkout_session_id: string;
+  checkout_generation: number;
+  cart_version: number;
+}
 export type CheckoutStep = 'contact' | 'delivery' | 'payment';
 export type PaymentMethod =
   | 'uba_redvault'

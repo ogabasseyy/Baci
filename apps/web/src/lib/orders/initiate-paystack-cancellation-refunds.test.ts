@@ -38,6 +38,25 @@ describe('initiatePaystackCancellationRefunds', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
+  it('quarantines a sub-kobo leg instead of refunding the whole transaction', async () => {
+    const refundIds = await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [{ ...transaction, amount: 0.001 }],
+    });
+
+    // 0.001 rounds to 0 kobo, which the provider call would read as a
+    // full-transaction refund: the leg quarantines and no provider
+    // call goes out.
+    expect(refundIds).toEqual([]);
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    const subKobo = { ...transaction, amount: 0.001 };
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ transactions: [subKobo] })
+    );
+  });
+
   it('audits accepted refunds as refund_pending before returning', async () => {
     acceptedRefund();
 

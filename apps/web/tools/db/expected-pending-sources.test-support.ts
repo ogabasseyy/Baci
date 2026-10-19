@@ -18,6 +18,7 @@ import { EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES } from './expected-order-ca
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
+import { EXPECTED_PENDING_ORDER_REFUND_SOURCES } from './expected-pending-order-refund-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
@@ -25,6 +26,7 @@ import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-repl
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
+import { REDVAULT_PENDING_SOURCES } from './expected-redvault-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
 import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
@@ -32,22 +34,12 @@ import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sourc
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
-import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
-
-const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
-  '\n'
-).map((row) => {
-  const [sha256, filename] = row.split(' ');
-  return {
-    repositoryPath: `supabase/migrations/${filename}`,
-    sha256,
-  };
-});
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {
     repositoryPath:

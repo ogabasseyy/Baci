@@ -17,6 +17,7 @@ const SHIPPING_VARIANTS: Record<string, string> = {
   Shipped: 'bg-indigo-100 text-indigo-800 border-indigo-200',
   Delivered: 'bg-green-100 text-green-800 border-green-200',
   Canceled: 'bg-red-100 text-red-800 border-red-200',
+  Cancelled: 'bg-red-100 text-red-800 border-red-200',
   Returned: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 

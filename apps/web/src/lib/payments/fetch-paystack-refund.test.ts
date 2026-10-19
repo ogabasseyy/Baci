@@ -32,8 +32,48 @@ describe('fetchRefund', () => {
 
     await fetchRefund(42, signal);
 
-    expect(mocks.paystackRequest).toHaveBeenCalledWith('/refund/42', {
-      signal,
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      '/refund/42',
+      expect.objectContaining({
+        signal,
+        preprocessResponseText: expect.any(Function),
+      })
+    );
+  });
+
+  it('passes decimal-text ids through without numeric rounding', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+    const big = '9007199254740993';
+
+    await fetchRefund(big);
+
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      `/refund/${big}`,
+      expect.objectContaining({
+        preprocessResponseText: expect.any(Function),
+      })
+    );
+    await expect(fetchRefund('not-an-id')).resolves.toMatchObject({
+      success: false,
+      code: 'VALIDATION_ERROR',
     });
+  });
+
+  it('quotes wire transaction ids above 2^53 as decimal text', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+
+    await fetchRefund(42);
+
+    const preprocess = mocks.paystackRequest.mock.calls[0][1]
+      .preprocessResponseText as (raw: string) => string;
+    const big = '9007199254740993';
+    const parsed = JSON.parse(
+      preprocess(
+        `{"status":true,"data":{"id":${big},"transaction":${big},` +
+          `"amount":10000,"currency":"NGN","status":"processed"}}`
+      )
+    ).data;
+    expect(parsed.id).toBe(big);
+    expect(parsed.transaction).toBe(big);
   });
 });

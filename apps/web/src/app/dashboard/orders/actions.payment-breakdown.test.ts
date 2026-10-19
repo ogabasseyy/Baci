@@ -111,9 +111,15 @@ function mockGetOrderQueries(order: Record<string, unknown> = mockOrder) {
   const productsSelect = vi.fn(() => ({ in: productsIn }));
   const transactionsSelect = vi.fn(() => ({
     eq: vi.fn((column: string, value: string) => {
-      expect(column).toBe('order_id');
-      expect(value).toBe(ORDER_ID);
-      return { order: transactionsOrder };
+      expect(column).toBe('merchant_id');
+      expect(value).toBe(MERCHANT_ID);
+      return {
+        eq: vi.fn((nestedColumn: string, nestedValue: string) => {
+          expect(nestedColumn).toBe('order_id');
+          expect(nestedValue).toBe(ORDER_ID);
+          return { order: transactionsOrder };
+        }),
+      };
     }),
   }));
 

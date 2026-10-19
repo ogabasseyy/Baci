@@ -61,7 +61,11 @@ function database({
   from
     .mockReturnValueOnce(selectQuery(orderRow))
     .mockReturnValueOnce({ insert })
-    .mockReturnValueOnce(selectQuery(racedRow == null ? [] : [racedRow]));
+    .mockReturnValueOnce(selectQuery(racedRow == null ? [] : [racedRow]))
+    // The raced-row lookup also scans stamped manuals by stored
+    // provider id: the empty page keeps the chain aligned when the
+    // lookup runs, and sits unused when it does not.
+    .mockReturnValueOnce(selectQuery([]));
   return {
     from,
     insert,

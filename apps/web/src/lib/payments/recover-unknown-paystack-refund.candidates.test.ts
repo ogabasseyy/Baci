@@ -63,14 +63,14 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'PSK-1' },
+      data: { id: '555', reference: 'PSK-1' },
       success: true,
     });
   });
@@ -363,7 +363,7 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
         currency: 'NGN',
         id: 203,
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
@@ -399,9 +399,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       data: {
         amount: 12.5,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
@@ -453,9 +453,9 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       data: {
         amount: 12.5,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });

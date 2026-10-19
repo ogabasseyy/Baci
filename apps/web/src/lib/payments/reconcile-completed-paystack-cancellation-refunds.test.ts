@@ -168,6 +168,47 @@ describe('legacy completed Paystack cancellation refunds', () => {
     );
   });
 
+  it('rotates a failed stamped manual in place instead of zero-row succeeding', async () => {
+    reconcile.mockRejectedValue(new Error('paystack_refund_evidence_mismatch'));
+    isDeterministic.mockReturnValue(true);
+    const failedRefund = {
+      ...legacyRefund,
+      description: 'Refund for cancelled order #B-1',
+      status: 'failed',
+      metadata: {
+        payment_transaction_id: 'payment-1',
+        provider_refund_id: 7,
+        provider_refund_status: 'failed',
+      },
+    };
+    const chain = updateChain();
+    const update = vi.fn().mockReturnValue(chain);
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: [failedRefund], error: null });
+    const from = vi.fn().mockReturnValueOnce({ update });
+    const supabase = { from, rpc } as never;
+
+    await expect(
+      reconcileCompletedPaystackCancellationRefunds(supabase)
+    ).resolves.toEqual({ checked: 1, failed: 1 });
+
+    // The failed row keeps its classified status (no demote) but the
+    // rotation guard matches it: a completed-only guard would zero-row
+    // succeed, leaving the row oldest forever and refiling the same
+    // review every run.
+    expect(fileReview).toHaveBeenCalledWith(
+      supabase,
+      failedRefund,
+      'paystack_refund_evidence_mismatch'
+    );
+    expect(update).toHaveBeenCalledWith({
+      updated_at: expect.any(String),
+    });
+    expect(chain.eq).toHaveBeenCalledWith('id', 'refund-1');
+    expect(chain.eq).toHaveBeenCalledWith('status', 'failed');
+  });
+
   it('rotates a legacy deterministic mismatch here instead of stranding it', async () => {
     reconcile.mockRejectedValue(new Error('paystack_refund_evidence_mismatch'));
     isDeterministic.mockReturnValue(true);
@@ -196,6 +237,40 @@ describe('legacy completed Paystack cancellation refunds', () => {
     });
     expect(chain.eq).toHaveBeenCalledWith('id', 'refund-1');
     expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
+  });
+
+  it('rotates a legacy refunded row with its actual status', async () => {
+    // Both rotation paths guard on the row's own terminal state: a
+    // completed-only guard would zero-row succeed on a legacy refunded
+    // row, leaving it oldest in the recheck slice forever.
+    for (const deterministic of [true, false]) {
+      vi.clearAllMocks();
+      fileReview.mockResolvedValue(undefined);
+      reconcile.mockRejectedValue(
+        deterministic
+          ? new Error('paystack_refund_evidence_mismatch')
+          : new Error('paystack_refund_verification_unavailable')
+      );
+      isDeterministic.mockReturnValue(deterministic);
+      const chain = updateChain();
+      const update = vi.fn().mockReturnValue(chain);
+      const rpc = vi.fn().mockResolvedValue({
+        data: [{ ...legacyRefund, status: 'refunded' }],
+        error: null,
+      });
+      const from = vi.fn().mockReturnValueOnce({ update });
+      const supabase = { from, rpc } as never;
+
+      await expect(
+        reconcileCompletedPaystackCancellationRefunds(supabase)
+      ).resolves.toEqual({ checked: 1, failed: 1 });
+
+      expect(update).toHaveBeenCalledWith({
+        updated_at: expect.any(String),
+      });
+      expect(chain.eq).toHaveBeenCalledWith('id', 'refund-1');
+      expect(chain.eq).toHaveBeenCalledWith('status', 'refunded');
+    }
   });
 
   it('rotates a transient failure without filing a review', async () => {

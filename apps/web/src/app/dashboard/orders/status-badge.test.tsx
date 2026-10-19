@@ -12,4 +12,10 @@ describe('StatusBadge', () => {
 
     expect(screen.getByText(scenario.status)).toBeInTheDocument();
   });
+
+  it('styles the Cancelled spelling like Canceled', () => {
+    render(<StatusBadge status="Cancelled" type="shipping" />);
+
+    expect(screen.getByText('Cancelled')).toHaveClass('bg-red-100');
+  });
 });

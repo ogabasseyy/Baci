@@ -28,7 +28,7 @@ import { verifyUnknownPaystackRefundProvider } from './verify-unknown-paystack-r
  */
 export async function recoverUnknownPaystackRefund(
   supabase: SupabaseClient,
-  refundId: number,
+  refundId: number | string,
   paymentReference?: string
 ): Promise<void> {
   let verified: Awaited<ReturnType<typeof verifyUnknownPaystackRefundProvider>>;
@@ -69,7 +69,7 @@ export async function recoverUnknownPaystackRefund(
     provider_refund_status: current.status,
   };
   if (
-    current.id !== refundId ||
+    current.id !== String(refundId) ||
     !Number.isSafeInteger(current.amount) ||
     current.amount <= 0 ||
     typeof current.currency !== 'string' ||

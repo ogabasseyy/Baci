@@ -4,6 +4,9 @@ export const PAYMENT_STATUSES = [
   'Pending',
   'Partially Paid',
   'Refunded',
+  // Credit Direct funds BNPL orders, flipping payment_status to this
+  // alongside paid; cancellations need the same refund recovery.
+  'Bnpl Approved',
 ] as const;
 
 export const SHIPPING_STATUSES = [
@@ -12,6 +15,9 @@ export const SHIPPING_STATUSES = [
   'Shipped',
   'Delivered',
   'Canceled',
+  // Both DB spellings occur; formatStatus title-cases each, so the
+  // display union must carry both like the refund gate checks.
+  'Cancelled',
   'Returned',
 ] as const;
 

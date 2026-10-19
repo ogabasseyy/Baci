@@ -12,10 +12,10 @@ output was used only as a supporting signal. No code was moved.
 consumed by all three apps. Counting non-test `.ts`/`.tsx` files that
 import `@baci/shared` or any subpath (import-aware count, excluding
 comment-only, `jest.mock`, and test-config alias matches):
-`apps/web/src` 460, `apps/mobile-storefront` 147,
-`apps/mobile-admin` 121. Reproduce with
-`grep -rl "@baci/shared" --include="*.ts" --include="*.tsx" <app>`
-per app, then drop test files and non-import matches; other precise
+`apps/web/src` 459, `apps/mobile-storefront` 147,
+`apps/mobile-admin` 121. Reproduce exactly with:
+`grep -rlE "(from\s+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared)" --include="*.ts" --include="*.tsx" <base>`
+per base below, excluding paths containing `.test.`; other precise
 counts in this doc are from the same session's `find`/`wc`/`grep`
 pass on this base and should be treated as ±1 file at file
 boundaries (tests vs fixtures classification). Bases differ
@@ -43,8 +43,8 @@ work below extends it.
 | 8 | VTU pending-reference idempotency core | Same platform-free protocol implemented twice: web `components/storefront/ogabassey/components/utility-pending-vtu-reference-queries.ts` (+ registry) and mobile `lib/pending-vtu-reference-queries.ts` implement the same reference, stale-success, and completion logic, with mirrored persistence/mint-lock registries guarding against double-debit on retry. | web, storefront | **Deferred shared-core candidate (high risk).** Extract the pure reference/completion logic to shared with storage adapters kept local, in its own wave with characterization fixtures first — a duplicated money-movement protocol must not drift. Not in Waves 1–3, but explicitly tracked, not omitted. |
 | 9 | Wallet-funding response contract | The order wallet-funding response schema exists on both sides and has already diverged: web `src/schemas/order-wallet-funding-intent.ts:62` accepts PostgREST `+00:00` timestamps via `z.iso.datetime({ offset: true })`, while mobile `schemas/order-wallet-funding-intent.ts:27` uses bare `z.iso.datetime()` for create/poll responses. | web, storefront | **Share the response contract** (own wave, can precede cart waves): one shared response schema in `@baci/shared`; server-only request/auth schemas stay local. The offset divergence should be treated as a latent mobile parsing bug and verified against live PostgREST payloads during that wave. |
 | 10 | Mobile update policy core | Both mobile apps implement the same `MobileReleasePolicy`/`resolveMobileUpdatePrompt` flow in `components/updates/mobile-update-check.ts` (storefront and admin), and have already diverged: when a required policy lacks `storeUrl`, admin fails open while storefront creates an unusable blocking prompt. | storefront, admin | **Share the pure policy core** in its own wave: policy fetching stays local; gating/decision logic moves to shared with app-specific route/app-name/OTA adapters. The `storeUrl` divergence needs an explicit decision recorded with its threat model: fail-open lets a forced-update policy be bypassed when its store link is missing (integrity risk), fail-closed strands users on a dead prompt (availability risk). Neither is asserted here; the wave picks one with the rejected alternative documented. |
-| 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. | web, admin | **Share the primitives** in a small wave with characterization fixtures; schema-level rules stay local. |
-| 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector stale. Note the type domains differ: web's `BusinessTypeId` is `keyof typeof BUSINESS_TYPES` (record keys), while values carry separate `id` fields — a shared union must be built from the **id values**, not the record keys. | web, admin | **Share the data contract** built from id values (ids/labels/union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. **Approval gate:** `apps/web/src/config/business-types.ts` is a protected file (CLAUDE.md/AGENTS.md); touching or building on it requires explicit approval recorded in that wave's PR. |
+| 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. A shared primitive already exists for one piece — `packages/shared/src/lib/sanitize-html-text.ts` — so the wave extends that home rather than starting a new one. | web, admin | **Share the primitives** in a small wave with characterization fixtures, building on the existing shared `sanitize-html-text`; schema-level rules stay local. |
+| 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector stale. Note the type domains differ: web's `BusinessTypeId` is declared as `keyof typeof BUSINESS_TYPES`, but `BUSINESS_TYPES` is typed `Record<string, BusinessTypeConfig>`, so the alias actually resolves to `string` — no closed union exists today. A shared contract must build a real union from the **id values**, not reuse the alias. | web, admin | **Share the data contract** built from id values (ids/labels/union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. **Approval gate:** `apps/web/src/config/business-types.ts` is a protected file (CLAUDE.md/AGENTS.md); touching or building on it requires explicit approval recorded in that wave's PR. |
 | 13 | Wallet top-up limits | Identical `WALLET_TOP_UP_MIN_AMOUNT` (100) / `WALLET_TOP_UP_MAX_AMOUNT` (500_000) constants duplicated in `apps/web/src/lib/wallet-top-up-constants.ts` (server Zod validation; comment says "must match mobile validation") and `apps/mobile-storefront/lib/wallet-top-up-constants.ts` (UI disable + input validation; comment says "must match server validation"). Changing one side silently makes accepted amounts disagree by surface. | web, storefront | **Share the constants** — a trivial move into `@baci/shared` that can ride with the wallet-funding wave (sequence step 1). |
 | 14 | IMEI payment-recovery protocol | Near-verbatim `resolveImeiCheckFailure` implementations in the web and storefront IMEI checkers, plus a matching pending-lookup persistence contract, decide whether paid IMEI retries retain or discard an idempotency key for debit/refund-uncertain results (`REFUND_PENDING`, `DEBIT_FAILURE_STATE_SAVE_FAILED`). An independent edit can make one client retry with a fresh key (double-debit risk) while the other preserves it. | web, storefront | **Deferred shared-core candidate (money-safety).** Same treatment as row 8: extract the failure-classification core to shared with persistence adapters local, characterization fixtures first. |
 | 15 | Merchant-country catalog | The shared/web `MERCHANT_COUNTRIES` catalog (`packages/shared/src/constants/merchant-countries.ts`) is duplicated by mobile-admin's local `COUNTRIES` (`apps/mobile-admin/constants/countries.ts`), which adds unsupported entries (e.g. Zambia `ZM`/`ZMW`) that the admin settings screen can persist through a shape-only RPC check — producing merchant country/currency states web onboarding and provisioning do not support. | web (via shared), admin | **Split the catalog by consumer before changing anything:** the local `COUNTRIES` also feeds phone-country calling codes (`lib/phone-country.ts`), the supported-currency fallback (`lib/merchant-currency.ts`), and currency formatting — those keep the wide catalog. Only the merchant-settings selector gets a projection gated to the shared 22-entry `MERCHANT_COUNTRIES`. Merchants who already persisted unsupported values (e.g. ZM) need an explicit repair/backfill decision before gating, not a silent selector change. |
@@ -101,7 +101,12 @@ green CI and change no activation state.
    `findActiveOrderIntent` returns the existing active intent for
    the order before inserting), so the correct client behavior is
    an idempotent re-create for the same order, never a parallel
-   gateway payment.
+   gateway payment. The wave must also handle the concurrent-create
+   race the current server path leaves open: two simultaneous
+   creates can both miss `findActiveOrderIntent` and collide on
+   insert, so the conflict outcome must resolve to the existing
+   intent (conflict-then-fetch), not surface as a create failure
+   that falls back to gateway payment.
 2. **Formatting wave: currency/price formatting.** One shared `Intl`
    formatting module, characterization fixtures pinning each app's
    current outputs, semantic unification decision recorded in the
@@ -128,8 +133,10 @@ green CI and change no activation state.
 ≥2 consumers: yes (3). Platform-free: mostly — `Intl` exists in
 Next.js, Hermes, and Node, but Node-run fixtures cannot pin Hermes
 locale/currency output; the repo already acknowledges runtimes
-without full Intl data (`apps/mobile-admin/lib/utils.ts` wraps
-`Intl.NumberFormat` in try/catch fallbacks). The formatting wave must therefore
+without full Intl data (the cited fallback,
+`apps/mobile-admin/lib/utils.ts`, covers `Intl.NumberFormat`
+currency formatting only — no date fallback is claimed or needed
+for this currency-only wave). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
 allowlist) before relying on fixture parity. Size: one shared module
 plus wrapper swaps — fits one PR under ~400 changed lines if call

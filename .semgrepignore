@@ -1,16 +1,15 @@
 # Semgrep Ignore File
 # Suppress false positive security alerts
 
-# Internal dev tooling & staging - not production code
+# Internal dev tooling & staging - not production code.
+# NOTE: production/operational trees are intentionally NOT excluded here:
+# apps/web/mcp-server (deployed token-handling server), vps-workers
+# (deploy.yml), infra (nginx/CDN runtime), ci_scripts (CI-executed).
 .gemini/
 /.claude/
 scripts/
 /tools/
-/infra/
-/vps-workers/
 /apps/web/tools/
-/apps/web/mcp-server/
-/ci_scripts/
 
 # Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
 /apps/mobile-storefront/__tests__/

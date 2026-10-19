@@ -202,6 +202,11 @@ it('serializes the renderer contract with native Zod 4 JSON Schema support', asy
   const renderer = body.tools.find(
     (tool: { name: string }) => tool.name === 'render_ogabassey_catalog'
   );
+  // Cross-item product_id uniqueness is a runtime refinement; discovery
+  // consumers receive the rule in the description instead of uniqueItems,
+  // which would compare whole objects rather than product_id values.
+  expect(renderer.description).toContain('Pass each product_id once');
+  expect(renderer.inputSchema.properties.products.uniqueItems).toBeUndefined();
   expect(renderer.inputSchema).toMatchObject({
     type: 'object',
     additionalProperties: false,

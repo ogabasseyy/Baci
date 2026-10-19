@@ -80,6 +80,9 @@ export function createCartAddHandler({
       ? null
       : window.open('about:blank', '_blank');
     try {
+      // Keep the navigation handle but prevent the destination from reaching
+      // back into the widget. Passing noopener to open would lose the handle.
+      if (pendingTab) pendingTab.opener = null;
       // Guest quantities are absolute totals, so re-adding tops the line up
       // instead of resetting it to one.
       // Last-wins absolute quantities: the add target derives from local

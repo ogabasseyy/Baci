@@ -142,6 +142,10 @@ it('keeps the submitted-review v4 widget resource available alongside the standa
     const current = await read('ui://widget/store-v5.html');
     const legacy = await read('ui://widget/store-v4.html');
     expect(legacy.contents).toEqual([expect.objectContaining({uri: 'ui://widget/store-v4.html', mimeType: 'text/html+skybridge'})]);
-    expect((legacy.contents as Array<{text: string}>)[0].text).toEqual((current.contents as Array<{text: string}>)[0].text);
+    const legacyHtml = (legacy.contents as Array<{text: string}>)[0].text;
+    const currentHtml = (current.contents as Array<{text: string}>)[0].text;
+    expect(legacyHtml).toContain('data-ogabassey-legacy-widget="true"');
+    expect(currentHtml).not.toContain('data-ogabassey-legacy-widget="true"');
+    expect(legacyHtml.replace(' data-ogabassey-legacy-widget="true"', '')).toEqual(currentHtml);
   } finally { await server.close(); }
 });

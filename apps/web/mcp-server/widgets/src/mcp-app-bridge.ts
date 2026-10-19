@@ -5,6 +5,10 @@ import { widgetHost } from './widget-host';
 /** Standard MCP Apps transport, adapted to the widget's existing host interface. */
 export async function connectMcpApp() {
   const extensions = window.openai;
+  // Only the resource pinned by the submitted review takes the legacy path.
+  // Modern resources still negotiate standard MCP Apps even with window.openai.
+  if (document.documentElement.dataset.ogabasseyLegacyWidget === 'true' && extensions)
+    return;
   const app = new App(
     { name: 'Ogabassey catalog', version: '1.0.0' },
     { availableDisplayModes: ['inline', 'fullscreen'] },

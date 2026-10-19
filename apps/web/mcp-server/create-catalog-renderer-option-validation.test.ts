@@ -107,7 +107,7 @@ it('falls back to the parent comparison price for a paired offer without a varia
   const result = await render({ products: [{
     product_id: 'phone', matched_option: { kind: 'offer', option_id: 'offer-2', variantId: 'variant-7', condition: 'used' },
   }] });
-  expect(result.structuredContent.products[0]).toMatchObject({ price: 125, compare_at_price: 150 });
+  expect(result.structuredContent.products[0]).toMatchObject({ price: 80, compare_at_price: 150 });
 });
 
 it('rejects a variant selection whose caller variantId conflicts with its option_id', async () => {

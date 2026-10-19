@@ -127,7 +127,8 @@ export function createCatalogRenderer(
                   if (!pairedVariant || typeof pairedVariant.price !== 'number' || pairedVariant.availability === 'out_of_stock') {
                     throw new Error('Paired variant no longer available');
                   }
-                  price = pairedVariant.price;
+                  // The PDP gives the selected condition offer price precedence.
+                  price = matched.price;
                   // The PDP sources the comparison price from the selected
                   // variant or the parent product, never the offer row.
                   compareAtPrice = pairedVariant.compare_at_price ?? product.base_compare_at_price;

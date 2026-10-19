@@ -57,6 +57,7 @@ import { widgetHost } from './widget-host';
 afterEach(() => {
   widgetHost.reset();
   delete window.openai;
+  delete document.documentElement.dataset.ogabasseyLegacyWidget;
   vi.clearAllMocks();
 });
 it('prefers the standard bridge while retaining ChatGPT state persistence', async () => {
@@ -282,3 +283,16 @@ it('shows a connection error for navigation-only extensions with no delivered re
   });
 });
 
+
+it('skips the standard handshake only for the v4 resource with a native bridge', async () => {
+  document.documentElement.dataset.ogabasseyLegacyWidget = 'true';
+  window.openai = { toolOutput: { products: [] } };
+  await connectMcpApp();
+  expect(factory).not.toHaveBeenCalled();
+  expect(widgetHost.get()?.toolOutput).toEqual({ products: [] });
+});
+it('uses standard initialization for marked resources without a native bridge', async () => {
+  document.documentElement.dataset.ogabasseyLegacyWidget = 'true';
+  await connectMcpApp();
+  expect(host.connect).toHaveBeenCalled();
+});

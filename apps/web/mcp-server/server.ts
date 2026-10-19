@@ -1248,7 +1248,9 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
           {
             uri,
             mimeType,
-            text: premiumWidgetHtml,
+            text: uri === STORE_WIDGET_URI
+              ? premiumWidgetHtml
+              : premiumWidgetHtml.replace(/<html(?=[\s>])/i, '<html data-ogabassey-legacy-widget="true"'),
             _meta: {
               ui: {
                 prefersBorder: true,

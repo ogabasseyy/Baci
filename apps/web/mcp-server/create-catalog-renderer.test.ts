@@ -210,7 +210,7 @@ it('uses the authoritative offer price for a selected condition', async () => {
   });
 });
 
-it('uses paired variant price and stock when the selected offer is out of stock', async () => {
+it('uses the condition-offer price and paired variant stock like the storefront', async () => {
   const render = createCatalogRenderer(async () => ({
     structuredContent: {
       products: [{ id: 'phone', name: 'Phone', slug: 'phone', price: 100, base_price: 100, base_condition: 'new', condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
@@ -223,7 +223,7 @@ it('uses paired variant price and stock when the selected offer is out of stock'
     matched_option: { kind: 'offer', option_id: 'offer-2', variantId: 'variant-7', condition: 'used' },
   }] });
   expect(result.structuredContent.products[0]).toMatchObject({
-    price: 125,
+    price: 80,
     condition: 'used',
     in_stock: true,
     url: 'https://ogabassey.com/products/phone?condition=used&variantId=variant-7',

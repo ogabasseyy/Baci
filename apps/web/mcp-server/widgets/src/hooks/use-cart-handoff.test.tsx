@@ -208,7 +208,7 @@ it('re-adds with the incremented absolute total', async () => {
   });
 });
 it('navigates a synchronously-opened tab when selection is required', async () => {
-  const tab = { location: { href: '' }, closed: false, close: vi.fn() };
+  const tab = { location: { href: '' }, closed: false, opener: {} as unknown, close: vi.fn() };
   const openSpy = vi.fn(() => tab);
   vi.stubGlobal('open', openSpy);
   const callTool = vi.fn().mockResolvedValue({
@@ -227,6 +227,7 @@ it('navigates a synchronously-opened tab when selection is required', async () =
   expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
   expect(tab.location.href).toBe('https://ogabassey.com/products/phone');
   expect(tab.close).not.toHaveBeenCalled();
+  expect(tab.opener).toBeNull();
   expect(result.current.cart).toHaveLength(0);
 });
 it('closes the reserved tab when no navigation is needed', async () => {

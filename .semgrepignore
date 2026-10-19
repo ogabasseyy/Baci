@@ -71,11 +71,5 @@ apps/web/src/components/seo/json-ld.tsx
 apps/web/src/components/ui/chart.tsx
 apps/web/src/app/builder/builder-client.tsx
 
-# Central HTML sanitizer component using DOMPurify
-apps/web/src/components/ui/safe-html.tsx
-
-# Builder preview iframe bridge - posts only schema-validated non-sensitive preview status events
-apps/web/src/app/(preview)/template-preview/builder-preview/builder-preview-canvas.tsx
-
 # Theme context - RegExp input is escaped with replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 apps/web/src/components/storefront/ogabassey/providers/v2-theme-context.tsx

@@ -126,6 +126,37 @@ class ContractAdversarialTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("with block", failures[0])
 
+    def test_anchor_decorated_condition_fails(self):
+        # YAML resolves `&skip if:` to the plain `if` key, so GitHub skips
+        # the job while `^if:` line scans see only an anchor prefix.
+        anchored = CI.replace(
+            "  changes:\n    runs-on:",
+            "  changes:\n    &skip if: false\n    runs-on:",
+            1,
+        )
+        self.assertNotEqual(anchored, CI)
+        failures = check.ci_failures(anchored)
+        self.assertTrue(failures)
+        self.assertIn("anchor", failures[0])
+        merged = CI.replace(
+            "  changes:\n    runs-on:",
+            "  changes:\n    <<: *off\n    runs-on:",
+            1,
+        )
+        self.assertTrue(check.ci_failures(merged))
+
+    def test_startup_env_covers_shell_functions_and_user_site(self):
+        # Bash imports BASH_FUNC_python3%% as a function and Python's site
+        # initialization respects PYTHONUSERBASE: both must fail top-level.
+        for key, value in (
+            ("BASH_FUNC_python3%%", "'() { return 0; }'"),
+            ("PYTHONUSERBASE", "/tmp/x"),
+        ):
+            ci = "env:\n  %s: %s\n" % (key, value) + CI
+            failures = check.ci_failures(ci)
+            self.assertTrue(failures, key)
+            self.assertIn("startup code", failures[0])
+
     def test_explicit_env_key_form_fails(self):
         # YAML's `? env` explicit key is still the env mapping to GitHub
         # but invisible to `^env:` line scans: BASH_ENV would preload a

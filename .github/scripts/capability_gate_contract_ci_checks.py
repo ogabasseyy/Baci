@@ -143,7 +143,7 @@ EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76
 EXPECTED_CHECKOUT_WITH = ["fetch-depth: 0", "persist-credentials: false"]
 # Interpreter/shell startup preloads: inheriting one of these at workflow
 # scope runs PR-controlled code before the gate's python3 starts.
-_STARTUP_ENV = frozenset({"PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
+_STARTUP_ENV = frozenset({"PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
 _TRIGGER_KEY = re.compile(r"^  (\S[^:\n]*?)\s*:\s*(.*)$")
 _TRIGGER_SUBKEY = re.compile(r"^    (\S[^:\n]*?)\s*:\s*(.*)$")
@@ -191,8 +191,8 @@ def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = _without_block_scalars(ci_text.splitlines())
     failures = trigger_failures(ci_text)
-    if any(re.match(r"^\s*\?", line) for line in lines if line.strip() and not line.strip().startswith("#")):
-        failures.append("ci.yml must not use explicit YAML key forms (? key bypasses structure scans)")
+    if any(re.match(r"^\s*(?:\?|<<|&(?![&\s])|\*(?![)\s]))", line) for line in lines if line.strip() and not line.strip().startswith("#")):
+        failures.append("ci.yml must not use explicit YAML key or anchor forms (? / & / << bypass structure scans)")
     if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in lines if line.strip() and not line.strip().startswith("#")):
         failures.append("ci.yml top-level keys must use plain spelling: escapes execute decoded")
     # Top-level env inherits into every job including the gate: quote spellings accepted, inline mappings rejected.
@@ -211,8 +211,8 @@ def ci_failures(ci_text):
                     continue
                 if not line.startswith("  ") or line.startswith("   "):
                     break
-                if stripped.split(":")[0].strip().strip("\"'") in _STARTUP_ENV:
-                    key = stripped.split(":")[0].strip().strip("\"'")
+                key = stripped.split(":")[0].strip().strip("\"'")
+                if key in _STARTUP_ENV or key.startswith("BASH_FUNC_"):
                     failures.append(f"ci.yml top-level env must not preload startup code ({key})")
                     break
     # Structure scans must not match inside block scalars (scrubbed above):

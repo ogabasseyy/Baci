@@ -6,9 +6,10 @@ import type { MerchantContextType } from '@/hooks/merchant/types';
 import type { Product } from '@/lib/products';
 import { applyStorefrontCartLineAdd } from './cart-line-add';
 import {
-  capUpdatedSimpleLineQuantity,
-  resolveSimpleLineAddCaps,
-} from './cart-stock-caps';
+  applyStorefrontCartQuantityEdit,
+  probeQuantityEditApplied,
+} from './cart-quantity-edit';
+import { resolveSimpleLineAddCaps } from './cart-stock-caps';
 import type {
   AddToCartOptions,
   AddToCartOutcome,
@@ -20,28 +21,6 @@ import type { useStorefrontCartDelegation } from './use-storefront-cart-delegati
 type DelegatedActions = ReturnType<
   typeof useStorefrontCartDelegation
 >['delegatedActions'];
-
-/**
- * Quantity-edit line targeting, shared by the applied-ness probe and
- * the cart updater so the two can never diverge: an explicit variant
- * id pins the line, otherwise the V2 cart item id or a variant-less
- * product id matches.
- */
-function findQuantityEditTargetIndex(
-  cart: CartItem[],
-  cartItemIdOrProductId: string,
-  variantId?: string
-): number {
-  return cart.findIndex((item) => {
-    if (variantId) {
-      return item.id === cartItemIdOrProductId && item.variantId === variantId;
-    }
-    return (
-      item.cartItemId === cartItemIdOrProductId ||
-      (item.id === cartItemIdOrProductId && !item.variantId)
-    );
-  });
-}
 
 /** Legacy/delegated line mutations and merchant binding for the provider. */
 export function useStorefrontCartLineHandlers({
@@ -255,89 +234,23 @@ export function useStorefrontCartLineHandlers({
       return;
     }
     const wasGroupActive = cartWideNegotiationActiveRef.current;
-    // Probe applied-ness synchronously, mirroring the add path: updaters
-    // run later, so an in-updater flag would still read true at the gate
-    // below. A missing target or a keepPrevious cap leaves the cart —
-    // including per-line negotiated prices — untouched, so the group
-    // deal must survive. Same-tick writers can skew the probe the way
-    // they can the add probe; the updater stays authoritative for the
-    // cart contents.
-    const probeCart = cartRef.current;
-    const probeIndex = findQuantityEditTargetIndex(
-      probeCart,
+    // Probe applied-ness synchronously (see cart-quantity-edit): a
+    // missing target or a keepPrevious cap leaves the group deal intact.
+    const editApplied = probeQuantityEditApplied({
+      cart: cartRef.current,
       cartItemIdOrProductId,
-      variantId
-    );
-    let editApplied = probeIndex !== -1;
-    if (editApplied && quantity > 0) {
-      const probeItem = probeCart[probeIndex];
-      const probeMinimum = probeItem.minimum_order_quantity || 1;
-      const probeQuantity = quantity < probeMinimum ? probeMinimum : quantity;
-      editApplied = !(
-        'keepPrevious' in
-        capUpdatedSimpleLineQuantity({
-          item: probeItem,
-          cart: probeCart,
-          excludeIndex: probeIndex,
-          quantity: probeQuantity,
-        })
-      );
-    }
-    setCart((previousCart) => {
-      const targetIndex = findQuantityEditTargetIndex(
+      variantId,
+      quantity,
+    });
+    setCart((previousCart) =>
+      applyStorefrontCartQuantityEdit({
         previousCart,
         cartItemIdOrProductId,
-        variantId
-      );
-
-      if (targetIndex === -1) return previousCart;
-      if (quantity <= 0) {
-        const filtered = previousCart.filter(
-          (_, index) => index !== targetIndex
-        );
-        if (wasGroupActive) {
-          return filtered.map((item) => ({
-            ...item,
-            negotiatedPrice: undefined,
-            negotiationStatus: undefined,
-          }));
-        }
-        return filtered;
-      }
-
-      const nextCart = [...previousCart];
-      const item = nextCart[targetIndex];
-      const minimumOrderQuantity = item.minimum_order_quantity || 1;
-      let nextQuantity =
-        quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
-      // Update-path caps (offer allocation + strict pool) live in
-      // cart-stock-caps with the add-path rules.
-      const capped = capUpdatedSimpleLineQuantity({
-        item,
-        cart: previousCart,
-        excludeIndex: targetIndex,
-        quantity: nextQuantity,
-      });
-      if ('keepPrevious' in capped) {
-        return previousCart;
-      }
-      nextQuantity = capped.quantity;
-      nextCart[targetIndex] = {
-        ...item,
-        quantity: nextQuantity,
-      };
-      // A quantity change alters the cart total, so an active cart-wide
-      // negotiation no longer represents the agreed total — clear the group
-      // deal on every line (not only when the line is removed).
-      if (wasGroupActive) {
-        return nextCart.map((line) => ({
-          ...line,
-          negotiatedPrice: undefined,
-          negotiationStatus: undefined,
-        }));
-      }
-      return nextCart;
-    });
+        variantId,
+        quantity,
+        wasGroupActive,
+      })
+    );
     if (wasGroupActive && editApplied) {
       setCartWideNegotiationActive(false);
     }

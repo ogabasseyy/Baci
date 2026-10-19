@@ -17,6 +17,11 @@ import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-li
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
+import {
+  getCreatedOrderId,
+  isFiniteAmountLike,
+  toFiniteAmount,
+} from './checkout-order-result-amounts';
 
 const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
@@ -286,24 +291,3 @@ export {
   markAgenticCheckoutOrderCanceled,
   sendAgenticOrderCreatedWebhook,
 } from '@/lib/agentic/checkout-order-lifecycle';
-
-function isFiniteAmountLike(value: unknown) {
-  return (
-    value !== null && value !== undefined && Number.isFinite(Number(value))
-  );
-}
-
-function toFiniteAmount(value: unknown) {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function getCreatedOrderId(data: Record<string, unknown>) {
-  const order = data.order;
-  if (order && typeof order === 'object' && 'id' in order) {
-    const id = (order as { id?: unknown }).id;
-    return typeof id === 'string' ? id : undefined;
-  }
-
-  return typeof data.id === 'string' ? data.id : undefined;
-}

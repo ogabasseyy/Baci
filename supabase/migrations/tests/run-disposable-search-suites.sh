@@ -95,6 +95,11 @@ EXCLUDED=(
   # called by any disposable suite; covered by the replay --sql-check
   # storefront_refined_reread_anon_visibility suite instead.
   20261016170000_storefront_search_merchant_visibility_rpc.sql
+  # Shared-cart terminal purge: matched the registration pattern only via
+  # "search_path"; no disposable search suite calls the purge function
+  # (covered by the commerce_cart_terminal_purge replay suite instead).
+  20261015159000_commerce_cart_purge_search_path.sql
+  20261015179950_commerce_cart_purge_search_path.sql
 )
 
 check_chain_registration() {

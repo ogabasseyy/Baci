@@ -9,8 +9,9 @@ output was used only as a supporting signal. No code was moved.
 ## Consumers and existing shared surface
 
 `@baci/shared` (`packages/shared`, ~265 source files / ~23k lines) is
-consumed by all three apps: `apps/web` (~353 importing files),
-`apps/mobile-storefront` (~97), `apps/mobile-admin` (~119). Uniform
+consumed by all three apps. Counting non-test `.ts`/`.tsx` files that
+import `@baci/shared` or any subpath: `apps/web/src` 461,
+`apps/mobile-storefront` 148, `apps/mobile-admin` 122. Uniform
 Zod `^4.4.3`; Metro maps the package in both mobile apps; Next.js
 consumes it directly. Per-domain subpath exports already exist
 (`./cart`, `./schemas`, `./contracts`, …). The pattern is proven; the
@@ -25,7 +26,7 @@ work below extends it.
 | 3 | Schemas | Web `src/schemas` is 446 files / ~25k lines, overwhelmingly server API input schemas with no mobile consumer — not duplication. Real overlap is narrow: `apps/mobile-storefront/schemas` holds 39 non-test source files (~2.2k lines; 79 files including tests), of which 7 are cart-related (`cart*.ts`: pairing/session/snapshot/pending-request parsing of the same payloads whose types already live in `@baci/shared/cart`). | web, storefront | **Share the cart-payload schemas post-activation;** the rest of web schemas are server-canonical and stay. Most of the apparent schema mass is a false positive. |
 | 4 | Product transform/hydration | Mobile `hooks/product-utils.ts` / `product-transform` vs web `lib/normalize-product.ts` and PDP normalizers shape the same product rows differently per surface (display vs indexing). Partially same concept, partially surface-specific. | web, storefront | **Defer.** Extract only the shared row-shaping primitives if a future product change touches both; full unification would force surface compromises. Re-audit after Wave 1. |
 | 5 | Auth session handling | Web `lib/auth` (6 files / 573 lines, server session) vs mobile `lib/auth` (5 files / 661 lines, device session storage) share vocabulary, not logic: different trust models and storage. | web, storefront | **Keep platform-specific.** Share only error-code/claim type contracts if the audit of a future auth change shows drift. |
-| 6 | Checkout payload shapes | Web-only today (`lib/checkout`, 62 files / ~4.9k lines; agentic checkout modules). Mobile consumes checkout via APIs, not by reimplementing payload construction. | web | **Server-canonical.** No wave. |
+| 6 | Checkout payload shapes | Web holds the server side (`lib/checkout`, 62 files / ~4.9k lines; `src/schemas/orders.ts` 452 lines), **but mobile does reimplement payload construction**: `apps/mobile-storefront/components/checkout/checkout-order-builders.ts` (225 lines) builds the customer/item/total/payment/shipping/discount/shared-cart request, and `services/orders.ts` validates its own `CreateOrderRequestSchema` before POSTing to `/api/orders`. The transport shape is therefore implemented twice. | web, storefront | **Share the transport subshape post-activation** (it is on the cart activation path via the shared-cart fields): one shared order-request schema/types in `@baci/shared`; server validation rules and adapter-specific fields stay local. Server remains canonical for pricing/trust. |
 | 7 | Exported-symbol overlap (whole lib) | Only ~20 exported names are shared between web and mobile `lib` trees (`calculateOrderTotals`, `normalizeVariantAttributes`, `getPrimaryProductImage`, `hexToRgba`, …). Duplication is concentrated, not diffuse. | all | Confirms waves 1–3 cover most real overlap; a whole-monorepo sweep is not warranted. |
 
 ## Sampled out (explicit)

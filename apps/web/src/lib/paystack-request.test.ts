@@ -113,4 +113,26 @@ describe('paystackRequest', () => {
     });
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it('rewrites the wire text before parsing when a preprocessor is given', async () => {
+    const big = '9007199254740993';
+    const raw = `{"status":true,"data":{"id":${big},"transaction":5}}`;
+    vi.mocked(fetch).mockResolvedValue({
+      json: () => Promise.resolve(JSON.parse(raw)),
+      text: () => Promise.resolve(raw),
+      ok: true,
+      status: 200,
+    } as unknown as Response);
+    const paystackRequest = await request();
+
+    await expect(
+      paystackRequest('/refund/42', {
+        preprocessResponseText: (text) =>
+          text.replace(/"id"\s*:\s*(\d+)/g, '"id":"$1"'),
+      })
+    ).resolves.toEqual({
+      data: { id: big, transaction: 5 },
+      success: true,
+    });
+  });
 });

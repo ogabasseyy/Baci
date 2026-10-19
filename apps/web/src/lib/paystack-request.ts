@@ -12,7 +12,12 @@ interface PaystackApiResponse<T> {
 
 export async function paystackRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit & {
+    // Rewrite the raw response text before parsing (e.g. quote
+    // bare numeric IDs that would not survive JSON.parse). Opt-in
+    // per call; default parsing is unchanged.
+    preprocessResponseText?: (raw: string) => string;
+  } = {}
 ): Promise<PaystackResult<T>> {
   const url = `${PAYSTACK_BASE_URL}${endpoint}`;
 
@@ -25,8 +30,9 @@ export async function paystackRequest<T>(
   }
 
   try {
+    const { preprocessResponseText, ...fetchOptions } = options;
     const response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
@@ -38,7 +44,11 @@ export async function paystackRequest<T>(
     // page, truncated 429) must not erase the HTTP status below.
     let data: PaystackApiResponse<T> | null = null;
     try {
-      data = (await response.json()) as PaystackApiResponse<T>;
+      data = (
+        preprocessResponseText
+          ? JSON.parse(preprocessResponseText(await response.text()))
+          : await response.json()
+      ) as PaystackApiResponse<T>;
     } catch {
       data = null;
     }

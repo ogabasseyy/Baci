@@ -38,6 +38,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiPatch, apiPost, fetchWithCsrf } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import type { RefundSummary } from '@/lib/orders/refund-summary';
 import {
   type Order,
   resendOrderConfirmation,
@@ -52,11 +53,13 @@ import ConfirmInsuranceDialog, {
 } from './confirm-insurance-dialog';
 import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary';
 import { OrderPaymentSummary } from './OrderPaymentSummary';
+import { OrderRefundSection } from './order-refund-section';
 import { ShipmentDetailsCard } from './shipment-details-card';
 
 // Type definitions
 interface OrderDetailsClientPageProps {
   initialOrder: Order;
+  initialRefundSummary?: RefundSummary | null;
 }
 // Helper function
 function formatCurrency(amount: number, currency?: string | null): string {
@@ -123,6 +126,7 @@ function FulfillmentDialog({
 
 export default function OrderDetailsClientPage({
   initialOrder,
+  initialRefundSummary,
 }: OrderDetailsClientPageProps) {
   const { toast } = useToast();
   const [order, setOrder] = useState<Order>(initialOrder);
@@ -510,6 +514,11 @@ export default function OrderDetailsClientPage({
 
           <div className="grid auto-rows-max items-start gap-4">
             <OrderPaymentSummary order={order} />
+            <OrderRefundSection
+              order={order}
+              setOrder={setOrder}
+              initialRefundSummary={initialRefundSummary ?? null}
+            />
 
             <Card>
               <CardHeader>

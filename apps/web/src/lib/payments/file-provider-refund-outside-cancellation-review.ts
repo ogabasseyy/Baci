@@ -16,8 +16,8 @@ export interface ActiveOrderPaystackRefundReview {
     gateway_reference: string | null;
     id: string;
   }>;
-  providerPaymentTransactionId: number;
-  providerRefundId: number;
+  providerPaymentTransactionId: string;
+  providerRefundId: number | string;
   providerRefundStatus: string;
   /** Ambiguous matches name every candidate payment in one reason. */
   reason?: string;
@@ -141,8 +141,8 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
   supabase: SupabaseClient,
   candidates: RefundCandidate[],
   evidence: {
-    providerPaymentTransactionId: number;
-    providerRefundId: number;
+    providerPaymentTransactionId: string;
+    providerRefundId: number | string;
     reference: string;
   },
   reason: string,

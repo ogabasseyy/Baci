@@ -380,14 +380,14 @@ describe('Paystack reference-only refund events', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 42,
+        id: '42',
         status: 'processed',
-        transaction: 123,
+        transaction: '123',
       },
       success: true,
     });
     provider.verifyTransaction.mockResolvedValue({
-      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      data: { amount: 10000, currency: 'NGN', id: '123', reference: 'PSK-1' },
       success: true,
     });
     const refunds = buildRefundCandidates([
@@ -430,14 +430,14 @@ describe('Paystack reference-only refund events', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 42,
+        id: '42',
         status: 'processed',
-        transaction: 123,
+        transaction: '123',
       },
       success: true,
     });
     provider.verifyTransaction.mockResolvedValue({
-      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      data: { amount: 10000, currency: 'NGN', id: '123', reference: 'PSK-1' },
       success: true,
     });
     const rows = Array.from({ length: 11 }, (_, index) => ({

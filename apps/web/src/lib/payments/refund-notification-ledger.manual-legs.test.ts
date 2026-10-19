@@ -1,0 +1,205 @@
+import { describe, expect, it } from 'vitest';
+import { refundNotificationLedgerAmount } from './refund-notification-ledger';
+import { refundNotificationLedgerTestKit } from './refund-notification-ledger.test-helpers';
+
+const { database, order } = refundNotificationLedgerTestKit;
+
+describe('refundNotificationLedgerAmount manual legs', () => {
+  it('totals a cash-only order from its linked manual rows', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'cash',
+          id: 'pay-cash',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-cash' },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('adds wallet and savings reversals to the notification total', async () => {
+    // A ₦50 cash leg plus a ₦30 wallet reversal and a ₦20 reversed
+    // savings goal reads ₦100: internal reversals return outside
+    // the refund ledger but count as refunded coverage. The
+    // unreversed savings goal stays out.
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 50,
+          currency: 'NGN',
+          gateway: 'cash',
+          id: 'pay-cash',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 50,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-cash' },
+        },
+      ],
+      savingsReversals: [
+        { amount: 20, metadata: { reversed_at: '2026-09-28T12:00:00Z' } },
+        { amount: 999, metadata: {} },
+      ],
+      walletReversals: [{ amount: 30 }],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('totals a reversal-only order from its wallet and savings reversals', async () => {
+    // A wallet-only order has no external or manual legs: the total
+    // comes from the reversals alone instead of dead-lettering with
+    // a ledger mismatch. An unreversed savings goal stays out, and
+    // a legless order with no reversals still mismatches.
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'wallet',
+          id: 'pay-wallet',
+          status: 'completed',
+        },
+      ],
+      refunds: [],
+      savingsReversals: [
+        { amount: 40, metadata: { reversed_at: '2026-09-28T12:00:00Z' } },
+        { amount: 999, metadata: {} },
+      ],
+      walletReversals: [{ amount: 60 }],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+
+    const { supabase: empty } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'savings',
+          id: 'pay-savings',
+          status: 'completed',
+        },
+      ],
+      refunds: [],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase: empty,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
+  it('includes a manually covered cash leg beside provider legs', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'cash',
+          id: 'pay-cash',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-cash' },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+  });
+
+  it('mismatches when a cash leg lacks full manual coverage', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'cash',
+          id: 'pay-cash',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 40,
+          currency: 'NGN',
+          gateway: 'manual',
+          metadata: { payment_transaction_id: 'pay-cash' },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+});

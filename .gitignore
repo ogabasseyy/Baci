@@ -90,6 +90,8 @@ final_migration*.json
 unmatched_*.json
 timestamp_matches.json
 supabase-updates.json
+# Supabase CLI local state (update-check cache); never source.
+supabase/.temp/
 vps_*.txt
 vps_*.sh
 files_to_tar.txt

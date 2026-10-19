@@ -39,7 +39,7 @@ const candidate: CompletedPaymentMatch = {
 };
 
 const evidence = {
-  providerPaymentTransactionId: 555,
+  providerPaymentTransactionId: '555',
   providerRefundId: 202,
   providerRefundStatus: 'processed',
   reference: 'PSK-1',

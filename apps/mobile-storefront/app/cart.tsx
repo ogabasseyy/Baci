@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
@@ -14,6 +14,7 @@ import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
+import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
 import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -26,7 +27,7 @@ import { sharedCartCheckoutReady } from '@/lib/cart/checkout-ready';
 import { isValidCartStore } from '@/lib/cart-validation';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
-import { type CartItem, formatPrice, useCartStore } from '@/stores/cart-store';
+import { formatPrice, useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 export default function CartScreen() {
@@ -43,7 +44,6 @@ export default function CartScreen() {
   // Keep CART_MPU unmounted until the iOS price-change modal's fade and
   // native dismissal complete.
   const [priceChangeDismissed, setPriceChangeDismissed] = useState(true);
-  const pendingOperations = useRef<Set<string>>(new Set());
 
   const cartStore = useCartStore(
     useShallow((state) => ({
@@ -102,36 +102,11 @@ export default function CartScreen() {
     getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID).features
       ?.negotiationModal ?? true;
 
-  const handleQuantityChange = (item: CartItem, delta: number) => {
-    if (pendingOperations.current.has(item.id)) return;
-    const newQuantity = item.quantity + delta;
-    triggerHaptic();
-
-    if (newQuantity <= 0) {
-      handleRemoveItem(item);
-      return;
-    }
-
-    pendingOperations.current.add(item.id);
-    updateQuantity(item.id, newQuantity);
-    setTimeout(() => pendingOperations.current.delete(item.id), 200);
-  };
-
-  const handleRemoveItem = (item: CartItem) => {
-    if (pendingOperations.current.has(item.id)) return;
-    Alert.alert('Remove Item', `Remove ${item.name} from cart?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
-          pendingOperations.current.add(item.id);
-          removeItem(item.id);
-          pendingOperations.current.delete(item.id);
-        },
-      },
-    ]);
-  };
+  const { handleQuantityChange, handleRemoveItem } = useCartScreenItemHandlers({
+    updateQuantity,
+    removeItem,
+    triggerHaptic,
+  });
 
   const handleCheckout = () => {
     triggerHaptic();

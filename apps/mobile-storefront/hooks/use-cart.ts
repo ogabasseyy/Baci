@@ -13,7 +13,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
-import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
+import {
+  forwardSharedCartWrite,
+  hasSharedCartWriter,
+} from '@/stores/shared-cart-writer';
 import { createAddToCartMutation } from './cart-add-mutation';
 import { showCartToast } from './cart-notifications';
 import { createUpdateQuantityMutation } from './cart-quantity-mutation';
@@ -126,6 +129,16 @@ export function useCart() {
   // (analytics, confirmation toasts) on validation succeeding: the
   // fire-and-forget wrapper above cannot report a stock rejection.
   const addToCartAsync = (item: AddToCartInput) => {
+    // A shared-cart writer owns the lines: awaiting the remote command
+    // keeps success-only callers (PDP toast, attribution) from firing
+    // when the paired cart rejects the write. The local mutation is
+    // skipped entirely — it would double-forward the add and
+    // stock-check the parked device cart instead. Falls through when
+    // no writer is installed (or it retired mid-call).
+    const forwarded = hasSharedCartWriter()
+      ? forwardSharedCartWrite({ type: 'add', item })
+      : null;
+    if (forwarded) return forwarded;
     return addToCartMutation.mutateAsync(item);
   };
 

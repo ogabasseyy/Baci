@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
+import { installSharedCartWriter } from '@/stores/shared-cart-writer';
 import { useCart } from './use-cart';
 
 const mockNetInfoFetch = jest.fn();
@@ -485,6 +486,103 @@ describe('useCart stock validation', () => {
       });
     } finally {
       nowSpy.mockRestore();
+      unmount();
+      queryClient.clear();
+    }
+  });
+});
+
+describe('useCart shared-writer addToCartAsync', () => {
+  const sharedItem = {
+    product_id: 'product-9',
+    slug: 'shared-line',
+    name: 'Shared Line',
+    price: 5000,
+    quantity: 1,
+  };
+
+  function renderUseCart() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const rendered = renderHook(() => useCart(), { wrapper });
+    return { ...rendered, queryClient };
+  }
+
+  beforeEach(() => {
+    useCartStore.setState({ items: [], isLoading: false, lineSequence: 0 });
+    jest.clearAllMocks();
+  });
+
+  it('awaits the remote add instead of resolving off the parked cart', async () => {
+    let resolveWrite!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      resolveWrite = resolve;
+    });
+    const write = jest.fn(() => gate);
+    const uninstall = installSharedCartWriter({ write, onError: jest.fn() });
+    const { result, unmount, queryClient } = renderUseCart();
+
+    try {
+      let settled: string | null = null;
+      let pending!: Promise<void>;
+      act(() => {
+        pending = result.current.addToCartAsync(sharedItem).then(
+          () => {
+            settled = 'resolved';
+          },
+          () => {
+            settled = 'rejected';
+          }
+        );
+      });
+      await act(async () => {});
+      expect(write).toHaveBeenCalledWith({ type: 'add', item: sharedItem });
+      // The remote command is still in flight: success-only callers
+      // (PDP toast, attribution) must not run yet, and the local
+      // mutation must not start (no double-forward, no parked-cart
+      // stock check).
+      expect(settled).toBeNull();
+      expect(mockCheckStock).not.toHaveBeenCalled();
+      expect(useCartStore.getState().items).toHaveLength(0);
+
+      await act(async () => {
+        resolveWrite();
+      });
+      await pending;
+      expect(settled).toBe('resolved');
+      expect(mockCheckStock).not.toHaveBeenCalled();
+      expect(useCartStore.getState().items).toHaveLength(0);
+    } finally {
+      uninstall();
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('rejects when the paired cart rejects the write', async () => {
+    const onError = jest.fn();
+    const uninstall = installSharedCartWriter({
+      write: jest.fn(() => Promise.reject(new Error('Cart is locked'))),
+      onError,
+    });
+    const { result, unmount, queryClient } = renderUseCart();
+
+    try {
+      await expect(result.current.addToCartAsync(sharedItem)).rejects.toThrow(
+        'Cart is locked'
+      );
+      expect(onError).toHaveBeenCalled();
+      expect(mockCheckStock).not.toHaveBeenCalled();
+      expect(useCartStore.getState().items).toHaveLength(0);
+    } finally {
+      uninstall();
       unmount();
       queryClient.clear();
     }

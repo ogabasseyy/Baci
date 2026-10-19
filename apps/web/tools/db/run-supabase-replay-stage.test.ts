@@ -43,4 +43,35 @@ describe('runSupabaseReplayStage', () => {
     });
     expect((failure as Error).message).not.toContain(secret);
   });
+
+  it.each([
+    'connection-refused',
+    'image-pull',
+    'container-create',
+    'port-conflict',
+    'container-health',
+    'docker-api',
+    'disk-full',
+    'postgres-42501',
+  ])('retains the fixed Supabase diagnostic %s', async (diagnostic) => {
+    const failure = await runSupabaseReplayStage('db start', async () => {
+      throw new Error(
+        `supabase failed: non-zero-exit (diagnostic=${diagnostic})`
+      );
+    }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      message: `Supabase replay stage db start failed (supabase failed: non-zero-exit (diagnostic=${diagnostic}))`,
+    });
+  });
+
+  it('rejects credential text disguised as a diagnostic', async () => {
+    const failure = await runSupabaseReplayStage('db start', async () => {
+      throw new Error(
+        'supabase failed: non-zero-exit (diagnostic=token-private-value)'
+      );
+    }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      message: 'Supabase replay stage db start failed',
+    });
+  });
 });

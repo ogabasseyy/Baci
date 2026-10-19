@@ -123,6 +123,26 @@ describe('REDVAULT Paystack payment gate', () => {
   });
 
   it.each([
+    'United Bank For Africa',
+    'UNITED BANK FOR AFRICA',
+  ])('accepts verified UBA issuer casing %s without widening issuer identity', (bank) => {
+    const response = createVerifiedPaystackFixture();
+    response.data.authorization.bank = bank;
+    expect(
+      createRedvaultVerifiedPaymentEvidence({
+        acceptedFilterPolicyHash: 'a'.repeat(64),
+        expectedAmountKobo: 9500,
+        expectedCurrency: 'NGN',
+        expectedCustomerEmail: 'customer@example.test',
+        expectedDomain: 'test',
+        expectedIssuerName: 'UNITED BANK FOR AFRICA',
+        expectedReference: 'RV-1',
+        verifyResponse: response,
+      })
+    ).toMatchObject({ issuerName: 'UNITED BANK FOR AFRICA' });
+  });
+
+  it.each([
     [
       'top-level API status',
       (fixture: PaystackVerifyFixture) => {

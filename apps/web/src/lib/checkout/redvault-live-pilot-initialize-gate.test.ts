@@ -59,6 +59,25 @@ describe('redvault live pilot initialize gate', () => {
     ).toBeNull();
   });
 
+  it.each([
+    null,
+    undefined,
+    'other-user',
+  ])('admits public-product initialization for %j', (userId) => {
+    expect(
+      rejectUnauthorizedRedvaultLivePilot({
+        reason: 'public_product_test',
+        userId,
+      })
+    ).toBeNull();
+    expect(
+      preserveRedvaultLivePilotAttempts({
+        redvaultRequested: true,
+        isLivePilot: true,
+      })
+    ).toBe(true);
+  });
+
   it('skips snapshot verification outside the live pilot', async () => {
     gateMocks.verifyRedvaultLivePilotSnapshot.mockResolvedValue({ ok: true });
     await expect(

@@ -7,6 +7,7 @@ import {
   verifyRedvaultLivePilotFunding,
   verifyRedvaultLivePilotSnapshot,
 } from './redvault-live-pilot-verification';
+import { isRedvaultLivePilotReason } from './redvault-payment-availability';
 
 // Pilot orchestration for payment initialization, extracted from the
 // initialize route so the payment handler stays a thin wiring layer:
@@ -28,7 +29,8 @@ export function rejectUnauthorizedRedvaultLivePilot(input: {
   userId?: string | null;
 }): RedvaultLivePilotRejection | null {
   if (
-    input.reason === 'private_live_pilot' &&
+    isRedvaultLivePilotReason(input.reason) &&
+    input.reason !== 'public_product_test' &&
     input.userId !== REDVAULT_PILOT_USER_ID
   ) {
     return UNAVAILABLE;

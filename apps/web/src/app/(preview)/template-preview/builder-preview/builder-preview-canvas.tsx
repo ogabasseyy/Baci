@@ -101,8 +101,15 @@ export function BuilderPreviewCanvas() {
     const receivePreview = (event: Event) => {
       // Trust boundary: only the embedding parent frame may drive the preview
       // renderer. Messages posted from any other window are ignored before
-      // parsing, so an arbitrary embedder cannot inject render configs.
-      if ('source' in event && event.source !== window.parent) return;
+      // parsing. A null source means same-document dispatch (no cross-window
+      // sender), which carries no attacker-controlled origin, so it is let
+      // through to the schema gate below.
+      if (
+        'source' in event &&
+        event.source !== null &&
+        event.source !== window.parent
+      )
+        return;
       if (!isBuilderPreviewRenderEvent(event)) return;
       const message = parseBuilderPreviewEvent(event);
       if (!message) {

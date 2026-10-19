@@ -5,7 +5,6 @@ import {
   mockRpc,
   POST,
   request,
-  setAnonClient,
   setMerchantRow,
 } from './route.test-support';
 

@@ -52,3 +52,18 @@ it('only the catalog renderer launches UI and reuses public product lookup', asy
     await server.close();
   }
 });
+
+it('rejects duplicate product IDs over tools/call with an actionable validation error', async () => {
+  const server = await startMcpServerWithPostgrest({});
+  try {
+    const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+      id: 30, method: 'tools/call', params: {
+        name: 'render_ogabassey_catalog', arguments: {
+          products: [{ product_id: 'available-product' }, { product_id: 'available-product' }],
+        },
+      },
+    }));
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('Each product_id may appear only once');
+  } finally { await server.close(); }
+});

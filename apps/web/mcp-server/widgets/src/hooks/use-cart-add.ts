@@ -52,6 +52,7 @@ export function createCartAddHandler({
     // tool call here would discard the matched option.
     const optionLink = resolveOptionAwareProductUrl(product);
     if (optionLink.hasOptions) {
+      busy.current = true;
       try {
         if (!openOgabasseyUrl(optionLink.url)) {
           if (requestId !== handoffRequestId.current) return;
@@ -62,6 +63,10 @@ export function createCartAddHandler({
       } catch {
         if (requestId !== handoffRequestId.current) return;
         setCartError('Could not open the cart. Please try again.');
+      } finally {
+        // Keep overlapping invocations serialized through the dispatch turn.
+        await Promise.resolve();
+        busy.current = false;
       }
       return;
     }

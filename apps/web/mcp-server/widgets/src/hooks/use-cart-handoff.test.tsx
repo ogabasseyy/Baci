@@ -291,3 +291,22 @@ it('forgets the dead token when a removal empties the cart', async () => {
     cart_token: undefined,
   });
 });
+
+it('serializes overlapping option-product navigation and permits a later attempt', async () => {
+  const openExternal = vi.fn();
+  window.openai = { openExternal };
+  const optionProduct = {
+    ...product, has_variants: true,
+    url: 'https://ogabassey.com/products/phone?variantId=v1',
+  };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await Promise.all([
+      result.current.handleAddToCart(optionProduct),
+      result.current.handleAddToCart(optionProduct),
+    ]);
+  });
+  expect(openExternal).toHaveBeenCalledTimes(1);
+  await act(async () => { await result.current.handleAddToCart(optionProduct); });
+  expect(openExternal).toHaveBeenCalledTimes(2);
+});

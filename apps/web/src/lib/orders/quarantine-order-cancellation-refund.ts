@@ -62,10 +62,20 @@ export async function quarantineRefund({
     // existing review instead of dropping the recovery metadata.
     const providerRefundId = metadata?.provider_refund_id;
     const paymentTransactionId = metadata?.payment_transaction_id;
+    // Stamps persist decimal text, but pre-migration stamps hold JSON
+    // numbers: accept both, since the bigint RPC parameter coerces
+    // decimal text. Fail-closed on anything else.
+    const providerRefundIdText =
+      typeof providerRefundId === 'string' &&
+      /^[1-9][0-9]*$/.test(providerRefundId)
+        ? providerRefundId
+        : typeof providerRefundId === 'number' &&
+            Number.isSafeInteger(providerRefundId) &&
+            providerRefundId > 0
+          ? String(providerRefundId)
+          : null;
     if (
-      typeof providerRefundId === 'number' &&
-      Number.isSafeInteger(providerRefundId) &&
-      providerRefundId > 0 &&
+      providerRefundIdText !== null &&
       typeof paymentTransactionId === 'string' &&
       paymentTransactionId.length > 0
     ) {
@@ -74,6 +84,8 @@ export async function quarantineRefund({
         {
           p_order_id: order.id,
           p_merchant_id: order.merchant_id,
+          // Pass the raw value through: numbers keep their exact wire
+          // shape, decimal text coerces to the bigint parameter.
           p_provider_refund_id: providerRefundId,
           p_payment_transaction_id: paymentTransactionId,
           p_reason: reason,

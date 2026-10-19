@@ -8,7 +8,7 @@ import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancel
 
 export async function lookupLocalRefundByProviderId(
   supabase: SupabaseClient,
-  refundId: number
+  refundId: number | string
 ): Promise<RefundRow | null> {
   const matches = await findPaystackRefundRowsByProviderId<RefundRow>(
     supabase,

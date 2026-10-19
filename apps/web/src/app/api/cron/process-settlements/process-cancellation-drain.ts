@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import {
+  CAPPED_RECONCILE_PHASE_MS,
   cancellationDrainDeadlineMs,
   cancellationEmailDrainDeadlineMs,
+  cancellationRefundDrainDeadlineMs,
 } from '@/lib/orders/cancellation-drain-deadline';
 import { cancellationSideEffectDrainLimit } from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
+import {
+  isRefundVerificationPendingBefore,
+  REFUND_VERIFICATION_PROBE_BUDGET_MS,
+} from '@/lib/orders/refund-verification-pending';
 import type { MerchantRefundPushSender } from '@/lib/payments/drain-paystack-refund-notifications';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { notificationDrainDeadlineMs } from '@/lib/payments/notification-drain-deadline';
@@ -44,7 +50,22 @@ export async function processCancellationDrain(
   const workersStartedAt = Date.now();
   // Bound the parallel reconcile phase so the serial drains behind it keep
   // a guaranteed share of the invocation instead of computing zero limits.
-  const workerDeadlineMs = reconcileWorkerDeadlineMs(workersStartedAt);
+  // When refund verification pends, cap the phase before it consumes the
+  // provider admission: a full reconcile leaves ~30s and every 76s
+  // verification-plus-initiation defers on every backlog invocation.
+  // A thrown probe outage fails closed (capped) like a returned
+  // read error: aborting here would skip every drain below. A slow
+  // probe fails closed the same way at its overall deadline: without
+  // the bound it would eat the invocation before any deadline is
+  // computed and every drain below would skip on a zero limit.
+  const verificationPending = await isRefundVerificationPendingBefore(
+    supabase,
+    workersStartedAt + REFUND_VERIFICATION_PROBE_BUDGET_MS
+  );
+  const workerDeadlineMs = reconcileWorkerDeadlineMs(
+    workersStartedAt,
+    verificationPending ? CAPPED_RECONCILE_PHASE_MS : undefined
+  );
   const [refundResult, legacyRefundResult, watchSweepResult] =
     await Promise.allSettled([
       reconcilePendingPaystackCancellationRefunds(
@@ -92,6 +113,10 @@ export async function processCancellationDrain(
           // deadline leaves no 48s sender budget after a full reconcile
           // phase, excluding every customer email on each backlog run.
           emailDeadlineMs: cancellationEmailDrainDeadlineMs(workersStartedAt),
+          // Refunds verify against their own cutoff for the same
+          // reason: with the reconcile phase capped above, admitted
+          // refund steps get the full 76s preflight window.
+          refundDeadlineMs: cancellationRefundDrainDeadlineMs(workersStartedAt),
           limit: sideEffectLimit,
           sendCancellationEmail,
           supabase,

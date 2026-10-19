@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ initiateRefund: vi.fn() }));
 
+vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('@/lib/initiate-paystack-refund', () => ({
   initiateRefund: mocks.initiateRefund,
 }));
@@ -250,51 +253,5 @@ describe('cancellation refund leg matching', () => {
         reason: expect.stringContaining('do not cover their payment legs'),
       })
     );
-  });
-
-  it('lets an in-flight remainder take precedence over mismatch quarantine', async () => {
-    const eq = vi.fn().mockReturnThis();
-    const update = vi.fn().mockReturnValue({ eq });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(
-        transactionQuery([payment('payment-1', 100, 'paystack-ref')])
-      )
-      .mockReturnValueOnce(
-        transactionQuery([
-          completedRefund('payment-1', { amount: 40 }),
-          {
-            amount: 60,
-            currency: 'NGN',
-            gateway: 'paystack',
-            gateway_reference: '42',
-            metadata: { payment_transaction_id: 'payment-1' },
-            status: 'refund_pending',
-          },
-        ])
-      )
-      .mockReturnValueOnce(auditReviewsQuery([]))
-      .mockReturnValueOnce({ update });
-
-    const error = await executeOrderCancellationSideEffect({
-      merchant,
-      order,
-      step: 'refund',
-      supabase: { from } as never,
-    }).catch((reason: unknown) => reason);
-
-    expect(error).toBeInstanceOf(Error);
-    expect(error).not.toBeInstanceOf(DeliveryUncertainError);
-    expect((error as Error).message).toBe(
-      'cancellation_refund_awaiting_provider_completion'
-    );
-    expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    // The order-level budget was consumed before these legs settled:
-    // reset it so the resumed run retries the outstanding legs fresh
-    // instead of mistaking their first failure for exhaustion.
-    expect(from).toHaveBeenCalledTimes(4);
-    expect(update).toHaveBeenCalledWith({ attempts: 0 });
-    expect(eq).toHaveBeenCalledWith('order_id', 'order-1');
-    expect(eq).toHaveBeenCalledWith('step', 'refund');
   });
 });

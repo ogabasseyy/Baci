@@ -55,6 +55,10 @@ export async function runOrderCancellationSideEffect({
   let status: 'completed' | 'failed' | 'delivery_uncertain' | 'deferred' =
     'completed';
   let errorMessage: string | null = null;
+  // No budget gate here: cheap worker paths (unsupported-gateway
+  // quarantine, manual deferral) must run even in a short window,
+  // and the verification budget is enforced precisely where a leg
+  // needing provider verification is scheduled.
   try {
     result = await execute();
   } catch (error) {

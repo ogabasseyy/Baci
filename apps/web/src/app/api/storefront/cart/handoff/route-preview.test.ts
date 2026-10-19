@@ -281,17 +281,20 @@ describe('GET /api/storefront/cart/handoff', () => {
 
   it('rejects an overlong pairing token before any database call', async () => {
     const previewCallsBefore = mocks.previewCalls;
+    const token = `ch1.${'x'.repeat(2049 - 'ch1.'.length)}`;
+    expect(token).toHaveLength(2049);
     const response = await GET(
       new NextRequest(
         `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
         {
-          headers: { 'x-handoff-token': `ch1.${'x'.repeat(600)}` },
+          headers: { 'x-handoff-token': token },
           method: 'GET',
         }
       )
     );
     expect(response.status).toBe(404);
     expect(mocks.previewCalls).toBe(previewCallsBefore);
+    expect(mocks.locatorArgs).toBeNull();
   });
 
   it('applies the per-client quota before running the preview RPC', async () => {

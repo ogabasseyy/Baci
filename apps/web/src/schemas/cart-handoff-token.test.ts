@@ -32,10 +32,14 @@ describe('handoff preview token boundary', () => {
     expect(cartHandoffPairingTokenSchema.safeParse(token).success).toBe(true);
   });
 
-  it('rejects oversized tokens before calling the preview RPC', () => {
-    expect(
-      cartHandoffPairingTokenSchema.safeParse(`ch1.${'a'.repeat(2048)}.sig`)
-        .success
-    ).toBe(false);
+  it.each([
+    [2048, true],
+    [2049, false],
+  ] as const)('validates a %i-character token at the exact bound', (length, accepted) => {
+    const token = `ch1.${'a'.repeat(length - 'ch1..sig'.length)}.sig`;
+    expect(token).toHaveLength(length);
+    expect(cartHandoffPairingTokenSchema.safeParse(token).success).toBe(
+      accepted
+    );
   });
 });

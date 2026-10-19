@@ -93,3 +93,37 @@ it('persists a validated guest-cart result after the server accepts an add', asy
   expect(persistedState?.cart).toEqual([{ product, quantity: 1 }]);
   expect(setCartError).toHaveBeenCalledWith(null);
 });
+
+it('closes the reserved tab when variant-selection navigation fails', async () => {
+  const callTool = vi.fn().mockResolvedValue({
+    structuredContent: {
+      success: false,
+      requires_variant_selection: true,
+      product_id: product.id,
+      product_url: 'https://ogabassey.com/products/phone',
+    },
+  });
+  window.openai = { callTool };
+  const close = vi.fn();
+  vi.stubGlobal(
+    'open',
+    vi.fn(() => ({ closed: true, location: { href: '' }, close }))
+  );
+  const setCartError = vi.fn();
+  const handler = createCartAddHandler({
+    widgetState: null,
+    setWidgetState: vi.fn(),
+    setCartError,
+    setIsSavingCart: vi.fn(),
+    syncCartNotice: vi.fn(),
+    handoffRequestId: { current: 0 },
+    busy: { current: false },
+  });
+
+  await handler(product);
+
+  expect(close).toHaveBeenCalledOnce();
+  expect(setCartError).toHaveBeenLastCalledWith(
+    'Could not open the product page. Please allow popups and try again.'
+  );
+});

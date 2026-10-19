@@ -121,6 +121,7 @@ export function createCartAddHandler({
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id);
       if (variantSelectionUrl) {
         if (!openOgabasseyUrl(variantSelectionUrl, pendingTab)) {
+          pendingTab?.close();
           setCartError(
             'Could not open the product page. Please allow popups and try again.'
           );

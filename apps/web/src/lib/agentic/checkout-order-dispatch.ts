@@ -11,9 +11,7 @@ import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
-import { prepareAgenticOfferEconomics } from '@/lib/agentic/prepare-agentic-offer-economics';
 import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
@@ -22,6 +20,7 @@ import {
   isFiniteAmountLike,
   toFiniteAmount,
 } from './checkout-order-result-amounts';
+import { resolveAgenticOfferPrices } from './resolve-agentic-offer-prices';
 
 const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
@@ -109,27 +108,13 @@ export async function createAgenticCheckoutOrder(
   // reconcile exactly like /api/orders before computing economics, or
   // the order would price and reserve the parent instead of the
   // selected offer.
-  const preparedOffers = await prepareAgenticOfferEconomics(
-    (productId) =>
-      supabase.rpc('get_product_offers', {
-        p_product_id: productId,
-      }) as unknown as Promise<OrderOfferQueryResult>,
-    orderItemsPayload
+  const resolvedOffers = await resolveAgenticOfferPrices(
+    supabase,
+    orderItemsPayload,
+    sharedCartBinding
   );
-  if (!preparedOffers.ok) {
-    // A committed bound order must still replay when the offer catalog
-    // changed under the retry (exact offer deleted/deactivated after
-    // commit, response lost): refusing here would report an invalid
-    // offer for a completed checkout without ever reaching the binding
-    // RPC's replay path. Fall through with no live prices — the
-    // binding path revalidates authoritatively in SQL, so it replays
-    // or fails closed there. Mirrors the
-    // OrderConditionUnavailableError fall-through below.
-    if (!sharedCartBinding) return preparedOffers.result;
-  }
-  const liveOfferPrices: Map<string, number> = preparedOffers.ok
-    ? preparedOffers.liveOfferPrices
-    : new Map();
+  if (!resolvedOffers.ok) return resolvedOffers.result;
+  const liveOfferPrices = resolvedOffers.liveOfferPrices;
 
   // B3.5 round 5 (Codex P1, PR #1622): agentic
   // `calculateCheckoutSession` produces `tax: 0` for every line item,

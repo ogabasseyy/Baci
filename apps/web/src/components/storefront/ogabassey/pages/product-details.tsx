@@ -619,7 +619,7 @@ export const OgabasseyV2ProductDetails: React.FC<
                   {selectedStorage === null &&
                     productData.storage.length > 0 && (
                       <p className="text-[10px] text-gray-400 mt-1">
-                        Select storage to confirm availability
+                        Select storage
                       </p>
                     )}
                 </div>

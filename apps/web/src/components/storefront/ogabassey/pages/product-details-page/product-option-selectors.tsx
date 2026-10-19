@@ -69,7 +69,7 @@ export function ProductOptionSelectors({
                   getAxisOptions(axis).length > 0
               ) && (
               <p className="mt-1 text-[10px] text-gray-400">
-                Select options to confirm availability
+                Select options
               </p>
             )}
           </div>

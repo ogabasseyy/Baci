@@ -19,6 +19,7 @@ test('defines the current required public MCP inventory', () => {
     'get_delivery_fee_info',
     'get_store_info',
     'search_products',
+    'render_ogabassey_catalog',
   ]);
   assert.equal(DEFAULT_REQUIRED_TOOLS.includes('get_recommendations'), false);
   assert.equal(DEFAULT_REQUIRED_TOOLS.includes('get_shipping_quote'), false);

@@ -1119,7 +1119,7 @@ const widgetHtml = `<!DOCTYPE html>
             '<p class="product-name">' + escapeHtml(p.name) + '</p>' +
             '<div class="product-meta">' +
               (p.brand ? '<span class="product-brand">' + escapeHtml(p.brand) + '</span>' : '') +
-              '<span class="in-stock">' + (p.in_stock === true ? 'In Stock' : p.in_stock === false ? 'Out of Stock' : 'Confirm availability') + '</span>' +
+              (typeof p.in_stock === 'boolean' ? '<span class="in-stock">' + (p.in_stock ? 'In Stock' : 'Out of Stock') + '</span>' : '') +
             '</div>' +
             '<div class="price-row">' +
               '<span class="product-price">' + formatPrice(p.price) + '</span>' +

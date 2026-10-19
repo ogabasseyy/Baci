@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { openOgabasseyUrl } from './open-ogabassey-url';
+import { widgetHost } from './widget-host';
 
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
   vi.restoreAllMocks();
 });
@@ -71,4 +73,14 @@ it('reports a browser exception as a failed navigation request', () => {
     throw new Error('navigation rejected');
   });
   expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(false);
+});
+
+it('surfaces a rejected retained-bridge call as a host error', async () => {
+  window.openai = {
+    openExternal: vi.fn().mockRejectedValueOnce(new Error('denied')),
+  };
+  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(true);
+  await vi.waitFor(() => {
+    expect(widgetHost.get()?.hostError).toContain('Could not open');
+  });
 });

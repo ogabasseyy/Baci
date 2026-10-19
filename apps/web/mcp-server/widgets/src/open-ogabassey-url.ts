@@ -8,7 +8,18 @@ export function openOgabasseyUrl(
   pendingTab?: Window | null
 ): boolean {
   if (widgetHost.get()?.openExternal) {
-    widgetHost.get()?.openExternal?.({ href: url });
+    const result = widgetHost.get()?.openExternal?.({ href: url }) as unknown;
+    // A retained legacy bridge may reject asynchronously; surface the denial
+    // instead of letting it escape as an unhandled rejection the caller
+    // counts as success. Adapters that catch internally never reach the catch.
+    if (typeof (result as Promise<void> | undefined)?.catch === 'function') {
+      (result as Promise<void>).catch(() => {
+        widgetHost.update({
+          hostError:
+            'Could not open Ogabassey. Please try again or continue in the conversation.',
+        });
+      });
+    }
     return true;
   } else if (pendingTab && !pendingTab.closed) {
     pendingTab.location.href = url;

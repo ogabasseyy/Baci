@@ -112,6 +112,13 @@ change fixture imports.
 
 ## Money formatting (`@baci/shared/money`)
 
+Public API: `formatMoney` (major units), `formatMoneyMinor` (minor
+units scaled by ISO exponent), `formatMoneyCompact` (compact/standard
+notation only), and `createMoneyFormatter` (bound formatter from
+`create-money-formatter.ts`, backed by the cached Intl factory in
+`money-formatter.ts`). Whole-amount rendering is an explicit
+`minimumFractionDigits: 0, maximumFractionDigits: 0` override.
+
 The canonical money formatter lives in `src/money/format-money.ts`,
 extracted from the receipt-scoped formatter in
 `src/receipt/receipt-money.ts` (which re-exports `createMoneyFormatter`

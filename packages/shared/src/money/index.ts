@@ -12,7 +12,10 @@ export {
   SUPPORTED_MONEY_CURRENCIES,
 } from './currency-locales';
 export { formatMoney } from './format-money';
-export { formatMoneyCompact } from './format-money-compact';
+export {
+  type FormatMoneyCompactOptions,
+  formatMoneyCompact,
+} from './format-money-compact';
 export { formatMoneyMinor } from './format-money-minor';
 export type {
   FormatMoneyOptions,

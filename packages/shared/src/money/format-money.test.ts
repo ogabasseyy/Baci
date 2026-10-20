@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getReceiptVatRate } from '../receipt/receipt-money';
 import {
   createMoneyFormatter,
+  type FormatMoneyCompactOptions,
   type FormatMoneyOptions,
   formatMoney,
   formatMoneyCompact,
@@ -126,7 +127,7 @@ describe('shared money formatting characterization', () => {
   });
 
   it('equalizes fraction bounds for roundingIncrement > 1', () => {
-    const options = { roundingIncrement: 5 } as FormatMoneyOptions;
+    const options = { roundingIncrement: 5 } as FormatMoneyCompactOptions;
     expect(formatMoneyCompact(1200, 'NGN', options)).toBe('₦1.20K');
     expect(formatMoney(1200, 'NGN', options)).toBe('₦1,200.00');
   });
@@ -150,6 +151,14 @@ describe('shared money formatting characterization', () => {
     };
     expect(getReceiptVatRate(merchant, ' ngn ')).toBe(7.5);
     expect(getReceiptVatRate(merchant, '')).toBeNull();
+  });
+
+  it('ignores non-compact/standard notation in formatMoneyCompact', () => {
+    const rogue = {
+      notation: 'scientific',
+    } as unknown as FormatMoneyCompactOptions;
+    expect(formatMoneyCompact(1200, 'NGN', rogue)).toBe('₦1.2K');
+    expect(formatMoneyCompact(500, 'NGN', rogue)).toBe('₦500.00');
   });
 
   it('exposes frozen currency metadata maps', () => {

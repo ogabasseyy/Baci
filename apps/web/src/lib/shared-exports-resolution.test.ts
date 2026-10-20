@@ -135,6 +135,15 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       buildPendingVtuScopeTag: unknown;
     };
     expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');
+    // Load (not just resolve) the money subpath through the exports map
+    // and exercise it the way a consumer would.
+    const money = (await import(
+      pathToFileURL(appRequire.resolve('@baci/shared/money')).href
+    )) as {
+      formatMoney: (amount: number, currency: string) => string;
+    };
+    expect(typeof money.formatMoney).toBe('function');
+    expect(money.formatMoney(1234.5, 'NGN')).toBe('₦1,234.50');
   });
 
   it('every src domain directory with an index has a subpath export', () => {

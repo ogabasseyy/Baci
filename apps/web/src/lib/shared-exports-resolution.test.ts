@@ -91,9 +91,7 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
   it('loads every fixture subpath through its exports-resolved path', async () => {
     // Load (not just resolve) each module at the path the exports map
     // produced, proving the file and its import graph load cleanly.
-    for (const specifier of expectedSubpaths.filter((s) =>
-      s.includes('/test-fixtures/')
-    )) {
+    for (const specifier of fixtureSubpaths) {
       const resolved = appRequire.resolve(specifier);
       const loaded = (await import(pathToFileURL(resolved).href)) as Record<
         string,

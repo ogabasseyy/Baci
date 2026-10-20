@@ -78,8 +78,14 @@ resolvable from production bundles (Next.js, Metro). The boundary is
 enforced by test, not by the exports map:
 `apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts` (plus
 per-app mirrors in both mobile apps) fails
-if any non-test source in the three apps or in this package imports a
-fixture by a literal subpath or deep-relative specifier. The guards
+if any scanned non-test source in the three apps or in this package
+imports a fixture by a literal subpath or deep-relative specifier.
+Scan exclusions: generated-output directories (node_modules, build,
+dist, coverage, Pods, DerivedData, .next, .expo) are skipped at any
+depth, root-level developer tooling directories (apps/*/tools, which
+run in Node and are never bundled) are skipped, and symlinked entries
+are not followed; a fixture import inside an excluded tree is a
+code-review catch, not a guard catch. The guards
 match literal specifiers only; dynamically assembled fixture paths
 are a code-review catch, not a guard catch. Never import a fixture
 from non-test code. These guard suites are explicitly force-run in

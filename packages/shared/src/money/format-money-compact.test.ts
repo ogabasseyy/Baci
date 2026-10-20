@@ -48,12 +48,15 @@ describe('formatMoneyCompact', () => {
     expect(formatMoneyCompact(1200, 'NGN', options)).toBe('₦1.20K');
   });
 
-  it('caps compact defaults at zero-decimal currency exponents', () => {
+  it('keeps magnitude precision in compact zero-decimal amounts', () => {
+    // Compact fractions describe the abbreviated magnitude (1,5 M),
+    // not minor units, so zero-decimal currencies keep them; the
+    // standard branch (500.5 XAF pin above) stays whole.
     expect(formatMoneyCompact(500, 'XOF', { notation: 'compact' })).toBe(
-      `500${NBSP}F${NNBSP}CFA`
+      `500,0${NBSP}F${NNBSP}CFA`
     );
-    expect(formatMoneyCompact(1_200_000, 'XOF')).toBe(
-      `1${NBSP}M${NBSP}F${NNBSP}CFA`
+    expect(formatMoneyCompact(1_500_000, 'XOF')).toBe(
+      `1,5${NBSP}M${NBSP}F${NNBSP}CFA`
     );
   });
 });

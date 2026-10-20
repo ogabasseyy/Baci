@@ -27,6 +27,15 @@ describe('createMoneyFormatter', () => {
     expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.46`);
   });
 
+  it('resolves single-bound options like formatMoney', () => {
+    expect(
+      createMoneyFormatter('JPY', { minimumFractionDigits: 0 })(1234.5)
+    ).toBe(formatMoney(1234.5, 'JPY', { minimumFractionDigits: 0 }));
+    expect(
+      createMoneyFormatter('JPY', { minimumFractionDigits: 0 })(1234.5)
+    ).toBe('JP¥1,235');
+  });
+
   it('normalizes lowercase and padded stored codes (documented change)', () => {
     // Legacy raw-code lookup fell back to en-NG for these; the shared
     // normalization now resolves the intended currency locale.

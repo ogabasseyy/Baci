@@ -1,13 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { useCheckoutCtaAnimation } from '@/components/checkout/use-checkout-cta-animation';
 import type Colors from '@/constants/Colors';
 import { RADIUS } from '@/constants/Colors';
 import styles from './styles';
@@ -39,20 +33,7 @@ export default function CartCheckoutFooter({
   onNegotiateTotal,
   surfaceInset,
 }: CartCheckoutFooterProps) {
-  const arrowTranslateX = useSharedValue(0);
-
-  useEffect(() => {
-    arrowTranslateX.set(withRepeat(withTiming(6, { duration: 600 }), -1, true));
-
-    return () => {
-      cancelAnimation(arrowTranslateX);
-      arrowTranslateX.set(0);
-    };
-  }, [arrowTranslateX]);
-
-  const animatedArrowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: arrowTranslateX.get() }],
-  }));
+  const animatedArrowStyle = useCheckoutCtaAnimation(false, 600);
 
   return (
     <View

@@ -237,6 +237,16 @@ describe('send manual order document dispatch', () => {
     });
   });
 
+  it('bounds the provider send to a single attempt per sender for the cron budget', async () => {
+    const db = database();
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail.mock.calls[0][0]).toMatchObject({
+      maxAttemptsPerSender: 1,
+    });
+  });
+
   it('fails unknown instead of recording sent when a newer attempt re-claimed the row', async () => {
     const db = database({}, { dispatchLeaseOwner: 'worker-2' });
     const result = await sendManualOrderDocument({ supabase: db.client, row });

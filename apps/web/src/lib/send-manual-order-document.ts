@@ -202,6 +202,12 @@ export async function sendManualOrderDocument({
         },
       ],
       emailType: 'orders',
+      // Single attempt per sender: this runs inside the 60s cron worker,
+      // so a slow provider must fail fast into the outbox retry path
+      // instead of overrunning the function mid-dispatch. Transient
+      // failures reschedule via markFailedOrRetry; the platform-sender
+      // fallback still applies once on definite rejections.
+      maxAttemptsPerSender: 1,
       fromName: sanitizeEmailDisplayName(
         merchant.email_sender_name ||
           merchant.business_name ||

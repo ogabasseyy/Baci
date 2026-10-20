@@ -18,7 +18,7 @@ import {
   resolveInvoiceTypeCode,
   showMerchantBankDetails,
 } from '@baci/shared';
-import { isManualOrderRecord } from '@baci/shared/receipt';
+import { ASSURANCE_LINE_NAME, isManualOrderRecord } from '@baci/shared/receipt';
 import { useState } from 'react';
 import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
 import { selectReceiptCompletionDate } from './receipt-completion-date';
@@ -45,7 +45,7 @@ function appendAssuranceLine(
   return [
     ...(items as ReceiptOrder['items']),
     {
-      product_name: 'Ogabassey Assurance',
+      product_name: ASSURANCE_LINE_NAME,
       quantity: 1,
       price: total,
     },
@@ -201,8 +201,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       // dereferences every item, so a corrupt row must degrade to fewer
       // lines, never crash the render. Then itemize the premium like the
       // emailed PDF, web preview, and download so the receipt lines
-      // reconcile with the displayed total. ('Ogabassey Assurance' mirrors
-      // web ASSURANCE_LINE_NAME; mobile cannot import apps/web.)
+      // reconcile with the displayed total. (ASSURANCE_LINE_NAME is the
+      // shared canonical name; mobile cannot import apps/web.)
       items: appendAssuranceLine(
         (Array.isArray(receiptDetail.items) ? receiptDetail.items : []).filter(
           (item) => item != null && typeof item === 'object'

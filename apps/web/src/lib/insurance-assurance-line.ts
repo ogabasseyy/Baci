@@ -1,4 +1,5 @@
 import type { ReceiptOrder } from '@baci/shared/receipt';
+import { ASSURANCE_LINE_NAME } from '@baci/shared/receipt';
 import type { InvoiceLineItem, TaxSubtotal } from '@/lib/invoice-generator';
 
 type ReceiptLineItem = ReceiptOrder['items'][number];
@@ -13,7 +14,8 @@ type ReceiptLineItem = ReceiptOrder['items'][number];
  * exactly with zero tax-behaviour change.
  */
 
-export const ASSURANCE_LINE_NAME = 'Ogabassey Assurance';
+export { ASSURANCE_LINE_NAME };
+
 const ASSURANCE_LINE_DESCRIPTION = 'Device protection premium (MyCover.ai)';
 const ASSURANCE_EXEMPTION_REASON = 'Insurance premium — outside scope of VAT';
 

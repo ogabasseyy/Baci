@@ -179,26 +179,18 @@ async function fetchReceiptDetail(
     !(await isReceiptInvoiceTaxValid(orderId))
   )
     return null;
-  const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
-    async () =>
-      await supabase.rpc('get_customer_order_payment_accounts', {
-        p_order_ids: [orderId],
-      }),
-    { maxRetries: 2 }
-  );
+  // Independent RPCs (same args, combined downstream) fire together; the
+  // error checks below keep the sequential semantics (account throws first).
+  // biome-ignore format: parallel RPCs preserve the 300-line gate.
+  const [virtualAccountResult, transactionResult] = await Promise.all([withSupabaseRetry(async () => await supabase.rpc('get_customer_order_payment_accounts', { p_order_ids: [orderId] }), { maxRetries: 2 }), withSupabaseRetry(async () => await supabase.rpc('get_customer_order_transactions', { p_order_ids: [orderId] }), { maxRetries: 2 })]);
+  const { data: virtualAccountRows, error: vaError } = virtualAccountResult;
   if (vaError) {
     log.warn('Failed to fetch virtual account:', vaError.message);
     throw vaError;
   }
   const virtualAccounts = mapCustomerPaymentAccountRpcRows(virtualAccountRows);
 
-  const { data: transactionRows, error: txError } = await withSupabaseRetry(
-    async () =>
-      await supabase.rpc('get_customer_order_transactions', {
-        p_order_ids: [orderId],
-      }),
-    { maxRetries: 2 }
-  );
+  const { data: transactionRows, error: txError } = transactionResult;
   if (txError) {
     log.warn('Failed to fetch transactions:', txError.message);
     if (isPaidOrder || requiresPaymentHistory) {

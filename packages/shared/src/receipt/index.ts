@@ -1,3 +1,4 @@
+export { ASSURANCE_LINE_NAME } from './assurance-line-name';
 export { getBankNameFromCode, resolveMerchantBankName } from './bank-codes';
 export { escapeHtml, escapeJsString } from './escape-html';
 export { generateReceiptHtml } from './generate-receipt-html';

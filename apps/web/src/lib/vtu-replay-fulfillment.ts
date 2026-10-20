@@ -20,6 +20,8 @@ type ReplayAuthUser = NonNullable<
  * check is the only addition. Guards (customer, merchant,
  * fingerprint) stay at the call sites: they compare against
  * different baselines (requesting ownership vs the prepared row).
+ * Reads + overlay run on `authSupabase` (Phase 2, epic #3694);
+ * `supabase` is fulfill-only (service-role, narrowed exception).
  */
 export async function fulfillReplayVtuTransaction({
   authSupabase,
@@ -35,9 +37,11 @@ export async function fulfillReplayVtuTransaction({
   user: ReplayAuthUser;
 }) {
   // Owner binding: the key row's owner was validated above;
-  // the transaction row must match before fulfilling.
+  // the transaction row must match before fulfilling. Reads run on
+  // the authenticated client (buyer SELECT policy, Phase 2); only
+  // the fulfill below stays privileged.
   const binding = await verifyReplayTransactionBinding({
-    supabase,
+    supabase: authSupabase,
     keyRow,
   });
   if ('error' in binding) {
@@ -59,7 +63,11 @@ export async function fulfillReplayVtuTransaction({
   // 425 as no-rotation (ambiguous/infrastructure), so the key is
   // kept and the retry dedupes instead of re-debiting. The message
   // must never instruct a fresh key.
-  const { data: ownerRow, error: ownerError } = await supabase
+  // Buyer-visible by construction: linked-to-caller rows pass
+  // customers_select_policy; unlinked/vanished/foreign rows are
+  // invisible (null) and take the same 425 below (parity with the
+  // old user_id-comparison — Phase 2, epic #3694).
+  const { data: ownerRow, error: ownerError } = await authSupabase
     .from('customers')
     .select('id, user_id')
     .eq('id', keyRow.customer_id)

@@ -15,6 +15,7 @@ import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
+import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -22,19 +23,20 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 
 /**
  * SERVICE-ROLE BOUNDARY (owner-approved narrow exception, PR #3655,
- * expires 2027-01-14 or when the RLS+RPC migration epic lands — see
- * AGENTS.md TEMPORARY VTU WALLET-ONLY CHECKOUT EXCEPTION). This
- * user-facing route runs its reads/writes on the service-role client
- * because no safe partial move exists: the customer email-link flow
- * needs cross-user reads RLS would hide, and vtu_transactions /
- * vtu_idempotency_keys have no customer-facing policies (the replay
- * lookup is keyed by the unguessable key alone, which RLS cannot
- * scope — it needs SECURITY DEFINER RPCs). Exactly-once claiming
- * is enforced server-side by the service_role-only claim_vtu_intent
- * RPC (the authority; client registries are hints). Tenant
- * isolation is pinned by application checks + route.test.ts
- * (session binding, fingerprint, claim-race cross-customer
- * refusal, cross-merchant rejection, terminal overlap fence).
+ * narrowed Phase 2, epic #3694; expires 2027-01-14 or when the
+ * migration epic lands — see AGENTS.md TEMPORARY VTU WALLET-ONLY
+ * CHECKOUT EXCEPTION). Reads/writes run on the authenticated
+ * client: buyer RLS policies for owned-row reads, JWT-verifying
+ * SECURITY DEFINER RPCs for the key lookup, customer find/link,
+ * settings projection, prepare insert, intent claim, and orphan
+ * cleanup. The service-role client exists ONLY for the
+ * admission-proof RPC (merchant-wide live set spans customers by
+ * design — fence input only, never returned) and
+ * fulfillPendingVtuTransaction (wallet debit/credit/refund RPCs
+ * plus its transaction, ledger, marker, loyalty, and notification
+ * writes — criterion 3's documented privilege boundary). Tenant
+ * isolation is pinned by RLS + the RPC ownership checks +
+ * route.test.ts + supabase/tests/vtu_checkout_*.sql.
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -46,8 +48,8 @@ function createErrorResponse(error: string, status = 400) {
  * validate Idempotency-Key → replay existing mapping (wallet RPC
  * idempotency second backstop) → fresh key: prepare, claim
  * (records-or-joins via claim_vtu_intent), fulfill (wallet debit
- * Phase B.5, then vend). Service-role client only; no
- * `transactions` row or Paystack hop.
+ * Phase B.5, then vend). Authenticated client except fulfillment;
+ * no `transactions` row or Paystack hop.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -94,17 +96,24 @@ export async function POST(request: NextRequest) {
 
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
-    const supabase = createAdminClient();
+    // Authenticated client for everything except the admission
+    // proof and fulfillment (Phase 2): RLS + JWT-verifying RPCs
+    // own tenant isolation here.
+    const userSupabase = auth.supabase;
+    const adminSupabase = createAdminClient();
     // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
     // admission proof (stamp + live-scope snapshot) for the claim
     // overlap fence. No proof → fail closed BEFORE preparing
     // (nothing to orphan; the client retries the same key).
     let existing: ExistingIdempotencyRow | null;
+    let foreign: boolean;
     let proof: VtuAdmissionProof | null;
     try {
-      ({ existing, proof } = await admitVtuClaim(
-        supabase,
+      ({ existing, foreign, proof } = await admitVtuClaim(
+        userSupabase,
+        adminSupabase,
         idempotencyKey,
+        auth.user.id,
         input.merchantSlug,
         requestFingerprint
       ));
@@ -112,6 +121,15 @@ export async function POST(request: NextRequest) {
       if (!(error instanceof VtuAdmissionError)) throw error;
       console.error('VTU admission proof unavailable:', error.message);
       return createErrorResponse('Failed to admit VTU claim.', 500);
+    }
+    // A key mapped to another customer: same 400 the ownership
+    // guard returned (the verdict reveals existence, which that
+    // 400 already did — no row fields cross over).
+    if (foreign) {
+      return createErrorResponse(
+        'Idempotency-Key does not belong to this customer.',
+        400
+      );
     }
 
     // Replay path: reuse the existing vtu_transaction_id after the
@@ -121,7 +139,7 @@ export async function POST(request: NextRequest) {
     // charge the wrong recipient/amount).
     if (existing) {
       const requestingOwnership = await resolveRequestingOwnership(
-        supabase,
+        userSupabase,
         auth.user,
         input.merchantSlug
       );
@@ -151,23 +169,26 @@ export async function POST(request: NextRequest) {
       }
       // Shared replay tail: binding → owner claim → overlay →
       // fulfill (Muse R128 extraction; guards above compare against
-      // the requesting ownership).
+      // the requesting ownership). Service role reaches only the
+      // fulfill inside (narrowed exception).
       return fulfillReplayVtuTransaction({
         authSupabase: auth.supabase,
         input,
         keyRow: existing,
-        supabase,
+        supabase: createAdminClient(),
         user: auth.user,
       });
     }
 
     const prepared = await preparePendingVtuTransaction({
-      supabase,
+      supabase: userSupabase,
       user: auth.user,
       input: input,
       source: 'checkout',
       requireCustomer: true,
       strictLookups: true,
+      linkCustomerViaRpc: true,
+      insertViaRpc: true,
     });
 
     if (!prepared.customer?.id) {
@@ -193,7 +214,7 @@ export async function POST(request: NextRequest) {
     // PK-race re-read (Codex R124 P2).
     // Fresh keys always carry proof (admit throws otherwise).
     if (!proof) return createErrorResponse('Failed to admit VTU claim.', 500);
-    const { data: claimRows, error: claimError } = await supabase.rpc(
+    const { data: claimRows, error: claimError } = await userSupabase.rpc(
       'claim_vtu_intent',
       {
         p_key: idempotencyKey,
@@ -216,7 +237,7 @@ export async function POST(request: NextRequest) {
         await discardOrphanedClaimTransaction({
           context: 'rejection',
           merchantId: prepared.merchant.id,
-          supabase,
+          supabase: userSupabase,
           transactionId: prepared.transaction.id,
         });
       }
@@ -240,8 +261,9 @@ export async function POST(request: NextRequest) {
       await discardOrphanedClaimTransaction({
         context: 'join',
         merchantId: prepared.merchant.id,
-        supabase,
+        supabase: userSupabase,
         transactionId: prepared.transaction.id,
+        userId: auth.user.id,
       });
       // Joins should be rare (registries normally reuse keys); a
       // join storm signals client key churn — investigate the
@@ -262,7 +284,7 @@ export async function POST(request: NextRequest) {
           merchant_id: prepared.merchant.id,
           request_fingerprint: requestFingerprint,
         },
-        supabase,
+        supabase: createAdminClient(),
         user: auth.user,
       });
       // Winner-key wire: the loser key maps to the winner
@@ -278,8 +300,9 @@ export async function POST(request: NextRequest) {
       return replayResponse;
     }
 
+    // Sole service-role use on this route (narrowed exception).
     const fulfillment = await fulfillPendingVtuTransaction({
-      supabase,
+      supabase: createAdminClient(),
       transactionId: prepared.transaction.id,
     });
     return mapFulfillmentToResponse(fulfillment);

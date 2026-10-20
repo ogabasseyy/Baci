@@ -286,15 +286,19 @@ BEGIN
     RAISE EXCEPTION 'Spent key must replay (t1/k1), got %', v_claim;
   END IF;
 
-  -- 11. Non-service_role callers are forbidden (in-body gate).
+  -- 11. Callers without a JWT identity are forbidden (in-body
+  -- gate, which runs before any scope logic). Phase 2 (#3694):
+  -- authenticated callers WITH a uid pass the gate and prove scope
+  -- ownership instead (claim_scope_mismatch on foreign scopes —
+  -- see vtu_checkout_write_rpcs.sql C1-C3).
   BEGIN
     PERFORM pg_catalog.set_config(
       'request.jwt.claim.role', 'authenticated', true
     );
     PERFORM public.claim_vtu_intent(v_k2, 'fp-gated', v_t2, v_m1, v_c1, now(), '{}');
-    RAISE EXCEPTION 'Expected forbidden for authenticated role';
+    RAISE EXCEPTION 'Expected forbidden without JWT identity';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM NOT LIKE '%requires service_role%' THEN
+    IF SQLERRM NOT LIKE '%requires authentication%' THEN
       RAISE;
     END IF;
   END;
@@ -302,13 +306,15 @@ BEGIN
     'request.jwt.claim.role', 'service_role', true
   );
 
-  -- 12. Grants: service_role may execute; authenticated may not.
-  IF pg_catalog.has_function_privilege(
+  -- 12. Grants: service_role and authenticated may execute (Phase 2
+  -- grants authenticated; ownership is enforced in-body); anon may
+  -- not.
+  IF NOT pg_catalog.has_function_privilege(
     'authenticated',
     'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated must not have EXECUTE on claim_vtu_intent';
+    RAISE EXCEPTION 'authenticated must have EXECUTE on claim_vtu_intent';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'service_role',
@@ -695,6 +701,15 @@ BEGIN
     OR coalesce(cardinality(v_proof.live_transaction_ids), -1) <> 0
   THEN
     RAISE EXCEPTION 'Proof on unknown slug must stamp an empty set, got %', v_proof;
+  END IF;
+  -- Phase 2 (#3694): anon must not execute the claim (in-body
+  -- ownership gate is authenticated-or-service_role only).
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must not have EXECUTE on claim_vtu_intent';
   END IF;
 END;
 $test$;

@@ -17932,6 +17932,14 @@ export type Database = {
         };
         Returns: boolean;
       };
+      fail_orphan_vtu_transaction: {
+        Args: {
+          p_merchant_id: string;
+          p_transaction_id: string;
+          p_user_id: string;
+        };
+        Returns: string;
+      };
       fail_petrock_remediation_before_acceptance: {
         Args: {
           p_customer_message: string;
@@ -18097,6 +18105,10 @@ export type Database = {
           similarity_score: number;
           suggested_term: string;
         }[];
+      };
+      find_vtu_customer_for_checkout: {
+        Args: { p_merchant_id: string; p_user_id: string };
+        Returns: string;
       };
       finish_cache_invalidation: {
         Args: {
@@ -19239,6 +19251,22 @@ export type Database = {
         }[];
       };
       get_user_merchant_context: { Args: never; Returns: Json };
+      get_vtu_checkout_settings: {
+        Args: { p_merchant_id: string; p_user_id: string };
+        Returns: {
+          korapay_enabled: boolean | null;
+          paystack_enabled: boolean | null;
+          vtu_airtime_enabled: boolean | null;
+          vtu_betting_enabled: boolean | null;
+          vtu_customer_cashback_enabled: boolean | null;
+          vtu_customer_cashback_rate: number | null;
+          vtu_data_enabled: boolean | null;
+          vtu_electricity_enabled: boolean | null;
+          vtu_enabled: boolean | null;
+          vtu_merchant_commission_rate: number | null;
+          vtu_tv_enabled: boolean | null;
+        }[];
+      };
       get_wallet_summary: {
         Args: { p_merchant_id: string };
         Returns: {
@@ -19305,6 +19333,37 @@ export type Database = {
           p_tracking_token: string;
         };
         Returns: undefined;
+      };
+      insert_prepared_vtu_transaction: {
+        Args: {
+          p_amount: number;
+          p_biller_item_code: string | null;
+          p_biller_name: string | null;
+          p_customer_cashback: number | null;
+          p_customer_id: string;
+          p_customer_identifier: string | null;
+          p_customer_name: string | null;
+          p_merchant_commission: number | null;
+          p_merchant_id: string;
+          p_metadata: Json;
+          p_network_provider: string;
+          p_order_id: string | null;
+          p_phone_number: string;
+          p_platform_commission: number | null;
+          p_request_reference: string;
+          p_source: string;
+          p_type: string;
+          p_user_id: string;
+        };
+        Returns: {
+          amount: number;
+          customer_identifier: string;
+          id: string;
+          metadata: Json;
+          request_reference: string;
+          status: string;
+          type: string;
+        }[];
       };
       invoke_cleanup_pending_transactions: { Args: never; Returns: undefined };
       is_active_staff_of: {
@@ -19532,6 +19591,17 @@ export type Database = {
         };
         Returns: Json;
       };
+      link_vtu_customer_by_email: {
+        Args: { p_merchant_id: string; p_user_id: string };
+        Returns: {
+          email: string;
+          first_name: string;
+          id: string;
+          last_name: string;
+          phone: string;
+          user_id: string;
+        }[];
+      };
       list_variant_inventory_units: {
         Args: {
           p_branch_id?: string;
@@ -19545,6 +19615,17 @@ export type Database = {
           p_variant_id?: string;
         };
         Returns: Json;
+      };
+      lookup_vtu_idempotency_row: {
+        Args: { p_key: string; p_user_id: string };
+        Returns: {
+          customer_id: string;
+          key: string;
+          merchant_id: string;
+          request_fingerprint: string;
+          verdict: string;
+          vtu_transaction_id: string;
+        }[];
       };
       mark_abandoned_orders: {
         Args: { hours_threshold?: number };

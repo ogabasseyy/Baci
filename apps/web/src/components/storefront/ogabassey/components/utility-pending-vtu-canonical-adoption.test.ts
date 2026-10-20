@@ -3,6 +3,7 @@ import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import { adoptCanonicalVtuKey } from './utility-pending-vtu-canonical-adoption';
 import {
   clearPendingVtuKeys,
+  forgetPendingVtuPurchase,
   notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -184,5 +185,44 @@ describe('utility-pending-vtu-canonical-adoption', () => {
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.entries).toHaveLength(1);
     expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-fresh' });
+  });
+
+  it('does not resurrect an entry forgotten while waiting for the lock', async () => {
+    // CodeRabbit #3730: the rebind must re-read the live entry
+    // under the lock — a synchronous forget during the lock wait
+    // deletes the live entry, and rebinding the pre-lock copy
+    // would resurrect it (the tombstone holds the loser key and
+    // does not suppress the winner).
+    const scoped = scopedDescriptor('{"forgotten":1}');
+    rememberPendingVtuPurchase(scoped, 'key-minted');
+    const real = vtuStore.runPendingVtuMintLocked;
+    let forgot = false;
+    const lockSpy = vi
+      .spyOn(vtuStore, 'runPendingVtuMintLocked')
+      .mockImplementation((async (callback: () => unknown) => {
+        if (!forgot) {
+          // Exactly once: later lock runs are scheduled flushes
+          // sharing the runner. A repeat forget with empty memory
+          // would note a keyless tombstone, whose timestamp
+          // arbitration reaps even the winner — masking the bug
+          // this test pins (a loser-bound tombstone does not
+          // suppress the winner entry).
+          forgot = true;
+          forgetPendingVtuPurchase(scoped);
+        }
+        return real(callback);
+      }) as typeof real);
+    try {
+      await expect(
+        adoptCanonicalVtuKey(scoped, 'key-minted', 'key-winner')
+      ).resolves.toBe(true);
+    } finally {
+      lockSpy.mockRestore();
+    }
+
+    expect(recallPendingVtuKey(scoped)).toBeUndefined();
+    expect(pendingVtuPurchases.has(scoped)).toBe(false);
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([]);
   });
 });

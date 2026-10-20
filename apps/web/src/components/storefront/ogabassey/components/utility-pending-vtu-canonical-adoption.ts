@@ -62,7 +62,17 @@ export async function adoptCanonicalVtuKey(
         ) {
           return 'stale' as const;
         }
-        pendingVtuPurchases.set(payloadSignature, { ...entry, key });
+        const live = pendingVtuPurchases.get(payloadSignature);
+        if (!live || (live.key !== expectedKey && live.key !== key)) {
+          // Forgotten or rotated while waiting for the lock: never
+          // resurrect, never overwrite a newer generation.
+          return 'stale' as const;
+        }
+        if (live.key === expectedKey) {
+          // Already adopted (own retry or a sibling won): skip the
+          // rebind but still flush below — the winner must land.
+          pendingVtuPurchases.set(payloadSignature, { ...live, key });
+        }
         return persistPendingVtuPurchases()
           ? ('saved' as const)
           : ('failed' as const);

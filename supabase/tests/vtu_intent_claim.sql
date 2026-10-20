@@ -88,6 +88,7 @@ DECLARE
   v_k22 uuid := 'd4d4d4d4-0000-4000-8000-000000000022';
   v_claim record;
   v_proof record;
+  v_raised boolean;
   v_rows_before integer;
   v_rows_after integer;
 BEGIN
@@ -218,24 +219,32 @@ BEGIN
   END IF;
 
   -- 6. Same key + different fingerprint raises (409 contract).
+  v_raised := false;
   BEGIN
     PERFORM public.claim_vtu_intent(v_k5, 'fp-other', v_t8, v_m1, v_c1, now(), '{}');
-    RAISE EXCEPTION 'Expected claim_fingerprint_mismatch';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_fingerprint_mismatch%' THEN
       RAISE;
     END IF;
+    v_raised := true;
   END;
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'Test 6: function did not raise the fingerprint-mismatch error';
+  END IF;
 
   -- 7. Same key + different scope raises (400 contract).
+  v_raised := false;
   BEGIN
     PERFORM public.claim_vtu_intent(v_k5, 'fp-tie', v_t8, v_m1, v_c2, now(), '{}');
-    RAISE EXCEPTION 'Expected claim_scope_mismatch';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_scope_mismatch%' THEN
       RAISE;
     END IF;
+    v_raised := true;
   END;
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'Test 7: function did not raise the scope-mismatch error';
+  END IF;
 
   -- 8. Same fingerprint under another customer is an independent
   -- intent (isolation is by scope, not fingerprint).
@@ -501,16 +510,20 @@ BEGIN
 
   -- 18. Missing admission timestamp is rejected: the fence
   -- requires it (no silent fallback to row time).
+  v_raised := false;
   BEGIN
     PERFORM public.claim_vtu_intent(
       v_k17, 'fp-legacy', v_t17, v_m1, v_c1, NULL, '{}'
     );
-    RAISE EXCEPTION 'Expected claim_invalid_arguments for NULL admission';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_invalid_arguments%' THEN
       RAISE;
     END IF;
+    v_raised := true;
   END;
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'Test 18: function did not reject NULL admission';
+  END IF;
 
   -- 19. Admission-liveness join (Codex R4 P1): terminal_at is the
   -- terminal writer's XACT START, not its commit. A winner whose
@@ -602,16 +615,20 @@ BEGIN
   -- 21. Missing admission liveness is rejected: the fence
   -- requires it (no silent fallback to the stamp-only fence,
   -- which cannot see commit-skewed terminals).
+  v_raised := false;
   BEGIN
     PERFORM public.claim_vtu_intent(
       v_k1, 'fp-live', v_t1, v_m1, v_c1, now(), NULL
     );
-    RAISE EXCEPTION 'Expected claim_invalid_arguments for NULL liveness';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_invalid_arguments%' THEN
       RAISE;
     END IF;
+    v_raised := true;
   END;
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'Test 21: function did not reject NULL liveness';
+  END IF;
 
   -- 22. Admission proof contract: atomic stamp + live-scope
   -- snapshot by (merchant slug, fingerprint); alias slugs

@@ -60,7 +60,17 @@ export async function adoptCanonicalVtuKey(
         ) {
           return 'stale' as const;
         }
-        pendingPurchases.set(descriptor, { ...entry, key });
+        const live = pendingPurchases.get(descriptor);
+        if (!live || (live.key !== expectedKey && live.key !== key)) {
+          // Forgotten or rotated while waiting for the lock: never
+          // resurrect, never overwrite a newer generation.
+          return 'stale' as const;
+        }
+        if (live.key === expectedKey) {
+          // Already adopted (own retry or a sibling won): skip the
+          // rebind but still flush below — the winner must land.
+          pendingPurchases.set(descriptor, { ...live, key });
+        }
         return persistPendingVtuPurchases()
           ? ('saved' as const)
           : ('failed' as const);

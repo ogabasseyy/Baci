@@ -9,6 +9,24 @@ export interface ConditionOfferLike {
 }
 
 /**
+ * Canonical-condition fallback order: raw condition, then id — the
+ * storefront RPC's (condition, id) emission order. The feed dedup and
+ * the PDP condition selector both sort by this comparator, so the
+ * first row per normalized condition is the same row the PDP would
+ * select, regardless of source order.
+ */
+export function compareConditionOfferIdentity(
+  a: Pick<ConditionOfferLike, 'id' | 'condition'>,
+  b: Pick<ConditionOfferLike, 'id' | 'condition'>
+): number {
+  const conditionOrder = String(a.condition ?? '').localeCompare(
+    String(b.condition ?? '')
+  );
+  if (conditionOrder !== 0) return conditionOrder;
+  return String(a.id ?? '').localeCompare(String(b.id ?? ''));
+}
+
+/**
  * Offers that can emit feed rows: identified, positive finite price, valid
  * condition, and different from the parent condition. A null parent
  * defaults to `new`, matching the storefront PDP selection rule that never
@@ -24,16 +42,10 @@ export function getEligibleConditionOffers<T extends ConditionOfferLike>(
   // anything else must map cleanly or the parent contributes no condition.
   const parent =
     parentCondition == null ? 'new' : toGoogleListingCondition(parentCondition);
-  // Order deterministically by (condition, id) like the storefront RPC
+  // Order deterministically by the shared (condition, id) comparator
   // before deduplicating: the first offer per normalized condition must
   // be the same row the PDP would select, regardless of source order.
-  const ordered = [...(offers ?? [])].sort((a, b) => {
-    const conditionOrder = String(a.condition ?? '').localeCompare(
-      String(b.condition ?? '')
-    );
-    if (conditionOrder !== 0) return conditionOrder;
-    return String(a.id ?? '').localeCompare(String(b.id ?? ''));
-  });
+  const ordered = [...(offers ?? [])].sort(compareConditionOfferIdentity);
   // The storefront selects the first offer matching a normalized
   // condition, so duplicate normalized conditions would land at least
   // one row on the wrong purchasable price: keep the first only.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getEligibleConditionOffers } from './eligible-condition-offers';
 import { selectConditionOffer } from './select-condition-offer';
 
 describe('selectConditionOffer', () => {
@@ -16,7 +17,7 @@ describe('selectConditionOffer', () => {
     );
   });
 
-  it('prefers exact spellings only when requested', () => {
+  it('prefers exact spellings when requested, feed order otherwise', () => {
     const exact = {
       id: 'offer-zzz-open-box',
       condition: 'open_box',
@@ -29,9 +30,35 @@ describe('selectConditionOffer', () => {
         preferExactConditionMatch: true,
       })
     ).toEqual(exact);
+    // Without the exact preference the canonical fallback still lands
+    // on the open_box row: raw condition sorts before id (feed
+    // order), so the higher id does not lose to the refurbished
+    // alias. Input order must not decide.
     expect(
       selectConditionOffer(candidates, { selectedCondition: 'open_box' })
-    ).toEqual(offers[0]);
+    ).toEqual(exact);
+    expect(
+      selectConditionOffer([exact, offers[1], offers[0]], {
+        selectedCondition: 'open_box',
+      })
+    ).toEqual(exact);
+  });
+
+  it('agrees with the feed dedup on the first row per canonical condition', () => {
+    const candidates = [
+      { id: 'offer-aaa-refurbished', condition: 'refurbished', price: 510 },
+      { id: 'offer-zzz-open-box', condition: 'open_box', price: 525 },
+    ];
+    const [kept] = getEligibleConditionOffers(candidates, 'new');
+    expect(kept?.id).toBe('offer-zzz-open-box');
+    expect(
+      selectConditionOffer(candidates, { selectedCondition: 'open_box' })?.id
+    ).toBe(kept?.id);
+    expect(
+      selectConditionOffer([candidates[1], candidates[0]], {
+        selectedCondition: 'open_box',
+      })?.id
+    ).toBe(kept?.id);
   });
 
   it('tiebreaks same-condition fallbacks by lowest offer id', () => {

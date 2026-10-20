@@ -119,4 +119,18 @@ describe('public option resolution', () => {
     expect(depleted.stockQuantity).toBe(0);
     expect(depleted.purchasable).toBe(false);
   });
+  it('keeps an unbounded offer allocation purchasable on a zero-stock parent', () => {
+    const unlimitedParent = {
+      ...parent,
+      inventory_tracking_policy: 'serialized_then_unlimited',
+      stock: 0,
+      stock_quantity: 0,
+    };
+    const option = resolvePublicProductOption(unlimitedParent, {
+      offer: { price: 80000, stock_quantity: null },
+      condition: 'used',
+    });
+    expect(option.stockQuantity).toBe(Number.POSITIVE_INFINITY);
+    expect(option.purchasable).toBe(true);
+  });
 });

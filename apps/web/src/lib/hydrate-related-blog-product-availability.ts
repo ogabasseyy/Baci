@@ -165,7 +165,11 @@ export async function hydrateRelatedBlogProductAvailability(
                   price: resolution.priceBasis,
                   compare_at_price: resolution.compareAtPrice ?? null,
                   status: 'active',
-                  stock_quantity: resolution.allocatableStock,
+                  // Null is unbounded (unlimited policy with no
+                  // scalar): purchasable, per the shared contract —
+                  // never zero stock.
+                  stock_quantity:
+                    resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
                 })
               );
               return [

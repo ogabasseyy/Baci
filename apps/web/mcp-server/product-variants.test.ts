@@ -118,6 +118,31 @@ describe('loadMcpProductVariants', () => {
     });
   });
 
+  it('skips stocked offers without a finite price instead of pricing them at zero', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: null, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('No variant options were returned');
+    expect(result.content[0].text).not.toContain('• used:');
+    expect(result.structuredContent).toMatchObject({ condition_offers: [] });
+  });
+
   it('returns stored catalog colors even when the product has no variant rows', async () => {
     const supabase = createSupabase();
     supabase.query.single.mockResolvedValue({

@@ -122,7 +122,7 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
         authorityRow('offer-1', { allocatable_stock: 0 }),
-        authorityRow('offer-2', { allocatable_stock: null }),
+        authorityRow('offer-2', { allocatable_stock: 0 }),
       ],
       error: null,
     });
@@ -133,6 +133,20 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(false);
+  });
+
+  it('marks an unbounded offer allocation purchasable, never zero stock', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [authorityRow('offer-1', { allocatable_stock: null })],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product()]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(true);
   });
 
   it('does not read offers for products that are not currently unavailable', async () => {

@@ -51,13 +51,14 @@ BEGIN
  IF r.price_basis <> 80 OR r.allocatable_stock <> 3 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'live offer basis/allocation/eligibility wrong'; END IF;
  SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000021';
  IF r.allocatable_stock <> 0 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'zeroed offer stays eligible with zero allocation'; END IF;
- -- Variant-bearing, flag-disabled, and stray-variant parents stay listed but ineligible.
- SELECT parent_eligible INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000002']::uuid[]);
- IF r.parent_eligible IS NOT FALSE THEN RAISE EXCEPTION 'variant parent must be ineligible'; END IF;
- SELECT parent_eligible INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000003']::uuid[]);
- IF r.parent_eligible IS NOT FALSE THEN RAISE EXCEPTION 'flag-disabled parent must be ineligible'; END IF;
- SELECT parent_eligible INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000005']::uuid[]);
- IF r.parent_eligible IS NOT FALSE THEN RAISE EXCEPTION 'stray-variant parent must be ineligible'; END IF;
+ -- Variant-bearing, flag-disabled, and stray-variant parents resolve
+ -- nothing: gated-out rows are withheld, not flagged.
+ SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000002']::uuid[]);
+ IF n <> 0 THEN RAISE EXCEPTION 'variant parent must resolve nothing'; END IF;
+ SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000003']::uuid[]);
+ IF n <> 0 THEN RAISE EXCEPTION 'flag-disabled parent must resolve nothing'; END IF;
+ SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000005']::uuid[]);
+ IF n <> 0 THEN RAISE EXCEPTION 'stray-variant parent must resolve nothing'; END IF;
  -- The finite scalar binds even on unmanaged parents.
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000004']::uuid[]);
  IF n <> 2 THEN RAISE EXCEPTION 'unmanaged parent must not lift the offer scalar'; END IF;

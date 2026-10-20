@@ -19,9 +19,11 @@
 --     is defensive only.
 --   parent_eligible  the order-RPC M28 parent gate verbatim
 --     (has_condition_offers, sku_matrix-aware non-variant parent, no
---     live non-anchor variants). Gated-out rows are still returned so
---     membership ("is this offer live?") and eligibility ("may this
---     line order through it?") stay distinct, as today.
+--     live non-anchor variants). Gated-out rows are withheld, not
+--     flagged: an ineligible parent reads exactly like a missing
+--     offer at every consumer, so no per-consumer flag check can be
+--     forgotten. The column stays TRUE on all live rows (contract
+--     stability for the search branch and existing callers).
 --   Display columns (compare_at_price, grade, condition_notes, images)
 --     ride along so detail surfaces need no second lookup.
 -- Advertising-only predicates stay with their callers: the
@@ -107,18 +109,40 @@ BEGIN
          WHERE av.product_id = r.id AND av.merchant_id = r.merchant_id
            AND av.is_inventory_anchor IS TRUE
          ORDER BY av.id LIMIT 1),
-        r.inventory_tracking_policy, 'legacy') AS effective_policy
+        r.inventory_tracking_policy, 'legacy') AS effective_policy,
+      -- M28 parent gate, defined once: the final SELECT emits it and
+      -- the WHERE enforces it, so gated-out rows never leave the
+      -- authority and no consumer can price or stock them.
+      (r.has_condition_offers IS TRUE
+        AND r.variant_bearing IS NOT TRUE
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.product_variants AS nv
+          WHERE nv.product_id = r.id
+            AND nv.merchant_id = r.merchant_id
+            AND nv.is_inventory_anchor IS NOT TRUE
+        )) AS parent_eligible
     FROM requested AS r
   -- The serialized-count page holds 200 ids (and rejects the empty
   -- array), so slice each merchant's ids into 200-pages. GROUP BY
   -- never emits an empty page, and the deterministic id order keeps
   -- pages stable across plans.
+  -- Only strict products read the serialized counts: merchants with
+  -- no strict product skip the call entirely (their result was always
+  -- discarded). Kept merchants pass the identical id arrays, so their
+  -- results are unchanged — this is a pure call-skipping filter.
+  ), strict_merchants AS MATERIALIZED (
+    SELECT DISTINCT r.merchant_id
+    FROM requested AS r
+    JOIN anchor_policy AS a ON a.product_id = r.id
+    WHERE a.effective_policy = 'serialized_strict'
   ), merchant_slices AS MATERIALIZED (
     SELECT merchant_id, array_agg(id ORDER BY id) AS ids
     FROM (
       SELECT r2.merchant_id, r2.id,
         (row_number() OVER (PARTITION BY r2.merchant_id ORDER BY r2.id) - 1) / 200 AS slice_no
       FROM requested AS r2
+      JOIN strict_merchants AS sm ON sm.merchant_id = r2.merchant_id
     ) AS numbered
     GROUP BY merchant_id, slice_no
   ), serialized AS MATERIALIZED (
@@ -137,15 +161,7 @@ BEGIN
         THEN o.stock_quantity
       ELSE COALESCE(o.stock_quantity, r.parent_effective)
     END AS allocatable_stock,
-    (r.has_condition_offers IS TRUE
-      AND r.variant_bearing IS NOT TRUE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM public.product_variants AS nv
-        WHERE nv.product_id = r.id
-          AND nv.merchant_id = r.merchant_id
-          AND nv.is_inventory_anchor IS NOT TRUE
-      )) AS parent_eligible,
+    a.parent_eligible,
     a.effective_policy,
     CASE WHEN a.effective_policy = 'serialized_strict' THEN s.public_available_units END AS available_units,
     o.compare_at_price, o.grade, o.condition_notes, o.images
@@ -155,6 +171,11 @@ BEGIN
     ON o.product_id = r.id AND o.merchant_id = r.merchant_id
   LEFT JOIN serialized AS s ON s.product_id = r.id
   WHERE o.status = 'active'
+    -- Gated-out rows are withheld, not flagged: every consumer (cart,
+    -- checkout, PDP, native, MCP, blog, search) then treats an
+    -- ineligible parent exactly like a missing offer, with no
+    -- per-consumer flag check to forget.
+    AND a.parent_eligible
   ORDER BY r.id, o.condition, o.id;
 END;
 $$;

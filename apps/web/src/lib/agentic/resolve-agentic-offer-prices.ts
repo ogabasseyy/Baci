@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import type { AgenticCheckoutOrderResult } from './checkout-order-dispatch';
 import { prepareAgenticOfferEconomics } from './prepare-agentic-offer-economics';
 
@@ -20,14 +21,7 @@ export async function resolveAgenticOfferPrices(
   merchantId?: string | null
 ): Promise<ResolvedAgenticOfferPrices> {
   const preparedOffers = await prepareAgenticOfferEconomics(
-    (args) =>
-      supabase.rpc(
-        'get_storefront_offer_resolution',
-        args
-      ) as unknown as Promise<{
-        data: unknown;
-        error: { message: string } | null;
-      }>,
+    createOfferAuthorityRpcCall(supabase),
     orderItemsPayload,
     merchantId
   );

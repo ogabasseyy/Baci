@@ -69,11 +69,16 @@ export function resolvePublicProductOption(
         parentStock,
       })
     : undefined;
+  // An unbounded offer allocation (serialized_then_unlimited with no
+  // scalar) stays purchasable with no finite count — the PDP pricing
+  // path maps it to Infinity, never to the parent stock.
   const stockQuantity = variant
     ? (resolveSerializedVariantStock(variant) ??
       variant.stock_quantity ??
       getEffectiveStock(parent))
-    : (offerStock ?? getEffectiveStock(parent));
+    : offerStock === null
+      ? Number.POSITIVE_INFINITY
+      : (offerStock ?? getEffectiveStock(parent));
   const purchasable = variant
     ? isPublicVariantPurchasable(parent, variant)
     : parent.manage_stock === false ||

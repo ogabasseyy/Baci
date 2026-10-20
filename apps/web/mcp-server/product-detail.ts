@@ -98,15 +98,22 @@ export async function buildMcpProductDetail({
     } else {
       conditionOffers = ((offerData ?? []) as unknown[]).flatMap((row) => {
         const resolution = coerceOfferAuthorityRow(row);
-        if (!resolution || resolution.productId !== product.id) return [];
+        if (
+          !resolution ||
+          resolution.productId !== product.id ||
+          resolution.priceBasis === null
+        )
+          return [];
         // Display prices from the live basis and availability from the
         // allocatable stock (policy-capped, parent-inherited): exactly
-        // what checkout enforces. Unbounded rows stay purchasable.
+        // what checkout enforces. Rows without a finite price are
+        // skipped, never zero-priced: checkout would not honor 0.
+        // Unbounded rows stay purchasable.
         return [
           {
             offer_id: resolution.offerId,
             condition: resolution.condition ?? product.condition ?? 'new',
-            price: resolution.priceBasis ?? 0,
+            price: resolution.priceBasis,
             compare_at_price: resolution.compareAtPrice ?? null,
             stock_quantity:
               resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,

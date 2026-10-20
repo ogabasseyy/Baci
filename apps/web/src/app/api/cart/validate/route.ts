@@ -1,6 +1,7 @@
 import { makeOfferLineKey } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import { createClient } from '@/lib/supabase/server';
 import { cartValidateSchema } from '@/schemas/cart';
 import { fetchCartOfferPrices } from './cart-offer-prices';
@@ -122,14 +123,7 @@ export async function POST(request: NextRequest) {
           })
         : Promise.resolve({ data: null, error: null }),
       fetchCartOfferPrices(
-        (args) =>
-          supabase.rpc(
-            'get_storefront_offer_resolution',
-            args
-          ) as unknown as Promise<{
-            data: unknown;
-            error: { message: string } | null;
-          }>,
+        createOfferAuthorityRpcCall(supabase),
         validationItems
       ).catch((error: unknown) =>
         error instanceof Error ? error : new Error('Offer query failed')

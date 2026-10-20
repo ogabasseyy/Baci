@@ -54,6 +54,14 @@ describe('resolveOfferStock', () => {
     });
   });
 
+  it('reports zero for a gated-out row a partial projection still carries', async () => {
+    mockAuthority({ rows: [row({ parent_eligible: false })] });
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
+      stock: 0,
+      strictUnits: null,
+    });
+  });
+
   it('reports the authority allocation on legacy policies', async () => {
     mockAuthority({ rows: [row({ allocatable_stock: 5 })] });
     await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({

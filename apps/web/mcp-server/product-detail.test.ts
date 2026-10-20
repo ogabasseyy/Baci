@@ -97,6 +97,25 @@ describe('buildMcpProductDetail', () => {
     expect(result.content[0].text).not.toContain('120000');
   });
 
+  it('skips stocked offers without a finite price instead of pricing them at zero', async () => {
+    const supabase = { rpc: vi.fn(async () => ({ data: [
+      { product_id: 'option-phone', offer_id: 'offer-new', condition: 'new', price_basis: 100000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+      { product_id: 'option-phone', offer_id: 'offer-used', condition: 'used', price_basis: null, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+    ], error: null })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: { ...product, has_variants: false, has_condition_offers: true },
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.content[0].text).toContain('• new: 100000 - In Stock');
+    expect(result.content[0].text).not.toContain('• used:');
+    expect(result.content[0].text).toContain('**Price:** 100000');
+    expect(result.content[0].text).not.toContain('**Price:** 0');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [{ condition: 'new', availability: 'in_stock' }],
+    });
+  });
+
   it('shows a stocked variant price instead of an unavailable parent price', async () => {
     const supabase = { rpc: vi.fn(async () => ({ data: [
       { attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', images: [] },

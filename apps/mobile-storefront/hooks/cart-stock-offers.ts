@@ -38,6 +38,12 @@ export async function resolveOfferStock(
     log.error('Offer stock check found no such offer:', offerId);
     return { stock: 0, strictUnits: null };
   }
+  // The authority withholds gated-out rows; a partial projection that
+  // still carries one must never read as available (checkout rejects
+  // ineligible parents, so reporting stock here would oversell).
+  if (!resolution.parentEligible) {
+    return { stock: 0, strictUnits: null };
+  }
   if (resolution.effectivePolicy === 'serialized_strict') {
     const units = resolution.availableUnits ?? 0;
     return {

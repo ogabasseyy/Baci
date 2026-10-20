@@ -56,9 +56,10 @@ export async function fetchLiveOrderOffers(
     productIds,
   });
 
-  // The authority returns gated-out rows (parent_eligible=false) so
-  // membership and eligibility stay distinct; order lines may only
-  // bind eligible rows, and their economics must never publish.
+  // The authority withholds gated-out rows (an ineligible parent
+  // reads like a missing offer); the flag check stays as
+  // defense-in-depth so a partial projection can never bind or
+  // publish ineligible economics.
   const live = new Map(
     Array.from(resolutions.entries()).filter(
       ([, resolution]) => resolution.parentEligible === true

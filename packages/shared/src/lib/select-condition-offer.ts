@@ -1,3 +1,4 @@
+import { compareConditionOfferIdentity } from './eligible-condition-offers';
 import { normalizeCanonicalProductCondition } from './product-condition';
 
 export interface SelectableConditionOffer {
@@ -37,11 +38,14 @@ export interface ConditionOfferSelection {
  * family's own condition). A missing selection resolves only a
  * single-offer catalog.
  *
- * The condition fallback tiebreaks by offer id (lowest first):
- * same-condition offers carry distinct prices, so input-order
- * dependence would price nondeterministically across snapshot
- * hydration orders. This matches the RPC's (condition, id) order and
- * the feed dedup that keeps the first row per normalized condition.
+ * The condition fallback orders by raw condition, then offer id
+ * (shared comparator with the feed dedup): same-condition offers
+ * carry distinct prices, so input-order dependence would price
+ * nondeterministically across snapshot hydration orders, and an
+ * id-only order would disagree with the feed whenever two raw
+ * conditions share one canonical condition (refurbished/open_box).
+ * This matches the RPC's (condition, id) emission order and the feed
+ * dedup that keeps the first row per normalized condition.
  */
 export function selectConditionOffer<T extends SelectableConditionOffer>(
   offers: readonly T[] | null | undefined,
@@ -101,17 +105,15 @@ export function selectConditionOffer<T extends SelectableConditionOffer>(
     if (normalizedSelected === normalizedParent) return null;
   }
 
-  const orderedById = [...offers].sort((a, b) =>
-    String(a.id).localeCompare(String(b.id))
-  );
+  const ordered = [...offers].sort(compareConditionOfferIdentity);
   if (preferExactConditionMatch) {
-    const exact = orderedById.find(
+    const exact = ordered.find(
       (offer) => (offer.condition ?? null) === selectedCondition
     );
     if (exact) return exact;
   }
   return (
-    orderedById.find(
+    ordered.find(
       (offer) =>
         normalizeCanonicalProductCondition(offer.condition ?? '') ===
         normalizedSelected

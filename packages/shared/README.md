@@ -64,7 +64,11 @@ documented subset — `mock.calls`/`results`/`invocationCallOrder`,
 `mockRejectedValue(Once)` — do not assume full `vi.fn`/`jest.fn`
 parity (e.g. no `mock.contexts`, `mockRestore`, or
 `getMockImplementation`); extend the helper deliberately if a
-consumer needs more.
+consumer needs more. Note the helper's mocks are not registered with
+either runner, so `jest.clearAllMocks()` / `vi.clearAllMocks()` do
+not reset them — call `mockClear()` explicitly — and
+`mock.invocationCallOrder` uses a module-level counter, so it is
+only comparable as relative ordering within a test process.
 
 Fixtures are exported as ordinary subpaths, so they are technically
 resolvable from production bundles (Next.js, Metro). The boundary is

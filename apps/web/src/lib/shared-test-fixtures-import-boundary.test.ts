@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -62,7 +62,7 @@ function isTestFile(path: string) {
 
 function collectSourceFiles() {
   // Git-tracked files only: fast, and immune to local build artifacts.
-  const listed = execSync('git ls-files', {
+  const listed = execSync('git ls-files --cached --others --exclude-standard', {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,

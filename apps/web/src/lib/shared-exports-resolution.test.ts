@@ -35,7 +35,25 @@ const subpaths = [
     .map((key) => `@baci/shared${key.slice(1)}`),
 ];
 
+// Hard-coded expectations for the subpaths this PR adds: deriving the
+// list from package.json alone would be tautological for these.
+const expectedSubpaths = [
+  '@baci/shared/vtu',
+  '@baci/shared/test-fixtures/builder-ai-edit',
+  '@baci/shared/test-fixtures/piggyvest-purchase',
+  '@baci/shared/test-fixtures/piggyvest-device-change',
+  '@baci/shared/test-fixtures/piggyvest-protected-offer',
+  '@baci/shared/test-fixtures/piggyvest-draft-closure',
+  '@baci/shared/test-fixtures/piggyvest-schedule',
+];
+
 describe('@baci/shared exports resolution (no test aliases)', () => {
+  it('exports map contains every expected new subpath', () => {
+    for (const specifier of expectedSubpaths) {
+      expect(subpaths, specifier).toContain(specifier);
+    }
+  });
+
   it('every test-fixtures file has an exports entry', () => {
     for (const specifier of fixtureSubpaths) {
       expect(subpaths, specifier).toContain(specifier);
@@ -50,16 +68,20 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     }
   });
 
-  it('loads the schedule fixture through its exports-resolved path', async () => {
-    // Load (not just resolve) the module at the path the exports map
+  it('loads every fixture subpath through its exports-resolved path', async () => {
+    // Load (not just resolve) each module at the path the exports map
     // produced, proving the file and its import graph load cleanly.
-    const resolved = appRequire.resolve(
-      '@baci/shared/test-fixtures/piggyvest-schedule'
-    );
-    const loaded = (await import(resolved)) as {
-      scheduleJourneyFixture: () => unknown;
-    };
-    expect(loaded.scheduleJourneyFixture()).toBeDefined();
+    for (const specifier of expectedSubpaths.filter((s) =>
+      s.includes('/test-fixtures/')
+    )) {
+      const resolved = appRequire.resolve(specifier);
+      const loaded = (await import(resolved)) as Record<string, unknown>;
+      expect(Object.keys(loaded).length, specifier).toBeGreaterThan(0);
+    }
+    const schedule = (await import(
+      appRequire.resolve('@baci/shared/test-fixtures/piggyvest-schedule')
+    )) as { scheduleJourneyFixture: () => unknown };
+    expect(schedule.scheduleJourneyFixture()).toBeDefined();
   });
 
   it('every exports target in package.json exists on disk', () => {

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
 // Import boundary (per-app mirror of the web guard): production
@@ -6,7 +6,9 @@ import { join, sep } from 'node:path';
 // @baci/shared/test-fixtures/*, by subpath or deep-relative path.
 // This suite runs in this app's own CI, so a mobile-only PR cannot
 // slip a fixture import past the web-only guard.
-const appRoot = process.cwd();
+// __dirname is provided by both Jest (CJS) and Vitest (node env);
+// import.meta cannot be used here because Jest parses this file as CJS.
+const appRoot = join(__dirname, '..');
 const skippedDirs = new Set([
   'node_modules',
   '.expo',
@@ -37,7 +39,9 @@ function collect(dir: string, out: string[]) {
   for (const entry of readdirSync(dir)) {
     if (skippedDirs.has(entry)) continue;
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
+    const stat = lstatSync(full);
+    if (stat.isSymbolicLink()) continue;
+    if (stat.isDirectory()) {
       collect(full, out);
     } else if (/\.(?:m|c)?[tj]sx?$/.test(entry) && !isTestFile(full)) {
       out.push(full);

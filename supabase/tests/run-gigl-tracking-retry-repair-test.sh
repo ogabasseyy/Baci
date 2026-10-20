@@ -124,13 +124,19 @@ for migration in \
   version="${migration%%_*}"
   name="${migration#*_}"
   name="${name%.sql}"
+  case "$version" in
+    20261003180000) recorded_version='20261003175517' ;;
+    20261003193000) recorded_version='20261003183737' ;;
+    20261003194500) recorded_version='20261003184149' ;;
+    *) echo "Unexpected alias migration in PostgreSQL fixture: $migration" >&2; exit 1 ;;
+  esac
   recorded_sql_file="$migration_file"
   if [ "$version" = '20261003194500' ]; then
     recorded_sql_file="$repo_root/supabase/tests/fixtures/storefront-category-facets-recorded.sql"
   fi
   statement_b64="$(base64 <"$recorded_sql_file" | tr -d '\n')"
   docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 \
-    -v "version=$version" \
+    -v "version=$recorded_version" \
     -v "name=$name" \
     -v "statement_b64=$statement_b64" \
     -U postgres -h 127.0.0.1 <<'SQL'
@@ -148,6 +154,9 @@ PATH="$fixture_root/bin:$PATH" \
   SUPABASE_ACCESS_TOKEN=test \
   SUPABASE_PROJECT_REF=test \
   bash "$repo_root/.github/scripts/apply-pending-migrations.sh" >"$alias_output"
+grep -q 'already applied under version 20261003175517: 20261003180000  storefront_available_search_facets' "$alias_output"
+grep -q 'already applied under version 20261003183737: 20261003193000  storefront_processor_filters' "$alias_output"
+grep -q 'already applied under version 20261003184149: 20261003194500  storefront_category_facets' "$alias_output"
 grep -q 'Migrations summary: 0 applied, 3 skipped.' "$alias_output"
 if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$alias_log"; then
   echo 'PostgreSQL-backed historical aliases must not write duplicate migration rows' >&2

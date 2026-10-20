@@ -1,4 +1,8 @@
 import {
+  orderWalletFundingIntentCreateResponseFixture,
+  orderWalletFundingIntentPollResponseFixture,
+} from '@baci/shared/test-fixtures/order-wallet-funding-intent';
+import {
   walletOrderFundingIntentCreateResponseSchema,
   walletOrderFundingIntentPollResponseSchema,
   walletOrderFundingIntentSchema,
@@ -42,6 +46,22 @@ describe('wallet order funding intent schemas', () => {
       walletOrderFundingIntentPollResponseSchema.safeParse({
         intent: validIntent,
       }).success
+    ).toBe(true);
+  });
+
+  it('parses the characterized HTTP fixtures (offset-form expiresAt)', () => {
+    // Fixtures are captured from the actual web response builders and
+    // carry an offset-form expiresAt; the pre-fix bare z.iso.datetime()
+    // rejected this form (see the shared fixture header).
+    expect(
+      walletOrderFundingIntentCreateResponseSchema.safeParse(
+        orderWalletFundingIntentCreateResponseFixture
+      ).success
+    ).toBe(true);
+    expect(
+      walletOrderFundingIntentPollResponseSchema.safeParse(
+        orderWalletFundingIntentPollResponseFixture
+      ).success
     ).toBe(true);
   });
 

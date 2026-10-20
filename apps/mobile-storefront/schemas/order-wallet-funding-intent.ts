@@ -24,7 +24,7 @@ export const walletOrderFundingIntentSchema = z.object({
   debitedAmount: z.number().min(0).optional(),
   excessAmount: z.number().min(0).optional(),
   expectedAmount: z.number().gt(0),
-  expiresAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime({ offset: true }),
   fundedAmount: z.number().min(0),
   id: z.uuid(),
   orderPaid: z.boolean().optional(),

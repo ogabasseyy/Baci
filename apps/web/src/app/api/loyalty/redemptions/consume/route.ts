@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   authenticateApiRequest,
-  hasBearerAuthScheme,
+  getBearerTokenFromRequest,
   hasPermission,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -36,6 +36,13 @@ type ConsumeRpcResult = {
  * lost-response retry replays the receipt. No storefront caller
  * exists by design — this is staff-only (authenticated, CSRF-checked,
  * marketing:edit-gated), and the contract is pinned by route.test.ts.
+ *
+ * NOT YET WIRED: no dashboard or mobile-admin client calls this
+ * endpoint yet, so manual-fulfillment rewards (free product / free
+ * shipping / exclusive access) cannot be consumed in-product until
+ * that staff client lands. The endpoint ships ahead of the client so
+ * the contract (auth, permission, idempotent replay) is pinned and
+ * reviewable; it is not a fulfillment path staff can use today.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -50,8 +57,12 @@ export async function POST(request: NextRequest) {
     const user = auth.user;
 
     // Bearer [REDACTED] are not cookie-ambient, so CSRF only applies to
-    // the cookie-authenticated dashboard path.
-    if (!hasBearerAuthScheme(request)) {
+    // the cookie-authenticated dashboard path. Gate on an extracted
+    // token, not the scheme word: a bare `Authorization: Bearer`
+    // header carries no token, authentication falls back to cookies,
+    // and such a request must not skip CSRF. (A present token was
+    // already verified above — an invalid one returned 401.)
+    if (getBearerTokenFromRequest(request) === null) {
       const { valid, response } = await checkCsrfProtection(request);
       if (!valid) {
         return (

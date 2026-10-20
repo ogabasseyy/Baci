@@ -1,8 +1,8 @@
 import { piggyvestSavingsScreenSchema } from '@baci/shared/contracts';
 import { createPiggyvestScheduleController } from '@baci/shared/lib';
+import { scheduleJourneyFixture } from '@baci/shared/test-fixtures/piggyvest-schedule';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
-import { scheduleJourneyFixture } from '../../../../../../packages/shared/src/lib/piggyvest-schedule.test-support';
 import { BoundScheduleReview, type ScheduleBinding } from './schedule-binding';
 
 it('fails closed instead of crashing on a malformed present binding', () => {

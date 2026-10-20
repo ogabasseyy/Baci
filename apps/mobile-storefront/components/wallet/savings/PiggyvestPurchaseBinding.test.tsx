@@ -9,8 +9,8 @@ import {
   createPiggyvestPurchaseClient,
   createPiggyvestPurchaseController,
 } from '@baci/shared/lib';
+import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { purchaseFixture } from '../../../../../packages/shared/src/test-fixtures/piggyvest-purchase';
 import { StartSavingsScreen } from './StartSavingsScreen';
 
 it.each([

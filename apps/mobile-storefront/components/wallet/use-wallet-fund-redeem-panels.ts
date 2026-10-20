@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { useState } from 'react';
+import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import type { Customer } from '@/stores/auth-store';
 import { fundWallet, redeemWalletPoints } from './wallet-screen.handlers';
 import type { resolveWalletRedeemPointsOutcome } from './wallet-screen.helpers';
@@ -33,7 +34,7 @@ export function useWalletFundRedeemPanels({
   routeAction?: string;
   routeRequiredAmount: string;
   user?: User | null;
-  walletReturnTo?: string;
+  walletReturnTo?: WalletReturnHref;
 }) {
   const [redeemPoints, setRedeemPoints] = useState('');
   const [showRedeemPanel, setShowRedeemPanel] = useState(

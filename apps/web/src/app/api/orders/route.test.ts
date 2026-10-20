@@ -709,6 +709,23 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
+// Issue #3696: the loyalty resolver runs on its own branded
+// resolver client. Only the unknown-code path reaches it here (SAVE10
+// resolves on the merchant path), and it must see no rows so the code
+// stays invalid; per-case overrides live in the bridge suites.
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(() => ({
+    rpc: vi.fn(async () => ({ data: [], error: null })),
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+        })),
+      })),
+    })),
+  })),
+}));
+
 // B3.5 round 7: the route now passes its own scoped supabase
 // client into the tax helper (CodeRabbit High — no service-role
 // in the Next.js layer). The helper's variant lookup routes
@@ -935,6 +952,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     const prepareSpy = vi
       .spyOn(idempotency, 'prepareCheckoutIdempotencyReplay')
       .mockResolvedValue({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: 'test-request-hash',
         isLegacyIdempotencyReplay: false,
       });
@@ -4730,15 +4748,20 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
     enrichSpy.mockRestore();
     if (isReplay) {
-      // Preserve the existing fail-closed provider-context contract for an
-      // extant quote replay. No destination is written in this branch.
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        code: 'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
-      });
-      expect(supabase.rpc).not.toHaveBeenCalledWith(
+      // Merge contract (#3687): a DB-confirmed keyed retry is a confirmed
+      // quote replay, so it reaches the order RPC's replay path with the
+      // first attempt's quote pin instead of failing provider validation.
+      expect(response.status).toBe(200);
+      expect(supabase.rpc).toHaveBeenCalledWith(
         'create_storefront_order',
-        expect.anything()
+        expect.objectContaining({
+          p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
+          p_shipping_provider: 'GIGL',
+          p_shipping_address: expect.objectContaining({
+            latitude: 43.65,
+            longitude: -79.38,
+          }),
+        })
       );
       return;
     }

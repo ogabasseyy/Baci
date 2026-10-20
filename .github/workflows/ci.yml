@@ -194,7 +194,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs
+          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
       - name: Verify authenticated shipping recovery in PostgreSQL
         env:
@@ -221,26 +221,30 @@ jobs:
           if [ "$TEST_PLAN_MODE" = "config-smoke" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm exec biome check turbo.json .github/scripts/resolve-ci-test-plan.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs
-            node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs
+            node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
             exit 0
           fi
 
           if [ "$TEST_PLAN_MODE" = "targeted-web-vitest" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm --filter @baci/web exec vitest run --changed "$TURBO_SCM_BASE" --passWithNoTests
+            pnpm --filter @baci/web exec vitest run src/lib/shared-test-fixtures-import-boundary.test.ts src/lib/shared-exports-resolution.test.ts
             exit 0
           fi
 
           if [ "$TEST_PLAN_MODE" = "targeted-storefront-jest" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm --filter @baci/mobile-storefront exec jest --changedSince "$TURBO_SCM_BASE" --runInBand --passWithNoTests
+            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts components/wallet/savings/shared-fixtures.smoke.test.ts --runInBand
             exit 0
           fi
 
           if [ "$TEST_PLAN_MODE" = "targeted-web-and-storefront-tests" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm --filter @baci/web exec vitest run --changed "$TURBO_SCM_BASE" --passWithNoTests
+            pnpm --filter @baci/web exec vitest run src/lib/shared-test-fixtures-import-boundary.test.ts src/lib/shared-exports-resolution.test.ts
             pnpm --filter @baci/mobile-storefront exec jest --changedSince "$TURBO_SCM_BASE" --runInBand --passWithNoTests
+            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts components/wallet/savings/shared-fixtures.smoke.test.ts --runInBand
             exit 0
           fi
 
@@ -346,6 +350,7 @@ jobs:
           --sql-check supabase/tests/shipping_provider_settings.sql
           --sql-check supabase/tests/negotiation_customer_contact.sql
           --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
+          --sql-check supabase/tests/storefront_cart_public_hints.sql
           --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql
           --sql-check supabase/tests/storefront_cluster_guide_classifier_behavior.sql
           --sql-check supabase/tests/storefront_comparison_revisions.sql
@@ -795,6 +800,8 @@ jobs:
         run: pnpm --dir apps/mobile-admin exec vitest run scripts/check-platform-drift.test.ts
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: pnpm --dir apps/mobile-admin exec vitest run scripts/check-module-size.test.ts
+      - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: pnpm --dir apps/mobile-admin exec vitest run lib/shared-test-fixtures-boundary.test.ts
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: pnpm --dir apps/mobile-admin check:platform-drift
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'

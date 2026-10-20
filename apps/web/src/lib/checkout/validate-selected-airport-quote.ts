@@ -52,7 +52,12 @@ export async function validateSelectedAirportQuote({
     });
   const quote = readAirportQuote(data);
   if (!quote && (await isReplay())) return true;
-  if (!quote || !isEligibleAirportQuote(quote, shippingProvider)) {
+  // The merchant-scoped quote is authoritative when the redundant caller
+  // provider is omitted. A supplied mismatch still fails the eligibility check.
+  const resolvedShippingProvider =
+    shippingProvider ??
+    (typeof quote?.provider === 'string' ? quote.provider : null);
+  if (!quote || !isEligibleAirportQuote(quote, resolvedShippingProvider)) {
     throw new LocalAirportDeliveryValidationError(
       'The selected airport delivery quote is not eligible for airport delivery',
       'AIRPORT_QUOTE_INVALID',

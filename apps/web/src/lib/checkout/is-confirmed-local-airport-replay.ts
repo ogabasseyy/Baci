@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logger } from '@/lib/logger';
+import { hasExistingKeyedOrder } from './has-existing-keyed-order';
 
 type ConfirmedLocalAirportReplayInput = Readonly<{
   merchantId: string;
@@ -7,30 +7,15 @@ type ConfirmedLocalAirportReplayInput = Readonly<{
   supabase: SupabaseClient;
 }>;
 
-/** Returns true only when the database confirms an existing airport replay. */
-export async function isConfirmedLocalAirportReplay({
+/**
+ * Returns true only when the database confirms an existing airport replay.
+ * Implemented via hasExistingKeyedOrder so replay behavior cannot drift
+ * between shipping paths.
+ */
+export function isConfirmedLocalAirportReplay({
   merchantId,
   requestIdempotencyKey,
   supabase,
 }: ConfirmedLocalAirportReplayInput): Promise<boolean> {
-  if (!requestIdempotencyKey) return false;
-
-  const { data, error } = await supabase.rpc(
-    'has_storefront_order_idempotency_key',
-    {
-      p_checkout_idempotency_key: requestIdempotencyKey,
-      p_merchant_id: merchantId,
-    }
-  );
-  if (error) {
-    logger.warn({
-      message:
-        'Idempotent local-airport order pre-check failed; rejecting the stale fee',
-      merchantId,
-      error,
-    });
-    return false;
-  }
-
-  return data === true;
+  return hasExistingKeyedOrder({ merchantId, requestIdempotencyKey, supabase });
 }

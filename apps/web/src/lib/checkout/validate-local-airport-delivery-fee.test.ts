@@ -147,7 +147,7 @@ describe('validateLocalAirportDeliveryFee', () => {
     });
   });
 
-  it('rejects a GIGL quote when the submitted provider is missing', async () => {
+  it('accepts the stored GIGL provider when the submitted provider is omitted', async () => {
     const promise = validateLocalAirportDeliveryFee({
       deliveryMethod: 'airport',
       merchantId: MERCHANT_ID,
@@ -157,9 +157,9 @@ describe('validateLocalAirportDeliveryFee', () => {
       supabase: mockSupabase([validGoFasterQuote]),
     });
 
-    await expect(promise).rejects.toMatchObject({
-      code: 'AIRPORT_QUOTE_INVALID',
-      status: 400,
+    await expect(promise).resolves.toMatchObject({
+      isIdempotentLocalAirportReplay: false,
+      localAirportShippingFee: null,
     });
   });
 

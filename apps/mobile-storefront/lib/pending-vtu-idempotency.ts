@@ -14,13 +14,11 @@
  */
 
 import * as Crypto from 'expo-crypto';
-import { isExpiredPendingVtuEntry } from './pending-vtu-idempotency-codec';
 import {
-  clearForgottenVtuScopes,
-  clearPendingVtuSnapshot,
-  forgottenVtuScopes,
-  noteForgottenVtuScopes,
-} from './pending-vtu-idempotency-store';
+  isExpiredPendingVtuEntry,
+  serializePendingVtuEntries,
+} from './pending-vtu-idempotency-codec';
+import { clearPendingVtuSnapshot } from './pending-vtu-idempotency-store';
 import {
   pendingPurchases,
   persistPendingVtuPurchases,
@@ -34,12 +32,17 @@ import {
   listNotedPendingVtuReferencesFrom,
   markPendingVtuCompletedIn,
 } from './pending-vtu-reference-queries';
+import {
+  clearForgottenVtuScopes,
+  forgottenVtuScopes,
+  listForgottenVtuTombstones,
+  noteForgottenVtuScopes,
+} from './pending-vtu-tombstones';
 
 export { adoptCanonicalVtuKey } from './pending-vtu-canonical-adoption';
 export {
   forgetPendingVtuPurchaseDurable,
   hydratePendingVtuPurchases,
-  serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 
@@ -277,4 +280,18 @@ export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();
   clearForgottenVtuScopes();
   clearPendingVtuSnapshot();
+}
+
+/**
+ * Serializes live entries + tombstones for MMKV (prunes
+ * TTL-expired). Lives here (not sync) per the 300-line
+ * module-size gate: sync owns merge discipline, this barrel owns
+ * registry ops.
+ */
+export function serializePendingVtuPurchases(now: number = Date.now()): string {
+  return serializePendingVtuEntries(
+    pendingPurchases,
+    listForgottenVtuTombstones(),
+    now
+  );
 }

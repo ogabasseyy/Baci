@@ -20,6 +20,7 @@ import { parsePendingVtuSnapshot } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
 import * as vtuSync from './pending-vtu-idempotency-sync';
 import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
+import { noteForgottenVtuScopes } from './pending-vtu-tombstones';
 
 describe('pending-vtu-generation-guards', () => {
   beforeEach(() => {
@@ -160,7 +161,7 @@ describe('pending-vtu-generation-guards', () => {
     }
     expect(recallPendingVtuKey('d-settle')).toBe('key-winner');
     // What chargeWalletForVtu now does on a non-durable adoption.
-    vtuStore.noteForgottenVtuScopes(['d-settle'], Date.now(), 'key-loser');
+    noteForgottenVtuScopes(['d-settle'], Date.now(), 'key-loser');
     // Cross-ms gap: single-slot replacement would drop the loser
     // record here — multi-key tombstones must keep both.
     await new Promise((resolve) => setTimeout(resolve, 3));

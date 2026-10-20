@@ -11,8 +11,8 @@ import {
 } from '@/lib/fetch-with-timeout';
 import { forgetOwnPendingVtuPurchase } from './pending-vtu-generation-guards';
 import { adoptCanonicalVtuKey } from './pending-vtu-idempotency';
-import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
 import { schedulePendingVtuFlush } from './pending-vtu-idempotency-sync';
+import { noteForgottenVtuScopes } from './pending-vtu-tombstones';
 import {
   getAccessToken,
   getResponseErrorMessage,

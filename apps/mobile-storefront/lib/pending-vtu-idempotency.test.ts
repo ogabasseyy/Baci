@@ -32,8 +32,8 @@ import {
   parsePendingVtuSnapshot,
 } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
-import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
 import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
+import { noteForgottenVtuScopes } from './pending-vtu-tombstones';
 
 describe('pending-vtu-idempotency', () => {
   // Suite-level isolation (Muse R123 low): the MMKV mock buckets

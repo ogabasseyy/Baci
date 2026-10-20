@@ -13,6 +13,10 @@ import { Platform } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 import type { PersistedPendingVtuPurchase } from './pending-vtu-idempotency-codec';
 import { serializePendingVtuEntries } from './pending-vtu-idempotency-codec';
+import {
+  clearForgottenVtuScopes,
+  listForgottenVtuTombstones,
+} from './pending-vtu-tombstones';
 
 const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
 // Single global mint lock (Codex R148 P1, web mirror): one key,
@@ -120,52 +124,6 @@ export function savePendingVtuSnapshot(serialized: string): boolean {
 }
 
 /**
- * Scopes deliberately deleted since the last persist (scope ->
- * deletion record). Cleared only after a durable write: if the write
- * throws, the stale snapshot still holds the completed entries, and
- * clearing would resurrect them on the next restart. Tombstones bind
- * the deleted generation's key (web R61 parity, Codex R143 P1) so a
- * newer generation survives an older generation's tombstone.
- */
-export const forgottenVtuScopes = new Map<
-  string,
-  Array<{ forgottenAt: number; key?: string }>
->();
-
-/**
- * Records deletion tombstones for scopes the registry just forgot.
- * Multi-key per scope (CodeRabbit Major): a non-durable canonical
- * adoption tombstones the persisted loser, then terminal settlement
- * tombstones the winner — single-slot replacement would drop the
- * loser record and resurrect the persisted loser on merge. Same-key
- * records refresh (newest wins); different generations accumulate
- * until the next durable persist carries them all.
- */
-export function noteForgottenVtuScopes(
-  scopes: string[],
-  forgottenAt: number,
-  key?: string
-): void {
-  for (const scoped of scopes) {
-    const known = forgottenVtuScopes.get(scoped) ?? [];
-    const same = known.find((record) => record.key === key);
-    if (same !== undefined) {
-      if (forgottenAt > same.forgottenAt) {
-        same.forgottenAt = forgottenAt;
-      }
-    } else {
-      known.push({ forgottenAt, key });
-    }
-    forgottenVtuScopes.set(scoped, known);
-  }
-}
-
-/** Test-only escape hatch: module state survives across test cases. */
-export function clearForgottenVtuScopes(): void {
-  forgottenVtuScopes.clear();
-}
-
-/**
  * Serializes live entries WITH tombstones and saves; tombstones clear
  * only after a durable write. Retained tombstones ride along on the
  * next persist instead of resurrecting the deleted entries.
@@ -175,20 +133,10 @@ export function persistPendingVtuEntries(
   now: number = Date.now()
 ): boolean {
   const ok = savePendingVtuSnapshot(
-    serializePendingVtuEntries(
-      entries,
-      [...forgottenVtuScopes].flatMap(([scoped, records]) =>
-        records.map((record) => ({
-          scoped,
-          forgottenAt: record.forgottenAt,
-          ...(record.key !== undefined ? { key: record.key } : {}),
-        }))
-      ),
-      now
-    )
+    serializePendingVtuEntries(entries, listForgottenVtuTombstones(), now)
   );
   if (ok) {
-    forgottenVtuScopes.clear();
+    clearForgottenVtuScopes();
   }
   return ok;
 }

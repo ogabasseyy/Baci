@@ -13,7 +13,7 @@ const repoRoot = dirname(fileURLToPath(import.meta.url)).replace(
   ''
 );
 const scanRoots = [
-  join(repoRoot, 'apps/web/src'),
+  join(repoRoot, 'apps/web'),
   join(repoRoot, 'apps/mobile-storefront'),
   join(repoRoot, 'apps/mobile-admin'),
   join(repoRoot, 'packages/shared/src'),
@@ -33,22 +33,24 @@ const skippedDirs = new Set([
   'Pods',
 ]);
 const bannedPatterns = [
-  // Any quoted specifier pointing at the fixture tree: subpath imports,
-  // deep-relative paths, require(), side-effect imports, and dynamic
-  // imports are all covered by matching the quoted path itself.
-  /['"`][^'"`]*test-fixtures\//,
+  // Package-specifier imports of the fixture tree.
+  /['"`]@baci\/shared\/test-fixtures\//,
+  // Deep-relative fixture paths in import/require/export position
+  // (a bare string mentioning the tree, e.g. a staging tool's path
+  // prefix constant, is not an import and is not matched).
+  /(?:from|require|import)\s*\(?\s*['"`][^'"`]*test-fixtures\//,
   /packages\/shared\/src\/lib\/[^'"]*\.test-support/,
 ];
 
 function isTestFile(path: string) {
   return (
     /(?:vitest|jest|metro)\.config\./.test(path) ||
-    path.includes('/__tests__/') ||
-    // Only the fixture definitions themselves are exempt; an app-side
-    // test-support helper is still scanned.
+    // Explicit allowlist: only the fixture definitions themselves are
+    // exempt. Blanket /__tests__/ or *.test-fixtures.* exemptions are
+    // deliberately NOT used — files in those locations are importable
+    // from production code, so they stay scanned.
     path.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
-    /\.test-fixtures\.(?:m|c)?[tj]sx?$/.test(path) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }

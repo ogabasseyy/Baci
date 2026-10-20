@@ -19,7 +19,10 @@ type FixtureMock<A extends unknown[], R> = ((...args: A) => R) & {
   mockResolvedValueOnce: (value: Awaited<R>) => FixtureMock<A, R>;
   mockRejectedValue: (error: unknown) => FixtureMock<A, R>;
   mockRejectedValueOnce: (error: unknown) => FixtureMock<A, R>;
+  mockReturnValueOnce: (value: R) => FixtureMock<A, R>;
   mockReset: () => FixtureMock<A, R>;
+  mockRestore: () => FixtureMock<A, R>;
+  getMockImplementation: () => ((...args: A) => R) | undefined;
   getMockName: () => string;
   _isMockFunction: true;
 };
@@ -88,6 +91,12 @@ export function createFixtureMock<A extends unknown[], R>(
     onceQueue.push(() => Promise.reject(error) as R);
     return mockFn;
   };
+  mockFn.mockReturnValueOnce = (value: R) => {
+    onceQueue.push(() => value);
+    return mockFn;
+  };
+  mockFn.mockRestore = () => mockFn.mockReset();
+  mockFn.getMockImplementation = () => current;
   mockFn.getMockName = () => 'fixtureMock';
   mockFn._isMockFunction = true;
   return mockFn;

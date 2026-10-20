@@ -184,3 +184,15 @@ test('follows extensionless in-root file symlinks to source targets', async () =
   const offenders = findFixtureImportOffenders([dir]);
   assert.ok(offenders.includes(join(dir, 'linked-helper')));
 });
+
+test('nested files reusing a config basename are not exempt', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const alias = './test-fixtures/x';\nexport const a = alias;\n",
+    'src/lib/vitest.config.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'src/lib/vitest.config.ts'),
+  ]);
+});

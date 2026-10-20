@@ -1,5 +1,5 @@
 import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 // Single source of truth for the shared test-fixtures import boundary,
 // consumed by the web Vitest guard and both mobile guards (Jest and
@@ -181,10 +181,28 @@ export function collectSourceFiles(roots: string[]): string[] {
 // (apps/*/tools): tooling may freely use test-named helpers, but a
 // direct shared-fixture import there still executes test-double code
 // outside the apps, so it is flagged.
+const RUNNER_CONFIG_BASENAME =
+  /^(?:vitest|jest|metro)\.config\.(?:m|c)?[tj]sx?$/;
+
+// A runner-config basename only earns the test-file exemption when the
+// file is a direct child of a scan root (where real runner configs
+// live). A nested file that merely reuses the config basename is
+// ordinary source and is scanned.
+function isExemptFile(file: string, roots: string[]): boolean {
+  if (!isTestFile(file)) return false;
+  const normalized = normalizePath(file);
+  const base = normalized.split('/').pop() ?? '';
+  if (!RUNNER_CONFIG_BASENAME.test(base)) return true;
+  const parent = normalized.slice(0, normalized.length - base.length - 1);
+  return roots.some(
+    (root) => normalizePath(resolve(root)) === parent
+  );
+}
+
 export function findFixturePatternOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
-    if (isTestFile(file)) continue;
+    if (isExemptFile(file, roots)) continue;
     const content = readFileSync(file, 'utf8');
     if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
       offenders.push(file);
@@ -196,7 +214,7 @@ export function findFixturePatternOffenders(roots: string[]): string[] {
 export function findFixtureImportOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
-    if (isTestFile(file)) continue;
+    if (isExemptFile(file, roots)) continue;
     const content = readFileSync(file, 'utf8');
     if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
       offenders.push(file);

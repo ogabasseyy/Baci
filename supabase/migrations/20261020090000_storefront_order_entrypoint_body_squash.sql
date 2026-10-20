@@ -2,16 +2,20 @@
 --
 -- The order entrypoints evolved through pg_get_functiondef string-patch
 -- migrations (08300000-09330000, 19090000-19100000). This forward
--- migration installs the exact effective bodies (captured
--- pg_get_functiondef output from a database at migration
--- 20261019183000, which is main db913dd1ca's migration state) via
--- CREATE OR REPLACE, so the pair contract is reviewable in one place
--- and future changes diff against pinned bodies instead of extending
--- the patch chain.
+-- migration installs the exact effective bodies via CREATE OR REPLACE,
+-- so the pair contract is reviewable in one place and future changes
+-- diff against pinned bodies instead of extending the patch chain.
 --
--- Semantically a no-op: the installed bodies are byte-identical to the
--- live definitions; the chronological replay effect digest enforces
--- this (any drift fails the digest comparison).
+-- Provenance: the checked body is captured pg_get_functiondef output
+-- (that entrypoint is an untouched delegating wrapper since 20260828).
+-- The unchecked body is captured output plus the exact 19090000
+-- final-state port (blocks 1-10) applied in order; the capture source
+-- predates 19090000, so the port is simulated here with the same
+-- anchors and guards (all 10 anchors hit exactly once).
+--
+-- Semantically a no-op: the installed bodies equal the replayed
+-- definitions; the chronological replay effect digest enforces this
+-- (any drift fails the digest comparison).
 --
 -- Historical patch files are untouched (migrations are append-only):
 -- they still run with their convergence and sibling-delegation guards
@@ -316,7 +320,12 @@ BEGIN
     condition_offer_id UUID,
     condition_valid BOOLEAN,
     submitted_price NUMERIC,
-    voucher_award_id text
+    voucher_award_id text,
+    offer_id UUID,
+    offer_condition TEXT,
+    offer_grade TEXT,
+    offer_condition_notes TEXT,
+    offer_labels_snapshotted BOOLEAN
   ) ON COMMIT DROP;
 
   INSERT INTO tmp_storefront_order_items (
@@ -333,7 +342,9 @@ BEGIN
     base_price,
     price_override,
     manage_stock,
-    variant_stock, condition_offer_id, condition_valid, submitted_price, voucher_award_id
+    variant_stock, condition_offer_id, condition_valid, submitted_price, voucher_award_id,
+    offer_id, offer_condition, offer_grade, offer_condition_notes,
+    offer_labels_snapshotted
   )
   SELECT
     r.product_id,
@@ -359,7 +370,12 @@ BEGIN
       WHEN offer.id IS NOT NULL THEN offer.status='active' AND public.commerce_cart_condition_pool_is_quantity_managed(p_merchant_id,p.id) AND EXISTS(SELECT 1 FROM public.merchants m WHERE m.id=p_merchant_id AND (coalesce(m.is_published,false) OR coalesce(m.is_platform_admin,false)))
       ELSE discovery.canonical_product_condition(r.condition)=discovery.canonical_product_condition(p.condition)
     END,
-    r.submitted_price,r.voucher_award_id
+    r.submitted_price,r.voucher_award_id,
+    r.offer_id,
+    offer.condition,
+    offer.grade,
+    offer.condition_notes,
+    offer.id IS NOT NULL
   FROM (
     SELECT
       COALESCE(
@@ -370,6 +386,7 @@ BEGIN
       NULLIF(trim(item->>'condition'), '') AS condition,
       nullif(item->>'price','')::numeric AS submitted_price,
       nullif(item->>'voucher_award_id','') AS voucher_award_id,
+      NULLIF(item->>'offer_id','')::uuid AS offer_id,
       NULLIF(trim(COALESCE(item->>'image_url', item->>'imageUrl')), '') AS image_url,
       NULLIF(item->>'variant_id','')::uuid AS variant_id,
       COALESCE(item->'variant_attributes', item->'variantAttributes') AS variant_attributes,
@@ -388,8 +405,9 @@ BEGIN
     AND v.product_id = p.id AND v.merchant_id=p_merchant_id
     
     AND NOT coalesce((to_jsonb(v)->>'is_inventory_anchor')::boolean,false)
-  LEFT JOIN public.product_offers offer ON r.variant_id IS NULL AND r.condition IS NOT NULL
-    AND offer.product_id=p.id AND offer.merchant_id=p_merchant_id AND offer.condition=r.condition;
+  LEFT JOIN public.product_offers offer ON offer.product_id=p.id AND offer.merchant_id=p_merchant_id
+    AND ((r.variant_id IS NULL AND r.condition IS NOT NULL AND offer.condition=r.condition)
+      OR (r.variant_id IS NULL AND r.condition IS NULL AND r.offer_id IS NOT NULL AND offer.id=r.offer_id AND offer.status='active'));
 
   SELECT
     COUNT(*) FILTER (WHERE t.product_id IS NULL OR t.product_name IS NULL) AS invalid_item_count,
@@ -410,6 +428,18 @@ BEGIN
 
   IF v_invalid_variant_count > 0 THEN
     RAISE EXCEPTION 'invalid_variant';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM tmp_storefront_order_items t
+    WHERE t.offer_id IS NOT NULL
+      AND (
+        t.variant_id IS NOT NULL
+        OR t.offer_id IS DISTINCT FROM t.condition_offer_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'invalid_offer';
   END IF;
 
   IF EXISTS(SELECT 1 FROM tmp_storefront_order_items t WHERE t.condition_valid IS NOT TRUE) THEN RAISE EXCEPTION 'invalid_condition_offer'; END IF;
@@ -755,12 +785,10 @@ BEGIN
     ORDER BY t.product_id, t.variant_id, t.condition_offer_id
   LOOP
     IF stock_rec.condition_offer_id IS NOT NULL THEN
-      IF stock_rec.manage_stock THEN
-        UPDATE public.product_offers offer SET stock_quantity=offer.stock_quantity-stock_rec.total_quantity
-        WHERE offer.id=stock_rec.condition_offer_id AND offer.merchant_id=p_merchant_id AND offer.product_id=stock_rec.product_id
-          AND offer.status='active' AND offer.stock_quantity>=stock_rec.total_quantity;
-        IF NOT FOUND THEN RAISE EXCEPTION 'insufficient_condition_offer_stock'; END IF;
-      END IF;
+      UPDATE public.product_offers offer SET stock_quantity=offer.stock_quantity-stock_rec.total_quantity
+      WHERE offer.id=stock_rec.condition_offer_id AND offer.merchant_id=p_merchant_id AND offer.product_id=stock_rec.product_id
+        AND offer.status='active' AND offer.stock_quantity>=stock_rec.total_quantity;
+      IF NOT FOUND THEN RAISE EXCEPTION 'insufficient_condition_offer_stock'; END IF;
       CONTINUE;
     END IF;
     IF stock_rec.manage_stock THEN
@@ -826,12 +854,17 @@ BEGIN
     has_assurance,
     assurance_fee,
     variant_attributes,
-    product_offer_id
+    product_offer_id,
+    offer_id,
+    offer_line,
+    offer_grade,
+    offer_condition_notes,
+    offer_labels_snapshotted
   )
   SELECT
     v_order_id,
     t.product_id,
-    t.condition,
+    COALESCE(t.offer_condition, t.condition),
     t.image_url,
     t.variant_id,
     t.variant_name,
@@ -841,7 +874,12 @@ BEGIN
     t.has_assurance,
     t.assurance_fee,
     COALESCE(t.variant_attributes, '{}'::jsonb),
-    t.condition_offer_id
+    t.condition_offer_id,
+    t.offer_id,
+    (t.offer_id IS NOT NULL OR t.condition_offer_id IS NOT NULL) AS offer_line,
+    t.offer_grade,
+    t.offer_condition_notes,
+    t.offer_labels_snapshotted
   FROM tmp_storefront_order_items t;
 
   -- Claim serialized units for newly created order items

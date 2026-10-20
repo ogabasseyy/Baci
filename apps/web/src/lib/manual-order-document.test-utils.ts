@@ -83,6 +83,7 @@ export function database(
     taxSubtotals?: Record<string, unknown>[];
     dispatchLeaseReset?: boolean;
     dispatchLeaseError?: boolean;
+    dispatchLeaseOwner?: string;
     snapshotError?: { message: string } | null;
     snapshotNull?: boolean;
     claimResult?: { data: unknown; error: unknown } | null;
@@ -192,6 +193,8 @@ export function database(
                     dispatch_started_at: options.dispatchLeaseReset
                       ? null
                       : '2026-09-30T10:00:00Z',
+                    locked_by: options.dispatchLeaseOwner ?? 'worker-1',
+                    status: 'processing',
                   }
                 : { id: 'outbox-1' },
             error:

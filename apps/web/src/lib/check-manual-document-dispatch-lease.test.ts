@@ -40,21 +40,29 @@ function queuedClient(results: { data: unknown; error: unknown }[]) {
 describe('checkManualDocumentDispatchLease', () => {
   it('reports held when the dispatch marker is set', async () => {
     const client = clientFor({
-      data: { dispatch_started_at: '2026-09-30T10:00:00Z' },
+      data: {
+        dispatch_started_at: '2026-09-30T10:00:00Z',
+        locked_by: 'worker-1',
+        status: 'processing',
+      },
       error: null,
     });
     await expect(
-      checkManualDocumentDispatchLease(client as never, 'outbox-1')
+      checkManualDocumentDispatchLease(client as never, 'outbox-1', 'worker-1')
     ).resolves.toBe('held');
   });
 
   it('reports reset when a data change cleared the marker', async () => {
     const client = clientFor({
-      data: { dispatch_started_at: null },
+      data: {
+        dispatch_started_at: null,
+        locked_by: 'worker-1',
+        status: 'processing',
+      },
       error: null,
     });
     await expect(
-      checkManualDocumentDispatchLease(client as never, 'outbox-1')
+      checkManualDocumentDispatchLease(client as never, 'outbox-1', 'worker-1')
     ).resolves.toBe('reset');
   });
 
@@ -64,7 +72,35 @@ describe('checkManualDocumentDispatchLease', () => {
       error: new Error('network lost'),
     });
     await expect(
-      checkManualDocumentDispatchLease(client as never, 'outbox-1')
+      checkManualDocumentDispatchLease(client as never, 'outbox-1', 'worker-1')
+    ).resolves.toBe('unknown');
+  });
+
+  it('reports unknown when a newer attempt re-claimed the row', async () => {
+    const client = clientFor({
+      data: {
+        dispatch_started_at: '2026-09-30T10:05:00Z',
+        locked_by: 'worker-2',
+        status: 'processing',
+      },
+      error: null,
+    });
+    await expect(
+      checkManualDocumentDispatchLease(client as never, 'outbox-1', 'worker-1')
+    ).resolves.toBe('unknown');
+  });
+
+  it('reports unknown when the row left the processing state', async () => {
+    const client = clientFor({
+      data: {
+        dispatch_started_at: '2026-09-30T10:00:00Z',
+        locked_by: 'worker-1',
+        status: 'sent',
+      },
+      error: null,
+    });
+    await expect(
+      checkManualDocumentDispatchLease(client as never, 'outbox-1', 'worker-1')
     ).resolves.toBe('unknown');
   });
 });

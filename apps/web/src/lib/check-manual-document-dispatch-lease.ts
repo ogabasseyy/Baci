@@ -8,14 +8,21 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  */
 export async function checkManualDocumentDispatchLease(
   supabase: SupabaseClient,
-  outboxId: string
+  outboxId: string,
+  expectedOwner: string
 ): Promise<'held' | 'reset' | 'unknown'> {
   const { data: lease, error: leaseError } = await supabase
     .from('order_notification_outbox')
-    .select('dispatch_started_at')
+    .select('dispatch_started_at, locked_by, status')
     .match({ id: outboxId })
     .maybeSingle();
   if (leaseError || !lease) return 'unknown';
+  // A newer attempt re-claimed the row after a reset or stale reclaim
+  // (corrective retry, staff re-arm): its marker must not read as this
+  // sender's held lease, or both attempts record the send. The guarded
+  // status update still enforces; lost leases read as unknown here.
+  if (lease.locked_by !== expectedOwner || lease.status !== 'processing')
+    return 'unknown';
   return lease.dispatch_started_at ? 'held' : 'reset';
 }
 

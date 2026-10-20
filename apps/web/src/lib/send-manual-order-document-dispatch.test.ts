@@ -236,4 +236,18 @@ describe('send manual order document dispatch', () => {
       deliveryOutcome: 'unknown',
     });
   });
+
+  it('fails unknown instead of recording sent when a newer attempt re-claimed the row', async () => {
+    const db = database({}, { dispatchLeaseOwner: 'worker-2' });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    // The provider accepted this attempt's mail, so the token is still
+    // recorded — but the newer attempt's marker must not read as this
+    // sender's held lease, or both attempts record the send.
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'dispatch_lease_check_failed',
+      deliveryOutcome: 'unknown',
+    });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
 });

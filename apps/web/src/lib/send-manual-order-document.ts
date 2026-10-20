@@ -243,7 +243,11 @@ export async function sendManualOrderDocument({
     };
     // A data change reset the marker after dispatch: the PDF is stale,
     // so fail for a bounded corrective retry instead of recording sent.
-    const lease = await checkManualDocumentDispatchLease(supabase, row.id);
+    const lease = await checkManualDocumentDispatchLease(
+      supabase,
+      row.id,
+      row.claim_owner
+    );
     if (lease === 'unknown') {
       if (!(await recordAcceptedToken()))
         return {

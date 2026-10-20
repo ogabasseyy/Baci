@@ -41,10 +41,7 @@ function normalize(path: string) {
   return path.split(sep).join('/');
 }
 
-const ALLOWLISTED_HELPERS = new Set([
-  'apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx',
-  'apps/web/src/hooks/use-notifications.test-render.tsx',
-]);
+const ALLOWLISTED_HELPERS = new Set<string>([]); // no allowlisted helpers in this app
 
 function isTestFile(path: string) {
   const normalized = normalize(path);

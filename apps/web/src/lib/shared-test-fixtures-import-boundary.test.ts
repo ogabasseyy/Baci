@@ -98,22 +98,36 @@ function collectSourceFiles() {
 }
 
 describe('boundary guard pattern parity', () => {
-  it('mobile mirrors ban the same specifier classes', () => {
-    const mirrorPaths = [
+  function extractBannedPatterns(content: string): string[] {
+    const start = content.indexOf('const bannedPatterns = [');
+    const slice = content.slice(start, content.indexOf('];', start));
+    return slice
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('/') && line.endsWith(','))
+      .map((line) => line.slice(0, -1))
+      .sort();
+  }
+
+  it('mobile mirrors use identical bannedPatterns sources', () => {
+    const own = extractBannedPatterns(
+      readFileSync(
+        join(
+          repoRoot,
+          'apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts'
+        ),
+        'utf8'
+      )
+    );
+    expect(own.length).toBeGreaterThan(0);
+    for (const mirror of [
       'apps/mobile-storefront/lib/shared-test-fixtures-boundary.test.ts',
       'apps/mobile-admin/lib/shared-test-fixtures-boundary.test.ts',
-    ];
-    const requiredFragments = [
-      '@baci\\/shared\\/test-fixtures',
-      'test-fixtures\\/',
-      '\\.test-support',
-      '@\\/',
-    ];
-    for (const mirror of mirrorPaths) {
-      const content = readFileSync(join(repoRoot, mirror), 'utf8');
-      for (const fragment of requiredFragments) {
-        expect(content, `${mirror} missing ${fragment}`).toContain(fragment);
-      }
+    ]) {
+      const theirs = extractBannedPatterns(
+        readFileSync(join(repoRoot, mirror), 'utf8')
+      );
+      expect(theirs, mirror).toEqual(own);
     }
   });
 });

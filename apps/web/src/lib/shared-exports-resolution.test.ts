@@ -60,7 +60,27 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     }
   });
 
-  it('resolves every pinned new subpath (expectedSubpaths) through the exports map to a real file; future non-fixture domain subpaths must be added to expectedSubpaths to be pinned', () => {
+  it('resolves every pinned new subpath (expectedSubpaths) through the exports map to its exact file; future non-fixture domain subpaths must be added to expectedSubpaths to be pinned', () => {
+    const expectedTargets: Record<string, string> = {
+      '@baci/shared/vtu': 'src/vtu/index.ts',
+      '@baci/shared/test-fixtures/builder-ai-edit':
+        'src/test-fixtures/builder-ai-edit.ts',
+      '@baci/shared/test-fixtures/piggyvest-purchase':
+        'src/test-fixtures/piggyvest-purchase.ts',
+      '@baci/shared/test-fixtures/piggyvest-device-change':
+        'src/test-fixtures/piggyvest-device-change.ts',
+      '@baci/shared/test-fixtures/piggyvest-protected-offer':
+        'src/test-fixtures/piggyvest-protected-offer.ts',
+      '@baci/shared/test-fixtures/piggyvest-draft-closure':
+        'src/test-fixtures/piggyvest-draft-closure.ts',
+      '@baci/shared/test-fixtures/piggyvest-schedule':
+        'src/test-fixtures/piggyvest-schedule.ts',
+    };
+    for (const [specifier, target] of Object.entries(expectedTargets)) {
+      const resolved = appRequire.resolve(specifier);
+      expect(resolved, specifier).toBe(join(sharedPackageDir, target));
+      expect(existsSync(resolved), specifier).toBe(true);
+    }
     for (const specifier of subpaths) {
       const resolved = appRequire.resolve(specifier);
       expect(existsSync(resolved), specifier).toBe(true);

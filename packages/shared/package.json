@@ -40,7 +40,8 @@
     "./test-fixtures/piggyvest-protected-offer": "./src/test-fixtures/piggyvest-protected-offer.ts",
     "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
     "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts",
-    "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts"
+    "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts",
+    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

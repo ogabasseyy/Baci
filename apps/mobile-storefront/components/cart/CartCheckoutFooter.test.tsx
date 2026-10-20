@@ -1,7 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { AppState } from 'react-native';
+import { withRepeat } from 'react-native-reanimated';
 import Colors from '@/constants/Colors';
 import CartCheckoutFooter from './CartCheckoutFooter';
+
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
 jest.mock('react-native-reanimated', () => {
   const { View } =
@@ -22,7 +26,8 @@ jest.mock('react-native-reanimated', () => {
         },
       };
     },
-    withRepeat: (value: number) => value,
+    withRepeat: jest.fn((value: number) => value),
+    withSequence: (value: number) => value,
     withTiming: (value: number) => value,
   };
 });
@@ -30,6 +35,37 @@ jest.mock('react-native-reanimated', () => {
 const formatPrice = (amount: number) => `NGN ${amount.toLocaleString()}`;
 
 describe('CartCheckoutFooter', () => {
+  it('uses a finite checkout attention cue instead of an idle animation loop', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      AppState,
+      'currentState'
+    );
+    Object.defineProperty(AppState, 'currentState', {
+      configurable: true,
+      value: 'active',
+    });
+    try {
+      render(
+        <CartCheckoutFooter
+          checkoutDotColor="#fff"
+          colors={Colors.light}
+          enableNegotiationModal={false}
+          formatPrice={formatPrice}
+          grandTotal={250000}
+          hasAcceptedNegotiation={false}
+          onCheckout={jest.fn()}
+          onCheckoutPressIn={jest.fn()}
+          onNegotiateTotal={jest.fn()}
+          surfaceInset={Colors.light.background}
+        />
+      );
+      expect(withRepeat).toHaveBeenLastCalledWith(expect.anything(), 3, false);
+    } finally {
+      if (descriptor)
+        Object.defineProperty(AppState, 'currentState', descriptor);
+    }
+  });
+
   it('exposes checkout and total negotiation actions', () => {
     const onCheckout = jest.fn();
     const onNegotiateTotal = jest.fn();

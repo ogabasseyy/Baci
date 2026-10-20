@@ -94,7 +94,14 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from '@testing-library/react-native';
+import { useSharedValue } from 'react-native-reanimated';
 import Colors from '@/constants/Colors';
 import { findHostElement } from '@/test-support/find-host-element';
 import { UtilityPanel } from './UtilityPanel';
@@ -144,6 +151,7 @@ describe('UtilityPanel', () => {
     mockWithTiming.mockClear();
     jest.useFakeTimers();
     mockUseColorScheme.mockReturnValue('light');
+    mockUseIsFocused.mockReturnValue(true);
     mockUseCategories.mockReturnValue(createCategoriesResult());
   });
 
@@ -239,6 +247,40 @@ describe('UtilityPanel', () => {
     });
 
     expect(screen.getByText('Power!')).toBeTruthy();
+  });
+
+  it('stops auto-rotation while a product screen covers home and resumes on return', () => {
+    mockUseIsFocused.mockReturnValue(true);
+    const { result } = renderHook(() => useSharedValue(0));
+    const { rerender } = render(
+      <UtilityPanel
+        activeIndex={result.current}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+      />
+    );
+    act(() => jest.advanceTimersByTime(2800));
+    expect(screen.getByText('Data!')).toBeTruthy();
+    mockUseIsFocused.mockReturnValue(false);
+    rerender(
+      <UtilityPanel
+        activeIndex={result.current}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+      />
+    );
+    act(() => jest.advanceTimersByTime(5600));
+    expect(screen.getByText('Data!')).toBeTruthy();
+    mockUseIsFocused.mockReturnValue(true);
+    rerender(
+      <UtilityPanel
+        activeIndex={result.current}
+        selectedCategoryId={null}
+        onCategorySelect={jest.fn()}
+      />
+    );
+    act(() => jest.advanceTimersByTime(2800));
+    expect(screen.getByText('Tv!')).toBeTruthy();
   });
 
   it('uses the selectedCategoryId prop to mark the chosen utility as active', () => {

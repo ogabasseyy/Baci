@@ -1,0 +1,106 @@
+{
+  "baselineCommit": "db913dd1cacb5f8449f3557c77d0b691455d10ad",
+  "nativeBinaryUUID": "544AFB77-9D04-35F5-A9D7-A876DC3DB38E",
+  "mode": "Debug native, development JS, local fixture only",
+  "candidateFilesSHA256": {
+    "components/cart/CartCheckoutFooter.tsx": "9fa507e234c328905642b5d3bab4c8def29d4791407640254659b6b151df7619",
+    "components/checkout/use-checkout-cta-animation.ts": "f69b4c0481459bc4d6154001eed51a30652af05d60691a683b0babc3453c873a",
+    "components/storefront/UtilityPanel.tsx": "0796562aa9bc46b7abd22ad3226712da7a2a3c426c2f8d23bf80cfcbfa66936b"
+  },
+  "cpuWindows": [
+    {
+      "phase": "baseline-product",
+      "elapsed": 15.070190458999605,
+      "cpuSeconds": 1.129999999999999,
+      "percentOneCore": 7.498246309987319
+    },
+    {
+      "phase": "baseline-flow-cart",
+      "elapsed": 15.296291500000734,
+      "cpuSeconds": 2.479999999999997,
+      "percentOneCore": 16.213080144294306
+    },
+    {
+      "phase": "baseline-flow-checkout",
+      "elapsed": 15.025832082999841,
+      "cpuSeconds": 3.0600000000000023,
+      "percentOneCore": 20.364928764657716
+    },
+    {
+      "phase": "candidate-product",
+      "elapsed": 15.035247666999567,
+      "cpuSeconds": 0.5700000000000003,
+      "percentOneCore": 3.791091524558501
+    },
+    {
+      "phase": "candidate-flow-cart",
+      "elapsed": 15.011103166999419,
+      "cpuSeconds": 0.519999999999996,
+      "percentOneCore": 3.4641024994296887
+    },
+    {
+      "phase": "candidate-flow-checkout",
+      "elapsed": 15.00934341700031,
+      "cpuSeconds": 0.519999999999996,
+      "percentOneCore": 3.464508643402874
+    },
+    {
+      "phase": "baseline2-product",
+      "pathname": "/product/cpu-profile-phone",
+      "elapsed": 15.009269584000322,
+      "cpuSeconds": 0.5200000000000031,
+      "percentOneCore": 3.464525685875588
+    },
+    {
+      "phase": "baseline2-cart",
+      "pathname": "/cart",
+      "elapsed": 15.073729582999476,
+      "cpuSeconds": 3.1199999999999974,
+      "percentOneCore": 20.69826171963978
+    },
+    {
+      "phase": "baseline2-checkout",
+      "pathname": "/checkout",
+      "elapsed": 15.011364457999662,
+      "cpuSeconds": 3.980000000000004,
+      "percentOneCore": 26.513246088559484
+    },
+    {
+      "phase": "candidate2-product",
+      "pathname": "/product/cpu-profile-phone",
+      "elapsed": 15.012064540999745,
+      "cpuSeconds": 0.6799999999999997,
+      "percentOneCore": 4.529690091211894
+    },
+    {
+      "phase": "candidate2-cart",
+      "pathname": "/cart",
+      "elapsed": 15.012659666000218,
+      "cpuSeconds": 0.629999999999999,
+      "percentOneCore": 4.196458282650513
+    },
+    {
+      "phase": "candidate2-checkout",
+      "pathname": "/checkout",
+      "elapsed": 15.014520082999297,
+      "cpuSeconds": 0.6700000000000017,
+      "percentOneCore": 4.462347089992121
+    }
+  ],
+  "nativeCheckoutSamples": {
+    "baseline": {
+      "mainThreadSamples": 612,
+      "animationFrameQueueInclusive": 162,
+      "performOperationsInclusive": 138,
+      "recursiveShadowTreeCloningPresent": true,
+      "rawSampleSHA256": "9d143d594a3ef8c5bc8162e6d3d81ab8071b342030d2dab86e371b5791c63eb6"
+    },
+    "candidate": {
+      "mainThreadSamples": 960,
+      "animationFrameQueueInclusive": 6,
+      "performOperationsInclusive": 0,
+      "recursiveShadowTreeCloningPresent": false,
+      "rawSampleSHA256": "c1f51084291a2db336b6045cd3238bc614ef5ea002a1439c5a5007e30ab81f37"
+    }
+  }
+}

@@ -10,7 +10,7 @@ jest.mock('expo-router', () => ({
 
 const props = {
   item: {
-    ctaLink: '/deals/standard',
+    ctaLink: '/category/standard' as const,
     ctaText: 'Shop now',
     image: 'https://example.com/standard.jpg',
     subtitle: 'Everyday essentials',
@@ -38,6 +38,6 @@ describe('StandardSlide', () => {
     fireEvent.press(screen.getByLabelText('Shop now'));
 
     // Assert
-    expect(mockPush).toHaveBeenCalledWith('/deals/standard');
+    expect(mockPush).toHaveBeenCalledWith('/category/standard');
   });
 });

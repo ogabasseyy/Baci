@@ -110,6 +110,9 @@ export function getPaymentInitializeCalls() {
 
 let originalFetch: typeof global.fetch = global.fetch;
 
+// These isolated screen fixtures represent a focused navigation route.
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
+
 jest.mock('expo-router', () => ({
   Stack: {
     Screen: () => null,

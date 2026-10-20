@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { getReceiptVatRate } from '../receipt/receipt-money';
 import {
   createMoneyFormatter,
   type FormatMoneyOptions,
@@ -122,6 +123,27 @@ describe('shared money formatting characterization', () => {
         maximumFractionDigits: undefined,
       })
     ).toBe('₦1.2M');
+  });
+
+  it('receipt formatter construction performs no Intl exponent derivation', () => {
+    // BHD is non-allowlisted and unused elsewhere in this file, so a
+    // derivation would show up as a second Intl.NumberFormat call.
+    const spy = vi.spyOn(Intl, 'NumberFormat');
+    try {
+      createMoneyFormatter('BHD');
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('receipt VAT default shares money currency normalization', () => {
+    const merchant = {
+      vat_rate: null,
+      vat_registration_status: 'registered' as const,
+    };
+    expect(getReceiptVatRate(merchant, ' ngn ')).toBe(7.5);
+    expect(getReceiptVatRate(merchant, '')).toBeNull();
   });
 
   it('exposes frozen currency metadata maps', () => {

@@ -1,4 +1,7 @@
-import { MONEY_CURRENCY_LOCALES } from '../money/currency-locales';
+import {
+  MONEY_CURRENCY_LOCALES,
+  normalizeMoneyCurrency,
+} from '../money/currency-locales';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -76,7 +79,16 @@ function getIncludedTaxAmount(total: number, taxRate: number): number {
 }
 
 function getDefaultVatRateForCurrency(currencyCode: string): number | null {
-  const locale = MONEY_CURRENCY_LOCALES[currencyCode.toUpperCase()];
+  // Share the money module's normalization (trim + uppercase) so VAT
+  // detection accepts exactly the codes the formatter accepts; blank
+  // codes have no default rate.
+  let normalized: string;
+  try {
+    normalized = normalizeMoneyCurrency(currencyCode);
+  } catch {
+    return null;
+  }
+  const locale = MONEY_CURRENCY_LOCALES[normalized];
   return locale === 'en-NG' ? DEFAULT_NG_VAT_RATE : null;
 }
 

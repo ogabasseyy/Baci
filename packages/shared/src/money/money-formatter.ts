@@ -35,12 +35,18 @@ export function getMoneyFormatter(
   const { locale: localeOverride, ...numberFormatOptions } = options;
   const currency = normalizeMoneyCurrency(currencyCode);
   const locale = localeOverride ?? resolveMoneyLocale(currency);
-  const exponent = getMoneyDisplayExponent(currency);
   // Resolve the fraction-digit pair jointly: a single supplied bound
   // must not combine with the exponent default into min > max (which
   // Intl rejects). The omitted bound derives from the supplied one.
   const minOption = numberFormatOptions.minimumFractionDigits;
   const maxOption = numberFormatOptions.maximumFractionDigits;
+  // Skip exponent derivation entirely when both bounds are supplied
+  // (the receipt path pre-resolves table digits): deriving would run
+  // an extra Intl construction whose result is discarded.
+  const exponent =
+    minOption === undefined || maxOption === undefined
+      ? getMoneyDisplayExponent(currency)
+      : 0;
   const finalOptions: Intl.NumberFormatOptions = {
     ...numberFormatOptions,
     style: 'currency',

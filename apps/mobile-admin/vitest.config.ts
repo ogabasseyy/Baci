@@ -76,13 +76,6 @@ export default defineConfig({
         ),
       },
       {
-        find: /^@baci\/shared\/lib$/,
-        replacement: path.resolve(
-          __dirname,
-          '../../packages/shared/src/lib/index.ts'
-        ),
-      },
-      {
         find: '@baci/shared',
         replacement: path.resolve(
           __dirname,

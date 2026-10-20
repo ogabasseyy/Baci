@@ -1,8 +1,3 @@
-import {
-  buildOfferResolutionMap,
-  makeOfferLineKey,
-  type OfferAuthorityRpcCall,
-} from '@baci/shared/lib';
 import { normalizeVariantAttributes } from '@/lib/product-picker-variant-rows';
 import { getJoinedRecord } from '@/lib/supabase-utils';
 
@@ -100,6 +95,12 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
   });
 }
 
+type OfferLabelRow = {
+  offer_id?: unknown;
+  grade?: unknown;
+  condition_notes?: unknown;
+};
+
 function hasOfferLabelSnapshot(item: {
   offer_grade?: string | null;
   offer_condition_notes?: string | null;
@@ -125,9 +126,10 @@ function hasOfferLabelSnapshot(item: {
  * or marked it inactive/sold out, and the live catalog row must not
  * rewrite history. The snapshotted marker (not label presence) decides:
  * a marked line with empty labels stays empty rather than consulting
- * live data. Only unmarked pre-snapshot lines fall back to one batched
- * offer-authority lookup. Fail-soft: offer lines keep their persisted
- * condition and ref when the lookup fails.
+ * live data. Only unmarked pre-snapshot lines fall back to the
+ * shopper-safe get_product_offers RPC (one lookup per distinct
+ * product). Fail-soft: offer lines keep their persisted condition and
+ * ref when the lookup fails.
  */
 type AttachedOfferLabelItem<TItem> = TItem & {
   offer_grade?: string;
@@ -145,8 +147,10 @@ export async function attachOrderItemOfferLabels<
   },
 >(
   items: TItem[],
-  callRpc: OfferAuthorityRpcCall,
-  merchantId?: string | null
+  fetchOffers: (productId: string) => Promise<{
+    data: OfferLabelRow[] | null;
+    error: unknown;
+  }>
 ): Promise<AttachedOfferLabelItem<TItem>[]> {
   // Condition-only legacy lines carry no exact offer_id: the resolved
   // offer lives in product_offer_id, so either identity qualifies the
@@ -177,32 +181,54 @@ export async function attachOrderItemOfferLabels<
     new Set(lookupItems.map((item) => item.product_id))
   );
   let labels = new Map<string, { grade?: string; notes?: string }>();
-  if (productIds.length > 0) {
-    try {
-      // One batched authority lookup for the whole order: no per-product
-      // fan-out, however many offer lines it carries.
-      const { data, error } = await callRpc({
-        p_merchant_id: merchantId ?? null,
-        p_product_ids: productIds,
-      });
-      if (error) {
-        return items as AttachedOfferLabelItem<TItem>[];
-      }
-      labels = new Map(
-        Array.from(buildOfferResolutionMap(data).values(), (resolution) => {
-          const entry: { grade?: string; notes?: string } = {};
-          if (resolution.grade) entry.grade = resolution.grade;
-          if (resolution.conditionNotes)
-            entry.notes = resolution.conditionNotes;
-          return [
-            makeOfferLineKey(resolution.productId, resolution.offerId),
-            entry,
-          ] as const;
+  try {
+    // Bounded batches like the order verifiers: a large order must not
+    // fan out an unbounded burst of parallel offer RPCs. Each product
+    // is fail-soft on its own: one transient failure leaves only that
+    // product's lines untouched instead of discarding every other
+    // product's fetched labels.
+    const results: {
+      productId: string;
+      data: OfferLabelRow[] | null;
+      error: unknown;
+    }[] = [];
+    for (let index = 0; index < productIds.length; index += 10) {
+      const batch = await Promise.all(
+        productIds.slice(index, index + 10).map(async (productId) => {
+          try {
+            return { productId, ...(await fetchOffers(productId)) };
+          } catch (error) {
+            return { productId, data: null, error };
+          }
         })
       );
-    } catch {
-      return items as AttachedOfferLabelItem<TItem>[];
+      results.push(...batch);
     }
+    labels = new Map(
+      results
+        .filter((result) => !result.error)
+        .flatMap((result) =>
+          (result.data ?? []).flatMap((row) =>
+            typeof row?.offer_id === 'string'
+              ? [
+                  [
+                    `${result.productId}::${row.offer_id}`,
+                    {
+                      grade:
+                        typeof row.grade === 'string' ? row.grade : undefined,
+                      notes:
+                        typeof row.condition_notes === 'string'
+                          ? row.condition_notes
+                          : undefined,
+                    },
+                  ] as const,
+                ]
+              : []
+          )
+        )
+    );
+  } catch {
+    return items as AttachedOfferLabelItem<TItem>[];
   }
 
   return items.map((item) => {
@@ -226,9 +252,7 @@ export async function attachOrderItemOfferLabels<
             : undefined,
       };
     }
-    const label = labels.get(
-      makeOfferLineKey(String(item.product_id), lookupOfferId)
-    );
+    const label = labels.get(`${item.product_id}::${lookupOfferId}`);
     if (!label) return item as AttachedOfferLabelItem<TItem>;
     return {
       ...item,

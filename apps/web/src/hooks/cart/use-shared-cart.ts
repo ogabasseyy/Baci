@@ -40,6 +40,7 @@ export function useSharedCart(
   useCartLinkLifecycle({
     ...runtime,
     ...snapshots,
+    ensureCart: provisioning.ensureCart,
     realtimeConnected: runtime.realtimeConnected || connected,
   });
   useCartSendQueue({ ...runtime, ...snapshots, ...provisioning });

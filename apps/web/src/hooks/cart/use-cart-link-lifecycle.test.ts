@@ -190,6 +190,82 @@ describe('useSharedCart link', () => {
     );
   });
 
+  it.each([
+    'unauthorized',
+    'not_found',
+  ] as const)('imports a saved device cart after %s without another cart edit', async (code) => {
+    saveCartToStorage([cartItem()], SLUG);
+    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+      code,
+      ok: false,
+      retryable: false,
+      snapshot: null,
+    });
+    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
+    vi.mocked(createSharedCart).mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot(),
+      warnings: [],
+    });
+    const { result } = renderHook(() =>
+      useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+    await waitFor(() => expect(result.current.cartId).toBe(CART_ID));
+    expect(result.current.syncStatus).toBe('synced');
+    expect(createSharedCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [expect.objectContaining({ quantity: 1 })],
+      }),
+      SLUG
+    );
+    expect(sendSharedCartCommand).not.toHaveBeenCalled();
+  });
+
+  it('replays the same saved-cart import after an indeterminate create', async () => {
+    saveCartToStorage([cartItem()], SLUG);
+    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+      code: 'unauthorized',
+      ok: false,
+      retryable: false,
+      snapshot: null,
+    });
+    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
+    vi.mocked(createSharedCart)
+      .mockResolvedValueOnce({
+        code: 'temporarily_unavailable',
+        ok: false,
+        retryable: true,
+        snapshot: null,
+      })
+      .mockResolvedValue({
+        ok: true,
+        replayed: true,
+        snapshot: snapshot(),
+        warnings: [],
+      });
+    const { result } = renderHook(() =>
+      useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+    await waitFor(() => expect(result.current.cartId).toBe(CART_ID), {
+      timeout: 5000,
+    });
+    expect(createSharedCart).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createSharedCart).mock.calls[1]).toEqual(
+      vi.mocked(createSharedCart).mock.calls[0]
+    );
+    expect(result.current.cart).toHaveLength(1);
+    expect(sendSharedCartCommand).not.toHaveBeenCalled();
+  });
+
   it('stays idle without a session until the first action bootstraps', async () => {
     vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
       code: 'unauthorized',

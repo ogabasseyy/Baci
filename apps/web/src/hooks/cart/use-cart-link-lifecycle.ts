@@ -14,6 +14,7 @@ import {
   RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
+import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import {
@@ -26,6 +27,7 @@ import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function useCartLinkLifecycle(
   context: SharedCartRuntime &
+    Pick<ReturnType<typeof createCartProvisioning>, 'ensureCart'> &
     Pick<
       ReturnType<typeof createCartSnapshotActions>,
       'hydrateMissing' | 'refreshNow'
@@ -58,6 +60,7 @@ export function useCartLinkLifecycle(
     optionsRef,
     hydrateMissing,
     refreshNow,
+    ensureCart,
   } = context;
 
   // Link lifecycle: seed from the display cache, then adopt. Every async
@@ -164,6 +167,21 @@ export function useCartLinkLifecycle(
         result.code === 'not_found' ? 'bootstrap' : 'none';
       if (cached.length === 0) {
         dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+      } else if (planLegacyImport(cached, null, null).kind !== 'blocked') {
+        // Capacity-blocked imports retain the existing explicit resolution
+        // flow; do not start provisioning an invalid device cart.
+        // A restored device cart can reach checkout without another edit.
+        // Import it now through the same replay-safe provisioning path used
+        // by the sender; never leave visible lines without server authority.
+        const ensured = await ensureCart();
+        if (cancelled || generationRef.current !== generation) return;
+        if (ensured && !ensured.ok && ensured.retryable) {
+          adoptTimer = setTimeout(
+            () => void adopt(attempt + 1),
+            backoffMs(ADOPT_RETRY_BASE_MS, attempt)
+          );
+          return;
+        }
       }
       setLinkPhase('ready');
     }

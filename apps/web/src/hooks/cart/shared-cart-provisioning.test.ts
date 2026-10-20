@@ -87,10 +87,12 @@ describe('useSharedCart legacy import', () => {
         snapshot: null,
       });
     });
-    await waitFor(() => expect(result.current.syncStatus).toBe('retrying'));
+    // Linking owns the automatic retry even when no new edit is made.
+    // Changing the device cache must not change the indeterminate request.
     saveCartToStorage([cartItem({ quantity: 7 })], SLUG);
-    act(() => result.current.retryPendingSync());
-    await waitFor(() => expect(createSharedCart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(createSharedCart).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
     expect(vi.mocked(createSharedCart).mock.calls[1][0]).toEqual(
       vi.mocked(createSharedCart).mock.calls[0][0]
     );

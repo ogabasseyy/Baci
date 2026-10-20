@@ -1,4 +1,5 @@
 import type { UtilityIdempotencyAttempt } from './use-utility-idempotency-key';
+import { recallPendingVtuKey } from './utility-pending-idempotency';
 
 /**
  * Adopts the server's canonical (winner) key after an intent-claim
@@ -8,6 +9,19 @@ import type { UtilityIdempotencyAttempt } from './use-utility-idempotency-key';
  * Awaited (Codex R1 P1) so the winner is durable before the
  * submit resolves; generation-bound (Codex R2 P1) on the
  * submitted loser key inside adoptCanonicalKey.
+ *
+ * Returns null unless the live entry actually holds the winner
+ * afterwards (Codex R5 P1): a vetoed adoption (a newer generation
+ * minted while this response was in flight) or a meanwhile-gone
+ * entry must NOT retag — settling a stale winner key would let
+ * scope-based terminal settlement delete the newer generation's
+ * entry, and its lost-response retry would then mint fresh and
+ * debit/vend twice. Null settles presentation-only (the result
+ * still describes this submit's real vend); the newer generation
+ * owns the registry. The re-read is synchronous in the same
+ * microtask as the adoption's resolution, so nothing can
+ * interleave between them; a rotation landing during the
+ * adoption's own awaits fails safe toward null.
  */
 export async function adoptSubmittedCanonicalKey({
   adoptCanonicalKey,
@@ -24,5 +38,8 @@ export async function adoptSubmittedCanonicalKey({
 }): Promise<UtilityIdempotencyAttempt | null> {
   if (!canonicalKey || !attempt) return attempt;
   await adoptCanonicalKey(attempt.scoped, attempt.key, canonicalKey);
+  if (recallPendingVtuKey(attempt.scoped) !== canonicalKey) {
+    return null;
+  }
   return { ...attempt, key: canonicalKey };
 }

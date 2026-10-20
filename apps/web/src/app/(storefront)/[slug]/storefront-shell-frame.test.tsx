@@ -132,3 +132,30 @@ describe('StorefrontShellFrame cart wiring', () => {
     });
   });
 });
+
+it('wires anonymous derived capability hints into the storefront cart', () => {
+  vi.clearAllMocks();
+  render(
+    <StorefrontShellFrame
+      preloadHeroLcpImages={false}
+      shellSnapshot={
+        {
+          ...shellSnapshot,
+          merchant: {
+            ...shellSnapshot.merchant,
+            shared_cart_enabled: true,
+            shared_cart_accounts_enabled: false,
+            shared_cart_realtime_enabled: true,
+          },
+        } as never
+      }
+    >
+      <main>Public shell</main>
+    </StorefrontShellFrame>
+  );
+  expect(vi.mocked(StorefrontCartProvider).mock.calls[0]?.[0]).toMatchObject({
+    sharedCartEnabled: true,
+    sharedCartAccountsEnabled: false,
+    sharedCartRealtimeEnabled: true,
+  });
+});

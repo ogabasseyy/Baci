@@ -190,6 +190,9 @@ export function toTemplateMerchantData(merchant: CachedMerchant): MerchantData {
     // payment/order paths stay authoritative.
     paystack_subaccount_configured: merchant.paystack_subaccount_configured,
     price_negotiation_enabled: merchant.price_negotiation_enabled,
+    shared_cart_enabled: merchant.shared_cart_enabled,
+    shared_cart_accounts_enabled: merchant.shared_cart_accounts_enabled,
+    shared_cart_realtime_enabled: merchant.shared_cart_realtime_enabled,
     slug: merchant.slug,
     custom_domain: merchant.custom_domain,
     favicon_svg_url: merchant.favicon_svg_url,

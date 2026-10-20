@@ -6,6 +6,8 @@ import {
   formatMoneyCompact,
   formatMoneyMinor,
   getMoneyCurrencyExponent,
+  MONEY_CURRENCY_EXPONENTS,
+  MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,
   resolveMoneyLocale,
   SUPPORTED_MONEY_CURRENCIES,
@@ -84,6 +86,20 @@ describe('shared money formatting characterization', () => {
     expect(formatMoneyCompact(500, 'NGN')).toBe('₦500.00');
     // Small zero-decimal amounts stay whole in the standard branch.
     expect(formatMoneyCompact(500.5, 'XAF')).toBe(`501${NBSP}FCFA`);
+  });
+
+  it('resolves single-bound compact overrides without throwing', () => {
+    expect(
+      formatMoneyCompact(1_200_000, 'NGN', { maximumFractionDigits: 0 })
+    ).toBe('₦1M');
+    expect(formatMoneyCompact(500, 'NGN', { minimumFractionDigits: 3 })).toBe(
+      '₦500.000'
+    );
+  });
+
+  it('exposes frozen currency metadata maps', () => {
+    expect(Object.isFrozen(MONEY_CURRENCY_LOCALES)).toBe(true);
+    expect(Object.isFrozen(MONEY_CURRENCY_EXPONENTS)).toBe(true);
   });
 
   it('derives locale from the currency code, case-insensitively', () => {

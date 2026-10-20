@@ -13,30 +13,32 @@
 // adoption PRs must verify allowlisted currencies on-device before
 // switching call sites, per the audit decision-rule check.
 
-export const MONEY_CURRENCY_LOCALES: Record<string, string> = {
-  NGN: 'en-NG',
-  GHS: 'en-GH',
-  KES: 'en-KE',
-  USD: 'en-US',
-  GBP: 'en-GB',
-  EUR: 'de-DE',
-  ZAR: 'en-ZA',
-  XAF: 'fr-CM',
-  XOF: 'fr-SN',
-};
+export const MONEY_CURRENCY_LOCALES: Readonly<Record<string, string>> =
+  Object.freeze({
+    NGN: 'en-NG',
+    GHS: 'en-GH',
+    KES: 'en-KE',
+    USD: 'en-US',
+    GBP: 'en-GB',
+    EUR: 'de-DE',
+    ZAR: 'en-ZA',
+    XAF: 'fr-CM',
+    XOF: 'fr-SN',
+  });
 
 /** ISO 4217 minor-unit exponents; XAF/XOF have no minor unit. */
-export const MONEY_CURRENCY_EXPONENTS: Record<string, number> = {
-  NGN: 2,
-  GHS: 2,
-  KES: 2,
-  USD: 2,
-  GBP: 2,
-  EUR: 2,
-  ZAR: 2,
-  XAF: 0,
-  XOF: 0,
-};
+export const MONEY_CURRENCY_EXPONENTS: Readonly<Record<string, number>> =
+  Object.freeze({
+    NGN: 2,
+    GHS: 2,
+    KES: 2,
+    USD: 2,
+    GBP: 2,
+    EUR: 2,
+    ZAR: 2,
+    XAF: 0,
+    XOF: 0,
+  });
 
 /** Currencies whose Node-pinned output mobile adoption may rely on. */
 export const SUPPORTED_MONEY_CURRENCIES = Object.freeze(

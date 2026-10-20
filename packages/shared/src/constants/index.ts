@@ -4,3 +4,4 @@ export * from './merchant-countries';
 export * from './order-status';
 export * from './quiz';
 export * from './shipping-providers';
+export * from './wallet-top-up';

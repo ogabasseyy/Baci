@@ -57,6 +57,7 @@ const expectedSubpaths = [
   '@baci/shared/test-fixtures/piggyvest-draft-closure',
   '@baci/shared/test-fixtures/piggyvest-schedule',
   '@baci/shared/test-fixtures/fixture-mock',
+  '@baci/shared/test-fixtures/order-wallet-funding-intent',
 ];
 
 describe('@baci/shared exports resolution (no test aliases)', () => {
@@ -89,6 +90,8 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
         'src/test-fixtures/piggyvest-schedule.ts',
       '@baci/shared/test-fixtures/fixture-mock':
         'src/test-fixtures/fixture-mock.ts',
+      '@baci/shared/test-fixtures/order-wallet-funding-intent':
+        'src/test-fixtures/order-wallet-funding-intent.ts',
     };
     for (const [specifier, target] of Object.entries(expectedTargets)) {
       const resolved = appRequire.resolve(specifier);

@@ -35,6 +35,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   const stateRef = useRef(state);
 
   const generationRef = useRef(sessionGeneration);
+  const enabledRef = useRef(enabled);
 
   // Publish refs only after commit: an abandoned render must not let
   // hydration, polling, or send operations observe an uncommitted
@@ -42,6 +43,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   useEffect(() => {
     stateRef.current = state;
     generationRef.current = sessionGeneration;
+    enabledRef.current = enabled;
     optionsRef.current = { merchantId, merchantSlug };
   });
 
@@ -90,6 +92,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     setLinkPhase,
     stateRef,
     generationRef,
+    enabledRef,
     adoptOutcomeRef,
     importOpIdsRef,
     createOpRef,

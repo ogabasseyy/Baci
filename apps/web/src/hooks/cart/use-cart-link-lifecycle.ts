@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { buildImportEntries } from './build-import-entries';
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import type { CartItem } from './cart-types';
+import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
   ADOPT_RETRY_BASE_MS,
@@ -14,6 +15,7 @@ import {
   RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
+import { createInitialCartProvisioner } from './shared-cart-initial-provisioning';
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
@@ -60,12 +62,9 @@ export function useCartLinkLifecycle(
     optionsRef,
     hydrateMissing,
     refreshNow,
-    ensureCart,
   } = context;
 
-  // Link lifecycle: seed from the display cache, then adopt. Every async
-  // step checks its generation so a merchant switch or logout fences
-  // late completions even before the reducer sees them.
+  // Seed the cache, then adopt under a fenced session generation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would relink every render.
   useEffect(() => {
     linkRunRef.current += 1;
@@ -82,16 +81,14 @@ export function useCartLinkLifecycle(
     const generation = sessionGeneration;
     let cancelled = false;
     let adoptTimer: ReturnType<typeof setTimeout> | null = null;
-    let removeVisibilityWaiter: (() => void) | null = null;
+    const visibility = createCartVisibilityWaiter();
     adoptOutcomeRef.current = 'unknown';
     importOpIdsRef.current = new Set();
     createOpRef.current = null;
     createRequestRef.current = null;
     createAttemptedRef.current = false;
     bootstrappingRef.current = false;
-    // A restarted link owns its hydration loop: the previous run's loop
-    // exits on the run check, and clearing both fields lets this run
-    // start its own instead of stranding ids behind a stale flag.
+    // Reset hydration ownership so a restart cannot inherit stale work.
     hydratingRef.current = false;
     pendingHydrationRef.current = new Set();
     latestSnapshotRef.current = null;
@@ -107,22 +104,18 @@ export function useCartLinkLifecycle(
     });
     setHydrated(true);
 
+    const provision = createInitialCartProvisioner(context, {
+      isLive: () => !cancelled,
+      whenVisible: visibility.wait,
+      schedule: (callback, delay) => {
+        adoptTimer = setTimeout(callback, delay);
+      },
+    });
+
     async function adopt(attempt: number): Promise<void> {
       if (cancelled || generationRef.current !== generation) return;
       if (document.hidden) {
-        // A background tab or prerender must not link yet — but it must
-        // not strand the link either. Wait for the first foreground
-        // presentation, then adopt with the same attempt number.
-        removeVisibilityWaiter?.();
-        const onVisible = () => {
-          if (document.hidden) return;
-          document.removeEventListener('visibilitychange', onVisible);
-          removeVisibilityWaiter = null;
-          void adopt(attempt);
-        };
-        removeVisibilityWaiter = () =>
-          document.removeEventListener('visibilitychange', onVisible);
-        document.addEventListener('visibilitychange', onVisible);
+        visibility.wait(() => void adopt(attempt));
         return;
       }
       if (
@@ -175,26 +168,6 @@ export function useCartLinkLifecycle(
       } else {
         await provision(attempt);
         return;
-      }
-      setLinkPhase('ready');
-    }
-
-    async function provision(attempt: number): Promise<void> {
-      if (cancelled || generationRef.current !== generation) return;
-      const ensured = await ensureCart();
-      if (cancelled || generationRef.current !== generation) return;
-      if (!ensured) return;
-      if (!ensured.ok && ensured.retryable) {
-        // Reconcile an indeterminate create by replaying its exact body.
-        // A GET may see a committed cart but cannot finish the import receipt.
-        adoptTimer = setTimeout(
-          () => void provision(attempt + 1),
-          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
-        );
-        return;
-      }
-      if (!ensured.ok) {
-        dispatch({ generation, code: ensured.code, type: 'import/failed' });
       }
       setLinkPhase('ready');
     }
@@ -259,14 +232,12 @@ export function useCartLinkLifecycle(
     return () => {
       cancelled = true;
       if (adoptTimer) clearTimeout(adoptTimer);
-      removeVisibilityWaiter?.();
+      visibility.cancel();
       linkRunRef.current += 1;
     };
   }, [enabled, merchantId, merchantSlug, sessionGeneration]);
 
-  // Convergence polling: fast fallback while realtime is unavailable,
-  // slow reconciliation once Task 8 connects. Stops when hidden,
-  // inactive, disabled, or unlinked.
+  // Poll for convergence only while linked, enabled and active.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would restart polling every render.
   useEffect(() => {
     if (!enabled || !state.cartId || surfaceActive === false) return;

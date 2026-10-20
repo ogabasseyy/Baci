@@ -68,7 +68,7 @@ it('shows capacity recovery even without offer conflicts and explicitly retries 
     'Your device items and offers are still saved on this device'
   );
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Remove items from your shared cart'
+    'Remove items below or from your shared cart'
   );
   fireEvent.click(
     screen.getByRole('button', { name: 'Retry importing device cart' })

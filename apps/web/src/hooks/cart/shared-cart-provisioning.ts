@@ -11,6 +11,7 @@ import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
+import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartProvisioning(context: SharedCartRuntime) {
@@ -18,6 +19,8 @@ export function createCartProvisioning(context: SharedCartRuntime) {
     dispatch,
     stateRef,
     generationRef,
+    enabledRef,
+    linkRunRef,
     adoptOutcomeRef,
     importOpIdsRef,
     createOpRef,
@@ -28,8 +31,23 @@ export function createCartProvisioning(context: SharedCartRuntime) {
     optionsRef,
   } = context;
 
-  async function ensureCart(): Promise<EnsureCartResult> {
+  async function ensureCart(
+    canProceed: () => boolean = () => true
+  ): Promise<EnsureCartResult> {
     const generation = generationRef.current;
+    const linkRun = linkRunRef.current;
+    const merchantSlug = optionsRef.current.merchantSlug;
+    const fenced = () =>
+      generationRef.current === generation &&
+      linkRunRef.current === linkRun &&
+      enabledRef.current;
+    const live = () => fenced() && canProceed();
+    const retireLateSession = () => {
+      if (generationRef.current === generation && !enabledRef.current) {
+        void revokeCartDeviceSession(merchantSlug, { fenceOnFailure: true });
+      }
+    };
+    if (!live()) return null;
     const current = stateRef.current;
     // A snapshot read can observe a committed create before its lost reply
     // is reconciled. Replay that creation to finish the import and receipt.
@@ -73,7 +91,10 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         const bootstrapped = await bootstrapSharedCart(
           optionsRef.current.merchantSlug ?? undefined
         );
-        if (generationRef.current !== generation) return null;
+        if (!fenced()) {
+          retireLateSession();
+          return null;
+        }
         if (!bootstrapped.ok) {
           return {
             code: bootstrapped.code,
@@ -83,10 +104,14 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         }
         adoptOutcomeRef.current = 'bootstrap';
       } finally {
-        bootstrappingRef.current = false;
+        if (
+          linkRunRef.current === linkRun &&
+          generationRef.current === generation
+        )
+          bootstrappingRef.current = false;
       }
     }
-    if (createAttemptedRef.current) return null;
+    if (!live() || createAttemptedRef.current) return null;
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
       const cached = getCartFromStorage(optionsRef.current.merchantSlug);
@@ -128,7 +153,10 @@ export function createCartProvisioning(context: SharedCartRuntime) {
       request,
       optionsRef.current.merchantSlug
     );
-    if (generationRef.current !== generation) return null;
+    if (!fenced()) {
+      retireLateSession();
+      return null;
+    }
     if (!created.ok) {
       // Every failure releases the attempt latch: the stable createOpRef
       // key makes the retry replay-safe, so a new attempt must be
@@ -157,7 +185,7 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         // key with a different body would be an idempotency conflict.
         createOpRef.current = crypto.randomUUID();
         createRequestRef.current = { operationId: createOpRef.current };
-        return ensureCart();
+        return ensureCart(canProceed);
       }
       return { code: created.code, ok: false, retryable: created.retryable };
     }

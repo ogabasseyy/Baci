@@ -9,6 +9,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { CheckoutCartCapacityGate } from './checkout/components/CheckoutCartCapacityGate';
 import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
 import { CheckoutScreen } from './checkout/components/CheckoutScreen';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
@@ -295,5 +296,9 @@ export const CheckoutPage: React.FC = () => {
     },
   });
 
-  return <CheckoutScreen {...screenModel} />;
+  return (
+    <CheckoutCartCapacityGate>
+      <CheckoutScreen {...screenModel} />
+    </CheckoutCartCapacityGate>
+  );
 };

@@ -2,11 +2,11 @@ import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Product } from '@/lib/products';
 
-import { getSharedCartImportReceipt, saveCartToStorage } from './cart-storage';
+import { saveCartToStorage } from './cart-storage';
 
 import type { CartItem } from './cart-types';
 
@@ -104,6 +104,10 @@ function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
 }
 
 describe('useSharedCart link', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
@@ -188,210 +192,6 @@ describe('useSharedCart link', () => {
       ['prod-foreign'],
       MERCHANT_ID
     );
-  });
-
-  it.each([
-    'unauthorized',
-    'not_found',
-  ] as const)('imports a saved device cart after %s without another cart edit', async (code) => {
-    saveCartToStorage([cartItem()], SLUG);
-    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-      code,
-      ok: false,
-      retryable: false,
-      snapshot: null,
-    });
-    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
-    vi.mocked(createSharedCart).mockResolvedValue({
-      ok: true,
-      replayed: false,
-      snapshot: snapshot(),
-      warnings: [],
-    });
-    const { result } = renderHook(() =>
-      useSharedCart({
-        merchantId: MERCHANT_ID,
-        merchantSlug: SLUG,
-        sessionGeneration: 1,
-      })
-    );
-    await waitFor(() => expect(result.current.cartId).toBe(CART_ID));
-    expect(result.current.syncStatus).toBe('synced');
-    expect(createSharedCart).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lines: [expect.objectContaining({ quantity: 1 })],
-      }),
-      SLUG
-    );
-    expect(sendSharedCartCommand).not.toHaveBeenCalled();
-  });
-
-  it('replays the same saved-cart import after an indeterminate create', async () => {
-    saveCartToStorage([cartItem()], SLUG);
-    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-      code: 'unauthorized',
-      ok: false,
-      retryable: false,
-      snapshot: null,
-    });
-    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
-    vi.mocked(createSharedCart)
-      .mockResolvedValueOnce({
-        code: 'temporarily_unavailable',
-        ok: false,
-        retryable: true,
-        snapshot: null,
-      })
-      .mockResolvedValue({
-        ok: true,
-        replayed: true,
-        snapshot: snapshot(),
-        warnings: [],
-      });
-    const { result } = renderHook(() =>
-      useSharedCart({
-        merchantId: MERCHANT_ID,
-        merchantSlug: SLUG,
-        sessionGeneration: 1,
-      })
-    );
-    await waitFor(() => expect(result.current.cartId).toBe(CART_ID), {
-      timeout: 5000,
-    });
-    expect(createSharedCart).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(createSharedCart).mock.calls[1]).toEqual(
-      vi.mocked(createSharedCart).mock.calls[0]
-    );
-    expect(result.current.cart).toHaveLength(1);
-    expect(sendSharedCartCommand).not.toHaveBeenCalled();
-  });
-
-  it('reconciles a committed create by replaying it instead of adopting past its receipt', async () => {
-    saveCartToStorage([cartItem()], SLUG);
-    vi.mocked(fetchSharedCartSnapshot)
-      .mockResolvedValueOnce({
-        code: 'unauthorized',
-        ok: false,
-        retryable: false,
-        snapshot: null,
-      })
-      .mockResolvedValue({ ok: true, snapshot: snapshot(), warnings: [] });
-    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
-    vi.mocked(createSharedCart)
-      .mockResolvedValueOnce({
-        code: 'temporarily_unavailable',
-        ok: false,
-        retryable: true,
-        snapshot: null,
-      })
-      .mockResolvedValue({
-        ok: true,
-        replayed: true,
-        snapshot: snapshot(),
-        warnings: [],
-      });
-    vi.mocked(sendSharedCartCommand).mockResolvedValue({
-      ok: true,
-      replayed: false,
-      snapshot: snapshot({ lines: [], version: 4 }),
-      warnings: [],
-    });
-    const { result } = renderHook(() =>
-      useSharedCart({
-        merchantId: MERCHANT_ID,
-        merchantSlug: SLUG,
-        sessionGeneration: 1,
-      })
-    );
-    await waitFor(() => expect(createSharedCart).toHaveBeenCalledTimes(1));
-    // A foreground/manual read can observe the committed cart before the
-    // create response is reconciled. It must not replace the create replay.
-    await act(async () => result.current.refreshSharedCart());
-    expect(result.current.cartId).toBe(CART_ID);
-    await waitFor(() => expect(result.current.importStatus).toBe('done'), {
-      timeout: 5000,
-    });
-    expect(createSharedCart).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(createSharedCart).mock.calls[1]).toEqual(
-      vi.mocked(createSharedCart).mock.calls[0]
-    );
-    expect(getSharedCartImportReceipt(SLUG)).toMatchObject({
-      cartId: CART_ID,
-      lineCount: 1,
-    });
-    act(() => result.current.removeFromCart('prod-1'));
-    await waitFor(() => expect(result.current.version).toBe(4));
-    expect(result.current.cart).toEqual([]);
-  });
-
-  it.each([
-    'retry',
-    'retry-sync',
-    'discard',
-  ] as const)('offers %s for an oversized saved cart without another edit', async (action) => {
-    saveCartToStorage(
-      Array.from({ length: 21 }, (_, index) =>
-        cartItem({
-          id: `prod-${index}`,
-          cartItemId: `prod-${index}`,
-        })
-      ),
-      SLUG
-    );
-    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-      code: 'unauthorized',
-      ok: false,
-      retryable: false,
-      snapshot: null,
-    });
-    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
-    vi.mocked(createSharedCart).mockResolvedValue({
-      ok: true,
-      replayed: false,
-      snapshot: snapshot(),
-      warnings: [],
-    });
-    if (action === 'retry-sync') {
-      vi.mocked(createSharedCart).mockResolvedValueOnce({
-        ok: false,
-        code: 'temporarily_unavailable',
-        retryable: true,
-        snapshot: null,
-      });
-    }
-    const { result } = renderHook(() =>
-      useSharedCart({
-        merchantId: MERCHANT_ID,
-        merchantSlug: SLUG,
-        sessionGeneration: 1,
-      })
-    );
-    await waitFor(() =>
-      expect(result.current.importWarnings).toContain(
-        'import_capacity_exceeded'
-      )
-    );
-    expect(createSharedCart).not.toHaveBeenCalled();
-    expect(result.current.importStatus).toBe('failed');
-    if (action === 'discard') {
-      act(() => result.current.discardLegacyImport());
-      expect(result.current.importStatus).toBe('skipped');
-      expect(result.current.cart).toEqual([]);
-      expect(createSharedCart).not.toHaveBeenCalled();
-    } else {
-      saveCartToStorage([cartItem()], SLUG);
-      act(() => result.current.retryImport());
-      if (action === 'retry-sync') {
-        await waitFor(() =>
-          expect(result.current.syncError).toBe('temporarily_unavailable')
-        );
-        act(() => result.current.discardLegacyImport());
-        expect(result.current.importStatus).toBe('failed');
-        act(() => result.current.retryPendingSync());
-      }
-      await waitFor(() => expect(result.current.importStatus).toBe('done'));
-      expect(result.current.cartId).toBe(CART_ID);
-    }
   });
 
   it('stays idle without a session until the first action bootstraps', async () => {

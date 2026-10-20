@@ -1,0 +1,21 @@
+'use client';
+
+/** Own one foreground listener so link restarts and unmounts can cancel it. */
+export function createCartVisibilityWaiter() {
+  let remove: (() => void) | undefined;
+  function cancel() {
+    remove?.();
+    remove = undefined;
+  }
+  function wait(callback: () => void) {
+    cancel();
+    const onVisible = () => {
+      if (document.hidden) return;
+      cancel();
+      callback();
+    };
+    remove = () => document.removeEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+  }
+  return { wait, cancel };
+}

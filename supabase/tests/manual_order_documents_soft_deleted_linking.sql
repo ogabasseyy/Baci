@@ -57,4 +57,24 @@ UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE or
 UPDATE public.customers SET merchant_id = '10000000-0000-4000-8000-000000000079' WHERE id = '10000000-0000-4000-8000-000000000080';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000081' AND event_type = 'manual_order_receipt'), 'mid-dispatch reassignment clears the marker');
 SELECT pg_temp.assert_true((SELECT status = 'processing' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000081' AND event_type = 'manual_order_receipt'), 'mid-dispatch reassignment never re-arms');
+-- A soft-deleted duplicate of the normalized email must not shadow the
+-- live row through the order-scoped email fallback: the claim's own row is
+-- stale here (staff corrected the recipient without re-linking), so the
+-- fallback is the only path to the live row and picking the deleted
+-- duplicate would fail the verified redeemer permanently.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000101', '10000000-0000-4000-8000-000000000001', 'shadowed@example.com');
+INSERT INTO public.customers (id, merchant_id, email, deleted_at) VALUES ('10000000-0000-4000-8000-000000000102', '10000000-0000-4000-8000-000000000001', 'Shadowed@Example.COM', now());
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000103', '10000000-0000-4000-8000-000000000001', 'stale-shadowed@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000104', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000103', '10000000-0000-4000-8000-000000000010', 'shadowed@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000104', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000104' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000104' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('5f', 32))->>'status' = 'created'), 'shadowed-live-row order creates its claim');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000105', 'shadowed@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000105', true);
+SELECT set_config('request.jwt.claims', '{"email":"shadowed@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('5f',32), 'web')->>'status' = 'ok', 'live row wins over soft-deleted duplicate');
+RESET ROLE;
+SELECT pg_temp.assert_true((SELECT user_id = '10000000-0000-4000-8000-000000000105' FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000101'), 'redeemer links the live row');
 ROLLBACK;

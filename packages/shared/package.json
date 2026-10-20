@@ -28,6 +28,7 @@
     "./schemas": "./src/schemas/index.ts",
     "./schemas/merchant-settings": "./src/schemas/merchant-settings.ts",
     "./receipt": "./src/receipt/index.ts",
+    "./money": "./src/money/index.ts",
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
     "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",

@@ -42,11 +42,13 @@ const skippedDirs = new Set([
 const bannedPatterns = [
   // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
-  // Deep-relative fixture paths in import/require/export position
-  // (a bare string mentioning the tree, e.g. a staging tool's path
-  // prefix constant, is not an import and is not matched).
-  /(?:from|require|import)\s*\(?\s*['"`][^'"`]*test-fixtures\//,
-  /packages\/shared\/src\/lib\/[^'"]*\.test-support/,
+  // Any quoted module specifier pointing into the fixture tree or at
+  // a test-support helper, whatever the callee (import, require,
+  // export-from, createRequire results, dynamic import). Bare path
+  // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
+  // scan prefix, which does not end in a module name) are not matched.
+  /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
+  /(?:from|require|import|export)\s*\(?\s*['"`][^'"`]*\.test-support/,
 ];
 
 function isTestFile(path: string) {
@@ -59,6 +61,8 @@ function isTestFile(path: string) {
     // from production code, so they stay scanned.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
+    /\.test-support\.(?:m|c)?[tj]sx?$/.test(path) ||
+    /\.test-[\w-]+\.(?:m|c)?[tj]sx?$/.test(path) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }

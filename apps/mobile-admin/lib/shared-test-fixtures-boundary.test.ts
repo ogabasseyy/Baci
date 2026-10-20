@@ -26,9 +26,15 @@ const skippedDirs = new Set([
   'Pods',
 ]);
 const bannedPatterns = [
+  // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
-  /(?:from|require|import)\s*\(?\s*['"`][^'"`]*test-fixtures\//,
-  /packages\/shared\/src\/lib\/[^'"]*\.test-support/,
+  // Any quoted module specifier pointing into the fixture tree or at
+  // a test-support helper, whatever the callee (import, require,
+  // export-from, createRequire results, dynamic import). Bare path
+  // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
+  // scan prefix, which does not end in a module name) are not matched.
+  /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
+  /(?:from|require|import|export)\s*\(?\s*['"`][^'"`]*\.test-support/,
 ];
 
 function normalize(path: string) {
@@ -40,6 +46,8 @@ function isTestFile(path: string) {
   return (
     /(?:vitest|jest|metro)\.config\./.test(normalized) ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /\.test-[\w-]+\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
   );
 }

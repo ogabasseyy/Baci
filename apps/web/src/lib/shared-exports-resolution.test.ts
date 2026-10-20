@@ -60,7 +60,7 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     }
   });
 
-  it('resolves every new subpath through the exports map to a real file', () => {
+  it('resolves every pinned new subpath (expectedSubpaths) through the exports map to a real file; future non-fixture domain subpaths must be added to expectedSubpaths to be pinned', () => {
     for (const specifier of subpaths) {
       const resolved = appRequire.resolve(specifier);
       expect(existsSync(resolved), specifier).toBe(true);
@@ -87,7 +87,9 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       ).href
     )) as { scheduleJourneyFixture: () => unknown };
     expect(schedule.scheduleJourneyFixture()).toBeDefined();
-    const vtu = (await import(appRequire.resolve('@baci/shared/vtu'))) as {
+    const vtu = (await import(
+      pathToFileURL(appRequire.resolve('@baci/shared/vtu')).href
+    )) as {
       buildPendingVtuScopeTag: unknown;
     };
     expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');

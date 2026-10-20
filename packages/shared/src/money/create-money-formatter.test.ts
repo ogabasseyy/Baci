@@ -27,13 +27,16 @@ describe('createMoneyFormatter', () => {
     expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.46`);
   });
 
-  it('resolves single-bound options like formatMoney', () => {
+  it('resolves single-bound options against the table, not Intl derivation', () => {
+    // Receipt path stays table-only: a lone minimum pairs with the
+    // legacy 2-digit table fallback, unlike formatMoney whose lone
+    // bound resolves against the derived exponent (whole yen).
     expect(
       createMoneyFormatter('JPY', { minimumFractionDigits: 0 })(1234.5)
-    ).toBe(formatMoney(1234.5, 'JPY', { minimumFractionDigits: 0 }));
-    expect(
-      createMoneyFormatter('JPY', { minimumFractionDigits: 0 })(1234.5)
-    ).toBe('JP¥1,235');
+    ).toBe('JP¥1,234.5');
+    expect(formatMoney(1234.5, 'JPY', { minimumFractionDigits: 0 })).toBe(
+      'JP¥1,235'
+    );
   });
 
   it('normalizes lowercase and padded stored codes (documented change)', () => {

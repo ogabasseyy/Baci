@@ -25,20 +25,26 @@ export function createMoneyFormatter(
 ): MoneyFormatter {
   const minOption = options.minimumFractionDigits;
   const maxOption = options.maximumFractionDigits;
-  // No-bounds call (the receipt contract): fill both bounds from the
-  // table so construction performs no Intl exponent derivation.
-  // Single-bound calls pass through to getMoneyFormatter's joint
-  // resolution, which derives the missing bound from the currency
-  // exponent like formatMoney.
+  // Every call on this receipt path resolves its fraction bounds from
+  // the table (legacy 2-digit fallback for non-allowlisted codes): a
+  // lone caller bound is paired against the table exponent here, so
+  // construction never performs Intl exponent derivation. This differs
+  // from formatMoney, whose lone bounds resolve against the derived
+  // ISO exponent.
   const tableExponent =
     MONEY_CURRENCY_EXPONENTS[normalizeMoneyCurrency(currencyCode)] ?? 2;
-  const formatter =
-    minOption === undefined && maxOption === undefined
-      ? getMoneyFormatter(currencyCode, {
-          ...options,
-          minimumFractionDigits: tableExponent,
-          maximumFractionDigits: tableExponent,
-        })
-      : getMoneyFormatter(currencyCode, options);
+  const formatter = getMoneyFormatter(currencyCode, {
+    ...options,
+    minimumFractionDigits:
+      minOption ??
+      (maxOption !== undefined
+        ? Math.min(tableExponent, maxOption)
+        : tableExponent),
+    maximumFractionDigits:
+      maxOption ??
+      (minOption !== undefined
+        ? Math.max(tableExponent, minOption)
+        : tableExponent),
+  });
   return (amount) => formatter.format(amount);
 }

@@ -31,25 +31,26 @@ export function formatMoneyCompact(
         ? 'compact'
         : 'standard';
   const useCompact = effectiveNotation === 'compact';
-  // Apply compact defaults only when the caller supplied neither
-  // bound: a lone caller bound must reach getMoneyFormatter's joint
-  // min/max resolution alone instead of being paired with a compact
-  // default that may contradict it (min 3 vs default max 2). The
-  // exponent is derived lazily inside that branch — the only place
-  // it is consumed — so compact calls and fully-bounded calls never
-  // pay for a discarded Intl derivation.
+  // Fraction defaults by effective notation:
+  // - standard: both bounds follow the currency exponent (derived
+  //   lazily here, the only branch that consumes it), so zero-decimal
+  //   currencies never render fictitious minor units.
+  // - compact: fraction digits describe the abbreviated magnitude
+  //   (1.5M), not minor units, so defaults are min 1 / max 2 for every
+  //   currency; a lone caller bound is paired against those compact
+  //   defaults here instead of falling through to the minor-unit
+  //   exponent resolution in getMoneyFormatter.
   const defaults: FormatMoneyOptions = {};
-  if (
-    options.minimumFractionDigits === undefined &&
-    options.maximumFractionDigits === undefined
-  ) {
-    // Standard branch: defaults follow the currency exponent so
-    // zero-decimal currencies never render fictitious minor units.
-    // Compact branch: fraction digits describe the abbreviated
-    // magnitude (1.5M), not minor units, so they keep the 1-2 digit
-    // precision defaults even for zero-decimal currencies.
-    const exponent = useCompact ? 2 : getMoneyDisplayExponent(currencyCode);
-    defaults.minimumFractionDigits = useCompact ? 1 : exponent;
+  const minOption = options.minimumFractionDigits;
+  const maxOption = options.maximumFractionDigits;
+  if (useCompact) {
+    defaults.minimumFractionDigits =
+      minOption ?? (maxOption !== undefined ? Math.min(1, maxOption) : 1);
+    defaults.maximumFractionDigits =
+      maxOption ?? (minOption !== undefined ? Math.max(2, minOption) : 2);
+  } else if (minOption === undefined && maxOption === undefined) {
+    const exponent = getMoneyDisplayExponent(currencyCode);
+    defaults.minimumFractionDigits = exponent;
     defaults.maximumFractionDigits = exponent;
   }
   return formatMoney(amount, currencyCode, {

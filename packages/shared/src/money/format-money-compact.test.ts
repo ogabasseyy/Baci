@@ -58,5 +58,10 @@ describe('formatMoneyCompact', () => {
     expect(formatMoneyCompact(1_500_000, 'XOF')).toBe(
       `1,5${NBSP}M${NBSP}F${NNBSP}CFA`
     );
+    // A lone bound also resolves against compact magnitude defaults,
+    // not the zero minor-unit exponent.
+    expect(
+      formatMoneyCompact(1_500_000, 'XOF', { minimumFractionDigits: 0 })
+    ).toBe(`1,5${NBSP}M${NBSP}F${NNBSP}CFA`);
   });
 });

@@ -38,11 +38,11 @@
 -- The guard also fails closed when either function is absent, so a
 -- divergent database can never silently CREATE one fresh with default
 -- PUBLIC EXECUTE (the chain revokes these entrypoints from PUBLIC).
--- Both guards also pin the 20260828 owner/grant shape (postgres owner;
--- EXECUTE for anon/authenticated/service_role on the checked wrapper,
--- owner-only on unchecked, no PUBLIC grant on either), because
--- pg_get_functiondef omits owner and ACL while CREATE OR REPLACE
--- preserves them.
+-- Both guards also pin the 20260828 owner/grant shape exactly
+-- (postgres owner; checked ACL exactly postgres/anon/authenticated/
+-- service_role EXECUTE with no grant option; unchecked owner-only),
+-- because pg_get_functiondef omits owner and ACL while CREATE OR
+-- REPLACE preserves them. Any extra grantee fails closed.
 
 DO $squash_guard$
 DECLARE
@@ -70,27 +70,27 @@ BEGIN
       USING DETAIL = 'private.create_storefront_order(24) differs from the pinned bytes';
   END IF;
   -- pg_get_functiondef omits owner and EXECUTE ACL, so pin the 20260828
-  -- shape explicitly: postgres owner, EXECUTE for the three service
-  -- callers, and no PUBLIC grant (NULL proacl would also grant PUBLIC
-  -- via defaults, so it fails closed too).
+  -- shape exactly: sampling a few roles would pass an extra grantee
+  -- (even WITH GRANT OPTION). The normalized set below rejects any
+  -- unexpected grantee, privilege, grantor, or grant-option bit, and
+  -- the cardinality rejects NULL proacl (whose defaults grant PUBLIC,
+  -- and which explodes to zero rows).
   IF pg_catalog.pg_get_userbyid(v_checked_owner) <> 'postgres' THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
       USING DETAIL = 'pre-image: private.create_storefront_order(24) owner is not postgres';
   END IF;
-  IF NOT (pg_catalog.has_function_privilege('anon', v_checked_oid, 'EXECUTE')
-      AND pg_catalog.has_function_privilege('authenticated', v_checked_oid, 'EXECUTE')
-      AND pg_catalog.has_function_privilege('service_role', v_checked_oid, 'EXECUTE')) THEN
-    RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'pre-image: private.create_storefront_order(24) EXECUTE grants differ (want anon, authenticated, service_role)';
-  END IF;
-  IF (SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid) IS NULL
+  IF (SELECT count(*)
+      FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid))) <> 4
       OR EXISTS (
         SELECT 1
         FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid)) AS a
-        WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+        WHERE a.privilege_type <> 'EXECUTE'
+          OR a.is_grantable
+          OR a.grantor <> 'postgres'::regrole
+          OR a.grantee NOT IN ('postgres'::regrole, 'anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
       ) THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'pre-image: private.create_storefront_order(24) is executable by PUBLIC';
+      USING DETAIL = 'pre-image: private.create_storefront_order(24) ACL differs (want exactly postgres/anon/authenticated/service_role EXECUTE, no grant option)';
   END IF;
 
   SELECT p.oid, p.proowner, pg_catalog.pg_get_functiondef(p.oid)
@@ -109,15 +109,24 @@ BEGIN
     RAISE EXCEPTION 'storefront_order_squash_pre_image_mismatch'
       USING DETAIL = 'private.create_storefront_order_unchecked(24) differs from the pinned bytes';
   END IF;
+  -- Owner-only EXECUTE, pinned exactly: any non-owner grantee (or
+  -- grant-option bit, or NULL default ACL) fails closed.
   IF pg_catalog.pg_get_userbyid(v_unchecked_owner) <> 'postgres' THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
       USING DETAIL = 'pre-image: private.create_storefront_order_unchecked(24) owner is not postgres';
   END IF;
-  IF pg_catalog.has_function_privilege('anon', v_unchecked_oid, 'EXECUTE')
-      OR pg_catalog.has_function_privilege('authenticated', v_unchecked_oid, 'EXECUTE')
-      OR pg_catalog.has_function_privilege('service_role', v_unchecked_oid, 'EXECUTE') THEN
+  IF (SELECT count(*)
+      FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_unchecked_oid))) <> 1
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_unchecked_oid)) AS a
+        WHERE a.privilege_type <> 'EXECUTE'
+          OR a.is_grantable
+          OR a.grantor <> 'postgres'::regrole
+          OR a.grantee <> 'postgres'::regrole
+      ) THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'pre-image: private.create_storefront_order_unchecked(24) must be owner-only EXECUTE';
+      USING DETAIL = 'pre-image: private.create_storefront_order_unchecked(24) ACL differs (want owner-only EXECUTE, no grant option)';
   END IF;
 END;
 $squash_guard$;
@@ -1059,27 +1068,27 @@ BEGIN
       USING DETAIL = 'installed private.create_storefront_order(24) differs from the pinned bytes';
   END IF;
   -- pg_get_functiondef omits owner and EXECUTE ACL, so pin the 20260828
-  -- shape explicitly: postgres owner, EXECUTE for the three service
-  -- callers, and no PUBLIC grant (NULL proacl would also grant PUBLIC
-  -- via defaults, so it fails closed too).
+  -- shape exactly: sampling a few roles would pass an extra grantee
+  -- (even WITH GRANT OPTION). The normalized set below rejects any
+  -- unexpected grantee, privilege, grantor, or grant-option bit, and
+  -- the cardinality rejects NULL proacl (whose defaults grant PUBLIC,
+  -- and which explodes to zero rows).
   IF pg_catalog.pg_get_userbyid(v_checked_owner) <> 'postgres' THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
       USING DETAIL = 'post-image: private.create_storefront_order(24) owner is not postgres';
   END IF;
-  IF NOT (pg_catalog.has_function_privilege('anon', v_checked_oid, 'EXECUTE')
-      AND pg_catalog.has_function_privilege('authenticated', v_checked_oid, 'EXECUTE')
-      AND pg_catalog.has_function_privilege('service_role', v_checked_oid, 'EXECUTE')) THEN
-    RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'post-image: private.create_storefront_order(24) EXECUTE grants differ (want anon, authenticated, service_role)';
-  END IF;
-  IF (SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid) IS NULL
+  IF (SELECT count(*)
+      FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid))) <> 4
       OR EXISTS (
         SELECT 1
         FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_checked_oid)) AS a
-        WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE'
+        WHERE a.privilege_type <> 'EXECUTE'
+          OR a.is_grantable
+          OR a.grantor <> 'postgres'::regrole
+          OR a.grantee NOT IN ('postgres'::regrole, 'anon'::regrole, 'authenticated'::regrole, 'service_role'::regrole)
       ) THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'post-image: private.create_storefront_order(24) is executable by PUBLIC';
+      USING DETAIL = 'post-image: private.create_storefront_order(24) ACL differs (want exactly postgres/anon/authenticated/service_role EXECUTE, no grant option)';
   END IF;
 
   SELECT p.oid, p.proowner, pg_catalog.pg_get_functiondef(p.oid)
@@ -1099,15 +1108,24 @@ BEGIN
     RAISE EXCEPTION 'storefront_order_squash_post_image_mismatch'
       USING DETAIL = 'installed private.create_storefront_order_unchecked(24) differs from the pinned bytes';
   END IF;
+  -- Owner-only EXECUTE, pinned exactly: any non-owner grantee (or
+  -- grant-option bit, or NULL default ACL) fails closed.
   IF pg_catalog.pg_get_userbyid(v_unchecked_owner) <> 'postgres' THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
       USING DETAIL = 'post-image: private.create_storefront_order_unchecked(24) owner is not postgres';
   END IF;
-  IF pg_catalog.has_function_privilege('anon', v_unchecked_oid, 'EXECUTE')
-      OR pg_catalog.has_function_privilege('authenticated', v_unchecked_oid, 'EXECUTE')
-      OR pg_catalog.has_function_privilege('service_role', v_unchecked_oid, 'EXECUTE') THEN
+  IF (SELECT count(*)
+      FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_unchecked_oid))) <> 1
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.aclexplode((SELECT p.proacl FROM pg_catalog.pg_proc p WHERE p.oid = v_unchecked_oid)) AS a
+        WHERE a.privilege_type <> 'EXECUTE'
+          OR a.is_grantable
+          OR a.grantor <> 'postgres'::regrole
+          OR a.grantee <> 'postgres'::regrole
+      ) THEN
     RAISE EXCEPTION 'storefront_order_squash_privilege_mismatch'
-      USING DETAIL = 'post-image: private.create_storefront_order_unchecked(24) must be owner-only EXECUTE';
+      USING DETAIL = 'post-image: private.create_storefront_order_unchecked(24) ACL differs (want owner-only EXECUTE, no grant option)';
   END IF;
 END;
 $squash_post_guard$;

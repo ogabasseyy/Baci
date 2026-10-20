@@ -40,27 +40,27 @@ describe('fetch-storefront-product-offers', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('maps active offer rows by product id with one rpc per id', async () => {
-    mockRpc
-      .mockReturnValueOnce(
-        Promise.resolve({
-          data: [
-            {
-              offer_id: 'offer-7',
-              condition: 'used',
-              price: 80000,
-              compare_at_price: 90000,
-              stock_quantity: 2,
-              grade: 'B',
-              condition_notes: 'Light wear',
-              images: ['offer.jpg'],
-            },
-            { offer_id: null, condition: 'used', price: 1 },
-          ],
-          error: null,
-        })
-      )
-      .mockReturnValueOnce(Promise.resolve({ data: [], error: null }));
+  it('maps authority rows by product id in one batched call', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: 'product-1',
+            offer_id: 'offer-7',
+            condition: 'used',
+            price_basis: 80000,
+            compare_at_price: 90000,
+            allocatable_stock: 2,
+            parent_eligible: true,
+            grade: 'B',
+            condition_notes: 'Light wear',
+            images: ['offer.jpg'],
+          },
+          { product_id: 'product-1', offer_id: null },
+        ],
+        error: null,
+      })
+    );
 
     await expect(
       getStorefrontProductOffersByProductIds([
@@ -83,40 +83,33 @@ describe('fetch-storefront-product-offers', () => {
       ],
       'product-2': [],
     });
-    expect(mockRpc).toHaveBeenCalledTimes(2);
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: 'product-1',
-    });
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: 'product-2',
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: ['product-1', 'product-2'],
     });
   });
 
-  it('processes large product lists in bounded batches of 10', async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    mockRpc.mockImplementation(() => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      return Promise.resolve({ data: [], error: null }).finally(() => {
-        inFlight -= 1;
-      });
-    });
+  it('keeps every requested id even for large product lists', async () => {
+    mockRpc.mockImplementation(() =>
+      Promise.resolve({ data: [], error: null })
+    );
 
     const ids = Array.from({ length: 25 }, (_, index) => `product-${index}`);
     const result = await getStorefrontProductOffersByProductIds(ids);
 
     expect(Object.keys(result ?? {})).toHaveLength(25);
-    expect(mockRpc).toHaveBeenCalledTimes(25);
-    expect(maxInFlight).toBeLessThanOrEqual(10);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: ids,
+    });
   });
 
-  it('returns null when any offer lookup fails', async () => {
-    mockRpc
-      .mockReturnValueOnce(Promise.resolve({ data: [], error: null }))
-      .mockReturnValueOnce(
-        Promise.resolve({ data: null, error: { message: 'boom' } })
-      );
+  it('returns null when the offer lookup fails', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({ data: null, error: { message: 'boom' } })
+    );
 
     await expect(
       getStorefrontProductOffersByProductIds(['product-1', 'product-2'])

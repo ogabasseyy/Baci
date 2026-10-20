@@ -25,6 +25,9 @@ export * from './negotiation-contact';
 export * from './negotiation-email';
 export * from './negotiation-item-info';
 export * from './negotiation-policy';
+export * from './offer-authority-client';
+export * from './offer-economics-basis';
+export * from './offer-line-key';
 export * from './order-item-analytics-profit';
 export * from './order-item-display';
 export * from './parse-merchant-rate-quote-id';
@@ -94,6 +97,7 @@ export {
   type SearchSuggestion,
   type SearchSuggestionProduct,
 } from './search-suggestions';
+export * from './select-condition-offer';
 export * from './select-preferred-order-payment-account';
 export {
   mergeAssistedRefinements,

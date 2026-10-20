@@ -437,6 +437,7 @@ jobs:
           --sql-check supabase/tests/storefront_product_request_intake.sql
           --sql-check supabase/migrations/tests/storefront_order_replay_line_identity.sql
           --sql-check supabase/migrations/tests/storefront_order_offer_both_entrypoints.sql
+          --sql-check supabase/migrations/tests/storefront_offer_resolution_authority.sql
           --sql-check supabase/migrations/tests/storefront_order_entrypoint_squash_guards.sql
           --sql-check supabase/migrations/tests/storefront_order_offer_entrypoints_behavior.sql
           --sql-check supabase/migrations/tests/storefront_product_base_inventory_anon_bounds.sql

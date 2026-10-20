@@ -1,0 +1,120 @@
+import { normalizeCanonicalProductCondition } from './product-condition';
+
+export interface SelectableConditionOffer {
+  id: string | number;
+  condition?: string | null;
+}
+
+export interface ConditionOfferSelection {
+  /** Canonical-or-raw selected condition; null/undefined selects nothing. */
+  selectedCondition?: string | null;
+  /** Advertised offer id (search/compare/route); honored on match. */
+  preferredOfferId?: string | null;
+  /**
+   * Ordered advertised ids (explicit pick before route id); each is
+   * honored on match before the condition fallback. Appended after
+   * `preferredOfferId` when both are given.
+   */
+  preferredOfferIds?: ReadonlyArray<string | null | undefined>;
+  /** Base-row entries suppress the match to keep the advertised price. */
+  suppressMatch?: boolean;
+  /**
+   * Parent condition: same-condition selections belong to the parent
+   * family, so the condition fallback resolves nothing. The preferred
+   * id is still honored above this gate (explicit picks win).
+   */
+  parentCondition?: string | null;
+  /** Prefer a raw condition spelling over an earlier canonical alias. */
+  preferExactConditionMatch?: boolean;
+}
+
+/**
+ * Offer identity for a selected condition, shared by the web PDP, the
+ * native PDP, and the ogabassey PDP: suppression wins, then each
+ * advertised id in order (when it names a member matching the
+ * selection), then the condition fallback (exact spelling first when
+ * requested, else the first canonical match, excluding the parent
+ * family's own condition). A missing selection resolves only a
+ * single-offer catalog.
+ *
+ * The condition fallback tiebreaks by offer id (lowest first):
+ * same-condition offers carry distinct prices, so input-order
+ * dependence would price nondeterministically across snapshot
+ * hydration orders. This matches the RPC's (condition, id) order and
+ * the feed dedup that keeps the first row per normalized condition.
+ */
+export function selectConditionOffer<T extends SelectableConditionOffer>(
+  offers: readonly T[] | null | undefined,
+  selection: ConditionOfferSelection = {}
+): T | null {
+  if (selection.suppressMatch) return null;
+  if (!offers || offers.length === 0) return null;
+  const {
+    selectedCondition,
+    preferredOfferId,
+    preferredOfferIds,
+    parentCondition,
+    preferExactConditionMatch,
+  } = selection;
+  const normalizedSelected = selectedCondition
+    ? normalizeCanonicalProductCondition(selectedCondition)
+    : '';
+
+  const orderedPreferredIds = [
+    ...(preferredOfferId != null && preferredOfferId !== ''
+      ? [preferredOfferId]
+      : []),
+    ...(preferredOfferIds ?? []).filter(
+      (id): id is string => id != null && id !== ''
+    ),
+  ];
+  for (const candidateId of orderedPreferredIds) {
+    const preferred = offers.find(
+      (offer) => String(offer.id) === String(candidateId)
+    );
+    if (!preferred) continue;
+    if (normalizedSelected) {
+      const normalizedPreferred = normalizeCanonicalProductCondition(
+        preferred.condition ?? ''
+      );
+      if (
+        normalizedPreferred !== '' &&
+        normalizedPreferred === normalizedSelected
+      ) {
+        return preferred;
+      }
+    } else if (offers.length === 1) {
+      return preferred;
+    }
+  }
+
+  if (!normalizedSelected) {
+    return offers.length === 1 ? offers[0] : null;
+  }
+
+  // Same-condition selections belong to the parent family, never to an
+  // offer row (a null parent defaults to `new`, matching the PDP rule
+  // that never purchases through a same-condition offer).
+  if (parentCondition !== undefined) {
+    const normalizedParent =
+      normalizeCanonicalProductCondition(parentCondition ?? '') || 'new';
+    if (normalizedSelected === normalizedParent) return null;
+  }
+
+  const orderedById = [...offers].sort((a, b) =>
+    String(a.id).localeCompare(String(b.id))
+  );
+  if (preferExactConditionMatch) {
+    const exact = orderedById.find(
+      (offer) => (offer.condition ?? null) === selectedCondition
+    );
+    if (exact) return exact;
+  }
+  return (
+    orderedById.find(
+      (offer) =>
+        normalizeCanonicalProductCondition(offer.condition ?? '') ===
+        normalizedSelected
+    ) ?? null
+  );
+}

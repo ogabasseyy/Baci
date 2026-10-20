@@ -153,18 +153,19 @@ describe('useCart stock validation', () => {
       typeof supabase.from
     >;
     jest.mocked(supabase.from).mockReturnValue(productQuery);
-    (supabase.rpc as jest.Mock).mockImplementation((fn: string) =>
-      Promise.resolve(
-        fn === 'get_storefront_product_base_inventory'
-          ? {
-              data: [{ product_id: 'product-1', effective_policy: 'legacy' }],
-              error: null,
-            }
-          : {
-              data: [{ offer_id: 'offer-7', stock_quantity: 2 }],
-              error: null,
-            }
-      )
+    (supabase.rpc as jest.Mock).mockImplementation(() =>
+      Promise.resolve({
+        data: [
+          {
+            product_id: 'product-1',
+            offer_id: 'offer-7',
+            allocatable_stock: 2,
+            effective_policy: 'legacy',
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
     );
 
     const queryClient = new QueryClient({
@@ -191,9 +192,13 @@ describe('useCart stock validation', () => {
       });
 
       await waitFor(() => {
-        expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
-          p_product_id: 'product-1',
-        });
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'get_storefront_offer_resolution',
+          {
+            p_merchant_id: null,
+            p_product_ids: ['product-1'],
+          }
+        );
       });
       await waitFor(() => {
         expect(result.current.isAddingToCart).toBe(false);

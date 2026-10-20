@@ -11,24 +11,28 @@ jest.mock('@/lib/supabase', () => ({
 
 const mockRpc = supabase.rpc as jest.Mock;
 
-function mockOfferCalls(args: {
-  offers?: unknown[];
-  offersError?: unknown;
-  baseRow?: unknown;
-  baseError?: unknown;
-}) {
+function mockAuthority(args: { rows?: unknown[]; error?: unknown }) {
   mockRpc.mockImplementation(async (name: string) => {
-    if (name === 'get_product_offers') {
-      return { data: args.offers ?? [], error: args.offersError ?? null };
+    if (name === 'get_storefront_offer_resolution') {
+      return { data: args.rows ?? [], error: args.error ?? null };
     }
-    return {
-      data: args.baseRow === undefined ? [] : [args.baseRow],
-      error: args.baseError ?? null,
-    };
+    throw new Error(`unexpected rpc: ${name}`);
   });
 }
 
-const BASE = { product_id: 'p1', effective_policy: 'managed' };
+function row(overrides: Record<string, unknown> = {}) {
+  return {
+    product_id: 'p1',
+    offer_id: 'o1',
+    condition: 'used',
+    price_basis: 80,
+    allocatable_stock: 5,
+    parent_eligible: true,
+    effective_policy: 'legacy',
+    available_units: null,
+    ...overrides,
+  };
+}
 
 describe('resolveOfferStock', () => {
   beforeEach(() => {
@@ -36,110 +40,86 @@ describe('resolveOfferStock', () => {
   });
 
   it('throws a retryable error when the offer lookup fails', async () => {
-    mockOfferCalls({ offersError: { message: 'boom' }, baseRow: BASE });
-    await expect(resolveOfferStock('p1', 'o1', 7)).rejects.toThrow(
+    mockAuthority({ error: { message: 'boom' } });
+    await expect(resolveOfferStock('p1', 'o1')).rejects.toThrow(
       'Cannot verify stock availability. Please try again.'
     );
   });
 
   it('reports zero when the offer is missing from the projection', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'other', stock_quantity: 5 }],
-      baseRow: BASE,
-    });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
+    mockAuthority({ rows: [row({ offer_id: 'other' })] });
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
       stock: 0,
       strictUnits: null,
     });
   });
 
-  it('throws when the base inventory lookup fails', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: 5 }],
-      baseError: { message: 'boom' },
-    });
-    await expect(resolveOfferStock('p1', 'o1', 7)).rejects.toThrow(
-      'Cannot verify stock availability. Please try again.'
-    );
-  });
-
-  it('reports zero when the product is absent from the base projection', async () => {
-    mockOfferCalls({ offers: [{ offer_id: 'o1', stock_quantity: 5 }] });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
-      stock: 0,
+  it('reports the authority allocation on legacy policies', async () => {
+    mockAuthority({ rows: [row({ allocatable_stock: 5 })] });
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
+      stock: 5,
       strictUnits: null,
     });
   });
 
-  it('caps a finite offer quantity by strict serialized units', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: 9 }],
-      baseRow: {
-        ...BASE,
-        effective_policy: 'serialized_strict',
-        available_units: 4,
-      },
+  it('reports strict stock with the shared serialized pool', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: 4,
+          effective_policy: 'serialized_strict',
+          available_units: 4,
+        }),
+      ],
     });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
       stock: 4,
       strictUnits: 4,
     });
   });
 
-  it('inherits strict units when the offer quantity is null', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: null }],
-      baseRow: {
-        ...BASE,
-        effective_policy: 'serialized_strict',
-        available_units: 4,
-      },
+  it('fails closed to zero when strict policy reports no unit count', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: null,
+          effective_policy: 'serialized_strict',
+          available_units: null,
+        }),
+      ],
     });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
-      stock: 4,
-      strictUnits: 4,
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
+      stock: 0,
+      strictUnits: 0,
     });
   });
 
-  it('throws when strict policy reports no unit count', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: 9 }],
-      baseRow: { ...BASE, effective_policy: 'serialized_strict' },
+  it('treats unlimited null allocations as unbounded', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: null,
+          effective_policy: 'serialized_then_unlimited',
+        }),
+      ],
     });
-    await expect(resolveOfferStock('p1', 'o1', 7)).rejects.toThrow(
-      'Cannot verify stock availability. Please try again.'
-    );
-  });
-
-  it('bypasses the cap for unlimited tracking with a null offer quantity', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: null }],
-      baseRow: { ...BASE, effective_policy: 'serialized_then_unlimited' },
-    });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
       stock: Number.MAX_SAFE_INTEGER,
       strictUnits: null,
     });
   });
 
-  it('uses the finite offer quantity under unlimited tracking', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: 9 }],
-      baseRow: { ...BASE, effective_policy: 'serialized_then_unlimited' },
+  it('uses the finite allocation under unlimited tracking', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: 9,
+          effective_policy: 'serialized_then_unlimited',
+        }),
+      ],
     });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
       stock: 9,
-      strictUnits: null,
-    });
-  });
-
-  it('falls back to parent stock when the offer quantity is null', async () => {
-    mockOfferCalls({
-      offers: [{ offer_id: 'o1', stock_quantity: null }],
-      baseRow: BASE,
-    });
-    await expect(resolveOfferStock('p1', 'o1', 7)).resolves.toEqual({
-      stock: 7,
       strictUnits: null,
     });
   });

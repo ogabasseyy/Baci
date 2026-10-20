@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
+import { coerceOfferAuthorityRow } from '@baci/shared/lib';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
@@ -144,9 +145,13 @@ export async function loadMcpProductVariants({
     condition_notes: string | null;
   }> = [];
   if (product.has_condition_offers) {
-    const { data, error } = await supabase.rpc('get_product_offers', {
-      p_product_id: product.id,
-    });
+    const { data, error } = await supabase.rpc(
+      'get_storefront_offer_resolution',
+      {
+        p_merchant_id: merchantId,
+        p_product_ids: [product.id],
+      }
+    );
     if (error) {
       console.error('Failed to fetch public product offers:', error);
       if (!product.has_variants) {
@@ -155,7 +160,23 @@ export async function loadMcpProductVariants({
       }
       offerLookupFailed = true;
     } else {
-      offers = data || [];
+      offers = ((data ?? []) as unknown[]).flatMap((row) => {
+        const resolution = coerceOfferAuthorityRow(row);
+        if (!resolution || resolution.productId !== product.id) return [];
+        // Display prices from the live basis and availability from the
+        // allocatable stock (policy-capped, parent-inherited): exactly
+        // what checkout enforces. Unbounded rows stay purchasable.
+        return [
+          {
+            condition: resolution.condition ?? 'new',
+            grade: resolution.grade ?? null,
+            price: resolution.priceBasis ?? 0,
+            stock_quantity:
+              resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
+            condition_notes: resolution.conditionNotes ?? null,
+          },
+        ];
+      });
     }
   }
 

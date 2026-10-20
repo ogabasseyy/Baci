@@ -168,19 +168,23 @@ describe('mapOrderItems', () => {
 });
 
 describe('attachOrderItemOfferLabels', () => {
-  it('attaches grade and notes for the selected offer with one lookup per product', async () => {
-    const fetchOffers = vi.fn(async (productId: string) => ({
-      data:
-        productId === 'product-1'
-          ? [
-              {
-                offer_id: 'offer-7',
-                grade: 'B',
-                condition_notes: 'Light wear',
-              },
-              { offer_id: 'offer-8', grade: 'A' },
-            ]
-          : [],
+  it('attaches grade and notes for the selected offer in one batched lookup', async () => {
+    const callRpc = vi.fn(async () => ({
+      data: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          grade: 'B',
+          condition_notes: 'Light wear',
+          parent_eligible: true,
+        },
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-8',
+          grade: 'A',
+          parent_eligible: true,
+        },
+      ],
       error: null,
     }));
 
@@ -190,11 +194,15 @@ describe('attachOrderItemOfferLabels', () => {
         { offer_id: 'offer-7', product_id: 'product-1' },
         { product_id: 'product-2' },
       ],
-      fetchOffers
+      callRpc,
+      'merchant-1'
     );
 
-    expect(fetchOffers).toHaveBeenCalledTimes(1);
-    expect(fetchOffers).toHaveBeenCalledWith('product-1');
+    expect(callRpc).toHaveBeenCalledTimes(1);
+    expect(callRpc).toHaveBeenCalledWith({
+      p_merchant_id: 'merchant-1',
+      p_product_ids: ['product-1'],
+    });
     expect(result[0]).toMatchObject({
       offer_grade: 'B',
       offer_condition_notes: 'Light wear',
@@ -203,12 +211,14 @@ describe('attachOrderItemOfferLabels', () => {
   });
 
   it('prefers the stored snapshot over the mutable catalog row', async () => {
-    const fetchOffers = vi.fn(async () => ({
+    const callRpc = vi.fn(async () => ({
       data: [
         {
+          product_id: 'product-1',
           offer_id: 'offer-7',
           grade: 'D',
           condition_notes: 'Revised after sale',
+          parent_eligible: true,
         },
       ],
       error: null,
@@ -223,12 +233,12 @@ describe('attachOrderItemOfferLabels', () => {
           product_id: 'product-1',
         },
       ],
-      fetchOffers
+      callRpc
     );
 
     // No catalog read at all: the snapshot is the creation-time truth
     // even though the live offer now carries different labels.
-    expect(fetchOffers).not.toHaveBeenCalled();
+    expect(callRpc).not.toHaveBeenCalled();
     expect(result[0]).toMatchObject({
       offer_grade: 'B',
       offer_condition_notes: 'Light wear',
@@ -236,12 +246,14 @@ describe('attachOrderItemOfferLabels', () => {
   });
 
   it('keeps marked-but-empty snapshots empty without a live lookup', async () => {
-    const fetchOffers = vi.fn(async () => ({
+    const callRpc = vi.fn(async () => ({
       data: [
         {
+          product_id: 'product-1',
           offer_id: 'offer-7',
           grade: 'A',
           condition_notes: 'Added after purchase',
+          parent_eligible: true,
         },
       ],
       error: null,
@@ -257,12 +269,12 @@ describe('attachOrderItemOfferLabels', () => {
           product_id: 'product-1',
         },
       ],
-      fetchOffers
+      callRpc
     );
 
     // The marker proves both NULLs are creation-time truth: no catalog
     // read, and the later merchant labels never leak into history.
-    expect(fetchOffers).not.toHaveBeenCalled();
+    expect(callRpc).not.toHaveBeenCalled();
     expect(result[0]).toMatchObject({
       offer_grade: undefined,
       offer_condition_notes: undefined,
@@ -270,12 +282,14 @@ describe('attachOrderItemOfferLabels', () => {
   });
 
   it('falls back to the live lookup for pre-snapshot lines', async () => {
-    const fetchOffers = vi.fn(async () => ({
+    const callRpc = vi.fn(async () => ({
       data: [
         {
+          product_id: 'product-1',
           offer_id: 'offer-7',
           grade: 'B',
           condition_notes: 'Light wear',
+          parent_eligible: true,
         },
       ],
       error: null,
@@ -290,10 +304,10 @@ describe('attachOrderItemOfferLabels', () => {
           product_id: 'product-1',
         },
       ],
-      fetchOffers
+      callRpc
     );
 
-    expect(fetchOffers).toHaveBeenCalledTimes(1);
+    expect(callRpc).toHaveBeenCalledTimes(1);
     expect(result[0]).toMatchObject({
       offer_grade: 'B',
       offer_condition_notes: 'Light wear',
@@ -316,30 +330,44 @@ describe('attachOrderItemOfferLabels', () => {
     ).resolves.toEqual(items);
   });
 
-  it('keeps successful products when one product lookup fails', async () => {
-    const fetchOffers = vi.fn(async (productId: string) => {
-      if (productId === 'product-bad') {
-        throw new Error('boom');
-      }
-      return {
-        data: [{ offer_id: 'offer-7', grade: 'B' }],
-        error: null,
-      };
-    });
+  it('attaches labels for every product from the single batched response', async () => {
+    const callRpc = vi.fn(async () => ({
+      data: [
+        { product_id: 'product-1', offer_id: 'offer-7', grade: 'B' },
+        {
+          product_id: 'product-2',
+          offer_id: 'offer-9',
+          grade: 'C',
+          condition_notes: 'Worn',
+        },
+      ],
+      error: null,
+    }));
     const items = [
       { offer_id: 'offer-7', product_id: 'product-1' },
-      { offer_id: 'offer-9', product_id: 'product-bad' },
+      { offer_id: 'offer-9', product_id: 'product-2' },
     ];
 
-    const result = await attachOrderItemOfferLabels(items, fetchOffers);
+    const result = await attachOrderItemOfferLabels(items, callRpc);
 
+    expect(callRpc).toHaveBeenCalledTimes(1);
     expect(result[0]).toMatchObject({ offer_grade: 'B' });
-    expect(result[1]).not.toHaveProperty('offer_grade');
+    expect(result[1]).toMatchObject({
+      offer_grade: 'C',
+      offer_condition_notes: 'Worn',
+    });
   });
 
   it('resolves legacy labels through the resolved condition offer id', async () => {
-    const fetchOffers = vi.fn(async () => ({
-      data: [{ offer_id: 'offer-9', grade: 'C', condition_notes: 'Worn' }],
+    const callRpc = vi.fn(async () => ({
+      data: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-9',
+          grade: 'C',
+          condition_notes: 'Worn',
+        },
+      ],
       error: null,
     }));
 
@@ -351,10 +379,13 @@ describe('attachOrderItemOfferLabels', () => {
           product_id: 'product-1',
         },
       ],
-      fetchOffers
+      callRpc
     );
 
-    expect(fetchOffers).toHaveBeenCalledWith('product-1');
+    expect(callRpc).toHaveBeenCalledWith({
+      p_merchant_id: null,
+      p_product_ids: ['product-1'],
+    });
     expect(result[0]).toMatchObject({
       offer_grade: 'C',
       offer_condition_notes: 'Worn',
@@ -362,37 +393,33 @@ describe('attachOrderItemOfferLabels', () => {
   });
 
   it('skips the lookup when no line names an offer', async () => {
-    const fetchOffers = vi.fn();
+    const callRpc = vi.fn();
     const items = [{ product_id: 'product-1' }];
 
-    await expect(attachOrderItemOfferLabels(items, fetchOffers)).resolves.toBe(
+    await expect(attachOrderItemOfferLabels(items, callRpc)).resolves.toBe(
       items
     );
-    expect(fetchOffers).not.toHaveBeenCalled();
+    expect(callRpc).not.toHaveBeenCalled();
   });
 
-  it('fans offer lookups out in bounded batches', async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const fetchOffers = vi.fn(async (productId: string) => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      inFlight -= 1;
-      return {
-        data: [{ offer_id: `offer-for-${productId}`, grade: 'B' }],
-        error: null,
-      };
-    });
+  it('resolves large orders in a single batched lookup', async () => {
+    const callRpc = vi.fn(async () => ({
+      data: Array.from({ length: 25 }, (_, index) => ({
+        product_id: `product-${index}`,
+        offer_id: `offer-for-product-${index}`,
+        grade: 'B',
+        parent_eligible: true,
+      })),
+      error: null,
+    }));
     const items = Array.from({ length: 25 }, (_, index) => ({
       offer_id: `offer-for-product-${index}`,
       product_id: `product-${index}`,
     }));
 
-    const result = await attachOrderItemOfferLabels(items, fetchOffers);
+    const result = await attachOrderItemOfferLabels(items, callRpc);
 
-    expect(fetchOffers).toHaveBeenCalledTimes(25);
-    expect(maxInFlight).toBeLessThanOrEqual(10);
+    expect(callRpc).toHaveBeenCalledTimes(1);
     expect(result).toHaveLength(25);
     expect(result[24]).toMatchObject({ offer_grade: 'B' });
   });

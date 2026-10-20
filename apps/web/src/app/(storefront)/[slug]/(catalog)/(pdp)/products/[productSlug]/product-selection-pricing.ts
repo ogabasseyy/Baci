@@ -1,6 +1,9 @@
+import {
+  resolveOfferAllocatableStock,
+  resolveOfferPriceBasis,
+} from '@baci/shared/lib';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
-import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 export interface SelectionPricingOffer {
@@ -23,7 +26,9 @@ export interface SelectionPricingVariant {
 /**
  * Price and stock for the current offer/variant selection. A matched
  * condition offer wins over any variant pricing; unmanaged stock is
- * unlimited.
+ * unlimited. Offer economics resolve through the shared authority
+ * (live price basis, allocatable stock) so the PDP advertises exactly
+ * what checkout enforces.
  */
 export function resolveSelectionPricing({
   product,
@@ -44,12 +49,13 @@ export function resolveSelectionPricing({
   isOutOfStock: boolean;
 } {
   // Get current price based on condition offer or variant selection
-  const currentPrice =
-    selectedOffer?.price != null
-      ? Number(selectedOffer.price)
-      : (displaySelection?.price ??
-        effectiveVariant?.price_override ??
-        product.price);
+  const fallbackPrice =
+    displaySelection?.price ??
+    effectiveVariant?.price_override ??
+    product.price;
+  const currentPrice = selectedOffer
+    ? resolveOfferPriceBasis(selectedOffer.price, fallbackPrice)
+    : fallbackPrice;
   const currentCompareAtPrice =
     displaySelection?.compareAtPrice ?? product.compare_at_price;
   // Serialized tracking resolves from exact units (strict) or stays enabled
@@ -58,19 +64,24 @@ export function resolveSelectionPricing({
   const serializedVariantStock = effectiveVariant
     ? resolveSerializedVariantStock(effectiveVariant)
     : undefined;
-  // Offer selections on serialized simple products cap by the folded base
-  // unit count (strict) or the binding offer scalar (unlimited) — ahead
-  // of the unmanaged short-circuit, since unlimited folds manage_stock
-  // false while the scalar still binds the order.
-  const serializedOfferStock =
+  // Offer selections resolve their allocatable stock through the
+  // authority — ahead of the unmanaged short-circuit, since order
+  // creation checks the offer allocation even on unmanaged parents, so
+  // an unmanaged infinite here would advertise what checkout refuses.
+  // The serialized variant count likewise wins over the shortcut: a
+  // strict variant with zero units is unorderable on any parent.
+  // Snapshot folds carry strict base units in stock_quantity, which
+  // the effective-stock reconciliation reads first: pass it as the
+  // pool so strict offers cap exactly like the serialized helper did.
+  const parentStock = getEffectiveStock(product);
+  const offerStock =
     !effectiveVariant && selectedOffer
-      ? resolveSerializedOfferStock(selectedOffer, product)
+      ? resolveOfferAllocatableStock(selectedOffer.stock_quantity, {
+          inventory_tracking_policy: product.inventory_tracking_policy ?? null,
+          availableUnits: parentStock,
+          parentStock,
+        })
       : undefined;
-  // Offer selections bypass the unmanaged short-circuit: order creation
-  // checks the offer allocation even on unmanaged parents, so an
-  // unmanaged infinite here would advertise what checkout refuses. The
-  // serialized variant count likewise wins over the shortcut: a strict
-  // variant with zero units is unorderable on any parent.
   const managedStock =
     !isStockManaged && !selectedOffer && serializedVariantStock === undefined
       ? Number.POSITIVE_INFINITY
@@ -83,19 +94,14 @@ export function resolveSelectionPricing({
                 stock_quantity:
                   effectiveVariant.stock_quantity ?? product.stock ?? undefined,
               }
-            : selectedOffer
-              ? {
-                  // A null offer quantity inherits parent stock (mirroring
-                  // the variants branch and the price-options CTE): the
-                  // offer is purchasable, not out of stock.
-                  stock:
-                    selectedOffer.stock_quantity ?? product.stock ?? undefined,
-                  stock_quantity:
-                    selectedOffer.stock_quantity ?? product.stock ?? undefined,
-                }
-              : product
+            : product
         ));
-  const currentStock = serializedOfferStock ?? managedStock;
+  // An unbounded offer allocation (unlimited policy) stays purchasable
+  // with no finite count, like unmanaged stock.
+  const currentStock =
+    offerStock === undefined
+      ? managedStock
+      : (offerStock ?? Number.POSITIVE_INFINITY);
   // A zero allocation disables purchase even when the snapshot folds the
   // product unmanaged (unlimited offers still bind their scalar).
   const isOutOfStock = currentStock === 0;

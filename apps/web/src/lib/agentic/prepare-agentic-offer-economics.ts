@@ -1,6 +1,6 @@
+import type { OfferAuthorityRpcCall } from '@baci/shared/lib';
 import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { resolveOrderOfferEconomics } from '@/lib/checkout/resolve-order-offer-economics';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import type { AgenticCheckoutOrderResult } from './checkout-order-dispatch';
@@ -20,7 +20,7 @@ export type PreparedAgenticOfferEconomics =
  * Returns a ready-made 400/500 dispatch result on failure.
  */
 export async function prepareAgenticOfferEconomics(
-  fetchOffers: (productId: string) => Promise<OrderOfferQueryResult>,
+  callRpc: OfferAuthorityRpcCall,
   orderItemsPayload: Array<{
     product_id?: string;
     offer_id?: string | null;
@@ -28,11 +28,13 @@ export async function prepareAgenticOfferEconomics(
     has_assurance?: boolean | null;
     assurance_fee?: number;
     quantity: number;
-  }>
+  }>,
+  merchantId?: string | null
 ): Promise<PreparedAgenticOfferEconomics> {
   const offerEconomics = await resolveOrderOfferEconomics(
-    fetchOffers,
-    orderItemsPayload
+    callRpc,
+    orderItemsPayload,
+    merchantId
   );
   if (!offerEconomics.ok) {
     if (offerEconomics.reason === 'verification_failed') {

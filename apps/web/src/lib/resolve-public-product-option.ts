@@ -1,7 +1,9 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  resolveOfferAllocatableStock,
+} from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
-import { resolveSerializedOfferStock } from './serialized-offer-stock';
 import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 type Parent = {
@@ -13,6 +15,7 @@ type Parent = {
   stock_quantity?: number | null;
   inventory_tracking_policy?: string | null;
   effective_policy?: string | null;
+  available_units?: number | null;
 };
 type Variant = {
   price_override?: number | null;
@@ -51,19 +54,26 @@ export function resolvePublicProductOption(
       price(variant.price_override) ??
       price(parent.price))
     : (price(offer?.price) ?? price(parent.price));
+  // Offer stock resolves through the shared authority (the finite
+  // scalar binds; a missing scalar inherits the parent stock): exactly
+  // what checkout enforces.
+  // Strict base units come from the live projection when hydrated,
+  // else the folded snapshot stock (units fold into stock_quantity):
+  // exactly the pool the serialized helper used to read.
+  const parentStock = getEffectiveStock(parent);
+  const offerStock = offer
+    ? resolveOfferAllocatableStock(offer.stock_quantity, {
+        effective_policy: parent.effective_policy,
+        inventory_tracking_policy: parent.inventory_tracking_policy,
+        availableUnits: parent.available_units ?? parentStock,
+        parentStock,
+      })
+    : undefined;
   const stockQuantity = variant
     ? (resolveSerializedVariantStock(variant) ??
       variant.stock_quantity ??
       getEffectiveStock(parent))
-    : offer
-      ? (resolveSerializedOfferStock(offer, {
-          ...parent,
-          // Serialized policies fold exact units into stock_quantity
-          // while legacy rows carry the scalar on stock: reconcile
-          // first so the strict cap reads the folded pool either way.
-          stock: getEffectiveStock(parent),
-        }) ?? getEffectiveStock(offer))
-      : getEffectiveStock(parent);
+    : (offerStock ?? getEffectiveStock(parent));
   const purchasable = variant
     ? isPublicVariantPurchasable(parent, variant)
     : parent.manage_stock === false ||

@@ -71,13 +71,16 @@ describe('resolveSerializedOfferStock', () => {
     ).toBe(5);
   });
 
-  it('inherits the folded base count when the unlimited offer quantity is null', () => {
+  it('returns unbounded (undefined) when the unlimited offer quantity is null', () => {
+    // A null scalar under serialized_then_unlimited is unbounded, not
+    // capped by the folded units: callers fall through to their
+    // scalar/parent logic, which keeps the line purchasable.
     expect(
       resolveSerializedOfferStock(
         { stock_quantity: null },
         { inventory_tracking_policy: 'serialized_then_unlimited', stock: 9999 }
       )
-    ).toBe(9999);
+    ).toBeUndefined();
   });
 
   it('prefers the inherited effective policy over the row-local one', () => {
@@ -108,18 +111,21 @@ describe('resolveSerializedOfferStock', () => {
     ).toBe(0);
   });
 
-  it('falls back to the scalar when base units are unknown', () => {
+  it('fails closed when strict base units are unknown', () => {
+    // Without a folded unit count the strict minimum cannot be
+    // proven, so the selection resolves zero (matching search, which
+    // requires a positive strict unit count to advertise).
     expect(
       resolveSerializedOfferStock(
         { stock_quantity: 5 },
         { inventory_tracking_policy: 'serialized_strict', stock: null }
       )
-    ).toBe(5);
+    ).toBe(0);
     expect(
       resolveSerializedOfferStock(
         { stock_quantity: null },
         { inventory_tracking_policy: 'serialized_strict', stock: null }
       )
-    ).toBeUndefined();
+    ).toBe(0);
   });
 });

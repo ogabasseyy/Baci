@@ -1,4 +1,7 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import {
+  makeOfferLineKey,
+  normalizeCanonicalProductCondition,
+} from '@baci/shared/lib';
 import { getBaseLineValidationKey } from '@/hooks/cart/cart-validation-keys';
 import { getEffectiveStock, type StockLike } from '@/lib/product-stock';
 
@@ -9,34 +12,6 @@ export function getCartValidationKey(
 ) {
   const variantKey = variantId ? `${id}::${variantId}` : id;
   return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
-}
-
-export type OfferParentFlags = {
-  has_condition_offers: boolean | null;
-  has_variants: boolean | null;
-  variant_model: string | null;
-};
-
-/**
- * Mirrors the order RPC's offer parent gate (M28): the flag must be on,
- * the parent must be non-variant (sku_matrix counts as variant-bearing),
- * and no live non-anchor variants may exist. The variants RPC already
- * excludes inventory anchors, so any row for the product fails the gate.
- * Without this, background validation would retain and reprice a stale
- * offer line that order creation then rejects at checkout.
- */
-export function isOfferParentEligible(
-  product: OfferParentFlags,
-  productHasLiveVariants: boolean
-): boolean {
-  if (product.has_condition_offers !== true) return false;
-  if (
-    product.has_variants === true ||
-    (product.variant_model ?? '') === 'sku_matrix'
-  )
-    return false;
-  if (productHasLiveVariants) return false;
-  return true;
 }
 
 export type OfferQuantityTotalInput = {
@@ -60,7 +35,7 @@ export function buildOfferQuantityTotals(
   const totals = new Map<string, number>();
   for (const item of items) {
     if (!item.variantId && item.offerId && typeof item.quantity === 'number') {
-      const key = `${String(item.id)}::${item.offerId}`;
+      const key = makeOfferLineKey(String(item.id), String(item.offerId));
       totals.set(key, (totals.get(key) ?? 0) + item.quantity);
     }
   }
@@ -73,7 +48,7 @@ export function readOfferQuantityTotal(
   productId: string,
   offerId: string
 ): number | undefined {
-  return totals.get(`${productId}::${offerId}`);
+  return totals.get(makeOfferLineKey(productId, offerId));
 }
 
 export type SimpleProductQuantityTotalInput = {
@@ -133,8 +108,12 @@ export type OfferLineResolutionInput = {
    * must compare the same aggregate, not each line alone.
    */
   aggregateOfferQuantity?: number;
-  offer?: { condition: string | null; stock_quantity?: number | string | null };
-  parentEligible: boolean;
+  offer?: {
+    condition: string | null;
+    stock_quantity?: number | string | null;
+    /** M28 parent gate from the SQL authority (never re-derived here). */
+    parent_eligible?: boolean;
+  };
   /**
    * Total quantity across this product's base line and every sibling
    * offer line (voucher lines excluded). Compared against
@@ -198,7 +177,6 @@ export function getInvalidOfferLineKey({
   submittedCondition,
   quantity,
   offer,
-  parentEligible,
   aggregateOfferQuantity,
   aggregateSimpleQuantity,
   strictPoolUnits,
@@ -215,8 +193,9 @@ export function getInvalidOfferLineKey({
 
   // A live offer row on a variant-bearing (or flag-disabled) parent is
   // stale: order creation rejects it, so validation must not retain
-  // and reprice the line only to fail at checkout.
-  if (!variantId && offerId && offer && !parentEligible) {
+  // and reprice the line only to fail at checkout. The gate lives in
+  // SQL; a row without the flag fails closed.
+  if (!variantId && offerId && offer && offer.parent_eligible !== true) {
     return getCartValidationKey(strId, undefined, offerId);
   }
 

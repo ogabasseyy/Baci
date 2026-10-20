@@ -111,7 +111,8 @@ export async function createAgenticCheckoutOrder(
   const resolvedOffers = await resolveAgenticOfferPrices(
     supabase,
     orderItemsPayload,
-    sharedCartBinding
+    sharedCartBinding,
+    body.merchant_id
   );
   if (!resolvedOffers.ok) return resolvedOffers.result;
   const liveOfferPrices = resolvedOffers.liveOfferPrices;

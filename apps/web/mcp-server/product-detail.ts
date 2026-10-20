@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
+import { coerceOfferAuthorityRow } from '@baci/shared/lib';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
@@ -84,14 +85,36 @@ export async function buildMcpProductDetail({
   }> = [];
   let offerLookupFailed = false;
   if (product.has_condition_offers) {
-    const { data: offerData, error: offerError } = await supabase.rpc('get_product_offers', {
-      p_product_id: product.id,
-    });
+    const { data: offerData, error: offerError } = await supabase.rpc(
+      'get_storefront_offer_resolution',
+      {
+        p_merchant_id: null,
+        p_product_ids: [product.id],
+      }
+    );
     if (offerError) {
       console.error('Failed to fetch public product offers:', offerError);
       offerLookupFailed = true;
     } else {
-      conditionOffers = offerData || [];
+      conditionOffers = ((offerData ?? []) as unknown[]).flatMap((row) => {
+        const resolution = coerceOfferAuthorityRow(row);
+        if (!resolution || resolution.productId !== product.id) return [];
+        // Display prices from the live basis and availability from the
+        // allocatable stock (policy-capped, parent-inherited): exactly
+        // what checkout enforces. Unbounded rows stay purchasable.
+        return [
+          {
+            offer_id: resolution.offerId,
+            condition: resolution.condition ?? product.condition ?? 'new',
+            price: resolution.priceBasis ?? 0,
+            compare_at_price: resolution.compareAtPrice ?? null,
+            stock_quantity:
+              resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
+            grade: resolution.grade ?? null,
+            condition_notes: resolution.conditionNotes ?? null,
+          },
+        ];
+      });
     }
   }
 

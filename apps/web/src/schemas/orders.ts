@@ -6,6 +6,8 @@ import {
   sanitizeText,
 } from '@/lib/sanitize-core';
 import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
+import { optionalVariantNameSchema } from './optional-variant-name-schema';
+import { optionalVoucherTokenSchema } from './optional-voucher-token-schema';
 import {
   aliasFieldsMismatchMessage,
   matchingAliasFields,
@@ -28,37 +30,6 @@ export {
   type ReuseCheckoutOrderInput,
   reuseCheckoutOrderSchema,
 } from './reuse-checkout-order';
-
-const optionalVariantNameSchema = z.preprocess(
-  (value) => (value === null ? undefined : value),
-  z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) {
-        return val;
-      }
-
-      const sanitized = sanitizeText(val).trim();
-      return sanitized.length > 0 ? sanitized : undefined;
-    })
-);
-
-const VOUCHER_TOKEN_MAX_LENGTH = 512;
-
-const optionalVoucherTokenSchema = z.preprocess((value) => {
-  if (value === null) {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const sanitized = sanitizeText(value.trim());
-
-  return sanitized.length > 0 ? sanitized : undefined;
-}, z.string().max(VOUCHER_TOKEN_MAX_LENGTH).optional());
 
 const orderCreateSchemaBase = z
   .object({

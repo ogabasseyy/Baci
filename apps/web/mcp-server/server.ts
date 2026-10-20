@@ -1,3 +1,4 @@
+import { privateCartContinuationEnabled } from './private-cart-continuation-config';
 import { getConfirmedStockLabel } from './confirmed-stock-label';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -1355,7 +1356,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     }
   );
 
-  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp, enablePrivateTextContinuation: privateCartContinuationEnabled() });
 
   registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 

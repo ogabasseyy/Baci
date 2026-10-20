@@ -63,12 +63,14 @@ it('continues one multi-item cart across text-only tool-result turns', async () 
     expect(block?.annotations?.audience).toEqual(['assistant']);
     const state = JSON.parse(block?.text ?? 'null') as {
       success: boolean;
-      cart_token: string;
+      cart_token?: string;
       items: { product_id: string; quantity: number }[];
       cart_emptied?: boolean;
     };
     expect(result.structuredContent).toMatchObject(state);
     expect(state.success).toBe(true);
+    if (state.cart_emptied) expect(state.cart_token).toBeUndefined();
+    else expect(state.cart_token).toBeTypeOf('string');
     return state;
   }
   const first = await nextTurn({ product_id: id, quantity: 1 });

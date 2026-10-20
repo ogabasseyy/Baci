@@ -34,6 +34,13 @@ describe('withGuestCartTranscript', () => {
     });
   });
 
+  it('omits retired authority while preserving the structured empty-cart response', () => {
+    const structuredContent = { success: true, cart_token: token, cart_emptied: true, items: [] };
+    const result = withGuestCartTranscript({ content: [], structuredContent }, { enabled: true });
+    expect(result.structuredContent).toBe(structuredContent);
+    expect(JSON.parse(result.content.at(-1)?.text ?? 'null')).toEqual({ success: true, cart_emptied: true, items: [] });
+  });
+
   it('preserves the real bridge-pending recovery contract for an opted-in candidate', () => {
     const result = withGuestCartTranscript(
       mapGuestCartToolError(new GuestCartBridgePendingError(token)), { enabled: true }

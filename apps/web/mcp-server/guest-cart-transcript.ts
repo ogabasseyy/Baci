@@ -22,6 +22,7 @@ export function withGuestCartTranscript<
   ] as const;
   const continuation: Record<string, unknown> = {};
   for (const key of keys) {
+    if (key === 'cart_token' && result.structuredContent.cart_emptied === true) continue;
     if (Object.hasOwn(result.structuredContent, key)) {
       continuation[key] = result.structuredContent[key];
     }

@@ -194,7 +194,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs
+          node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
       - name: Verify authenticated shipping recovery in PostgreSQL
         env:
@@ -221,7 +221,7 @@ jobs:
           if [ "$TEST_PLAN_MODE" = "config-smoke" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm exec biome check turbo.json .github/scripts/resolve-ci-test-plan.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs
-            node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs
+            node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
             exit 0
           fi
 

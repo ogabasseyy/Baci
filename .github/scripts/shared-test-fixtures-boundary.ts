@@ -1,48 +1,27 @@
 import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
-// Single source of truth for the shared test-fixtures import boundary,
-// consumed by the web Vitest guard and both mobile guards (Jest and
-// Vitest). Production (non-test) code must never import
-// @baci/shared/test-fixtures/* — by subpath specifier, deep-relative
-// path (including nested/dotted fixture paths), or through a
-// test-named helper file.
-//
-// Semantics:
-// - Fixture patterns apply to every scanned file except true test
-//   files and the fixture definitions themselves. Test-named helpers
-//   are NOT exempt from fixture patterns: a helper importing a shared
-//   fixture is flagged, closing the transitive prod -> helper ->
-//   fixture leak.
-// - The test-support pattern (production importing a *.test-* helper)
-//   applies only to files that are neither test files nor test-named
-//   helpers, so helpers may freely import other helpers.
+// Single source of truth for the shared test-fixtures import
+// boundary (web Vitest guard + both mobile guards). Production code
+// must never import @baci/shared/test-fixtures/*, directly or through
+// a test-named helper. Fixture patterns apply to every scanned file
+// except true test files and the fixture definitions; test-named
+// helpers are NOT exempt from them (closing the transitive leak).
+// The test-support pattern applies only to files that are neither
+// test files nor test-named helpers. Full semantics: shared README.
 
 export const FIXTURE_PATTERNS = [
   // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
-  // Any quoted module specifier pointing into a test-fixtures tree,
-  // including nested (`test-fixtures/piggyvest/schedule`) and dotted
-  // stems, whatever the callee (import, require, export-from,
-  // createRequire results, dynamic import). Bare path-prefix
-  // constants that do not end in a module name are not matched.
+  // Any quoted specifier into a test-fixtures tree, any callee.
   /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)*[\w.-]*\w(?:\.[\w]+)?['"`]/,
-  // A quoted path-prefix constant ending at the fixture-tree root:
-  // the shape used to assemble a specifier dynamically
-  // ('.../test-fixtures/' + name). Flagged so assembled imports cannot
-  // slip past the literal patterns; fully dynamic specifiers built
-  // from variables remain a documented code-review catch.
+  // Quoted path-prefix constants (assembled-specifier shapes).
   /['"`][^'"`]*test-fixtures\/['"`]/,
   // Template-literal prefix: `.../test-fixtures/${name}`.
   /['"`][^'"`]*test-fixtures\/\${/,
-  // Nested path-prefix constant: a quoted literal inside the fixture
-  // tree ending at a directory boundary ('../test-fixtures/piggyvest/').
+  // Nested path-prefix constant ending at a directory boundary.
   /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)+['"`]/,
-  // Split-literal assembly: a quoted fragment ending in test-
-  // concatenated with the rest of the specifier, or a fixtures/
-  // fragment concatenated onto a prefix. Statically knowable, so
-  // flagged; only fully variable-built specifiers remain a
-  // code-review catch.
+  // Split-literal assembly fragments (statically knowable).
   /['"`](?:[^'"`]*?[-_./]|)test-['"`]\s*\+/,
   /\+\s*['"`][^'"`]*fixtures\/[^'"`]*['"`]/,
 ];
@@ -57,8 +36,7 @@ export function normalizePath(path: string) {
 export function isTestFile(path: string) {
   const normalized = normalizePath(path);
   return (
-    // Test-runner configs (Vitest/Jest) only ever execute tests, so
-    // their alias registrations for fixture subpaths are legitimate.
+    // Test-runner configs only execute tests; alias strings are fine.
     /(?:^|\/)(?:(?:vitest|jest)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
@@ -74,10 +52,8 @@ export function isTestHelper(path: string) {
     /(?:^|\/)test-(?:support|fixtures?|render|utils|helpers?|subject)\//.test(
       normalized
     ) ||
-    // Metro config is a production bundle entry point: it stays
-    // exempt from the test-support pattern but NOT from the fixture
-    // patterns, so a Metro config importing a shared fixture (as
-    // opposed to a test-runner alias registration) is flagged.
+    // Metro config is a production entry point: exempt from the
+    // test-support pattern only, not from the fixture patterns.
     /(?:^|\/)(?:metro\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
@@ -87,8 +63,7 @@ export function isTestHelper(path: string) {
   );
 }
 
-// Generated-output directories are skipped at any depth (for example
-// ios/Pods or android/app/build inside a mobile app root).
+// Generated-output directories skipped at any depth.
 const ALWAYS_SKIPPED = new Set([
   'node_modules',
   '.git',
@@ -100,23 +75,16 @@ const ALWAYS_SKIPPED = new Set([
   'web-build',
   'Pods',
 ]);
-// Generic output names are skipped at a scan root, or under native
-// ios/android trees (android/app/build, ios build output), where they
-// are generated. A nested source directory with one of these names
-// elsewhere in a source tree is still scanned.
+// Generic output names skipped at scan roots or under native
+// ios/android trees; nested source dirs with these names are scanned.
 const GENERATED_AT_ROOT_OR_NATIVE = new Set(['build', 'coverage', 'dist']);
-// Skipped only as direct children of a scan root: developer CLI
-// tooling (apps/*/tools) is executed in Node and never bundled, while
-// a nested production directory named tools deeper in a source tree
-// is still scanned.
+// Skipped only as direct children of a scan root (apps/*/tools).
 const ROOT_LEVEL_SKIPPED = new Set(['tools', 'build', 'coverage', 'dist']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
-  // Cycle protection is ancestry-based (realpaths of the current
-  // directory chain), not a global visited set: the same real
-  // directory reached through a second logical path is emitted again
-  // under that path, because file classification is path-based.
+  // Ancestry-based cycle protection: the same real directory reached
+  // through a second logical path is emitted under that path too.
   const walk = (
     dir: string,
     isRoot: boolean,
@@ -168,9 +136,7 @@ export function collectSourceFiles(roots: string[]): string[] {
         if (targetStat.isDirectory()) {
           walk(full, false, entryRel, chain);
         } else if (/\.(?:m|c)?[tj]sx?$/.test(target)) {
-          // Classify by the resolved target's extension: a link with
-          // an extensionless or non-source name still surfaces its
-          // in-root source target for scanning.
+          // Classify by the resolved target's extension.
           out.push(full);
         }
         continue;
@@ -195,22 +161,14 @@ export function collectSourceFiles(roots: string[]): string[] {
   return out;
 }
 
-// Matching is intentionally raw-text and conservative: a fixture
-// specifier appearing in a comment, a plain string, or a type-only
-// import is flagged too. That is a deliberate hard failure — the
-// specifier has no legitimate reason to appear in non-test code at
-// all — rather than an attempt at import-aware parsing.
-// Fixture-pattern-only scan, used for developer tooling trees
-// (apps/*/tools): tooling may freely use test-named helpers, but a
-// direct shared-fixture import there still executes test-double code
-// outside the apps, so it is flagged.
+// Matching is intentionally raw-text and conservative (comments,
+// plain strings, and type-only imports are flagged too).
+// Fixture-pattern-only scan for developer tooling trees.
 const RUNNER_CONFIG_BASENAME =
   /^(?:(?:vitest|jest|metro)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/;
 
-// A runner-config basename only earns the test-file exemption when the
-// file is a direct child of a scan root (where real runner configs
-// live). A nested file that merely reuses the config basename is
-// ordinary source and is scanned.
+// A runner-config basename earns its exemption only as a direct
+// child of a scan root; nested lookalikes are ordinary source.
 function isExemptFile(file: string, roots: string[]): boolean {
   if (!isTestFile(file)) return false;
   const normalized = normalizePath(file);
@@ -223,17 +181,14 @@ function isExemptFile(file: string, roots: string[]): boolean {
 }
 
 // For exempt runner configs, only specifier-bearing constructs are
-// scanned: import/export-from statements (including multiline),
-// side-effect imports, dynamic imports, and resolver calls whose
-// first argument is a string literal (including multiline calls).
-// Alias registrations (find/replacement values, path.resolve targets)
-// are not specifier-bearing and stay exempt.
+// scanned (import/export-from, dynamic imports, first-string-arg
+// resolver calls); alias registrations stay exempt.
 const CONFIG_SPECIFIER_EXTRACTORS = [
   /(?:import|export)\b[^;]*?from\s*['"`][^'"`]*['"`]/g,
   /(?:import|export)\s*['"`][^'"`]*['"`]/g,
   /\bimport\s*\([^)]*\)/g,
   /\w+\s*\(\s*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
-  /(?:const|let|var)\s+(\w+)\s*=\s*(['"`][^'"`]*['"`])/g,
+  /(?:const|let|var)\s+(\w+)(?:\s*:\s*[^=;]+)?\s*=\s*(['"`][^'"`]*['"`])/g,
 ];
 
 const PATH_CONSTRUCTOR_CALL =
@@ -248,7 +203,9 @@ const PATH_CONSTRUCTOR_CALL =
 function normalizeContent(content: string): string {
   // Decode escapes only inside quoted string literals, so regex
   // literals and other escaped text keep their semantics.
-  let out = content.replace(
+  let out = content
+    .replace(/\\\r?\n/g, '')
+    .replace(
     /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g,
     (literal) =>
       literal
@@ -263,7 +220,7 @@ function normalizeContent(content: string): string {
         )
         .replace(/\\(.)/g, '$1')
   );
-  const gap = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))+`;
+  const gap = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*`;
   const fold = new RegExp(
     String.raw`(['"])([^'"]*)\1` + gap + String.raw`\+` + gap + String.raw`(['"])([^'"]*)\3`,
     'g'

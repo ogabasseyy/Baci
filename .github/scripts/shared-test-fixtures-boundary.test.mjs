@@ -52,13 +52,6 @@ test('scans nested production tools dirs but skips generated dirs', () => {
   ]);
 });
 
-test('test files and helpers keep their exemptions', () => {
-  assert.equal(isTestFile('/repo/foo.test.ts'), true);
-  assert.equal(isTestFile('/repo/foo.ts'), false);
-  assert.equal(isTestHelper('/repo/order-test-utils.ts'), true);
-  assert.equal(isTestHelper('/repo/order-helper.ts'), false);
-});
-
 test('flags production importing a __tests__ helper and nested build sources', () => {
   const dir = fixtureDir({
     'prod.ts':
@@ -115,34 +108,6 @@ test('fixture-pattern-only scan flags direct imports but allows helpers', () => 
   assert.deepEqual(findFixturePatternOffenders([dir]), [join(dir, 'direct.ts')]);
 });
 
-test('classifies .test-fixtures modules as test files', () => {
-  const dir = fixtureDir({
-    'route.test-fixtures.ts':
-      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
-    'prod.ts':
-      "import { h } from './route.test-fixtures';\nexport const y = h;\n",
-    'data.ts':
-      "import data from '../test-fixtures/expected.json';\nexport const z = data;\n",
-  });
-  assert.equal(isTestFile(join(dir, 'route.test-fixtures.ts')), true);
-  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
-    join(dir, 'data.ts'),
-    join(dir, 'prod.ts'),
-  ]);
-});
-
-test('does not flag innocuous names containing test- mid-word', () => {
-  const dir = fixtureDir({
-    'prod.ts':
-      "import { a } from './latest-utils';\nimport { b } from './fastest-helper';\nimport { c } from './contest-utils';\nexport const x = [a, b, c];\n",
-    'flagged.ts':
-      "import { h } from './order-test-utils';\nexport const y = h;\n",
-  });
-  assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'flagged.ts')]);
-  assert.equal(isTestHelper(join(dir, 'latest-utils.ts')), false);
-  assert.equal(isTestHelper(join(dir, 'order-test-utils.ts')), true);
-});
-
 test('flags runner config files importing shared fixtures', () => {
   const dir = fixtureDir({
     'metro.config.ts':
@@ -161,18 +126,6 @@ test('test-runner configs may register fixture aliases', () => {
       "const alias = '../../packages/shared/src/test-fixtures/builder-ai-edit.ts';\nexport const x = alias;\n",
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), []);
-});
-
-test('config exemption is anchored to real config basenames', () => {
-  assert.equal(isTestFile('/repo/vitest.config.ts'), true);
-  assert.equal(isTestFile('/repo/src/lib/vitest.config.helpers.ts'), false);
-  const dir = fixtureDir({
-    'src/lib/vitest.config.helpers.ts':
-      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
-  });
-  assert.deepEqual(findFixtureImportOffenders([dir]), [
-    join(dir, 'src/lib/vitest.config.helpers.ts'),
-  ]);
 });
 
 test('follows extensionless in-root file symlinks to source targets', async () => {
@@ -315,4 +268,27 @@ test('config const assignments retained; path aliases stay exempt', () => {
       "const alias = path.resolve('../../packages/shared/src/test-fixtures/builder-ai-edit.ts');\nexport const cfg = alias;\n",
   });
   assert.deepEqual(findFixtureImportOffenders([clean]), []);
+});
+
+test('detects line continuations and no-space concatenations', () => {
+  const dir = fixtureDir({
+    'cont.ts':
+      "export const load = () => import('@baci/shared/test\\\n-fixtures/piggyvest-purchase');\n",
+    'nospace.ts':
+      "const s = '@baci/shared/test-fixt'+'ures/piggyvest-purchase';\nexport const load = () => import(s);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'cont.ts'),
+    join(dir, 'nospace.ts'),
+  ]);
+});
+
+test('retains typed constant fixture specifiers in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const specifier: string = '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const load = () => import(specifier);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
 });

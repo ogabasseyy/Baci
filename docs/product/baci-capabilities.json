@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-20T20:58:30.000000+00:00",
-  "source_revision": "d3bf63a1e6a0660c44a8305a48429472e37aa69d",
-  "evidence_digest": "41c8d47bb474f6369876718ec37472679f435ddf74c796e8090022ccf50bd99e",
-  "claims_digest": "1b199ce8265ea80f0bbd97640d163bf03c554f1fbdb0dd43b94caddd96fe03fc",
-  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review. Scoped re-review of the agentic checkout offer surface: offer pricing now resolves through the merchant-scoped get_storefront_offer_resolution authority (published/platform-admin merchant gate in SQL) instead of per-product fan-outs; merchant scoping and the shared-cart fall-through are preserved.",
+  "reviewed_at": "2026-10-20T21:53:28.679874+00:00",
+  "source_revision": "40672ea6113bc412682af0bd938c7cd78f7cd718",
+  "evidence_digest": "f522ab2d91f25333d483dcba7adcbb5040f873145eabdf1fa43ce3501804c2ea",
+  "claims_digest": "28eb29d81e66874bee4b4342bb8669fb17828f42ee9ce2463850adc85a86e08c",
+  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review. Scoped re-review of the agentic checkout offer surface: offer pricing now resolves through the merchant-scoped get_storefront_offer_resolution authority (published/platform-admin merchant gate in SQL) instead of per-product fan-outs; merchant scoping and the shared-cart fall-through are preserved. Scoped re-review of the authority RPC adapter consolidation: the three server call sites share one awaited factory for the same get_storefront_offer_resolution call; request shape, merchant scoping, and fall-through behavior are unchanged.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

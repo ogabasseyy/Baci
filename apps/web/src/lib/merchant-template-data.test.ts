@@ -311,3 +311,17 @@ describe('toTemplateMerchantData', () => {
     expect(result.faq_items).toBeUndefined();
   });
 });
+
+it('preserves public cart capability hints through the shell merchant projection', () => {
+  const merchant = toTemplateMerchantData({
+    ...BASE_MERCHANT,
+    shared_cart_enabled: true,
+    shared_cart_accounts_enabled: false,
+    shared_cart_realtime_enabled: true,
+  });
+  expect(merchant).toMatchObject({
+    shared_cart_enabled: true,
+    shared_cart_accounts_enabled: false,
+    shared_cart_realtime_enabled: true,
+  });
+});

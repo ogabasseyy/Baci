@@ -157,3 +157,18 @@ SELECT pg_temp.assert_true(
   ),
   'award-minted referral code shape clause failed'
 );
+
+-- Permission boundary: pg_temp.as_user only sets JWT claims, never the
+-- session role, so every call above runs as the migration owner and
+-- cannot catch a missing privilege on the mint path. The invoker-rights
+-- award mints through public.loyalty_gen_random_bytes, so executing the
+-- wrapper as a real authenticated session pins the EXECUTE grant plus
+-- the definer chain (dropping either fails here with permission
+-- denied) without depending on table RLS. SET LOCAL scopes the switch
+-- to this transaction; RESET ROLE restores the owner afterwards.
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(
+  pg_catalog.length(public.loyalty_gen_random_bytes(4)) = 4,
+  'csprng wrapper clause failed for authenticated role'
+);
+RESET ROLE;

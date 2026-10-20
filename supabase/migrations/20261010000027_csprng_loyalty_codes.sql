@@ -10,7 +10,10 @@
 -- unchanged except the mint expression, which now encodes
 -- extensions.gen_random_bytes (pgcrypto, from the baseline) at the
 -- same lengths (8 hex referral, RDM- + 12 hex redemption); the
--- existing probe-and-retry collision loops are untouched.
+-- existing probe-and-retry collision loops are untouched. The
+-- invoker-rights award_purchase_points mints through the
+-- least-privilege loyalty_gen_random_bytes wrapper defined below
+-- instead of touching the extensions schema directly.
 --
 -- Residual risk (accepted, auditable): nothing already issued is
 -- reminted here. Outstanding RDM- codes expire 30 days after issue
@@ -312,7 +315,11 @@ BEGIN
         -- retry instead of losing the award to a unique violation.
         LOOP
             v_attempt := v_attempt + 1;
-            v_referral_code := pg_catalog.upper(pg_catalog.encode(extensions.gen_random_bytes(4), 'hex'));
+            -- Via the least-privilege wrapper below (not extensions.*
+            -- directly): this function is invoker-rights, so a direct
+            -- schema-qualified call would need USAGE on the whole
+            -- extensions schema for every executing role.
+            v_referral_code := pg_catalog.upper(pg_catalog.encode(public.loyalty_gen_random_bytes(4), 'hex'));
             IF NOT EXISTS (
                 SELECT 1
                 FROM public.customer_loyalty
@@ -427,15 +434,28 @@ REVOKE ALL ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
   TO authenticated, service_role;
--- award_purchase_points is invoker-rights (no SECURITY DEFINER) with an
--- empty search_path, and now resolves extensions.gen_random_bytes by
--- schema-qualified name. pgcrypto lives in the extensions schema
--- (baseline) with USAGE granted only on public, so the executing roles
--- need narrow USAGE here or first-purchase awards fail with
--- "permission denied for schema extensions". Scoped to exactly the
--- roles holding EXECUTE above; the other three reissued functions are
--- SECURITY DEFINER and unaffected.
-GRANT USAGE ON SCHEMA extensions TO authenticated, service_role;
+-- Least-privilege CSPRNG accessor for the invoker-rights
+-- award_purchase_points above (no SECURITY DEFINER, empty search_path):
+-- a direct extensions.gen_random_bytes call would force GRANT USAGE ON
+-- SCHEMA extensions to every executing role, exposing the whole
+-- extension surface (pgcrypto helpers, pg_net, future installs) to
+-- authenticated callers. This SECURITY DEFINER wrapper exposes exactly
+-- one capability — "mint N random bytes", clamped to 1..64 so a caller
+-- cannot turn it into a memory-exhaustion oracle — and the award path
+-- resolves randomness through it. The other three reissued functions
+-- are SECURITY DEFINER and resolve extensions.* as the owner.
+CREATE OR REPLACE FUNCTION public.loyalty_gen_random_bytes(p_count integer)
+RETURNS bytea
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+  SELECT extensions.gen_random_bytes(GREATEST(1, LEAST(p_count, 64)));
+$$;
+REVOKE ALL ON FUNCTION public.loyalty_gen_random_bytes(integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.loyalty_gen_random_bytes(integer)
+  TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,

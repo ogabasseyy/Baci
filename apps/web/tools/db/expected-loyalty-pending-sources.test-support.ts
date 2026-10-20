@@ -136,7 +136,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000027_csprng_loyalty_codes.sql',
-    sha256: '024550a4669db6473fa3711e31aea80dc00bedd2a48e0b018bf0797688da4c1b',
+    sha256: 'fe783b78f5ad62a0a2719f2ec511beb77117cdf8af5af914788542cadf3fcf2f',
   },
   {
     repositoryPath:

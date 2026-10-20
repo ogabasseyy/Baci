@@ -11,6 +11,18 @@
 -- extensions.gen_random_bytes (pgcrypto, from the baseline) at the
 -- same lengths (8 hex referral, RDM- + 12 hex redemption); the
 -- existing probe-and-retry collision loops are untouched.
+--
+-- Residual risk (accepted, auditable): nothing already issued is
+-- reminted here. Outstanding RDM- codes expire 30 days after issue
+-- (v_expires_at below), so that population decays on its own.
+-- Permanent referral codes keep their shape and are NOT rotated
+-- because reminting would invalidate already-shared referral links
+-- (product decision, owner call). Code lengths are unchanged by
+-- design (8 hex referral / RDM- + 12 hex redemption): enumeration is
+-- bounded by the removed anon oracle (#3719 revoked anon and
+-- authenticated EXECUTE on the checkout-code resolver) plus the
+-- middleware default 50 req/min/IP ceiling (rate-limit-routes.ts).
+-- Lengthening codes stays a follow-up option if abuse is observed.
 
 CREATE OR REPLACE FUNCTION public.enroll_customer_loyalty(
   p_merchant_id uuid,
@@ -415,6 +427,15 @@ REVOKE ALL ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.award_purchase_points(uuid, uuid, uuid, numeric)
   TO authenticated, service_role;
+-- award_purchase_points is invoker-rights (no SECURITY DEFINER) with an
+-- empty search_path, and now resolves extensions.gen_random_bytes by
+-- schema-qualified name. pgcrypto lives in the extensions schema
+-- (baseline) with USAGE granted only on public, so the executing roles
+-- need narrow USAGE here or first-purchase awards fail with
+-- "permission denied for schema extensions". Scoped to exactly the
+-- roles holding EXECUTE above; the other three reissued functions are
+-- SECURITY DEFINER and unaffected.
+GRANT USAGE ON SCHEMA extensions TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
   p_merchant_id uuid,

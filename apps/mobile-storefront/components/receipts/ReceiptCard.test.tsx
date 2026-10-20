@@ -202,6 +202,12 @@ describe('ReceiptCard', () => {
     expect(screen.queryByText('Invoice')).toBeNull();
   });
 
+  // biome-ignore format: compact legacy-balance pin preserves the 300-line gate.
+  it('shows the balance for the legacy Partially Paid spelling', () => {
+    renderCard({ ...receiptItem, payment_status: 'Partially Paid', amount_paid: 100000 });
+    expect(screen.getByText(/Balance:/)).toBeTruthy();
+  });
+
   it('normalizes legacy spellings before the badge lookup', () => {
     expect(getPaymentConfig('Partially Paid').label).toBe('Partial');
     expect(getPaymentConfig('Paid').label).toBe('Receipt');

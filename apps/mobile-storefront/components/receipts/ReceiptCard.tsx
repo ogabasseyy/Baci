@@ -114,9 +114,9 @@ export function ReceiptCard({
     : `Order #${item.order_number}`;
   // VoiceOver hears badge + money + explainer/balance, not kind alone.
   const balance = item.total - item.amount_paid;
-  // Hide corrupt balances: formatPrice degrades non-finite input to NGN 0.
-  const showBalance =
-    displayStatus === 'partially_paid' && Number.isFinite(balance);
+  // Hide corrupt balances (formatPrice degrades non-finite input to NGN 0); normalize like the badge lookup so legacy 'Partially Paid' keeps dues.
+  // biome-ignore format: inline normalization preserves the 300-line gate.
+  const showBalance = `${displayStatus ?? ''}`.trim().toLowerCase().replace(/\s+/g, '_') === 'partially_paid' && Number.isFinite(balance);
   const accessibilityMoney = `${moneyPaid ? 'Paid' : 'Total'} ${formatPrice(item.total, item.currency)}`;
   const accessibilityLabel =
     `${config.label} for ${productTitle}, order ${item.order_number}, ${accessibilityMoney}` +

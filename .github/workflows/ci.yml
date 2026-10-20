@@ -233,7 +233,7 @@ jobs:
           if [ "$TEST_PLAN_MODE" = "targeted-storefront-jest" ]; then
             echo "$TEST_PLAN_REASON"
             pnpm --filter @baci/mobile-storefront exec jest --changedSince "$TURBO_SCM_BASE" --runInBand --passWithNoTests
-            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts --runInBand
+            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts components/wallet/savings/shared-fixtures.smoke.test.ts --runInBand
             exit 0
           fi
 
@@ -242,7 +242,7 @@ jobs:
             pnpm --filter @baci/web exec vitest run --changed "$TURBO_SCM_BASE" --passWithNoTests
             pnpm --filter @baci/web exec vitest run src/lib/shared-test-fixtures-import-boundary.test.ts src/lib/shared-exports-resolution.test.ts
             pnpm --filter @baci/mobile-storefront exec jest --changedSince "$TURBO_SCM_BASE" --runInBand --passWithNoTests
-            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts --runInBand
+            pnpm --filter @baci/mobile-storefront exec jest lib/shared-test-fixtures-boundary.test.ts components/wallet/savings/shared-fixtures.smoke.test.ts --runInBand
             exit 0
           fi
 

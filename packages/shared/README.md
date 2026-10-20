@@ -78,8 +78,10 @@ resolvable from production bundles (Next.js, Metro). The boundary is
 enforced by test, not by the exports map:
 `apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts` fails
 if any non-test source in the three apps or in this package imports a
-fixture by subpath or deep-relative path. Never import a fixture from
-non-test code.
+fixture by a literal subpath or deep-relative specifier. The guards
+match literal specifiers only; dynamically assembled fixture paths
+are a code-review catch, not a guard catch. Never import a fixture
+from non-test code.
 
 ## Platform isolation
 

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Exercises the real package.json `exports` map of @baci/shared via
@@ -75,11 +75,16 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       s.includes('/test-fixtures/')
     )) {
       const resolved = appRequire.resolve(specifier);
-      const loaded = (await import(resolved)) as Record<string, unknown>;
+      const loaded = (await import(pathToFileURL(resolved).href)) as Record<
+        string,
+        unknown
+      >;
       expect(Object.keys(loaded).length, specifier).toBeGreaterThan(0);
     }
     const schedule = (await import(
-      appRequire.resolve('@baci/shared/test-fixtures/piggyvest-schedule')
+      pathToFileURL(
+        appRequire.resolve('@baci/shared/test-fixtures/piggyvest-schedule')
+      ).href
     )) as { scheduleJourneyFixture: () => unknown };
     expect(schedule.scheduleJourneyFixture()).toBeDefined();
     const vtu = (await import(appRequire.resolve('@baci/shared/vtu'))) as {

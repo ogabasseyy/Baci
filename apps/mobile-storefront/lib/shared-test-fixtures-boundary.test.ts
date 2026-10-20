@@ -3,7 +3,9 @@ import { join, sep } from 'node:path';
 
 // Import boundary (per-app mirror of the web guard): production
 // (non-test) sources in this app must never import
-// @baci/shared/test-fixtures/*, by subpath or deep-relative path.
+// @baci/shared/test-fixtures/* by a literal subpath or deep-relative
+// specifier. Like the web guard, this matches literal specifiers
+// only; dynamically assembled paths are a code-review catch.
 // This suite runs in this app's own CI, so a mobile-only PR cannot
 // slip a fixture import past the web-only guard.
 // __dirname is provided by both Jest (CJS) and Vitest (node env);

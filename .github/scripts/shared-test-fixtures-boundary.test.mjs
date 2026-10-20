@@ -98,10 +98,10 @@ test('follows in-root symlinks and skips out-of-root links', async () => {
       "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
   });
   symlinkSync(outside, join(dir, 'external'));
-  // Emitted under the resolved target path (build/hidden.ts), not
-  // the link name, so classification follows the target.
-  assert.deepEqual(findFixtureImportOffenders([dir]), [
+  // Emitted under both the link path and the resolved target path.
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
     join(realpathSync(dir), 'build/hidden.ts'),
+    join(dir, 'linked/hidden.ts'),
   ]);
 });
 
@@ -144,6 +144,7 @@ test('follows extensionless in-root file symlinks to source targets', async () =
   symlinkSync(join(dir, 'src/feature/helper.ts'), join(dir, 'linked-helper'));
   const offenders = findFixtureImportOffenders([dir]);
   assert.ok(offenders.includes(join(dir, 'src/feature/helper.ts')));
+  assert.ok(offenders.includes(join(dir, 'linked-helper')));
 });
 
 test('nested files reusing a config basename are not exempt', () => {
@@ -193,7 +194,12 @@ test('classifies a linked directory by its resolved target path', async () => {
   symlinkSync(join(dir, '__tests__'), join(dir, 'prod-link'));
   const files = collectSourceFiles([dir]);
   assert.ok(files.includes(join(dir, '__tests__/helper.ts')));
-  assert.ok(!files.some((f) => f.includes('prod-link')));
+  assert.ok(files.includes(join(dir, 'prod-link/helper.ts')));
+  // The production-named link path is classified as production, so
+  // its fixture import is flagged even though the target is exempt.
+  assert.ok(
+    findFixtureImportOffenders([dir]).includes(join(dir, 'prod-link/helper.ts'))
+  );
 });
 
 test('flags template prefixes, multiline config calls, helper directories', () => {

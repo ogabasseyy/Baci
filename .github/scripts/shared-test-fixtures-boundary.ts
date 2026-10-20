@@ -134,10 +134,12 @@ export function collectSourceFiles(roots: string[]): string[] {
         if (!inside) continue;
         const targetStat = lstatSync(target);
         if (targetStat.isDirectory()) {
-          // Emit under the resolved target path for classification.
+          // Emit under both link and target paths for classification.
+          walk(full, false, entryRel, chain);
           walk(target, false, entryRel, chain);
-        } else if (/\.(?:m|c)?[tj]sx?$/.test(target)) {
-          out.push(target);
+        } else {
+          out.push(full);
+          if (target !== full) out.push(target);
         }
         continue;
       }
@@ -242,9 +244,7 @@ function configSpecifiers(content: string): string {
     for (const match of content.matchAll(pattern)) {
       const [text, name, literal] = match;
       if (name !== undefined && literal !== undefined) {
-        // Constant assignments are retained only when the identifier
-        // is actually loaded (dynamic import or resolver call) in the
-        // same config; a bare alias registration stays exempt.
+        // Constant assignments retained only when actually loaded.
         const used = new RegExp(
           String.raw`\b(?:import|\w+)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)?` + name + String.raw`\b`
         );

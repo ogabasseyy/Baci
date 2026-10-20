@@ -263,3 +263,13 @@ test('tools-tree pattern scan flags runner-config fixture imports', () => {
     join(dir, 'vitest.config.ts'),
   ]);
 });
+
+test('retains comment-prefixed fixture calls in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const f = require(/* fixture */ '@baci/shared/test-fixtures/piggyvest-purchase');\nexport const cfg = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});

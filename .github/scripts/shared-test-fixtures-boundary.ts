@@ -233,7 +233,11 @@ const CONFIG_SPECIFIER_EXTRACTORS = [
   /(?:import|export)\s*['"`][^'"`]*['"`]/g,
   /\bimport\s*\([^)]*\)/g,
   /\w+\s*\(\s*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
+  /(?:const|let|var)\s+(\w+)\s*=\s*(['"`][^'"`]*['"`])/g,
 ];
+
+const PATH_CONSTRUCTOR_CALL =
+  /^(?:\w+\.)?(?:resolve|join|dirname|basename|extname|relative|normalize|parse|format|isAbsolute)\s*\(/;
 
 // Scanning runs on a normalized view of the source: literal escape
 // sequences are decoded (so test\x2dfixtures is seen as test-fixtures)
@@ -242,32 +246,55 @@ const CONFIG_SPECIFIER_EXTRACTORS = [
 // statically knowable assembly forms; only specifiers built from
 // runtime variables remain a documented code-review catch.
 function normalizeContent(content: string): string {
-  let out = content
-    .replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex: string) =>
-      String.fromCharCode(Number.parseInt(hex, 16))
-    )
-    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_m, hex: string) =>
-      String.fromCodePoint(Number.parseInt(hex, 16))
-    )
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_m, hex: string) =>
-      String.fromCharCode(Number.parseInt(hex, 16))
-    )
-    .replace(/\\(.)/g, '$1');
+  // Decode escapes only inside quoted string literals, so regex
+  // literals and other escaped text keep their semantics.
+  let out = content.replace(
+    /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g,
+    (literal) =>
+      literal
+        .replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex: string) =>
+          String.fromCharCode(Number.parseInt(hex, 16))
+        )
+        .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_m, hex: string) =>
+          String.fromCodePoint(Number.parseInt(hex, 16))
+        )
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_m, hex: string) =>
+          String.fromCharCode(Number.parseInt(hex, 16))
+        )
+        .replace(/\\(.)/g, '$1')
+  );
+  const gap = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))+`;
+  const fold = new RegExp(
+    String.raw`(['"])([^'"]*)\1` + gap + String.raw`\+` + gap + String.raw`(['"])([^'"]*)\3`,
+    'g'
+  );
   let previous: string;
   do {
     previous = out;
-    out = out.replace(
-      /(['"])([^'"]*)\1\s*\+\s*(['"])([^'"]*)\3/g,
-      '$1$2$4$1'
-    );
+    out = out.replace(fold, '$1$2$4$1');
   } while (out !== previous);
   return out;
 }
 
 function configSpecifiers(content: string): string {
-  return CONFIG_SPECIFIER_EXTRACTORS.flatMap((pattern) =>
-    [...content.matchAll(pattern)].map((match) => match[0])
-  ).join('\n');
+  const parts: string[] = [];
+  for (const pattern of CONFIG_SPECIFIER_EXTRACTORS) {
+    for (const match of content.matchAll(pattern)) {
+      const [text, name, literal] = match;
+      if (name !== undefined && literal !== undefined) {
+        // Constant assignments are retained only when the identifier
+        // is actually loaded (dynamic import or resolver call) in the
+        // same config; a bare alias registration stays exempt.
+        const used = new RegExp(
+          String.raw`\b(?:import|\w+)\s*\(\s*` + name + String.raw`\b`
+        );
+        if (used.test(content)) parts.push(literal);
+        continue;
+      }
+      if (!PATH_CONSTRUCTOR_CALL.test(text)) parts.push(text);
+    }
+  }
+  return parts.join('\n');
 }
 
 export function findFixturePatternOffenders(roots: string[]): string[] {

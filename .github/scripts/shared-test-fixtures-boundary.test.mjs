@@ -291,3 +291,28 @@ test('detects nested prefixes, escaped literals, and arbitrary splits', () => {
     join(dir, 'split.ts'),
   ]);
 });
+
+test('folds comment-separated literals; regex literals stay unflagged', () => {
+  const dir = fixtureDir({
+    'split.ts':
+      "const specifier = '@baci/shared/test-fixt' /* split */ + 'ures/piggyvest-purchase';\nexport const load = () => import(specifier);\n",
+    'regex.ts':
+      "export const re = /test-fixtures\\//;\nexport const digit = 'a\\\\d';\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'split.ts')]);
+});
+
+test('config const assignments retained; path aliases stay exempt', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const specifier = '@baci/shared/test-fixt' + 'ures/piggyvest-purchase';\nconst alias = path.resolve('../../packages/shared/src/test-fixtures/builder-ai-edit.ts');\nexport const load = () => import(specifier);\nexport const cfg = alias;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+  const clean = fixtureDir({
+    'vitest.config.ts':
+      "const alias = path.resolve('../../packages/shared/src/test-fixtures/builder-ai-edit.ts');\nexport const cfg = alias;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([clean]), []);
+});

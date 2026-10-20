@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { guestCartLineSchema } from './guest-cart-line';
 
 export const MCP_GUEST_CART_DESCRIPTION =
-  'Save a simple product in a persistent Ogabassey guest cart without signing in. Supply the cart_token returned previously to continue the same cart. Use quantity 0 to remove a product. quantity is the desired total for this product, not an increment, so retries with the same cart token are safe. Products requiring options must be selected on the website. Open cart_url to transfer all items to the website for guest checkout; account creation is optional there. Guest carts expire seven days after the last update. A response reporting cart_emptied retires its token: drop it and omit cart_token on the next call to start a new cart. Website transfer only adds items; it never removes lines or decreases website quantities, so decreases made here never shrink an already-transferred website cart.';
+  'Save, change or remove products in the same persistent Ogabassey guest cart without signing in. Retain the returned cart_token, version and items in private tool context across user messages, including when summarizing an execution result; do not replace the token with a boolean or discard it. Never display the token to the shopper or put it in logs. For follow-ups such as "remove it" or "remove the charger", resolve the product from the last cart items and call this tool with that cart_token and quantity 0. Only for replies containing version, supply that version as expectedVersion and use an operationId for the action; omit both fields for legacy replies without version. If the reference is ambiguous, ask which item. Never create a replacement cart to simulate removal and never use a cart ID, IP address or version as authority. quantity is the desired total for this product, not an increment. For versioned carts, retain the same operationId when retrying an indeterminate write; use a new operationId for each new action. Products requiring options must be selected on the website. Open cart_url for website guest checkout; account creation is optional. Respect expires_at. On cart_emptied, immediately discard the retired token. Create another cart without cart_token only after a subsequent shopper request to start or add to a new cart.';
 export const mcpGuestCartInputSchema = z
   .object({
     product_id: z
@@ -21,7 +21,7 @@ export const mcpGuestCartInputSchema = z
       .regex(/^[a-f0-9]{64}$/)
       .optional()
       .describe(
-        'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
+        'Private opaque capability from the previous cart tool result, retained verbatim across messages. Required to change or remove items in that same cart; omit only to start a new guest cart. Never expose it to the shopper.'
       ),
     expectedVersion: z
       .number()
@@ -54,7 +54,10 @@ export const mcpGuestCartOutputSchema = z
     cart_token: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
-      .optional(),
+      .optional()
+      .describe(
+        'Retain this exact private cart capability in tool context across messages and pass it to subsequent cart calls; do not summarize it as a boolean or display it to the shopper.'
+      ),
     items: z.array(guestCartLineSchema).max(20).optional(),
     expires_at: z.string().datetime().optional(),
     cart_url: z.string().url().optional(),

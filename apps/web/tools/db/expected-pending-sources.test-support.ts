@@ -265,6 +265,156 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: 'e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4',
   },
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
+    sha256: '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013194440_fix_shipping_quote_proof_canonicalization.sql',
+    sha256: '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013213516_customer_checkout_shipping_recovery_context.sql',
+    sha256: 'ae81f71311b41528d8d730d90f2824a0a848223be0e2cdafb48b0ff77f27504f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013213522_customer_checkout_shipping_recovery_confirmation.sql',
+    sha256: 'd771210edf2a907516c2c5739be97dcea90e1dbea0a15f3515802fb29b7ff48e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014080000_customer_checkout_shipping_recovery_scalar_address.sql',
+    sha256: '112b39558139a8a4851659abc8ac6d73a4a5f1d68afd0a567d4cd0702eddf1a4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014120000_customer_checkout_shipping_recovery_review_followups.sql',
+    sha256: '3182b0dbcc855c7a7838fb807dddcfd72c6c4bda1f8c966d0d8e210c613c8ca1',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014130000_customer_checkout_shipping_recovery_hardening.sql',
+    sha256: '7bb0c5c818d6082db126c1da3a443746a4ff0ea59ee67a44a3e2c5eaef2a7b54',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql',
+    sha256: '7e33008871585fe87dac30ca66c3e952841b099cadacab4c68cd39b4ede15059',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014210000_lease_vtu_customer_email_notification_attempt.sql',
+    sha256: 'e4090f77f17032a4a0adc7e639f74e3e89794bb4f4792e717ac554791899de14',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015010000_fence_vtu_customer_email_notification_clear_by_lease.sql',
+    sha256: '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015090001_storefront_payment_settings_shipping_insurance.sql',
+    sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql',
+    sha256: 'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
+    sha256: '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql',
+    sha256: '1c411255bf10472a71c0f38a2b744d246764453832b7a6e32091a72226f8ac6b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015145945_customer_checkout_shipping_recovery_committed_retry.sql',
+    sha256: '6336d903431424e3824ab52afa21213eeeac968406b519cc8bdd0f1944734627',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015215000_customer_checkout_shipping_recovery_activation_gate.sql',
+    sha256: '3131a8c8f65cc8d2a892d0e020cd67dfaaa425fa8dce6a2b8f7b605b1eddb0cc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015232000_pair_vtu_customer_email_notification_keys.sql',
+    sha256: '91c1c8b4d8934b33b39e6c61c27e0e948ad8f1dac925a8a689b30f2d7b09d597',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016090000_search_condition_match_hyphen.sql',
+    sha256: '82e8ab798c5444cfcc1037f21bfb376940d15ae7801f0462efa12f32bde0b274',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016100000_storefront_order_replay_key_floor.sql',
+    sha256: '35bb3fc0bca3a6e133e1909c7dc53179709819abf734ae6ae573f8a505709039',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016110000_storefront_order_item_offer_id_snapshot.sql',
+    sha256: '35e6dc838033f09f69ed12d479988833a9d6dbfe0b41905093998584eac0ae18',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016115000_storefront_order_item_offer_identity_hardening.sql',
+    sha256: 'efb4ed9615d183d01155ab7ceedf1509228afb85a4d15e6adc8da80ff3e75e26',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016120000_finalize_vtu_customer_email_notification_attempt.sql',
+    sha256: '300563b107439d9d998a06681a1f22c9d619b62cc651133c4d5e3f2903ee90f4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016123000_finalize_vtu_customer_email_notification_success.sql',
+    sha256: 'd55343f9a7c3079f09ace5e32778917e994ceef097b24773a3194d5f5bd78bc9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016125000_storefront_order_replay_economics_offer_snapshot.sql',
+    sha256: '3e4ef56adae86434136c65c4c19e63c1ab04c2a62e4316ad0cbec1f77222b4e7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016130000_guard_vtu_customer_email_claim_against_unknown.sql',
+    sha256: 'e304307c90cb3e52c3c1e4dfa8b1cbec46edaea6eca1b67fde5b164743681fd3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016140000_storefront_order_item_offer_identity_freeze.sql',
+    sha256: 'bff7b2dbb638298f1a0c464506bc23a5de3af1c5a0ab0ea9b9cf7e88f99f4bb0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016150000_storefront_order_idempotency_key_entropy.sql',
+    sha256: 'fb28c5d4994866dae1e83003b49d3ecfcd4d332b6f0d7a26b8b418c3f130fd21',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016160000_storefront_order_item_offer_tenant_bind.sql',
+    sha256: '8b78693d6a9d1a9ab76c23d667795f435d2f6eaf1fda34fecd2620d05014262d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019090000_storefront_order_offer_final_state.sql',
+    sha256: 'b804e2f56ee988be072063735e81ca669c5af5c0fb6e12c2b62900aca8fcc582',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019100000_storefront_order_item_offer_line_condition_identity.sql',
+    sha256: 'e2a9e1c01d2e137e3b198752c4310999b88ffd5cde4ac96714f2218a600f649d',
+  },
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

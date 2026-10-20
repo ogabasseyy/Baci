@@ -16,8 +16,6 @@ import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumi
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
 import { MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-manual-document-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
-import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
-import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
@@ -235,8 +233,6 @@ const PENDING_SOURCES = [
   CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS,
-  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
-  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,

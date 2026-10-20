@@ -24,7 +24,7 @@
 --
 -- Semantically a no-op on a converged database: the installed bodies
 -- equal the replayed definitions. Equivalence is enforced by (1) the
--- pre-image guard below, which fails this migration loudly when the
+-- pre/post-image guard below, which fails this migration loudly when the
 -- live definitions differ from the pinned bytes, and (2) the order
 -- sql-check suites (both-entrypoints, entrypoints behavior, line
 -- identity) which run over the final state. NOTE: the chronological
@@ -50,7 +50,9 @@ BEGIN
   JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'private'
     AND p.proname = 'create_storefront_order'
-    AND p.pronargs = 24;
+    AND p.pronargs = 24
+    AND pg_catalog.pg_get_function_identity_arguments(p.oid) =
+      'p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb, p_customer_phone text, p_shipping_fee numeric, p_discount_amount numeric, p_tax_amount numeric, p_payment_method text, p_payment_status text, p_shipping_status text, p_shipping_address jsonb, p_source text, p_notes text, p_ad_tracking jsonb, p_selected_quote_id uuid, p_shipping_provider text, p_tracking_number text, p_user_id uuid, p_tax_basis text, p_gift_wrapping_fee numeric, p_expected_total numeric, p_checkout_idempotency_key text, p_checkout_request_hash text';
   IF v_checked_def IS NULL THEN
     RAISE EXCEPTION 'storefront_order_function_not_found';
   END IF;
@@ -65,7 +67,9 @@ BEGIN
   JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'private'
     AND p.proname = 'create_storefront_order_unchecked'
-    AND p.pronargs = 24;
+    AND p.pronargs = 24
+    AND pg_catalog.pg_get_function_identity_arguments(p.oid) =
+      'p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb, p_customer_phone text, p_shipping_fee numeric, p_discount_amount numeric, p_tax_amount numeric, p_payment_method text, p_payment_status text, p_shipping_status text, p_shipping_address jsonb, p_source text, p_notes text, p_ad_tracking jsonb, p_selected_quote_id uuid, p_shipping_provider text, p_tracking_number text, p_user_id uuid, p_tax_basis text, p_gift_wrapping_fee numeric, p_expected_total numeric, p_checkout_idempotency_key text, p_checkout_request_hash text';
   IF v_unchecked_def IS NULL THEN
     RAISE EXCEPTION 'storefront_order_function_not_found';
   END IF;
@@ -985,3 +989,38 @@ BEGIN
     v_idempotency_replayed;
 END;
 $function$;
+
+DO $squash_post_guard$
+DECLARE
+  v_checked_def text;
+  v_unchecked_def text;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(p.oid)
+    INTO v_checked_def
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private'
+    AND p.proname = 'create_storefront_order'
+    AND p.pronargs = 24
+    AND pg_catalog.pg_get_function_identity_arguments(p.oid) =
+      'p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb, p_customer_phone text, p_shipping_fee numeric, p_discount_amount numeric, p_tax_amount numeric, p_payment_method text, p_payment_status text, p_shipping_status text, p_shipping_address jsonb, p_source text, p_notes text, p_ad_tracking jsonb, p_selected_quote_id uuid, p_shipping_provider text, p_tracking_number text, p_user_id uuid, p_tax_basis text, p_gift_wrapping_fee numeric, p_expected_total numeric, p_checkout_idempotency_key text, p_checkout_request_hash text';
+  IF md5(v_checked_def) <> 'cbb7f92e90a128c1fea05640d616ba09' THEN
+    RAISE EXCEPTION 'storefront_order_squash_post_image_mismatch'
+      USING DETAIL = 'installed private.create_storefront_order(24) differs from the pinned bytes';
+  END IF;
+
+  SELECT pg_catalog.pg_get_functiondef(p.oid)
+    INTO v_unchecked_def
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private'
+    AND p.proname = 'create_storefront_order_unchecked'
+    AND p.pronargs = 24
+    AND pg_catalog.pg_get_function_identity_arguments(p.oid) =
+      'p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb, p_customer_phone text, p_shipping_fee numeric, p_discount_amount numeric, p_tax_amount numeric, p_payment_method text, p_payment_status text, p_shipping_status text, p_shipping_address jsonb, p_source text, p_notes text, p_ad_tracking jsonb, p_selected_quote_id uuid, p_shipping_provider text, p_tracking_number text, p_user_id uuid, p_tax_basis text, p_gift_wrapping_fee numeric, p_expected_total numeric, p_checkout_idempotency_key text, p_checkout_request_hash text';
+  IF md5(v_unchecked_def) <> '0ac27900ce2d27f5b8f0c66f78fd2d32' THEN
+    RAISE EXCEPTION 'storefront_order_squash_post_image_mismatch'
+      USING DETAIL = 'installed private.create_storefront_order_unchecked(24) differs from the pinned bytes';
+  END IF;
+END;
+$squash_post_guard$;

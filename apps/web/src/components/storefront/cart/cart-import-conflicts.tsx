@@ -33,8 +33,10 @@ export function CartImportConflicts() {
         </h2>
         <p role="alert" className="mt-2 text-sm">
           Combining these carts exceeds the {SHARED_CART_MAX_LINES}-line limit.
-          Your device items and offers are still saved on this device. Remove
-          items below or from your shared cart, then retry importing.
+          Your device items and offers are still saved on this device.{' '}
+          {!cart.sharedCartRef && cart.merchantSlug
+            ? 'Remove items below, then retry importing.'
+            : 'Remove items from your shared cart, then retry importing.'}
         </p>
         {!cart.sharedCartRef && cart.merchantSlug ? (
           <DeviceCartCapacityItems

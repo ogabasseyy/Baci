@@ -1,6 +1,10 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { runBoundedCartSessionWrite } from './cart-session-write-fence';
+import {
+  isCartSessionRetiring,
+  runBoundedCartSessionWrite,
+  runCartSessionWrite,
+} from './cart-session-write-fence';
 import { failureOf, readBody } from './shared-cart-client-support';
 import {
   ensureCartDeviceRevocationCleared,
@@ -32,14 +36,31 @@ const inFlightBootstraps = new Map<string, Promise<BootstrapResult>>();
 export function bootstrapSharedCart(
   merchantSlug?: string
 ): Promise<BootstrapResult> {
+  const unavailable: BootstrapResult = {
+    code: 'temporarily_unavailable',
+    ok: false,
+    retryable: true,
+  };
+  if (isCartSessionRetiring(merchantSlug)) return Promise.resolve(unavailable);
   const key = merchantSlug ?? '';
   for (const [flightKey, pending] of inFlightBootstraps) {
-    if (flightKey === key || flightKey === '' || key === '') return pending;
+    if (flightKey === key || flightKey === '' || key === '') {
+      // An unnamed caller may belong to any merchant on this origin. Its
+      // dependency must overlap every retirement even if the original
+      // request was registered under a different named merchant.
+      return key === ''
+        ? runCartSessionWrite(undefined, unavailable, () => pending)
+        : pending;
+    }
   }
   const pending = runBoundedCartSessionWrite<BootstrapResult>(
     merchantSlug,
     { code: 'temporarily_unavailable', ok: false, retryable: true },
-    (signal) => requestBootstrap(merchantSlug, signal)
+    (signal) => requestBootstrap(merchantSlug, signal),
+    undefined,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
+      : undefined
   ).finally(() => {
     if (inFlightBootstraps.get(key) === pending) inFlightBootstraps.delete(key);
   });
@@ -51,10 +72,7 @@ async function requestBootstrap(
   merchantSlug?: string,
   signal?: AbortSignal
 ): Promise<BootstrapResult> {
-  if (
-    isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
-  ) {
+  if (isCartDeviceRevocationPending(merchantSlug)) {
     return { code: 'temporarily_unavailable', ok: false, retryable: true };
   }
   let response: Response;

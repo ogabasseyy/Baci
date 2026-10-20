@@ -9,6 +9,10 @@ import {
   saveCartWideNegotiationToStorage,
 } from '@/hooks/cart/cart-storage';
 import type { CartItem } from '@/hooks/cart/cart-types';
+import {
+  displayLineMatchesAddLane,
+  identityKeyOfDisplay,
+} from '@/hooks/cart/shared-cart-display-identity';
 
 /** Edit only the parked merchant-scoped device cache, before any create exists. */
 export function DeviceCartCapacityItems({
@@ -23,24 +27,27 @@ export function DeviceCartCapacityItems({
   function remove(index: number) {
     const selected = items[index];
     if (!selected) return;
-    const identity = selected.cartItemId ?? selected.id;
-    const occurrence = items
-      .slice(0, index)
-      .filter((item) => (item.cartItemId ?? item.id) === identity).length;
-    let matched = 0;
     const current = getCartFromStorage(merchantSlug);
-    let removed = false;
-    let remaining = current.filter((item) => {
-      if (
-        !removed &&
-        (item.cartItemId ?? item.id) === identity &&
-        matched++ === occurrence
-      ) {
-        removed = true;
-        return false;
-      }
-      return true;
-    });
+    const candidates = current.filter(
+      (item) =>
+        identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
+        item.offerId === selected.offerId &&
+        displayLineMatchesAddLane(item, {
+          voucherToken: selected.quizVoucherToken,
+          voucherAwardId: selected.quizAwardId,
+          negotiatedUnitPriceMinor:
+            selected.negotiatedPrice == null
+              ? undefined
+              : Math.round(selected.negotiatedPrice * 100),
+          negotiationStatus: selected.negotiationStatus,
+        })
+    );
+    // Refresh rather than deleting an arbitrary sibling when the saved
+    // selection no longer exists or its identity is ambiguous.
+    const removed = candidates.length === 1;
+    let remaining = removed
+      ? current.filter((item) => item !== candidates[0])
+      : current;
     if (removed && getCartWideNegotiationFromStorage(merchantSlug)) {
       remaining = remaining.map(
         ({ negotiatedPrice: _price, negotiationStatus: _status, ...item }) =>

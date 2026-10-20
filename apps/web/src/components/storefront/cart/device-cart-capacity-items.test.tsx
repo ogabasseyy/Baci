@@ -87,3 +87,26 @@ it('removes the intended stable line after its saved quantity changes', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
   expect(getCartFromStorage('shop')).toEqual([]);
 });
+
+it('removes the selected variant after another writer reorders legacy same-product lines', () => {
+  const red = cartItem({ cartItemId: undefined, selectedColor: 'Red' });
+  const blue = cartItem({ cartItemId: undefined, selectedColor: 'Blue' });
+  saveCartToStorage([red, blue], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([blue, red], 'shop');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove Phone' })[0]);
+  expect(getCartFromStorage('shop').map((item) => item.selectedColor)).toEqual([
+    'Blue',
+  ]);
+});
+it('does not remove a sibling after another writer already removed the selected variant', () => {
+  const red = cartItem({ cartItemId: undefined, selectedColor: 'Red' });
+  const blue = cartItem({ cartItemId: undefined, selectedColor: 'Blue' });
+  saveCartToStorage([red, blue], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([blue], 'shop');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove Phone' })[0]);
+  expect(getCartFromStorage('shop').map((item) => item.selectedColor)).toEqual([
+    'Blue',
+  ]);
+});

@@ -2,6 +2,7 @@
 
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { getCartCookieEpoch } from './cart-cross-tab-lock';
 import type { createSharedCart } from './shared-cart-client';
 import type {
   AdoptOutcome,
@@ -36,11 +37,22 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
 
   const generationRef = useRef(sessionGeneration);
   const enabledRef = useRef(enabled);
+  const cookieEpochRef = useRef<{ value: string | null | undefined } | null>(
+    null
+  );
 
   // Publish refs only after commit: an abandoned render must not let
   // hydration, polling, or send operations observe an uncommitted
   // generation/state and discard their completions as stale.
   useEffect(() => {
+    if (
+      !cookieEpochRef.current ||
+      generationRef.current !== sessionGeneration ||
+      optionsRef.current.merchantId !== merchantId ||
+      (!enabledRef.current && enabled)
+    ) {
+      cookieEpochRef.current = { value: getCartCookieEpoch() };
+    }
     stateRef.current = state;
     generationRef.current = sessionGeneration;
     enabledRef.current = enabled;
@@ -93,6 +105,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     stateRef,
     generationRef,
     enabledRef,
+    cookieEpochRef,
     adoptOutcomeRef,
     importOpIdsRef,
     createOpRef,

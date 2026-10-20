@@ -3,6 +3,7 @@ import type { CartErrorCode } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { CartCheckoutLine } from '@/lib/cart/checkout-snapshot';
 import { parseSnapshot } from '@/lib/cart/checkout-snapshot';
+import { runBoundedCartSessionWrite } from './cart-session-write-fence';
 import type { CartItem } from './cart-types';
 import { cartRoute, failureOf, readBody } from './shared-cart-client';
 
@@ -108,13 +109,29 @@ export function reviewOf(value: unknown): SharedCartCheckoutReview | null {
  * reference the order submit binds to; version drift fails with the
  * live version so the caller refreshes instead of submitting stale.
  */
-export async function prepareSharedCartCheckout(
+export function prepareSharedCartCheckout(
   input: {
     cartId: string;
     expectedVersion: number;
     operationId: string;
   },
   merchantSlug?: string | null
+): Promise<PrepareSharedCartCheckoutResult> {
+  return runBoundedCartSessionWrite<PrepareSharedCartCheckoutResult>(
+    merchantSlug,
+    {
+      code: 'temporarily_unavailable',
+      currentVersion: null,
+      ok: false,
+      retryable: true,
+    },
+    (signal) => requestSharedCartCheckout(input, merchantSlug, signal)
+  );
+}
+async function requestSharedCartCheckout(
+  input: { cartId: string; expectedVersion: number; operationId: string },
+  merchantSlug: string | null | undefined,
+  signal: AbortSignal
 ): Promise<PrepareSharedCartCheckoutResult> {
   let response: Response;
   try {
@@ -128,6 +145,7 @@ export async function prepareSharedCartCheckout(
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal,
       }
     );
   } catch {

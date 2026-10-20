@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 
 import {
   saveCartToStorage,
@@ -75,8 +76,11 @@ export function useCartSendQueue(
     const head = state.queue[0];
     if (head?.state !== 'queued' || head?.blockedOnTempId) return;
 
+    const cookieEpoch = context.cookieEpochRef.current?.value;
     async function send(): Promise<void> {
       if (generationRef.current !== generation) return;
+      if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
+        return;
       const current = stateRef.current;
       const pending = current.queue.find(
         (entry) => entry.operationId === head.operationId
@@ -147,6 +151,7 @@ export function useCartSendQueue(
       // the queue head so a completed cart adopts without mutating, while later
       // user actions remain queued behind this clear barrier.
       if (pending.intent.kind === 'clear' && (await adoptIfTerminal())) return;
+      if (!isCartCookieEpochCurrent(cookieEpoch)) return;
       const result = await sendSharedCartCommand(
         {
           command,

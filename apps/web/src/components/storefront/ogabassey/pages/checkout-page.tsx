@@ -33,10 +33,8 @@ export const CheckoutPage: React.FC = () => {
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
 
-  // Resolve address options and Places bias from the merchant's country.
   const merchantCountry = (merchant?.country?.trim() || 'NG').toUpperCase();
 
-  // Use merchant currency for payment initialization and amount formatting.
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
 
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
@@ -157,7 +155,6 @@ export const CheckoutPage: React.FC = () => {
   });
   const { cost: deliveryCost } = delivery;
 
-  // Live and resumed amount arithmetic feeds the payment session and summary.
   const { orderTotals, paymentSession, summaryAmounts } =
     useCheckoutFinancialSession({
       merchant,
@@ -235,8 +232,6 @@ export const CheckoutPage: React.FC = () => {
     attempt: checkoutAttempt,
   });
 
-  // Loading state (Initial fetch OR waiting for auto-trigger)
-  // This prevents the form from flashing briefly before the payment widget opens
   const isAutoTriggerProcessing =
     isHydrated &&
     checkoutCart.length === 0 &&
@@ -251,6 +246,12 @@ export const CheckoutPage: React.FC = () => {
   ) {
     return (
       <CheckoutResumeGate
+        capacityRecovery={{
+          validatedResume: Boolean(
+            resumedOrder && resumedOrder.id === resumeOrderId
+          ),
+          onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+        }}
         cartEmpty={checkoutCart.length === 0}
         isAutoTriggerProcessing={isAutoTriggerProcessing}
         isLoadingResumedOrder={isLoadingResumedOrder}

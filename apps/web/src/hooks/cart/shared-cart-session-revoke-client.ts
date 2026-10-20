@@ -1,6 +1,11 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { hasActiveCartCookieWrite } from './cart-cross-tab-lock';
 import { withCartRequestDeadline } from './cart-request-deadline';
-import { isCartSessionRetiring } from './cart-session-write-fence';
+import {
+  beginCartSessionRetirement,
+  isCartSessionRetirementReady,
+  isCartSessionRetiring,
+} from './cart-session-write-fence';
 import {
   clearSharedCartImportReceipt,
   getStorefrontCartStorageKey,
@@ -9,6 +14,7 @@ import {
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
 const ACTIVE_SESSION_KEY_PREFIX = 'baci-cart-device-session-active';
 const pendingRevocationMerchants = new Set<string>();
+const volatilePendingMerchants = new Set<string>();
 
 function normalizeMerchantKey(merchantSlug?: string | null): string {
   return merchantSlug?.trim() || '__default__';
@@ -69,8 +75,10 @@ export function markCartDeviceRevocationPending(
       getPendingRevocationStorageKey(merchantSlug),
       '1'
     );
+    volatilePendingMerchants.delete(key);
   } catch {
-    // Ignore storage errors; the in-memory fence still blocks adoption in this tab.
+    volatilePendingMerchants.add(key);
+    // Failed durable writes must retain their in-memory fence.
   }
 }
 
@@ -79,6 +87,7 @@ export function clearCartDeviceRevocationPending(
 ): void {
   const key = normalizeMerchantKey(merchantSlug);
   pendingRevocationMerchants.delete(key);
+  volatilePendingMerchants.delete(key);
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(
@@ -93,21 +102,26 @@ export function isCartDeviceRevocationPending(
   merchantSlug?: string | null
 ): boolean {
   const key = normalizeMerchantKey(merchantSlug);
-  if (pendingRevocationMerchants.has(key)) return true;
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return pendingRevocationMerchants.has(key);
   try {
-    return (
+    const stored =
       window.localStorage.getItem(
         getPendingRevocationStorageKey(merchantSlug)
-      ) === '1'
-    );
+      ) === '1';
+    if (stored) pendingRevocationMerchants.add(key);
+    else if (!volatilePendingMerchants.has(key))
+      pendingRevocationMerchants.delete(key);
+    // A successful durable clear in another tab supersedes this realm's
+    // old marker. Failed writes remain fenced even if a read now succeeds.
+    return stored || volatilePendingMerchants.has(key);
   } catch {
-    return false;
+    return pendingRevocationMerchants.has(key);
   }
 }
 
 export function resetPendingCartDeviceRevocationsForTests(): void {
   pendingRevocationMerchants.clear();
+  volatilePendingMerchants.clear();
   if (typeof window === 'undefined') return;
   try {
     for (const key of Object.keys(window.localStorage)) {
@@ -147,11 +161,30 @@ export async function revokeCartDeviceSession(
   merchantSlug?: string | null,
   options?: { fenceOnFailure?: boolean; signal?: AbortSignal }
 ): Promise<{ ok: boolean }> {
-  const result = await withCartRequestDeadline(
-    { ok: false },
-    (signal) => requestDeviceRevocation(merchantSlug, signal),
-    options?.signal
-  );
+  const request = () =>
+    withCartRequestDeadline(
+      { ok: false },
+      (signal) => requestDeviceRevocation(merchantSlug, signal),
+      options?.signal
+    );
+  // Passive cleanup must never request an exclusive lock while running
+  // inside a shared writer. Its lifecycle retry runs outside that writer.
+  const result = isCartSessionRetirementReady(merchantSlug)
+    ? await request()
+    : hasActiveCartCookieWrite()
+      ? { ok: false }
+      : await (async () => {
+          if (isCartSessionRetiring(merchantSlug)) return { ok: false };
+          const retirement = beginCartSessionRetirement(merchantSlug ?? '');
+          try {
+            await retirement.drained;
+            return await request();
+          } catch {
+            return { ok: false };
+          } finally {
+            retirement.release();
+          }
+        })();
   if (!result.ok && options?.fenceOnFailure !== false)
     markCartDeviceRevocationPending(merchantSlug);
   return result;
@@ -215,11 +248,7 @@ export async function ensureCartDeviceRevocationCleared(
   if (isCartSessionRetiring(merchantSlug)) return false;
   if (!isCartDeviceRevocationPending(merchantSlug)) return true;
   const revoked = await revokeCartDeviceSession(merchantSlug, { signal });
-  if (revoked.ok) {
-    clearCartDeviceRevocationPending(merchantSlug);
-    return true;
-  }
-  return false;
+  return revoked.ok && !isCartDeviceRevocationPending(merchantSlug);
 }
 
 export function retireDeEnrolledCartDeviceSession(

@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { beginCartSessionRetirement } from './cart-session-write-fence';
 import { bootstrapSharedCart } from './shared-cart-bootstrap-client';
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
@@ -34,4 +35,30 @@ it('preserves CSRF rejection as forbidden instead of authorizing preserved-sessi
     code: 'forbidden',
     retryable: false,
   });
+});
+
+it('drains a named flight joined by an unnamed caller during another merchant retirement', async () => {
+  let finish!: (response: Response) => void;
+  vi.mocked(fetchWithCsrf).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const named = bootstrapSharedCart('merchant-a');
+  const unnamed = bootstrapSharedCart();
+  const retirement = beginCartSessionRetirement('merchant-b');
+  const drained = vi.fn();
+  void retirement.drained.then(drained);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(drained).not.toHaveBeenCalled();
+    finish(new Response('{}', { status: 200 }));
+    await Promise.all([named, unnamed, retirement.drained]);
+    expect(drained).toHaveBeenCalledOnce();
+  } finally {
+    finish(new Response('{}', { status: 200 }));
+    await Promise.allSettled([named, unnamed]);
+    retirement.release();
+  }
 });

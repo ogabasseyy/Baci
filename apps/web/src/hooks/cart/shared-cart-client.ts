@@ -35,7 +35,11 @@ export function fetchSharedCartSnapshot(
     merchantSlug,
     UNAVAILABLE_FETCH,
     (requestSignal) => requestSharedCartSnapshot(requestSignal, merchantSlug),
-    signal
+    signal,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (requestSignal) =>
+          ensureCartDeviceRevocationCleared(merchantSlug, requestSignal)
+      : undefined
   );
 }
 
@@ -44,10 +48,7 @@ async function requestSharedCartSnapshot(
   merchantSlug?: string | null
 ): Promise<SharedCartFetchResult> {
   if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
-  if (
-    isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
-  ) {
+  if (isCartDeviceRevocationPending(merchantSlug)) {
     return UNAVAILABLE_FETCH;
   }
   let response: Response;
@@ -85,8 +86,14 @@ export function createSharedCart(
   input: CreateSharedCartInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
-  return runBoundedCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, (signal) =>
-    requestCreateSharedCart(input, merchantSlug, signal)
+  return runBoundedCartSessionWrite(
+    merchantSlug,
+    UNAVAILABLE_FETCH,
+    (signal) => requestCreateSharedCart(input, merchantSlug, signal),
+    undefined,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
+      : undefined
   );
 }
 
@@ -95,10 +102,7 @@ async function requestCreateSharedCart(
   merchantSlug?: string | null,
   signal?: AbortSignal
 ): Promise<SharedCartMutationResult> {
-  if (
-    isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
-  ) {
+  if (isCartDeviceRevocationPending(merchantSlug)) {
     return UNAVAILABLE_FETCH;
   }
   let response: Response;
@@ -142,8 +146,14 @@ export function sendSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
-  return runBoundedCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, (signal) =>
-    requestSharedCartCommand(input, merchantSlug, signal)
+  return runBoundedCartSessionWrite(
+    merchantSlug,
+    UNAVAILABLE_FETCH,
+    (signal) => requestSharedCartCommand(input, merchantSlug, signal),
+    undefined,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
+      : undefined
   );
 }
 
@@ -153,10 +163,7 @@ async function requestSharedCartCommand(
   signal?: AbortSignal
 ): Promise<SharedCartMutationResult> {
   if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
-  if (
-    isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
-  ) {
+  if (isCartDeviceRevocationPending(merchantSlug)) {
     return UNAVAILABLE_FETCH;
   }
   let response: Response;

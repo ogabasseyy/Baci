@@ -1,6 +1,7 @@
 'use client';
 
 import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
+import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import {
   getCartFromStorage,
   saveSharedCartImportReceipt,
@@ -42,11 +43,15 @@ export function createCartProvisioning(
   async function ensureCart(
     canProceed: () => boolean = () => true
   ): Promise<EnsureCartResult> {
+    if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
+      return null;
+    const cookieEpoch = context.cookieEpochRef.current?.value;
     const generation = generationRef.current;
     const linkRun = linkRunRef.current;
     const storageGeneration = getCartSessionGeneration();
     const merchantSlug = optionsRef.current.merchantSlug;
     const fenced = () =>
+      isCartCookieEpochCurrent(cookieEpoch) &&
       getCartSessionGeneration() === storageGeneration &&
       generationRef.current === generation &&
       linkRunRef.current === linkRun &&

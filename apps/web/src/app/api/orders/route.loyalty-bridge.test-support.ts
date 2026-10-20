@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import {
   authenticateApiRequest,
   mockCreateAdminClient,
+  mockCreateLoyaltyResolverServiceClient,
   NextRequest,
 } from './route.loyalty-bridge.mocks.test-support';
 
@@ -150,6 +151,13 @@ export async function setupLoyaltyBridge(
   const supabaseMod = await import('@/lib/supabase/server');
   vi.mocked(supabaseMod.createClient).mockImplementation(
     () => supabase as unknown as never
+  );
+  // The loyalty resolver runs on its own branded client (issue
+  // #3696): mirror the same overrides there so resolver cases behave
+  // identically to the scoped-client era.
+  const serviceSupabase = buildLoyaltyMockSupabase(overrides, PRODUCT_ROWS);
+  mockCreateLoyaltyResolverServiceClient.mockImplementation(
+    () => serviceSupabase as unknown as never
   );
   vi.mocked(authenticateApiRequest).mockResolvedValue({
     user: {

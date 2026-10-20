@@ -1,10 +1,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveLoyaltyCheckoutCode } from './resolve-loyalty-checkout-code';
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
+
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
+import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
+import { createAnonClient } from '@/lib/supabase/anon';
+
+const mockCreateServiceClient = vi.mocked(createLoyaltyResolverServiceClient);
+const mockCreateAnonClient = vi.mocked(createAnonClient);
 
 const ROW = {
   redemption_id: '22222222-2222-4222-8222-222222222222',
@@ -19,12 +33,21 @@ const ROW = {
   reward_name: 'Probe reward',
 };
 
-function clientWith(
+function serviceClientWith(
   rpcImpl: () => unknown,
   merchantRow: unknown = { country: 'NG', payout_currency: 'NGN' }
-): SupabaseClient {
-  return {
-    rpc: vi.fn(async () => rpcImpl()),
+) {
+  const rpc = vi.fn(async () => rpcImpl());
+  // Privilege split (issue #3696): the branded client is RPC-only —
+  // any table read through it throws, mirroring the production
+  // invariant. The merchant currency preview read goes over anon.
+  const from = vi.fn(() => {
+    throw new Error(
+      'The loyalty resolver service client must not query tables'
+    );
+  });
+  const client = { rpc, from } as unknown as SupabaseClient;
+  const anon = {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -33,12 +56,41 @@ function clientWith(
       })),
     })),
   } as unknown as SupabaseClient;
+  mockCreateServiceClient.mockReturnValue(client as never);
+  mockCreateAnonClient.mockReturnValue(anon as never);
+  return { client, rpc, anon };
 }
 
 describe('resolveLoyaltyCheckoutCode', () => {
-  it('resolves a bridgeable code to fixed economics', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resolves the RPC through the branded client and reads merchants over anon (issue #3696)', async () => {
+    const { client, rpc, anon } = serviceClientWith(() => ({
+      data: [ROW],
+      error: null,
+    }));
+
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({ data: [ROW], error: null })),
+      merchantId: 'm',
+      code: 'RDM-ABCDEF12',
+    });
+
+    expect(mockCreateServiceClient).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('get_loyalty_redemption_for_checkout', {
+      p_merchant_id: 'm',
+      p_code: 'RDM-ABCDEF12',
+    });
+    expect(mockCreateAnonClient).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(anon.from)).toHaveBeenCalledWith('merchants');
+    expect(vi.mocked(client.from)).not.toHaveBeenCalled();
+    expect(resolution.ok).toBe(true);
+  });
+
+  it('resolves a bridgeable code to fixed economics', async () => {
+    serviceClientWith(() => ({ data: [ROW], error: null }));
+    const resolution = await resolveLoyaltyCheckoutCode({
       merchantId: 'm',
       code: 'RDM-ABCDEF12',
     });
@@ -53,11 +105,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('passes the snapshotted max redemption percentage through', async () => {
+    serviceClientWith(() => ({
+      data: [{ ...ROW, max_redemption_percentage: 25 }],
+      error: null,
+    }));
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({
-        data: [{ ...ROW, max_redemption_percentage: 25 }],
-        error: null,
-      })),
       merchantId: 'm',
       code: 'RDM-CAPPED',
     });
@@ -66,20 +118,20 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('rejects a minimum-carrying percentage code after a currency change', async () => {
+    serviceClientWith(
+      () => ({
+        data: [
+          {
+            ...ROW,
+            reward_type: 'discount_percentage',
+            minimum_order_amount: 5000,
+          },
+        ],
+        error: null,
+      }),
+      { country: 'US', payout_currency: 'USD' }
+    );
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(
-        () => ({
-          data: [
-            {
-              ...ROW,
-              reward_type: 'discount_percentage',
-              minimum_order_amount: 5000,
-            },
-          ],
-          error: null,
-        }),
-        { country: 'US', payout_currency: 'USD' }
-      ),
       merchantId: 'm',
       code: 'RDM-PCTMIN',
     });
@@ -88,19 +140,19 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('maps a plain discount to fixed and percentage to proportional', async () => {
+    serviceClientWith(() => ({
+      data: [{ ...ROW, reward_type: 'discount' }],
+      error: null,
+    }));
     const plain = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({
-        data: [{ ...ROW, reward_type: 'discount' }],
-        error: null,
-      })),
       merchantId: 'm',
       code: 'RDM-PLAIN',
     });
+    serviceClientWith(() => ({
+      data: [{ ...ROW, reward_type: 'discount_percentage' }],
+      error: null,
+    }));
     const percent = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({
-        data: [{ ...ROW, reward_type: 'discount_percentage' }],
-        error: null,
-      })),
       merchantId: 'm',
       code: 'RDM-PCT',
     });
@@ -110,11 +162,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('rejects non-discount types as invalid without gating resolve-time state', async () => {
+    serviceClientWith(() => ({
+      data: [{ ...ROW, reward_type: 'free_shipping', reward_value: null }],
+      error: null,
+    }));
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({
-        data: [{ ...ROW, reward_type: 'free_shipping', reward_value: null }],
-        error: null,
-      })),
       merchantId: 'm',
       code: 'RDM-SHIP',
     });
@@ -129,11 +181,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('does not gate used codes: they must reach the wrapper for replay', async () => {
+    serviceClientWith(() => ({
+      data: [{ ...ROW, used: true }],
+      error: null,
+    }));
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({
-        data: [{ ...ROW, used: true }],
-        error: null,
-      })),
       merchantId: 'm',
       code: 'RDM-USED',
     });
@@ -142,11 +194,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('lets a used code reach replay even after a currency change', async () => {
+    serviceClientWith(() => ({ data: [{ ...ROW, used: true }], error: null }), {
+      country: 'US',
+      payout_currency: 'USD',
+    });
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(
-        () => ({ data: [{ ...ROW, used: true }], error: null }),
-        { country: 'US', payout_currency: 'USD' }
-      ),
       merchantId: 'm',
       code: 'RDM-USED',
     });
@@ -155,11 +207,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('rejects a fixed code whose issuance currency no longer matches', async () => {
+    serviceClientWith(() => ({ data: [ROW], error: null }), {
+      country: 'US',
+      payout_currency: 'USD',
+    });
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({ data: [ROW], error: null }), {
-        country: 'US',
-        payout_currency: 'USD',
-      }),
       merchantId: 'm',
       code: 'RDM-ABCDEF12',
     });
@@ -174,14 +226,14 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('keeps percentage codes currency-agnostic after a currency change', async () => {
+    serviceClientWith(
+      () => ({
+        data: [{ ...ROW, reward_type: 'discount_percentage' }],
+        error: null,
+      }),
+      { country: 'US', payout_currency: 'USD' }
+    );
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(
-        () => ({
-          data: [{ ...ROW, reward_type: 'discount_percentage' }],
-          error: null,
-        }),
-        { country: 'US', payout_currency: 'USD' }
-      ),
       merchantId: 'm',
       code: 'RDM-PCT',
     });
@@ -190,8 +242,8 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('lets the wrapper decide when the merchant lookup finds no row', async () => {
+    serviceClientWith(() => ({ data: [ROW], error: null }), null);
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({ data: [ROW], error: null }), null),
       merchantId: 'm',
       code: 'RDM-ABCDEF12',
     });
@@ -200,8 +252,8 @@ describe('resolveLoyaltyCheckoutCode', () => {
   });
 
   it('maps a lookup failure to 500 without masking it as invalid', async () => {
+    serviceClientWith(() => ({ data: null, error: { message: 'boom' } }));
     const resolution = await resolveLoyaltyCheckoutCode({
-      supabase: clientWith(() => ({ data: null, error: { message: 'boom' } })),
       merchantId: 'm',
       code: 'RDM-ABCDEF12',
     });

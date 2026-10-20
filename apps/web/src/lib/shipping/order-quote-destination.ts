@@ -36,24 +36,6 @@ type CheckoutQuoteLookupResponse = {
 
 type AttestedCoordinates = { latitude?: number; longitude?: number };
 
-function readAttestedCoordinates(
-  receiver: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>['receiver']
-): AttestedCoordinates {
-  const { latitude, longitude } = receiver;
-  if (latitude == null && longitude == null) return {};
-  if (
-    typeof latitude !== 'number' ||
-    !Number.isFinite(latitude) ||
-    Math.abs(latitude) > 90 ||
-    typeof longitude !== 'number' ||
-    !Number.isFinite(longitude) ||
-    Math.abs(longitude) > 180
-  ) {
-    throw new OrderQuoteDestinationMismatchError();
-  }
-  return { latitude, longitude };
-}
-
 async function lookupCheckoutQuote(
   supabase: SupabaseClient,
   selectedQuoteId: string,
@@ -215,9 +197,9 @@ export async function enrichShippingAddressWithQuoteDestination(
       : {}),
     // Only new-order creation opts in. Existing paid orders must use explicit
     // destination-confirmation recovery, never implicit booking-time repair.
-    ...(options.persistAttestedCoordinates
-      ? readAttestedCoordinates(quoteRequest.receiver)
-      : {}),
+    // Persist the coerced quote pin: stored receivers may carry numeric
+    // strings, which readCoordinate already normalized into quotePin.
+    ...(options.persistAttestedCoordinates && quoteHasPin ? quotePin.data : {}),
     country: quoteRequest.receiver.country ?? shippingAddress.country,
     countryCode:
       quoteRequest.receiver.countryCode ?? shippingAddress.countryCode,

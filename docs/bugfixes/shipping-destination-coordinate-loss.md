@@ -21,12 +21,21 @@ guard that rejects the subsequent booking.
 ## Prevention in this patch
 
 - Validate optional coordinates as a complete, finite numeric pair within range.
-- Preserve coordinates through order input parsing.
+- Preserve coordinates through order input parsing. On quoted storefront
+  checkout the route then sets body pins aside (ignored by design, per main
+  #3704): the validated quote's attested pin is the only pin that can attach,
+  so a conflicting body pin cannot override it. Quote-less (merchant-rate)
+  orders keep their validated body pin, which stays bound into the
+  idempotency hash.
 - After quote merchant, provider, fee, item, expiry and destination-text checks,
   allow **new order creation only** to adopt its validated checkout quote's pin.
 - Apply validated pin adoption to supported carrier quotes, including GIGL and
   TOPSHIP, with the same merchant, provider, fee, item and destination checks.
-- Reject malformed or conflicting pins. Keep existing matching order pins.
+- Reject malformed or conflicting pins wherever pins are presented to
+  enrichment (stored quote pins, order reuse and other direct callers).
+  Keep existing matching order pins. On the quoted storefront checkout
+  route, body pins are ignored by design instead (see above); a route test
+  covers a conflicting `(0, 0)` body pin resolving to the quote pin.
 - Existing order reuse never adopts missing coordinates from matching address
   text alone. A confirmed same-key idempotent replay re-derives the first
   attempt's validated quote pin in memory only (the stored order row is never

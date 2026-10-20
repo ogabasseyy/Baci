@@ -76,13 +76,24 @@ describe('GIGL checkout attested destination coordinates', () => {
     { latitude: 6.6, longitude: Number.POSITIVE_INFINITY },
     { latitude: 91, longitude: 3.35 },
     { latitude: 6.6, longitude: -181 },
-    { latitude: '6.6', longitude: 3.35 },
   ])('rejects an incomplete or invalid attested pin: %j', async (coordinates) => {
     await expect(
       enrich({ ...request, receiver: { ...receiver, ...coordinates } })
     ).rejects.toMatchObject({
       code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
     });
+  });
+
+  it('persists a numeric-string quote pin as coerced numbers', async () => {
+    // Stored quote receivers are database JSON: fulfillment accepts
+    // numeric-string pins via readCoordinate, so checkout must persist
+    // the same coerced pin instead of rejecting it as a mismatch.
+    const persisted = await enrich({
+      ...request,
+      receiver: { ...receiver, latitude: '6.6', longitude: '3.35' },
+    });
+
+    expect(persisted).toMatchObject({ latitude: 6.6, longitude: 3.35 });
   });
 
   it('keeps legacy unpinned quotes unpinned', async () => {

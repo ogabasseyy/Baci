@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { compareReceiptListDesc, selectReceiptDisplayDate } from './receipt-sort';
+import {
+  compareReceiptListDesc,
+  selectReceiptDisplayDate,
+} from './receipt-sort';
 
 describe('compareReceiptListDesc', () => {
   it('files a backdated invoice by its issue date, not its transaction date', () => {

@@ -33,7 +33,10 @@ export function selectReceiptDisplayDate(
   order: ReceiptSortable
 ): string | null {
   return (
-    order.invoice_issue_date || order.transaction_date || order.created_at || null
+    order.invoice_issue_date ||
+    order.transaction_date ||
+    order.created_at ||
+    null
   );
 }
 

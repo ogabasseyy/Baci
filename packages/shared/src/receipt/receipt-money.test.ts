@@ -119,9 +119,7 @@ describe('receipt VAT visibility', () => {
 
 describe('receipt line helpers', () => {
   it('prefers an explicit extension over quantity x price', () => {
-    expect(
-      getReceiptItemLineTotal({ price: 1000, quantity: 2 })
-    ).toBe(2000);
+    expect(getReceiptItemLineTotal({ price: 1000, quantity: 2 })).toBe(2000);
     expect(
       getReceiptItemLineTotal({
         price: 1000,
@@ -147,10 +145,7 @@ describe('receipt line helpers', () => {
       vat_rate: 7.5,
       vat_amount: 112.5,
     };
-    expect(getReceiptItemDetailLines(item)).toEqual([
-      'SKU: SKU-1',
-      'Unit: EA',
-    ]);
+    expect(getReceiptItemDetailLines(item)).toEqual(['SKU: SKU-1', 'Unit: EA']);
     expect(getReceiptItemVatLines(item, (n) => `NGN ${n}`)).toEqual([
       'VAT: 7.50%',
       'NGN 112.5',

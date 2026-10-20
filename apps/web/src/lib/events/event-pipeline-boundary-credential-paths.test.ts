@@ -14,7 +14,6 @@ import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyves
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
-import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),

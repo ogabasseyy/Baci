@@ -22,7 +22,7 @@ runs:
       env:
         STORE_DIR: ${{ inputs.store-dir }}
       run: |
-        delimiter="EOF-$RANDOM-$RANDOM"
+        delimiter="EOF-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
         {
           echo "PNPM_STORE_DIR<<${delimiter}"
           echo "$STORE_DIR"

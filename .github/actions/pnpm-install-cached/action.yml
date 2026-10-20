@@ -88,7 +88,7 @@ runs:
 
         "$PNPM_CMD" config set store-dir "$STORE_DIR"
         "$PNPM_CMD" --version
-        delimiter="EOF-$RANDOM-$RANDOM"
+        delimiter="EOF-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
         {
           echo "PNPM_STORE_DIR<<${delimiter}"
           echo "$STORE_DIR"

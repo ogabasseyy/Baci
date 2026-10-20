@@ -77,11 +77,14 @@ function postPreviewResponse(response: BuilderPreviewResponse): void {
   ).ReactNativeWebView;
   nativeBridge?.postMessage(message);
   // Wildcard target origin is required because the parent frame varies across
-  // preview deployments (local/staging/production). The payload is
-  // schema-validated above and carries only non-sensitive preview status
-  // (ready/rendered/error, revision, capability hash/version), so an arbitrary
-  // embedder receives status, never secrets. Inbound render events are
-  // additionally restricted to window.parent in receivePreview.
+  // preview deployments (local/staging/production), so no static origin can
+  // be pinned. Framing is independently restricted by CSP frame-ancestors
+  // 'self' on this route (see lib/proxy/csp.ts), so a rendered parent is
+  // necessarily same-origin. The payload is schema-validated above and
+  // carries only non-sensitive preview status (ready/rendered/error,
+  // revision, capability hash/version), so an embedder receives status,
+  // never secrets. Inbound render events are additionally restricted to
+  // window.parent in receivePreview.
   // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
   if (window.parent !== window) window.parent.postMessage(message, '*');
 }
@@ -101,9 +104,10 @@ export function BuilderPreviewCanvas() {
     const receivePreview = (event: Event) => {
       // Trust boundary: only the embedding parent frame may drive the preview
       // renderer. Messages posted from any other window are ignored before
-      // parsing. A null source means same-document dispatch (no cross-window
-      // sender), which carries no attacker-controlled origin, so it is let
-      // through to the schema gate below.
+      // parsing. A null source means same-document dispatch (the React
+      // Native/document bridge and synthetic test events); accepted as a
+      // documented same-document trust assumption — such events carry no
+      // cross-window sender — and still subject to the schema gate below.
       if (
         'source' in event &&
         event.source !== null &&

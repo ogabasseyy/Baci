@@ -58,6 +58,15 @@ export async function adoptCanonicalVtuKey(
           persisted[1].key !== expectedKey &&
           persisted[1].rememberedAt >= entry.rememberedAt
         ) {
+          // Stale veto — but reconcile memory to the persisted
+          // newer generation first (Codex P1): leaving the
+          // superseded K1 live lets a later memory-wins flush
+          // write K1 back over K2. No flush here: memory now
+          // matches storage, nothing to write.
+          pendingPurchases.set(descriptor, {
+            ...persisted[1],
+            completedAt: persisted[1].completedAt ?? null,
+          });
           return 'stale' as const;
         }
         const live = pendingPurchases.get(descriptor);

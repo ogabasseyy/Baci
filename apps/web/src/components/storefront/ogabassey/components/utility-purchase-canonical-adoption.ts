@@ -22,6 +22,11 @@ import { recallPendingVtuKey } from './utility-pending-idempotency';
  * microtask as the adoption's resolution, so nothing can
  * interleave between them; a rotation landing during the
  * adoption's own awaits fails safe toward null.
+ * A non-durable adoption (false: memory rebound but the flush
+ * failed) also returns null (Codex P2): retagging would let
+ * terminal settlement tombstone only the winner while storage
+ * still holds the loser, and the key-bound merge would resurrect
+ * the loser. The scheduled retry persists the winner instead.
  */
 export async function adoptSubmittedCanonicalKey({
   adoptCanonicalKey,
@@ -37,7 +42,14 @@ export async function adoptSubmittedCanonicalKey({
   canonicalKey: string | undefined;
 }): Promise<UtilityIdempotencyAttempt | null> {
   if (!canonicalKey || !attempt) return attempt;
-  await adoptCanonicalKey(attempt.scoped, attempt.key, canonicalKey);
+  const durable = await adoptCanonicalKey(
+    attempt.scoped,
+    attempt.key,
+    canonicalKey
+  );
+  if (!durable) {
+    return null;
+  }
   if (recallPendingVtuKey(attempt.scoped) !== canonicalKey) {
     return null;
   }

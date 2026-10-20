@@ -11,6 +11,8 @@ import {
 } from '@/lib/fetch-with-timeout';
 import { forgetOwnPendingVtuPurchase } from './pending-vtu-generation-guards';
 import { adoptCanonicalVtuKey } from './pending-vtu-idempotency';
+import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
+import { schedulePendingVtuFlush } from './pending-vtu-idempotency-sync';
 import {
   getAccessToken,
   getResponseErrorMessage,
@@ -129,7 +131,21 @@ export async function chargeWalletForVtu(
     // once the winner terminalizes. Generation-bound (Codex R2
     // P1): a sibling tab's newer generation vetoes this stale
     // response instead of being overwritten.
-    await adoptCanonicalVtuKey(pendingDescriptor, idempotencyKey, canonicalKey);
+    const adopted = await adoptCanonicalVtuKey(
+      pendingDescriptor,
+      idempotencyKey,
+      canonicalKey
+    );
+    if (!adopted) {
+      // Non-durable (Codex P2): memory rebound to the winner but
+      // storage still holds the loser — terminal settlement would
+      // tombstone only the winner and the key-bound merge would
+      // resurrect the loser. Tombstone the loser explicitly so
+      // settlement cannot bring it back (web mirror: a non-durable
+      // adoption settles presentation-only instead).
+      noteForgottenVtuScopes([pendingDescriptor], Date.now(), idempotencyKey);
+      schedulePendingVtuFlush();
+    }
   }
   if (!response.ok) {
     const error = new HttpError(response.status, getResponseErrorMessage(data));

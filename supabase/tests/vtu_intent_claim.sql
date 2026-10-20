@@ -86,6 +86,7 @@ DECLARE
   v_k20 uuid := 'd4d4d4d4-0000-4000-8000-000000000020';
   v_k21 uuid := 'd4d4d4d4-0000-4000-8000-000000000021';
   v_k22 uuid := 'd4d4d4d4-0000-4000-8000-000000000022';
+  v_k22b uuid := 'd4d4d4d4-0000-4000-8000-00000000002b';
   v_claim record;
   v_proof record;
   v_raised boolean;
@@ -666,6 +667,21 @@ BEGIN
   FROM public.vtu_admission_proof('intent-claim-old', 'fp-proof');
   IF NOT (v_t22 = ANY (v_proof.live_transaction_ids)) THEN
     RAISE EXCEPTION 'Proof must resolve alias slugs, got %', v_proof;
+  END IF;
+  -- A second loser-key join onto the same live transaction must
+  -- not duplicate it in the proof (Codex P2): proof size tracks
+  -- live transactions, not historical join attempts.
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k22b, 'fp-proof', v_t22, v_m1, v_c1, now(), '{}'
+  );
+  IF v_claim.created IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Second join onto the live mapping must join, got %', v_claim;
+  END IF;
+  SELECT * INTO v_proof
+  FROM public.vtu_admission_proof('intent-claim-m1', 'fp-proof');
+  IF coalesce(cardinality(v_proof.live_transaction_ids), -1) <> 1 THEN
+    RAISE EXCEPTION 'Proof must dedupe transaction ids, got %', v_proof;
   END IF;
   UPDATE public.vtu_transactions SET status = 'successful' WHERE id = v_t22;
   SELECT * INTO v_proof

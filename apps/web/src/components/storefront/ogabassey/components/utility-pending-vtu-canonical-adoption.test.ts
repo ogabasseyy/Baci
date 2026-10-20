@@ -140,11 +140,14 @@ describe('utility-pending-vtu-canonical-adoption', () => {
     expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-new' });
   });
 
-  it('adoption no-ops without flushing when storage holds a newer generation', async () => {
+  it('adoption reconciles memory to the persisted newer generation without flushing', async () => {
     // Codex R2 P1 (cross-tab half, mobile mirror): a sibling tab
     // persisted a newer same-descriptor key after this tab
     // submitted — this join response is stale. Flushing would
-    // overwrite the newer key (memory-wins), orphaning its retry.
+    // overwrite the newer key (memory-wins), orphaning its retry —
+    // but returning without reconciling is just as bad (Codex P1):
+    // the stale in-memory K1 would later flush over the persisted
+    // K2. So the veto adopts K2 into memory and skips the flush.
     // Production descriptors are pre-digested (callers scope once
     // via scopePendingVtuSignature), so the crafted snapshot uses
     // the same digest key the gate looks up.
@@ -179,12 +182,20 @@ describe('utility-pending-vtu-canonical-adoption', () => {
       adoptCanonicalVtuKey(scoped, 'key-minted', 'key-winner')
     ).resolves.toBe(true);
 
-    // No rebind, no flush: live memory and the newer persisted
-    // generation both survive untouched.
-    expect(recallPendingVtuKey(scoped)).toBe('key-minted');
+    // No rebind, no flush — but memory converges to the
+    // persisted newer generation so a later flush cannot write
+    // the superseded K1 back over K2.
+    expect(recallPendingVtuKey(scoped)).toBe('key-fresh');
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.entries).toHaveLength(1);
     expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-fresh' });
+
+    // The P1 regression proper: a later unrelated flush must not
+    // write the superseded K1 back over the persisted K2.
+    await flushPendingVtuPurchases();
+    const afterFlush = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(afterFlush.entries).toHaveLength(1);
+    expect(afterFlush.entries[0]?.[1]).toMatchObject({ key: 'key-fresh' });
   });
 
   it('does not resurrect an entry forgotten while waiting for the lock', async () => {

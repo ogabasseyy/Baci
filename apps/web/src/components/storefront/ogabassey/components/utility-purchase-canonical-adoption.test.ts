@@ -100,4 +100,26 @@ describe('adoptSubmittedCanonicalKey', () => {
     expect(adoptCanonicalKey).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
+
+  it('returns null when the adoption was not durable', async () => {
+    // Codex P2: all persistence attempts failed AFTER the
+    // in-memory rebind — memory holds the winner but storage
+    // still holds the loser. Retagging would let terminal
+    // settlement tombstone only the winner, and the merge would
+    // then resurrect the persisted loser (key-bound tombstones do
+    // not suppress it). Null settles presentation-only; the
+    // scheduled retry persists the winner over the loser.
+    rememberPendingVtuPurchase('scoped-1', 'key-winner');
+    const adoptCanonicalKey = vi.fn(async () => false);
+
+    const result = await adoptSubmittedCanonicalKey({
+      adoptCanonicalKey,
+      attempt,
+      canonicalKey: 'key-winner',
+    });
+
+    expect(adoptCanonicalKey).toHaveBeenCalled();
+    expect(result).toBeNull();
+    expect(recallPendingVtuKey('scoped-1')).toBe('key-winner');
+  });
 });

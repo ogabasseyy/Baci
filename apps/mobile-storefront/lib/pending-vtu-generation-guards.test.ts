@@ -1,3 +1,4 @@
+import { adoptCanonicalVtuKey } from './pending-vtu-canonical-adoption';
 import {
   forgetOwnPendingVtuPurchase,
   forgetOwnPendingVtuPurchaseDurable,
@@ -122,5 +123,44 @@ describe('pending-vtu-generation-guards', () => {
     expect(snapshot.entries).toEqual([
       ['d-race', expect.objectContaining({ key: 'key-k2' })],
     ]);
+  });
+
+  it('settling the winner cannot resurrect a tombstoned persisted loser', async () => {
+    // Codex P2 (mobile half): after a non-durable adoption, memory
+    // holds the winner while storage still holds the loser. The
+    // checkout tombstones the loser explicitly; terminal settlement
+    // of the winner must then leave the loser suppressed instead
+    // of resurrecting it on merge (key-bound tombstones ignore a
+    // winner-only tombstone for a loser-keyed entry).
+    rememberPendingVtuPurchase('d-settle', 'key-loser');
+    await flushPendingVtuPurchases();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Force the adoption flush to fail: memory rebinds, storage
+    // keeps the loser, adoption reports non-durable.
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    const consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    try {
+      await expect(
+        adoptCanonicalVtuKey('d-settle', 'key-loser', 'key-winner')
+      ).resolves.toBe(false);
+    } finally {
+      persistSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+    expect(recallPendingVtuKey('d-settle')).toBe('key-winner');
+    // What chargeWalletForVtu now does on a non-durable adoption.
+    vtuStore.noteForgottenVtuScopes(['d-settle'], Date.now(), 'key-loser');
+    // Terminal settlement of the winner generation.
+    await expect(
+      forgetOwnPendingVtuPurchaseDurable('d-settle', 'key-winner')
+    ).resolves.toBe(true);
+
+    expect(recallPendingVtuKey('d-settle')).toBeNull();
+    const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([]);
   });
 });

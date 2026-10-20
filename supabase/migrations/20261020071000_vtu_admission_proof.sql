@@ -56,7 +56,7 @@ AS $$
     pg_catalog.statement_timestamp(),
     COALESCE(
       (
-        SELECT pg_catalog.array_agg(t.id)
+        SELECT pg_catalog.array_agg(DISTINCT t.id)
         FROM public.vtu_idempotency_keys AS k
         JOIN public.vtu_transactions AS t
           ON t.id = k.vtu_transaction_id

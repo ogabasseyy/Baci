@@ -132,11 +132,14 @@ describe('pending-vtu-canonical-adoption', () => {
     ]);
   });
 
-  it('adoption no-ops without flushing when storage holds a newer generation', async () => {
+  it('adoption reconciles memory to the persisted newer generation without flushing', async () => {
     // Codex R2 P1 (cross-tab half): a sibling tab persisted a
     // newer same-descriptor key after this tab submitted — this
     // join response is stale. Flushing would overwrite the newer
-    // key (memory-wins), orphaning its retry.
+    // key (memory-wins), orphaning its retry — but returning
+    // without reconciling is just as bad (Codex P1): the stale
+    // in-memory K1 would later flush over the persisted K2. So
+    // the veto adopts K2 into memory and skips the flush.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('desc-stale', 'key-minted');
     // Drain the remember's scheduled flush BEFORE crafting the
@@ -167,11 +170,22 @@ describe('pending-vtu-canonical-adoption', () => {
       adoptCanonicalVtuKey('desc-stale', 'key-minted', 'key-winner')
     ).resolves.toBe(true);
 
-    // No rebind, no flush: live memory and the newer persisted
-    // generation both survive untouched.
-    expect(recallPendingVtuKey('desc-stale')).toBe('key-minted');
+    // No rebind, no flush — but memory converges to the
+    // persisted newer generation so a later flush cannot write
+    // the superseded K1 back over K2.
+    expect(recallPendingVtuKey('desc-stale')).toBe('key-fresh');
     const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
     expect(snapshot.entries).toEqual([
+      ['desc-stale', expect.objectContaining({ key: 'key-fresh' })],
+    ]);
+
+    // The P1 regression proper: a later unrelated flush must not
+    // write the superseded K1 back over the persisted K2.
+    await flushPendingVtuPurchases();
+    const afterFlush = parsePendingVtuSnapshot(
+      vtuStore.loadPendingVtuSnapshot()
+    );
+    expect(afterFlush.entries).toEqual([
       ['desc-stale', expect.objectContaining({ key: 'key-fresh' })],
     ]);
   });

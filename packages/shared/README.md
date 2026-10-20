@@ -135,7 +135,12 @@ One immediate behavior change: the legacy receipt formatter forced 2
 fraction digits for every currency, so XAF/XOF receipts rendered
 fictitious hundredths; `createMoneyFormatter` now defaults to the
 currency exponent for allowlisted currencies (0 for XAF/XOF), pinned
-by a receipt-class fixture in `format-money.test.ts`.
+by a receipt-class fixture in `format-money.test.ts`. Currency codes
+are also normalized (trim + uppercase, ISO 3-letter shape) before
+locale lookup, so stored lowercase/padded codes (`eur`, ` ngn `) now
+resolve their intended locale instead of the legacy en-NG fallback,
+and the receipt VAT default shares that normalization; both are
+pinned in `create-money-formatter.test.ts` and the money VAT test.
 Display defaults in the new `formatMoney` entry points use the ISO
 exponent for every well-formed code (allowlisted exponents are
 table-pinned; others are Intl-derived), matching `formatMoneyMinor`

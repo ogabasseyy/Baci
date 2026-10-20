@@ -27,6 +27,13 @@ describe('createMoneyFormatter', () => {
     expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.46`);
   });
 
+  it('normalizes lowercase and padded stored codes (documented change)', () => {
+    // Legacy raw-code lookup fell back to en-NG for these; the shared
+    // normalization now resolves the intended currency locale.
+    expect(createMoneyFormatter('eur')(1234.5)).toBe(`1.234,50${NBSP}€`);
+    expect(createMoneyFormatter(' ngn ')(1234.5)).toBe('₦1,234.50');
+  });
+
   it('performs no Intl exponent derivation during construction', () => {
     // BHD is non-allowlisted and unused elsewhere in this file, so a
     // derivation would show up as a second Intl.NumberFormat call.

@@ -43,11 +43,15 @@ export function formatMoneyCompact(
     options.minimumFractionDigits === undefined &&
     options.maximumFractionDigits === undefined
   ) {
-    const exponent = useCompact ? 2 : getMoneyDisplayExponent(currencyCode);
-    defaults.minimumFractionDigits = useCompact ? 1 : exponent;
-    // Non-compact branch keeps the currency exponent as the maximum so
-    // zero-decimal currencies never render fictitious fractions.
-    defaults.maximumFractionDigits = exponent;
+    const exponent = getMoneyDisplayExponent(currencyCode);
+    // Cap compact defaults by the currency exponent so zero-decimal
+    // currencies never render fictitious fractions in compact form.
+    defaults.minimumFractionDigits = useCompact
+      ? Math.min(1, exponent)
+      : exponent;
+    defaults.maximumFractionDigits = useCompact
+      ? Math.min(2, exponent)
+      : exponent;
   }
   return formatMoney(amount, currencyCode, {
     compactDisplay: 'short',

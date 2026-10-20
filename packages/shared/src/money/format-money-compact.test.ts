@@ -5,6 +5,7 @@ import {
 } from './format-money-compact';
 
 const NBSP = '\u00A0';
+const NNBSP = '\u202F';
 
 describe('formatMoneyCompact', () => {
   it('pins compact outputs and keeps small amounts standard', () => {
@@ -45,5 +46,14 @@ describe('formatMoneyCompact', () => {
   it('equalizes fraction bounds for roundingIncrement > 1', () => {
     const options = { roundingIncrement: 5 } as FormatMoneyCompactOptions;
     expect(formatMoneyCompact(1200, 'NGN', options)).toBe('₦1.20K');
+  });
+
+  it('caps compact defaults at zero-decimal currency exponents', () => {
+    expect(formatMoneyCompact(500, 'XOF', { notation: 'compact' })).toBe(
+      `500${NBSP}F${NNBSP}CFA`
+    );
+    expect(formatMoneyCompact(1_200_000, 'XOF')).toBe(
+      `1${NBSP}M${NBSP}F${NNBSP}CFA`
+    );
   });
 });

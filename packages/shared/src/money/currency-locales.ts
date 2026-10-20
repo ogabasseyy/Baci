@@ -41,7 +41,7 @@ export const MONEY_CURRENCY_EXPONENTS: Readonly<Record<string, number>> =
   });
 
 /** Currencies whose Node-pinned output mobile adoption may rely on. */
-export const SUPPORTED_MONEY_CURRENCIES = Object.freeze(
+export const SUPPORTED_MONEY_CURRENCIES: readonly string[] = Object.freeze(
   Object.keys(MONEY_CURRENCY_LOCALES)
 );
 

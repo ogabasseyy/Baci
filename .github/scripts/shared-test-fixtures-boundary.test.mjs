@@ -161,3 +161,26 @@ test('test-runner configs may register fixture aliases', () => {
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), []);
 });
+
+test('config exemption is anchored to real config basenames', () => {
+  assert.equal(isTestFile('/repo/vitest.config.ts'), true);
+  assert.equal(isTestFile('/repo/src/lib/vitest.config.helpers.ts'), false);
+  const dir = fixtureDir({
+    'src/lib/vitest.config.helpers.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'src/lib/vitest.config.helpers.ts'),
+  ]);
+});
+
+test('follows extensionless in-root file symlinks to source targets', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    'src/feature/helper.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'src/feature/helper.ts'), join(dir, 'linked-helper'));
+  const offenders = findFixtureImportOffenders([dir]);
+  assert.ok(offenders.includes(join(dir, 'linked-helper')));
+});

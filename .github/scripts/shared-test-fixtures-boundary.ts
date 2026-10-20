@@ -41,7 +41,7 @@ export function isTestFile(path: string) {
   return (
     // Test-runner configs (Vitest/Jest) only ever execute tests, so
     // their alias registrations for fixture subpaths are legitimate.
-    /(?:vitest|jest)\.config\./.test(normalized) ||
+    /(?:^|\/)(?:vitest|jest)\.config\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
@@ -57,7 +57,7 @@ export function isTestHelper(path: string) {
     // exempt from the test-support pattern but NOT from the fixture
     // patterns, so a Metro config importing a shared fixture (as
     // opposed to a test-runner alias registration) is flagged.
-    /metro\.config\./.test(normalized) ||
+    /(?:^|\/)metro\.config\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /(?:^|[-_./])test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
@@ -131,7 +131,10 @@ export function collectSourceFiles(roots: string[]): string[] {
           if (visitedDirs.has(target)) continue;
           visitedDirs.add(target);
           walk(full, false, entryRel);
-        } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
+        } else if (/\.(?:m|c)?[tj]sx?$/.test(target)) {
+          // Classify by the resolved target's extension: a link with
+          // an extensionless or non-source name still surfaces its
+          // in-root source target for scanning.
           out.push(full);
         }
         continue;

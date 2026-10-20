@@ -1,5 +1,9 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { findFixtureImportOffenders } from '../../../.github/scripts/shared-test-fixtures-boundary';
+import {
+  findFixtureImportOffenders,
+  findFixturePatternOffenders,
+} from '../../../.github/scripts/shared-test-fixtures-boundary';
 
 // Import boundary (thin wrapper over the single shared
 // implementation in .github/scripts/shared-test-fixtures-boundary.ts):
@@ -15,5 +19,12 @@ const sharedSrc = join(appRoot, '..', '..', 'packages', 'shared', 'src');
 describe('shared test-fixtures import boundary', () => {
   it('no non-test source imports @baci/shared/test-fixtures', () => {
     expect(findFixtureImportOffenders([appRoot, sharedSrc])).toEqual([]);
+  }, 60_000);
+
+  it('no developer tooling source imports shared fixtures directly', () => {
+    const toolsRoot = join(appRoot, 'tools');
+    expect(
+      existsSync(toolsRoot) ? findFixturePatternOffenders([toolsRoot]) : []
+    ).toEqual([]);
   }, 60_000);
 });

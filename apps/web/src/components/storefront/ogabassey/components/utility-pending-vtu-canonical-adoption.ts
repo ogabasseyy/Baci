@@ -5,9 +5,14 @@
  * module-size budget (Codex R1 P1 fix; mobile mirror in
  * pending-vtu-canonical-adoption.ts).
  */
+import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
-  flushPendingVtuPurchases,
+  loadPendingVtuSnapshot,
+  runPendingVtuMintLocked,
+} from './utility-pending-idempotency-store';
+import {
   pendingVtuPurchases,
+  persistPendingVtuPurchases,
   schedulePendingVtuFlush,
 } from './utility-pending-vtu-sync';
 
@@ -17,23 +22,53 @@ import {
  * is flushed under the mint mutex before resolving, so a restart
  * recovers the winner, not the loser (retrying the loser after
  * the winner terminalizes would prepare fresh and double-debit).
+ * Generation-bound (Codex R2 P1): adoption proceeds only when
+ * the live entry still holds the expected loser key AND no
+ * persisted entry holds a newer different key (a sibling tab's
+ * newer generation vetoes — this join response is stale). A
+ * stale veto no-ops WITHOUT flushing: memory-wins persistence
+ * would otherwise overwrite the newer key, orphaning its retry.
  * No-op true when the entry is missing (forgotten/rotated
- * meanwhile — never resurrect) or already canonical. False =
- * flush failed after retries; a background retry is scheduled
- * and the server-side loser-key mapping backstops the crash
- * window (loser-key retries replay the winner). */
+ * meanwhile — never resurrect), already canonical, or stale.
+ * False = flush failed after retries; a background retry is
+ * scheduled and the server-side loser-key mapping backstops the
+ * crash window (loser-key retries replay the winner). */
 export async function adoptCanonicalVtuKey(
   payloadSignature: string,
+  expectedKey: string,
   key: string
 ): Promise<boolean> {
   const entry = pendingVtuPurchases.get(payloadSignature);
-  if (!entry || entry.key === key) {
+  if (!entry || entry.key !== expectedKey || entry.key === key) {
     return true;
   }
-  pendingVtuPurchases.set(payloadSignature, { ...entry, key });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      if (await flushPendingVtuPurchases()) return true;
+      const outcome = await runPendingVtuMintLocked(() => {
+        // Re-checked under the lock so a sibling persist landing
+        // between our pre-check and flush still vetoes. Newer
+        // only (rememberedAt): an older persisted key is a lagging
+        // write, not a newer generation — overwriting it is
+        // correct. Ties veto (fail-closed: the server-side loser
+        // mapping covers our retry).
+        const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+        const persisted = snapshot.entries.find(
+          ([scoped]) => scoped === payloadSignature
+        );
+        if (
+          persisted &&
+          persisted[1].key !== expectedKey &&
+          persisted[1].rememberedAt >= entry.rememberedAt
+        ) {
+          return 'stale' as const;
+        }
+        pendingVtuPurchases.set(payloadSignature, { ...entry, key });
+        return persistPendingVtuPurchases()
+          ? ('saved' as const)
+          : ('failed' as const);
+      });
+      if (outcome === 'stale' || outcome === 'saved') return true;
+      // 'failed' or lock-unacquired (null) → retry.
     } catch {
       break;
     }

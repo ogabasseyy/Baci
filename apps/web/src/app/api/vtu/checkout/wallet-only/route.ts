@@ -5,10 +5,12 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
+import { admitVtuClaim, VtuAdmissionError } from '@/lib/vtu-claim-admission';
 import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
+import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
-import { findExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
+import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -28,7 +30,7 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  * RPC (the authority; client registries are hints). Tenant
  * isolation is pinned by application checks + route.test.ts
  * (session binding, fingerprint, claim-race cross-customer
- * refusal, cross-merchant rejection, terminal exclusion).
+ * refusal, cross-merchant rejection, terminal overlap fence).
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -89,7 +91,23 @@ export async function POST(request: NextRequest) {
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     const supabase = createAdminClient();
-    const existing = await findExistingIdempotencyRow(supabase, idempotencyKey);
+    // Admission (Codex R3 P1): key lookup + DB-clock stamp for the
+    // claim overlap fence. No stamp → fail closed BEFORE preparing
+    // (nothing to orphan; the client retries the same key).
+    let existing: ExistingIdempotencyRow | null;
+    let admittedAt: string;
+    try {
+      ({ existing, admittedAt } = await admitVtuClaim(
+        supabase,
+        idempotencyKey
+      ));
+    } catch (error) {
+      if (!(error instanceof VtuAdmissionError)) throw error;
+      console.error('VTU admission timestamp unavailable:', {
+        message: error.message,
+      });
+      return createErrorResponse('Failed to admit VTU claim.', 500);
+    }
 
     // Replay path: reuse the existing vtu_transaction_id after the
     // ownership guard (a stolen key must not replay cross-customer/
@@ -158,12 +176,13 @@ export async function POST(request: NextRequest) {
     // (key, transaction) mapping for this intent scope, or joins the
     // scope's live-or-overlapping transaction when another key won
     // the race (second tab/device, registry loss, double submit).
-    // Terminals that settled before our prepare are never joined: a
-    // new key after terminalization starts a new purchase (repeat
-    // purchases share fingerprints); terminals overlapping our
-    // prepare join (same in-flight operation). The RPC returns the
-    // authoritative mapping, subsuming the old insert + PK-race
-    // re-read (Codex R124 P2).
+    // Terminals that settled before our admission are never joined:
+    // a new key after terminalization starts a new purchase
+    // (repeat purchases share fingerprints); terminals overlapping
+    // our admission join (same in-flight operation, even when
+    // preparation delays our row past terminalization — Codex R3
+    // P1). The RPC returns the authoritative mapping, subsuming
+    // the old insert + PK-race re-read (Codex R124 P2).
     const { data: claimRows, error: claimError } = await supabase.rpc(
       'claim_vtu_intent',
       {
@@ -172,6 +191,7 @@ export async function POST(request: NextRequest) {
         p_transaction_id: prepared.transaction.id,
         p_merchant_id: prepared.merchant.id,
         p_customer_id: prepared.customer.id,
+        p_admitted_at: admittedAt,
       }
     );
     if (claimError) {
@@ -189,30 +209,7 @@ export async function POST(request: NextRequest) {
           transactionId: prepared.transaction.id,
         });
       }
-      // Same-key race lost on a changed payload: the key is mapped
-      // with another fingerprint — same 409 contract as the replay
-      // path. Scope mismatch (key-UUID collision; the route's
-      // ownership checks already reject cross-tenant keys) → 400.
-      if (claimError.message.startsWith('claim_fingerprint_mismatch')) {
-        return createErrorResponse(
-          'Idempotency-Key already used with a different request payload. Generate a fresh key for the new purchase.',
-          409
-        );
-      }
-      if (claimError.message.startsWith('claim_scope_mismatch')) {
-        return createErrorResponse(
-          'Idempotency-Key does not belong to this customer.',
-          400
-        );
-      }
-      // Log internally; don't leak the raw DB error to the client.
-      // The key itself is the unguessable replay credential — log
-      // the prepared transaction id instead (Muse R108 MEDIUM).
-      console.error('Failed to claim VTU purchase intent:', {
-        error: claimError.message,
-        transactionId: prepared.transaction.id,
-      });
-      return createErrorResponse('Failed to claim VTU purchase intent.', 500);
+      return respondToClaimError(claimError, prepared.transaction.id);
     }
     const claim = claimRows?.[0];
     if (!claim) {

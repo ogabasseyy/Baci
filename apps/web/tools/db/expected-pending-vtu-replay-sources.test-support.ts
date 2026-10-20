@@ -73,4 +73,9 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261020061000_stamp_vtu_terminal_transition.sql',
     sha256: '0e46b29e365197d00ad956045a382b3836ee75c0bebe043dd9318aedb6c26ceb',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020064000_claim_vtu_intent_admission_fence.sql',
+    sha256: '64605f81a684b36689eed8e4879a1c1d1e2f9ff8b1d8676ccf82a1d0f8a681ce',
+  },
 ];

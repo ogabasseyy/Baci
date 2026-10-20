@@ -17050,6 +17050,7 @@ export type Database = {
       };
       claim_vtu_intent: {
         Args: {
+          p_admitted_at: string;
           p_customer_id: string;
           p_fingerprint: string;
           p_key: string;
@@ -21844,6 +21845,10 @@ export type Database = {
           p_order_id: string;
         };
         Returns: Json;
+      };
+      vtu_admission_timestamp: {
+        Args: never;
+        Returns: string;
       };
       write_admin_reconciliation_export_event_v1: {
         Args: never;

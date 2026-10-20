@@ -555,7 +555,7 @@ describe('utility-pending-idempotency', () => {
     notePendingVtuReference('{"a":1}', 'REF-1');
 
     await expect(
-      adoptCanonicalVtuKey('{"a":1}', 'key-winner')
+      adoptCanonicalVtuKey('{"a":1}', 'key-minted', 'key-winner')
     ).resolves.toBe(true);
 
     expect(recallPendingVtuKey('{"a":1}')).toBe('key-winner');
@@ -574,7 +574,7 @@ describe('utility-pending-idempotency', () => {
 
   it('adoption is a no-op for a missing entry (never resurrect)', async () => {
     await expect(
-      adoptCanonicalVtuKey('{"gone":1}', 'key-winner')
+      adoptCanonicalVtuKey('{"gone":1}', 'key-minted', 'key-winner')
     ).resolves.toBe(true);
 
     expect(recallPendingVtuKey('{"gone":1}')).toBeUndefined();
@@ -586,7 +586,7 @@ describe('utility-pending-idempotency', () => {
     const before = pendingVtuPurchases.get('{"a":2}');
 
     await expect(
-      adoptCanonicalVtuKey('{"a":2}', 'key-winner')
+      adoptCanonicalVtuKey('{"a":2}', 'key-winner', 'key-winner')
     ).resolves.toBe(true);
 
     expect(pendingVtuPurchases.get('{"a":2}')).toBe(before);
@@ -609,7 +609,7 @@ describe('utility-pending-idempotency', () => {
       .mockImplementation(() => {});
     try {
       await expect(
-        adoptCanonicalVtuKey('{"f":1}', 'key-winner')
+        adoptCanonicalVtuKey('{"f":1}', 'key-minted', 'key-winner')
       ).resolves.toBe(false);
       expect(recallPendingVtuKey('{"f":1}')).toBe('key-winner');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -624,5 +624,70 @@ describe('utility-pending-idempotency', () => {
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.entries).toHaveLength(1);
     expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-winner' });
+  });
+
+  it('adoption no-ops when the live entry already moved generation', async () => {
+    // Codex R2 P1 (local half, mobile mirror): the descriptor was
+    // rebound since this join response was issued — adopting the
+    // old winner would resurrect a superseded generation.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"r":1}', 'key-new');
+    await flushPendingVtuPurchases();
+
+    await expect(
+      adoptCanonicalVtuKey('{"r":1}', 'key-minted', 'key-winner')
+    ).resolves.toBe(true);
+
+    expect(recallPendingVtuKey('{"r":1}')).toBe('key-new');
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-new' });
+  });
+
+  it('adoption no-ops without flushing when storage holds a newer generation', async () => {
+    // Codex R2 P1 (cross-tab half, mobile mirror): a sibling tab
+    // persisted a newer same-descriptor key after this tab
+    // submitted — this join response is stale. Flushing would
+    // overwrite the newer key (memory-wins), orphaning its retry.
+    // Production descriptors are pre-digested (callers scope once
+    // via scopePendingVtuSignature), so the crafted snapshot uses
+    // the same digest key the gate looks up.
+    const scoped = scopePendingVtuSignature('owner-1', 'merchant-1', '{"s":1}');
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase(scoped, 'key-minted');
+    // Drain the remember's scheduled flush BEFORE crafting the
+    // sibling write, so nothing rewrites storage afterwards.
+    await flushPendingVtuPurchases();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(
+      vtuStore.savePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [
+            [
+              scoped,
+              {
+                key: 'key-fresh',
+                reference: null,
+                rememberedAt: Date.now(),
+                completedAt: null,
+                scopeTag: 'scope-1',
+              },
+            ],
+          ],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+
+    await expect(
+      adoptCanonicalVtuKey(scoped, 'key-minted', 'key-winner')
+    ).resolves.toBe(true);
+
+    // No rebind, no flush: live memory and the newer persisted
+    // generation both survive untouched.
+    expect(recallPendingVtuKey(scoped)).toBe('key-minted');
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-fresh' });
   });
 });

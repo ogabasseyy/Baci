@@ -221,10 +221,15 @@ export function useUtilityPurchase({
     });
     // Adopt the winner key after a claim join (retries replay
     // it) — awaited (Codex R1 P1) so the winner is durable before
-    // the submit resolves.
+    // the submit resolves, generation-bound (Codex R2 P1) on the
+    // submitted loser key.
     const canonicalKey = result.canonicalIdempotencyKey;
     if (canonicalKey && captured.attempt) {
-      await adoptCanonicalKey(captured.attempt.scoped, canonicalKey);
+      await adoptCanonicalKey(
+        captured.attempt.scoped,
+        captured.attempt.key,
+        canonicalKey
+      );
       captured.attempt = { ...captured.attempt, key: canonicalKey };
     }
 

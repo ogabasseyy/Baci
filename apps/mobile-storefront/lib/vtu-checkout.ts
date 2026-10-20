@@ -124,8 +124,10 @@ export async function chargeWalletForVtu(
     // Awaited (Codex R1 P1): the winner key must be durable
     // before this response resolves — a restart on a scheduled-
     // only flush would resurrect the loser key and double-debit
-    // once the winner terminalizes.
-    await adoptCanonicalVtuKey(pendingDescriptor, canonicalKey);
+    // once the winner terminalizes. Generation-bound (Codex R2
+    // P1): a sibling tab's newer generation vetoes this stale
+    // response instead of being overwritten.
+    await adoptCanonicalVtuKey(pendingDescriptor, idempotencyKey, canonicalKey);
   }
   if (!response.ok) {
     throw new HttpError(response.status, getResponseErrorMessage(data));

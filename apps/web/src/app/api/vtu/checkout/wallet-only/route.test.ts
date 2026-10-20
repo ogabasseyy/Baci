@@ -124,16 +124,23 @@ interface IdempotencyRowState {
   claimStore?: {
     rows: ClaimMapping[];
     txnStatus: Record<string, string>;
+    /** Terminal settle times (ISO) for the overlap fence; absent = legacy-stale. */
+    txnTerminalAt?: Record<string, string>;
   };
+  /** Admission-stamp override (null data / error fails admission). */
+  admissionTimestamp?: string | null;
+  admissionError?: { message: string } | null;
 }
 
 /**
  * Faithful sequential mirror of the claim_vtu_intent RPC: same key
  * first (immutable mapping, scope/fingerprint asserted), then the
- * earliest in-flight scope winner, else record. Terminal (successful/
- * failed) transactions are never joined. True two-backend race
- * serialization is proven against live Postgres during development,
- * not here — this mock interleaves deterministically.
+ * earliest live-or-overlapping scope winner (terminals join only
+ * when settled at/after admission; legacy terminals without a
+ * stamp never join), else record. Joins persist the loser-key
+ * mapping. True two-backend race serialization is proven against
+ * live Postgres during development, not here — this mock
+ * interleaves deterministically.
  */
 function defaultClaim(
   state: IdempotencyRowState,
@@ -148,7 +155,16 @@ function defaultClaim(
   const transactionId = args.p_transaction_id;
   const merchantId = args.p_merchant_id;
   const customerId = args.p_customer_id;
+  const admittedAt = args.p_admitted_at ?? '';
   const statusOf = (id: string) => store.txnStatus[id] ?? 'processing';
+  // Overlap fence mirror (Codex R3): in-flight always joins;
+  // terminals join only with a stamp at/after admission.
+  const joins = (id: string) => {
+    const status = statusOf(id);
+    if (status !== 'successful' && status !== 'failed') return true;
+    const settledAt = store.txnTerminalAt?.[id];
+    return settledAt !== undefined && settledAt >= admittedAt;
+  };
   const sameKey = store.rows.find((r) => r.key === key);
   if (sameKey) {
     if (
@@ -183,10 +199,18 @@ function defaultClaim(
       r.merchant_id === merchantId &&
       r.customer_id === customerId &&
       r.request_fingerprint === fingerprint &&
-      statusOf(r.vtu_transaction_id) !== 'successful' &&
-      statusOf(r.vtu_transaction_id) !== 'failed'
+      joins(r.vtu_transaction_id)
   );
   if (winner) {
+    // Loser-key mapping mirror: the join records (loser key →
+    // winner transaction) so loser-key retries replay.
+    store.rows.push({
+      key,
+      vtu_transaction_id: winner.vtu_transaction_id,
+      customer_id: customerId,
+      merchant_id: merchantId,
+      request_fingerprint: fingerprint,
+    });
     state.row = { ...winner };
     return {
       data: [
@@ -375,6 +399,12 @@ function buildSupabase(
     }),
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
+      if (fn === 'vtu_admission_timestamp') {
+        return Promise.resolve({
+          data: state.admissionTimestamp ?? ADMISSION_TS,
+          error: state.admissionError ?? null,
+        });
+      }
       if (fn !== 'claim_vtu_intent') {
         return Promise.resolve({ data: null, error: null });
       }
@@ -409,6 +439,9 @@ const VALID_BODY_FINGERPRINT = computeVtuWalletRequestFingerprint({
 } as Parameters<typeof computeVtuWalletRequestFingerprint>[0]);
 
 const VALID_KEY = '11111111-2222-3333-4444-555555555555';
+
+/** Fixed DB-clock admission stamp returned by the rpc mock. */
+const ADMISSION_TS = '2026-10-20T05:00:00.000Z';
 
 function makeRequest({
   body = VALID_BODY,
@@ -808,7 +841,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         },
       },
     ]);
-    expect(state.rpcCalls).toEqual([]);
+    // Admission stamp fires on the replay path too (concurrent
+    // with the key lookup; unused when a mapping exists).
+    expect(state.rpcCalls).toEqual([{ fn: 'vtu_admission_timestamp' }]);
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: expect.anything(),
       transactionId: 'vtu-tx-existing',
@@ -872,7 +907,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           },
         },
       ]);
-      expect(state.rpcCalls).toEqual([]);
+      // Admission stamp fires on the replay path too (concurrent
+      // with the key lookup; unused when a mapping exists).
+      expect(state.rpcCalls).toEqual([{ fn: 'vtu_admission_timestamp' }]);
       expect(mockFulfill).toHaveBeenCalledWith({
         supabase: expect.anything(),
         transactionId: 'vtu-tx-existing',
@@ -1013,6 +1050,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // adoption. The cleanup outcome never masks the replay.
     const WINNER_KEY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const markPayloads: Record<string, unknown>[] = [];
+    const claimArgs: Record<string, unknown>[] = [];
     mockPrepare.mockResolvedValue({
       transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
       customer: { id: 'customer-1', email: 'c@example.com' },
@@ -1134,8 +1172,12 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn((fn: string) => {
+      rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+        if (fn === 'vtu_admission_timestamp') {
+          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        }
         if (fn === 'claim_vtu_intent') {
+          claimArgs.push(args);
           return Promise.resolve({
             data: [
               {
@@ -1172,6 +1214,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // Winner-key wire: the joined response carries the winner
     // key so client retries converge on one key.
     expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(WINNER_KEY);
+    // Admission wire (Codex R3 P1): the claim carries the DB-clock
+    // admission stamp for the overlap fence.
+    expect(claimArgs).toHaveLength(1);
+    expect(claimArgs[0]).toMatchObject({ p_admitted_at: ADMISSION_TS });
     // Join telemetry carries transaction IDs only: the winner key
     // is an unguessable replay credential (Codex R2 P2, R108).
     expect(consoleInfoSpy).toHaveBeenCalled();
@@ -1280,6 +1326,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         };
       }),
       rpc: vi.fn((fn: string) => {
+        if (fn === 'vtu_admission_timestamp') {
+          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        }
         if (fn === 'claim_vtu_intent') {
           return Promise.resolve({
             data: [
@@ -1346,8 +1395,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(resA.status).toBe(200);
     expect(resB.status).toBe(200);
     expect(state.claimCalls).toBe(2);
-    // Single mapping row: the second claim joined, not recorded.
-    expect(state.claimStore?.rows).toHaveLength(1);
+    // Winner row + loser-key mapping: the second claim joined (and
+    // recorded its loser key) instead of starting a new purchase.
+    expect(state.claimStore?.rows).toHaveLength(2);
     const winnerTxn = state.claimStore?.rows[0]?.vtu_transaction_id;
     // Both checkouts drove the SAME transaction (the winner
     // fulfills; the loser re-drives idempotently via replay).
@@ -1404,6 +1454,51 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       expect.objectContaining({ transactionId: 'vtu-tx-new' })
     );
     expect(state.claimStore?.rows).toHaveLength(2);
+  });
+
+  it('claim overlapping terminal: joins instead of starting a new purchase', async () => {
+    // Overlap fence (Codex R3 P1): the prior occurrence settled
+    // AFTER this operation was admitted (a concurrent duplicate
+    // delayed in preparation) — the claim joins it instead of
+    // debiting twice. Settle stamp >= admission stamp.
+    const OLD_KEY = 'dddddddd-4444-5444-8444-dddddddddddd';
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimStore: {
+        rows: [
+          {
+            key: OLD_KEY,
+            vtu_transaction_id: 'vtu-tx-old',
+            customer_id: 'customer-1',
+            merchant_id: 'merchant-1',
+            request_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        ],
+        txnStatus: { 'vtu-tx-old': 'successful' },
+        txnTerminalAt: { 'vtu-tx-old': ADMISSION_TS },
+      },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body, headers } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    // Joined the overlapping terminal (settled at admission):
+    // winner replayed, loser key mapped, wire carried.
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-old' })
+    );
+    expect(state.claimStore?.rows).toHaveLength(2);
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(OLD_KEY);
   });
 
   it('claim race: same key mapped with another fingerprint returns 409', async () => {
@@ -1557,6 +1652,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         };
       }),
       rpc: vi.fn((fn: string) => {
+        if (fn === 'vtu_admission_timestamp') {
+          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        }
         if (fn === 'claim_vtu_intent') {
           return Promise.resolve({
             data: null,
@@ -1579,6 +1677,36 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(JSON.stringify(body)).not.toContain(VALID_KEY);
     // No blind cleanup: the claim may have committed.
     expect(deleteSpy).not.toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('admission stamp failure: 500s before preparing (nothing to orphan)', async () => {
+    // Without the admission stamp the RPC cannot fence the
+    // overlap, so the route fails closed BEFORE prepare — no
+    // prepared row exists to orphan, and the client retries with
+    // the same key (Codex R3 P1).
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      admissionError: { message: 'connection reset' },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/admit/i),
+    });
+    expect(JSON.stringify(body)).not.toContain(VALID_KEY);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(state.claimCalls).toBeFalsy();
     expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });

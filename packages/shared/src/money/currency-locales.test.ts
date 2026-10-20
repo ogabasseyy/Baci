@@ -22,6 +22,14 @@ describe('currency-locales', () => {
     expect(() => normalizeMoneyCurrency('   ')).toThrow(RangeError);
   });
 
+  it('rejects non-ISO shapes including prototype-chain keys', () => {
+    expect(() => normalizeMoneyCurrency('__proto__')).toThrow(RangeError);
+    expect(() => resolveMoneyLocale('__proto__')).toThrow(RangeError);
+    expect(() => getMoneyCurrencyExponent('__proto__')).toThrow(RangeError);
+    expect(() => normalizeMoneyCurrency('NG')).toThrow(RangeError);
+    expect(() => normalizeMoneyCurrency('USDD')).toThrow(RangeError);
+  });
+
   it('pins allowlist exponents and derives others from Intl', () => {
     expect(getMoneyCurrencyExponent('NGN')).toBe(2);
     expect(getMoneyCurrencyExponent('XAF')).toBe(0);

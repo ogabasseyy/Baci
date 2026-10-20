@@ -47,13 +47,18 @@ export const SUPPORTED_MONEY_CURRENCIES = Object.freeze(
 
 export function normalizeMoneyCurrency(currencyCode: string): string {
   const normalized = currencyCode.trim().toUpperCase();
-  if (!normalized) {
-    throw new RangeError('Invalid currency code: empty');
+  // ISO 4217 codes are exactly three letters; validating here also
+  // keeps prototype-chain keys ('__proto__') out of the table lookups.
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new RangeError(`Invalid currency code: ${currencyCode}`);
   }
   return normalized;
 }
 
 export function resolveMoneyLocale(currencyCode: string): string {
+  // Plain lookup is prototype-safe here: normalizeMoneyCurrency has
+  // already restricted the key to exactly three uppercase letters,
+  // which no Object.prototype member name matches.
   return (
     MONEY_CURRENCY_LOCALES[normalizeMoneyCurrency(currencyCode)] ?? 'en-NG'
   );
@@ -75,6 +80,7 @@ const derivedExponentCache = new Map<string, number>();
 
 export function getMoneyCurrencyExponent(currencyCode: string): number {
   const normalized = normalizeMoneyCurrency(currencyCode);
+  // Prototype-safe for the same reason as resolveMoneyLocale.
   const known = MONEY_CURRENCY_EXPONENTS[normalized];
   if (known !== undefined) return known;
   // Non-allowlisted currency: derive the real ISO exponent from Intl

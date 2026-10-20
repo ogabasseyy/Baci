@@ -141,7 +141,7 @@ build_register_migration_query() {
 . "$script_dir/apply-pending-migration.sh"
 . "$script_dir/repair-sales-migration-collision.sh"
 
-applied_versions_query="SELECT version, name, encode(sha256(convert_to(array_to_string(statements, E'\n'), 'UTF8')), 'hex') AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+applied_versions_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_string(statements, E'\n'), 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
 applied_versions_body="$(jq -n --arg query "$applied_versions_query" '{query: $query}')"
 applied_versions_response="$(api_query <<<"$applied_versions_body")"
 applied_migrations="$(jq -r '.[] | [.version, .name, (.statements_sha256 // "")] | @tsv' <<<"$applied_versions_response")"
@@ -186,6 +186,16 @@ for file in "${sorted_files[@]}"; do
 
   recorded_name="$(awk -F '\t' -v version="$version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
   if [ -z "$recorded_name" ] && alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+    if [ "$migration_phase" = "predeploy" ] && is_postdeploy_migration "$base"; then
+      echo "⏸ deferred until postdeploy: $version  ${name}"
+      deferred_count=$((deferred_count + 1))
+      continue
+    fi
+    if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+      echo "⏸ deferred above MIGRATION_MAX_VERSION $migration_max_version: $version  ${name}"
+      deferred_count=$((deferred_count + 1))
+      continue
+    fi
     if skip_verified_historical_migration_version_alias "$version" "$name" "$file" "$alias_spec"; then
       continue
     else

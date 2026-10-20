@@ -171,6 +171,7 @@ done
 facets_sha="$(sha256sum "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" | awk '{print $1}')"
 processor_sha="$(sha256sum "$version_alias_dir/20261003193000_storefront_processor_filters.sql" | awk '{print $1}')"
 category_sha="$(sha256sum "$version_alias_dir/20261003194500_storefront_category_facets.sql" | awk '{print $1}')"
+category_stored_sha='14bd400f6d42cf80df4797dfd96c6f9db863f82488abeee9394fd6c7237d7769'
 version_alias_log="$fixture_root/version-alias-queries.log"
 version_alias_output="$fixture_root/version-alias-output.log"
 PATH="$fake_bin:$PATH" \
@@ -181,13 +182,21 @@ PATH="$fake_bin:$PATH" \
   FAKE_INITIAL_RESPONSE="$(jq -cn \
     --arg facets "$facets_sha" \
     --arg processor "$processor_sha" \
-    --arg category "$category_sha" \
+    --arg category "$category_stored_sha" \
     '[
       {version:"20261003175517",name:"storefront_available_search_facets",statements_sha256:$facets},
       {version:"20261003183737",name:"storefront_processor_filters",statements_sha256:$processor},
       {version:"20261003184149",name:"storefront_category_facets",statements_sha256:$category}
     ]')" \
   bash "$applier" >"$version_alias_output"
+if ! jq -r '.query' "$version_alias_log" | grep -Fq "CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256"; then
+  echo 'Migration history must hash only the three pinned alias rows' >&2
+  exit 1
+fi
+if ! jq -r '.query' "$version_alias_log" | grep -Fq "FROM supabase_migrations.schema_migrations ORDER BY version"; then
+  echo 'Expected the migration history query to retain the full ordered version/name ledger' >&2
+  exit 1
+fi
 grep -q 'already applied under version 20261003175517: 20261003180000  storefront_available_search_facets' "$version_alias_output"
 grep -q 'already applied under version 20261003183737: 20261003193000  storefront_processor_filters' "$version_alias_output"
 grep -q 'already applied under version 20261003184149: 20261003194500  storefront_category_facets' "$version_alias_output"
@@ -253,6 +262,27 @@ fi
 grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/wrong-name-version-alias-output.log"
 if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_name_version_alias_log"; then
   echo 'A rejected alias name must not write migration state' >&2
+  exit 1
+fi
+
+capped_version_alias_dir="$fixture_root/capped-version-alias"
+mkdir -p "$capped_version_alias_dir"
+cp "$version_alias_dir/20261003193000_storefront_processor_filters.sql" \
+  "$capped_version_alias_dir/20261003193000_storefront_processor_filters.sql"
+capped_version_alias_log="$fixture_root/capped-version-alias-queries.log"
+capped_version_alias_output="$fixture_root/capped-version-alias-output.log"
+PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$capped_version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$capped_version_alias_log" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn '[{version:"20261003183737",name:"storefront_processor_filters",statements_sha256:"wrong"}]')" \
+  MIGRATION_MAX_VERSION=20261003190000 \
+  bash "$applier" >"$capped_version_alias_output"
+grep -q 'deferred above MIGRATION_MAX_VERSION 20261003190000: 20261003193000  storefront_processor_filters' "$capped_version_alias_output"
+grep -q 'Migrations summary: 0 applied, 0 skipped, 1 deferred.' "$capped_version_alias_output"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$capped_version_alias_log"; then
+  echo 'An out-of-scope historical alias must remain deferred despite a mismatched hash' >&2
   exit 1
 fi
 

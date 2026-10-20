@@ -31,20 +31,23 @@ export function formatMoneyCompact(
         ? 'compact'
         : 'standard';
   const useCompact = effectiveNotation === 'compact';
-  const exponent = getMoneyDisplayExponent(currencyCode);
   // Apply compact defaults only when the caller supplied neither
   // bound: a lone caller bound must reach getMoneyFormatter's joint
   // min/max resolution alone instead of being paired with a compact
-  // default that may contradict it (min 3 vs default max 2).
+  // default that may contradict it (min 3 vs default max 2). The
+  // exponent is derived lazily inside that branch — the only place
+  // it is consumed — so compact calls and fully-bounded calls never
+  // pay for a discarded Intl derivation.
   const defaults: FormatMoneyOptions = {};
   if (
     options.minimumFractionDigits === undefined &&
     options.maximumFractionDigits === undefined
   ) {
+    const exponent = useCompact ? 2 : getMoneyDisplayExponent(currencyCode);
     defaults.minimumFractionDigits = useCompact ? 1 : exponent;
     // Non-compact branch keeps the currency exponent as the maximum so
     // zero-decimal currencies never render fictitious fractions.
-    defaults.maximumFractionDigits = useCompact ? 2 : exponent;
+    defaults.maximumFractionDigits = exponent;
   }
   return formatMoney(amount, currencyCode, {
     compactDisplay: 'short',

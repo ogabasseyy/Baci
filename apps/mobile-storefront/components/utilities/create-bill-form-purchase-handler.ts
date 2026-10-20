@@ -2,10 +2,10 @@ import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  forgetPendingVtuPurchaseDurable,
-  isStalePendingVtuSuccess,
-  notePendingVtuReference,
-} from '@/lib/pending-vtu-idempotency';
+  forgetOwnPendingVtuPurchaseDurable,
+  isOwnPendingVtuStaleSuccess,
+  noteOwnPendingVtuReference,
+} from '@/lib/pending-vtu-generation-guards';
 import {
   acquireUtilityCheckoutOrAlert,
   releaseUtilityCheckout,
@@ -186,6 +186,9 @@ export function createBillFormPurchaseHandler({
           idempotencyKey,
           pendingDescriptor: descriptor,
         });
+        // Generation-guarded settlement (Codex R6 P1): the
+        // mutations below run only while live holds ownKey.
+        const ownKey = result.canonicalIdempotencyKey ?? idempotencyKey;
         if (
           shouldDiscardVtuResultForAccountSwitch(
             payment,
@@ -193,23 +196,31 @@ export function createBillFormPurchaseHandler({
             getIsActive
           )
         ) {
-          // Finalize the SUBMITTER's entry (descriptor captured at
-          // submit) so their switch-back repeat replays the original
-          // outcome instead of minting fresh and debiting twice.
-          await preserveSuppressedVtuSuccess(payment, descriptor, result);
+          // Finalize the SUBMITTER's entry so their switch-back repeat
+          // replays instead of minting fresh and debiting twice.
+          await preserveSuppressedVtuSuccess(
+            payment,
+            descriptor,
+            result,
+            ownKey
+          );
           return;
         }
         if (getIsActive && !getIsActive()) {
           // Back-navigated mid-flight: preserve for SAME-key replay on
           // reopen; suppress onSuccess/Alert (screen gone).
-          await preserveSuppressedVtuSuccess(payment, descriptor, result);
+          await preserveSuppressedVtuSuccess(
+            payment,
+            descriptor,
+            result,
+            ownKey
+          );
           return;
         }
-        // 'processing' is non-terminal — the vend is still in flight
-        // server-side. Keep the key so a retry hits the route's
-        // dedupe row instead of creating a second VTU transaction.
+        // 'processing' is non-terminal: keep the key so a retry hits
+        // the route's dedupe row, not a second VTU transaction.
         if (result.status === 'processing') {
-          notePendingVtuReference(descriptor, result.reference);
+          noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
           emitSuccess({
             amount: result.amount ?? numericAmount,
             customerIdentifier: customerId,
@@ -218,19 +229,18 @@ export function createBillFormPurchaseHandler({
           });
           return;
         }
-        if (isStalePendingVtuSuccess(descriptor, result.reference)) {
+        if (isOwnPendingVtuStaleSuccess(descriptor, result.reference, ownKey)) {
           // Old replay answering a NEW intent: forget so the next tap
           // mints fresh, and say so instead of presenting it as new.
-          await forgetPendingVtuPurchaseDurable(descriptor);
+          await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
           Alert.alert(
             'Purchase Already Completed',
             `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
           );
           return;
         }
-        // Terminal success — rotate the key so the next user-initiated
-        // submit gets a fresh dedupe slot (durable: lands pre-finalize).
-        await forgetPendingVtuPurchaseDurable(descriptor);
+        // Terminal success — rotate so the next submit gets a fresh dedupe slot.
+        await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
         emitSuccess({
           amount: result.amount ?? numericAmount,
           cashback: creditedVtuCashback(result.cashback),
@@ -248,21 +258,13 @@ export function createBillFormPurchaseHandler({
             getIsActive
           )
         ) {
-          // Still finalize status-bearing terminal errors for the
-          // SUBMITTER (descriptor captured at submit): otherwise the
-          // retained key replays the dead transaction when they retry.
-          if (shouldRotateWalletIdempotencyKeyForError(error)) {
-            payment.resetWalletIdempotencyKey(descriptor);
-          }
+          // Definitive rejections rotated inside charge; suppress only.
           return;
         }
-        // Keep the idempotency key for any error that leaves room for
-        // server state to have been persisted (network, timeout, 5xx,
-        // pre-route 401/403/413/415/429, unknown) so the user's retry
-        // hits the route's dedupe table. Only rotate on definitive
-        // route 4xx — the same key would just keep failing.
+        // Keep the key for ambiguous failures (network, timeout, 5xx,
+        // pre-route 401/403/413/415/429, unknown) so the route's dedupe
+        // table protects retries. Rotate only on definitive route 4xx.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey(descriptor);
           // The rejection may prove a stale balance (e.g. 400 after
           // another spend): AWAIT the refetch (never rejects), else a
           // quick retry re-passes on it. On-screen only — off-screen

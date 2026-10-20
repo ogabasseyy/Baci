@@ -365,10 +365,10 @@ describe('airtime stale success replay', () => {
     );
   });
 
-  it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
-    // The submitter's retained key would replay the dead
-    // transaction when they retry — finalize it for the submitter
-    // even though the result UI is discarded.
+  it('leaves rotation to chargeWalletForVtu on a terminal 4xx when the account switched', async () => {
+    // Rotation lives inside chargeWalletForVtu (the only layer
+    // that knows the canonical key): the handler only discards
+    // the result UI here.
     mockChargeWalletForVtu.mockRejectedValueOnce(
       new HttpError(400, 'Insufficient funds')
     );
@@ -384,7 +384,7 @@ describe('airtime stale success replay', () => {
 
     await result.current.handlePurchase();
 
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     // The switch helper invalidates all cached wallets for the retry.
     expect(invalidateWallets).toHaveBeenCalledTimes(1);
     expect(refetchWallet).not.toHaveBeenCalled();
@@ -563,10 +563,10 @@ describe('airtime stale success replay', () => {
     ).toBe(true);
   });
 
-  it('finalizes but suppresses an off-screen terminal rejection', async () => {
-    // Rotation + refetch must still run (the dead key must not replay
-    // when the customer retries), but no failure UI may fire over the
-    // destination screen.
+  it('suppresses an off-screen terminal rejection without handler-side rotation', async () => {
+    // Refetch still runs (a 400 may prove a stale balance), but
+    // rotation lives inside chargeWalletForVtu now; no failure UI
+    // may fire over the destination screen.
     mockChargeWalletForVtu.mockRejectedValueOnce(
       new HttpError(400, 'Insufficient funds')
     );
@@ -579,7 +579,7 @@ describe('airtime stale success replay', () => {
     });
     await result.current.handlePurchase();
 
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     expect(refetchWallet).toHaveBeenCalledTimes(1);
     expect(Alert.alert).not.toHaveBeenCalled();
   });

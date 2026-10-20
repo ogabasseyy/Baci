@@ -9,6 +9,7 @@ import {
   fetchWithTimeout,
   HttpError,
 } from '@/lib/fetch-with-timeout';
+import { forgetOwnPendingVtuPurchase } from './pending-vtu-generation-guards';
 import { adoptCanonicalVtuKey } from './pending-vtu-idempotency';
 import {
   getAccessToken,
@@ -16,6 +17,7 @@ import {
   normalizeConfirmCheckoutStatus,
   normalizeVtuCheckoutPayload,
   parseJsonResponse,
+  shouldRotateWalletIdempotencyKeyForError,
 } from './vtu-checkout-helpers';
 import {
   ConfirmCheckoutResponseSchema,
@@ -130,13 +132,30 @@ export async function chargeWalletForVtu(
     await adoptCanonicalVtuKey(pendingDescriptor, idempotencyKey, canonicalKey);
   }
   if (!response.ok) {
-    throw new HttpError(response.status, getResponseErrorMessage(data));
+    const error = new HttpError(response.status, getResponseErrorMessage(data));
+    // Rotation lives here (not the handlers): only this layer
+    // knows the canonical key, so only it can rotate
+    // generation-guarded — a vetoed/superseded error must not
+    // delete the newer generation (Codex R6 P1).
+    if (pendingDescriptor && shouldRotateWalletIdempotencyKeyForError(error)) {
+      forgetOwnPendingVtuPurchase(
+        pendingDescriptor,
+        canonicalKey ?? idempotencyKey
+      );
+    }
+    throw error;
   }
 
-  return WalletOnlyVtuResponseSchema.parse({
-    ...data,
-    status: normalizeConfirmCheckoutStatus(data.status),
-  });
+  return {
+    ...WalletOnlyVtuResponseSchema.parse({
+      ...data,
+      status: normalizeConfirmCheckoutStatus(data.status),
+    }),
+    // Surfaced for generation-guarded settlement (Codex R6 P1):
+    // callers settle-mutate only when the live entry still holds
+    // this generation (canonical-after-adoption, else submitted).
+    canonicalIdempotencyKey: canonicalKey,
+  };
 }
 
 export async function confirmVtuCheckout({

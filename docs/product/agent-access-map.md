@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 20 October 2026 against source revision
-`12904e5ee10edd18f0434c82d29edb3159611910`. This is a navigation map, not
+`3e20436fe110d109b5c158627288edb527e61ea9`. This is a navigation map, not
 authorization or proof of current deployment. Check the current implementation,
 live tool discovery and merchant entitlement before calling or claiming a tool.
 
@@ -39,7 +39,7 @@ does not prove a complete supported workflow.
 
 | Surface | Evidence | Current boundary |
 | --- | --- | --- |
-| Shopping MCP | `apps/web/mcp-server/server.ts`, `apps/web/mcp-server/agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. Not a multi-tenant Baci admin connector. |
+| Shopping MCP | `apps/web/mcp-server/server.ts`, `apps/web/mcp-server/agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. The private cart text-continuation candidate defaults off; activation requires separate owner-approved configuration and live client privacy/retention qualification. Not a multi-tenant Baci admin connector. |
 | Merchant storefront protocols | `apps/web/src/app/.well-known/acp.json/route.ts`, `apps/web/src/app/.well-known/ucp/route.ts`, `apps/web/src/lib/agentic/` | Merchant-scoped ACP/UCP discovery, catalog, carts, checkout and orders; enabled capabilities/auth/payment readiness apply. A REST interface is not automatically an MCP tool. |
 | Browser tools | `apps/web/src/components/storefront/webmcp-storefront-tools-builder.ts` | Browser-bound storefront tools. Inspect current registrations and browser session authority. |
 | Merchant connector gateway | `apps/web/src/lib/connector/manifest.ts`, `apps/web/tools/connector-gateway/` | R0 manifest names (version `r0.4`, data-only, no routes) for four read-only tools planned for the R1 pilot: `orders.list`, `orders.get`, `inventory.levels`, `analytics.summary`. The gateway implementation — scoped owner grants, branch selection, tool-time permission checks and revocation — lives in `apps/web/tools/connector-gateway/`, but the R1 pilot runtime is unverified; do not treat these tools as pilot-callable. REST/OpenAPI, not a ChatGPT MCP server. |

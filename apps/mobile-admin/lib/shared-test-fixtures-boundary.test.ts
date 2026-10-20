@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import { findFixtureImportOffenders } from '../../../scripts/shared-test-fixtures-boundary';
+import { findFixtureImportOffenders } from '../../../.github/scripts/shared-test-fixtures-boundary';
 
 // Import boundary (thin wrapper over the single shared
-// implementation in scripts/shared-test-fixtures-boundary.ts):
+// implementation in .github/scripts/shared-test-fixtures-boundary.ts):
 // production (non-test) sources in this app — and in
 // packages/shared/src — must never import shared test fixtures.
 // This suite runs in this app's own CI, so a mobile-only PR cannot

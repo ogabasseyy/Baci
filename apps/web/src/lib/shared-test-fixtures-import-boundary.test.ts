@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { findFixtureImportOffenders } from '../../../../scripts/shared-test-fixtures-boundary';
+import { findFixtureImportOffenders } from '../../../../.github/scripts/shared-test-fixtures-boundary';
 
 // Import boundary: @baci/shared/test-fixtures/* is test-only surface.
 // The guard logic lives in one shared implementation
-// (scripts/shared-test-fixtures-boundary.ts) consumed by this suite
+// (.github/scripts/shared-test-fixtures-boundary.ts) consumed by this suite
 // and both mobile guards, so the three cannot drift.
 const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),

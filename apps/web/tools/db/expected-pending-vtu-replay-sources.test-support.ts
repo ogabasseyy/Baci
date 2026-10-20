@@ -81,7 +81,7 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261020071000_vtu_admission_proof.sql',
-    sha256: '844fbc15ad7c9022fab10cc4f1b09cddf25bead362892f21d5c854c4f2760d6f',
+    sha256: 'f192a278a1f5d2a4465535e3495c496f10e52d78a0baf858597a35a60ddbc040',
   },
   {
     repositoryPath:

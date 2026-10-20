@@ -26,9 +26,19 @@ const appRequire = createRequire(join(repoRoot, 'apps/web/package.json'));
 const pkg = JSON.parse(
   readFileSync(join(sharedPackageDir, 'package.json'), 'utf8')
 ) as { exports: Record<string, string> };
-const fixtureSubpaths = readdirSync(join(sharedPackageDir, 'src/test-fixtures'))
-  .filter((name) => /\.tsx?$/.test(name) && !name.includes('.test.'))
-  .map((name) => `@baci/shared/test-fixtures/${name.replace(/\.tsx?$/, '')}`);
+const fixtureRoot = join(sharedPackageDir, 'src/test-fixtures');
+const listFixtureFiles = (dir: string, prefix = ''): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory())
+      return listFixtureFiles(join(dir, entry.name), rel);
+    return /\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')
+      ? [rel]
+      : [];
+  });
+const fixtureSubpaths = listFixtureFiles(fixtureRoot).map(
+  (rel) => `@baci/shared/test-fixtures/${rel.replace(/\.tsx?$/, '')}`
+);
 const subpaths = [
   ...Object.keys(pkg.exports)
     .filter((key) => key.startsWith('./test-fixtures/') || key === './vtu')

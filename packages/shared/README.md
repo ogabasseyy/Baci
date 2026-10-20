@@ -80,8 +80,9 @@ enforced by test, not by the exports map:
 per-app mirrors in both mobile apps) fails
 if any scanned non-test source in the three apps or in this package
 imports a fixture by a literal subpath or deep-relative specifier.
-Scan exclusions: generated-output directories (node_modules, build,
-dist, coverage, Pods, DerivedData, .next, .expo) are skipped at any
+Scan exclusions: generated-output directories (node_modules, .git,
+.turbo, .gradle, build, dist, coverage, Pods, DerivedData, .next,
+.expo, web-build) are skipped at any
 depth, root-level developer tooling directories (apps/*/tools, which
 run in Node and are never bundled) are skipped, and symlinked entries
 are not followed; a fixture import inside an excluded tree is a

@@ -8,7 +8,12 @@ export function formatMoneyCompact(
   currencyCode = 'NGN',
   options: FormatMoneyOptions = {}
 ): string {
-  const useCompact = Math.abs(amount) >= 1_000;
+  // Effective notation: a caller-supplied notation overrides the
+  // amount-based choice, and the fraction-digit defaults derive from
+  // the effective notation so the two never desync.
+  const useCompact =
+    (options.notation ??
+      (Math.abs(amount) >= 1_000 ? 'compact' : 'standard')) === 'compact';
   const exponent = getMoneyDisplayExponent(currencyCode);
   // Apply compact defaults only when the caller supplied neither
   // bound: a lone caller bound must reach getMoneyFormatter's joint

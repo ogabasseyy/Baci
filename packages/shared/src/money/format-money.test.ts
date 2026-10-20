@@ -99,6 +99,19 @@ describe('shared money formatting characterization', () => {
     );
   });
 
+  it('derives compact defaults from the effective notation', () => {
+    // Caller-forced standard notation on a compact-sized amount uses
+    // the standard (exponent) defaults, not compact defaults.
+    expect(formatMoneyCompact(1200, 'NGN', { notation: 'standard' })).toBe(
+      '₦1,200.00'
+    );
+    // Caller-forced compact notation on a small amount uses compact
+    // defaults.
+    expect(formatMoneyCompact(500, 'NGN', { notation: 'compact' })).toBe(
+      '₦500.0'
+    );
+  });
+
   it('exposes frozen currency metadata maps', () => {
     expect(Object.isFrozen(MONEY_CURRENCY_LOCALES)).toBe(true);
     expect(Object.isFrozen(MONEY_CURRENCY_EXPONENTS)).toBe(true);

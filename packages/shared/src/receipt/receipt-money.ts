@@ -24,6 +24,10 @@ export const DEFAULT_NG_VAT_RATE = 7.5;
 // The money formatter now lives in ../money (formatting wave
 // extraction); re-exported here so receipt callers keep their
 // existing imports and there is one formatter/cache in the package.
+// This path is exempt from the mobile on-device verification gate for
+// new @baci/shared/money call sites: receipts already ran this Intl
+// formatter on-device with the same locale map; only the
+// fraction-digit options changed (see README, Money formatting).
 export { createMoneyFormatter } from '../money/create-money-formatter';
 export type { MoneyFormatter } from '../money/money-formatter';
 

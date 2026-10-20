@@ -42,7 +42,12 @@ const fixtureSubpaths = listFixtureFiles(fixtureRoot).map(
 );
 const subpaths = [
   ...Object.keys(pkg.exports)
-    .filter((key) => key.startsWith('./test-fixtures/') || key === './vtu')
+    .filter(
+      (key) =>
+        key.startsWith('./test-fixtures/') ||
+        key === './vtu' ||
+        key === './money'
+    )
     .map((key) => `@baci/shared${key.slice(1)}`),
 ];
 
@@ -58,6 +63,7 @@ const expectedSubpaths = [
   '@baci/shared/test-fixtures/piggyvest-schedule',
   '@baci/shared/test-fixtures/fixture-mock',
   '@baci/shared/test-fixtures/order-wallet-funding-intent',
+  '@baci/shared/money',
 ];
 
 describe('@baci/shared exports resolution (no test aliases)', () => {

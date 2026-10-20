@@ -145,6 +145,16 @@ mobile adoption must first verify those currencies on-device (Hermes
 Intl data can differ from the Node ICU output pinned in
 `format-money.test.ts`).
 
+Receipt-path exemption from that gate: `generateReceiptHtml` already
+ran the legacy formatter on-device in both mobile apps, using the same
+Intl surface and the same locale map, so no new Intl capability is
+introduced there. The only receipt delta is the fraction-digit
+options passed to that existing formatter (exponent-derived instead
+of forced 2), which is option-level behavior, not locale-data
+behavior. The on-device verification gate therefore applies to
+switching app call sites to the new `@baci/shared/money` wrappers,
+not to the receipt re-export.
+
 ## Platform isolation
 
 This package declares only `@noble/hashes` and a Zod peer dependency

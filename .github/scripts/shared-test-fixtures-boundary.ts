@@ -109,9 +109,14 @@ export function collectSourceFiles(roots: string[]): string[] {
         } catch {
           continue;
         }
-        const inside = rootRealPaths.some(
-          (root) => target === root || target.startsWith(`${root}/`)
-        );
+        const normalizedTarget = normalizePath(target);
+        const inside = rootRealPaths.some((root) => {
+          const normalizedRoot = normalizePath(root);
+          return (
+            normalizedTarget === normalizedRoot ||
+            normalizedTarget.startsWith(`${normalizedRoot}/`)
+          );
+        });
         if (!inside) continue;
         const targetStat = lstatSync(target);
         if (targetStat.isDirectory()) {

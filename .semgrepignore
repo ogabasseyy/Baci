@@ -1,9 +1,9 @@
 # Semgrep Ignore File
 # Suppress false positive security alerts
 
-# Pre-existing entries (main).
+# Pre-existing entries (main). (The PR-added /.claude/ entry was dropped:
+# agent config with no alert evidence stays scanned like everything else.)
 .gemini/
-/.claude/
 scripts/
 
 # NOTE: production/operational trees are NOT excluded here: apps/web/mcp-server

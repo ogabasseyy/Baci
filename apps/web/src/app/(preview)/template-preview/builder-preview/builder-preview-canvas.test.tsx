@@ -144,6 +144,33 @@ describe('BuilderPreviewCanvas', () => {
     expect(await screen.findByText('parent-window')).toBeInTheDocument();
   });
 
+  it('pins outbound responses to the document origin, never wildcard', async () => {
+    installBridge();
+    const parentPost = vi.fn();
+    const realParent = window.parent;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage: parentPost },
+    });
+    try {
+      render(<BuilderPreviewCanvas />);
+
+      await waitFor(() => expect(parentPost).toHaveBeenCalled());
+      expect(parentPost.mock.calls.length).toBeGreaterThan(0);
+      for (const [message, targetOrigin] of parentPost.mock.calls) {
+        expect(targetOrigin).toBe(window.location.origin);
+        expect(JSON.parse(message as string)).toEqual(
+          expect.objectContaining({ type: expect.any(String) })
+        );
+      }
+    } finally {
+      Object.defineProperty(window, 'parent', {
+        configurable: true,
+        value: realParent,
+      });
+    }
+  });
+
   it('accepts Android document and iOS window string transports before revision gating', async () => {
     installBridge();
     render(<BuilderPreviewCanvas />);

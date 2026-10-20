@@ -34,6 +34,7 @@ function sandbox() {
   writeFileSync(join(dir, '.github', 'scripts', 'pnpm-install-with-retry.sh'), stub, { mode: 0o755 });
   writeFileSync(join(dir, 'trusted-ops', '.github', 'scripts', 'pnpm-install-with-retry.sh'), stub, { mode: 0o755 });
   writeFileSync(join(dir, 'pnpm'), stub, { mode: 0o755 });
+  writeFileSync(log, '');
   return { dir, log };
 }
 
@@ -103,6 +104,10 @@ test('every workflow caller command is allowlisted (contract test)', () => {
   const def = actionDefault(INSTALL_ACTION);
   assert.ok(def, 'expected an install-command default in the action');
   assert.ok(allowed.has(def), `action default not allowlisted: ${def}`);
+  const dynamic = execFileSync('grep', ['-rn', 'install-command:', join(ROOT, '.github', 'workflows'), join(ROOT, '.github', 'actions')], { encoding: 'utf8' })
+    .split('\n')
+    .filter((line) => line.includes('${{'));
+  assert.deepEqual(dynamic, [], `non-literal install-command values evade the contract test:\n${dynamic.join('\n')}`);
 });
 
 function actionDefault(actionPath) {
@@ -117,14 +122,24 @@ test('enumerated commands execute, hostile inputs fail closed', () => {
   const sentinel = join(dir, 'exec-proof-sentinel');
   try {
     const good = [
-      './.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline',
-      'pnpm install',
+      ['./.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline', /pnpm-install-with-retry\.sh --frozen-lockfile --prefer-offline$/],
+      ['.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline', /pnpm-install-with-retry\.sh --frozen-lockfile --prefer-offline$/],
+      ['./.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile', /pnpm-install-with-retry\.sh --frozen-lockfile$/],
+      ['.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile', /pnpm-install-with-retry\.sh --frozen-lockfile$/],
+      ['./trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline', /trusted-ops\/.github\/scripts\/pnpm-install-with-retry\.sh --frozen-lockfile --prefer-offline$/],
+      ['trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline', /trusted-ops\/.github\/scripts\/pnpm-install-with-retry\.sh --frozen-lockfile --prefer-offline$/],
+      ['pnpm install --frozen-lockfile --prefer-offline', /\/pnpm install --frozen-lockfile --prefer-offline$/],
+      ['pnpm install --frozen-lockfile', /\/pnpm install --frozen-lockfile$/],
+      ['pnpm install', /\/pnpm install$/],
     ];
-    for (const cmd of good) {
+    for (const [cmd, expected] of good) {
+      const before = readFileSync(log, 'utf8');
       const r = dispatch(script, cmd, dir);
       assert.equal(r.status, 0, `allowlisted command must run: ${cmd}\n${r.stderr}`);
+      const added = readFileSync(log, 'utf8').slice(before.length).trim().split('\n');
+      assert.equal(added.length, 1, `exactly one command must run for: ${cmd}`);
+      assert.match(added[0], expected, `wrong command executed for: ${cmd}`);
     }
-    assert.ok(readFileSync(log, 'utf8').length > 0, 'stubs must observe execution');
 
     const evil = [
       `'; touch "${sentinel}"; echo '`,

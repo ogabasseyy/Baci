@@ -36,14 +36,21 @@ export function getMoneyFormatter(
   const currency = normalizeMoneyCurrency(currencyCode);
   const locale = localeOverride ?? resolveMoneyLocale(currency);
   const exponent = getMoneyCurrencyExponent(currency);
+  // Resolve the fraction-digit pair jointly: a single supplied bound
+  // must not combine with the exponent default into min > max (which
+  // Intl rejects). The omitted bound derives from the supplied one.
+  const minOption = numberFormatOptions.minimumFractionDigits;
+  const maxOption = numberFormatOptions.maximumFractionDigits;
   const finalOptions: Intl.NumberFormatOptions = {
     ...numberFormatOptions,
     style: 'currency',
     currency,
     minimumFractionDigits:
-      numberFormatOptions.minimumFractionDigits ?? exponent,
+      minOption ??
+      (maxOption !== undefined ? Math.min(exponent, maxOption) : exponent),
     maximumFractionDigits:
-      numberFormatOptions.maximumFractionDigits ?? exponent,
+      maxOption ??
+      (minOption !== undefined ? Math.max(exponent, minOption) : exponent),
   };
   const cacheKey = `${locale}:${JSON.stringify(finalOptions)}`;
 

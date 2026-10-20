@@ -82,6 +82,8 @@ describe('shared money formatting characterization', () => {
     expect(formatMoneyCompact(1_200_000, 'NGN')).toBe('₦1.2M');
     expect(formatMoneyCompact(3_400_000_000, 'NGN')).toBe('₦3.4B');
     expect(formatMoneyCompact(500, 'NGN')).toBe('₦500.00');
+    // Small zero-decimal amounts stay whole in the standard branch.
+    expect(formatMoneyCompact(500.5, 'XAF')).toBe(`501${NBSP}FCFA`);
   });
 
   it('derives locale from the currency code, case-insensitively', () => {
@@ -112,6 +114,33 @@ describe('shared money formatting characterization', () => {
       style: 'decimal',
     } as unknown as FormatMoneyOptions;
     expect(formatMoney(100, 'NGN', rogue)).toBe('₦100.00');
+  });
+
+  it('resolves a single fraction-digit bound without throwing', () => {
+    expect(formatMoney(100, 'NGN', { maximumFractionDigits: 0 })).toBe('₦100');
+    expect(formatMoney(100.5, 'NGN', { minimumFractionDigits: 0 })).toBe(
+      '₦100.5'
+    );
+    expect(formatMoney(100, 'NGN', { minimumFractionDigits: 3 })).toBe(
+      '₦100.000'
+    );
+  });
+
+  it('derives exponents for non-allowlisted currencies from Intl', () => {
+    expect(getMoneyCurrencyExponent('JPY')).toBe(0);
+    expect(getMoneyCurrencyExponent('KWD')).toBe(3);
+    // Zero-exponent JPY minor units are already major units.
+    expect(formatMoneyMinor(123450, 'JPY')).toBe(formatMoney(123450, 'JPY'));
+  });
+
+  it('pins the receipt class: createMoneyFormatter defaults per currency', () => {
+    // Intentional behavior change from the legacy receipt formatter,
+    // which forced 2 fraction digits for every currency: XAF/XOF
+    // receipts now render whole francs (their ISO exponent is 0).
+    expect(createMoneyFormatter('XOF')(1234.5)).toBe(
+      `1${NNBSP}235${NBSP}F${NNBSP}CFA`
+    );
+    expect(createMoneyFormatter('NGN')(1234.5)).toBe('₦1,234.50');
   });
 
   it('surfaces an invalid explicit locale instead of masking it', () => {

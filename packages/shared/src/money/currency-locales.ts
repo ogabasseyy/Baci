@@ -57,6 +57,22 @@ export function resolveMoneyLocale(currencyCode: string): string {
   );
 }
 
+const derivedExponentCache = new Map<string, number>();
+
 export function getMoneyCurrencyExponent(currencyCode: string): number {
-  return MONEY_CURRENCY_EXPONENTS[normalizeMoneyCurrency(currencyCode)] ?? 2;
+  const normalized = normalizeMoneyCurrency(currencyCode);
+  const known = MONEY_CURRENCY_EXPONENTS[normalized];
+  if (known !== undefined) return known;
+  // Non-allowlisted currency: derive the real ISO exponent from Intl
+  // (JPY/KRW are 0, BHD/KWD are 3) instead of assuming 2, so minor-unit
+  // scaling never silently mis-scales an unsupported code.
+  const cached = derivedExponentCache.get(normalized);
+  if (cached !== undefined) return cached;
+  const derived =
+    new Intl.NumberFormat(resolveMoneyLocale(normalized), {
+      style: 'currency',
+      currency: normalized,
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+  derivedExponentCache.set(normalized, derived);
+  return derived;
 }

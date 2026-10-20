@@ -124,6 +124,12 @@ units; `formatMoneyMinor` takes minor units and scales by the
 currency's ISO 4217 exponent (100:1 for 2-decimal currencies, no
 scaling for zero-decimal XAF/XOF).
 
+One immediate behavior change: the legacy receipt formatter forced 2
+fraction digits for every currency, so XAF/XOF receipts rendered
+fictitious hundredths; `createMoneyFormatter` now defaults to the
+currency exponent (0 for XAF/XOF), pinned by a receipt-class fixture
+in `format-money.test.ts`.
+
 Divergences this unification intentionally removes when the per-app
 adoption PRs land: mobile-storefront's NGN-only hardcoding, web's
 country-derived currency/locale split, and mobile-admin's device-locale

@@ -14,7 +14,9 @@ export function formatMoneyCompact(
     notation: useCompact ? 'compact' : 'standard',
     compactDisplay: 'short',
     minimumFractionDigits: useCompact ? 1 : exponent,
-    maximumFractionDigits: 2,
+    // Non-compact branch keeps the currency exponent as the maximum so
+    // zero-decimal currencies never render fictitious fractions.
+    maximumFractionDigits: useCompact ? 2 : exponent,
     ...options,
   });
 }

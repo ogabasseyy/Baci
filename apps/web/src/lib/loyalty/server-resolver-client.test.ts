@@ -28,6 +28,13 @@ describe('createLoyaltyResolverServiceClient', () => {
     expect(Object.keys(createLoyaltyResolverServiceClient())).toEqual(['rpc']);
   });
 
+  it('refuses any RPC other than the resolver one', () => {
+    const handle = createLoyaltyResolverServiceClient();
+    expect(() =>
+      (handle.rpc as (...args: unknown[]) => unknown)('other_function', {})
+    ).toThrow('loyalty-resolver handle refuses RPC');
+  });
+
   it('declares the server-only marker before any runtime imports', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/lib/loyalty/server-resolver-client.ts'),

@@ -45,6 +45,11 @@ vi.mock('@/lib/supabase/server', () => ({
 // Issue #3696: resolveLoyaltyCheckoutCode builds its own branded
 // resolver client (the resolver RPC lost anon EXECUTE), so the
 // harness wires the branded factory to an override-driven fake too.
+// NOTE: the anon factory is deliberately NOT mocked here. The anon
+// client is constructed against env-mocked URL/key material and the
+// suite's paths never await it (17ms/file, no network); a bare `{}`
+// mock breaks seven tests whose code calls anon methods that the
+// real client surface provides.
 vi.mock('@/lib/loyalty/server-resolver-client', () => ({
   createLoyaltyResolverServiceClient: mockCreateLoyaltyResolverServiceClient,
 }));

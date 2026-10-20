@@ -16,11 +16,11 @@
 -- isolation, spent-key idempotence (winner + loser keys),
 -- service-role gating + grants, admission-proof requirement.
 --
--- NOTE: this file runs in a single session, so it cannot prove
--- two-backend race serialization directly. That rests on
--- pg_advisory_xact_lock semantics (xact-scoped: a waiter's SELECT
--- observes the holder's commit) plus the in-repo
--- complete_order_gateway_payment precedent.
+-- NOTE: this file runs in a single session; two-backend race
+-- serialization is proven separately by
+-- supabase/tests/vtu_intent_claim_concurrency.sql (two live dblink
+-- sessions: exactly one creates, the other blocks on the advisory
+-- xact lock and joins the winner).
 --
 -- NOTE: single-transaction tests freeze now(), so overlap-fence
 -- orderings are set EXPLICITLY on the p_admitted_at argument

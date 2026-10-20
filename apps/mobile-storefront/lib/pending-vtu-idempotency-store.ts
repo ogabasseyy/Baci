@@ -129,20 +129,34 @@ export function savePendingVtuSnapshot(serialized: string): boolean {
  */
 export const forgottenVtuScopes = new Map<
   string,
-  { forgottenAt: number; key?: string }
+  Array<{ forgottenAt: number; key?: string }>
 >();
 
-/** Records deletion tombstones for scopes the registry just forgot. */
+/**
+ * Records deletion tombstones for scopes the registry just forgot.
+ * Multi-key per scope (CodeRabbit Major): a non-durable canonical
+ * adoption tombstones the persisted loser, then terminal settlement
+ * tombstones the winner — single-slot replacement would drop the
+ * loser record and resurrect the persisted loser on merge. Same-key
+ * records refresh (newest wins); different generations accumulate
+ * until the next durable persist carries them all.
+ */
 export function noteForgottenVtuScopes(
   scopes: string[],
   forgottenAt: number,
   key?: string
 ): void {
   for (const scoped of scopes) {
-    const known = forgottenVtuScopes.get(scoped);
-    if (known === undefined || forgottenAt > known.forgottenAt) {
-      forgottenVtuScopes.set(scoped, { forgottenAt, key });
+    const known = forgottenVtuScopes.get(scoped) ?? [];
+    const same = known.find((record) => record.key === key);
+    if (same !== undefined) {
+      if (forgottenAt > same.forgottenAt) {
+        same.forgottenAt = forgottenAt;
+      }
+    } else {
+      known.push({ forgottenAt, key });
     }
+    forgottenVtuScopes.set(scoped, known);
   }
 }
 
@@ -163,11 +177,13 @@ export function persistPendingVtuEntries(
   const ok = savePendingVtuSnapshot(
     serializePendingVtuEntries(
       entries,
-      [...forgottenVtuScopes].map(([scoped, record]) => ({
-        scoped,
-        forgottenAt: record.forgottenAt,
-        ...(record.key !== undefined ? { key: record.key } : {}),
-      })),
+      [...forgottenVtuScopes].flatMap(([scoped, records]) =>
+        records.map((record) => ({
+          scoped,
+          forgottenAt: record.forgottenAt,
+          ...(record.key !== undefined ? { key: record.key } : {}),
+        }))
+      ),
       now
     )
   );

@@ -56,12 +56,18 @@ export interface ForgottenVtuScope {
   key?: string;
 }
 
-export const forgottenScopedKeys = new Map<string, ForgottenVtuScope>();
+export const forgottenScopedKeys = new Map<string, ForgottenVtuScope[]>();
 
 /**
  * Records a deliberate deletion (single choke point so the key
- * binding cannot be forgotten at one of the forget sites). Latest
- * deletion wins per scope — remember() deletes the record, so a
+ * binding cannot be forgotten at one of the forget sites).
+ * Multi-key per scope (CodeRabbit Major, mobile mirror): a
+ * non-durable canonical adoption tombstones the persisted loser,
+ * then terminal settlement tombstones the winner — single-slot
+ * replacement would drop the loser record and resurrect the
+ * persisted loser on merge. Same-key records refresh (newest
+ * wins); different generations accumulate until the next durable
+ * persist carries them all. remember() deletes the records, so a
  * record always postdates the entry it names.
  */
 export function noteForgottenVtuScope(
@@ -69,7 +75,16 @@ export function noteForgottenVtuScope(
   forgottenAt: number,
   key?: string
 ): void {
-  forgottenScopedKeys.set(scoped, { forgottenAt, key });
+  const known = forgottenScopedKeys.get(scoped) ?? [];
+  const same = known.find((record) => record.key === key);
+  if (same !== undefined) {
+    if (forgottenAt > same.forgottenAt) {
+      same.forgottenAt = forgottenAt;
+    }
+  } else {
+    known.push({ forgottenAt, key });
+  }
+  forgottenScopedKeys.set(scoped, known);
 }
 
 /** Serializes live entries for localStorage (prunes TTL-expired). */
@@ -78,11 +93,13 @@ export function serializePendingVtuPurchases(
 ): string {
   return serializePendingVtuEntries(
     pendingVtuPurchases,
-    [...forgottenScopedKeys].map(([scoped, record]) => ({
-      scoped,
-      forgottenAt: record.forgottenAt,
-      ...(typeof record.key === 'string' ? { key: record.key } : {}),
-    })),
+    [...forgottenScopedKeys].flatMap(([scoped, records]) =>
+      records.map((record) => ({
+        scoped,
+        forgottenAt: record.forgottenAt,
+        ...(typeof record.key === 'string' ? { key: record.key } : {}),
+      }))
+    ),
     now
   );
 }
@@ -136,10 +153,7 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
     ) {
       pendingVtuPurchases.delete(scoped);
     }
-    const known = forgottenScopedKeys.get(scoped);
-    if (known === undefined || forgottenAt > known.forgottenAt) {
-      forgottenScopedKeys.set(scoped, { forgottenAt, key });
-    }
+    noteForgottenVtuScope(scoped, forgottenAt, key);
   }
   for (const [scoped, entry] of snapshot.entries) {
     const live = pendingVtuPurchases.get(scoped);
@@ -171,12 +185,15 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
     // mint K3 and debit again). A re-remembered entry (newer than
     // the tombstone) still merges, and keyless tombstones
     // (pre-binding) keep timestamp arbitration.
-    const tombstone = forgottenScopedKeys.get(scoped);
-    if (
-      tombstone !== undefined &&
-      entry.rememberedAt <= tombstone.forgottenAt &&
-      (tombstone.key === undefined || tombstone.key === entry.key)
-    ) {
+    // Multi-key (CodeRabbit Major, mobile mirror): a scope can
+    // carry several generation tombstones — any match suppresses.
+    const tombstones = forgottenScopedKeys.get(scoped) ?? [];
+    const suppressed = tombstones.some(
+      (tombstone) =>
+        entry.rememberedAt <= tombstone.forgottenAt &&
+        (tombstone.key === undefined || tombstone.key === entry.key)
+    );
+    if (suppressed) {
       continue;
     }
     pendingVtuPurchases.set(scoped, {

@@ -37,11 +37,13 @@ export const pendingPurchases = new Map<string, PendingVtuPurchase>();
 export function serializePendingVtuPurchases(now: number = Date.now()): string {
   return serializePendingVtuEntries(
     pendingPurchases,
-    [...forgottenVtuScopes].map(([s, record]) => ({
-      scoped: s,
-      forgottenAt: record.forgottenAt,
-      ...(record.key !== undefined ? { key: record.key } : {}),
-    })),
+    [...forgottenVtuScopes].flatMap(([s, records]) =>
+      records.map((record) => ({
+        scoped: s,
+        forgottenAt: record.forgottenAt,
+        ...(record.key !== undefined ? { key: record.key } : {}),
+      }))
+    ),
     now
   );
 }
@@ -117,12 +119,15 @@ export function syncPendingVtuPurchasesFromSnapshot(
       continue;
     }
     // Entry-merge is KEY-bound like live-delete (web R61 parity).
-    const tombstone = forgottenVtuScopes.get(scoped);
-    if (
-      tombstone !== undefined &&
-      entry.rememberedAt <= tombstone.forgottenAt &&
-      (tombstone.key === undefined || tombstone.key === entry.key)
-    ) {
+    // Multi-key (CodeRabbit Major): a scope can carry several
+    // generation tombstones — any matching record suppresses.
+    const tombstones = forgottenVtuScopes.get(scoped) ?? [];
+    const suppressed = tombstones.some(
+      (tombstone) =>
+        entry.rememberedAt <= tombstone.forgottenAt &&
+        (tombstone.key === undefined || tombstone.key === entry.key)
+    );
+    if (suppressed) {
       continue;
     }
     pendingPurchases.set(scoped, {

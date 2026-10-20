@@ -18,6 +18,7 @@ import {
 } from './pending-vtu-idempotency';
 import { parsePendingVtuSnapshot } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
+import * as vtuSync from './pending-vtu-idempotency-sync';
 import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
 
 describe('pending-vtu-generation-guards', () => {
@@ -136,7 +137,12 @@ describe('pending-vtu-generation-guards', () => {
     await flushPendingVtuPurchases();
     await new Promise((resolve) => setTimeout(resolve, 0));
     // Force the adoption flush to fail: memory rebinds, storage
-    // keeps the loser, adoption reports non-durable.
+    // keeps the loser, adoption reports non-durable. The scheduled
+    // retry is held back so this test pins the tombstone structure
+    // itself, not whichever flush wins the race.
+    const scheduleSpy = jest
+      .spyOn(vtuSync, 'schedulePendingVtuFlush')
+      .mockImplementation(() => {});
     const persistSpy = jest
       .spyOn(vtuStore, 'persistPendingVtuEntries')
       .mockReturnValue(false);
@@ -150,10 +156,14 @@ describe('pending-vtu-generation-guards', () => {
     } finally {
       persistSpy.mockRestore();
       consoleErrorSpy.mockRestore();
+      scheduleSpy.mockRestore();
     }
     expect(recallPendingVtuKey('d-settle')).toBe('key-winner');
     // What chargeWalletForVtu now does on a non-durable adoption.
     vtuStore.noteForgottenVtuScopes(['d-settle'], Date.now(), 'key-loser');
+    // Cross-ms gap: single-slot replacement would drop the loser
+    // record here — multi-key tombstones must keep both.
+    await new Promise((resolve) => setTimeout(resolve, 3));
     // Terminal settlement of the winner generation.
     await expect(
       forgetOwnPendingVtuPurchaseDurable('d-settle', 'key-winner')

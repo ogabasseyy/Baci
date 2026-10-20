@@ -497,11 +497,15 @@ describe('pending-vtu-idempotency', () => {
     // The forget's own persist cleared its tombstone (the root
     // MMKV mock is memory-backed, so the write succeeds); re-note
     // to prove the registry→snapshot plumbing directly.
+    // Multi-key (CodeRabbit Major): the re-noted keyless record
+    // accumulates alongside the forget's keyed record instead of
+    // replacing it — both ride the snapshot.
     noteForgottenVtuScopes([scoped], Date.now());
     const snapshot = parsePendingVtuSnapshot(serializePendingVtuPurchases());
 
     expect(snapshot.entries).toEqual([]);
-    expect(snapshot.forgotten).toHaveLength(1);
+    expect(snapshot.forgotten).toHaveLength(2);
+    expect(snapshot.forgotten.map((t) => t.key)).toContain('noted-key');
     expect(recallPendingVtuKey(scoped)).toBeNull();
   });
 

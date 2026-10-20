@@ -30,6 +30,7 @@ import {
   flushPendingVtuPurchases,
   forgottenScopedKeys,
   hydratePendingVtuPurchases,
+  noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   serializePendingVtuPurchases,
@@ -857,6 +858,66 @@ describe('keyed tombstones (6rrMIj)', () => {
     } finally {
       consoleError.mockRestore();
       setItem.mockRestore();
+    }
+  });
+
+  it('keeps every generation tombstone for a scope until the next persist', () => {
+    // Multi-key (CodeRabbit Major, mobile mirror): a non-durable
+    // canonical adoption tombstones the persisted loser, then
+    // terminal settlement tombstones the winner. Single-slot
+    // replacement would drop the loser record and resurrect the
+    // persisted loser on merge — both records must accumulate and
+    // any matching record must suppress.
+    const scoped = scopePendingVtuSignature(
+      'user-multikey',
+      'merchant-1',
+      '{"multikey":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-loser');
+    const now = Date.now();
+    noteForgottenVtuScope(scoped, now, 'key-loser');
+    noteForgottenVtuScope(scoped, now + 5, 'key-winner');
+
+    // Both records ride the snapshot (one scope, two tombstones).
+    const serialized = parsePendingVtuSnapshot(serializePendingVtuPurchases());
+    expect(serialized.forgotten).toHaveLength(2);
+    // Either generation's persisted entry is suppressed on merge.
+    expect(
+      syncSuppressesForTesting(scoped, 'key-loser', now - 1000)
+    ).toBe(true);
+    expect(
+      syncSuppressesForTesting(scoped, 'key-winner', now - 1000)
+    ).toBe(true);
+    expect(
+      syncSuppressesForTesting(scoped, 'key-other', now - 1000)
+    ).toBe(false);
+
+    function syncSuppressesForTesting(
+      descriptor: string,
+      key: string,
+      rememberedAt: number
+    ): boolean {
+      pendingVtuPurchases.delete(descriptor);
+      expect(
+        savePendingVtuSnapshot(
+          JSON.stringify({
+            entries: [
+              [
+                descriptor,
+                {
+                  key,
+                  reference: null,
+                  rememberedAt,
+                  completedAt: null,
+                },
+              ],
+            ],
+            forgotten: [],
+          })
+        )
+      ).toBe(true);
+      syncPendingVtuPurchasesFromSnapshot();
+      return !pendingVtuPurchases.has(descriptor);
     }
   });
 });

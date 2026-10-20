@@ -61,7 +61,18 @@ describe('storefront-cart-validation', () => {
     ]);
 
     expect(first).toBe(second);
-    expect(first).toBe('a:::10|b::v-b:::20');
+    expect(first).toBe('a:::10:1|b::v-b:::20:1');
+  });
+
+  it('changes the hash when only a line quantity changes', () => {
+    const before = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p', quantity: 1 }),
+    ]);
+    const after = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p', quantity: 2 }),
+    ]);
+
+    expect(before).not.toBe(after);
   });
 
   it('includes variant and condition identity in the cart validation hash', () => {
@@ -75,7 +86,7 @@ describe('storefront-cart-validation', () => {
           variantId: 'variant-used',
         }),
       ])
-    ).toBe('iphone-15::variant-used:used::829000');
+    ).toBe('iphone-15::variant-used:used::829000:1');
   });
 
   it('posts the first 50 cart items for validation and returns the response body', async () => {
@@ -106,7 +117,9 @@ describe('storefront-cart-validation', () => {
           cartItems: Array.from({ length: 50 }, (_, index) => ({
             id: `cart-item-${index + 1}`,
             price: index + 1,
+            quantity: 1,
             variantId: index === 0 ? 'variant-1' : undefined,
+            isQuizVoucherLine: false,
           })),
         }),
         signal: controller.signal,
@@ -148,12 +161,14 @@ describe('storefront-cart-validation', () => {
               condition: 'open_box',
               id: 'iphone-15',
               price: 829000,
+              quantity: 1,
               variantAttributes: {
                 color: 'Black',
                 sim_type: 'eSIM Only',
                 storage: '128GB',
               },
               variantId: 'iphone15-openbox-128-black-esim',
+              isQuizVoucherLine: false,
             },
           ],
         }),
@@ -334,5 +349,217 @@ describe('storefront-cart-validation', () => {
         priceChanges: [],
       })
     ).toBe(cart);
+  });
+
+  it('distinguishes same-condition offer lines in the cart validation hash', () => {
+    const first = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p::a', offerId: 'offer-a' }),
+    ]);
+    const second = createCartHash([
+      makeCartItem({ id: 'p', cartItemId: 'p::b', offerId: 'offer-b' }),
+    ]);
+
+    expect(first).not.toBe(second);
+  });
+
+  it('posts exact-offer identity for server-side validation', async () => {
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ invalidProductIds: [], priceChanges: [] }),
+    });
+
+    await validateStorefrontCart(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+      ],
+      new AbortController().signal
+    );
+
+    expect(mocks.fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/cart/validate',
+      expect.objectContaining({
+        body: JSON.stringify({
+          cartItems: [
+            {
+              condition: 'used',
+              id: 'product-1',
+              price: 400,
+              quantity: 1,
+              offerId: 'offer-a',
+              isQuizVoucherLine: false,
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('marks pre-reserved voucher lines for server-side pool exemption', async () => {
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ invalidProductIds: [], priceChanges: [] }),
+    });
+
+    await validateStorefrontCart(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::prize',
+          price: 0,
+          quizAwardId: 'award-1',
+        }),
+      ],
+      new AbortController().signal
+    );
+
+    expect(mocks.fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/cart/validate',
+      expect.objectContaining({
+        body: JSON.stringify({
+          cartItems: [
+            {
+              id: 'product-1',
+              price: 0,
+              quantity: 1,
+              isQuizVoucherLine: true,
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('applies offer-specific price changes only to the matching cart line', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-b',
+          condition: 'used',
+          offerId: 'offer-b',
+          price: 420,
+        }),
+      ],
+      {
+        priceChanges: [
+          {
+            id: 'product-1',
+            offerId: 'offer-b',
+            oldPrice: 420,
+            newPrice: 430,
+          },
+        ],
+      }
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-a',
+        price: 400,
+      }),
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-b',
+        price: 430,
+      }),
+    ]);
+  });
+
+  it('invalidates only the targeted offer cart line key', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+          price: 400,
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-b',
+          condition: 'used',
+          offerId: 'offer-b',
+          price: 420,
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1::offer=offer-b'],
+      }
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        cartItemId: 'product-1::condition=used::offerId=offer-a',
+        price: 400,
+      }),
+    ]);
+  });
+
+  it('removes only the base line on a base-scoped pool key, preserving vouchers', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-base',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-voucher',
+          quizAwardId: 'award-1',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1::base'],
+      }
+    );
+
+    expect(result.map((item) => item.cartItemId).sort()).toEqual([
+      'product-1-voucher',
+      'product-1::condition=used::offerId=offer-a',
+    ]);
+  });
+
+  it('still removes every line, vouchers included, on a dead-product bare id', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-base',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-voucher',
+          quizVoucherToken: 'tok-1',
+        }),
+        makeCartItem({
+          id: 'product-2',
+          cartItemId: 'product-2-base',
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1'],
+      }
+    );
+
+    expect(result.map((item) => item.cartItemId)).toEqual(['product-2-base']);
   });
 });

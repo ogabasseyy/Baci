@@ -5,6 +5,10 @@ import {
   isInsufficientWalletBalanceError,
   VtuPersistenceError,
 } from '@/lib/vtu-fulfillment';
+import {
+  VTU_CUSTOMER_FAILURE_MESSAGE,
+  VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
+} from '@/lib/vtu-metadata-fields';
 
 const mockPurchaseAirtime = vi.fn();
 const mockPurchaseData = vi.fn();
@@ -73,15 +77,62 @@ interface PendingTransactionMockOptions {
     support_email?: string | null;
   };
   claimData?: Record<string, unknown> | null;
+  completedGatewayTransactions?: Array<{ status: string }>;
   emailClaimData?: { id: string } | null;
+  /**
+   * When null, the email-clear RPC resolves null (Codex R97 P2: the row
+   * was reclaimed under a newer lease generation, so our stale clear
+   * must leave the owner's lease untouched).
+   */
+  emailClearData?: { id: string } | null;
+  /**
+   * When null, the email-finalize RPC resolves null (Codex R127 P2:
+   * same stale-generation semantics as the fenced clear — our merge
+   * must revert the outcome keys too).
+   */
+  emailFinalizeData?: { id: string } | null;
   notificationClaimData?: { id: string } | null;
-  purchaseUpdateData?: { id: string } | null;
+  purchaseUpdateData?: { id: string; updated_at?: string } | null;
   purchaseUpdateErrors?: Array<{ message: string } | null>;
+  /**
+   * When set, the Kuda-fallback marker write resolves with this
+   * matched row (null = zero-match lost race, Codex R97 P1); all
+   * other updates keep purchaseUpdateData. Lets one test lose the
+   * fallback race while the claim/debit/marker succeed.
+   */
+  fallbackMarkerData?: { id: string } | null;
+  /**
+   * When set, pre-vend restore updates resolve as a CAS match ONLY
+   * when the captured `updated_at` token equals this (Codex R65
+   * 6ru4mQ) — otherwise they zero-match like a raced row.
+   */
+  expectedRestoreToken?: string;
   updateErrors?: {
     finalMetadata?: { message: string };
     purchase?: { message: string };
+    submissionMarker?: { message: string };
     successMetadata?: { message: string };
   };
+  /**
+   * When set, the settlement-metadata merge re-read (the only
+   * `metadata, updated_at` select) fails with this error (Codex
+   * R103 P2) — every other select is unaffected.
+   */
+  metadataRereadError?: { message: string };
+  /**
+   * Rows returned by the claim_failed_vtu_retry RPC (Codex R114).
+   * Defaults to a successful claim so existing retry tests keep
+   * vending; script a refusal to test the lost-race paths.
+   */
+  retryClaimData?: Record<string, unknown>[] | null;
+  retryClaimError?: { message: string } | null;
+  /**
+   * When set, customer_wallet_transactions reads serve this sequence
+   * (then repeat the last) instead of existingCustomerCashback —
+   * models a refund landing between the retry pre-check and the
+   * post-claim re-read (Codex R114).
+   */
+  ledgerReadSequence?: ({ amount: number } | null)[];
   updatePayloads?: unknown[];
 }
 
@@ -108,6 +159,20 @@ function selectUpdateError(
   }
 
   return updateErrors.finalMetadata;
+}
+
+function isSubmissionMarkerShaped(payloadRecord: Record<string, unknown>) {
+  const markerMetadata =
+    payloadRecord.metadata && typeof payloadRecord.metadata === 'object'
+      ? (payloadRecord.metadata as Record<string, unknown>)
+      : null;
+  return (
+    !('status' in payloadRecord) &&
+    !('transaction_id' in payloadRecord) &&
+    !('error_message' in payloadRecord) &&
+    markerMetadata !== null &&
+    'providerSubmissionStartedAt' in markerMetadata
+  );
 }
 
 function isClaimOrErrorUpdate(payloadRecord: Record<string, unknown>): boolean {
@@ -162,14 +227,40 @@ function createPendingTransactionSupabaseMock({
   rpcImpl,
   merchantData = { business_name: 'OgaBassey' },
   claimData = { id: 'vtu-1' },
+  completedGatewayTransactions = [],
   emailClaimData = { id: 'vtu-1' },
+  emailClearData = { id: 'vtu-1' },
+  emailFinalizeData = { id: 'vtu-1' },
   notificationClaimData = { id: 'vtu-1' },
   purchaseUpdateData = { id: 'vtu-1' },
   purchaseUpdateErrors,
+  fallbackMarkerData,
+  expectedRestoreToken,
   updateErrors = {},
   updatePayloads = [],
+  metadataRereadError,
+  retryClaimData = [
+    {
+      claimed: true,
+      claimed_updated_at: '2026-10-16T00:00:00.000Z',
+      refusal_reason: null,
+    },
+  ],
+  retryClaimError = null,
+  ledgerReadSequence,
 }: PendingTransactionMockOptions): SupabaseStub {
+  let ledgerReadIndex = 0;
   let purchaseUpdateAttempt = 0;
+  // The first marker-shaped write always takes the submissionMarker
+  // slot (unscripted → success: the normal pre-vend marker). Later
+  // ones take it only while a scripted error stands AND the write is
+  // non-terminal: the marker write retries (R79: 3 attempts), so
+  // failing only the first would let the retry succeed and the test
+  // would vend instead of restoring. Terminal (post-vend)
+  // marker-shaped writes and unscripted runs fall through to
+  // finalMetadata, preserving tests that script a failure for a
+  // post-vend metadata write.
+  let submissionMarkerWriteSeen = false;
   const claimMaybeSingle = vi.fn().mockResolvedValue({
     data: claimData,
     error: null,
@@ -214,11 +305,37 @@ function createPendingTransactionSupabaseMock({
               single: vi.fn().mockResolvedValue({
                 data:
                   columns === 'error_message, status' ||
+                  columns ===
+                    'customer_cashback, error_message, merchant_commission, metadata, status, transaction_id' ||
+                  // Pre-refresh re-read shape: kept so the
+                  // concurrent-settlement regression test fails
+                  // against code that does not refresh money columns.
                   columns === 'error_message, metadata, status, transaction_id'
                     ? (currentTransactionData ?? transactionRow)
                     : transactionRow,
                 error: null,
               }),
+              // Marker read-back verify (Codex R54 6rrFRC): the
+              // scripted marker write truly failed, so the re-read
+              // shows no marker — the error (and the caller's
+              // restore+throw) stands. The settlement merge
+              // re-read (Codex R103 P2) fails when scripted.
+              maybeSingle: vi.fn().mockResolvedValue(
+                columns === 'metadata, updated_at' && metadataRereadError
+                  ? { data: null, error: metadataRereadError }
+                  : {
+                      data: {
+                        metadata:
+                          transactionRow.metadata &&
+                          typeof transactionRow.metadata === 'object'
+                            ? transactionRow.metadata
+                            : {},
+                        status: 'processing',
+                        transaction_id: transactionRow.transaction_id ?? null,
+                      },
+                      error: null,
+                    }
+              ),
             }),
           })),
           update: vi.fn((payload: unknown) => {
@@ -263,11 +380,54 @@ function createPendingTransactionSupabaseMock({
             }
 
             if (!isClaimOrErrorUpdate(payloadRecord)) {
+              if (
+                expectedRestoreToken !== undefined &&
+                payloadRecord.status === 'pending' &&
+                typeof metadataPayload?.preVendInterruptedAt === 'string'
+              ) {
+                // Token-gated pre-vend restore: captures the CAS
+                // token from the eq chain and matches only on the
+                // expected value (Codex R65 6ru4mQ).
+                let capturedToken: unknown;
+                const restoreChain = createAwaitableUpdateChain(
+                  { data: null, error: null },
+                  vi.fn()
+                );
+                restoreChain.eq = vi.fn((column: string, value: unknown) => {
+                  if (column === 'updated_at') {
+                    capturedToken = value;
+                  }
+                  return restoreChain;
+                });
+                restoreChain.maybeSingle = vi.fn().mockImplementation(() =>
+                  Promise.resolve({
+                    data:
+                      capturedToken === expectedRestoreToken
+                        ? { id: 'vtu-1' }
+                        : null,
+                    error: null,
+                  })
+                );
+                return restoreChain;
+              }
               let updateError = selectUpdateError(
                 payloadRecord,
                 transactionRow,
                 updateErrors
               );
+              if (isSubmissionMarkerShaped(payloadRecord)) {
+                const terminalWrite =
+                  payloadRecord.status === 'successful' ||
+                  payloadRecord.status === 'failed';
+                if (
+                  !submissionMarkerWriteSeen ||
+                  (updateErrors.submissionMarker !== undefined &&
+                    !terminalWrite)
+                ) {
+                  updateError = updateErrors.submissionMarker;
+                }
+                submissionMarkerWriteSeen = true;
+              }
               if (
                 (payloadRecord.status === 'successful' ||
                   payloadRecord.status === 'failed') &&
@@ -282,8 +442,15 @@ function createPendingTransactionSupabaseMock({
                 purchaseUpdateAttempt += 1;
               }
 
+              const isFallbackMarker =
+                !('status' in payloadRecord) &&
+                metadataPayload?.providerFallback === 'monnify_airtime_to_kuda';
               const purchaseUpdateMaybeSingle = vi.fn().mockResolvedValue({
-                data: updateError ? null : purchaseUpdateData,
+                data: updateError
+                  ? null
+                  : isFallbackMarker && fallbackMarkerData !== undefined
+                    ? fallbackMarkerData
+                    : purchaseUpdateData,
                 error: updateError ?? null,
               });
               return createAwaitableUpdateChain(
@@ -304,7 +471,17 @@ function createPendingTransactionSupabaseMock({
       }
 
       if (table === 'customer_wallet_transactions') {
-        const chain = makeMaybeSingleChain(existingCustomerCashbackMaybeSingle);
+        const ledgerMaybeSingle = ledgerReadSequence
+          ? vi.fn().mockImplementation(() => {
+              const row =
+                ledgerReadSequence[
+                  Math.min(ledgerReadIndex, ledgerReadSequence.length - 1)
+                ];
+              ledgerReadIndex += 1;
+              return Promise.resolve({ data: row, error: null });
+            })
+          : existingCustomerCashbackMaybeSingle;
+        const chain = makeMaybeSingleChain(ledgerMaybeSingle);
         return {
           select: vi.fn(() => chain),
         };
@@ -325,6 +502,20 @@ function createPendingTransactionSupabaseMock({
             eq: vi.fn().mockReturnValue({ maybeSingle: customerMaybeSingle }),
           }),
         };
+      }
+
+      if (table === 'transactions') {
+        // Refund-gate evidence lookups: awaitable terminal (no
+        // maybeSingle), one scripted payload per test. Defaults to
+        // no gateway rows — genuinely-charged legacy rows opt in.
+        const terminal = Object.assign(
+          Promise.resolve({
+            data: completedGatewayTransactions,
+            error: null,
+          }),
+          { eq: vi.fn(() => terminal) }
+        );
+        return { select: vi.fn(() => ({ eq: terminal.eq })) };
       }
 
       return {
@@ -358,6 +549,8 @@ function createPendingTransactionSupabaseMock({
                   ? (transactionRow.metadata as Record<string, unknown>)
                   : {}),
                 [String(args?.p_attempt_key)]: true,
+                [`${String(args?.p_attempt_key)}At`]:
+                  '2026-10-15T00:00:00.000Z',
               }
             : null,
           error: null,
@@ -366,14 +559,44 @@ function createPendingTransactionSupabaseMock({
 
       if (name === 'clear_vtu_customer_email_notification_attempt') {
         return Promise.resolve({
-          data: {
-            ...(transactionRow.metadata &&
-            typeof transactionRow.metadata === 'object'
-              ? (transactionRow.metadata as Record<string, unknown>)
-              : {}),
-            [String(args?.p_attempt_key)]: false,
-          },
+          data: emailClearData
+            ? {
+                ...(transactionRow.metadata &&
+                typeof transactionRow.metadata === 'object'
+                  ? (transactionRow.metadata as Record<string, unknown>)
+                  : {}),
+                [String(args?.p_attempt_key)]: false,
+              }
+            : null,
           error: null,
+        });
+      }
+
+      if (name === 'finalize_vtu_customer_email_notification_attempt') {
+        return Promise.resolve({
+          data: emailFinalizeData
+            ? {
+                ...(transactionRow.metadata &&
+                typeof transactionRow.metadata === 'object'
+                  ? (transactionRow.metadata as Record<string, unknown>)
+                  : {}),
+                [String(args?.p_attempt_key)]: false,
+                [String(args?.p_sent_key)]: Boolean(args?.p_sent),
+                ...(args?.p_delivery_outcome === 'unknown'
+                  ? {
+                      [`${String(args?.p_sent_key)}DeliveryOutcome`]: 'unknown',
+                    }
+                  : {}),
+              }
+            : null,
+          error: null,
+        });
+      }
+
+      if (name === 'claim_failed_vtu_retry') {
+        return Promise.resolve({
+          data: retryClaimData,
+          error: retryClaimError,
         });
       }
 
@@ -697,10 +920,70 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
         customerNotificationAttempted: true,
-        customerTokenEmailNotificationAttempted: true,
+        customerTokenEmailNotificationAttempted: false,
         customerTokenEmailNotificationSent: true,
       }),
     });
+  });
+
+  it('throws retryable when the settlement merge re-read fails after the email sent', async () => {
+    // Codex R103 P2 (reconcile site): the email already went out and
+    // its `sent: true` lives only in the dropped merge patch — fail
+    // retryable instead of succeeding silently, or the
+    // lease-without-marker resends once it expires.
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const supabase = createPendingTransactionSupabaseMock({
+        customerData: {
+          user_id: 'user-1',
+          email: 'buyer@example.com',
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+        },
+        merchantData: {
+          business_name: 'OgaBassey',
+          slug: 'ogabassey',
+          support_email: 'support@oga.test',
+        },
+        transactionRow: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'electricity',
+          network_provider: '',
+          phone_number: '',
+          amount: 1000,
+          request_reference: 'VTU-123',
+          transaction_id: 'kuda-1',
+          status: 'successful',
+          metadata: {
+            customerNotificationAttempted: true,
+            customerEmailNotificationSent: false,
+            voucherPin: 'TOKEN-READY-1234',
+          },
+          error_message: null,
+          merchant_commission: 0,
+          customer_cashback: 0,
+          biller_name: 'EKEDC PREPAID',
+          biller_item_code: 'KUD-ELE-EKED-002',
+          customer_identifier: '43901766923',
+        },
+        metadataRereadError: { message: 'read failed' },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' })
+      ).rejects.toMatchObject({
+        name: 'RetryableVtuError',
+        message: expect.stringContaining('re-read failed'),
+      });
+      // The send happened — this is exactly the drop the throw guards.
+      expect(mockSendEmail).toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('sends token-ready email after an earlier receipt email for token-backed utilities', async () => {
@@ -758,7 +1041,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
         customerReceiptEmailNotificationSent: true,
-        customerTokenEmailNotificationAttempted: true,
+        customerTokenEmailNotificationAttempted: false,
         customerTokenEmailNotificationSent: true,
       }),
     });
@@ -835,7 +1118,7 @@ describe('fulfillPendingVtuTransaction', () => {
     });
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
-        customerReceiptEmailNotificationAttempted: true,
+        customerReceiptEmailNotificationAttempted: false,
         customerReceiptEmailNotificationSent: true,
       }),
     });
@@ -887,7 +1170,108 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
-  it('durably clears a claimed token email attempt when email delivery fails', async () => {
+  it('reclaims a stuck email claim whose lease expired before the send landed', async () => {
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerNotificationAttempted: true,
+          customerReceiptEmailNotificationAttempted: true,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      {
+        p_attempt_key: 'customerReceiptEmailNotificationAttempted',
+        p_sent_key: 'customerReceiptEmailNotificationSent',
+        p_transaction_id: 'vtu-1',
+      }
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'buyer@example.com' })
+    );
+  });
+
+  it('does not steal a fresh email claim held by a live sender', async () => {
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerNotificationAttempted: true,
+          customerReceiptEmailNotificationAttempted: true,
+          customerReceiptEmailNotificationAttemptedAt: new Date().toISOString(),
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerReceiptEmailNotificationAttempted',
+      })
+    );
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('durably finalizes a claimed token email attempt when email delivery fails', async () => {
+    // Codex R127 P2: the failure outcome AND the lease release must
+    // persist in one fenced write — after the send, before the merge.
     const updatePayloads: unknown[] = [];
     mockSendEmail.mockResolvedValueOnce({ success: false });
     const supabase = createPendingTransactionSupabaseMock({
@@ -934,12 +1318,27 @@ describe('fulfillPendingVtuTransaction', () => {
     });
 
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'clear_vtu_customer_email_notification_attempt',
+      'finalize_vtu_customer_email_notification_attempt',
       {
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
         p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'failed',
+        p_sent: false,
         p_sent_key: 'customerTokenEmailNotificationSent',
         p_transaction_id: 'vtu-1',
       }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'clear_vtu_customer_email_notification_attempt',
+      expect.anything()
+    );
+    const rpcMock = vi.mocked(supabase.rpc);
+    const finalizeCall = rpcMock.mock.calls.findIndex(
+      (call) => call[0] === 'finalize_vtu_customer_email_notification_attempt'
+    );
+    expect(finalizeCall).toBeGreaterThanOrEqual(0);
+    expect(mockSendEmail.mock.invocationCallOrder[0]).toBeLessThan(
+      rpcMock.mock.invocationCallOrder[finalizeCall]
     );
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
@@ -947,6 +1346,289 @@ describe('fulfillPendingVtuTransaction', () => {
         customerTokenEmailNotificationSent: false,
       }),
     });
+  });
+
+  it('records an uncertain terminal marker when delivery outcome is unknown', async () => {
+    // Codex R106 P2: ZeptoMail accepted the send but its response
+    // was lost — the email may have landed. Record sent=false AND
+    // the unknown marker so automatic retries exclude the row
+    // instead of collapsing it into a definite failure.
+    const updatePayloads: unknown[] = [];
+    mockSendEmail.mockResolvedValueOnce({
+      success: false,
+      deliveryOutcome: 'unknown',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    // Codex R127 P2: the unknown marker reaches the row in the same
+    // fenced write that releases the lease — never staged-only.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'unknown',
+        p_sent: false,
+      })
+    );
+    expect(updatePayloads).toContainEqual({
+      metadata: expect.objectContaining({
+        customerTokenEmailNotificationSent: false,
+        customerTokenEmailNotificationSentDeliveryOutcome: 'unknown',
+      }),
+    });
+  });
+
+  it('never re-attempts an email with unknown delivery outcome', async () => {
+    // Codex R106 P2: the uncertain marker is terminal for
+    // automatic retries — neither the in-flight gate nor the
+    // claim pre-check may touch the row again.
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerTokenEmailNotificationSent: false,
+          customerTokenEmailNotificationSentDeliveryOutcome: 'unknown',
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.anything()
+    );
+  });
+
+  it('still sends the token email when the earlier receipt outcome is unknown', async () => {
+    // Codex R107 P2: an uncertain receipt must not block the
+    // distinct token-ready email once the PIN exists — the state
+    // machine sends token (not receipt), and the receipt itself is
+    // never retried.
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerReceiptEmailNotificationSent: false,
+          customerReceiptEmailNotificationSentDeliveryOutcome: 'unknown',
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+      })
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerReceiptEmailNotificationAttempted',
+      })
+    );
+    // Codex R127 P2 (success half): sent=true reaches the row in the
+    // same fenced write that releases the lease — no 15-minute
+    // re-send window if the worker crashes before the merge.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'sent',
+        p_sent: true,
+      })
+    );
+    expect(updatePayloads).toContainEqual({
+      metadata: expect.objectContaining({
+        customerTokenEmailNotificationSent: true,
+      }),
+    });
+  });
+
+  it('leaves a reclaimed email lease untouched when our finalize is stale', async () => {
+    const updatePayloads: unknown[] = [];
+    mockSendEmail.mockResolvedValueOnce({
+      success: false,
+      deliveryOutcome: 'unknown',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      emailFinalizeData: null,
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updateErrors: {
+        successMetadata: { message: 'final metadata write failed' },
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
+      })
+    );
+    // Neither lease key, sent-result key, nor outcome marker may be
+    // persisted: the row now belongs to the reclaiming owner, so our
+    // merge must not write our stale flag, stamp, `sent: false`, or
+    // `unknown` over theirs (Codex R102 P2: that would double-send
+    // their email; R127: a stale `unknown` would suppress a retry).
+    for (const payload of updatePayloads) {
+      const metadata = (payload as { metadata?: Record<string, unknown> })
+        .metadata;
+      if (metadata && typeof metadata === 'object') {
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationAttempted'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationAttemptedAt'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationSent'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationSentDeliveryOutcome'
+        );
+      }
+    }
   });
 
   it('skips email send when another fulfillment path already claimed delivery', async () => {
@@ -1040,8 +1722,11 @@ describe('fulfillPendingVtuTransaction', () => {
         reference: 'VTU-123',
         status: 'successful',
       });
+      // CAS-merged write (Codex R82 P2): both attempts fail, the
+      // helper gives up without throwing, and the result still
+      // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to persist VTU transaction metadata:',
+        'VTU settlement metadata merge gave up after five attempts:',
         expect.objectContaining({
           error: 'metadata write failed',
           transactionId: 'vtu-1',
@@ -1493,6 +2178,256 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toEqual([]);
   });
 
+  it('completes both refund legs when the retry claim loses to a committed refund', async () => {
+    // A refund committed between the pre-check read and the atomic
+    // claim: the claim refuses already_refunded. The retry must
+    // re-enter the idempotent refund helper (a hybrid refund may have
+    // restored only the wallet leg) and report failed with the
+    // ledger-verified total — never re-vend on restored value.
+    // Provider error text is redacted to the fixed refunded fallback
+    // (no first-party safe flag on this row).
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+    const rpcImpl = vi.fn((name: string) =>
+      Promise.resolve(
+        name === 'refund_customer_wallet_for_vtu'
+          ? {
+              data: [
+                {
+                  success: true,
+                  new_balance: 1700,
+                  transaction_id: 'ledger-card-1',
+                },
+              ],
+              error: null,
+            }
+          : name === 'reverse_vtu_wallet_payment'
+            ? {
+                data: [
+                  {
+                    success: false,
+                    reversed_amount: 0,
+                    new_balance: 1000,
+                    reversal_transaction_id: null,
+                  },
+                ],
+                error: null,
+              }
+            : { data: null, error: null }
+      )
+    );
+
+    const supabase = createPendingTransactionSupabaseMock({
+      ledgerReadSequence: [null, { amount: 700 }, { amount: 300 }],
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'already_refunded',
+        },
+      ],
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {
+          paymentSplit: { card: 700, wallet: 300 },
+          walletDebited: true,
+        },
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      amount: 1000,
+      error:
+        'Original payment was refunded to wallet — please retry as a new purchase.',
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    // Both legs ran through the idempotent helper (reverse no-op'd
+    // on the already-restored leg; the card leg completed).
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'reverse_vtu_wallet_payment',
+      expect.objectContaining({ p_expected_status: 'failed' })
+    );
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({ p_amount: 700 })
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('returns first-party copy verbatim on the refund-race path when flagged safe', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      ledgerReadSequence: [null, { amount: 700 }, { amount: 300 }],
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'already_refunded',
+        },
+      ],
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {
+          paymentSplit: { card: 700, wallet: 300 },
+          walletDebited: true,
+          [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
+        },
+        error_message:
+          'Wallet balance changed during checkout — no charge was made.',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      error: 'Wallet balance changed during checkout — no charge was made.',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+  });
+
+  it('returns processing when the retry claim finds the row already moved', async () => {
+    // Another writer flipped the row between the read and the claim:
+    // poll again instead of vending against a stale snapshot.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'status_moved',
+        },
+      ],
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {},
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toEqual({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('throws when the retry claim RPC errors', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      retryClaimError: { message: 'claim blew up' },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {},
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+      },
+    });
+
+    await expect(
+      fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      })
+    ).rejects.toThrow(VtuPersistenceError);
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
   it('does not retry a failed transaction when retryFailed is false', async () => {
     const supabase = createPendingTransactionSupabaseMock({
       transactionRow: {
@@ -1526,7 +2461,7 @@ describe('fulfillPendingVtuTransaction', () => {
 
     expect(result).toMatchObject({
       amount: 1000,
-      error: 'Temporary biller error',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       status: 'failed',
     });
@@ -1680,12 +2615,15 @@ describe('fulfillPendingVtuTransaction', () => {
   });
 
   it('throws when the purchase result cannot be persisted', async () => {
+    // Codex R90 P1: the persist-failure log must not carry the
+    // provider body — tx id + provider reference only.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockPurchaseAirtime.mockResolvedValue({
-      success: true,
-      message: 'ok',
+      success: false,
+      message: 'Provider exploded: meter 9988776655 (k99)',
       transactionId: 'kuda-1',
       amount: 1000,
-      status: 'successful',
+      status: 'failed',
     });
 
     const supabase = createPendingTransactionSupabaseMock({
@@ -1719,6 +2657,14 @@ describe('fulfillPendingVtuTransaction', () => {
         transactionId: 'vtu-1',
       })
     ).rejects.toThrow('Failed to persist VTU purchase result');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Failed to persist VTU purchase result:',
+      expect.not.objectContaining({
+        errorMessage: expect.stringContaining('9988776655'),
+      })
+    );
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('9988776655');
+    errorSpy.mockRestore();
   });
 
   it('retries provider result persistence when the first update fails', async () => {
@@ -1846,8 +2792,11 @@ describe('fulfillPendingVtuTransaction', () => {
         reference: 'VTU-123',
         status: 'successful',
       });
+      // CAS-merged write (Codex R82 P2): both attempts fail, the
+      // helper gives up without throwing, and the vend result still
+      // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to persist final VTU transaction metadata:',
+        'VTU settlement metadata merge gave up after five attempts:',
         expect.objectContaining({
           error: 'final metadata write failed',
           transactionId: 'vtu-1',
@@ -2050,6 +2999,63 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('pins the Monnify vend recipient to the row identifier even when metadata.validationReference names another meter (Muse R141)', async () => {
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: true,
+      reference: 'VTU-123',
+      message: 'Transaction Completed Successfully',
+      transactionId: 'monnify-bill-1',
+      amount: 1000,
+      status: 'successful',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'biller1',
+          productCode: 'product1',
+          // Attacker-swapped token attesting a DIFFERENT meter. The
+          // overlay stores request attestations verbatim by design; the
+          // vend must still go to the fingerprint-bound row identifier.
+          validationReference: 'token-for-some-other-meter',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC',
+        biller_item_code: null,
+        customer_identifier: '43901766923',
+      },
+      updatePayloads: [],
+    });
+
+    await fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' });
+
+    // Recipient pinned to the row; the token rides along only as the
+    // provider-side consistency check (a mismatch fails closed).
+    expect(mockMonnifyPurchaseBill).toHaveBeenCalledWith(
+      'biller1',
+      'product1',
+      '43901766923',
+      1000,
+      'OgaBassey',
+      'VTU-123',
+      '08146978921',
+      'token-for-some-other-meter'
+    );
+  });
+
   it('falls back to Kuda airtime when Monnify rejects an airtime vend after payment', async () => {
     mockMonnifyPurchaseBill.mockResolvedValue({
       success: false,
@@ -2146,6 +3152,7 @@ describe('fulfillPendingVtuTransaction', () => {
           provider: 'kuda',
           providerFallback: 'monnify_airtime_to_kuda',
         }),
+        platform_commission: 22.5,
         status: 'successful',
         transaction_id: 'kuda-airtime-1',
       })
@@ -2210,7 +3217,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(mockPurchaseAirtime).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       amount: 100,
-      error: 'Kuda vend failed',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       status: 'failed',
     });
@@ -2229,6 +3236,78 @@ describe('fulfillPendingVtuTransaction', () => {
         transaction_id: null,
       })
     );
+  });
+
+  it('replaces provider failure text with the fixed customer-safe message', async () => {
+    // Codex R89 P1: Kuda/Monnify response bodies (which may contain
+    // identifiers) must never reach API responses — the client toasts
+    // the error verbatim. The raw text stays persisted server-side
+    // for support correlation; telemetry carries only the
+    // transaction id and provider, never the body.
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const providerMessage =
+      'Insufficient float for merchant 9876543210 (ref KU-998877)';
+    mockPurchaseAirtime.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: providerMessage,
+      amount: 1000,
+      phoneNumber: '08012345678',
+      provider: 'MTN',
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'kuda',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({ error_message: providerMessage })
+    );
+    for (const call of consoleErrorSpy.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain('9876543210');
+      expect(JSON.stringify(call)).not.toContain(providerMessage);
+    }
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Fresh VTU vend failed:', {
+      provider: 'MTN',
+      transactionId: 'vtu-1',
+    });
+    consoleErrorSpy.mockRestore();
   });
 
   it('preserves pending Kuda fallback state after Monnify terminal airtime rejection', async () => {
@@ -2310,6 +3389,292 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('persists processing without refunding when the Kuda response times out', async () => {
+    // Codex R102 P1: the timeout may follow Kuda's acceptance — the
+    // vend may have landed, so the row stays processing for BILL_TSQ
+    // reconciliation instead of failing + refunding on top of value.
+    mockPurchaseAirtime.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Kuda ADMIN_PURCHASE_BILL request timed out',
+      amount: 100,
+      phoneNumber: '08012345678',
+      provider: 'MTN',
+      status: 'pending',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'kuda',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({ status: 'processing' })
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'reverse_vtu_wallet_payment',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.anything()
+    );
+  });
+
+  it('persists Kuda fallback routing before calling Kuda', async () => {
+    // If the final result persist exhausts, the stored row must still
+    // route Kuda TSQ by request_reference — otherwise it keeps
+    // provider=monnify with no vend reference and strands charged.
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Monnify rejected the bill payment request.',
+      providerErrorDetail:
+        'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      amount: 100,
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+    let markerPersistedAtKudaCall = false;
+    mockPurchaseAirtime.mockImplementationOnce(async () => {
+      markerPersistedAtKudaCall = updatePayloads.some(
+        (payload) =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          !('status' in payload) &&
+          (
+            (payload as { metadata?: unknown }).metadata as Record<
+              string,
+              unknown
+            >
+          )?.provider === 'kuda'
+      );
+      return {
+        success: false,
+        reference: 'VTU-123',
+        message: 'Kuda vend pending confirmation',
+        amount: 100,
+        phoneNumber: '08012345678',
+        provider: 'MTN',
+        status: 'pending',
+      };
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).toHaveBeenCalledOnce();
+    expect(markerPersistedAtKudaCall).toBe(true);
+    expect(result).toMatchObject({ reference: 'VTU-123' });
+  });
+
+  it('settles the Monnify failure without calling Kuda when the fallback marker write fails', async () => {
+    // Fail closed: Kuda must never be called when its routing cannot
+    // be recorded — nothing delivered, so the Monnify rejection
+    // settles (refund path) instead of stranding charged.
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Monnify rejected the bill payment request.',
+      providerErrorDetail:
+        'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      amount: 100,
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updateErrors: {
+        finalMetadata: { message: 'marker write unavailable' },
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      amount: 100,
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
+      reference: 'VTU-123',
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        error_message: 'Monnify rejected the bill payment request.',
+        metadata: expect.not.objectContaining({
+          providerFallback: 'monnify_airtime_to_kuda',
+        }),
+        status: 'failed',
+      })
+    );
+  });
+
+  it('resolves the current row instead of failing it when the fallback marker loses its race', async () => {
+    // Codex R97 P1: this worker paused after its Monnify failure; a
+    // replay reclaimed the row and is vending. Recording our stale
+    // Monnify failure over THEIR in-flight row would refund while
+    // their vend lands (free airtime) — resolve their row instead:
+    // no failed persist, no Kuda call, no refund; the client replays
+    // onto the progressed row.
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Monnify rejected the bill payment request.',
+      providerErrorDetail:
+        'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      amount: 100,
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      fallbackMarkerData: null,
+      currentTransactionData: {
+        error_message: null,
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        status: 'processing',
+        transaction_id: null,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(
+      updatePayloads.filter(
+        (payload) =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          (payload as { status?: unknown }).status === 'failed'
+      )
+    ).toEqual([]);
+  });
+
   it('does not fall back to Kuda airtime for generic Monnify vend failures', async () => {
     mockMonnifyPurchaseBill.mockResolvedValue({
       success: false,
@@ -2366,7 +3731,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       amount: 100,
-      error: 'Monnify business failure',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       status: 'failed',
     });
@@ -2517,7 +3882,7 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  it('restores Monnify transient vend failures without transaction reference to retryable pending', async () => {
+  it('restores Monnify transient vend failures to pending so retry/cron re-vends them', async () => {
     const transientError = new Error('Transient vend outcome: timeout');
     transientError.name = 'MonnifyTransientVendError';
     mockMonnifyPurchaseBill.mockRejectedValue(transientError);
@@ -2730,7 +4095,7 @@ describe('fulfillPendingVtuTransaction', () => {
     );
     expect(result).toMatchObject({
       amount: 1000,
-      error: 'Request successful. (biller status: k11)',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       refundedToWallet: 1000,
       status: 'failed',
@@ -2842,7 +4207,201 @@ describe('fulfillPendingVtuTransaction', () => {
     );
     expect(result).toMatchObject({
       amount: 1000,
-      error: 'Request successful. (biller status: k11)',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        error_message: 'Request successful. (biller status: k11)',
+        status: 'failed',
+      })
+    );
+  });
+
+  it('settles a stale flagged row from Kuda provider truth without re-vending', async () => {
+    // The claim declines (no transaction_id or message) and pre-vend
+    // recovery refuses (flag proves the debit landed), but Kuda TSQ
+    // resolves by BillRequestRef — settle from that, never re-vend.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: { walletDebited: true },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+  });
+
+  it('applies Kuda fallback credit correction when a flagged fallback row settles', async () => {
+    // The recovered row still carries Monnify-derived commission
+    // columns; settling those would misallocate real wallet funds.
+    // Same inputs as the inline-path correction test, same corrected
+    // outputs (11.25/11.25 off the 22.5 Kuda earning).
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: '9MOBILE',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+          fulfillmentProvider: 'kuda',
+          originalProvider: 'monnify',
+          monnifyFallbackError: 'Monnify API error: 400',
+          customerCashbackEnabled: true,
+          customerCashbackRate: 50,
+          originalMerchantCommission: 25,
+          walletDebited: true,
+        },
+        error_message: null,
+        merchant_commission: 12.5,
+        customer_cashback: 12.5,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        customer_cashback: 11.25,
+        merchant_commission: 11.25,
+        metadata: expect.objectContaining({
+          commissionProvider: 'kuda',
+          originalMerchantCommission: 22.5,
+        }),
+        platform_commission: 22.5,
+        status: 'successful',
+      })
+    );
+  });
+
+  it('fails and refunds a stale flagged row when Kuda definitively rejects it', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful. (biller status: k11)',
+      status: 'failed',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'processing',
+        metadata: { walletDebited: true },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+        updated_at: staleAt,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-123'
+    );
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({
+        p_amount: 1000,
+        p_customer_id: 'customer-1',
+        p_vtu_transaction_id: 'vtu-1',
+      })
+    );
+    expect(result).toMatchObject({
+      amount: 1000,
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       refundedToWallet: 1000,
       status: 'failed',
@@ -2913,6 +4472,128 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
+  it('never debits or re-vends when fulfilling a processing row: claim then reconcile-by-reference only (Muse R142)', async () => {
+    // The history-GET backfill fulfills processing rows; that path must
+    // be unable to move money out (debit) or re-drive a provider vend.
+    // The processing branch claims exclusively, then reconciles from
+    // provider truth — Phase B.5 (debit-before-vend) sits below the
+    // branch early-return and is unreachable here.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-bill-1',
+        status: 'processing',
+        metadata: {},
+        error_message: 'Request successful',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ reference: 'VTU-123' });
+    // Non-vacuous: the claim won and reconcile requeried provider truth.
+    expect(mockCheckTransactionStatus).toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
+    );
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(mockMonnifyPurchaseBill).not.toHaveBeenCalled();
+  });
+
+  it('settles refreshed fallback credits when a concurrent worker persisted them first', async () => {
+    // Overlap: this worker read Monnify-derived credits (12.5/12.5),
+    // then worker A persisted the Kuda correction (11.25/11.25) with
+    // the terminal status. The re-read must refresh the money columns
+    // too, or this worker settles stale amounts that win the ledger.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      currentTransactionData: {
+        customer_cashback: 11.25,
+        error_message: null,
+        merchant_commission: 11.25,
+        metadata: {
+          commissionProvider: 'kuda',
+          originalMerchantCommission: 22.5,
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        status: 'successful',
+        transaction_id: 'kuda-airtime-1',
+      },
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: '9MOBILE',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-airtime-1',
+        status: 'processing',
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        error_message: null,
+        merchant_commission: 12.5,
+        customer_cashback: 12.5,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'successful',
+    });
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'credit_merchant_wallet',
+      expect.objectContaining({ p_amount: 11.25 })
+    );
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'credit_customer_wallet',
+      expect.objectContaining({ p_amount: 11.25 })
+    );
+  });
+
   it('returns failed when processing reconciliation loses the claim to a non-refundable failed row', async () => {
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Loyalty reward vend rejected',
@@ -2958,7 +4639,7 @@ describe('fulfillPendingVtuTransaction', () => {
 
     expect(result).toEqual({
       amount: 1000,
-      error: 'Loyalty reward vend rejected',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       status: 'failed',
     });
@@ -3018,6 +4699,12 @@ describe('fulfillPendingVtuTransaction', () => {
       },
       name: 'RetryableVtuError',
     });
+    // The reconcile persist flipped the row to failed; the guard must
+    // carry the persisted status, not the stale processing snapshot.
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({ p_expected_status: 'failed' })
+    );
   });
 
   it('returns failed when processing reconciliation intentionally skips the wallet refund', async () => {
@@ -3058,13 +4745,84 @@ describe('fulfillPendingVtuTransaction', () => {
 
     expect(result).toEqual({
       amount: 1000,
-      error: 'Loyalty reward vend rejected',
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: 'VTU-123',
       status: 'failed',
     });
     expect(rpcImpl).not.toHaveBeenCalledWith(
       'refund_customer_wallet_for_vtu',
       expect.anything()
+    );
+  });
+
+  it('confirms the refund when losing the reconcile claim to an unrefunded failed row', async () => {
+    // Replay/cron overlap: the winner persisted failed but hasn't
+    // confirmed the refund yet. This terminal response must confirm
+    // it — the client rotates the key on 400 and failed rows are
+    // cron-excluded, so anything less strands the debit forever.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Checking status',
+      status: 'processing',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      currentTransactionData: {
+        error_message: 'Kuda rejected the vend',
+        metadata: {},
+        status: 'failed',
+        transaction_id: 'kuda-air-1',
+      },
+      purchaseUpdateData: null,
+      rpcImpl,
+      updatePayloads,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-air-1',
+        status: 'processing',
+        metadata: {},
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(rpcImpl).toHaveBeenCalledWith('refund_customer_wallet_for_vtu', {
+      p_customer_id: 'customer-1',
+      p_merchant_id: 'merchant-1',
+      p_amount: 1000,
+      p_vtu_transaction_id: 'vtu-1',
+      p_description: expect.stringContaining('Refund for failed'),
+      p_expected_status: 'failed',
+    });
+    expect(result).toEqual({
+      amount: 1000,
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ refundIssued: true }),
+      })
     );
   });
 
@@ -3168,9 +4926,11 @@ describe('fulfillPendingVtuTransaction', () => {
         transactionId: 'vtu-1',
       });
 
+      // Provider text persisted pre-flag: replay fails closed to the
+      // fixed customer-safe message (Codex R89 P1), raw stays in DB.
       expect(result).toMatchObject({
         amount: 1000,
-        error: 'Vend rejected (biller status: k11)',
+        error: VTU_CUSTOMER_FAILURE_MESSAGE,
         reference: 'VTU-123',
         refundedToWallet: 1000,
         status: 'failed',
@@ -3179,6 +4939,7 @@ describe('fulfillPendingVtuTransaction', () => {
         p_amount: 1000,
         p_customer_id: 'customer-1',
         p_description: expect.any(String),
+        p_expected_status: 'failed',
         p_merchant_id: 'merchant-1',
         p_vtu_transaction_id: 'vtu-1',
       });
@@ -3190,6 +4951,228 @@ describe('fulfillPendingVtuTransaction', () => {
         refundAmount: 1000,
         refundIssued: true,
       });
+    });
+
+    it('replaces unflagged persisted provider text when a failed row is replayed', async () => {
+      // Codex R89 P1: pre-flag rows carry provider-authored
+      // error_message; replay must fail closed to the fixed message.
+      const rpcImpl = vi.fn((name: string) =>
+        Promise.resolve(
+          name === 'refund_customer_wallet_for_vtu'
+            ? {
+                data: [
+                  {
+                    success: true,
+                    new_balance: 1050,
+                    transaction_id: 'ledger-1',
+                  },
+                ],
+                error: null,
+              }
+            : { data: null, error: null }
+        )
+      );
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          error_message: 'Kuda timeout for account 1122334455',
+          metadata: { paymentReference: 'VTU-PAYSTACK-123' },
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        error: VTU_CUSTOMER_FAILURE_MESSAGE,
+        status: 'failed',
+      });
+    });
+
+    it('returns flagged first-party text verbatim when a failed row is replayed', async () => {
+      // The wallet-race notice is first-party fixed copy: writers flag
+      // it safe so replays preserve the top-up signal.
+      const firstPartyMessage =
+        'Wallet balance changed during checkout — payment refunded.';
+      const rpcImpl = vi.fn((name: string) =>
+        Promise.resolve(
+          name === 'refund_customer_wallet_for_vtu'
+            ? {
+                data: [
+                  {
+                    success: true,
+                    new_balance: 1050,
+                    transaction_id: 'ledger-1',
+                  },
+                ],
+                error: null,
+              }
+            : { data: null, error: null }
+        )
+      );
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          error_message: firstPartyMessage,
+          metadata: {
+            paymentReference: 'VTU-PAYSTACK-123',
+            [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
+          },
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        error: firstPartyMessage,
+        status: 'failed',
+      });
+    });
+
+    it('marks (never credits) a legacy failed row with no collection evidence', async () => {
+      // Money-minting regression (Codex R51 6rqH1I): legacy
+      // gateway-init/declined rows never collected — no wallet
+      // flag, no ledger redemption, no provider reference, no
+      // payment reference, no order link. Crediting those mints
+      // unearned wallet funds the cron would spray across every
+      // historical failed row. The row is marked skipped
+      // (terminally failed, cron-excluded) and returns failed
+      // WITHOUT throwing (nothing is retryable). FAILS against
+      // pre-fix code (no gate: full-amount card-only refund issued).
+      const updatePayloads: unknown[] = [];
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {},
+          error_message: 'Gateway initialization failed',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({ status: 'failed' });
+      expect(result).not.toHaveProperty('refundedToWallet');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.any(Object)
+      );
+      const skippedPayload = findPayloadWithMetadata(
+        updatePayloads,
+        (metadata) => metadata.refundSkipped === 'no_collection_evidence'
+      );
+      expect(skippedPayload?.metadata).toMatchObject({
+        refundSkipped: 'no_collection_evidence',
+      });
+      expect(skippedPayload?.metadata).not.toHaveProperty('refundIssued');
+    });
+
+    it('returns terminal failed (no throw, no RPC) when replaying a no-charge race row', async () => {
+      // The wallet-race arm charged nothing and marked the row
+      // no_charge. A confirm-only replay must return failed without
+      // throwing (nothing to confirm) and without calling the refund
+      // RPC — and must NOT trip the kuda_failure dispatch invariant
+      // on the split-without-debit shape.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 0, wallet: 1000 },
+            refundSkipped: 'no_charge',
+          },
+          error_message:
+            'Wallet balance changed during checkout — no charge was made.',
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({ status: 'failed' });
+      expect(result).not.toHaveProperty('refundedToWallet');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.any(Object)
+      );
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'reverse_vtu_wallet_payment',
+        expect.any(Object)
+      );
+    });
+
+    it('refunds (never skips) a failed row with a metadata-linked completed gateway transaction', async () => {
+      // Twin of the skip test (Codex R54 6rrFRE): the legacy charge
+      // route stored its VTU link in transactions.metadata, left
+      // order_id null, and never copied paymentReference onto the
+      // VTU row — so a genuinely charged row abandoned before its
+      // refund carries no other evidence. Skipping it would strand a
+      // paid purchase with no vend and no refund.
+      const updatePayloads: unknown[] = [];
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+      const supabase = createPendingTransactionSupabaseMock({
+        completedGatewayTransactions: [{ status: 'completed' }],
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {},
+          error_message: 'Kuda request failed',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.objectContaining({
+          p_amount: 1000,
+          p_customer_id: 'customer-1',
+          p_vtu_transaction_id: 'vtu-1',
+        })
+      );
+      expect(result).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+      expect(
+        findPayloadWithMetadata(
+          updatePayloads,
+          (metadata) => metadata.refundSkipped === 'no_collection_evidence'
+        )
+      ).toBeUndefined();
     });
 
     it('skips the refund when the row has no customer_id', async () => {
@@ -3323,6 +5306,69 @@ describe('fulfillPendingVtuTransaction', () => {
       );
     });
 
+    it('reconstructs the wallet+card total when replaying a hybrid kuda-failure refund', async () => {
+      // Codex R103 P2: the hybrid branch persists only the card leg
+      // (the history projector sums it with the split wallet leg), so
+      // a cached replay must add the wallet leg back — a wallet-only
+      // refund would otherwise serialize refundedToWallet: 0.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const runReplay = async (metadata: Record<string, unknown>) => {
+        const supabase = createPendingTransactionSupabaseMock({
+          transactionRow: {
+            ...FAILED_ROW_BASE,
+            status: 'failed',
+            metadata,
+          },
+          rpcImpl,
+        });
+        return await fulfillPendingVtuTransaction({
+          retryFailed: false,
+          supabase,
+          transactionId: 'vtu-1',
+        });
+      };
+
+      const walletOnly = await runReplay({
+        paymentSplit: { card: 0, wallet: 1000 },
+        refundAmount: 0,
+        refundContext: 'hybrid_vend_failure',
+        refundIssued: true,
+      });
+      expect(walletOnly).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+
+      const split = await runReplay({
+        paymentSplit: { card: 400, wallet: 600 },
+        refundAmount: 400,
+        refundContext: 'hybrid_vend_failure',
+        refundIssued: true,
+      });
+      expect(split).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+
+      // Other branches persist exactly what was restored: a wallet
+      // race with the same split restored only the card leg, so the
+      // replay must NOT add the wallet leg back.
+      const race = await runReplay({
+        paymentSplit: { card: 400, wallet: 600 },
+        refundAmount: 400,
+        refundContext: 'wallet_race',
+        refundIssued: true,
+      });
+      expect(race).toMatchObject({
+        refundedToWallet: 400,
+        status: 'failed',
+      });
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+    });
+
     it('refuses to retry a row that has already been refunded (prevents double-credit)', async () => {
       // Once metadata.refundIssued is true, retryFailed must NOT execute a
       // second vend attempt: if it succeeded, the customer would keep both
@@ -3349,6 +5395,10 @@ describe('fulfillPendingVtuTransaction', () => {
 
       expect(result).toMatchObject({
         amount: 1000,
+        // Provider error text redacted: no first-party safe flag on
+        // this row, so the fixed refunded fallback applies (R117 P1).
+        error:
+          'Original payment was refunded to wallet — please retry as a new purchase.',
         reference: 'VTU-123',
         refundedToWallet: 1000,
         status: 'failed',
@@ -3358,6 +5408,47 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
       expect(mockPurchaseData).not.toHaveBeenCalled();
       expect(mockPurchaseBill).not.toHaveBeenCalled();
+    });
+
+    it('reconstructs the hybrid total when a cached refund blocks the retry', async () => {
+      // The hybrid arm persists the CARD leg only: a retryFailed
+      // replay must report wallet + card (Codex R118 P2), not the
+      // persisted ₦400 of a ₦1000 restoration.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 400, wallet: 600 },
+            refundAmount: 400,
+            refundContext: 'hybrid_vend_failure',
+            refundIssued: true,
+            refundedAt: '2026-05-05T08:00:00.000Z',
+            walletDebited: true,
+          },
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        amount: 1000,
+        reference: 'VTU-123',
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+      expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
     });
 
     it('blocks retry via the ledger when refundIssued metadata is missing but a refund row exists', async () => {
@@ -3415,6 +5506,69 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
       expect(mockPurchaseBill).not.toHaveBeenCalled();
+    });
+
+    it('re-drives a no-charge race row on retry (self-healing vend)', async () => {
+      // Nothing was charged, so the retry is a fresh attempt, not a
+      // double-credit: the claim proceeds (no ledger row), the debit
+      // re-checks the balance, and a funded wallet vends. The stale
+      // no-charge marker must be cleared when value moves.
+      mockCheckTransactionStatus.mockResolvedValueOnce({
+        message: 'Original attempt failed',
+        status: 'failed',
+      });
+      mockPurchaseAirtime.mockResolvedValue({
+        success: true,
+        message: 'ok',
+        transactionId: 'kuda-redrive-1',
+        amount: 1000,
+        status: 'successful',
+      });
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: [{ success: true }],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          type: 'airtime',
+          network_provider: 'MTN',
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 0, wallet: 1000 },
+            refundSkipped: 'no_charge',
+          },
+          error_message:
+            'Wallet balance changed during checkout — no charge was made.',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        reference: 'VTU-123',
+        status: 'successful',
+      });
+      expect(rpcImpl).toHaveBeenCalledWith(
+        'redeem_vtu_wallet_payment',
+        expect.objectContaining({ p_amount: 1000 })
+      );
     });
 
     it('throws VtuPersistenceError when refund RPC succeeded but metadata persistence fails', async () => {
@@ -3669,12 +5823,145 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
       expect(rpcImpl).toHaveBeenCalledWith(
         'refund_customer_wallet_for_vtu',
-        expect.objectContaining({ p_amount: 700 })
+        expect.objectContaining({
+          p_amount: 700,
+          // The row was just claimed (processing) when the race
+          // refund runs; the snapshot still reads pending (R115 P1).
+          p_expected_status: 'processing',
+        })
       );
       expect(rpcImpl).not.toHaveBeenCalledWith(
         'reverse_vtu_wallet_payment',
         expect.anything()
       );
+    });
+
+    it('wallet-only race restores to pending when the failed persist exhausts (no refund issued, safe to re-drive)', async () => {
+      // Codex R91 P2: card<=0 issues NO refund RPC, so restoring
+      // cannot double-run compensation. Without the restore the row
+      // strands on processing forever (never-debited strands match
+      // no recovery predicate by design, R39).
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'insufficient_wallet_balance', code: 'P0001' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-race-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-RACE-1',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          updated_at: '2026-10-14T20:00:00.000Z',
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+        updateErrors: {
+          purchase: { message: 'purchase write failed' },
+        },
+        updatePayloads,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-race-1',
+        })
+      ).rejects.toThrow('Failed to persist wallet-race VTU result');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+      expect(updatePayloads).toContainEqual({
+        error_message:
+          'VTU wallet balance changed during checkout; the purchase will resume automatically.',
+        metadata: expect.objectContaining({
+          customerSafeErrorMessage: true,
+          preVendInterruptedAt: expect.any(String),
+        }),
+        status: 'pending',
+      });
+    });
+
+    it('hybrid race does NOT restore to pending when the failed persist exhausts (card refund may have issued)', async () => {
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'insufficient_wallet_balance', code: 'P0001' },
+          });
+        }
+        if (name === 'refund_customer_wallet_for_vtu') {
+          return Promise.resolve({
+            data: [
+              { success: true, new_balance: 1700, transaction_id: 'refund-tx' },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-race-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-RACE-1',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+        updateErrors: {
+          purchase: { message: 'purchase write failed' },
+        },
+        updatePayloads,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-race-1',
+        })
+      ).rejects.toThrow('Failed to persist wallet-race VTU result');
+      expect(
+        updatePayloads.filter(
+          (payload) =>
+            typeof payload === 'object' &&
+            payload !== null &&
+            (payload as Record<string, unknown>).status === 'pending'
+        )
+      ).toEqual([]);
     });
 
     it('hybrid replay (post-fact) self-heals when the ledger has a refund row and metadata.refundIssued was lost', async () => {
@@ -3901,16 +6188,177 @@ describe('fulfillPendingVtuTransaction', () => {
       });
 
       expect(result).toMatchObject({ status: 'failed' });
+      // The purchase persist flipped the row to failed before the
+      // refund ran; the snapshot still reads pending (R115 P1).
       expect(rpcImpl).toHaveBeenCalledWith(
         'reverse_vtu_wallet_payment',
-        expect.objectContaining({ p_vtu_transaction_id: 'vtu-kuda-fail-1' })
+        expect.objectContaining({
+          p_vtu_transaction_id: 'vtu-kuda-fail-1',
+          p_expected_status: 'failed',
+        })
       );
       expect(rpcImpl).toHaveBeenCalledWith(
         'refund_customer_wallet_for_vtu',
-        expect.objectContaining({ p_amount: 700 })
+        expect.objectContaining({
+          p_amount: 700,
+          p_expected_status: 'failed',
+        })
       );
-      // The card portion is what gets returned as fresh credit.
-      expect(result).toMatchObject({ refundedToWallet: 700 });
+      // Both legs were reversed, so the response reports the total
+      // (Codex R98 P2): card-only reporting claimed refundedToWallet:
+      // 700 here and 0 for wallet-only splits.
+      expect(result).toMatchObject({ refundedToWallet: 1000 });
+    });
+
+    it('wallet-only Kuda failure after wallet debit: reports the full restored amount', async () => {
+      // Codex R98 P2: wallet-only splits have card: 0, so card-only
+      // reporting serialized refundedToWallet: 0 (or omitted it)
+      // even though reverse_vtu_wallet_payment restored the full
+      // purchase amount.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'reverse_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: [
+              {
+                success: true,
+                reversed_amount: 1000,
+                new_balance: 2000,
+                reversal_transaction_id: 'rev-tx-1',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      mockPurchaseAirtime.mockResolvedValue({
+        success: false,
+        message: 'Vend rejected (biller status: k11)',
+        amount: 1000,
+        status: 'failed',
+      });
+
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        transactionRow: {
+          id: 'vtu-kuda-fail-wo',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-KFAIL-WO',
+          transaction_id: null,
+          status: 'pending',
+          metadata: {
+            paymentSplit: { wallet: 1000, card: 0 },
+            walletDebited: true,
+          },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        supabase,
+        transactionId: 'vtu-kuda-fail-wo',
+      });
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        refundedToWallet: 1000,
+      });
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+      // Persisted metadata keeps the card leg only: the history
+      // projector sums it with the split's wallet leg, so persisting
+      // the total would double-count the restoration there.
+      expect(updatePayloads).toContainEqual({
+        metadata: expect.objectContaining({ refundAmount: 0 }),
+      });
+    });
+
+    it('fresh vend failure with unconfirmed wallet reversal throws retryable (key preserved)', async () => {
+      // P1: wallet debited, vend rejected, reverse_vtu_wallet_payment
+      // transiently fails. Returning failed/400 here would make both
+      // clients rotate the idempotency key, so the retry mints a fresh
+      // debit while the original charge stands unreversed. Throw
+      // RetryableVtuError instead (routes map it to 5xx; clients keep
+      // the key and the retry dedupes onto this same row, re-attempting
+      // the refund). Mirrors the already-failed replay-path guard.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'reverse_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection reset' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      mockPurchaseAirtime.mockResolvedValue({
+        success: false,
+        message: 'Vend rejected (biller status: k11)',
+        amount: 1000,
+        status: 'failed',
+      });
+
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          id: 'vtu-kuda-fail-unreversed',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-KFAIL-UNREV',
+          transaction_id: null,
+          status: 'pending',
+          metadata: {
+            paymentSplit: { wallet: 300, card: 700 },
+            walletDebited: true,
+          },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-kuda-fail-unreversed',
+        })
+      ).rejects.toMatchObject({
+        context: {
+          refundedAmount: 0,
+          transactionId: 'vtu-kuda-fail-unreversed',
+        },
+        name: 'RetryableVtuError',
+      });
+      expect(rpcImpl).toHaveBeenCalledWith(
+        'reverse_vtu_wallet_payment',
+        expect.objectContaining({
+          p_vtu_transaction_id: 'vtu-kuda-fail-unreversed',
+        })
+      );
     });
 
     it('wallet-only insufficient balance: marks failed, does NOT call refund RPC (no card portion to refund)', async () => {
@@ -3966,6 +6414,11 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.anything()
       );
+      // No-charge honesty (Codex R116 P2): nothing was debited, so
+      // the copy must not claim a refund.
+      expect(result).toMatchObject({
+        error: 'Wallet balance changed during checkout — no charge was made.',
+      });
       // Pin: the row.status MUST be persisted as 'failed' with an
       // explanatory error_message — otherwise the row stays in
       // 'pending' forever and the next webhook call re-runs the whole
@@ -3976,6 +6429,17 @@ describe('fulfillPendingVtuTransaction', () => {
           error_message: expect.stringMatching(/wallet balance/i),
         })
       );
+      const failedPersist = updatePayloads.find(
+        (payload): payload is Record<string, unknown> =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      const failedMetadata = failedPersist?.metadata as
+        | Record<string, unknown>
+        | undefined;
+      expect(failedMetadata?.refundSkipped).toBe('no_charge');
+      expect(failedMetadata?.refundIssued).toBeUndefined();
     });
 
     it('throws VtuPersistenceError when wallet debit RPC fails with a non-balance error (DB outage etc.)', async () => {
@@ -3996,6 +6460,10 @@ describe('fulfillPendingVtuTransaction', () => {
       });
 
       const supabase = createPendingTransactionSupabaseMock({
+        claimData: {
+          id: 'vtu-debit-err',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
         transactionRow: {
           id: 'vtu-debit-err',
           merchant_id: 'merchant-1',
@@ -4009,6 +6477,7 @@ describe('fulfillPendingVtuTransaction', () => {
           status: 'pending',
           metadata: { paymentSplit: { wallet: 300, card: 700 } },
           error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
           merchant_commission: 10,
           customer_cashback: 0,
           biller_name: null,
@@ -4030,6 +6499,346 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.anything()
       );
+    });
+
+    it('restores debit-RPC failures to marked pending so retry/cron re-drives them', async () => {
+      // Without the restore the row sits processing with no provider
+      // reference, which the reconciliation claim declines — debited
+      // with no vend or refund, forever.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection terminated', code: '08006' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        claimData: {
+          id: 'vtu-debit-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
+        transactionRow: {
+          id: 'vtu-debit-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-DBRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-debit-restore',
+        })
+      ).rejects.toThrow(/Failed to debit VTU wallet/);
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          // Fixed user-safe template: error_message is
+          // customer-visible via history, so the raw RPC error
+          // ('connection terminated') must NOT be persisted.
+          error_message:
+            'VTU wallet debit failed; the purchase will resume automatically.',
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('connection terminated');
+      }
+    });
+
+    it('restores with the post-claim token, not the stale fetch-time token', async () => {
+      // R41: the claim bumps updated_at, so the fetch-time token is
+      // stale by the time an inline restore runs — comparing against
+      // it would match zero rows and strand a pre-debit failure (no
+      // ledger entry, so the reconciler never recovers it) in
+      // processing forever. FAILS pre-fix (eqs the stale T0).
+      const FETCH_TOKEN = '2026-10-12T00:00:00.000Z';
+      const CLAIM_TOKEN = '2026-10-12T00:00:01.000Z';
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection terminated', code: '08006' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const supabase = createPendingTransactionSupabaseMock({
+        claimData: { id: 'vtu-claim-token', updated_at: CLAIM_TOKEN },
+        transactionRow: {
+          id: 'vtu-claim-token',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-CLAIMTOKEN',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 300, card: 700 } },
+          error_message: null,
+          updated_at: FETCH_TOKEN,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+      // Record every updated_at eq across update chains.
+      type EqFn = (column: string, value: unknown) => unknown;
+      const stub = supabase as unknown as {
+        from: (table: string) => {
+          update: (payload: unknown) => { eq?: EqFn };
+        };
+      };
+      const origFrom = stub.from;
+      const observedTokens: unknown[] = [];
+      stub.from = (table: string) => {
+        const tableStub = origFrom(table);
+        if (table !== 'vtu_transactions') {
+          return tableStub;
+        }
+        const origUpdate = tableStub.update;
+        tableStub.update = (payload: unknown) => {
+          const chain = origUpdate(payload);
+          const origEq = chain.eq;
+          if (typeof origEq === 'function') {
+            chain.eq = (column: string, value: unknown) => {
+              if (column === 'updated_at') {
+                observedTokens.push(value);
+              }
+              return origEq(column, value);
+            };
+          }
+          return chain;
+        };
+        return tableStub;
+      };
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-claim-token',
+        })
+      ).rejects.toThrow(/Failed to debit VTU wallet/);
+
+      expect(observedTokens).toContain(CLAIM_TOKEN);
+      expect(observedTokens).not.toContain(FETCH_TOKEN);
+    });
+
+    it('restores walletDebited write failures to marked pending (debit is kept, re-drive short-circuits)', async () => {
+      // The debit RPC committed but the flag write failed: restore so
+      // the retry re-drives (RPC short-circuits on the ledger row,
+      // flag write retried, then vend) instead of stranding a
+      // reference-less processing row the claim declines.
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        updateErrors: { finalMetadata: { message: 'write failed' } },
+        claimData: {
+          id: 'vtu-debited-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
+        transactionRow: {
+          id: 'vtu-debited-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-DEBITEDRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-debited-restore',
+        })
+      ).rejects.toThrow(/Failed to persist walletDebited/);
+      // The restore write itself also hits the injected failure
+      // (best-effort: logged, original throw preserved) — but the
+      // attempt is recorded, proving the path runs.
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          // Fixed user-safe template: the raw DB error ('write
+          // failed') stays in server logs, never in history-visible
+          // error_message.
+          error_message:
+            'VTU wallet debit confirmation failed; the purchase will resume automatically.',
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('write failed');
+      }
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    });
+
+    it('restores submission-marker write failures to marked pending without vending', async () => {
+      // The marker must persist BEFORE the first provider call: without
+      // it the row is indistinguishable from a submitted-but-unpersisted
+      // vend, which must never re-drive. Fail closed (restore + throw)
+      // so the next pass retries the marker write, then vends.
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        updateErrors: { submissionMarker: { message: 'marker write failed' } },
+        claimData: {
+          id: 'vtu-marker-restore',
+          updated_at: '2026-10-12T00:00:01.000Z',
+        },
+        transactionRow: {
+          id: 'vtu-marker-restore',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-MARKERRESTORE',
+          transaction_id: null,
+          status: 'pending',
+          metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+          error_message: null,
+          updated_at: '2026-10-12T00:00:00.000Z',
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({
+          supabase,
+          transactionId: 'vtu-marker-restore',
+        })
+      ).rejects.toThrow(/Failed to persist provider-submission marker/);
+      expect(updatePayloads).toContainEqual(
+        expect.objectContaining({
+          status: 'pending',
+          error_message:
+            'VTU purchase confirmation failed; the purchase will resume automatically.',
+          metadata: expect.objectContaining({
+            preVendInterruptedAt: expect.any(String),
+          }),
+        })
+      );
+      for (const payload of updatePayloads) {
+        expect(JSON.stringify(payload)).not.toContain('marker write failed');
+      }
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    });
+
+    it('restores marker failures with the refreshed CAS token from the debit persist', async () => {
+      // Codex R65 6ru4mQ: the debit metadata write advances updated_at
+      // via trigger — the marker-failure restore must CAS with the NEW
+      // token or it zero-matches and strands the charged row until the
+      // 5-minute stale path. The token gate matches ONLY on the
+      // refreshed token, so this fails against code that restores
+      // with the stale claim token.
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const updatePayloads: unknown[] = [];
+        const supabase = createPendingTransactionSupabaseMock({
+          updatePayloads,
+          updateErrors: {
+            submissionMarker: { message: 'marker write failed' },
+          },
+          purchaseUpdateData: {
+            id: 'vtu-cas-refresh',
+            updated_at: '2026-10-12T00:00:02.000Z',
+          },
+          expectedRestoreToken: '2026-10-12T00:00:02.000Z',
+          claimData: {
+            id: 'vtu-cas-refresh',
+            updated_at: '2026-10-12T00:00:01.000Z',
+          },
+          transactionRow: {
+            id: 'vtu-cas-refresh',
+            merchant_id: 'merchant-1',
+            customer_id: 'customer-1',
+            type: 'airtime',
+            network_provider: 'MTN',
+            phone_number: '08012345678',
+            amount: 1000,
+            request_reference: 'VTU-CASREFRESH',
+            transaction_id: null,
+            status: 'pending',
+            metadata: { paymentSplit: { wallet: 1000, card: 0 } },
+            error_message: null,
+            updated_at: '2026-10-12T00:00:00.000Z',
+            merchant_commission: 10,
+            customer_cashback: 0,
+            biller_name: null,
+            biller_item_code: null,
+            customer_identifier: null,
+            source: 'checkout',
+          },
+        });
+
+        await expect(
+          fulfillPendingVtuTransaction({
+            supabase,
+            transactionId: 'vtu-cas-refresh',
+          })
+        ).rejects.toThrow(/Failed to persist provider-submission marker/);
+        // Restore attempted AND matched (no lost-race skip).
+        expect(updatePayloads).toContainEqual(
+          expect.objectContaining({ status: 'pending' })
+        );
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          'VTU pre-vend restore skipped: row changed after snapshot:',
+          expect.anything()
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('skips redeem RPC when walletDebited is already true and proceeds to vend', async () => {
@@ -4120,6 +6929,388 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.anything()
       );
+    });
+  });
+
+  function buildStrandedRowSupabase(
+    ledgerData: unknown,
+    options: {
+      createdAt?: string;
+      metadata?: Record<string, unknown>;
+    } = {}
+  ) {
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const rowMetadata = options.metadata ?? {
+      paymentSplit: { wallet: 1000, card: 0 },
+    };
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-STRANDED',
+          transaction_id: null,
+          status: 'processing',
+          metadata: rowMetadata,
+          error_message: null,
+          merchant_commission: null,
+          customer_cashback: null,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+          created_at: options.createdAt ?? '2026-10-01T00:00:00.000Z',
+          updated_at: staleAt,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          error_message: null,
+          metadata: rowMetadata,
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const updateEq = vi.fn();
+    const updateMaybeSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { id: 'vtu-1' }, error: null });
+    const updateChain = Object.assign(Promise.resolve({ error: null }), {
+      eq: updateEq,
+      select: vi.fn(() => ({ maybeSingle: updateMaybeSingle })),
+    });
+    updateEq.mockReturnValue(updateChain);
+    const update = vi.fn(() => ({ eq: updateEq }));
+    const ledgerChain = {
+      eq: vi.fn(() => ledgerChain),
+      limit: vi.fn(() => ledgerChain),
+      maybeSingle: vi.fn().mockResolvedValue({ data: ledgerData, error: null }),
+      order: vi.fn(() => ledgerChain),
+    };
+    const rpc = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'customer_wallet_transactions') {
+          return { select: vi.fn(() => ledgerChain) };
+        }
+        if (table !== 'vtu_transactions') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ single })),
+          })),
+          update,
+        };
+      }),
+      rpc,
+    } as unknown as Parameters<
+      typeof fulfillPendingVtuTransaction
+    >[0]['supabase'];
+    return { supabase, update, rpc };
+  }
+
+  it('recovers a debited stranded pre-vend row to marked pending instead of limbo', async () => {
+    // The pre-vend restore failed while the database was down, so the
+    // row sits processing with no provider reference — the
+    // reconciliation claim declines it. The ledger proves a debit
+    // landed (money moved → duty to complete), so recovery flips it
+    // to marked pending (client retry AND cron re-drive it) and
+    // reports processing; the next pass re-drives claim → debit
+    // (idempotent, cached) → vend.
+    const { supabase, update } = buildStrandedRowSupabase({
+      id: 'ledger-debit-1',
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'pending',
+        metadata: expect.objectContaining({
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('recovers an unsubmitted prepared row to marked pending instead of requery limbo', async () => {
+    // Crash between the debit persist and the first provider call
+    // (Codex R50 6rp7M_): walletDebited is set but no submission
+    // marker exists on a stale marker-era row, which proves no
+    // provider call ran. Recovery flips to marked pending so the
+    // next pass re-drives with the same reference (debit
+    // short-circuits idempotently) instead of requerying a
+    // never-submitted reference as unknown forever. FAILS against
+    // pre-fix code (no unsubmitted branch: the row takes the flagged
+    // requery path and no flip is issued).
+    const { supabase, update } = buildStrandedRowSupabase(
+      { id: 'ledger-debit-1' },
+      {
+        metadata: { submissionMarkerEra: true, walletDebited: true },
+      }
+    );
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_message: expect.stringContaining('unsubmitted prepared row'),
+        status: 'pending',
+        metadata: expect.objectContaining({
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('recovers a marked unsubmitted Monnify row to marked pending instead of stranding it', async () => {
+    // Crash between the marker persist and the provider call
+    // (Codex R54 6rrFRC): the marker fails the unsubmitted proof
+    // and Monnify cannot requery without a response vendReference,
+    // so without this branch the row strands processing forever.
+    // Recovery flips to marked pending; the next pass re-drives
+    // with the same reference (Monnify receives it as its
+    // vendReference — the transient path's dedupe assumption).
+    // FAILS against pre-fix code (no marked-Monnify branch: the
+    // row falls through to resolve-current with no flip issued).
+    const { supabase, update } = buildStrandedRowSupabase(
+      { id: 'ledger-debit-1' },
+      {
+        metadata: {
+          provider: 'monnify',
+          providerSubmissionStartedAt: new Date().toISOString(),
+          walletDebited: true,
+        },
+      }
+    );
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error_message: expect.stringContaining('marked unsubmitted Monnify'),
+        status: 'pending',
+        metadata: expect.objectContaining({
+          preVendInterruptedAt: expect.any(String),
+        }),
+      })
+    );
+    expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('never flips a never-debited strand: it may be an exhausted terminal decline', async () => {
+    // Joint-outage regression (Codex R39 rldXK): the debit RPC
+    // reported insufficient balance, then the marker AND the
+    // failed-persist writes all exhausted — the row left behind is
+    // byte-identical to a crash strand. No post-decision write can
+    // close this, so recovery fails closed on the ledger read: no
+    // debit → no flip, no vend — even though the wallet could fund
+    // later. The row stays processing (visible, support-recoverable)
+    // instead of auto-vending a rejected purchase with no submission.
+    // FAILS against pre-fix code (which flips unconditionally).
+    const { supabase, update, rpc } = buildStrandedRowSupabase(null);
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
+    );
+    expect(result).toMatchObject({
+      reference: 'VTU-STRANDED',
+      status: 'processing',
+    });
+  });
+
+  it('never re-vends a flagged row; inconclusive requery stays processing', async () => {
+    // Post-vend persistence failure (vend returned, result write
+    // exhausted): same reference-less processing shape, but the
+    // persisted walletDebited flag proves the debit landed, so the
+    // row settles from provider truth instead of stranding forever —
+    // and never re-vends (double-credit). Ambiguous provider evidence
+    // settles nothing: no writes, still processing, retried next pass.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Bill not found',
+      status: 'unknown',
+    });
+    const staleAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-POSTVEND',
+          transaction_id: null,
+          status: 'processing',
+          metadata: { walletDebited: true },
+          error_message: null,
+          merchant_commission: null,
+          customer_cashback: null,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+          created_at: '2026-10-01T00:00:00.000Z',
+          updated_at: staleAt,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          error_message: null,
+          metadata: { walletDebited: true },
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const update = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table !== 'vtu_transactions') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ single })),
+          })),
+          update,
+        };
+      }),
+      rpc: vi.fn(),
+    } as unknown as Parameters<
+      typeof fulfillPendingVtuTransaction
+    >[0]['supabase'];
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockCheckTransactionStatus).toHaveBeenCalledWith(
+      undefined,
+      'VTU-POSTVEND'
+    );
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(mockMonnifyPurchaseBill).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-POSTVEND',
+      status: 'processing',
+    });
+  });
+
+  it('leaves a fresh reference-less processing row to the live worker', async () => {
+    // Same shape but written seconds ago: a worker may be mid-vend,
+    // so no flip — just report current state.
+    const freshAt = new Date(Date.now() - 1000).toISOString();
+    const single = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-LIVE',
+          transaction_id: null,
+          status: 'processing',
+          metadata: {},
+          error_message: null,
+          merchant_commission: null,
+          customer_cashback: null,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+          created_at: '2026-10-01T00:00:00.000Z',
+          updated_at: freshAt,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          error_message: null,
+          metadata: {},
+          status: 'processing',
+          transaction_id: null,
+        },
+        error: null,
+      });
+    const update = vi.fn();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table !== 'vtu_transactions') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({ single })),
+          })),
+          update,
+        };
+      }),
+      rpc: vi.fn(),
+    } as unknown as Parameters<
+      typeof fulfillPendingVtuTransaction
+    >[0]['supabase'];
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(update).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-LIVE',
+      status: 'processing',
     });
   });
 });

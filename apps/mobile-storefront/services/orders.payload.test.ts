@@ -51,3 +51,24 @@ describe('buildOrderPayload — discount code', () => {
     expect(payload.discount_amount).toBe(0);
   });
 });
+
+it('preserves cart provenance instead of silently downgrading a bound checkout', () => {
+  const binding = {
+    cart_id: '11111111-1111-4111-8111-111111111111',
+    checkout_session_id: '22222222-2222-4222-8222-222222222222',
+    checkout_generation: 2,
+    cart_version: 4,
+  };
+  const line = '33333333-3333-4333-8333-333333333333';
+  const request = {
+    ...baseRequest,
+    shared_cart: binding,
+    items: [{ ...baseRequest.items[0], cart_line_id: line }],
+  };
+  expect(buildOrderPayload({ merchantId: 'merchant-1', request })).toEqual(
+    expect.objectContaining({
+      shared_cart: binding,
+      items: [expect.objectContaining({ cart_line_id: line })],
+    })
+  );
+});

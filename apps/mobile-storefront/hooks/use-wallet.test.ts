@@ -346,6 +346,126 @@ function setupWalletTableMocks({
 }
 
 describe('useWallet', () => {
+  it('reads live fetch state through isFetchingNow without waiting for a rerender', async () => {
+    // Codex R75 6r486a: readiness gates invoke this AFTER the
+    // settlement-gate await, so it must read the query cache
+    // imperatively — a render-time isRefetching snapshot would be
+    // stale. Drive fetch state through the client with a held
+    // deferred: no timing assumptions.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.isFetchingNow()).toBe(false);
+
+    const settledData = result.current.data;
+    let releaseFetch!: (value: typeof settledData) => void;
+    const pending = new Promise<typeof settledData>((resolve) => {
+      releaseFetch = resolve;
+    });
+    let inFlight!: Promise<typeof settledData>;
+    await act(async () => {
+      inFlight = queryClient.fetchQuery({
+        queryFn: () => pending,
+        queryKey: walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+          userId: 'user-1',
+        }),
+      });
+    });
+
+    await waitFor(() => expect(result.current.isFetchingNow()).toBe(true));
+
+    releaseFetch(settledData);
+    await act(async () => {
+      await inFlight;
+    });
+    expect(result.current.isFetchingNow()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('reads the live cached balance through getWalletBalance', async () => {
+    // Codex R78 6sN80p: readiness invokes this after the
+    // settlement-gate await; it must reflect a refetch that landed
+    // mid-await, not the render-time snapshot.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const walletKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-1',
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.getWalletBalance()).toBe(750);
+
+    queryClient.setQueryData<WalletQueryData>(walletKey, (old) =>
+      old === undefined
+        ? old
+        : { ...old, wallet: { ...old.wallet, balance: 3200 } }
+    );
+    expect(result.current.getWalletBalance()).toBe(3200);
+
+    queryClient.removeQueries({ queryKey: walletKey });
+    expect(result.current.getWalletBalance()).toBe(0);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('exposes live wallet readers that follow the current identity', async () => {
+    // Wiring only — reader semantics live in lib/live-wallet-query:
+    // the hook must surface readers bound to the CURRENT store
+    // identity, not this render's.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const switchedKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-2',
+      userId: 'user-2',
+    });
+    queryClient.setQueryData<WalletQueryData>(switchedKey, {
+      wallet: { balance: 3200, loyalty_points: 0 },
+      transactions: [],
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    const readers = result.current;
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-2',
+          email: 'second@example.com',
+          user_id: 'user-2',
+        },
+        user: createMockUser('user-2'),
+      });
+    });
+
+    expect(readers.getWalletBalance()).toBe(3200);
+    expect(readers.isWalletSettled()).toBe(true);
+    expect(readers.getWalletError()).toBeNull();
+    expect(readers.isFetchingNow()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
   it('reads customer wallet transactions instead of merchant wallet transactions', async () => {
     const { tableCalls, transactionFilters } = setupWalletTableMocks();
     const queryClient = createTestClient();
@@ -900,6 +1020,7 @@ describe('useWallet', () => {
         ownerId: 'customer-1',
         userId: 'user-1',
       }),
+      exact: false,
     });
 
     unmount();
@@ -1645,6 +1766,7 @@ describe('useCreateWalletFundingAccount', () => {
         ownerId: 'customer-1',
         userId: 'user-1',
       }),
+      exact: false,
     });
 
     unmount();

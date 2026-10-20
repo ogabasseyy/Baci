@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { isValidElement, type ReactNode, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 
@@ -246,5 +246,39 @@ describe('OgabasseyHomePage', () => {
     expect(
       (homepageStripCall?.[0] as { fallback?: unknown }).fallback
     ).toBeUndefined();
+  });
+
+  it('gives the Suspense boundary around HomeProductGridGate an explicit 1200px inline-styled fallback', () => {
+    type ReserveProps = {
+      children?: ReactNode;
+      'data-ogabassey-grid-gate-reserve'?: string;
+      fallback?: ReactNode;
+      style?: React.CSSProperties;
+    };
+    const element = OgabasseyHomePage({
+      products: [],
+      categories: [],
+      renderHero: false,
+    });
+    expect(isValidElement<ReserveProps>(element)).toBe(true);
+    if (!isValidElement<ReserveProps>(element)) return;
+
+    const children = Array.isArray(element.props.children)
+      ? element.props.children
+      : [];
+    const suspenseChild = children.find(
+      (child): child is React.ReactElement<ReserveProps> =>
+        isValidElement<ReserveProps>(child) && child.type === Suspense
+    );
+    const fallback = suspenseChild?.props.fallback;
+    expect(isValidElement<ReserveProps>(fallback)).toBe(true);
+    if (!isValidElement<ReserveProps>(fallback)) return;
+
+    expect(fallback.props['data-ogabassey-grid-gate-reserve']).toBe('true');
+    const inner = fallback.props.children;
+    expect(isValidElement<ReserveProps>(inner)).toBe(true);
+    if (isValidElement<ReserveProps>(inner)) {
+      expect(inner.props.style).toEqual({ minHeight: '1200px' });
+    }
   });
 });

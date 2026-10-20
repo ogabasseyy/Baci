@@ -6,6 +6,8 @@ import {
   prepaidGiglCustomerCheckoutOrderFields,
 } from './route.test-fixtures';
 
+type QuoteRequestPayloadModule = typeof import('./quote-request-payload');
+
 const {
   mockGetShippingQuoteBookingMetadata,
   mockGetShippingQuoteBookingEconomics,
@@ -35,8 +37,7 @@ vi.mock('@/lib/shipping/shipping-quote-booking-economics', () => ({
 }));
 
 vi.mock('./quote-request-payload', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./quote-request-payload')>();
+  const actual = await importOriginal<QuoteRequestPayloadModule>();
   return {
     ...actual,
     resolveBookingQuoteRequestPayload: mockResolveBookingQuoteRequestPayload,

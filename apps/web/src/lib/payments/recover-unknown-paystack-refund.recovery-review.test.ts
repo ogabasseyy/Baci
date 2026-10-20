@@ -70,14 +70,14 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'PSK-1' },
+      data: { id: '555', reference: 'PSK-1' },
       success: true,
     });
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
@@ -128,7 +128,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         p_paystack_ref: null,
         p_metadata: expect.objectContaining({
           provider_refund_id: 202,
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           audit_record_failed: true,
           refund_evidence: {
             'provider:202': expect.objectContaining({
@@ -233,6 +233,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
@@ -256,7 +257,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         p_paystack_ref: '202',
         p_metadata: expect.objectContaining({
           provider_refund_id: 202,
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           payment_transaction_id: 'pay-1',
           audit_record_failed: true,
         }),
@@ -274,6 +275,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
@@ -316,7 +318,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         p_reason: expect.stringContaining('non-completed local payment'),
         p_metadata: expect.objectContaining({
           provider_refund_id: 202,
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           audit_record_failed: true,
         }),
         p_candidates: [
@@ -352,7 +354,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
         p_evidence: expect.objectContaining({
           amount_minor: 10000,
           currency: 'NGN',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           provider_refund_status: 'processed',
         }),
       })
@@ -443,6 +445,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 

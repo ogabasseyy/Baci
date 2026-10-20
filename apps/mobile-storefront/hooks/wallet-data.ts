@@ -6,6 +6,7 @@ import {
   readPrimaryFundingAccount,
   resolveWalletFundingAccount,
 } from './resolve-wallet-funding-account';
+import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -71,7 +72,16 @@ function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   };
 }
 
-export async function fetchWalletData(
+export function fetchWalletData(
+  customerId: string | null,
+  merchantId: string,
+  userId: string | null
+): Promise<WalletQueryData> {
+  const load = () => fetchWalletDataUnbounded(customerId, merchantId, userId);
+  return runWithWalletLoadDeadline(load);
+}
+
+export async function fetchWalletDataUnbounded(
   customerId: string | null,
   merchantId: string,
   userId: string | null

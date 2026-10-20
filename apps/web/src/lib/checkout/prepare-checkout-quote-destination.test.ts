@@ -113,7 +113,7 @@ describe('prepareCheckoutQuoteDestination', () => {
       })
     );
   });
-  it('preserves legacy airport replay bypass without a new keyed replay probe', async () => {
+  it('treats a confirmed airport replay as a quote replay without a new keyed replay probe', async () => {
     const { params } = input();
     await prepareCheckoutQuoteDestination({
       ...params,
@@ -125,8 +125,8 @@ describe('prepareCheckoutQuoteDestination', () => {
       'quote',
       address,
       expect.objectContaining({
-        isConfirmedReplay: false,
-        shippingFee: undefined,
+        isConfirmedReplay: true,
+        shippingFee: 100,
         shippingProvider: null,
       })
     );

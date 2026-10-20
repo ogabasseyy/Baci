@@ -2,6 +2,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onRequestError, register } from './instrumentation';
 
 const registerOTelMock = vi.hoisted(() => vi.fn());
+const initializeLabRuntimeMock = vi.hoisted(() => vi.fn());
+const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
+const resolvePilotPublicDirMock = vi.hoisted(() =>
+  vi.fn(() => '/resolved/public')
+);
+vi.mock('@/config/pilot-public-assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/pilot-public-assets')>()),
+  assertPilotPublicAssets: assertPilotPublicAssetsMock,
+}));
+vi.mock('@/config/pilot-public-assets-roots', () => ({
+  resolvePilotPublicDir: resolvePilotPublicDirMock,
+}));
+vi.mock('@/app/pilot-lab/lab-route', () => ({
+  initializeLabRuntime: initializeLabRuntimeMock,
+}));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
@@ -26,6 +41,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
   vi.stubEnv('NEXT_OTEL_FETCH_DISABLED', '0');
 });
 

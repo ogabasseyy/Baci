@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cartCheckoutBindingSchema } from '@/schemas/cart-checkout-binding';
 import {
   type RedvaultCheckout,
   RedvaultCheckoutSchema,
@@ -7,6 +8,7 @@ import {
 const MAX_SAVINGS_CREDIT_AMOUNT = 10_000_000;
 
 const OrderItemSchema = z.object({
+  cart_line_id: z.uuid().optional(),
   id: z.string(),
   condition: z.string().optional(),
   product_id: z.string().optional(),
@@ -16,6 +18,7 @@ const OrderItemSchema = z.object({
   image_url: z.string().optional(),
   variant: z.string().optional(),
   variant_id: z.string().optional(),
+  offer_id: z.string().optional(),
   variant_name: z.string().optional(),
   variant_attributes: z.record(z.string(), z.string()).optional(),
   has_assurance: z.boolean().optional(),
@@ -39,6 +42,7 @@ const OrderItemSchema = z.object({
 });
 
 const createOrderRequestSchemaBase = z.object({
+  shared_cart: cartCheckoutBindingSchema.optional(),
   customer_email: z.email('Invalid email address'),
   customer_name: z.string().min(1, 'Name is required'),
   customer_phone: z.string().min(10, 'Valid phone number required'),
@@ -81,6 +85,19 @@ const createOrderRequestSchemaBase = z.object({
 
 export const CreateOrderRequestSchema =
   createOrderRequestSchemaBase.superRefine((data, ctx) => {
+    if (data.shared_cart) {
+      const lineIds = new Set<string>();
+      data.items.forEach((item, index) => {
+        if (!item.cart_line_id || lineIds.has(item.cart_line_id))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['items', index, 'cart_line_id'],
+            message:
+              'Every shared-cart line must have a unique canonical line ID',
+          });
+        if (item.cart_line_id) lineIds.add(item.cart_line_id);
+      });
+    }
     if (
       data.payment_method === 'uba_redvault' &&
       (data.discount_code ||

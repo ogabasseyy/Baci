@@ -1,5 +1,3 @@
-import '@/app/(storefront)/storefront-core.css';
-import '@/app/(storefront)/storefront-home.css';
 import { OGABASSEY_TITLE } from '@/config/ogabassey';
 import { OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS } from './ogabassey-home-carousel-critical-css';
 import { OGABASSEY_HOME_CHROME_CRITICAL_CSS } from './ogabassey-home-chrome-critical-css';

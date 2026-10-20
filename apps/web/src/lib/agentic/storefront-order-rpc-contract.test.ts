@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { definesOrPatchesStorefrontOrderRpc } from './storefront-order-rpc-migration.test-support';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = resolve(
@@ -14,13 +15,6 @@ const storefrontOrderRpcDefinitionPattern = new RegExp(
   String.raw`CREATE\s+OR\s+REPLACE\s+FUNCTION\s+${storefrontOrderRpcNamePattern}\s*\(`,
   'i'
 );
-const storefrontOrderRpcDynamicPatchPatterns = [
-  /pg_get_functiondef\s*\([^;]*create_storefront_order/i,
-  new RegExp(
-    String.raw`EXECUTE\s+(?:format\s*\([^;]*create_storefront_order|['"][^;]*create_storefront_order|[^;]*CREATE\s+OR\s+REPLACE\s+FUNCTION\s+${storefrontOrderRpcNamePattern})`,
-    'i'
-  ),
-];
 const ambiguousCustomerConflictTargetPattern =
   /ON\s+CONFLICT\s*\(\s*merchant_id\s*,\s*email\s*\)/i;
 // Signature history: the migration must remove the 19-arg B3 overload,
@@ -39,12 +33,7 @@ function readLatestStorefrontOrderRpcMigrationSql(options?: {
     .sort()
     .reverse()) {
     const sql = readFileSync(resolve(migrationsDirectory, fileName), 'utf8');
-    if (
-      storefrontOrderRpcDefinitionPattern.test(sql) ||
-      storefrontOrderRpcDynamicPatchPatterns.some((pattern) =>
-        pattern.test(sql)
-      )
-    ) {
+    if (definesOrPatchesStorefrontOrderRpc(sql)) {
       if (options?.unsliced) {
         return sql;
       }

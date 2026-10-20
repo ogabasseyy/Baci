@@ -43,6 +43,10 @@ vi.mock('@/lib/domain-cache-simple', () => ({
   getSlugForCustomDomain: vi.fn().mockResolvedValue('ogabassey'),
 }));
 
+vi.mock('@/lib/reverse-domain-cache', () => ({
+  isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
+}));
+
 // Retired-slug alias resolution. Defaults to null ("not a retired alias") so it
 // is a no-op for existing tests; individual tests override it.
 vi.mock('@/lib/slug-alias-cache', () => ({

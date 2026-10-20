@@ -15,6 +15,7 @@ import { hasExistingKeyedOrder } from './has-existing-keyed-order';
 type OrderQuoteValidationPayloadItem = {
   price?: number | string | null;
   product_id?: string | null;
+  offer_id?: string | null;
   quantity: number;
 };
 type OrderQuoteValidationProductRow = {
@@ -28,10 +29,12 @@ type OrderQuoteValidationProductRow = {
 async function buildOrderQuoteValidationItems({
   items,
   merchantId,
+  offerPrices,
   supabase,
 }: {
   items: OrderQuoteValidationPayloadItem[];
   merchantId: string;
+  offerPrices: Map<string, number>;
   supabase: SupabaseClient;
 }) {
   const productIds = Array.from(
@@ -67,9 +70,17 @@ async function buildOrderQuoteValidationItems({
       const product = item.product_id
         ? (productMap.get(item.product_id) ?? null)
         : null;
+      // Exact offer lines bill the live offer price (the RPC persists
+      // it), not the submitted price the shopper quoted days ago.
+      // Validating against the stale value accepts checkout while the
+      // booking guard later rejects fulfillment as a quote mismatch.
+      const liveOfferPrice =
+        item.offer_id && item.product_id
+          ? offerPrices.get(`${item.product_id}::${item.offer_id}`)
+          : undefined;
       return {
         name: product?.name ?? null,
-        price: item.price ?? null,
+        price: liveOfferPrice ?? item.price ?? null,
         quantity: item.quantity,
         product,
       };
@@ -83,6 +94,7 @@ type PrepareCheckoutQuoteDestinationInput = {
   isIdempotentOrderReplay: boolean;
   items: OrderQuoteValidationPayloadItem[];
   merchantId: string;
+  offerPrices?: Map<string, number>;
   requestIdempotencyKey?: string | null;
   selectedQuoteId: string | null;
   shippingAddress: OrderCreateInput['shipping_address'];
@@ -108,6 +120,7 @@ export async function prepareCheckoutQuoteDestination({
   isIdempotentOrderReplay,
   items,
   merchantId,
+  offerPrices,
   requestIdempotencyKey,
   selectedQuoteId,
   shippingAddress,
@@ -123,6 +136,7 @@ export async function prepareCheckoutQuoteDestination({
       quoteValidationItems = await buildOrderQuoteValidationItems({
         items,
         merchantId,
+        offerPrices: offerPrices ?? new Map<string, number>(),
         supabase,
       });
     } catch (error) {
@@ -157,17 +171,18 @@ export async function prepareCheckoutQuoteDestination({
   // Confirmed same-key retries skip expiry and catalog-derived item matching;
   // the RPC's stored hash enforces the caller's product, quantity and price.
   // Destination/pin, provider, merchant and fee checks remain authoritative.
+  // A confirmed airport replay is already DB-confirmed by
+  // validateLocalAirportDeliveryFee, so it is a quote replay too: reuse
+  // that signal instead of probing again, or enrich would re-apply the
+  // expiry check and reject the retry before the order RPC can replay it.
   const isConfirmedQuoteReplay =
-    Boolean(
-      selectedQuoteId &&
-        requestIdempotencyKey &&
-        !isIdempotentLocalAirportReplay
-    ) &&
-    (await hasExistingKeyedOrder({
-      merchantId,
-      requestIdempotencyKey,
-      supabase,
-    }));
+    Boolean(selectedQuoteId && requestIdempotencyKey) &&
+    (isIdempotentLocalAirportReplay ||
+      (await hasExistingKeyedOrder({
+        merchantId,
+        requestIdempotencyKey,
+        supabase,
+      })));
   const bypassCheckoutContext =
     (isIdempotentLocalAirportReplay || isIdempotentOrderReplay) &&
     !isConfirmedQuoteReplay;

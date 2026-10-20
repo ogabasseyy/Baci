@@ -177,7 +177,9 @@ export function CartPageLineItem({
       </div>
 
       <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 justify-between items-center">
-        {shippingInsuranceEnabled && (
+        {/* An assured line keeps its removal control even when the
+            setting is off, so the fee stays removable pre-checkout. */}
+        {(shippingInsuranceEnabled || item.hasAssurance) && (
           <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
             <div className="relative flex items-center mt-0.5">
               <input

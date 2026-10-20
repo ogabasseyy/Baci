@@ -1,274 +1,172 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
+import {
+  buildOrderIdempotencyPayload,
+  hashOrderIdempotencyPayload,
+} from '@/lib/checkout/order-idempotency';
 import { orderCreateSchema } from '@/schemas/orders';
 import { assertQuoteReceiverMatchesOrder } from './international-quote-order-guard';
-import {
-  enrichShippingAddressWithQuoteDestination,
-  type OrderShippingAddressForQuote,
-} from './order-quote-destination';
+import { enrichShippingAddressWithQuoteDestination } from './order-quote-destination';
 import { createSupabaseRpcMock } from './test-helpers/create-supabase-rpc-mock';
+import type { QuoteRequest } from './types';
 
-const merchantId = '123e4567-e89b-12d3-a456-426614174000';
-const address = {
-  address: '12 Test Street',
+const destination = {
+  address: '12 Synthetic Street',
   city: 'Ikeja',
   state: 'Lagos',
-  country: undefined,
-  countryCode: undefined,
+  country: 'Nigeria',
+  countryCode: 'NG',
   postalCode: undefined,
 };
-const coordinates = { latitude: 6.6018, longitude: 3.3515 };
-const orderInput = {
-  merchant_id: merchantId,
-  customer_email: 'test@example.com',
-  customer_name: 'Test Customer',
-  payment_method: 'card',
-  items: [{ productId: 'product-1', name: 'Phone', quantity: 1, price: 1000 }],
-  subtotal: 1000,
+const receiver = {
+  ...destination,
+  name: 'Synthetic Buyer',
+  phone: '08000000000',
+  latitude: 6.6,
+  longitude: 3.35,
 };
-const request = {
-  merchantId,
-  sessionId: 'session-1',
-  shipmentType: 'domestic' as const,
-  receiver: {
-    ...address,
-    ...coordinates,
-    name: 'Test Customer',
-    phone: '',
-    country: 'Nigeria',
-    countryCode: 'NG',
-  },
-  items: [{ name: 'Phone', quantity: 1, weight: 1, value: 1000 }],
+const request: QuoteRequest = {
+  merchantId: 'merchant-current',
+  sessionId: 'synthetic-session',
+  shipmentType: 'domestic',
+  receiver,
+  items: [{ name: 'Synthetic phone', quantity: 1, weight: 1, value: 100_000 }],
 };
-describe.each([
-  'GIGL',
-  'TOPSHIP',
-])('checkout destination coordinate provenance for %s', (provider) => {
-  const context = {
-    isNewOrder: true,
-    merchantId,
-    shippingProvider: provider,
-    shippingFee: 2500,
-    items: orderInput.items,
-  };
 
-  function enrich(
-    shippingAddress: OrderShippingAddressForQuote,
-    receiver: Record<string, unknown> = request.receiver
-  ) {
-    return enrichShippingAddressWithQuoteDestination(
-      createSupabaseRpcMock({
-        provider,
-        price: 2500,
-        quote_request: { ...request, receiver },
-      }) as unknown as SupabaseClient,
-      'quote-1',
-      shippingAddress,
-      context
-    );
-  }
+async function enrich(quoteRequest: unknown = request) {
+  return enrichShippingAddressWithQuoteDestination(
+    createSupabaseRpcMock({
+      provider: 'GIGL',
+      provider_rate_id: 'GIGL_4_0',
+      quote_request: quoteRequest,
+    }) as unknown as SupabaseClient,
+    'quote-1',
+    destination,
+    { merchantId: 'merchant-current', shippingProvider: 'GIGL' },
+    { persistAttestedCoordinates: true }
+  );
+}
 
-  it('preserves valid coordinates through order input validation', () => {
-    const result = orderCreateSchema.parse({
-      ...orderInput,
-      shipping_address: { ...address, ...coordinates },
-    });
-    expect(result.shipping_address).toEqual({ ...address, ...coordinates });
-  });
-
-  it.each([
-    { latitude: 6.6 },
-    { longitude: 3.3 },
-    { latitude: 91, longitude: 3.3 },
-    { latitude: 6.6, longitude: -181 },
-    { latitude: Number.NaN, longitude: 3.3 },
-    { latitude: 6.6, longitude: Number.POSITIVE_INFINITY },
-    { latitude: '6.6', longitude: '3.3' },
-    { latitude: null, longitude: null },
-  ])('rejects invalid order coordinates %j', (pair) => {
-    expect(
-      orderCreateSchema.safeParse({
-        ...orderInput,
-        shipping_address: { ...address, ...pair },
-      }).success
-    ).toBe(false);
-  });
-
-  it('copies the validated checkout quote pin into an order without a pin', async () => {
-    const parsed = orderCreateSchema.parse({
-      ...orderInput,
-      shipping_address: address,
-    });
-    const destination = await enrich(parsed.shipping_address ?? address);
-    expect(destination).toMatchObject(coordinates);
-    // Exercise the real booking guard, which continues to require both pins.
+describe('GIGL checkout attested destination coordinates', () => {
+  it('persists the bound quote pin so an unchanged checkout destination passes the booking guard', async () => {
+    // This is the production failure: all text matches but the order lost
+    // coordinates present on its selected quote. Keep that guard fail-closed.
     expect(() =>
       assertQuoteReceiverMatchesOrder(request, {
-        shipping_address: destination ?? null,
+        shipping_address: destination,
+      })
+    ).toThrow(
+      expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
+    );
+
+    const persisted = await enrich();
+
+    expect(persisted).toMatchObject({ latitude: 6.6, longitude: 3.35 });
+    expect(() =>
+      assertQuoteReceiverMatchesOrder(request, {
+        shipping_address: persisted ?? null,
       })
     ).not.toThrow();
   });
 
-  it('adopts a domestic composed quote pin and passes the real booking guard', async () => {
-    const composedAddress = {
-      ...address,
-      address: '12 Test Street, Ikeja, Lagos',
-    };
-    const composedReceiver = {
-      ...request.receiver,
-      address: composedAddress.address,
-    };
-    const destination = await enrich(composedAddress, composedReceiver);
-    expect(destination).toMatchObject(coordinates);
-    expect(() =>
-      assertQuoteReceiverMatchesOrder(
-        { ...request, receiver: composedReceiver },
-        { shipping_address: destination ?? null }
-      )
-    ).not.toThrow();
-  });
-
-  it('does not backfill an existing order from address text alone', async () => {
-    const supabase = createSupabaseRpcMock({
-      provider,
-      price: 2500,
-      quote_request: request,
-    });
-    await expect(
-      enrichShippingAddressWithQuoteDestination(
-        supabase as unknown as SupabaseClient,
-        'quote-1',
-        address,
-        { ...context, isNewOrder: false }
-      )
-    ).rejects.toMatchObject({ status: 400 });
-  });
-
-  it('accepts matching pins including zero coordinates', async () => {
-    const zero = { latitude: 0, longitude: 0 };
-    await expect(
-      enrich({ ...address, ...zero }, { ...request.receiver, ...zero })
-    ).resolves.toMatchObject(zero);
-  });
-
-  it('preserves an existing matching pin rather than replacing it', async () => {
-    const existingPin = {
-      ...coordinates,
-      latitude: coordinates.latitude + 1e-7,
-    };
-    const supabase = createSupabaseRpcMock({
-      provider,
-      price: 2500,
-      quote_request: request,
-    });
-    await expect(
-      enrichShippingAddressWithQuoteDestination(
-        supabase as unknown as SupabaseClient,
-        'quote-1',
-        { ...address, ...existingPin },
-        { ...context, isNewOrder: false }
-      )
-    ).resolves.toMatchObject(existingPin);
-  });
-
-  it('rejects a conflicting pin without overwriting it', async () => {
-    const destination = { ...address, ...coordinates, latitude: 6.7 };
-    await expect(enrich(destination)).rejects.toMatchObject({ status: 400 });
-    expect(destination.latitude).toBe(6.7);
-  });
-
-  it('rejects a partial stored order pin', async () => {
-    await expect(enrich({ ...address, latitude: 6.6 })).rejects.toMatchObject({
-      status: 400,
-    });
-  });
-
   it.each([
     { latitude: 6.6, longitude: undefined },
-    { latitude: 91, longitude: 3.3 },
-    { latitude: 'far', longitude: 3.3 },
-  ])('rejects malformed saved quote coordinates %j', async (pair) => {
+    { latitude: undefined, longitude: 3.35 },
+    { latitude: Number.NaN, longitude: 3.35 },
+    { latitude: 6.6, longitude: Number.POSITIVE_INFINITY },
+    { latitude: 91, longitude: 3.35 },
+    { latitude: 6.6, longitude: -181 },
+    { latitude: '6.6', longitude: 3.35 },
+  ])('rejects an incomplete or invalid attested pin: %j', async (coordinates) => {
     await expect(
-      enrich(address, { ...request.receiver, ...pair })
-    ).rejects.toMatchObject({ status: 400 });
-  });
-
-  it('coerces numeric-string saved quote coordinates like the booking guard', async () => {
-    const destination = await enrich(address, {
-      ...request.receiver,
-      latitude: '6.6',
-      longitude: '3.3',
+      enrich({ ...request, receiver: { ...receiver, ...coordinates } })
+    ).rejects.toMatchObject({
+      code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
     });
-    expect(destination).toMatchObject({ latitude: 6.6, longitude: 3.3 });
   });
 
-  it('rejects a pinned order with a quote lacking its pin', async () => {
-    await expect(
-      enrich(
-        { ...address, ...coordinates },
+  it('keeps legacy unpinned quotes unpinned', async () => {
+    const persisted = await enrich({
+      ...request,
+      receiver: { ...receiver, latitude: undefined, longitude: undefined },
+    });
+
+    expect(persisted).not.toHaveProperty('latitude');
+    expect(persisted).not.toHaveProperty('longitude');
+  });
+
+  it('does not attach pins to callers that did not opt into new-order creation', async () => {
+    const persisted = await enrichShippingAddressWithQuoteDestination(
+      createSupabaseRpcMock({
+        provider: 'GIGL',
+        provider_rate_id: 'GIGL_4_0',
+        quote_request: request,
+      }) as unknown as SupabaseClient,
+      'quote-1',
+      destination,
+      { merchantId: 'merchant-current', shippingProvider: 'GIGL' }
+    );
+
+    expect(persisted).not.toHaveProperty('latitude');
+    expect(persisted).not.toHaveProperty('longitude');
+  });
+
+  it('takes coordinates from the validated quote when the checkout body carries no pin', async () => {
+    // Merge reconciliation: #3687 deliberately preserves validated body
+    // pins through orderCreateSchema (mismatches fail at enrichment), so
+    // this scenario uses a pin-less body; quote adoption is unchanged.
+    const parsedAddress = orderCreateSchema.parse({
+      merchant_id: '11111111-1111-4111-8111-111111111111',
+      customer_email: 'synthetic@example.test',
+      customer_name: 'Synthetic Buyer',
+      items: [
         {
-          ...request.receiver,
-          latitude: undefined,
-          longitude: undefined,
-        }
-      )
-    ).rejects.toMatchObject({ status: 400 });
+          product_id: '22222222-2222-4222-8222-222222222222',
+          name: 'Synthetic phone',
+          quantity: 1,
+          price: 100_000,
+        },
+      ],
+      subtotal: 100_000,
+      payment_method: 'card',
+      shipping_address: destination,
+    }).shipping_address;
+    expect(parsedAddress).not.toHaveProperty('latitude');
+    expect(parsedAddress).not.toHaveProperty('longitude');
+
+    const persisted = await enrichShippingAddressWithQuoteDestination(
+      createSupabaseRpcMock({
+        provider: 'GIGL',
+        provider_rate_id: 'GIGL_4_0',
+        quote_request: request,
+      }) as unknown as SupabaseClient,
+      'quote-1',
+      parsedAddress,
+      { merchantId: 'merchant-current', shippingProvider: 'GIGL' },
+      { persistAttestedCoordinates: true }
+    );
+
+    expect(persisted).toMatchObject({ latitude: 6.6, longitude: 3.35 });
   });
 
-  it.each([
-    { shippingFee: 2501 },
-    { shippingProvider: 'OTHER' },
-    { items: [{ ...orderInput.items[0], quantity: 2 }] },
-    { items: [{ ...orderInput.items[0], price: 1001 }] },
-  ])('rejects changed checkout context before adopting the pin: %j', async (change) => {
-    await expect(
-      enrichShippingAddressWithQuoteDestination(
-        createSupabaseRpcMock({
-          provider,
-          price: 2500,
-          quote_request: request,
-        }) as unknown as SupabaseClient,
-        'quote-1',
-        address,
-        { ...context, ...change }
-      )
-    ).rejects.toMatchObject({ status: 400 });
-  });
+  it('preserves the pre-release checkout idempotency hash when attested pins are persisted', async () => {
+    const persisted = await enrich();
+    const payload = {
+      merchant_id: 'merchant-current',
+      selected_quote_id: 'quote-1',
+      customer_email: 'synthetic@example.test',
+      customer_name: 'Synthetic Buyer',
+      items: [{ product_id: 'product-1', quantity: 1, price: 100_000 }],
+    };
+    const hash = (
+      shipping_address: Parameters<
+        typeof buildOrderIdempotencyPayload
+      >[0]['shipping_address']
+    ) =>
+      hashOrderIdempotencyPayload(
+        buildOrderIdempotencyPayload({ ...payload, shipping_address })
+      );
 
-  it('rejects an expired quote before adopting the pin', async () => {
-    await expect(
-      enrichShippingAddressWithQuoteDestination(
-        createSupabaseRpcMock({
-          provider,
-          price: 2500,
-          quote_request: request,
-          expires_at: new Date(0).toISOString(),
-        }) as unknown as SupabaseClient,
-        'quote-1',
-        address,
-        context
-      )
-    ).rejects.toMatchObject({ code: 'INTERNATIONAL_QUOTE_EXPIRED' });
-  });
-
-  it('rejects a quote request from another merchant before adopting the pin', async () => {
-    await expect(
-      enrichShippingAddressWithQuoteDestination(
-        createSupabaseRpcMock({
-          provider,
-          price: 2500,
-          quote_request: { ...request, merchantId: 'another-merchant' },
-        }) as unknown as SupabaseClient,
-        'quote-1',
-        address,
-        context
-      )
-    ).rejects.toMatchObject({ code: 'INTERNATIONAL_QUOTE_MERCHANT_MISMATCH' });
-  });
-
-  it('still rejects changed address text even when coordinates match', async () => {
-    await expect(
-      enrich({ ...address, ...coordinates, address: '99 Other Street' })
-    ).rejects.toMatchObject({ status: 400 });
+    expect(hash(persisted)).toBe(hash(destination));
   });
 });

@@ -8,7 +8,7 @@ vi.mock('./file-paystack-refund-recovery-review', () => ({
 }));
 
 const evidence = {
-  providerPaymentTransactionId: 555,
+  providerPaymentTransactionId: '555',
   providerRefundId: 202,
   providerRefundStatus: 'failed',
   reference: 'PSK-1',
@@ -57,7 +57,7 @@ describe('filePaystackRefundCandidateReviews', () => {
         reason: 'reason',
         metadata: expect.objectContaining({
           provider_refund_id: 202,
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           reference: 'PSK-1',
           audit_record_failed: true,
         }),

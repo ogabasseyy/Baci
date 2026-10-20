@@ -102,6 +102,7 @@ export interface ProductConditionOffer {
 }
 
 export interface Product {
+  searchMatch?: import('@baci/shared/lib').RefinedSearchRow;
   id: string;
   merchant_id?: string;
   name: string;
@@ -120,6 +121,8 @@ export interface Product {
   in_stock?: boolean;
   manage_stock?: boolean;
   stock_quantity?: number;
+  base_effective_policy?: string;
+  base_available_units?: number;
   has_variants?: boolean;
   variant_model?: 'legacy' | 'sku_matrix';
   available_conditions?: ProductCondition[];
@@ -132,6 +135,20 @@ export interface Product {
   // Condition offers (multiple conditions with different prices)
   has_condition_offers?: boolean;
   offers?: ProductConditionOffer[];
+  // Explicit marker: the condition-offer fetch failed, so an absent
+  // `offers` list means "unknown", not "offerless". Exact offer links
+  // must fail closed (retry/unavailable) instead of silently dropping
+  // the requested identity.
+  offers_hydration_failed?: boolean;
+  // Explicit marker: the variant fetch failed, so an absent `variants`
+  // list means "unknown", not "variantless". Exact variant links must
+  // fail closed (retry) instead of rendering a normal PDP.
+  variants_hydration_failed?: boolean;
+  // Explicit marker: the base-inventory projection fetch failed, so
+  // strict serialized availability is "unknown", not "zero". The PDP
+  // must fail closed (retry) instead of rendering a confident
+  // out-of-stock verdict with no recovery.
+  base_inventory_hydration_failed?: boolean;
 }
 
 export interface ProductVariant {
@@ -148,6 +165,8 @@ export interface ProductVariant {
   images?: string[];
   in_stock?: boolean;
   stock_quantity?: number;
+  effective_policy?: string;
+  available_units?: number;
   attributes?: Record<string, string>;
 }
 

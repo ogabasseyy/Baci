@@ -36,3 +36,56 @@ describe('fetchAvailableBrands normalized-empty search', () => {
     expect(mockFrom).not.toHaveBeenCalled();
   });
 });
+
+describe('fetchAvailableBrands complete search facets', () => {
+  it('finds a brand after the RPC maximum first 100 results without trimming its filter value', async () => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+    const page = Array.from({ length: 100 }, (_, i) => ({
+      product_id: `p-${i}`,
+      total_count: 101,
+    }));
+    mockRpc
+      .mockResolvedValueOnce({ data: page, error: null })
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'p-100', total_count: 101 }],
+        error: null,
+      });
+    const pages = [
+      [
+        ...page.map((r) => ({
+          id: r.product_id,
+          brand: r.product_id === 'p-0' ? '   ' : 'Apple',
+        })),
+      ],
+      [{ id: 'p-100', brand: ' Samsung ' }],
+    ];
+    mockFrom.mockImplementation(() => ({
+      select: () => ({
+        eq: () => ({
+          in: () => Promise.resolve({ data: pages.shift(), error: null }),
+        }),
+      }),
+    }));
+    expect(
+      await fetchAvailableBrands('merchant-1', { search: 'phone' })
+    ).toEqual([' Samsung ', 'Apple']);
+  });
+});
+
+describe('fetchAvailableBrands processor refinements', () => {
+  it('omits the processor filter the brands RPC cannot accept', async () => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+    mockRpc.mockResolvedValue({ data: [{ brand: 'Apple' }], error: null });
+    const result = await fetchAvailableBrands('merchant-1', {
+      search: 'laptop',
+      refinements: { brands: [], sort: 'relevance', processor: 'M3' },
+    });
+    expect(result).toEqual(['Apple']);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_search_brands',
+      expect.not.objectContaining({ processor_filter: expect.anything() })
+    );
+  });
+});

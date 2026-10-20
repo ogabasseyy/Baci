@@ -65,27 +65,15 @@ describe('commerce variant axis contract', () => {
       'NVIDIA GeForce RTX 4070 8GB'
     );
     expect(
-      normalizeCommerceVariantOption(
-        'graphics',
-        'RTX 4070 Laptop GPU 8GB 115W'
-      )
+      normalizeCommerceVariantOption('graphics', 'RTX 4070 Laptop GPU 8GB 115W')
     ).toBe('NVIDIA GeForce RTX 4070 8GB Laptop 115W');
     expect(
-      normalizeCommerceVariantOption(
-        'graphics',
-        'RTX 4070 Laptop GPU 8GB 140W'
-      )
+      normalizeCommerceVariantOption('graphics', 'RTX 4070 Laptop GPU 8GB 140W')
     ).toBe('NVIDIA GeForce RTX 4070 8GB Laptop 140W');
     expect(
-      normalizeCommerceVariantOption(
-        'graphics',
-        'RTX 4070 Laptop GPU 8GB 115W'
-      )
+      normalizeCommerceVariantOption('graphics', 'RTX 4070 Laptop GPU 8GB 115W')
     ).not.toBe(
-      normalizeCommerceVariantOption(
-        'graphics',
-        'RTX 4070 Laptop GPU 8GB 140W'
-      )
+      normalizeCommerceVariantOption('graphics', 'RTX 4070 Laptop GPU 8GB 140W')
     );
     expect(
       normalizeCommerceVariantOption('processor', 'Intel Ultra 7 155H')

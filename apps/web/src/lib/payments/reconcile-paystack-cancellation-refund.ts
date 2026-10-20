@@ -67,15 +67,32 @@ export async function reconcilePaystackCancellationRefund(
   supabase: SupabaseClient,
   refund: RefundRow
 ): Promise<'updated' | 'unchanged'> {
-  const refundId = Number(refund.gateway_reference);
+  // Stamped manuals carry a merchant reference, not the numeric
+  // provider id: recheck by the provider id the proof stamp
+  // persisted (the candidate RPC only selects stamped rows, so a
+  // stored id always means a paired manual). Decimal text throughout:
+  // stamps persist text and a >2^53 id would not survive a Number
+  // round-trip (it would then fail the guard as an invalid link).
+  // Pre-migration numeric stamps and numeric gateway references still
+  // normalize. The link guard below validates the result either way.
+  const storedProviderRefundId = refund.metadata?.provider_refund_id;
+  const decimalIdText = (value: unknown): string | null => {
+    if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) return value;
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0)
+      return String(value);
+    return null;
+  };
+  const refundId =
+    storedProviderRefundId === undefined || storedProviderRefundId === null
+      ? decimalIdText(refund.gateway_reference)
+      : decimalIdText(storedProviderRefundId);
   const paymentId = refund.metadata?.payment_transaction_id;
   // A malformed link (empty string, legacy non-UUID) must fail as a
   // deterministic bad link: sending it to the UUID transactions.id filter
   // raises an invalid-UUID read error that looks retryable, rotating the
   // row forever instead of filing the bad-link review and hold.
   if (
-    !Number.isSafeInteger(refundId) ||
-    refundId <= 0 ||
+    refundId === null ||
     !refund.order_id ||
     (typeof paymentId !== 'string' &&
       paymentId !== undefined &&
@@ -107,7 +124,9 @@ export async function reconcilePaystackCancellationRefund(
 
   const [providerRefund, providerPayment] = await Promise.all([
     fetchRefund(refundId, AbortSignal.timeout(8_000)),
-    verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000)),
+    verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000), {
+      textIds: true,
+    }),
   ]);
   if (!providerRefund.success || !providerPayment.success) {
     // A definitive provider rejection (unknown refund or payment ID)
@@ -130,6 +149,11 @@ export async function reconcilePaystackCancellationRefund(
   }
   const current = providerRefund.data;
   const original = providerPayment.data;
+  // Both provider identities compare as exact decimal text:
+  // Paystack IDs are unsigned 64-bit, so numeric compares would round
+  // adjacent large IDs equal. Legacy metadata stamps hold numbers;
+  // String() keeps safe small IDs matching while a rounded large
+  // stamp fails closed into evidence review instead of matching.
   if (
     current.id !== refundId ||
     current.transaction !== original.id ||
@@ -140,8 +164,9 @@ export async function reconcilePaystackCancellationRefund(
       normalizeCurrencyCode(refund.currency) ||
     normalizeCurrencyCode(original.currency) !==
       normalizeCurrencyCode(refund.currency) ||
-    (typeof refund.metadata?.provider_payment_transaction_id === 'number' &&
-      refund.metadata.provider_payment_transaction_id !== original.id)
+    (refund.metadata?.provider_payment_transaction_id !== undefined &&
+      refund.metadata.provider_payment_transaction_id !== null &&
+      String(refund.metadata.provider_payment_transaction_id) !== original.id)
   )
     throw new Error('paystack_refund_evidence_mismatch');
 
@@ -167,6 +192,9 @@ export async function reconcilePaystackCancellationRefund(
   ) {
     throw new Error('unknown_paystack_refund_status');
   }
+  // Decimal text into the numeric RPC arg: PostgREST coerces exact
+  // digit strings at any width, while a number here would already
+  // be rounded (and a bigint arg would reject IDs above int64max).
   const { error } = await supabase.rpc(
     'record_verified_paystack_cancellation_refund_v1',
     {

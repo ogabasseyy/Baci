@@ -13,13 +13,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
-import { showCartToast } from './cart-notifications';
-import { getCachedProductStock } from './cart-query-cache';
 import {
-  type AddToCartInput,
-  checkStock,
-  getTotalRequestedQuantityForStock,
-} from './cart-stock';
+  forwardSharedCartWrite,
+  hasSharedCartWriter,
+} from '@/stores/shared-cart-writer';
+import { createAddToCartMutation } from './cart-add-mutation';
+import { showCartToast } from './cart-notifications';
+import { createUpdateQuantityMutation } from './cart-quantity-mutation';
+import type { AddToCartInput } from './cart-stock';
 
 /**
  * Main hook for optimistic cart operations
@@ -30,9 +31,11 @@ export function useCart() {
   // Get store actions
   const {
     items,
+    isLoading,
     addItem: addItemToStore,
     removeItem: removeItemFromStore,
     updateQuantity: updateQuantityInStore,
+    restoreItems: restoreItemsInStore,
     itemCount,
     subtotal,
     getItem,
@@ -40,9 +43,11 @@ export function useCart() {
   } = useCartStore(
     useShallow((state) => ({
       items: state.items,
+      isLoading: state.isLoading,
       addItem: state.addItem,
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
+      restoreItems: state.restoreItems,
       itemCount: state.itemCount,
       subtotal: state.subtotal,
       getItem: state.getItem,
@@ -52,92 +57,22 @@ export function useCart() {
 
   // Track pending operations for rollback
   const pendingRollbacks = useRef<Map<string, () => void>>(new Map());
-
-  /** L11 fix: Evict oldest rollback entries to prevent memory leak under rapid mutation spam */
-  function trackRollback(id: string, fn: () => void) {
-    const map = pendingRollbacks.current;
-    // Keep at most 50 pending rollbacks
-    if (map.size >= 50) {
-      const oldestKey = map.keys().next().value;
-      if (oldestKey !== undefined) {
-        map.delete(oldestKey);
-      }
-    }
-    map.set(id, fn);
-  }
+  // Monotonic rollback sequence: Date.now() alone can collide for two
+  // rapid adds in the same millisecond, so the sequence keeps every
+  // pending entry addressable even when timestamps match.
+  const rollbackSequence = useRef(0);
 
   /**
    * Add to cart with optimistic update and stock validation
    */
-  const addToCartMutation = useMutation({
-    mutationFn: async (item: AddToCartInput) => {
-      const totalQuantity = getTotalRequestedQuantityForStock(item);
-
-      // Validate stock in background, with cached fallback for offline
-      const stockCheck = await checkStock(
-        item.product_id,
-        totalQuantity,
-        getCachedProductStock(queryClient, item.product_id)
-      );
-
-      if (!stockCheck.available) {
-        throw new Error(
-          `Only ${stockCheck.currentStock} items available in stock`
-        );
-      }
-
-      return { item, stockCheck };
-    },
-
-    // Optimistic update - runs immediately before mutationFn
-    onMutate: (item) => {
-      // Generate a temporary ID for potential rollback
-      const rollbackId = `${item.product_id}-${item.variant_id || 'default'}-${Date.now()}`;
-
-      // Capture current state for rollback (read fresh from store to avoid stale closure)
-      const previousItems = [...useCartStore.getState().items];
-
-      // Optimistically add to cart (instant UI update)
-      addItemToStore(item);
-
-      // Store rollback function (L11 fix: uses trackRollback to enforce size limit)
-      trackRollback(rollbackId, () => {
-        // Restore previous state
-        useCartStore.setState({ items: previousItems });
-      });
-
-      return { rollbackId, previousItems };
-    },
-
-    // On error, rollback the optimistic update
-    onError: (error, _item, context) => {
-      if (context?.rollbackId) {
-        const rollback = pendingRollbacks.current.get(context.rollbackId);
-        if (rollback) {
-          rollback();
-          pendingRollbacks.current.delete(context.rollbackId);
-        }
-      }
-
-      // Show stock error toast
-      showCartToast(
-        error instanceof Error ? error.message : 'Failed to add to cart',
-        'error'
-      );
-    },
-
-    // Cleanup on success
-    onSuccess: (data, _item, context) => {
-      if (context?.rollbackId) {
-        pendingRollbacks.current.delete(context.rollbackId);
-      }
-
-      // Invalidate specific product query to refresh stock data
-      queryClient.invalidateQueries({
-        queryKey: ['product', data.item.product_id],
-      });
-    },
-  });
+  const addToCartMutation = useMutation(
+    createAddToCartMutation({
+      queryClient,
+      addItemToStore,
+      pendingRollbacks,
+      rollbackSequence,
+    })
+  );
 
   /**
    * Remove from cart with optimistic update
@@ -163,7 +98,8 @@ export function useCart() {
 
     onError: (_error, _id, context) => {
       if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
+        if (!hasSharedCartWriter())
+          useCartStore.setState({ items: context.previousItems });
       }
       showCartToast('Failed to remove item', 'error');
     },
@@ -172,71 +108,53 @@ export function useCart() {
   /**
    * Update quantity with optimistic update and stock validation
    */
-  const updateQuantityMutation = useMutation({
-    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
-      // H21 fix: Read fresh items from store instead of stale closure variable
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === id);
-      if (!item) throw new Error('Item not found');
-
-      // Validate stock for the new quantity, with cached fallback for offline
-      const stockCheck = await checkStock(
-        item.product_id,
-        quantity,
-        getCachedProductStock(queryClient, item.product_id)
-      );
-
-      if (!stockCheck.available) {
-        throw new Error(
-          `Only ${stockCheck.currentStock} items available in stock`
-        );
-      }
-
-      return { id, quantity, stockCheck };
-    },
-
-    onMutate: ({ id, quantity }) => {
-      // Read fresh from store to avoid stale closure
-      const previousItems = [...useCartStore.getState().items];
-
-      // Optimistically update quantity
-      updateQuantityInStore(id, quantity);
-
-      return { previousItems };
-    },
-
-    onError: (_error, _, context) => {
-      if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
-      }
-      showCartToast(
-        'Stock Error: Quantity adjusted to available stock',
-        'error'
-      );
-    },
-
-    onSuccess: (data) => {
-      // Bug #96 fix: Read fresh items from store instead of stale closure
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === data.id);
-      if (item) {
-        queryClient.invalidateQueries({
-          queryKey: ['product', item.product_id],
-        });
-      }
-    },
-  });
+  const updateQuantityMutation = useMutation(
+    createUpdateQuantityMutation({
+      queryClient,
+      updateQuantityInStore,
+      restoreItemsInStore,
+    })
+  );
 
   // Wrapped functions for easier consumption
   const addToCart = (item: AddToCartInput) => {
+    if (hasSharedCartWriter()) {
+      addItemToStore(item);
+      return;
+    }
     addToCartMutation.mutate(item);
   };
 
+  // Promise variant for callers that must gate success-only behavior
+  // (analytics, confirmation toasts) on validation succeeding: the
+  // fire-and-forget wrapper above cannot report a stock rejection.
+  const addToCartAsync = (item: AddToCartInput) => {
+    // A shared-cart writer owns the lines: awaiting the remote command
+    // keeps success-only callers (PDP toast, attribution) from firing
+    // when the paired cart rejects the write. The local mutation is
+    // skipped entirely — it would double-forward the add and
+    // stock-check the parked device cart instead. Falls through when
+    // no writer is installed (or it retired mid-call).
+    const forwarded = hasSharedCartWriter()
+      ? forwardSharedCartWrite({ type: 'add', item })
+      : null;
+    if (forwarded) return forwarded;
+    return addToCartMutation.mutateAsync(item);
+  };
+
   const removeFromCart = (id: string) => {
+    if (hasSharedCartWriter()) {
+      void removeItemFromStore(id);
+      return;
+    }
     removeFromCartMutation.mutate(id);
   };
 
   const updateQuantity = (id: string, quantity: number) => {
+    if (hasSharedCartWriter()) {
+      void updateQuantityInStore(id, quantity);
+      return;
+    }
     updateQuantityMutation.mutate({ id, quantity });
   };
 
@@ -248,13 +166,20 @@ export function useCart() {
 
     // Optimistic actions
     addToCart,
+    addToCartAsync,
     removeFromCart,
     updateQuantity,
 
     // Mutation states for UI feedback
-    isAddingToCart: addToCartMutation.isPending,
-    isRemovingFromCart: removeFromCartMutation.isPending,
-    isUpdatingQuantity: updateQuantityMutation.isPending,
+    isAddingToCart: hasSharedCartWriter()
+      ? isLoading
+      : addToCartMutation.isPending,
+    isRemovingFromCart: hasSharedCartWriter()
+      ? isLoading
+      : removeFromCartMutation.isPending,
+    isUpdatingQuantity: hasSharedCartWriter()
+      ? isLoading
+      : updateQuantityMutation.isPending,
 
     // Direct store access for non-optimistic operations
     getItem,

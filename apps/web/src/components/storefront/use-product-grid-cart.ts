@@ -33,7 +33,15 @@ export function useProductGridCart(merchantSlug: string | undefined) {
     if (merchantSlug) {
       setMerchantSlug(merchantSlug);
     }
-    addToCart(product);
+    const outcome = addToCart(product);
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
       title: 'Added to cart',
       description: `${product.name} has been added to your cart.`,

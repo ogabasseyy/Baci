@@ -72,4 +72,45 @@ describe('useActivationFocusRestore', () => {
 
     expect(document.activeElement).toBe(document.body);
   });
+
+  it('skips restoring a stale target when focus moves elsewhere before activation commits', () => {
+    function DeferredHarness() {
+      const containerRef = useRef<HTMLElement | null>(null);
+      const [activated, setActivated] = useState(false);
+      const { capture } = useActivationFocusRestore(containerRef, activated);
+
+      return (
+        <div>
+          <input aria-label="Search store" type="search" />
+          <section ref={containerRef}>
+            <button onClick={() => capture()} type="button">
+              Capture
+            </button>
+            <button onClick={() => setActivated(true)} type="button">
+              Commit
+            </button>
+            <div key={activated ? 'interactive' : 'static'}>
+              <a href="/smartphones/tecno-spark-40-pro">Tecno Spark 40 Pro</a>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    render(<DeferredHarness />);
+    const link = screen.getByRole('link', { name: 'Tecno Spark 40 Pro' });
+    const searchInput = screen.getByRole('searchbox', { name: 'Search store' });
+
+    link.focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Capture' }));
+
+    // User moves focus to the search box while the transition is still pending.
+    searchInput.focus();
+    expect(document.activeElement).toBe(searchInput);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+
+    expect(document.activeElement).toBe(searchInput);
+  });
 });
+

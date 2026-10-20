@@ -24,10 +24,16 @@ const ROW_START_SLACK_MS = 16_000;
  * Epoch-ms row-start deadline for reconciliation work started at
  * `startedAtMs`: the last started row may overrun by two sequential
  * provider timeouts, so this sits that interval inside the phase
- * budget and the phase still ends within `WORKER_BUDGET_MS`.
+ * budget and the phase still ends within it. Pass a capped phase
+ * budget when refund verification pends so the preflight window
+ * survives the reconcile phase (see
+ * CAPPED_RECONCILE_PHASE_MS).
  */
-export function reconcileWorkerDeadlineMs(startedAtMs: number): number {
-  return startedAtMs + WORKER_BUDGET_MS - ROW_START_SLACK_MS;
+export function reconcileWorkerDeadlineMs(
+  startedAtMs: number,
+  phaseBudgetMs: number = WORKER_BUDGET_MS
+): number {
+  return startedAtMs + phaseBudgetMs - ROW_START_SLACK_MS;
 }
 
 /** Sentinel deadline for worker calls with no bounding phase budget. */

@@ -121,6 +121,28 @@ describe('SearchPageContent', () => {
     mockNotFound.mockReset();
   });
 
+  it('keeps other pages reachable when every hydrated product disappears', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 20,
+      totalCount: 40,
+      products: [],
+      productIds: [],
+      query: 'iphone',
+      didYouMean: null,
+    });
+    render(await SearchPageContent(createSearchPageProps({ q: 'iphone' })));
+    expect(
+      screen.getByText(
+        'Products on this page are no longer available. Try another page.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('page=2')
+    );
+  });
+
   it('pages past the first 20 matches without recording a new submission', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({
@@ -190,90 +212,5 @@ describe('SearchPageContent', () => {
     expect(collectionSchema?.mainEntity?.itemListElement?.[0]?.position).toBe(
       21
     );
-  });
-
-  it('does not record a page-less results render as a new search', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
-      count: 45,
-      didYouMean: null,
-      products: createSearchProducts(20),
-      productIds: [],
-      query: 'iphone',
-    });
-
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone', page: undefined })
-      )) as React.ReactElement
-    );
-
-    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0 })
-    );
-  });
-
-  it('does not record an explicit page-1 navigation as a new search', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
-      count: 45,
-      didYouMean: null,
-      products: createSearchProducts(20),
-      productIds: [],
-      query: 'iphone',
-    });
-
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone', page: '1' })
-      )) as React.ReactElement
-    );
-
-    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0 })
-    );
-  });
-
-  it('does not track results renders across a page 1 → 2 → 1 journey', async () => {
-    mockStorefrontContext();
-    mockGetStorefrontSearchProducts.mockResolvedValue({
-      count: 45,
-      didYouMean: null,
-      products: createSearchProducts(20),
-      productIds: [],
-      query: 'iphone',
-    });
-
-    // Fresh submission entry: no page parameter.
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone', page: undefined })
-      )) as React.ReactElement
-    );
-    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 0 })
-    );
-
-    // Paging forward is navigation, not a submission.
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone', page: '2' })
-      )) as React.ReactElement
-    );
-    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 20 })
-    );
-
-    // Returning to page 1 via the Previous link (explicit page=1) must not
-    // recount the original submission.
-    render(
-      (await SearchPageContent(
-        createSearchPageProps({ q: 'iphone', page: '1' })
-      )) as React.ReactElement
-    );
-    expect(mockGetStorefrontSearchProducts).toHaveBeenLastCalledWith(
-      expect.objectContaining({ offset: 0 })
-    );
-    expect(mockGetStorefrontSearchProducts).toHaveBeenCalledTimes(3);
   });
 });

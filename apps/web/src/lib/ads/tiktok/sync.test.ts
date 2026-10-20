@@ -12,12 +12,14 @@ vi.mock('./config', () => ({
   getTikTokAdsConfig: (...args: unknown[]) => config(...args),
 }));
 vi.mock('./provider', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./provider')>()),
+  ...(await importOriginal<ProviderModule>()),
   fetchTikTokAdsDailyReport: (...args: unknown[]) => reports(...args),
   listTikTokAdsAccounts: (...args: unknown[]) => accounts(...args),
 }));
 
 import { syncTikTokAdsSpendForMerchant, tiktokAdsDateChunks } from './sync';
+
+type ProviderModule = typeof import('./provider');
 
 describe('TikTok Ads sync', () => {
   const rpc = vi.fn();

@@ -10,8 +10,16 @@ import {
 } from '@/config/ogabassey';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 
+const mockResolveOgabasseyHomeHeroShell = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve(null))
+);
+
 vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant: vi.fn(),
+}));
+
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: () => mockResolveOgabasseyHomeHeroShell(),
 }));
 
 vi.mock('@/lib/validation', () => ({
@@ -37,6 +45,7 @@ const { generateMetadata } = await import('./page');
 
 describe('storefront homepage metadata', () => {
   beforeEach(() => {
+    mockResolveOgabasseyHomeHeroShell.mockClear();
     vi.mocked(getRequestScopedMerchant).mockReset();
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(
       baseMerchant as unknown as Awaited<
@@ -151,5 +160,70 @@ describe('storefront homepage metadata', () => {
     });
 
     expect(metadata.twitter).not.toHaveProperty('site');
+    expect(mockResolveOgabasseyHomeHeroShell).not.toHaveBeenCalled();
+  });
+
+  it('warms and awaits the OgaBassey home hero shell alongside merchant resolution on the canonical domain', async () => {
+    let resolveMerchant!: (
+      value: Awaited<ReturnType<typeof getRequestScopedMerchant>>
+    ) => void;
+    let resolveHeroShell!: (value: null) => void;
+    let settled = false;
+
+    vi.mocked(getRequestScopedMerchant).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveMerchant = resolve;
+        })
+    );
+    mockResolveOgabasseyHomeHeroShell.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHeroShell = resolve;
+        })
+    );
+
+    const metadataPromise = generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    await Promise.resolve();
+
+    expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
+
+    resolveMerchant(null);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveHeroShell(null);
+    await metadataPromise;
+    expect(settled).toBe(true);
+  });
+
+  it('warms the hero shell without blocking metadata on the /ogabassey path route', async () => {
+    mockResolveOgabasseyHomeHeroShell.mockImplementationOnce(
+      () => new Promise(() => {})
+    );
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
+    expect(metadata.title).toEqual({ absolute: OGABASSEY_TITLE });
+  });
+
+  it('propagates Next.js framework interrupts rethrown by the hero shell lookup', async () => {
+    const frameworkInterrupt = new Error('NEXT_PRERENDER_INTERRUPTED');
+    mockResolveOgabasseyHomeHeroShell.mockRejectedValueOnce(frameworkInterrupt);
+
+    await expect(
+      generateMetadata({
+        params: Promise.resolve({ slug: 'ogabassey.com' }),
+      })
+    ).rejects.toThrow('NEXT_PRERENDER_INTERRUPTED');
   });
 });

@@ -10,7 +10,6 @@ interface DataFormFooterProps {
   isKeyboardVisible: boolean;
   isSubmitting: boolean;
   planAmount: number;
-  selectedSavedCardId: string | null;
   onPress: () => void;
 }
 
@@ -22,7 +21,6 @@ export function DataFormFooter({
   isSubmitting,
   onPress,
   planAmount,
-  selectedSavedCardId,
 }: DataFormFooterProps) {
   return (
     <View
@@ -53,9 +51,7 @@ export function DataFormFooter({
           <ActivityIndicator color="#FFF" />
         ) : (
           <Text style={dataFormStyles.payButtonText}>
-            {selectedSavedCardId
-              ? `Pay ₦${planAmount ? planAmount.toLocaleString() : '0'}`
-              : 'Continue to Payment'}
+            {`Pay ₦${planAmount ? planAmount.toLocaleString() : '0'}`}
           </Text>
         )}
       </Pressable>

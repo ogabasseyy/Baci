@@ -3,6 +3,10 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
+  findMatchingCartLineIndex,
+  resolveCartLineAssurance,
+} from '@/hooks/cart/cart-line-merge-policy';
+import {
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   generateCartItemId,
   getCartFromStorage,
@@ -24,10 +28,15 @@ import {
 // Re-exported so existing importers keep working; the helper lives in ./cart/cart-persistence.
 export { clearCartStorage } from '@/hooks/cart/cart-persistence';
 
+import {
+  resolveAssuranceMerchantSetting,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveDefaultVariantSelection } from '../../../../packages/shared/src/lib/product-default-variant';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 interface CartProviderProps {
   children: ReactNode;
@@ -78,6 +87,8 @@ export const CartProvider = ({
 
   // 2026 Critical Fix: Track validation state to prevent infinite loops
   const lastValidatedCartHashRef = useRef<string>('');
+
+  const merchantContext = useMerchantSafe();
 
   // Re-sync the slug/user/cart when the identifying props change after the
   // initial hydration. Adjusting during render (a prev-prop comparison) avoids
@@ -222,7 +233,7 @@ export const CartProvider = ({
   useEffect(() => {
     if (!isHydrated || !isValidationActivated || cart.length === 0) return;
 
-    // 2026 Critical Fix: Create a stable hash of cart item IDs+prices to detect meaningful changes
+    // 2026 Critical Fix: Create a stable hash of cart item IDs+prices+quantities to detect meaningful changes
     // This prevents infinite loops when validation updates prices
     const cartHash = createCartHash(cart);
 
@@ -338,7 +349,9 @@ export const CartProvider = ({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 
@@ -350,7 +363,7 @@ export const CartProvider = ({
         productName: productForCart.name,
         stock: productForCart.stock,
       });
-      return; // Silently reject - UI should show out of stock state
+      return 'rejected'; // Silently reject - UI should show out of stock state
     }
 
     // Variant validation: Prevent adding variant products without selection
@@ -360,8 +373,19 @@ export const CartProvider = ({
         productId: productForCart.id,
         productName: productForCart.name,
       });
-      return;
+      return 'rejected';
     }
+
+    // The add-time assurance default resolves against the live merchant
+    // shipping-insurance setting via the shared resolver, mirroring
+    // StorefrontCartProvider.
+    const contextMerchant = merchantContext?.merchant;
+    const shippingInsuranceEnabled = resolveAssuranceMerchantSetting({
+      contextSlug: contextMerchant?.slug,
+      contextSetting:
+        contextMerchant?.feature_settings?.shipping_insurance_enabled,
+      cartSlug: merchantSlug,
+    });
 
     setCart((prev) => {
       const cartItemId = generateCartItemId(
@@ -370,35 +394,11 @@ export const CartProvider = ({
       );
 
       // Robust duplicate check: Match by cartItemId OR Legacy ID/Variant
-      const existingItemIndex = prev.findIndex((item) => {
-        // 1. Direct V2 Match (:: separator)
-        if (item.cartItemId === cartItemId) return true;
-
-        // 2. Legacy V1 Match (old - separator format stored in cart)
-        if (item.cartItemId?.includes('-') && !item.cartItemId.includes('::')) {
-          // Rebuild what the old generateCartItemId would have produced
-          const legacyParts = [product.id];
-          if (options?.variantId) legacyParts.push(options.variantId);
-          if (options?.color) legacyParts.push(options.color);
-          if (options?.storage) legacyParts.push(options.storage);
-          if (options?.condition) legacyParts.push(options.condition);
-          if (item.cartItemId === legacyParts.join('-')) return true;
-        }
-
-        // 3. Legacy Match (if item has no cartItemId)
-        if (!item.cartItemId && item.id === product.id) {
-          const itemVar = item.variantId;
-          const newVar = normalizedOptions?.variantId;
-          if (itemVar !== newVar) return false;
-
-          // Check if V2 options are used (legacy items have none)
-          // If adding item with V2 options, don't match legacy item
-          if (normalizedOptions?.color || normalizedOptions?.storage)
-            return false;
-
-          return true;
-        }
-        return false;
+      const existingItemIndex = findMatchingCartLineIndex(prev, {
+        productId: product.id,
+        cartItemId,
+        options,
+        normalizedOptions,
       });
 
       if (existingItemIndex >= 0) {
@@ -410,6 +410,11 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
+          hasAssurance: resolveCartLineAssurance(normalizedOptions, item, {
+            smartCartProEnabled: enableSmartCartPro,
+            merchantSlug,
+            shippingInsuranceEnabled,
+          }),
         };
         return newCart;
       }
@@ -434,8 +439,13 @@ export const CartProvider = ({
             | 'open_box'
             | 'refurbished'
             | undefined,
+          offerId: normalizedOptions?.offerId,
           negotiationStatus: 'none',
-          hasAssurance: false,
+          hasAssurance: resolveCartLineAssurance(normalizedOptions, undefined, {
+            smartCartProEnabled: enableSmartCartPro,
+            merchantSlug,
+            shippingInsuranceEnabled,
+          }),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];
@@ -448,6 +458,9 @@ export const CartProvider = ({
         setShowUpsell(true);
       }, 500);
     }
+    // The legacy path has no stock-cap rejections: the guards above are
+    // the only exits that leave the cart unchanged.
+    return 'applied';
   };
 
   const removeFromCart = (

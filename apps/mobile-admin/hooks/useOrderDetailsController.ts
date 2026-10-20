@@ -35,6 +35,7 @@ import {
   useUpdateOrderStatus,
 } from '@/hooks/useOrders';
 import { useTheme } from '@/hooks/useTheme';
+import { canUseCheckoutShippingRecovery } from '@/lib/checkout-shipping-recovery-eligibility';
 import {
   formatShippingProviderName,
   getOrderFulfillmentIdentifierItems,
@@ -135,7 +136,6 @@ export function useOrderDetailsController() {
 
   const formatPrice = (amount: number) =>
     formatOrderDetailsPrice(amount, orderCurrency);
-  const formatDate = formatOrderDetailsDate;
 
   const contactActions = createOrderDetailsContactActions({
     formatPrice,
@@ -191,7 +191,11 @@ export function useOrderDetailsController() {
     showShipmentFlow: uiState.showShipmentFlow,
     updateStatus: updateStatusMutation.mutateAsync,
     onProviderBookingError: (error) =>
-      handleOrderDetailsProviderBookingError(error, giglShipping),
+      handleOrderDetailsProviderBookingError(
+        error,
+        giglShipping,
+        canUseCheckoutShippingRecovery(order, merchant, user?.id)
+      ),
   });
 
   const statusActions = createOrderDetailsStatusActions({
@@ -252,7 +256,7 @@ export function useOrderDetailsController() {
     currencySymbol,
     error,
     formatAddress: formatOrderAddress,
-    formatDate,
+    formatDate: formatOrderDetailsDate,
     formatPrice,
     giglShipping,
     handleCall: contactActions.handleCall,

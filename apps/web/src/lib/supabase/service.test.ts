@@ -68,6 +68,7 @@ describe('service Supabase client factory', () => {
     vi.clearAllMocks();
     delete process.env.SUPABASE_ADS_CREDENTIAL_KEY;
     delete process.env.SUPABASE_JUMIA_CREDENTIAL_KEY;
+    delete process.env.SUPABASE_STOREFRONT_INTAKE_KEY;
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
   });
 

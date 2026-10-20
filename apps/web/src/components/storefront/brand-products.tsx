@@ -143,7 +143,15 @@ export function BrandProducts({
   ]);
 
   const handleAddToCart = (p: Product) => {
-    addToCart(p);
+    const outcome = addToCart(p);
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
       title: 'Added to cart',
       description: `${p.name} has been added to your cart.`,

@@ -45,6 +45,7 @@ describe('event pipeline authority importer boundary', () => {
     );
 
     expect(manifest.authority.adminImporters).toEqual([
+      'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
       'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
@@ -74,6 +75,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/lib/piggyvest/server-intake-client.ts',
+      'apps/web/src/lib/storefront/server-intake-client.ts',
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',

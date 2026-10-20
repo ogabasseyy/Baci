@@ -1,12 +1,12 @@
 import {
-  buildTransactionDiscountLineKey,
-  buildTransactionDiscountLineOccurrenceKey,
-} from '@baci/shared/contracts';
-import {
   isProductNegotiable,
   MAX_AUTO_NEGOTIATION_DISCOUNT_RATE,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
 import {
@@ -14,6 +14,7 @@ import {
   type EligibleLineDiscountResult,
   type NegotiationLineInput,
 } from './eligible-line-discount';
+import { applyPersistedLineOccurrenceKeys } from './order-negotiation-occurrence-keys';
 
 type VariantPriceRow = {
   id: string;
@@ -34,6 +35,7 @@ type NegotiationCatalogRow = {
 type NegotiationDiscountItem = {
   condition?: string | null;
   product_id?: string;
+  offer_id?: string | null;
   variant_attributes?: Record<string, string> | null;
   variant_id?: string | null;
   quantity: number;
@@ -50,102 +52,24 @@ type IndexedNegotiationItem = {
   lineId: number;
 };
 
-function applyPersistedLineOccurrenceKeys(
-  result: EligibleLineDiscountResult,
-  indexedItems: IndexedNegotiationItem[],
-  productMap: Map<string, NegotiationCatalogRow>
-): EligibleLineDiscountResult {
-  if (!result.lineDiscounts) {
-    return result;
-  }
-
-  const lineKeys = indexedItems.map(({ item }) => {
-    if (!item.product_id) {
-      return null;
-    }
-    const product = productMap.get(item.product_id);
-    return buildTransactionDiscountLineKey({
-      condition: item.condition?.trim() || product?.condition,
-      productId: item.product_id,
-      variantAttributes: item.variant_attributes ?? null,
-      variantId: item.variant_id ?? null,
-    });
-  });
-  const lineIdentityCounts = new Map<string, number>();
-  for (const { item } of indexedItems) {
-    if (!item.product_id) {
-      continue;
-    }
-    const identity = JSON.stringify([item.product_id, item.variant_id ?? null]);
-    lineIdentityCounts.set(
-      identity,
-      (lineIdentityCounts.get(identity) ?? 0) + 1
-    );
-  }
-  const lineKeyCounts = new Map<string, number>();
-  const occurrenceByLineId = new Map<number, number>();
-  for (const lineKey of lineKeys) {
-    if (lineKey == null) {
-      continue;
-    }
-    lineKeyCounts.set(lineKey, (lineKeyCounts.get(lineKey) ?? 0) + 1);
-  }
-  const seenLineKeys = new Map<string, number>();
-  for (const [index, lineKey] of lineKeys.entries()) {
-    if (lineKey == null) {
-      continue;
-    }
-    const occurrence = (seenLineKeys.get(lineKey) ?? 0) + 1;
-    seenLineKeys.set(lineKey, occurrence);
-    occurrenceByLineId.set(
-      indexedItems[index]?.lineId ?? index + 1,
-      occurrence
-    );
-  }
-
-  return {
-    ...result,
-    lineDiscounts: result.lineDiscounts.map((allocation) => {
-      if (!allocation) {
-        return allocation;
-      }
-      const itemIndex = allocation.lineId - 1;
-      const lineKey = lineKeys[itemIndex];
-      const item = indexedItems[itemIndex]?.item;
-      const identity = item?.product_id
-        ? JSON.stringify([item.product_id, item.variant_id ?? null])
-        : null;
-      if (
-        lineKey == null ||
-        identity == null ||
-        (lineIdentityCounts.get(identity) ?? 0) < 2
-      ) {
-        return allocation;
-      }
-      const occurrence = occurrenceByLineId.get(allocation.lineId);
-      if (occurrence == null) {
-        return allocation;
-      }
-      return {
-        ...allocation,
-        lineKey:
-          (lineKeyCounts.get(lineKey) ?? 0) === 1
-            ? lineKey
-            : buildTransactionDiscountLineOccurrenceKey(lineKey, occurrence),
-      };
-    }),
-  };
-}
-
 export async function computeOrderNegotiationDiscount({
   items,
   merchantId,
+  offerPrices,
   supabase,
   vatRegistered,
+  allowUnavailableConditionPrices,
+  conditionPriceOverrides,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
+  // Live offer prices by `${product_id}::${offer_id}`, loaded once by the
+  // route alongside offer verification. Offer lines price from the live
+  // offer (what the RPC charges), not the parent catalog price.
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
+  conditionPriceOverrides?: Map<string, number>;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
   vatRegistered: boolean;
@@ -154,7 +78,7 @@ export async function computeOrderNegotiationDiscount({
   // priced at 0 and dispatched to the voucher RPC. Excluding them from the id
   // lists means a pure-voucher order skips the products query and returns null
   // (so existing voucher tests need no products mock).
-  const indexedItems = items.map((item, index) => ({
+  const indexedItems: IndexedNegotiationItem[] = items.map((item, index) => ({
     item,
     lineId: index + 1,
   }));
@@ -220,6 +144,16 @@ export async function computeOrderNegotiationDiscount({
     );
   }
 
+  const conditionPrices = await loadOrderConditionPrices(
+    items,
+    merchantId,
+    supabase,
+    {
+      allowUnavailable: allowUnavailableConditionPrices,
+      priceOverrides: conditionPriceOverrides,
+    }
+  );
+
   const productMap = new Map(products.map((product) => [product.id, product]));
   const variantMap = new Map(
     (variantsData ?? []).map((variant) => [variant.id, variant])
@@ -241,8 +175,22 @@ export async function computeOrderNegotiationDiscount({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
+    // Mirror the RPC precedence (variant override, then live offer, then
+    // parent): the key pins the offer to this line's product, so a
+    // cross-product offer_id falls through to the parent price and the
+    // mismatch fails at the RPC's invalid_offer guard instead.
+    const offerPrice =
+      item.offer_id && item.product_id
+        ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
+        : undefined;
     lines.push({
-      catalogUnitPrice: Number(variant?.price_override ?? product.price ?? 0),
+      catalogUnitPrice: Number(
+        orderConditionPrice(conditionPrices, item) ??
+          variant?.price_override ??
+          offerPrice ??
+          product.price ??
+          0
+      ),
       clientUnitPrice: Number(item.price),
       lineId,
       productId: item.product_id,

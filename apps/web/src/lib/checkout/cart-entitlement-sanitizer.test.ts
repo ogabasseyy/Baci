@@ -130,6 +130,49 @@ describe('cart-entitlement-sanitizer', () => {
       expect(calculateCartItemSubtotal(negotiatedCart, false)).toBe(2000);
     });
 
+    it('prices pending and rejected proposals at catalog like the server', () => {
+      const proposedCart = [
+        {
+          id: '1',
+          cartItemId: '1::v1',
+          name: 'Item 1',
+          price: 1000,
+          negotiatedPrice: 800,
+          negotiationStatus: 'pending',
+          quantity: 2,
+        } as CartItem,
+        {
+          id: '2',
+          cartItemId: '2::v1',
+          name: 'Item 2',
+          price: 500,
+          negotiatedPrice: 300,
+          negotiationStatus: 'rejected',
+          quantity: 1,
+        } as CartItem,
+      ];
+
+      // The reviewed server snapshot prices both lines at catalog;
+      // client totals must not discount unaccepted proposals.
+      expect(getCartItemCheckoutUnitPrice(proposedCart[0])).toBe(1000);
+      expect(getCartItemCheckoutUnitPrice(proposedCart[1])).toBe(500);
+      expect(calculateCartItemSubtotal(proposedCart, true)).toBe(2500);
+      expect(calculateCartTotal(proposedCart, true)).toBe(2500);
+    });
+
+    it('keeps status-less legacy negotiated prices', () => {
+      const legacyItem = {
+        id: '1',
+        cartItemId: '1::v1',
+        name: 'Item 1',
+        price: 1000,
+        negotiatedPrice: 800,
+        quantity: 1,
+      } as CartItem;
+
+      expect(getCartItemCheckoutUnitPrice(legacyItem)).toBe(800);
+    });
+
     it('keeps quiz award items priced until the signed voucher token is present', () => {
       const incompleteVoucherItem = {
         id: 'gift-product',
@@ -190,16 +233,29 @@ describe('cart-entitlement-sanitizer', () => {
       expect(calculateCartTotal(mockCart, true)).toBe(3680);
     });
 
-    it('prices condition-offer lines at the retained catalog basis', () => {
+    it('prices condition-offer lines at the live offer price, ignoring any retained catalog basis', () => {
       const offerLine: CartItem = {
         ...mockCart[0],
         price: 600,
         catalogPrice: 1000,
+        offerId: 'offer-1',
       };
-      // Goods use catalog (1000 x 2), not the offer price (600 x 2): a
-      // merchant-rate tier between 1200 and 2000 must see 2000. Assurance
-      // still tracks the negotiated basis: 800 x 2 x 0.05 = 80.
-      expect(calculateCartCatalogSubtotal([offerLine], true)).toBe(2080);
+      // Goods use the offer price (600 x 2 = 1200), matching the server
+      // canonical subtotal: quoting catalog (2000) would display a tier the
+      // order then rejects. Assurance still tracks the negotiated basis:
+      // 800 x 2 x 0.05 = 80. Line = 1280.
+      expect(calculateCartCatalogSubtotal([offerLine], true)).toBe(1280);
+    });
+
+    it('keeps the retained catalog basis for non-offer lines', () => {
+      const catalogLine: CartItem = {
+        ...mockCart[0],
+        price: 600,
+        catalogPrice: 1000,
+      };
+      // No offer identity: goods use catalog (1000 x 2 = 2000) plus the
+      // negotiated-basis assurance (80). Line = 2080.
+      expect(calculateCartCatalogSubtotal([catalogLine], true)).toBe(2080);
     });
 
     it('falls back to the line price when the retained basis is invalid', () => {

@@ -6,7 +6,18 @@ import {
   sanitizeText,
 } from '@/lib/sanitize-core';
 import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
+import {
+  aliasFieldsMismatchMessage,
+  matchingAliasFields,
+} from './order-alias-fields';
 import { optionalHttpUrlSchema } from './order-create-fields';
+import {
+  OFFER_VARIANT_EXCLUSION_ERROR,
+  OFFER_VOUCHER_EXCLUSION_ERROR,
+  offerVariantExclusionHolds,
+  offerVoucherExclusionHolds,
+  orderItemOfferAliasFields,
+} from './order-item-offer-aliases';
 import { orderShippingAddressSchema } from './order-shipping-address';
 
 export { merchantOrderCancellationSchema } from './merchant-order-cancellation';
@@ -48,22 +59,6 @@ const optionalVoucherTokenSchema = z.preprocess((value) => {
 
   return sanitized.length > 0 ? sanitized : undefined;
 }, z.string().max(VOUCHER_TOKEN_MAX_LENGTH).optional());
-
-function matchingAliasFields<Left extends string, Right extends string>(
-  left: Left,
-  right: Right
-) {
-  return (data: { [Key in Left | Right]?: unknown }) => {
-    const leftValue = data[left];
-    const rightValue = data[right];
-
-    return !leftValue || !rightValue || leftValue === rightValue;
-  };
-}
-
-function aliasFieldsMismatchMessage(left: string, right: string) {
-  return `${left} and ${right} must match when both are provided`;
-}
 
 const orderCreateSchemaBase = z
   .object({
@@ -113,6 +108,7 @@ const orderCreateSchemaBase = z
               ),
             variantId: z.string().optional(),
             variant_id: z.string().optional(),
+            ...orderItemOfferAliasFields,
             variantName: optionalVariantNameSchema,
             variant_name: optionalVariantNameSchema,
             variantAttributes: z
@@ -131,6 +127,10 @@ const orderCreateSchemaBase = z
             voucherToken: optionalVoucherTokenSchema,
             voucher_award_id: optionalVoucherTokenSchema,
             voucher_token: optionalVoucherTokenSchema,
+            // Shared-cart line provenance for bound orders. The binding
+            // RPC revalidates the cart version; this id is traceability,
+            // never authorization.
+            cart_line_id: z.uuid().optional(),
           })
           .refine((data) => data.product_id || data.productId || data.id, {
             error:
@@ -142,6 +142,12 @@ const orderCreateSchemaBase = z
           .refine(matchingAliasFields('variantName', 'variant_name'), {
             error: aliasFieldsMismatchMessage('variantName', 'variant_name'),
           })
+          .refine(matchingAliasFields('offerId', 'offer_id'), {
+            error: aliasFieldsMismatchMessage('offerId', 'offer_id'),
+          })
+          .refine(offerVariantExclusionHolds, {
+            error: OFFER_VARIANT_EXCLUSION_ERROR,
+          })
           .refine(matchingAliasFields('voucherToken', 'voucher_token'), {
             error: aliasFieldsMismatchMessage('voucherToken', 'voucher_token'),
           })
@@ -151,8 +157,18 @@ const orderCreateSchemaBase = z
               'voucher_award_id'
             ),
           })
+          .refine(offerVoucherExclusionHolds, {
+            // The voucher RPC's reserved-order branch ignores submitted
+            // item economics while the route recomputes VAT from the
+            // offer's live price: a cheaper same-product offer would
+            // understate the recorded tax on the prize order.
+            error: OFFER_VOUCHER_EXCLUSION_ERROR,
+          })
       )
-      .min(1),
+      // Matches admin-order-edit's order-items cap: bounds per-line offer
+      // verification fan-out (fetchLiveOrderOffers) on public requests.
+      .min(1)
+      .max(200),
     subtotal: z.coerce.number().nonnegative(),
     shipping_fee: z.coerce.number().nonnegative().prefault(0),
     discount_amount: z.coerce.number().nonnegative().prefault(0),
@@ -210,6 +226,19 @@ const orderCreateSchemaBase = z
     savings_goal_id: z.uuid().optional(),
     savings_amount: z.number().positive().optional(),
     user_id: z.uuid().optional(),
+    // Shared server cart binding (Task 11A). Present only when checkout
+    // reviewed a shared cart: the orders route submits through the
+    // bound-create RPC, which revalidates the session, generation and
+    // reviewed version inside the final order transaction. Absent for
+    // legacy checkouts, which keep the direct order path.
+    shared_cart: z
+      .object({
+        cart_id: z.uuid(),
+        checkout_session_id: z.uuid(),
+        checkout_generation: z.int().positive(),
+        cart_version: z.int().positive(),
+      })
+      .optional(),
     // Merchant-configured shipping rate (merchant_shipping_rates.id). Sent by
     // checkout when the shopper picks a merchant rate (an `mrate_` quote).
     // The orders route re-verifies the rate against the merchant's zone

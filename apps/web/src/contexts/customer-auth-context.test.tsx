@@ -1,10 +1,17 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { act, Suspense, useLayoutEffect } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CustomerAuthProvider,
   useCustomerAuth,
   useOptionalCustomerAuth,
 } from '@/contexts/customer-auth-context';
+import { resetRememberedCustomerSessionsForTests } from '@/contexts/customer-auth-session';
+import {
+  getLiveCustomerIdentity,
+  publishCustomerIdentity,
+} from '@/contexts/customer-live-identity';
 
 vi.mock('@/hooks/use-cart', () => ({
   clearCartStorage: vi.fn(),
@@ -32,6 +39,7 @@ function OptionalAuthProbe() {
 
 describe('CustomerAuthProvider', () => {
   afterEach(() => {
+    resetRememberedCustomerSessionsForTests();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -243,5 +251,208 @@ describe('CustomerAuthProvider', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('publishes the identity reset when the storefront slug commits a change', async () => {
+    // Codex R129 P2 (behavioral half): a committed slug change must
+    // reset the live identity so in-flight results from the old
+    // store are discarded. The second session load hangs, pinning
+    // the post-reset state deterministically (otherwise the load
+    // would immediately overwrite it).
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: {
+            email: 'a@example.com',
+            first_name: 'A',
+            id: 'customer-a',
+            last_name: 'User',
+          },
+          user: { email: 'a@example.com', id: 'user-a', role: 'customer' },
+        })
+      )
+      .mockImplementationOnce(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(
+      <CustomerAuthProvider merchantSlug="store-a">
+        <AuthProbe />
+      </CustomerAuthProvider>
+    );
+    await waitFor(() =>
+      expect(getLiveCustomerIdentity()).toEqual({
+        customerId: 'customer-a',
+        merchantSlug: 'store-a',
+        userId: 'user-a',
+      })
+    );
+
+    rerender(
+      <CustomerAuthProvider merchantSlug="store-b">
+        <AuthProbe />
+      </CustomerAuthProvider>
+    );
+
+    // The reset publishes synchronously before the hanging load's
+    // fetch starts, so by the second fetch the reset has landed.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(getLiveCustomerIdentity()).toEqual({
+      customerId: null,
+      merchantSlug: 'store-b',
+      userId: null,
+    });
+  });
+
+  it('does not publish a merchant switch for a render that never commits', async () => {
+    // Codex R129 P2 (mechanistic half): a concurrent render that
+    // suspends before committing must leave the live identity
+    // untouched — module mutations cannot roll back like setState,
+    // so a speculative publish would discard a healthy in-flight
+    // checkout from the still-committed storefront.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ authenticated: false }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    let suspenderThrows = 0;
+    let suspendOnSlug: string | null = null;
+    function Suspender({ slug }: { slug: string }) {
+      if (suspendOnSlug !== null && slug === suspendOnSlug) {
+        suspenderThrows += 1;
+        throw new Promise(() => {});
+      }
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(
+          <Suspense fallback={null}>
+            <CustomerAuthProvider merchantSlug="store-a">
+              <Suspender slug="store-a" />
+            </CustomerAuthProvider>
+          </Suspense>
+        );
+      });
+      expect(getLiveCustomerIdentity().merchantSlug).toBe('store-a');
+
+      suspendOnSlug = 'store-b';
+      await act(async () => {
+        root.render(
+          <Suspense fallback={null}>
+            <CustomerAuthProvider merchantSlug="store-b">
+              <Suspender slug="store-b" />
+            </CustomerAuthProvider>
+          </Suspense>
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // The store-b render ran (and suspended) but never committed.
+      expect(suspenderThrows).toBeGreaterThan(0);
+      expect(getLiveCustomerIdentity()).toEqual({
+        customerId: null,
+        merchantSlug: 'store-a',
+        userId: null,
+      });
+    } finally {
+      suspendOnSlug = null;
+      publishCustomerIdentity(null, null, null);
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it('publishes the merchant reset before any post-commit layout reader runs', async () => {
+    // Codex R133 P2: a promise continuation settling in the
+    // post-commit / pre-passive-flush window must already see the
+    // reset — otherwise it accepts the old storefront's identity
+    // and publishes the old store's result into the new view. The
+    // sibling spy reads the singleton from its own layout effect,
+    // which runs after the provider's layout effects but before
+    // ANY passive effect of the same commit — exactly the window
+    // under test. Fails pre-fix: the passive publish has not run
+    // yet, so the spy still sees store-a.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: {
+            email: 'a@example.com',
+            first_name: 'A',
+            id: 'customer-a',
+            last_name: 'User',
+          },
+          user: { email: 'a@example.com', id: 'user-a', role: 'customer' },
+        })
+      )
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const seenAtLayout: ReturnType<typeof getLiveCustomerIdentity>[] = [];
+    function LayoutSpy() {
+      useLayoutEffect(() => {
+        seenAtLayout.push({ ...getLiveCustomerIdentity() });
+      });
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(
+          <>
+            <CustomerAuthProvider merchantSlug="store-a">
+              <AuthProbe />
+            </CustomerAuthProvider>
+            <LayoutSpy />
+          </>
+        );
+      });
+      await waitFor(() =>
+        expect(getLiveCustomerIdentity()).toEqual({
+          customerId: 'customer-a',
+          merchantSlug: 'store-a',
+          userId: 'user-a',
+        })
+      );
+
+      seenAtLayout.length = 0;
+      await act(async () => {
+        root.render(
+          <>
+            <CustomerAuthProvider merchantSlug="store-b">
+              <AuthProbe />
+            </CustomerAuthProvider>
+            <LayoutSpy />
+          </>
+        );
+      });
+
+      // The update commit's layout phase already saw the reset —
+      // no post-commit window exposes the stale storefront.
+      expect(seenAtLayout.length).toBeGreaterThan(0);
+      expect(seenAtLayout.at(-1)).toEqual({
+        customerId: null,
+        merchantSlug: 'store-b',
+        userId: null,
+      });
+    } finally {
+      publishCustomerIdentity(null, null, null);
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
   });
 });

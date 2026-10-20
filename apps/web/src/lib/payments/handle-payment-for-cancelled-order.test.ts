@@ -42,6 +42,16 @@ describe('isOrderClampedAsCancelled', () => {
     ).toBe(true);
   });
 
+  it('returns true for the US-spelled shipping cancellation without cancelled_at', () => {
+    expect(
+      isOrderClampedAsCancelled({
+        id: 'o1',
+        cancelled_at: null,
+        shipping_status: 'canceled',
+      })
+    ).toBe(true);
+  });
+
   it('returns true when cancelled_at is set even if shipping_status differs', () => {
     expect(
       isOrderClampedAsCancelled({

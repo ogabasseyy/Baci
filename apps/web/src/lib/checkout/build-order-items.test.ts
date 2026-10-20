@@ -170,4 +170,69 @@ describe('buildCheckoutOrderItems', () => {
       }),
     ]);
   });
+
+  it('carries the exact condition-offer id into the order payload', () => {
+    const items = buildCheckoutOrderItems([
+      {
+        id: 'prod_1',
+        name: 'Galaxy S22 Ultra',
+        quantity: 1,
+        price: 400000,
+        condition: 'used',
+        offerId: 'offer-used-b',
+      },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        product_id: 'prod_1',
+        condition: 'used',
+        offer_id: 'offer-used-b',
+      }),
+    ]);
+  });
+
+  it('forwards the shared-cart server line id as cart_line_id', () => {
+    const [item] = buildCheckoutOrderItems([
+      {
+        id: 'prod_1',
+        name: 'Galaxy S22 Ultra',
+        quantity: 1,
+        price: 500000,
+        serverLineId: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',
+      },
+    ]);
+
+    expect(item).toMatchObject({
+      cart_line_id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',
+      product_id: 'prod_1',
+    });
+  });
+
+  it('omits cart_line_id for legacy lines without a server marker', () => {
+    const [item] = buildCheckoutOrderItems([
+      {
+        id: 'prod_1',
+        name: 'Galaxy S22 Ultra',
+        quantity: 1,
+        price: 500000,
+      },
+    ]);
+
+    expect(item).not.toHaveProperty('cart_line_id');
+  });
+
+  it('omits cart_line_id for blank server markers', () => {
+    const [item] = buildCheckoutOrderItems([
+      {
+        id: 'prod_1',
+        name: 'Galaxy S22 Ultra',
+        quantity: 1,
+        price: 500000,
+        serverLineId: '   ',
+      },
+    ]);
+
+    expect(item).not.toHaveProperty('cart_line_id');
+  });
 });

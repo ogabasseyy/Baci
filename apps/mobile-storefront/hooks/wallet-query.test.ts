@@ -1,4 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
+import { QueryClient } from '@tanstack/react-query';
 import { walletKeys } from './wallet-query';
 
 describe('walletKeys', () => {
@@ -66,5 +67,34 @@ describe('walletKeys', () => {
       )
     ).toBe(true);
     expect(Object.isFrozen(walletKeys.transactions('customer-1'))).toBe(true);
+  });
+
+  it('short-key invalidate with exact:false clears the user-pinned long key', async () => {
+    // Post-purchase invalidation deliberately omits userId so one
+    // prefix clears both key shapes. This pins the TanStack prefix
+    // semantics that correctness depends on: if a future major flips
+    // the default, this fails loudly instead of silently returning
+    // stale pre-debit balances.
+    const queryClient = new QueryClient();
+    try {
+      const longKey = walletKeys.data({
+        merchantId: 'merchant-1',
+        ownerId: 'customer-1',
+        userId: 'user-1',
+      });
+      queryClient.setQueryData(longKey, { balance: 1 });
+
+      await queryClient.invalidateQueries({
+        queryKey: walletKeys.data({
+          merchantId: 'merchant-1',
+          ownerId: 'customer-1',
+        }),
+        exact: false,
+      });
+
+      expect(queryClient.getQueryState(longKey)?.isInvalidated).toBe(true);
+    } finally {
+      queryClient.clear();
+    }
   });
 });

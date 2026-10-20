@@ -19,8 +19,7 @@ vi.mock('./retire-terminal-side-effect-drain', () => ({
   retireTerminalSideEffectDrain: mocks.retireTerminalSideEffectDrain,
 }));
 vi.mock('./verify-gateway-charge', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./verify-gateway-charge')>();
+  const actual = await importOriginal<VerifyGatewayChargeModule>();
   return { ...actual, verifyGatewayCharge: mocks.verifyGatewayCharge };
 });
 
@@ -28,6 +27,8 @@ import {
   type DrainCandidateRow,
   drainFailedPaidOrderSideEffectRow,
 } from './drain-failed-paid-order-side-effect-row';
+
+type VerifyGatewayChargeModule = typeof import('./verify-gateway-charge');
 
 function row(overrides: Record<string, unknown> = {}): DrainCandidateRow {
   return {

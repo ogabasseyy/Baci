@@ -166,11 +166,14 @@ export function assertInternationalQuoteMatchesOrder(
     throw error;
   }
 
-  // Flatten nested product.dimensions the same way domestic booking does so
-  // newly added package size is visible against legacy quotes that omit it.
+  // International quote creation/refresh retains original quantities; actual
+  // shipment construction separately removes refunded units. Keep package and
+  // product validation against the same complete snapshot as those quotes.
   assertQuoteItemsMatchOrder(
     quoteRequest,
-    toQuoteComparableOrderItems(order.order_items),
+    toQuoteComparableOrderItems(order.order_items, {
+      quantityMode: 'original',
+    }),
     {
       message:
         'The saved international shipping quote no longer matches this order. Please get a new quote before shipping.',

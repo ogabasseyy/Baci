@@ -61,7 +61,7 @@ function makeFromStub(opts?: { vatStatus?: 'registered' | 'not_registered' }) {
   };
 }
 
-function orderPayload() {
+function orderPayload(): Record<string, unknown> {
   return {
     customer_email: 'buyer@example.com',
     customer_name: 'Ada Lovelace',
@@ -381,6 +381,94 @@ describe('agentic checkout order dispatch', () => {
     );
   });
 
+  it.each([
+    'invalid_offer',
+    'insufficient_offer_stock',
+  ])('maps the order RPC %s rejection to a 400', async (code) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code, message: code },
+    });
+
+    const result = await createAgenticCheckoutOrder(orderPayload(), {
+      rpc,
+      from: makeFromStub(),
+    } as unknown as SupabaseClient);
+
+    expect(result).toMatchObject({
+      error: code,
+      ok: false,
+      orderId: undefined,
+      status: 400,
+    });
+  });
+
+  it.each([
+    'invalid_condition_offer',
+    'condition_offer_price_changed',
+    'insufficient_condition_offer_stock',
+  ])('returns a client error for %s', async (code) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: code },
+    });
+
+    const result = await createAgenticCheckoutOrder(orderPayload(), {
+      rpc,
+      from: makeFromStub(),
+    } as unknown as SupabaseClient);
+    expect(result).toMatchObject({ ok: false, status: 400, error: code });
+  });
+
+  it('rejects an inactive selected condition before order creation', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [
+        {
+          product_id: 'product-1',
+          condition: 'used',
+          status: 'inactive',
+          price: null,
+        },
+      ],
+      error: null,
+    }));
+    const products = {
+      select: () => products,
+      eq: () => products,
+      in: () => products,
+      returns: async () => ({
+        data: [
+          {
+            id: 'product-1',
+            price: 100,
+            vat_rate: 7.5,
+            vat_category_code: 'S',
+          },
+        ],
+        error: null,
+      }),
+    };
+    const from = (table: string) =>
+      table === 'products'
+        ? products
+        : makeFromStub({ vatStatus: 'registered' })(table);
+    const payload = orderPayload();
+    const items = payload.items as Record<string, unknown>[];
+    const result = await createAgenticCheckoutOrder(
+      {
+        ...payload,
+        items: items.map((item) => ({ ...item, condition: 'used' })),
+      },
+      { rpc, from } as unknown as SupabaseClient
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'invalid_condition_offer',
+    });
+    expect(rpc.mock.calls).toHaveLength(1);
+  });
+
   it('does not expose unknown order RPC error details to callers', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,
@@ -525,5 +613,543 @@ describe('agentic checkout order dispatch', () => {
         sessionId: 'agentic_session_1',
       })
     );
+  });
+
+  it('forwards a verified offer alias and persists the live condition', async () => {
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const offerId = '33333333-3333-4333-8333-333333333333';
+    const rpc = vi.fn((name: string) => {
+      if (name === 'get_product_offers') {
+        return Promise.resolve({
+          data: [{ offer_id: offerId, price: 400_000, condition: 'open_box' }],
+          error: null,
+        });
+      }
+      if (name === 'create_storefront_order') {
+        return Promise.resolve({
+          data: [{ id: 'order-offer-1', total: 400_000 }],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+    const payload = orderPayload();
+    payload.items = [
+      {
+        condition: 'Open Box',
+        name: 'Phone',
+        offerId,
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(payload, {
+      from: makeFromStub(),
+      rpc,
+    } as unknown as SupabaseClient);
+
+    expect(result).toMatchObject({ ok: true, status: 201 });
+    expect(rpc).toHaveBeenCalledWith(
+      'get_product_offers',
+      expect.objectContaining({ p_product_id: productId })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            condition: 'open_box',
+            offer_id: offerId,
+            product_id: productId,
+          }),
+        ],
+      })
+    );
+  });
+
+  it('rejects an offer alias that is not live for its product', async () => {
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const rpc = vi.fn((name: string) => {
+      if (name === 'get_product_offers') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+    const payload = orderPayload();
+    payload.items = [
+      {
+        name: 'Phone',
+        offer_id: '44444444-4444-4444-8444-444444444444',
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(payload, {
+      from: makeFromStub(),
+      rpc,
+    } as unknown as SupabaseClient);
+
+    expect(result).toMatchObject({
+      error: 'Invalid condition offer for order item',
+      ok: false,
+      status: 400,
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('maps offer lookup failures to a retryable 500', async () => {
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const rpc = vi.fn((name: string) => {
+      if (name === 'get_product_offers') {
+        return Promise.reject(new Error('offers offline'));
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+    const payload = orderPayload();
+    payload.items = [
+      {
+        name: 'Phone',
+        offer_id: '44444444-4444-4444-8444-444444444444',
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(payload, {
+      from: makeFromStub(),
+      rpc,
+    } as unknown as SupabaseClient);
+
+    expect(result).toMatchObject({
+      error: 'Unable to verify order offers',
+      ok: false,
+      status: 500,
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('taxes the verified live offer price for VAT-registered merchants', async () => {
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const offerId = '33333333-3333-4333-8333-333333333333';
+    const from = (table: string) => {
+      if (table === 'merchants') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { vat_registration_status: 'registered' },
+                  error: null,
+                }),
+            }),
+          }),
+        };
+      }
+      if (table === 'products') {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                returns: () =>
+                  Promise.resolve({
+                    data: [
+                      {
+                        id: productId,
+                        price: 500_000,
+                        vat_category_code: 'S',
+                        vat_rate: 7.5,
+                      },
+                    ],
+                    error: null,
+                  }),
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error('unexpected');
+    };
+    const rpc = vi.fn((name: string) => {
+      if (name === 'get_product_offers') {
+        return Promise.resolve({
+          data: [{ offer_id: offerId, price: 400_000, condition: 'used' }],
+          error: null,
+        });
+      }
+      if (name === 'get_order_variant_overrides') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      if (name === 'create_storefront_order') {
+        return Promise.resolve({
+          data: [{ id: 'order-vat-offer-1', total: 430_000 }],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+    const payload = orderPayload();
+    payload.items = [
+      {
+        condition: 'used',
+        name: 'Phone',
+        offer_id: offerId,
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(payload, {
+      from,
+      rpc,
+    } as unknown as SupabaseClient);
+
+    expect(result.ok).toBe(true);
+    // ROUND(ROUND(1 * 400000, 2) * 7.5 / 100, 2) = 30000 on the offer
+    // basis (the 500000 parent price would give 37500).
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({ p_tax_amount: 30_000 })
+    );
+  });
+});
+
+describe('agentic checkout order dispatch — shared cart binding', () => {
+  const SHARED_CART = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  const BOUND_ENVELOPE = {
+    binding: {
+      cartId: SHARED_CART.cart_id,
+      cartVersionReviewed: 3,
+      checkout_generation: 1,
+      merchantId: merchantId,
+      sessionId: SHARED_CART.checkout_session_id,
+      variant: 'base',
+    },
+    code: null,
+    ok: true,
+    order: {
+      customer_email: 'buyer@example.com',
+      customer_id: null,
+      customer_name: 'Ada Lovelace',
+      customer_phone: '+2348012345678',
+      discount_amount: 0,
+      gift_wrapping_fee: 0,
+      id: 'order-1',
+      idempotency_replayed: false,
+      merchant_id: merchantId,
+      order_number: 'ORD-1',
+      payment_method: 'bank_transfer',
+      payment_status: 'pending',
+      shipping_address: null,
+      shipping_fee: 0,
+      shipping_status: 'pending',
+      subtotal: 500_000,
+      tax_amount: 0,
+      tax_basis: 'exclusive',
+      total: 500_000,
+      tracking_token: 'tok-1',
+    },
+    replayed: false,
+  };
+
+  function boundPayload(extra: Record<string, unknown> = {}) {
+    return { ...orderPayload(), shared_cart: SHARED_CART, ...extra };
+  }
+
+  function dispatchClient(rpc: ReturnType<typeof vi.fn>) {
+    return { from: makeFromStub(), rpc } as unknown as SupabaseClient;
+  }
+
+  it('replays a bound order when the condition offer is now inactive', async () => {
+    const rpc = vi.fn(async (name: string) => {
+      if (name === 'get_order_condition_prices') {
+        return {
+          data: [
+            {
+              product_id: 'product-1',
+              condition: 'used',
+              status: 'inactive',
+              price: null,
+            },
+          ],
+          error: null,
+        };
+      }
+      return { data: BOUND_ENVELOPE, error: null };
+    });
+    const products = {
+      select: () => products,
+      eq: () => products,
+      in: () => products,
+      returns: async () => ({
+        data: [
+          {
+            id: 'product-1',
+            price: 100,
+            vat_rate: 7.5,
+            vat_category_code: 'S',
+          },
+        ],
+        error: null,
+      }),
+    };
+    const from = (table: string) =>
+      table === 'products'
+        ? products
+        : makeFromStub({ vatStatus: 'registered' })(table);
+    const payload = boundPayload();
+    const items = (payload as unknown as { items: Record<string, unknown>[] })
+      .items;
+    const result = await createAgenticCheckoutOrder(
+      {
+        ...payload,
+        items: items.map((item) => ({ ...item, condition: 'used' })),
+      },
+      { rpc, from } as unknown as SupabaseClient
+    );
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1' });
+    expect(rpc).toHaveBeenCalledWith(
+      'get_order_condition_prices',
+      expect.anything()
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('replays a bound order when the exact offer was deleted after commit', async () => {
+    // Shared-cart checkout committed but the response was lost; the
+    // merchant then deleted the selected exact offer. The retry's
+    // offer verification fails against the live catalog, but the
+    // binding RPC must still be reached so it can replay the
+    // completed order instead of reporting an invalid offer.
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const deletedOfferId = '33333333-3333-4333-8333-333333333333';
+    const rpc = vi.fn(async (name: string) => {
+      if (name === 'get_product_offers') {
+        return { data: [], error: null };
+      }
+      if (name === 'get_order_condition_prices') {
+        return {
+          data: [
+            {
+              product_id: productId,
+              condition: 'used',
+              status: 'inactive',
+              price: null,
+            },
+          ],
+          error: null,
+        };
+      }
+      return { data: BOUND_ENVELOPE, error: null };
+    });
+    const payload = boundPayload() as unknown as {
+      items: Record<string, unknown>[];
+    } & Record<string, unknown>;
+    payload.items = [
+      {
+        condition: 'used',
+        name: 'Phone',
+        offerId: deletedOfferId,
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(
+      payload as unknown as Record<string, unknown>,
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1' });
+    expect(rpc).toHaveBeenCalledWith(
+      'get_product_offers',
+      expect.objectContaining({ p_product_id: productId })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('submits a bound base order through the binding RPC', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1', status: 201 });
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: expect.objectContaining({
+          p_customer_email: 'buyer@example.com',
+          p_merchant_id: merchantId,
+        }),
+        p_generation: 1,
+        p_session_id: SHARED_CART.checkout_session_id,
+        p_variant: 'base',
+      }
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('forwards cart line ids into the bound items payload', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    await createAgenticCheckoutOrder(
+      boundPayload({
+        items: [
+          {
+            cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+            name: 'Phone',
+            price: 500_000,
+            product_id: 'product-1',
+            quantity: 1,
+          },
+        ],
+      }),
+      dispatchClient(rpc)
+    );
+
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_items: [
+            expect.objectContaining({
+              cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              price: 500_000,
+              product_id: 'product-1',
+            }),
+          ],
+        }),
+      })
+    );
+  });
+
+  it('forwards the resolved session principal into the bound submit', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    await createAgenticCheckoutOrder(boundPayload(), dispatchClient(rpc), {
+      boundPrincipalId: 'guest-principal-9',
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_cart_principal_id: 'guest-principal-9',
+        }),
+      })
+    );
+  });
+
+  it('directs voucher authority failures to website checkout without retrying another order path', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'cart_order_voucher_authority_required',
+      },
+    });
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      status: 409,
+      error: 'Complete voucher checkout on the storefront website.',
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('maps a stale binding to 409 with a refresh error', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_checkout_stale' },
+    });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    expect(result.error).toMatch(/refresh/i);
+  });
+
+  it('maps an expired session to 409 and forbidden bindings to 403', async () => {
+    const expired = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_checkout_expired' },
+    });
+    expect(
+      await createAgenticCheckoutOrder(boundPayload(), dispatchClient(expired))
+    ).toMatchObject({ ok: false, status: 409 });
+
+    const forbidden = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'cart_order_unauthorized' },
+    });
+    expect(
+      await createAgenticCheckoutOrder(
+        boundPayload(),
+        dispatchClient(forbidden)
+      )
+    ).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it('keeps legacy mapping for inner order rejections on the bound path', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: 'order_total_mismatch' },
+    });
+
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({
+      error: 'order_total_mismatch',
+      ok: false,
+      status: 400,
+    });
   });
 });

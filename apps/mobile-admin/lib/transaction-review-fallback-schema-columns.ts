@@ -4,7 +4,12 @@ export type TransactionReviewSchemaColumnAvailability = Readonly<{
   discountAmountUnavailable: boolean;
   discountCodeUnavailable: boolean;
   lineIdUnavailable: boolean;
+  offerIdUnavailable?: boolean;
+  offerIdSnapshotUnavailable?: boolean;
+  offerGradeUnavailable?: boolean;
+  offerConditionNotesUnavailable?: boolean;
   productMatchStatusUnavailable?: boolean;
+  productOfferIdUnavailable?: boolean;
   quizAwardIdUnavailable: boolean;
   quizAwardAmountUnavailable?: boolean;
   transactionDateUnavailable: boolean;
@@ -24,7 +29,12 @@ const schemaColumnAvailabilityKeys: Readonly<
   discount_amount: 'discountAmountUnavailable',
   discount_code_id: 'discountCodeUnavailable',
   line_id: 'lineIdUnavailable',
+  offer_id: 'offerIdUnavailable',
+  offer_id_snapshot: 'offerIdSnapshotUnavailable',
+  offer_grade: 'offerGradeUnavailable',
+  offer_condition_notes: 'offerConditionNotesUnavailable',
   product_match_status: 'productMatchStatusUnavailable',
+  product_offer_id: 'productOfferIdUnavailable',
   quiz_award_amount: 'quizAwardAmountUnavailable',
   quiz_award_id: 'quizAwardIdUnavailable',
   transaction_date: 'transactionDateUnavailable',
@@ -41,7 +51,12 @@ export function createTransactionReviewSchemaColumnState() {
     discountAmountUnavailable: false,
     discountCodeUnavailable: false,
     lineIdUnavailable: false,
+    offerIdUnavailable: false,
+    offerIdSnapshotUnavailable: false,
+    offerGradeUnavailable: false,
+    offerConditionNotesUnavailable: false,
     productMatchStatusUnavailable: false,
+    productOfferIdUnavailable: false,
     quizAwardAmountUnavailable: false,
     quizAwardIdUnavailable: false,
     transactionDateUnavailable: false,
@@ -119,6 +134,23 @@ export function omitUnavailableTransactionReviewSchemaColumns(
   }
   if (isUnavailable('lineIdUnavailable', 'line_id')) {
     result = withoutSchemaColumn(result, 'line_id');
+  }
+  if (isUnavailable('offerIdUnavailable', 'offer_id')) {
+    result = withoutSchemaColumn(result, 'offer_id');
+  }
+  if (isUnavailable('productOfferIdUnavailable', 'product_offer_id')) {
+    result = withoutSchemaColumn(result, 'product_offer_id');
+  }
+  if (isUnavailable('offerIdSnapshotUnavailable', 'offer_id_snapshot')) {
+    result = withoutSchemaColumn(result, 'offer_id_snapshot');
+  }
+  if (isUnavailable('offerGradeUnavailable', 'offer_grade')) {
+    result = withoutSchemaColumn(result, 'offer_grade');
+  }
+  if (
+    isUnavailable('offerConditionNotesUnavailable', 'offer_condition_notes')
+  ) {
+    result = withoutSchemaColumn(result, 'offer_condition_notes');
   }
   if (isUnavailable('adTrackingUnavailable', 'ad_tracking')) {
     result = withoutSchemaColumn(result, 'ad_tracking');

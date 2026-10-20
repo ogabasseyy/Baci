@@ -11,6 +11,8 @@ export interface Product {
   condition?: string;
   stock_level?: string;
   in_stock?: boolean | null;
+  has_variants?: boolean | null;
+  has_condition_offers?: boolean | null;
   brand?: string;
   category?: string;
   url?: string;

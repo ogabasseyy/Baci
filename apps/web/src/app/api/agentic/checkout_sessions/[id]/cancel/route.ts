@@ -84,6 +84,7 @@ export async function POST(
       merchantSlug: merchant.slug,
     });
     const idempotency = await reserveAgenticIdempotencyKey({
+      agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
       body: mutation.rawBody,
       key: mutation.idempotencyKey,
@@ -110,6 +111,7 @@ export async function POST(
     }
     respondWithIdempotency = (response: unknown, status: number) =>
       buildStoredAgenticIdempotencyResponse({
+        agentId: mutation.agentId,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         requestId: mutation.requestId,

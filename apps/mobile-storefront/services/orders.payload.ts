@@ -14,11 +14,13 @@ export function buildOrderPayload({
 }: BuildOrderPayloadInput) {
   return {
     merchant_id: merchantId,
+    ...(request.shared_cart ? { shared_cart: request.shared_cart } : {}),
     customer_email: request.customer_email,
     customer_name: request.customer_name,
     customer_phone: request.customer_phone,
     items: request.items.map((item) => ({
       id: item.id,
+      ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
       condition: item.condition,
       product_id: item.product_id || item.id,
       name: item.name,
@@ -27,6 +29,7 @@ export function buildOrderPayload({
       image_url: item.image_url,
       value: Math.round(item.price * item.quantity),
       variant_id: item.variant_id,
+      offer_id: item.offer_id,
       variant_name: item.variant_name,
       variant_attributes: item.variant_attributes || {},
       has_assurance: item.has_assurance ?? false,

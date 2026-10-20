@@ -17,6 +17,7 @@ describe('REDVAULT request guard', () => {
     { useWallet: true },
     { useSavings: true },
     { hasVoucherItem: true },
+    { hasSharedCart: true },
     { discountCode: 'ANY' },
   ])('rejects unsupported or incomplete requests before side effects', (override) =>
     expect(validateRedvaultRequest({ ...input, ...override })).not.toBeNull());

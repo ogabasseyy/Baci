@@ -66,6 +66,7 @@ jest.mock('react-native-keyboard-controller', () => ({
   KeyboardAwareScrollView: mockKeyboardAwareScrollView,
   KeyboardAvoidingView: mockKeyboardAvoidingView,
   KeyboardProvider: mockKeyboardProvider,
+  KeyboardStickyView: mockKeyboardAvoidingView,
 }));
 
 // Mock AsyncStorage

@@ -4,9 +4,9 @@ import { FlatList, Pressable, Text, View } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
 import { CheckoutIdentityModal } from '@/components/checkout/checkout-identity';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
-import type Colors from '@/constants/Colors';
 import { palette, SPACING } from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
+import type { ThemeColors } from '@/hooks/useTheme';
 import type { CartItem } from '@/stores/cart-store';
 import { useUIStore } from '@/stores/ui-store';
 import CartCheckoutFooter from './CartCheckoutFooter';
@@ -16,7 +16,7 @@ import styles from './styles';
 
 interface CartLoadedViewProps {
   colorScheme: 'light' | 'dark';
-  colors: (typeof Colors)['light'];
+  colors: ThemeColors;
   enableNegotiationModal: boolean;
   formatPrice: (amount: number) => string;
   grandTotal: number;

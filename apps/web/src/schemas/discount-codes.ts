@@ -1,7 +1,23 @@
 import { z } from 'zod';
 
+// RDM- is reserved for loyalty redemptions (issue #3165): checkout
+// resolves merchant codes first, so a merchant RDM-* code would shadow
+// the loyalty redemption even after points+stock. Shared with the
+// dashboard upsert path so the reservation cannot drift.
+export function isReservedDiscountCodePrefix(code: string): boolean {
+  return code.trim().toUpperCase().startsWith('RDM-');
+}
+
 const discountCodeFields = {
-  code: z.string().trim().min(1).max(50).toUpperCase(),
+  code: z
+    .string()
+    .trim()
+    .min(1)
+    .max(50)
+    .toUpperCase()
+    .refine((c) => !isReservedDiscountCodePrefix(c), {
+      message: 'Code prefix RDM- is reserved for loyalty redemptions',
+    }),
   description: z.string().max(500).nullable().optional(),
   discount_type: z.enum(['percentage', 'fixed_amount']),
   discount_value: z.number().positive(),
@@ -31,7 +47,16 @@ const discountCodeBaseFields = z.object({
   category_ids: discountCodeFields.category_ids.default([]),
 });
 
-const discountCodeUpdateFields = z.object(discountCodeFields).partial();
+// Updates resend the unchanged code, so the RDM- refine cannot apply at
+// parse time (it would brick legacy-row edits): the DB trigger rejects
+// actual code changes, and callers re-check the reservation on change.
+const { code: _createCode, ...updateableCodeFields } = discountCodeFields;
+const discountCodeUpdateFields = z
+  .object({
+    ...updateableCodeFields,
+    code: z.string().trim().min(1).max(50).toUpperCase(),
+  })
+  .partial();
 
 type DiscountCodeTargetingInput = {
   applies_to?: 'all' | 'specific_products' | 'specific_categories';

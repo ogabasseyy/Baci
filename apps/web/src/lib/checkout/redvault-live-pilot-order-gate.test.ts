@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type PaymentAvailabilityModule =
+  typeof import('./redvault-payment-availability');
+
 const gateMocks = vi.hoisted(() => ({
   getRedvaultPaymentAvailability: vi.fn(),
   validateRedvaultLivePilotOrder: vi.fn(),
 }));
 
-vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
-  getRedvaultPaymentAvailability: gateMocks.getRedvaultPaymentAvailability,
-}));
+vi.mock(
+  '@/lib/checkout/redvault-payment-availability',
+  async (importOriginal) => ({
+    ...(await importOriginal<PaymentAvailabilityModule>()),
+    getRedvaultPaymentAvailability: gateMocks.getRedvaultPaymentAvailability,
+  })
+);
 vi.mock('@/lib/checkout/redvault-live-pilot', () => ({
   validateRedvaultLivePilotOrder: gateMocks.validateRedvaultLivePilotOrder,
 }));

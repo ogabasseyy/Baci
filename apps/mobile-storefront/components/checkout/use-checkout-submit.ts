@@ -5,6 +5,7 @@ import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpe
 import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
@@ -20,10 +21,10 @@ import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
 import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
+import { completeSubmittedOrder } from './complete-submitted-order';
 import { isBnplPayment } from './is-bnpl-payment';
+import { resolveSharedCartCheckoutBinding } from './resolve-shared-cart-checkout-binding';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
-import { runCheckoutFinalization } from './run-checkout-finalization';
-import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
 import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
@@ -134,18 +135,30 @@ export function useCheckoutSubmit({
       checkoutGenerationSnapshot
     );
     try {
-      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
+      if (
+        !useNativeSharedCartStore.getState().enabled &&
+        (await abortIfCartPricesStale(itemsSnapshot, merchantId))
+      ) {
         return;
       }
-      const snapshot = createCheckoutSnapshot(
+      const resolvedBinding = resolveSharedCartCheckoutBinding({
         itemsSnapshot,
+        setStep,
+      });
+      if (!resolvedBinding) {
+        return;
+      }
+      const sharedCartBinding = resolvedBinding.binding;
+      const boundItemsSnapshot = resolvedBinding.items;
+      const snapshot = createCheckoutSnapshot(
+        boundItemsSnapshot,
         deliveryFee,
         orderTotals?.taxAmount ?? 0
       );
       const { liveSavingsSelection, liveWalletSelection } =
         resolveCheckoutStoreCreditSelections({
           getLiveSavingsSelection,
-          itemsSnapshot,
+          itemsSnapshot: boundItemsSnapshot,
           paymentTab,
           selectedPayment,
           snapshotTotal: snapshot.total,
@@ -170,7 +183,8 @@ export function useCheckoutSubmit({
           deliveryMethod,
           getShippingProvider,
           isOrderInFlight,
-          itemsSnapshot,
+          itemsSnapshot: boundItemsSnapshot,
+          sharedCartBinding,
           liveSavingsSelection,
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
@@ -192,13 +206,14 @@ export function useCheckoutSubmit({
         customerName,
         customerPhone,
         deliveryMethod,
-        itemsSnapshot,
+        itemsSnapshot: boundItemsSnapshot,
         liveSavingsSelection,
         liveWalletSelection,
         paymentMethodForOrder,
         selectedQuote,
         shippingProvider: getShippingProvider(),
         snapshot,
+        sharedCartBinding,
       });
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,
@@ -226,17 +241,22 @@ export function useCheckoutSubmit({
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
       if (
-        await runRedvaultPostOrderBranch({
+        await completeSubmittedOrder({
           accountPassword,
           address,
           checkoutGeneration: submittedGeneration.current(),
+          clearCart,
           completedPaymentMethod,
           customer,
           customerEmail,
           customerName,
           customerPhone,
           isAuthenticated,
-          itemsSnapshot,
+          isMountedRef,
+          isOrderInFlight,
+          // Finalization observes the same reviewed items the order
+          // was created and bound with, not the pre-review cart.
+          itemsSnapshot: boundItemsSnapshot,
           onRedvaultOrder,
           order,
           orderNumber,
@@ -245,38 +265,16 @@ export function useCheckoutSubmit({
           saveDetails,
           selectedPayment,
           selectedSavedAddressId,
+          setIsProcessing,
+          setPendingOrder,
+          setShowCryptoSelection,
           snapshot,
+          user,
+          walletFundedBankTransferOptionEnabled,
         })
       ) {
         return;
       }
-      await runCheckoutFinalization({
-        accountPassword,
-        address,
-        clearCart,
-        completedPaymentMethod,
-        customer,
-        customerEmail,
-        customerName,
-        customerPhone,
-        isAuthenticated,
-        isMountedRef,
-        isOrderInFlight,
-        itemsSnapshot,
-        order,
-        orderNumber,
-        orderResponse,
-        saveAsDefaultAddress,
-        saveDetails,
-        selectedPayment,
-        selectedSavedAddressId,
-        setIsProcessing,
-        setPendingOrder,
-        setShowCryptoSelection,
-        snapshot,
-        user,
-        walletFundedBankTransferOptionEnabled,
-      });
     } catch (error) {
       if (!rollbackCaptureInconclusive) {
         await restoreEmptiedCheckoutCart({

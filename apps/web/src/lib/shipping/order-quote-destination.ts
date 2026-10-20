@@ -34,6 +34,26 @@ type CheckoutQuoteLookupResponse = {
   error?: { message?: string } | null;
 };
 
+type AttestedCoordinates = { latitude?: number; longitude?: number };
+
+function readAttestedCoordinates(
+  receiver: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>['receiver']
+): AttestedCoordinates {
+  const { latitude, longitude } = receiver;
+  if (latitude == null && longitude == null) return {};
+  if (
+    typeof latitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    Math.abs(latitude) > 90 ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(longitude) ||
+    Math.abs(longitude) > 180
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  return { latitude, longitude };
+}
+
 async function lookupCheckoutQuote(
   supabase: SupabaseClient,
   selectedQuoteId: string,
@@ -57,8 +77,9 @@ export async function enrichShippingAddressWithQuoteDestination(
   supabase: SupabaseClient,
   selectedQuoteId: string | null | undefined,
   shippingAddress: OrderShippingAddressForQuote | undefined,
-  context: QuoteCheckoutContext = {}
-): Promise<OrderShippingAddressForQuote | undefined> {
+  context: QuoteCheckoutContext = {},
+  options: { persistAttestedCoordinates?: boolean } = {}
+): Promise<(OrderShippingAddressForQuote & AttestedCoordinates) | undefined> {
   if (!selectedQuoteId) {
     context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
@@ -170,10 +191,12 @@ export async function enrichShippingAddressWithQuoteDestination(
     typeof quoteLatitude === 'number' && typeof quoteLongitude === 'number';
   // A new checkout can adopt the validated, merchant-scoped quote's pin.
   // Existing orders must keep their own destination provenance; matching text
-  // alone does not authorize adding or replacing their coordinates.
+  // alone does not authorize adding or replacing their coordinates. Callers
+  // that never opted into adoption (isNewOrder undefined, no attested
+  // opt-in) simply keep their address unpinned.
   if (
     (orderHasPin && !quoteHasPin) ||
-    (!orderHasPin && quoteHasPin && !context.isNewOrder) ||
+    (!orderHasPin && quoteHasPin && context.isNewOrder === false) ||
     (orderHasPin &&
       quoteHasPin &&
       (Math.abs(orderLatitude - quoteLatitude) > 1e-6 ||
@@ -185,7 +208,16 @@ export async function enrichShippingAddressWithQuoteDestination(
   context.onValidatedQuoteProvider?.(quote.provider);
   return {
     ...shippingAddress,
-    ...(!orderHasPin && quoteHasPin ? quotePin.data : {}),
+    ...(!orderHasPin &&
+    quoteHasPin &&
+    (context.isNewOrder || options.persistAttestedCoordinates)
+      ? quotePin.data
+      : {}),
+    // Only new-order creation opts in. Existing paid orders must use explicit
+    // destination-confirmation recovery, never implicit booking-time repair.
+    ...(options.persistAttestedCoordinates
+      ? readAttestedCoordinates(quoteRequest.receiver)
+      : {}),
     country: quoteRequest.receiver.country ?? shippingAddress.country,
     countryCode:
       quoteRequest.receiver.countryCode ?? shippingAddress.countryCode,

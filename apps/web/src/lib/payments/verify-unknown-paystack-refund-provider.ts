@@ -9,9 +9,9 @@ export interface VerifiedUnknownRefundProvider {
   current: {
     amount: number;
     currency: string;
-    id: number;
+    id: string;
     status: string;
-    transaction: number;
+    transaction: string;
   };
   resolvedPaymentReference: string;
 }
@@ -26,7 +26,7 @@ export interface VerifiedUnknownRefundProvider {
  * Paystack can redeliver.
  */
 export async function verifyUnknownPaystackRefundProvider(
-  refundId: number,
+  refundId: number | string,
   paymentReference?: string
 ): Promise<VerifiedUnknownRefundProvider> {
   const providerRefund = await fetchRefund(
@@ -37,7 +37,13 @@ export async function verifyUnknownPaystackRefundProvider(
     throw new Error('paystack_refund_verification_unavailable');
   }
   const current = providerRefund.data;
-  if (!Number.isSafeInteger(current.transaction) || current.transaction <= 0) {
+  // Decimal text like the refund id: Paystack IDs are unsigned 64-bit,
+  // beyond the safe integer range, so a numeric check would reject
+  // the exact large IDs the fetcher now preserves.
+  if (
+    typeof current.transaction !== 'string' ||
+    !/^[1-9][0-9]*$/.test(current.transaction)
+  ) {
     // Carry the raw payload: the caller files it as invalid evidence
     // before rejecting, so a malformed transaction leaves a durable
     // trace instead of 503ing with nothing recorded.
@@ -47,9 +53,10 @@ export async function verifyUnknownPaystackRefundProvider(
     error.providerRefund = current;
     throw error;
   }
-  // Always resolve the payment from the refund's own numeric transaction
-  // ID: the webhook reference is only a hint and may be stale. A stale
-  // hint is logged but never blocks recovery of the verified refund.
+  // Always resolve the payment from the refund's own decimal-text
+  // transaction ID: the webhook reference is only a hint and may be
+  // stale. A stale hint is logged but never blocks recovery of the
+  // verified refund.
   const fetchedPayment = await fetchPaystackPaymentById(
     current.transaction,
     AbortSignal.timeout(PROVIDER_READ_TIMEOUT_MS)

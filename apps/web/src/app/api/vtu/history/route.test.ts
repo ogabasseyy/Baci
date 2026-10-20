@@ -14,6 +14,15 @@ vi.mock('@/lib/api-auth', () => ({
     mockAuthenticateApiRequest(...args),
 }));
 
+const mockGetCurrentSlugForAlias = vi.fn();
+const mockGetCurrentSlugForAliasStrict = vi.fn();
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: (...args: unknown[]) =>
+    mockGetCurrentSlugForAlias(...args),
+  getCurrentSlugForAliasStrict: (...args: unknown[]) =>
+    mockGetCurrentSlugForAliasStrict(...args),
+}));
+
 const mockAfter = vi.fn();
 vi.mock('next/server', async () => {
   const actual =
@@ -35,8 +44,10 @@ vi.mock('@/lib/vtu-fulfillment', () => ({
 
 let merchantData: { id: string } | null = null;
 let merchantError: unknown = null;
+let merchantDataBySlug: Record<string, { id: string } | null> = {};
 let customerByUserIdData: { id: string; user_id: string | null } | null = null;
 let customerByEmailData: { id: string; user_id: string | null } | null = null;
+let customerLookupError: unknown = null;
 let transactionsData: Record<string, unknown>[] | null = null;
 let transactionsError: unknown = null;
 let paymentRowsData: Record<string, unknown>[] | null = null;
@@ -64,11 +75,11 @@ function createMockSupabase() {
       }),
       maybeSingle: vi.fn().mockImplementation(() => {
         if (filters.has('user_id')) {
-          return { data: customerByUserIdData, error: null };
+          return { data: customerByUserIdData, error: customerLookupError };
         }
 
         if (filters.has('email')) {
-          return { data: customerByEmailData, error: null };
+          return { data: customerByEmailData, error: customerLookupError };
         }
 
         return { data: null, error: null };
@@ -128,9 +139,14 @@ function createMockSupabase() {
       if (table === 'merchants') {
         return {
           select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue({
-                data: merchantData,
+            eq: vi.fn((field: string, value: unknown) => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data:
+                  field === 'slug' &&
+                  typeof value === 'string' &&
+                  value in merchantDataBySlug
+                    ? merchantDataBySlug[value]
+                    : merchantData,
                 error: merchantError,
               }),
             })),
@@ -186,12 +202,19 @@ describe('GET /api/vtu/history', () => {
     mockFulfillPendingVtuTransaction.mockReset();
     merchantData = { id: 'merchant-1' };
     merchantError = null;
+    merchantDataBySlug = {};
+    mockGetCurrentSlugForAlias.mockReset();
+    mockGetCurrentSlugForAlias.mockResolvedValue(null);
+    mockGetCurrentSlugForAliasStrict.mockReset();
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
     customerByUserIdData = { id: 'customer-1', user_id: 'user-1' };
     customerByEmailData = null;
+    customerLookupError = null;
     transactionsData = [
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -226,7 +249,13 @@ describe('GET /api/vtu/history', () => {
     vtuTransactionUpdateSelectPromise = null;
     mockCustomerUpdateEq.mockResolvedValue({ data: null, error: null });
     mockAuthenticateApiRequest.mockResolvedValue({
-      user: { id: 'user-1', email: 'customer@example.com' },
+      // Verified session: the history email fallback requires a
+      // confirmed address (Muse R119), mirroring production logins.
+      user: {
+        id: 'user-1',
+        email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+      },
       error: null,
       supabase: {},
     });
@@ -263,7 +292,12 @@ describe('GET /api/vtu/history', () => {
   it('returns transactions for the resolved customer and applies the type filter', async () => {
     const { GET } = await import('./route');
     customerByUserIdData = null;
-    customerByEmailData = { id: 'customer-1', user_id: null };
+    // Email fallback accepts ONLY a row already linked to this auth
+    // user (user-1). An unlinked or mismatched match previously
+    // disclosed the row's history + voucher PINs to whoever held an
+    // account with that email (tenant isolation); those now fall
+    // through to the empty list (see the two tests below).
+    customerByEmailData = { id: 'customer-1', user_id: 'user-1' };
     mockCustomerUpdateEq.mockImplementation(() => {
       throw new Error('GET /vtu/history must not relink customers');
     });
@@ -292,6 +326,78 @@ describe('GET /api/vtu/history', () => {
     expect(transactionEqCalls).toContainEqual(['type', 'electricity']);
   });
 
+  it('returns no history when the email-matched customer belongs to a different user', async () => {
+    // Tenant isolation: the email claim alone must not disclose
+    // another customer's transactions or voucher PINs.
+    const { GET } = await import('./route');
+    customerByUserIdData = null;
+    customerByEmailData = { id: 'customer-1', user_id: 'user-2' };
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
+  });
+
+  it('returns no history when the email-matched customer is unlinked', async () => {
+    // Same guard for guest (user_id null) rows: accepting them would
+    // disclose a stranger's history to whoever registers the email,
+    // and linking-on-read would let them claim it permanently. GET
+    // stays read-only; checkout links on the next purchase.
+    const { GET } = await import('./route');
+    customerByUserIdData = null;
+    customerByEmailData = { id: 'customer-1', user_id: null };
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
+  });
+
+  it('returns no history for an unverified session even with a linked row (Muse R150 M2)', async () => {
+    // Mirrors checkout's R109 gate: a row linked before R109 stays
+    // unreadable to an unverified session — unspendable must mean
+    // unreadable while the projection carries voucher PINs. The
+    // default byUserId fixture stays linked; the gate refuses before
+    // any customer lookup, so no transaction query runs either.
+    const { GET } = await import('./route');
+    mockAuthenticateApiRequest.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+      },
+      error: null,
+      supabase: {},
+    });
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
+  });
+
+  it('scopes by exact reference when the backfill passes one', async () => {
+    const { GET } = await import('./route');
+
+    const response = await GET(
+      makeRequest(
+        '?merchantSlug=ogabassey&type=electricity&limit=20&reference=VTU-123'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionEqCalls).toContainEqual(['merchant_id', 'merchant-1']);
+    expect(transactionEqCalls).toContainEqual(['customer_id', 'customer-1']);
+    expect(transactionEqCalls).toContainEqual(['request_reference', 'VTU-123']);
+  });
+
   it('logs and falls back when a transaction amount is not finite', async () => {
     const { GET } = await import('./route');
     const consoleErrorSpy = vi
@@ -301,6 +407,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-invalid-amount',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: 'not-a-number',
@@ -344,6 +451,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-invalid-cashback',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -384,6 +492,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -426,13 +535,20 @@ describe('GET /api/vtu/history', () => {
 
     await scheduledBackfillClaim();
 
-    expect(vtuTransactionUpdatePayloads).toEqual([
-      {
-        metadata: expect.objectContaining({
-          voucherPinBackfillScheduledAt: expect.any(String),
-        }),
-      },
-    ]);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the unresolved mock pin leaves
+    // a second payload clearing the schedule with attempt 1.
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillAttempts: 1,
+      }),
+    });
     expect(vtuTransactionUpdateEqCalls).toContainEqual(['id', 'tx-1']);
     const metadataFilter = vtuTransactionUpdateFilters.find(
       ([field, operator]) => field === 'metadata' && operator === 'eq'
@@ -442,17 +558,10 @@ describe('GET /api/vtu/history', () => {
       alpha: 'first',
       zeta: 'last',
     });
-    expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
-
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-    const scheduledBackfill = mockAfter.mock.calls[1]?.[0] as
-      | (() => Promise<void>)
-      | undefined;
-    expect(scheduledBackfill).toBeDefined();
-    if (!scheduledBackfill) {
-      throw new Error('Expected voucher-pin backfill to be scheduled');
-    }
-    await scheduledBackfill();
+    // Single after() layer (Muse R151 M1): draining the route's
+    // callback runs the mark AND the provider poll inline — no
+    // nested after() is registered.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
 
     expect(mockBackfillVtuVoucherPin).toHaveBeenCalledWith({
       billRequestRef: 'VTU-123',
@@ -465,12 +574,86 @@ describe('GET /api/vtu/history', () => {
     });
   });
 
+  it('does not let reference-less rows starve eligible rows of backfill budget', async () => {
+    // Three reference-less processing rows sit ahead of an eligible
+    // row. They would be rejected downstream anyway; if they consumed
+    // the 3-slot MAX_TOKEN_BACKFILL_SCHEDULES budget first, the
+    // eligible row would never be scheduled (Codex R43 rnTRj).
+    const { GET } = await import('./route');
+    const referenceLess = (id: string) => ({
+      amount: '2500',
+      biller_name: 'EKEDC NG',
+      created_at: '2026-04-08T12:00:00.000Z',
+      customer_id: 'customer-1',
+      customer_cashback: '0',
+      error_message: null,
+      id,
+      metadata: {},
+      request_reference: `VTU-${id}`,
+      status: 'processing',
+      transaction_id: null,
+      type: 'electricity',
+    });
+    transactionsData = [
+      referenceLess('tx-ref-1'),
+      referenceLess('tx-ref-2'),
+      referenceLess('tx-ref-3'),
+      {
+        amount: '2500',
+        biller_name: 'EKEDC NG',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        customer_cashback: '0',
+        id: 'tx-eligible',
+        metadata: {},
+        request_reference: 'VTU-eligible',
+        status: 'successful',
+        transaction_id: 'kuda-bill-eligible',
+        type: 'electricity',
+      },
+    ];
+    paymentRowsData = [];
+    mockBackfillVtuVoucherPin.mockResolvedValue('1234-5678');
+
+    const response = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(response.status).toBe(200);
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+
+    const scheduledBackfillClaim = mockAfter.mock.calls[0]?.[0] as
+      | (() => Promise<void>)
+      | undefined;
+    expect(scheduledBackfillClaim).toBeDefined();
+    if (!scheduledBackfillClaim) {
+      throw new Error('Expected voucher-pin backfill claim to be scheduled');
+    }
+    await scheduledBackfillClaim();
+
+    expect(vtuTransactionUpdateEqCalls).toContainEqual(['id', 'tx-eligible']);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the unresolved mock pin leaves
+    // a second payload clearing the schedule with attempt 1.
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillAttempts: 1,
+      }),
+    });
+  });
+
   it('schedules processing bill reconciliation from history polling', async () => {
     const { GET } = await import('./route');
     transactionsData = [
       {
         id: 'tx-processing',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'processing',
         amount: '1000',
@@ -516,32 +699,152 @@ describe('GET /api/vtu/history', () => {
     }
     await scheduledBackfillClaim();
 
-    expect(vtuTransactionUpdatePayloads).toEqual([
-      {
-        metadata: expect.objectContaining({
-          voucherPinBackfillScheduledAt: expect.any(String),
-        }),
-      },
-    ]);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the still-processing mock
+    // leaves a second payload clearing the schedule marker (no
+    // attempt consumed: processing rows never consume).
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1].metadata).not.toHaveProperty(
+      'voucherPinBackfillScheduledAt'
+    );
     expect(vtuTransactionUpdatePayloads[0].metadata).not.toHaveProperty(
       'voucherPinBackfillAttempts'
     );
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-
-    const scheduledReconciliation = mockAfter.mock.calls[1]?.[0] as
-      | (() => Promise<void>)
-      | undefined;
-    expect(scheduledReconciliation).toBeDefined();
-    if (!scheduledReconciliation) {
-      throw new Error('Expected processing reconciliation to be scheduled');
-    }
-    await scheduledReconciliation();
+    // Single after() layer (Muse R151 M1): the fulfill already ran
+    // inline inside the route's callback — no nested registration.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
 
     expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledWith({
       supabase: expect.any(Object),
       transactionId: 'tx-processing',
     });
     expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
+  });
+
+  it('does not amplify provider fulfillment on repeated history polls', async () => {
+    // Muse R138: the first poll schedules the processing row's
+    // fulfill; the second poll sees the schedule marker the first
+    // wrote and schedules nothing — polling/prefetch cannot
+    // amplify provider calls beyond the paced single attempt.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-processing',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-REQ-123',
+        transaction_id: 'kuda-bill-1',
+        customer_cashback: '0',
+      },
+    ];
+    paymentRowsData = [];
+    mockFulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REQ-123',
+      status: 'processing',
+    });
+
+    const first = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(first.status).toBe(200);
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+
+    // Drain the first poll's claim so its schedule marker exists,
+    // then thread it back into the row as the persisted write would.
+    const [claimCallback] = mockAfter.mock.calls;
+    await (claimCallback?.[0] as () => Promise<void>)();
+    const marker = vtuTransactionUpdatePayloads[0]?.metadata as
+      | { voucherPinBackfillScheduledAt?: string }
+      | undefined;
+    expect(marker?.voucherPinBackfillScheduledAt).toEqual(expect.any(String));
+    transactionsData[0] = {
+      ...transactionsData[0],
+      metadata: {
+        voucherPinBackfillScheduledAt: String(
+          marker?.voucherPinBackfillScheduledAt
+        ),
+      },
+    };
+    mockAfter.mockClear();
+    mockFulfillPendingVtuTransaction.mockClear();
+
+    const second = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(second.status).toBe(200);
+    expect(mockAfter).not.toHaveBeenCalled();
+    expect(mockFulfillPendingVtuTransaction).not.toHaveBeenCalled();
+  });
+
+  it('never schedules fulfillment for rows outside the resolved caller', async () => {
+    // Muse R138: fulfillment-level ownership assertion, not just
+    // the query filter — a foreign row reaching the scheduler
+    // (future query refactor) must not be fulfilled.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-owned',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-OWNED',
+        transaction_id: 'kuda-bill-owned',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-foreign',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-2',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-FOREIGN',
+        transaction_id: 'kuda-bill-foreign',
+        customer_cashback: '0',
+      },
+    ];
+    paymentRowsData = [];
+    mockFulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-OWNED',
+      status: 'processing',
+    });
+
+    const response = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(response.status).toBe(200);
+
+    for (const [callback] of mockAfter.mock.calls) {
+      await (callback as () => Promise<void>)();
+    }
+
+    expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledTimes(1);
+    expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledWith({
+      supabase: expect.any(Object),
+      transactionId: 'tx-owned',
+    });
+    expect(vtuTransactionUpdateEqCalls).not.toContainEqual([
+      'id',
+      'tx-foreign',
+    ]);
   });
 
   it('does not wait for voucher-pin backfill scheduling before returning history', async () => {
@@ -556,6 +859,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -567,6 +871,9 @@ describe('GET /api/vtu/history', () => {
       },
     ];
     paymentRowsData = [];
+    // Unresolved pin (mirrors the main backfill test): the inline
+    // poll runs to its clear-timestamp branch without throwing.
+    mockBackfillVtuVoucherPin.mockResolvedValue('1234-5678');
 
     const responsePromise = GET(
       makeRequest('?merchantSlug=ogabassey&type=electricity')
@@ -595,7 +902,9 @@ describe('GET /api/vtu/history', () => {
     const scheduledBackfillClaimPromise = scheduledBackfillClaim();
     // The scheduled callback reaches the mocked update builder before its
     // first awaited branch, so one microtask tick is enough to observe the
-    // claim payload while scheduledBackfillClaimPromise is still pending.
+    // claim payload while scheduledBackfillClaimPromise is still pending
+    // (the mark UPDATE is issued but unresolved — the inline poll has
+    // not run yet, so only the mark payload exists).
     await Promise.resolve();
 
     expect(vtuTransactionUpdatePayloads).toEqual([
@@ -610,8 +919,11 @@ describe('GET /api/vtu/history', () => {
 
     resolveBackfillClaim?.({ data: [{ id: 'tx-1' }], error: null });
     await scheduledBackfillClaimPromise;
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-    expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark and the provider poll inline — no nested after() is
+    // registered, and the poll already executed.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+    expect(mockBackfillVtuVoucherPin).toHaveBeenCalledTimes(1);
 
     const response = await responsePromise;
     const data = await response.json();
@@ -634,6 +946,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -675,6 +988,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -712,6 +1026,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-paystack',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -727,6 +1042,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-korapay',
         created_at: '2026-04-08T12:01:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -783,5 +1099,292 @@ describe('GET /api/vtu/history', () => {
 
     expect(response.status).toBe(200);
     expect(data.transactions).toEqual([]);
+  });
+
+  it('flags a failed debited row with no issued refund as refund-pending', async () => {
+    // Failed persists before the refund RPC runs: clients must keep
+    // polling (and never claim the refund) until this clears.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-failed',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: { walletDebited: true },
+        request_reference: 'VTU-FAIL',
+        customer_cashback: '0',
+        source: 'checkout',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-failed',
+        refund_pending: true,
+        refunded_to_wallet: null,
+      }),
+    ]);
+  });
+
+  it('exposes the confirmed refund amount once issued', async () => {
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-refunded',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 1000,
+        },
+        request_reference: 'VTU-REFUNDED',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-refunded',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+    ]);
+  });
+
+  it('totals the reversed wallet leg for wallet-only failures', async () => {
+    // The persisted refundAmount is the card leg (0 here); the wallet
+    // leg carries the restoration — the view must show ₦1,000, not ₦0.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-wallet-only',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 0,
+          paymentSplit: { wallet: 1000, card: 0 },
+        },
+        request_reference: 'VTU-WO',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-hybrid',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {
+          walletDebited: true,
+          refundIssued: true,
+          refundAmount: 700,
+          paymentSplit: { wallet: 300, card: 700 },
+        },
+        request_reference: 'VTU-HY',
+        customer_cashback: '0',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-wallet-only',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+      expect.objectContaining({
+        id: 'tx-hybrid',
+        refund_pending: false,
+        refunded_to_wallet: 1000,
+      }),
+    ]);
+  });
+
+  it('flags a failed card-only checkout with no markers as refund-pending', async () => {
+    // Legacy card-only rows carry no split and no walletDebited marker,
+    // but refundCardOnly still owes the full amount — pending until
+    // refundIssued lands, never an explicit false.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-card-only',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {},
+        request_reference: 'VTU-CARD-ONLY',
+        customer_cashback: '0',
+        source: 'checkout',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({
+        id: 'tx-card-only',
+        refund_pending: true,
+        refunded_to_wallet: null,
+      }),
+    ]);
+    // The refund inputs that decided pending stay out of the response.
+    expect(data.transactions[0]).not.toHaveProperty('source');
+    expect(data.transactions[0]).not.toHaveProperty('customer_id');
+  });
+
+  it('never flags successful or non-checkout rows as refund-pending', async () => {
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-ok',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'successful',
+        amount: '1000',
+        metadata: { walletDebited: true },
+        request_reference: 'VTU-OK',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-failed-noncheckout',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'failed',
+        amount: '1000',
+        metadata: {},
+        request_reference: 'VTU-NONCHECKOUT',
+        customer_cashback: '0',
+        source: 'admin',
+      },
+    ];
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([
+      expect.objectContaining({ id: 'tx-ok', refund_pending: false }),
+      expect.objectContaining({
+        id: 'tx-failed-noncheckout',
+        refund_pending: false,
+        refunded_to_wallet: null,
+      }),
+    ]);
+  });
+
+  it('resolves a stale slug via the alias fallback instead of 404', async () => {
+    // Store renamed while a processing tab stayed open: the tab polls
+    // with the retired slug, which must resolve, not strand the
+    // backfill on a permanent 404.
+    merchantData = null;
+    merchantDataBySlug = {
+      'old-slug': null,
+      'new-slug': { id: 'merchant-1' },
+    };
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue('new-slug');
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=old-slug'));
+    const data = await response.json();
+
+    expect(mockGetCurrentSlugForAliasStrict).toHaveBeenCalledWith('old-slug');
+    expect(mockGetCurrentSlugForAlias).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(data.transactions).toHaveLength(1);
+  });
+
+  it('returns 404 for an unknown slug with no alias', async () => {
+    merchantData = null;
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=nope'));
+    const data = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(data.error).toBe('Merchant not found');
+  });
+
+  it('returns 500 (retryable) when the alias lookup fails', async () => {
+    merchantData = null;
+    mockGetCurrentSlugForAliasStrict.mockRejectedValue(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: old-slug')
+    );
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=old-slug'));
+    const data = await response.json();
+
+    // 404 would strand the backfill (it treats 4xx as terminal);
+    // 5xx keeps it retrying through the transient blip.
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the merchant lookup errors', async () => {
+    merchantData = null;
+    merchantError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the customer lookup errors', async () => {
+    // A transient DB blip must not present as empty history:
+    // pollers treat 2xx-empty as terminal (burning their finite
+    // budget) but retry 5xx (Codex R55 6rrMIW).
+    customerLookupError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
+  });
+
+  it('returns 500 (retryable) when the email-fallback lookup errors', async () => {
+    customerByUserIdData = null;
+    customerLookupError = { message: 'connection reset' };
+    const { GET } = await import('./route');
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to fetch history');
   });
 });

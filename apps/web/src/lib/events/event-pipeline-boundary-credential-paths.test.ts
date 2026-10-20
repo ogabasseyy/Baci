@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
@@ -13,6 +14,7 @@ import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyves
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
+import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),
@@ -29,6 +31,7 @@ describe('event pipeline credential-path authority', () => {
     );
 
     expect(manifest.authority.credentialPaths).toEqual([
+      ...eventPipelineCartCredentialPaths,
       [
         'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
         'apps/web/src/lib/agentic/mutation-request.ts',
@@ -230,6 +233,7 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/supabase/admin.ts',
         'apps/web/src/env.ts',
       ],
+      ...eventPipelineVtuReplayCredentialPaths,
       ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelinePiggyvestCredentialPaths,

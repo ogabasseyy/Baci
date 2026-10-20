@@ -1,9 +1,30 @@
 import { after } from 'next/server';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import {
+  clearVoucherPinBackfillTimestamp,
+  hasRecentBackfillSchedule,
+  markVoucherPinBackfillScheduled,
+  stableJsonStringify,
+} from '@/lib/vtu-backfill-pacing';
+import {
   backfillVtuVoucherPin,
   fulfillPendingVtuTransaction,
 } from '@/lib/vtu-fulfillment';
+import {
+  extractMetadataField,
+  isMetadataRecord,
+  isString,
+  type MetadataRecord,
+  normalizeMetadata,
+} from '@/lib/vtu-metadata-fields';
+
+export {
+  extractMetadataField,
+  isMetadataRecord,
+  isString,
+  type MetadataRecord,
+  normalizeMetadata,
+};
 
 export const TOKEN_BACKFILL_TYPES = new Set([
   'electricity',
@@ -11,89 +32,13 @@ export const TOKEN_BACKFILL_TYPES = new Set([
   'betting',
 ]);
 export const MAX_TOKEN_BACKFILL_SCHEDULES = 3;
-export const VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY =
-  'voucherPinBackfillScheduledAt';
-export const VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY = 'voucherPinBackfillAttempts';
-// After a no-pin result, clear the timestamp so the next mobile poll can
-// retry immediately. Stop retrying successful no-pin rows after this many
-// Kuda BILL_TSQ calls.
-export const MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS = 10;
-// Short dedupe window: only block a second concurrent attempt within the same
-// request burst. Once the after() callback clears the timestamp, the next poll
-// can schedule a fresh attempt.
-export const TOKEN_BACKFILL_DEDUPE_WINDOW_MS = 5_000;
-
-export type MetadataRecord = Record<string, unknown>;
-
 interface VoucherPinBackfillTransaction {
+  error_message?: unknown;
   id: unknown;
   request_reference: unknown;
   status: unknown;
   transaction_id: unknown;
   type: unknown;
-}
-
-export function isMetadataRecord(
-  metadata: unknown
-): metadata is MetadataRecord {
-  return (
-    typeof metadata === 'object' &&
-    metadata !== null &&
-    !Array.isArray(metadata)
-  );
-}
-
-export function normalizeMetadata(metadata: unknown): MetadataRecord {
-  return isMetadataRecord(metadata) ? metadata : {};
-}
-
-function toStableJsonValue(value: unknown): unknown {
-  if (typeof value === 'undefined') {
-    throw new TypeError(
-      'Cannot stable JSON stringify metadata containing undefined'
-    );
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => toStableJsonValue(item));
-  }
-
-  if (isMetadataRecord(value)) {
-    return Object.keys(value)
-      .sort()
-      .reduce<Record<string, unknown>>((accumulator, key) => {
-        accumulator[key] = toStableJsonValue(value[key]);
-        return accumulator;
-      }, {});
-  }
-
-  return value;
-}
-
-/**
- * Serializes metadata for PostgREST JSON equality filters with deterministic
- * object key order. Undefined is rejected because JSON.stringify would either
- * omit it or convert it to null, which can corrupt compare-and-set semantics.
- */
-function stableJsonStringify(value: unknown): string {
-  return JSON.stringify(toStableJsonValue(value)) ?? 'null';
-}
-
-export function isString(value: unknown): value is string {
-  return typeof value === 'string';
-}
-
-export function extractMetadataField<T>(
-  metadata: unknown,
-  key: string,
-  validator: (value: unknown) => value is T
-): T | null {
-  if (!isMetadataRecord(metadata)) {
-    return null;
-  }
-
-  const value = metadata[key];
-  return validator(value) ? value : null;
 }
 
 export function shouldBackfillForType(type: unknown): boolean {
@@ -104,119 +49,48 @@ export function shouldBackfillForStatus(status: unknown): boolean {
   return status === 'successful' || status === 'processing';
 }
 
-function getBackfillAttempts(metadata: MetadataRecord): number {
-  const raw = metadata[VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY];
-  return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
-}
-
-export function hasRecentBackfillSchedule(metadata: MetadataRecord): boolean {
-  // Hard stop: exhausted all retry attempts.
-  if (getBackfillAttempts(metadata) >= MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS) {
-    return true;
-  }
-
-  const scheduledAt = extractMetadataField(
-    metadata,
-    VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY,
-    isString
-  );
-  const scheduledAtMs = scheduledAt ? Date.parse(scheduledAt) : Number.NaN;
-  return (
-    Number.isFinite(scheduledAtMs) &&
-    Date.now() - scheduledAtMs < TOKEN_BACKFILL_DEDUPE_WINDOW_MS
-  );
-}
-
-async function markVoucherPinBackfillScheduled({
-  consumeAttempt,
-  metadata,
-  originalMetadata,
-  supabase,
-  transactionId,
-}: {
-  consumeAttempt: boolean;
-  metadata: MetadataRecord;
-  originalMetadata: unknown;
-  supabase: ReturnType<typeof createAdminClient>;
-  transactionId: string;
-}): Promise<MetadataRecord | null> {
-  const nextMetadata: MetadataRecord = {
-    ...metadata,
-    [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date().toISOString(),
-  };
-  if (consumeAttempt) {
-    nextMetadata[VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY] =
-      getBackfillAttempts(metadata) + 1;
-  }
-  let updateQuery = supabase
-    .from('vtu_transactions')
-    .update({ metadata: nextMetadata })
-    .eq('id', transactionId);
-
-  updateQuery =
-    originalMetadata === null
-      ? updateQuery.is('metadata', null)
-      : updateQuery.filter(
-          'metadata',
-          'eq',
-          // Supabase filter() expects raw PostgREST syntax, so pass stable JSON
-          // text instead of an object, which would become "[object Object]".
-          stableJsonStringify(originalMetadata)
-        );
-
-  const { data, error } = await updateQuery.select('id');
-  if (error) {
-    console.error('Failed to mark VTU voucher-pin backfill as scheduled:', {
-      error,
-      transactionId,
-    });
-    return null;
-  }
-
-  return Array.isArray(data) && data.length > 0 ? nextMetadata : null;
-}
-
 /**
- * After a no-pin result from Kuda, clear voucherPinBackfillScheduledAt so the
- * next mobile history poll can immediately schedule a fresh attempt (up to the
- * attempt cap).
+ * True for processing rows with neither provider reference nor
+ * response (mirrors the reconciliation-claim precondition). Such
+ * rows can never resolve a pin through fulfill, and scheduling
+ * them would bump updated_at (postponing pre-vend recovery) while
+ * consuming backfill budget ahead of eligible rows — so candidate
+ * builders must filter them BEFORE the budget, and the scheduler
+ * re-checks defensively (Codex R42 rm5ao, R43 rnTRj).
  */
-/**
- * Clears voucherPinBackfillScheduledAt using compare-and-set so concurrent
- * metadata writes (e.g. webhooks) are not clobbered.
- */
-async function clearVoucherPinBackfillTimestamp({
-  currentMetadata,
-  supabase,
-  transactionId,
-}: {
-  currentMetadata: MetadataRecord;
-  supabase: ReturnType<typeof createAdminClient>;
-  transactionId: string;
-}): Promise<void> {
-  const { [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: _dropped, ...rest } =
-    currentMetadata;
-  const { error } = await supabase
-    .from('vtu_transactions')
-    .update({ metadata: rest })
-    .eq('id', transactionId)
-    .filter('metadata', 'eq', stableJsonStringify(currentMetadata));
-
-  if (error) {
-    console.error(
-      'Failed to clear VTU voucher-pin backfill timestamp after no-pin result:',
-      { error, transactionId }
-    );
+export function isReferenceLessProcessingTransaction(
+  transaction: Pick<
+    VoucherPinBackfillTransaction,
+    'error_message' | 'status' | 'transaction_id'
+  >
+): boolean {
+  if (transaction.status !== 'processing') {
+    return false;
   }
+  const providerReference = isString(transaction.transaction_id)
+    ? transaction.transaction_id.trim()
+    : '';
+  const providerResponse = isString(transaction.error_message)
+    ? transaction.error_message.trim()
+    : '';
+  return providerReference === '' && providerResponse === '';
 }
 
 export async function scheduleVoucherPinBackfill({
+  deferPoll = true,
   metadata,
   originalMetadata,
   supabase,
   transaction,
   voucherPin,
 }: {
+  /**
+   * False = run the provider poll inline instead of registering a
+   * second after(). For callers that already run inside their own
+   * after() (history GET), so the schedule stays a single layer
+   * (Muse R151 M1). Webhook/confirm keep the default.
+   */
+  deferPoll?: boolean;
   metadata: MetadataRecord;
   originalMetadata: unknown;
   supabase: ReturnType<typeof createAdminClient>;
@@ -227,7 +101,15 @@ export async function scheduleVoucherPinBackfill({
     voucherPin !== null ||
     !shouldBackfillForStatus(transaction.status) ||
     !shouldBackfillForType(transaction.type) ||
-    hasRecentBackfillSchedule(metadata)
+    hasRecentBackfillSchedule(metadata) ||
+    // Reference-less processing rows can never resolve a pin — and
+    // every schedule/clear cycle bumps updated_at, postponing the
+    // 5-minute pre-vend staleness gate indefinitely while history
+    // polling continues (Codex R42 rm5ao). Successful rows still
+    // backfill (their Kuda lookup keys on the request reference).
+    // Candidate builders pre-filter this before any budget (R43
+    // rnTRj); this re-check defends direct callers.
+    isReferenceLessProcessingTransaction(transaction)
   ) {
     return false;
   }
@@ -252,7 +134,9 @@ export async function scheduleVoucherPinBackfill({
     return false;
   }
 
-  after(async () => {
+  // Named poll step (Muse R151 M1): identical body whether it runs
+  // inline (caller-owned after) or deferred (own after below).
+  const pollVoucherPinBackfill = async (): Promise<void> => {
     const currentMetadata = scheduledMetadata;
     let pinResolved = false;
 
@@ -360,6 +244,15 @@ export async function scheduleVoucherPinBackfill({
         );
       }
     }
+  };
+
+  if (!deferPoll) {
+    await pollVoucherPinBackfill();
+    return true;
+  }
+
+  after(async () => {
+    await pollVoucherPinBackfill();
   });
 
   return true;

@@ -4,6 +4,8 @@ type IdempotencyItem = {
   assurance_fee?: number;
   condition?: string;
   has_assurance?: boolean;
+  offer_id?: string;
+  offerId?: string;
   price: number;
   product_id?: string;
   productId?: string;
@@ -37,6 +39,12 @@ export type OrderIdempotencyPayloadInput = {
     latitude?: number;
     longitude?: number;
     state?: string | null;
+  } | null;
+  shared_cart?: {
+    cart_id?: string | null;
+    cart_version?: number | null;
+    checkout_generation?: number | null;
+    checkout_session_id?: string | null;
   } | null;
   shipping_fee?: number;
   shipping_provider?: string | null;
@@ -112,6 +120,11 @@ function normalizeItems(
       assurance_fee: normalizeNumber(item.assurance_fee),
       condition: normalizeText(item.condition),
       has_assurance: Boolean(item.has_assurance),
+      // Two offers can share one condition, so the offer id must join the
+      // hash or an Idempotency-Key reuse across offers replays the original
+      // order. Omit when empty (undefined, so JSON.stringify drops the key)
+      // to keep the hash byte-identical for pre-offer orders.
+      offer_id: normalizeText(item.offer_id ?? item.offerId) || undefined,
       price: normalizeNumber(item.price),
       product_id: normalizeText(item.product_id ?? item.productId),
       quantity: normalizeNumber(item.quantity),
@@ -131,6 +144,14 @@ function normalizeItems(
       const variantComparison = compareText(left.variant_id, right.variant_id);
       if (variantComparison !== 0) {
         return variantComparison;
+      }
+
+      const offerComparison = compareText(
+        left.offer_id ?? '',
+        right.offer_id ?? ''
+      );
+      if (offerComparison !== 0) {
+        return offerComparison;
       }
 
       const variantNameComparison = compareText(
@@ -201,6 +222,22 @@ export function buildOrderIdempotencyPayload(
     savings_amount: normalizeNumber(input.savings_amount),
     savings_goal_id: normalizeText(input.savings_goal_id) || null,
     selected_quote_id: normalizeText(input.selected_quote_id) || null,
+    // Bound shared-cart checkouts hash their reviewed cart identity:
+    // without it, a second cart reusing the key with identical order
+    // fields would replay the first cart's order. Omitted entirely
+    // for unbound checkouts so their hashes stay byte-identical.
+    shared_cart: input.shared_cart
+      ? {
+          cart_id: normalizeText(input.shared_cart.cart_id),
+          cart_version: normalizeNumber(input.shared_cart.cart_version),
+          checkout_generation: normalizeNumber(
+            input.shared_cart.checkout_generation
+          ),
+          checkout_session_id: normalizeText(
+            input.shared_cart.checkout_session_id
+          ),
+        }
+      : undefined,
     shipping_address: {
       address: normalizeText(input.shipping_address?.address),
       city: normalizeText(input.shipping_address?.city),

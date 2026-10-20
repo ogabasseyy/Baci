@@ -1,7 +1,13 @@
+import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
+  GuestCartPersistedError,
+} from './guest-cart-errors';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 import {
@@ -12,6 +18,37 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+it('types a migrated cart with its canonical successor', () => {
+  expect(
+    mapGuestCartToolError(new GuestCartMigratedError('cart-canonical-1'))
+  ).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'This guest cart moved to the shared cart (cart-canonical-1). Refresh the cart to continue with the shared cart.',
+      },
+    ],
+    structuredContent: {
+      success: false,
+      cart_migrated: true,
+      migrated_cart_id: 'cart-canonical-1',
+    },
+  });
+  expect(mapGuestCartToolError(new GuestCartMigratedError())).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'This guest cart moved to the shared cart. Refresh the cart to continue with the shared cart.',
+      },
+    ],
+    structuredContent: {
+      success: false,
+      cart_migrated: true,
+      migrated_cart_id: null,
+    },
+  });
 });
 
 it('types an expired token as recoverable without a tool error', () => {
@@ -117,4 +154,50 @@ it('falls back to a generic tool error for unknown failures', () => {
     ],
     structuredContent: { success: false },
   });
+});
+
+it('returns a retained capability when broker delivery follows committed legacy creation', () => {
+  const token = 'a'.repeat(64);
+  expect(
+    mapGuestCartToolError(new GuestCartBridgePendingError(token))
+      .structuredContent
+  ).toEqual({
+    success: false,
+    cart_token: token,
+    retryable: true,
+    code: 'refresh_required',
+  });
+});
+it('surfaces the definitive failure wrapped by a persisted creation', () => {
+  const token = 'a'.repeat(64);
+  const response = mapGuestCartToolError(
+    new GuestCartPersistedError(
+      token,
+      new GuestCartCanonicalError('invalid_item', token)
+    )
+  );
+  expect(response.structuredContent).toEqual({
+    success: false,
+    code: 'invalid_item',
+    retryable: false,
+  });
+});
+it('returns a canonical version refresh with the same token without claiming migration', () => {
+  const response = mapGuestCartToolError(
+    new GuestCartCanonicalError(
+      'version_conflict',
+      'a'.repeat(64),
+      '11111111-1111-4111-8111-111111111111',
+      7
+    )
+  );
+  expect(response.structuredContent).toMatchObject({
+    success: false,
+    code: 'version_conflict',
+    retryable: true,
+    cart_token: 'a'.repeat(64),
+    canonical_cart_id: '11111111-1111-4111-8111-111111111111',
+    version: 7,
+  });
+  expect(response.structuredContent).not.toHaveProperty('cart_migrated');
 });

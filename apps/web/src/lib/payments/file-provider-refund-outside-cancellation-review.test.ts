@@ -14,7 +14,7 @@ function review(overrides = {}) {
     orderNumber: 'ORD-1',
     paymentId: 'pay-1',
     paymentReference: 'PSK-1',
-    providerPaymentTransactionId: 555,
+    providerPaymentTransactionId: '555',
     providerRefundId: 202,
     providerRefundStatus: 'processed',
     ...overrides,
@@ -131,7 +131,7 @@ describe('fileActiveOrderPaystackRefundCandidateReviews', () => {
   });
 
   const evidence = {
-    providerPaymentTransactionId: 555,
+    providerPaymentTransactionId: '555',
     providerRefundId: 202,
     reference: 'PSK-1',
   };

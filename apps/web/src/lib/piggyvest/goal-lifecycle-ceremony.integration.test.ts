@@ -9,6 +9,7 @@ import { createPiggyvestCustomerPolicyHandler } from './customer-policy-handler'
 import { activatePiggyvestGoalLifecycle } from './goal-lifecycle';
 import { recordPiggyvestGoalLifecycleTerms } from './goal-lifecycle-terms';
 import { createGoalPolicyStore } from './goal-policy-store';
+import { rejectLocalPostgresPassword } from './local-postgres-password';
 import { createPiggyvestPostgresExecutor } from './postgres-executor';
 
 const integrationTest = it.skipIf(
@@ -39,7 +40,6 @@ async function fixture(sequence: number, prepared = true) {
     transport: 'local_test',
     socketDirectory: process.env.PIGGYVEST_LOCAL_TEST_SOCKET,
     database: 'piggyvest_local',
-    password: 'synthetic-local-only',
     role: 'piggyvest_staging_policy_writer',
     port: 55443,
   });
@@ -140,10 +140,18 @@ async function fixture(sequence: number, prepared = true) {
     );
   async function credit() {
     if (database.transport !== 'local_test') throw new Error('Local only');
+    // SAFE (SAST-reviewed): local-test transport only (guarded above); the
+    // socket directory comes from env and this role exists solely in the
+    // local harness — never a real credential. Precedent: pg suppressions in
+    // customer-draft-closure-local.test-fixture.ts and postgres-executor tests.
+    // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
     const client = new Client({
+      password: rejectLocalPostgresPassword,
       host: database.socketDirectory,
       port: database.port,
       database: database.database,
+      // Suppression mirrored here in case the rule reports this line.
+      // nosemgrep: javascript.pg.node-pg-hardcoded-secret.node-pg-hardcoded-secret
       user: 'goal_policy_other',
       connectionTimeoutMillis: 2000,
       statement_timeout: 2000,

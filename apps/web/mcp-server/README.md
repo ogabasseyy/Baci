@@ -159,6 +159,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
 | `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
 | `add_to_cart` | Deprecated alias of `prepare_storefront_cart_link` for cached tool lists |
+| `render_ogabassey_catalog` | Display selected products after a search or product lookup |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
@@ -329,6 +330,35 @@ the version-gated `get/upsert/delete_mcp_guest_cart` RPCs; concurrent writers
 server needs no local volume and no replica pin. Expired rows are reclaimed by
 the hourly `mcp-guest-cart-cleanup` pg_cron sweep.
 
+### Canonical shared-cart bridge (release gate)
+
+The optional `MCP_CANONICAL_CART_BRIDGE_URL` delegates token-bound cart reads and
+writes to the verified-owner web broker. Its default accepted value is
+`https://ogabassey.com/api/storefront/cart/legacy`; staging or additional
+deployments allowlist their exact origin with
+`MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS` (comma-separated exact origins).
+Redirects and non-allowlisted origins are rejected before an opaque guest
+capability is sent. The MCP worker receives
+no cart signing key or service-role credential. The broker verifies the persisted
+merchant and legacy owner, migrates the exact stored source once, and returns
+scoped canonical state plus a web handoff. Keep the returned guest token for
+recovery after an uncertain response. Migrated carts never fall back to legacy
+writes when the broker is unavailable.
+
+This code does not provision the URL, apply migrations, activate merchant flags,
+or deploy either service. A separately approved coordinated release must verify
+the pending shared-cart migrations, compatible web and MCP revisions, scoped
+broker signing configuration, and merchant enrollment before cutting over MCP
+traffic. Leave the URL unset until that release is ready; the default remains the
+legacy RPC path. Checkout continues on the handoff website and does not create an
+order through this bridge.
+
+Separate condition offers use their persisted offer price and stock pool. A
+condition offer under serialized tracking remains unavailable until its offer to
+unit mapping is verified; it must never bypass unit allocation. Existing base
+product and selected-variant serialized checkout keeps its original inventory
+contract. Include this limitation in merchant qualification before activation.
+
 ### Worker token rotation
 
 The server authenticates to PostgREST with `MCP_GUEST_CART_WORKER_TOKEN`, a
@@ -375,3 +405,79 @@ decreases do not propagate to an already-transferred website cart.
 Products with variants or condition offers continue through explicit website option
 selection. Checkout remains on Ogabassey; its existing save-information checkbox
 is optional and defaults to off. This feature does not place orders or charge buyers.
+
+### MCP Apps catalog rendering
+
+`search_products` and `get_product` return data without launching UI. After
+choosing products, call `render_ogabassey_catalog` with 1–20 product selections
+in display order: `{ products: [{ product_id, matched_option? }] }`. When a
+search result includes `matched_option`, pass its `kind`, `option_id`,
+`variantId`, and `condition` so the renderer can revalidate and preserve the
+selected variant or condition offer. It re-fetches public merchant-scoped
+product and option details; callers cannot provide prices or arbitrary product
+cards. Lookups are bounded and any stale or unavailable selection fails closed.
+If any product cannot be loaded, it returns an error instead of a partial
+comparison. Option selection stays on the storefront.
+
+The browser bridge imports the SDK’s `app-with-deps` entry so the generated
+widget does not depend on workspace peer hoisting. A build regression test
+rejects external SDK peer resolution; regenerate the committed asset after
+widget changes.
+
+The v5 catalog resource uses `text/html;profile=mcp-app` and standard
+`ui.resourceUri`/`ui.visibility` metadata. Every host first connects through
+MCP Apps for results, deferred arguments, theme, sizing, links, messages and
+cart tool calls. The adapter stays separate from host-owned `window.openai`.
+ChatGPT's optional widget-state persistence and open-in-app extension remain
+available. If standard initialization fails, an existing legacy bridge is
+retained; hosts without either bridge show a safe error. Standard-only hosts
+maintain cart UI state while mounted; cross-remount persistence remains
+host-dependent and needs host QA. The submitted review's v4 URI remains
+registered with its legacy MIME type.
+
+### SDK and architecture research (2026-10-15)
+
+Verified against public npm dist-tags and the official upstream sources:
+
+| Layer | Selected version | Decision |
+| --- | --- | --- |
+| MCP Apps UI SDK | `@modelcontextprotocol/ext-apps` 2.0.3 | Current stable release; retain it. |
+| MCP server | `@modelcontextprotocol/server` 2.3.1 | Migrate from the maintained v1 line to the current stable v2 line. |
+| Node HTTP transport | `@modelcontextprotocol/node` 2.1.1 | Runtime-specific adapter for the existing Node request/response server. |
+| MCP test client | `@modelcontextprotocol/client` 2.3.1 | Development dependency; exercise the server through the wire protocol. |
+
+The v2 migration preserves tool names, published schemas, stateless Streamable
+HTTP, existing access controls, and cart behavior. Tool registrations now pass
+complete Zod objects instead of deprecated raw shapes. The existing protocol
+negotiation defaults are retained; adopting a new protocol revision is a
+separate compatibility decision, not a requirement to use v2.
+
+Additional compatibility regressions covered in this PR:
+- Display all accepted selections (up to twenty), without silently truncating at six.
+- Reject failed variant/offer lookups and show actionable catalog errors.
+- Honor the host's server-tools and fullscreen capabilities.
+- Map initial and updated safe-area insets, follow-up messages, and result metadata.
+- Surface denied/failed external links as widget alerts.
+- Keep the server-card inventory aligned with the renderer.
+
+Research sources:
+- [OpenAI UI architecture](https://developers.openai.com/plugins/build/chatgpt-ui):
+  standard bridge first, extensions only for additional capabilities, data/render
+  separation, versioned resource URIs, and external checkout by default.
+- [OpenAI UI reference](https://developers.openai.com/plugins/reference):
+  deferred tool inputs, shared metadata, and optional ChatGPT persistence.
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk):
+  v2 is the stable line; v1 receives maintenance through at least January 2027.
+- [Official v2 migration](https://ts.sdk.modelcontextprotocol.io/v2/migration/upgrade-to-v2):
+  split packages, Node adapter, complete schema objects, and wire-level boundaries.
+- [MCP Apps releases](https://github.com/modelcontextprotocol/ext-apps/releases):
+  2.0.3 is the current stable UI SDK.
+
+The optional OpenAI UI component library is not a transport requirement. Keep
+our existing branded components; validate accessibility and responsive behavior
+through host QA. Embedded payment-sheet checkout requires separate eligibility;
+this PR keeps the supported merchant-hosted checkout flow.
+
+These source changes do not cancel, resubmit, or alter Platform review state.
+A release still requires normal review, merge and authorized deployment,
+followed by actual ChatGPT host verification.

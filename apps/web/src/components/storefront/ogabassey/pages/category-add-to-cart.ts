@@ -1,3 +1,4 @@
+import type { AddToCartOutcome } from '@/hooks/cart/cart-types';
 import type { Product as CartProduct } from '@/lib/products';
 import type { Dispatch, MouseEvent, SetStateAction } from 'react';
 import type { Product } from '../types';
@@ -8,11 +9,18 @@ import { toRelatedProductsProduct } from './product-details-page/related-product
  * state after a beat so repeat taps stay honest.
  */
 export function createCategoryAddToCartHandler(
-  addToCart: (product: CartProduct, quantity?: number) => void,
+  addToCart: (
+    product: CartProduct,
+    quantity?: number
+  ) => AddToCartOutcome | void,
   setAddedItems: Dispatch<SetStateAction<string[]>>
 ): (_event: MouseEvent, product: Product) => void {
   return (_event, product) => {
-    addToCart(toRelatedProductsProduct(product), 1);
+    // A rejection (exhausted cap/guard) shows no "Added" chip: the tap
+    // stays honest and retryable.
+    if (addToCart(toRelatedProductsProduct(product), 1) === 'rejected') {
+      return;
+    }
 
     const productId = String(product.id);
     setAddedItems((prev) => [...prev, productId]);

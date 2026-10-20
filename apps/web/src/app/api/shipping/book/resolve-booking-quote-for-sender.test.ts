@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShippingAddress } from '@/lib/shipping/types';
 
+type RefreshOrderShipmentQuoteModule =
+  typeof import('@/lib/shipping/refresh-order-shipment-quote');
+
 const mockRefreshOrderShipmentQuote = vi.fn();
 
 vi.mock(
   '@/lib/shipping/refresh-order-shipment-quote',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/refresh-order-shipment-quote')
-      >();
+    const actual = await importOriginal<RefreshOrderShipmentQuoteModule>();
     return {
       ...actual,
       refreshOrderShipmentQuote: (...args: unknown[]) =>

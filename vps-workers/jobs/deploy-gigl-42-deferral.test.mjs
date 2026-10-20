@@ -22,11 +22,8 @@ function writeExecutable(path, source) {
   chmodSync(path, 0o755);
 }
 
-// Focused extract from deploy-source-guards.test.mjs: the exit-42
-// deferral scenarios need the full deploy.sh harness but not the dirty,
-// preflight, or docker stubs, so this file carries a minimal harness
-// (clean git, permissive rsync, GIGL-42 ssh) to stay under the 300-line
-// limit in both modules.
+// Local command stubs isolate deploy.sh capability-deferral behavior.
+// No GitHub, SSH or rsync operation reaches an external system.
 function runGigl42Scenario(scenario) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-deploy-gigl-42-'));
   const binDirectory = join(directory, 'bin');
@@ -42,6 +39,15 @@ function runGigl42Scenario(scenario) {
       `#!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
+  *hash-object*--stdin*|*mktree*)
+    # Git plumbing consumes its pipe before replying. Exiting early makes
+    # the writer fail nondeterministically with SIGPIPE under pipefail.
+    cat >/dev/null
+    echo "0123456789abcdef0123456789abcdef01234567"
+    ;;
+  *commit-tree*)
+    echo "0123456789abcdef0123456789abcdef01234567"
+    ;;
   "rev-parse HEAD")
     echo "0123456789abcdef0123456789abcdef01234567"
     ;;
@@ -160,16 +166,32 @@ exit 0
 `
     );
 
+    if (scenario.startsWith('plumbing-probe-')) {
+      const command = scenario.endsWith('tree')
+        ? 'mktree'
+        : 'hash-object -w --stdin';
+      const result = spawnSync(
+        'bash',
+        ['-o', 'pipefail', '-c', `printf '%131072s\\n' '' | git ${command}`],
+        {
+          cwd: directory,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
+          },
+        }
+      );
+      return { result };
+    }
+
     const result = spawnSync('bash', [deployScript], {
       cwd: repoRoot,
       encoding: 'utf8',
       env: {
         ...process.env,
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
-        // The inflight guard fails closed without a resolvable repo;
-        // the stub git answers no origin, so pin the override (the
-        // stub gh swallows the query and the promote record either
-        // way).
+        // Pin a fixture-only repository for the stubbed inflight guard.
         BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
         PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
         TEST_FETCH_MARKER: fetchMarker,
@@ -269,4 +291,12 @@ describe('deploy GIGL exit-42 deferral', () => {
     assert.equal(outcome.promotionCalled, true);
     assert.equal(outcome.fetchCalled, true);
   });
+});
+
+it('keeps git plumbing stdin open until piped input has been consumed', () => {
+  for (const scenario of ['plumbing-probe-tree', 'plumbing-probe-blob']) {
+    const { result } = runGigl42Scenario(scenario);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout.trim(), /^[a-f0-9]{40}$/);
+  }
 });

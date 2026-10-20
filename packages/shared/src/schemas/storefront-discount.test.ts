@@ -108,4 +108,17 @@ describe('StorefrontDiscountValidateResponseSchema', () => {
         .success
     ).toBe(false);
   });
+
+  it('parses a loyalty success with a null discount_code_id', () => {
+    expect(
+      StorefrontDiscountValidateResponseSchema.safeParse({
+        valid: true,
+        discount_code_id: null,
+        code: 'RDM-ABCDEF12',
+        discount_type: 'fixed',
+        discount_value: 1000,
+        discount_amount: 1000,
+      }).success
+    ).toBe(true);
+  });
 });

@@ -3,6 +3,9 @@ import { drainFailedPaidOrderSideEffects } from '@/lib/payments/drain-failed-pai
 import { drainFailedPaidOrderSideEffectsTestKit } from '@/lib/payments/drain-failed-paid-order-side-effects.test-helpers';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail';
 
+type VerifyGatewayChargeModule =
+  typeof import('@/lib/payments/verify-gateway-charge');
+
 const mocks = vi.hoisted(() => ({
   finalizeOrderGatewayPayment: vi.fn(),
   recoverStrandedPaidOrderSideEffects: vi.fn(),
@@ -18,10 +21,7 @@ vi.mock('@/lib/payments/recover-stranded-paid-order-side-effects', () => ({
     mocks.recoverStrandedPaidOrderSideEffects,
 }));
 vi.mock('@/lib/payments/verify-gateway-charge', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/lib/payments/verify-gateway-charge')
-    >();
+  const actual = await importOriginal<VerifyGatewayChargeModule>();
   return {
     ...actual,
     verifyGatewayCharge: mocks.verifyGatewayCharge,

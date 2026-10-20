@@ -90,6 +90,8 @@ final_migration*.json
 unmatched_*.json
 timestamp_matches.json
 supabase-updates.json
+# Supabase CLI local state (update-check cache); never source.
+supabase/.temp/
 vps_*.txt
 vps_*.sh
 files_to_tar.txt
@@ -212,3 +214,23 @@ orphaned_images_sample/
 
 # Local native gtest bootstrap/build artifacts (never commit)
 tools/**/.work/
+
+# Merchant image variant pilot: local snapshots, generations, and lab staging
+# (real merchant bytes stay out of git; hashes travel in the review packet)
+/infra/cdn-transformer/.pilot-input/
+/infra/cdn-transformer/.pilot-output/
+/apps/web/public/__pilot/*
+# ...except the three frozen lab filler bytes (synthetic, hash-pinned
+# in tests). The directory is re-included so git can reach the files,
+# its contents are re-excluded, and only the three exact names are
+# re-included: a merchant file miscopied into fillers/ stays ignored
+# instead of showing up committable next to the staged tree.
+!/apps/web/public/__pilot/fillers/
+/apps/web/public/__pilot/fillers/*
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-a.png
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-b.png
+!/apps/web/public/__pilot/fillers/grid-filler-600x400-c.png
+
+# Generated Python bytecode (never commit; produced by local test runs).
+__pycache__/
+*.py[cod]

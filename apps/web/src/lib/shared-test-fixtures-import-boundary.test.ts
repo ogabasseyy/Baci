@@ -19,7 +19,7 @@ const repoRoot = join(
   '..',
   '..'
 );
-const scanRoots = [
+const allScanRoots = [
   join(repoRoot, 'apps/web'),
   join(repoRoot, 'apps/mobile-storefront'),
   join(repoRoot, 'apps/mobile-admin'),
@@ -27,6 +27,7 @@ const scanRoots = [
   join(repoRoot, 'packages/tiktok-business'),
   join(repoRoot, 'apps/cloudflare-evidence-qualification-worker'),
 ];
+const scanRoots = allScanRoots.filter((root) => existsSync(root));
 
 describe('test-fixtures import boundary', () => {
   it('no non-test source imports shared test fixtures by any path', () => {

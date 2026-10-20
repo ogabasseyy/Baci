@@ -2,28 +2,18 @@ import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 // Single source of truth for the shared test-fixtures import
-// boundary (web Vitest guard + both mobile guards). Production code
-// must never import @baci/shared/test-fixtures/*, directly or through
-// a test-named helper. Fixture patterns apply to every scanned file
-// except true test files and the fixture definitions; test-named
-// helpers are NOT exempt from them (closing the transitive leak).
-// The test-support pattern applies only to files that are neither
-// test files nor test-named helpers. Full semantics: shared README.
+// boundary (web + both mobile guards). Production code must never
+// import @baci/shared/test-fixtures/*, directly or through a
+// test-named helper. Full semantics: packages/shared/README.md.
 
 const SOURCE_EXT = /\.(?:m|c)?[tj]sx?$/;
 
 export const FIXTURE_PATTERNS = [
-  // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
-  // Any quoted specifier into a test-fixtures tree, any callee.
   /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)*[\w.-]*\w(?:\.[\w]+)?['"`]/,
-  // Quoted path-prefix constants (assembled-specifier shapes).
   /['"`][^'"`]*test-fixtures\/['"`]/,
-  // Template-literal prefix: `.../test-fixtures/${name}`.
   /['"`][^'"`]*test-fixtures\/\${/,
-  // Nested path-prefix constant ending at a directory boundary.
   /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)+['"`]/,
-  // Split-literal assembly fragments (statically knowable).
   /['"`](?:[^'"`]*?[-_./]|)test-['"`]\s*\+/,
   /\+\s*['"`][^'"`]*fixtures\/[^'"`]*['"`]/,
 ];
@@ -53,8 +43,7 @@ export function isTestHelper(path: string) {
     /(?:^|\/)test-(?:support|fixtures?|render|utils|helpers?|subject)\//.test(
       normalized
     ) ||
-    // Metro config is a production entry point: exempt from the
-    // test-support pattern only, not from the fixture patterns.
+    // Metro config: exempt from test-support pattern only.
     /(?:^|\/)(?:metro\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
@@ -77,22 +66,26 @@ const ALWAYS_SKIPPED = new Set([
   'web-build',
   'Pods',
 ]);
-// Generic output names skipped at scan roots or under native
-// ios/android trees; nested source dirs with these names are scanned.
+// Generic output names skipped at scan roots or under ios/android.
 const GENERATED_AT_ROOT_OR_NATIVE = new Set(['build', 'coverage', 'dist']);
 // Skipped only as direct children of a scan root (apps/*/tools).
 const ROOT_LEVEL_SKIPPED = new Set(['tools', 'build', 'coverage', 'dist']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
-  // Ancestry-based cycle protection: the same real directory reached
-  // through a second logical path is emitted under that path too.
+  // Ancestry-based cycle protection (see README).
   const walk = (
     dir: string,
     isRoot: boolean,
     rel: string,
     ancestors: ReadonlySet<string>
   ) => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
     let dirReal: string;
     try {
       dirReal = realpathSync(dir);
@@ -102,9 +95,14 @@ export function collectSourceFiles(roots: string[]): string[] {
     if (ancestors.has(dirReal)) return;
     const chain = new Set(ancestors);
     chain.add(dirReal);
-    for (const entry of readdirSync(dir)) {
+    for (const entry of entries) {
       const full = join(dir, entry);
-      const stat = lstatSync(full);
+      let stat: ReturnType<typeof lstatSync>;
+      try {
+        stat = lstatSync(full);
+      } catch {
+        continue;
+      }
       // Symlinks bypass name-based exclusions (containment below).
       const isLink = stat.isSymbolicLink();
       if (!isLink && ALWAYS_SKIPPED.has(entry)) continue;
@@ -118,10 +116,7 @@ export function collectSourceFiles(roots: string[]): string[] {
         continue;
       }
       if (stat.isSymbolicLink()) {
-        // Symlink policy: follow links that resolve inside a scan root
-        // (with ancestry-based cycle protection); skip links that
-        // resolve outside every scan root or are broken. Content
-        // reachable inside a root is scanned, never silently hidden.
+        // Symlink policy: follow in-root links; skip external/broken.
         let target: string;
         try {
           target = realpathSync(full);
@@ -173,8 +168,7 @@ export function collectSourceFiles(roots: string[]): string[] {
 const RUNNER_CONFIG_BASENAME =
   /^(?:(?:vitest|jest|metro)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/;
 
-// A runner-config basename earns its exemption only as a direct
-// child of a scan root; nested lookalikes are ordinary source.
+// Runner-config exemption applies only at a scan root.
 function isExemptFile(file: string, roots: string[]): boolean {
   if (!isTestFile(file)) return false;
   const normalized = normalizePath(file);
@@ -190,7 +184,7 @@ function isExemptFile(file: string, roots: string[]): boolean {
 // scanned; alias registrations stay exempt.
 const CONFIG_SPECIFIER_EXTRACTORS = [
   /(?:import|export)\b[^;]*?from(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`]/g,
-  /(?:import|export)\s*['"`][^'"`]*['"`]/g,
+  /(?:import|export)(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`]/g,
   /\bimport(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*\([^)]*\)/g,
   /\w+\s*\((?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
   /(?:const|let|var)\s+(\w+)(?:\s*:\s*[^=;]+)?\s*=\s*(['"`][^'"`]*['"`])/g,
@@ -198,18 +192,12 @@ const CONFIG_SPECIFIER_EXTRACTORS = [
 
 const PATH_CONSTRUCTOR_CALL =
   /^(?:\w+\.)?(?:resolve|join|dirname|basename|extname|relative|normalize|parse|format|isAbsolute)\s*\(/;
-// Module resolvers (require.resolve, import.meta.resolve) resolve
-// module specifiers, unlike path constructors; they stay scanned.
+// Module resolvers stay scanned (unlike path constructors).
 
-// Scanning runs on a normalized view of the source: literal escape
-// sequences are decoded (so test\x2dfixtures is seen as test-fixtures)
-// and adjacent string literals are constant-folded (so
-// 'test-' + 'fixtures/x' is seen as one specifier). This closes
-// statically knowable assembly forms; only specifiers built from
-// runtime variables remain a documented code-review catch.
+// Scanning runs on a normalized view: escapes decoded inside string
+// literals and adjacent literals constant-folded.
 function normalizeContent(content: string): string {
-  // Decode escapes only inside quoted string literals, so regex
-  // literals and other escaped text keep their semantics.
+  // Decode escapes only inside quoted string literals.
   let out = content
     .replace(/\\\r?\n/g, '')
     .replace(
@@ -254,7 +242,7 @@ function configSpecifiers(content: string): string {
         if (used.test(content)) parts.push(literal);
         continue;
       }
-      const owner = /([\w$]+)\.$/.exec(content.slice(0, match.index))?.[1];
+      const owner = /([\w$]+)\s*(?:\/\*[\s\S]*?\*\/\s*)*\.\s*(?:\/\*[\s\S]*?\*\/\s*)?$/.exec(content.slice(0, match.index))?.[1];
       const isPathCall =
         PATH_CONSTRUCTOR_CALL.test(text) &&
         owner !== 'require' &&
@@ -270,10 +258,15 @@ function isOffender(
   roots: string[],
   withSupport: boolean
 ): boolean {
-  const content = normalizeContent(readFileSync(file, 'utf8'));
+  let raw: string;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  const content = normalizeContent(raw);
   if (isExemptFile(file, roots)) {
-    // Root runner configs are exempt for alias registrations, but an
-    // actual fixture import in a config still executes fixture code.
+    // Runner configs: alias registrations exempt, imports scanned.
     const base = normalizePath(file).split('/').pop() ?? '';
     return (
       RUNNER_CONFIG_BASENAME.test(base) &&

@@ -279,3 +279,21 @@ test('flags comment-separated static and dynamic config imports', () => {
     join(dir, 'vitest.config.ts'),
   ]);
 });
+
+test('missing roots and vanished entries do not crash the scan', () => {
+  const dir = fixtureDir({ 'prod.ts': 'export const x = 1;\n' });
+  assert.deepEqual(
+    findFixtureImportOffenders([join(dir, 'does-not-exist'), dir]),
+    []
+  );
+});
+
+test('flags trivia-separated side-effect imports and resolver owners', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "import /* fx */ '@baci/shared/test-fixtures/piggyvest-purchase';\nconst p = require . resolve('@baci/shared/test-fixtures/piggyvest-purchase');\nexport const cfg = p;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});

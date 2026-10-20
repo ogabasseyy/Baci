@@ -1,4 +1,5 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { isCartSessionRetiring } from './cart-session-write-fence';
 
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
 const ACTIVE_SESSION_KEY_PREFIX = 'baci-cart-device-session-active';
@@ -184,6 +185,7 @@ export async function revokeCartDeviceSession(
 export async function ensureCartDeviceRevocationCleared(
   merchantSlug?: string | null
 ): Promise<boolean> {
+  if (isCartSessionRetiring(merchantSlug)) return false;
   if (!isCartDeviceRevocationPending(merchantSlug)) return true;
   const revoked = await revokeCartDeviceSession(merchantSlug);
   if (revoked.ok) {

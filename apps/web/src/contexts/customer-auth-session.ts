@@ -1,3 +1,4 @@
+import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
 // Session load/logout orchestration for the storefront customer auth provider.
 //
 // Extracted from `customer-auth-context.tsx` so the provider stays focused on
@@ -35,19 +36,22 @@ async function retirePreviousAccountCartAuthority(
   merchantSlug: string,
   previousUserId: string
 ): Promise<boolean> {
-  // Always mark revocation pending, clear local cart storage, and bump
-  // cartSessionGeneration so the browser drops local cart items and
-  // fences shared-cart adoption until server revocation succeeds.
+  const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
   clearCartStorage(merchantSlug, previousUserId);
-  const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok) {
-    setRememberedCustomerUserId(merchantSlug, previousUserId);
-    return false;
+  try {
+    await retirement.drained;
+    const revoked = await revokeCartDeviceSession(merchantSlug);
+    if (!revoked.ok) {
+      setRememberedCustomerUserId(merchantSlug, previousUserId);
+      return false;
+    }
+    clearCartDeviceRevocationPending?.(merchantSlug);
+    setRememberedCustomerUserId(merchantSlug, null);
+    return true;
+  } finally {
+    retirement.release();
   }
-  clearCartDeviceRevocationPending?.(merchantSlug);
-  setRememberedCustomerUserId(merchantSlug, null);
-  return true;
 }
 
 type CustomerSessionFetchResult =
@@ -221,27 +225,35 @@ export async function performCustomerLogout(
   userId?: string | null
 ): Promise<void> {
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
-  // Do not clear Auth or report success until this device's cart
-  // authority is retired.
-  const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok)
-    throw new Error('Could not safely sign out. Please retry when connected.');
+  const retirement = beginCartSessionRetirement(merchantSlug);
+  markCartDeviceRevocationPending?.(merchantSlug);
+  clearCartStorage(merchantSlug, previousUserId ?? userId);
   try {
-    const response = await fetch('/api/storefront/auth/logout', {
-      method: 'POST',
-    });
-    if (response.ok) {
-      clearCustomerAuthRollbackPending(merchantSlug);
+    await retirement.drained;
+    const revoked = await revokeCartDeviceSession(merchantSlug);
+    if (!revoked.ok)
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
+    try {
+      const response = await fetch('/api/storefront/auth/logout', {
+        method: 'POST',
+      });
+      if (response.ok) {
+        clearCustomerAuthRollbackPending(merchantSlug);
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setRememberedCustomerUserId(merchantSlug, null);
+      setUser(null);
+      setCustomer(null);
+      publishCustomerIdentity(null, null, merchantSlug);
+      setOtpState(null);
+      // Clear cart on logout to prevent cart data leakage between users
+      clearCartStorage(merchantSlug, previousUserId ?? userId);
     }
-  } catch (error) {
-    console.error('Logout error:', error);
   } finally {
-    setRememberedCustomerUserId(merchantSlug, null);
-    setUser(null);
-    setCustomer(null);
-    publishCustomerIdentity(null, null, merchantSlug);
-    setOtpState(null);
-    // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug, previousUserId ?? userId);
+    retirement.release();
   }
 }

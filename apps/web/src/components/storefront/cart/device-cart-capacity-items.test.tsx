@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it } from 'vitest';
 import {
   getCartFromStorage,
+  getCartWideNegotiationFromStorage,
   saveCartToStorage,
+  saveCartWideNegotiationToStorage,
 } from '@/hooks/cart/cart-storage';
 import { cartItem } from '@/hooks/cart/shared-cart-provisioning.test-support';
 import { DeviceCartCapacityItems } from './device-cart-capacity-items';
@@ -46,4 +48,33 @@ it('preserves concurrent saved-cart edits while removing the selected unchanged 
     phone.id,
     cable.id,
   ]);
+});
+
+it.each([
+  true,
+  false,
+])('invalidates group prices only for a group deal (%s)', (group) => {
+  saveCartToStorage(
+    [
+      cartItem({
+        name: 'Phone',
+        negotiatedPrice: 100,
+        negotiationStatus: 'accepted',
+      }),
+      cartItem({ id: 'charger', cartItemId: 'charger', name: 'Charger' }),
+    ],
+    'shop'
+  );
+  saveCartWideNegotiationToStorage(group, 'shop');
+  saveCartWideNegotiationToStorage(true, 'other-shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Charger' }));
+  expect(getCartFromStorage('shop')[0].negotiatedPrice).toBe(
+    group ? undefined : 100
+  );
+  expect(getCartFromStorage('shop')[0].negotiationStatus).toBe(
+    group ? undefined : 'accepted'
+  );
+  expect(getCartWideNegotiationFromStorage('shop')).toBe(false);
+  expect(getCartWideNegotiationFromStorage('other-shop')).toBe(true);
 });

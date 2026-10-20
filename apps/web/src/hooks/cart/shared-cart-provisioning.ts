@@ -1,20 +1,28 @@
 'use client';
 
-import type { CartErrorCode } from '@baci/shared/cart';
-
+import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
 import {
   getCartFromStorage,
   saveSharedCartImportReceipt,
 } from './cart-storage';
-
-import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
+import {
+  bootstrapSharedCart,
+  createSharedCart,
+  fetchSharedCartSnapshot,
+} from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
+import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
+import { getCartSessionGeneration } from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
-export function createCartProvisioning(context: SharedCartRuntime) {
+export function createCartProvisioning(
+  context: SharedCartRuntime & {
+    hydrateMissing?: (snapshot: CartSnapshot) => Promise<void>;
+  }
+) {
   const {
     dispatch,
     stateRef,
@@ -36,8 +44,10 @@ export function createCartProvisioning(context: SharedCartRuntime) {
   ): Promise<EnsureCartResult> {
     const generation = generationRef.current;
     const linkRun = linkRunRef.current;
+    const storageGeneration = getCartSessionGeneration();
     const merchantSlug = optionsRef.current.merchantSlug;
     const fenced = () =>
+      getCartSessionGeneration() === storageGeneration &&
       generationRef.current === generation &&
       linkRunRef.current === linkRun &&
       enabledRef.current;
@@ -112,6 +122,8 @@ export function createCartProvisioning(context: SharedCartRuntime) {
       }
     }
     if (!live() || createAttemptedRef.current) return null;
+    const canAdoptPreserved =
+      adoptOutcomeRef.current === 'bootstrap' && !createRequestRef.current;
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
       const cached = getCartFromStorage(optionsRef.current.merchantSlug);
@@ -162,6 +174,21 @@ export function createCartProvisioning(context: SharedCartRuntime) {
       // key makes the retry replay-safe, so a new attempt must be
       // allowed instead of stranding the head entry behind a set latch.
       createAttemptedRef.current = false;
+      // A definitive bootstrap-scope rejection can mean another tab installed
+      // a live session. Never substitute a GET for an indeterminate replay.
+      if (canAdoptPreserved && created.code === 'unauthorized') {
+        const preserved = await fetchSharedCartSnapshot(
+          undefined,
+          merchantSlug
+        );
+        if (!fenced()) return null;
+        if (preserved.ok && !isTerminalCart(preserved.snapshot)) {
+          createRequestRef.current = null;
+          adoptPreservedCart(context, preserved.snapshot);
+          void context.hydrateMissing?.(preserved.snapshot);
+          return { ok: true };
+        }
+      }
       if (lines) {
         if (created.retryable) {
           // Keep the import pending; the failed head entry drives the

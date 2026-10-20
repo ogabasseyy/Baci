@@ -34,10 +34,7 @@ export function createCartRecovery(
       (entry) => entry.state === 'failed'
     );
     if (!failed) {
-      if (
-        stateRef.current.importStatus === 'failed' &&
-        !stateRef.current.confirmed
-      ) {
+      if (stateRef.current.importStatus === 'failed') {
         retryImport();
       }
       return;
@@ -70,11 +67,26 @@ export function createCartRecovery(
       return;
     }
     if (!current.confirmed) {
-      if (bootstrappingRef.current || createAttemptedRef.current) return;
+      if (bootstrappingRef.current || createAttemptedRef.current) {
+        dispatch({
+          generation,
+          code: 'temporarily_unavailable',
+          type: 'import/failed',
+        });
+        return;
+      }
       // Capacity can be resolved before any server cart or queue exists.
       // Keep the exact provisioning request on retries and fence late replies.
       void ensureCart().then((result) => {
-        if (generationRef.current !== generation || !result) return;
+        if (generationRef.current !== generation) return;
+        if (!result) {
+          dispatch({
+            generation,
+            code: 'temporarily_unavailable',
+            type: 'import/failed',
+          });
+          return;
+        }
         if (!result.ok) {
           dispatch({ generation, code: result.code, type: 'import/failed' });
           return;

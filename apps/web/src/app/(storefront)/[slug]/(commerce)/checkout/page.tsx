@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CheckoutThemeProvider } from '@/components/checkout-theme-provider';
 import { NewTemplateCheckoutPage } from '@/components/storefront/new-template';
+import { CheckoutCartCapacityGate } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutCartCapacityGate';
 import { CheckoutPage as OgabasseyCheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
 import {
   getCachedMerchant,
@@ -37,7 +38,11 @@ export default async function CheckoutPage({
   ) {
     return (
       <CheckoutThemeProvider>
-        <NewTemplateCheckoutPage />
+        <CheckoutCartCapacityGate
+          cartHref={isDomainIdentifier(slug) ? '/cart' : `/${slug}/cart`}
+        >
+          <NewTemplateCheckoutPage />
+        </CheckoutCartCapacityGate>
       </CheckoutThemeProvider>
     );
   }
@@ -46,7 +51,12 @@ export default async function CheckoutPage({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      <OgabasseyCheckoutPage />
+      <CheckoutCartCapacityGate
+        allowOrderResume
+        cartHref={isDomainIdentifier(slug) ? '/cart' : `/${slug}/cart`}
+      >
+        <OgabasseyCheckoutPage />
+      </CheckoutCartCapacityGate>
     </CheckoutThemeProvider>
   );
 }

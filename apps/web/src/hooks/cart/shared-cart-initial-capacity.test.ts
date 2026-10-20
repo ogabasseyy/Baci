@@ -94,12 +94,16 @@ describe('initial device cart recovery', () => {
         await waitFor(() =>
           expect(result.current.syncError).toBe('temporarily_unavailable')
         );
+        expect(result.current.importWarnings).not.toContain(
+          'import_capacity_exceeded'
+        );
         act(() => result.current.discardLegacyImport());
         expect(result.current.importStatus).toBe('failed');
         act(() => result.current.retryPendingSync());
       }
       await waitFor(() => expect(result.current.importStatus).toBe('done'));
       expect(result.current.cartId).toBe(CART_ID);
+      expect(result.current.cart).toHaveLength(1);
     }
   });
 });

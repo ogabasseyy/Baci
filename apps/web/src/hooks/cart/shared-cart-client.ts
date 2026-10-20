@@ -5,8 +5,11 @@ import type {
   CartSnapshot,
   CartWarning,
 } from '@baci/shared/cart';
-
 import { fetchWithCsrf } from '@/lib/api-client';
+import {
+  isCartSessionRetiring,
+  runCartSessionWrite,
+} from './cart-session-write-fence';
 import {
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
@@ -82,7 +85,10 @@ export function failureOf(
   status: number,
   fallback: CartErrorCode = 'temporarily_unavailable'
 ): Extract<SharedCartFetchResult, { ok: false }> {
-  const code = (body?.code as CartErrorCode | undefined) ?? fallback;
+  const code =
+    body?.code === 'forbidden'
+      ? 'unauthorized'
+      : ((body?.code as CartErrorCode | undefined) ?? fallback);
   const snapshot =
     body && isSnapshot(body.cart) ? (body.cart as CartSnapshot) : null;
   const retryable =
@@ -102,6 +108,7 @@ export async function fetchSharedCartSnapshot(
   signal?: AbortSignal,
   merchantSlug?: string | null
 ): Promise<SharedCartFetchResult> {
+  if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
     !(await ensureCartDeviceRevocationCleared(merchantSlug))
@@ -160,7 +167,11 @@ export function bootstrapSharedCart(
   for (const [flightKey, pending] of inFlightBootstraps) {
     if (flightKey === key || flightKey === '' || key === '') return pending;
   }
-  const pending = requestBootstrap(merchantSlug).finally(() => {
+  const pending = runCartSessionWrite<BootstrapResult>(
+    merchantSlug,
+    { code: 'temporarily_unavailable', ok: false, retryable: true },
+    () => requestBootstrap(merchantSlug)
+  ).finally(() => {
     if (inFlightBootstraps.get(key) === pending) inFlightBootstraps.delete(key);
   });
   inFlightBootstraps.set(key, pending);
@@ -198,7 +209,16 @@ export interface CreateSharedCartInput {
   currency?: string;
 }
 
-export async function createSharedCart(
+export function createSharedCart(
+  input: CreateSharedCartInput,
+  merchantSlug?: string | null
+): Promise<SharedCartMutationResult> {
+  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
+    requestCreateSharedCart(input, merchantSlug)
+  );
+}
+
+async function requestCreateSharedCart(
   input: CreateSharedCartInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
@@ -248,6 +268,7 @@ export async function sendSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
+  if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
     !(await ensureCartDeviceRevocationCleared(merchantSlug))

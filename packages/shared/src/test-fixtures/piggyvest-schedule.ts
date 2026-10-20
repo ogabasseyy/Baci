@@ -48,7 +48,11 @@ export function createFixtureMock<A extends unknown[], R>(
   mockFn.mock = { calls: [], results: [], invocationCallOrder: [] };
   // Runner-faithful: mockClear resets only calls/results/order (Jest and
   // Vitest semantics); queued once-implementations survive it. mockReset
-  // additionally drops the once-queue and the installed implementation.
+  // additionally drops the once-queue and the installed implementation,
+  // so post-reset calls return undefined exactly as Jest/Vitest
+  // mockReset does — including for async mocks, whose post-reset calls
+  // therefore return undefined rather than a promise and must only be
+  // awaited, never chained with .then/.catch.
   mockFn.mockClear = () => {
     mockFn.mock.calls.length = 0;
     mockFn.mock.results.length = 0;

@@ -33,6 +33,8 @@ export const FIXTURE_PATTERNS = [
   // slip past the literal patterns; fully dynamic specifiers built
   // from variables remain a documented code-review catch.
   /['"`][^'"`]*test-fixtures\/['"`]/,
+  // Template-literal prefix: `.../test-fixtures/${name}`.
+  /['"`][^'"`]*test-fixtures\/\${/,
   // Split-literal assembly: a quoted fragment ending in test-
   // concatenated with the rest of the specifier, or a fixtures/
   // fragment concatenated onto a prefix. Statically knowable, so
@@ -43,7 +45,7 @@ export const FIXTURE_PATTERNS = [
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|[^'\"`]*?\.(?:test|spec|tests)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:[./]|['\"`])|[^'\"`]*?\.(?:test|spec|tests)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -54,7 +56,7 @@ export function isTestFile(path: string) {
   return (
     // Test-runner configs (Vitest/Jest) only ever execute tests, so
     // their alias registrations for fixture subpaths are legitimate.
-    /(?:^|\/)(?:vitest|jest)\.config\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /(?:^|\/)(?:(?:vitest|jest)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
@@ -66,11 +68,14 @@ export function isTestFile(path: string) {
 export function isTestHelper(path: string) {
   const normalized = normalizePath(path);
   return (
+    /(?:^|\/)test-(?:support|fixtures?|render|utils|helpers?|subject)\//.test(
+      normalized
+    ) ||
     // Metro config is a production bundle entry point: it stays
     // exempt from the test-support pattern but NOT from the fixture
     // patterns, so a Metro config importing a shared fixture (as
     // opposed to a test-runner alias registration) is flagged.
-    /(?:^|\/)metro\.config\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /(?:^|\/)(?:metro\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /(?:^|[-_./])test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
@@ -197,7 +202,7 @@ export function collectSourceFiles(roots: string[]): string[] {
 // direct shared-fixture import there still executes test-double code
 // outside the apps, so it is flagged.
 const RUNNER_CONFIG_BASENAME =
-  /^(?:vitest|jest|metro)\.config\.(?:m|c)?[tj]sx?$/;
+  /^(?:(?:vitest|jest|metro)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/;
 
 // A runner-config basename only earns the test-file exemption when the
 // file is a direct child of a scan root (where real runner configs
@@ -214,16 +219,23 @@ function isExemptFile(file: string, roots: string[]): boolean {
   );
 }
 
-function fixtureImportLines(content: string): string {
-  return content
-    .split('\n')
-    .filter(
-      (line) =>
-        /^\s*(?:import|export)\b/.test(line) ||
-        /\bfrom\s*['"`]/.test(line) ||
-        /\w+\s*\(\s*['"`]/.test(line)
-    )
-    .join('\n');
+// For exempt runner configs, only specifier-bearing constructs are
+// scanned: import/export-from statements (including multiline),
+// side-effect imports, dynamic imports, and resolver calls whose
+// first argument is a string literal (including multiline calls).
+// Alias registrations (find/replacement values, path.resolve targets)
+// are not specifier-bearing and stay exempt.
+const CONFIG_SPECIFIER_EXTRACTORS = [
+  /(?:import|export)\b[^;]*?from\s*['"`][^'"`]*['"`]/g,
+  /(?:import|export)\s*['"`][^'"`]*['"`]/g,
+  /\bimport\s*\([^)]*\)/g,
+  /\w+\s*\(\s*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
+];
+
+function configSpecifiers(content: string): string {
+  return CONFIG_SPECIFIER_EXTRACTORS.flatMap((pattern) =>
+    [...content.matchAll(pattern)].map((match) => match[0])
+  ).join('\n');
 }
 
 export function findFixturePatternOffenders(roots: string[]): string[] {
@@ -251,7 +263,7 @@ export function findFixtureImportOffenders(roots: string[]): string[] {
       if (
         RUNNER_CONFIG_BASENAME.test(base) &&
         FIXTURE_PATTERNS.some((pattern) =>
-          pattern.test(fixtureImportLines(content))
+          pattern.test(configSpecifiers(content))
         )
       ) {
         offenders.push(file);

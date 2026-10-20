@@ -250,3 +250,28 @@ test('emits the same real directory under a second logical path', async () => {
   const files = collectSourceFiles([dir]);
   assert.ok(files.includes(join(dir, 'prod-link/helper.ts')));
 });
+
+test('flags template prefixes, multiline config calls, helper directories', () => {
+  const dir = fixtureDir({
+    'tpl.ts':
+      'const load = (name: string) => import(`@baci/shared/test-fixtures/${name}`);\nexport const x = load;\n',
+    'prod.ts':
+      "import { h } from '@/test-support/find-host-element';\nexport const y = h;\n",
+    'vitest.workspace.ts':
+      "const alias = '../../packages/shared/src/test-fixtures/builder-ai-edit.ts';\nexport const cfg = alias;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'prod.ts'),
+    join(dir, 'tpl.ts'),
+  ]);
+});
+
+test('retains multiline runner-config resolver calls', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const sharedRequire = createRequire(import.meta.url);\nconst f = sharedRequire(\n  '@baci/shared/test-fixtures/piggyvest-schedule'\n);\nexport const cfg = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});

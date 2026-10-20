@@ -56,8 +56,9 @@ SELECT pg_temp.assert_true(
   'loyalty order wrapper is missing claim mechanics'
 );
 
--- Bridge grants: self-policing Bearer [REDACTED]; anon through
--- service_role hold EXECUTE and PUBLIC holds nothing.
+-- Bridge grants: resolver is service_role-only (issue #3696 revoked
+-- anon + authenticated: enumeration oracle); the self-policing order
+-- wrapper keeps anon through service_role; PUBLIC holds nothing.
 SELECT pg_temp.assert_true(
   NOT EXISTS (
     SELECT 1
@@ -67,9 +68,9 @@ SELECT pg_temp.assert_true(
       AND acl_entry.grantee = 0
       AND acl_entry.privilege_type = 'EXECUTE'
   )
-  AND has_function_privilege('anon',
+  AND NOT has_function_privilege('anon',
     'public.get_loyalty_redemption_for_checkout(uuid,text)', 'EXECUTE')
-  AND has_function_privilege('authenticated',
+  AND NOT has_function_privilege('authenticated',
     'public.get_loyalty_redemption_for_checkout(uuid,text)', 'EXECUTE')
   AND has_function_privilege('service_role',
     'public.get_loyalty_redemption_for_checkout(uuid,text)', 'EXECUTE')

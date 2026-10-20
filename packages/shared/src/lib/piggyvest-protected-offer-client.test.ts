@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { protectedOfferFixture } from './piggyvest-protected-offer.test-support';
+import { protectedOfferFixture } from '../test-fixtures/piggyvest-protected-offer';
 import { createPiggyvestProtectedOfferClient } from './piggyvest-protected-offer-client';
 
 it('uses bounded signed-CSRF publish and exact scoped GET status with no acceptance field', async () => {

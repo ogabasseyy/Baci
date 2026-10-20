@@ -1,5 +1,5 @@
 import { piggyvestProtectedOfferSchemas as schemas } from '../contracts/piggyvest-protected-offer';
-import { purchaseFixture } from '../test-fixtures/piggyvest-purchase';
+import { purchaseFixture } from './piggyvest-purchase';
 
 export function protectedOfferFixture() {
   const purchase = purchaseFixture();

@@ -1,7 +1,7 @@
 import { piggyvestSavingsScreenSchema } from '@baci/shared/contracts';
 import { createPiggyvestProtectedOfferController } from '@baci/shared/lib';
+import { protectedOfferFixture } from '@baci/shared/test-fixtures/piggyvest-protected-offer';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { protectedOfferFixture } from '../../../../../packages/shared/src/lib/piggyvest-protected-offer.test-support';
 import { StartSavingsScreen } from './StartSavingsScreen';
 
 jest.mock('@/components/useColorScheme', () => ({

@@ -2,11 +2,11 @@ import {
   createPiggyvestProtectedOfferController,
   createPiggyvestPurchaseController,
 } from '@baci/shared/lib';
+import { protectedOfferFixture } from '@baci/shared/test-fixtures/piggyvest-protected-offer';
+import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
-import { protectedOfferFixture } from '../../../../../../packages/shared/src/lib/piggyvest-protected-offer.test-support';
-import { purchaseFixture } from '../../../../../../packages/shared/src/test-fixtures/piggyvest-purchase';
 import { BoundProtectedOffer } from './protected-offer-binding';
 import { SavingsScreen } from './savings-screen';
 

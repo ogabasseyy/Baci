@@ -26,7 +26,7 @@ import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
 import { registerCartLinkTools } from './cart-link-tool';
-import { registerGuestCartTool } from './guest-cart-tool';
+import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
@@ -1355,7 +1355,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     }
   );
 
-  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
+  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
   registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 

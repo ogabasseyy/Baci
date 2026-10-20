@@ -36,7 +36,10 @@
     "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts",
     "./vtu": "./src/vtu/index.ts",
     "./test-fixtures/piggyvest-device-change": "./src/test-fixtures/piggyvest-device-change.ts",
-    "./test-fixtures/piggyvest-purchase": "./src/test-fixtures/piggyvest-purchase.ts"
+    "./test-fixtures/piggyvest-purchase": "./src/test-fixtures/piggyvest-purchase.ts",
+    "./test-fixtures/piggyvest-protected-offer": "./src/test-fixtures/piggyvest-protected-offer.ts",
+    "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
+    "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

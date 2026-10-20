@@ -1,6 +1,6 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { runCartSessionWrite } from './cart-session-write-fence';
+import { runBoundedCartSessionWrite } from './cart-session-write-fence';
 import { failureOf, readBody } from './shared-cart-client-support';
 import {
   ensureCartDeviceRevocationCleared,
@@ -36,10 +36,10 @@ export function bootstrapSharedCart(
   for (const [flightKey, pending] of inFlightBootstraps) {
     if (flightKey === key || flightKey === '' || key === '') return pending;
   }
-  const pending = runCartSessionWrite<BootstrapResult>(
+  const pending = runBoundedCartSessionWrite<BootstrapResult>(
     merchantSlug,
     { code: 'temporarily_unavailable', ok: false, retryable: true },
-    () => requestBootstrap(merchantSlug)
+    (signal) => requestBootstrap(merchantSlug, signal)
   ).finally(() => {
     if (inFlightBootstraps.get(key) === pending) inFlightBootstraps.delete(key);
   });
@@ -48,11 +48,12 @@ export function bootstrapSharedCart(
 }
 
 async function requestBootstrap(
-  merchantSlug?: string
+  merchantSlug?: string,
+  signal?: AbortSignal
 ): Promise<BootstrapResult> {
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
   ) {
     return { code: 'temporarily_unavailable', ok: false, retryable: true };
   }
@@ -62,6 +63,7 @@ async function requestBootstrap(
       body: JSON.stringify(merchantSlug ? { merchantSlug } : {}),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
+      signal,
     });
   } catch {
     return { code: 'temporarily_unavailable', ok: false, retryable: true };

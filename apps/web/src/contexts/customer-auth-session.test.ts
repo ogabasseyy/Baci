@@ -276,7 +276,7 @@ describe('customer-auth-session passive identity revocation', () => {
     });
 
     expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
-    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
+    expect(clearCartStorage).not.toHaveBeenCalled();
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
     // The already-exchanged auth cookie must be rolled back too, not
@@ -313,7 +313,7 @@ describe('customer-auth-session passive identity revocation', () => {
     );
 
     expect(committed).toBe(false);
-    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
+    expect(clearCartStorage).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenLastCalledWith('/api/storefront/auth/logout', {
       method: 'POST',
     });

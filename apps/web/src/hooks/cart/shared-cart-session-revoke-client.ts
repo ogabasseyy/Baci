@@ -1,4 +1,5 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { withCartRequestDeadline } from './cart-request-deadline';
 import { isCartSessionRetiring } from './cart-session-write-fence';
 
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
@@ -140,16 +141,30 @@ async function readRevokeBody(
 /** Device-scoped revocation on sign-out; never clears the shared cart. */
 export async function revokeCartDeviceSession(
   merchantSlug?: string | null,
-  options?: { fenceOnFailure?: boolean }
+  options?: { fenceOnFailure?: boolean; signal?: AbortSignal }
 ): Promise<{ ok: boolean }> {
-  const fenceOnFailure = options?.fenceOnFailure !== false;
+  const result = await withCartRequestDeadline(
+    { ok: false },
+    (signal) => requestDeviceRevocation(merchantSlug, signal),
+    options?.signal
+  );
+  if (!result.ok && options?.fenceOnFailure !== false)
+    markCartDeviceRevocationPending(merchantSlug);
+  return result;
+}
+async function requestDeviceRevocation(
+  merchantSlug: string | null | undefined,
+  signal: AbortSignal
+): Promise<{ ok: boolean }> {
   try {
     const response = await fetchWithCsrf(revokeRoute(merchantSlug), {
       body: JSON.stringify({}),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
+      signal,
     });
     const body = await readRevokeBody(response);
+    if (signal.aborted) return { ok: false };
     // No proof means no cart authority exists to retire (ordinary
     // legacy logout). A definitively invalid proof (for example after
     // a signing-key rotation) can never be repaired by retrying and
@@ -165,14 +180,9 @@ export async function revokeCartDeviceSession(
     if (ok) {
       clearCartDeviceRevocationPending(merchantSlug);
       clearCartDeviceSessionActive(merchantSlug);
-    } else if (fenceOnFailure) {
-      markCartDeviceRevocationPending(merchantSlug);
     }
     return { ok };
   } catch {
-    if (fenceOnFailure) {
-      markCartDeviceRevocationPending(merchantSlug);
-    }
     return { ok: false };
   }
 }
@@ -183,11 +193,12 @@ export async function revokeCartDeviceSession(
  * bootstrap can adopt the surviving HTTP-only proof.
  */
 export async function ensureCartDeviceRevocationCleared(
-  merchantSlug?: string | null
+  merchantSlug?: string | null,
+  signal?: AbortSignal
 ): Promise<boolean> {
   if (isCartSessionRetiring(merchantSlug)) return false;
   if (!isCartDeviceRevocationPending(merchantSlug)) return true;
-  const revoked = await revokeCartDeviceSession(merchantSlug);
+  const revoked = await revokeCartDeviceSession(merchantSlug, { signal });
   if (revoked.ok) {
     clearCartDeviceRevocationPending(merchantSlug);
     return true;

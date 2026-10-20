@@ -6,7 +6,10 @@ import {
 import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { getCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { clearCartStorage } from '@/hooks/use-cart';
-import { performCustomerLogout } from './customer-auth-session';
+import {
+  commitCustomerAuthSession,
+  performCustomerLogout,
+} from './customer-auth-session';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
   markCartDeviceRevocationPending: vi.fn(),
@@ -60,4 +63,38 @@ it('preserves saved device items when logout revocation fails', async () => {
   expect(clearCartStorage).not.toHaveBeenCalled();
   expect(setUser).not.toHaveBeenCalled();
   expect(isCartSessionRetiring('ogabassey')).toBe(false);
+});
+
+it('preserves the previous account cache when switching retirement fails', async () => {
+  vi.mocked(clearCartStorage).mockClear();
+  vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: false });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(Response.json({ success: true }))
+  );
+  const setUser = vi.fn();
+  const result = await commitCustomerAuthSession(
+    'switch-shop',
+    {
+      user: { id: 'next-user', email: 'next@example.com', role: 'customer' },
+      customer: {
+        id: 'next-customer',
+        email: 'next@example.com',
+        first_name: 'Next',
+        last_name: 'Buyer',
+      },
+    },
+    {
+      currentUserId: 'previous-user',
+      setUser,
+      setCustomer: vi.fn(),
+      setOtpState: vi.fn(),
+    }
+  );
+  expect(result).toBe(false);
+  expect(clearCartStorage).not.toHaveBeenCalled();
+  expect(setUser).not.toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'next-user' })
+  );
+  expect(isCartSessionRetiring('switch-shop')).toBe(false);
 });

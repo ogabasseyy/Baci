@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { CartImportConflicts } from '@/components/storefront/cart/cart-import-conflicts';
 import { Button } from '@/components/ui/button';
@@ -13,17 +12,16 @@ export function CheckoutCartCapacityGate({
   children,
   onReturnToCart,
   cartHref,
-  allowOrderResume = false,
+  validatedResume = false,
 }: {
   children: ReactNode;
   onReturnToCart?: () => void;
   cartHref?: string;
-  allowOrderResume?: boolean;
+  validatedResume?: boolean;
 }) {
   const cart = useCart();
-  const orderId = useSearchParams().get('orderId');
   if (
-    !(allowOrderResume && orderId) &&
+    !validatedResume &&
     cart.sharedCartEnabled &&
     cart.importWarnings?.includes('import_capacity_exceeded')
   ) {

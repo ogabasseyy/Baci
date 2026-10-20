@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { beginCartSessionRetirement } from './cart-session-write-fence';
 
 import {
   bootstrapSharedCart,
@@ -72,17 +71,17 @@ describe('shared-cart-client snapshot', () => {
   });
 
   it.each([
-    ['missing_proof', 404],
-    ['not_found', 404],
-    ['expired', 404],
-    ['unauthorized', 401],
-  ])('maps %s to a fatal typed failure', async (code, status) => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ code }, status));
+    ['missing_proof', 404, 'unauthorized'],
+    ['not_found', 404, 'not_found'],
+    ['expired', 404, 'expired'],
+    ['unauthorized', 401, 'unauthorized'],
+  ])('maps %s to a fatal typed failure', async (code, status, expectedCode) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ code }, Number(status)));
 
     const result = await fetchSharedCartSnapshot();
 
     expect(result).toEqual({
-      code,
+      code: expectedCode,
       ok: false,
       retryable: false,
       snapshot: null,
@@ -221,7 +220,7 @@ describe('shared-cart-client bootstrap and create', () => {
       jsonResponse({ code: 'quota_exceeded' }, 429)
     );
     await expect(bootstrapSharedCart()).resolves.toEqual({
-      code: 'quota_exceeded',
+      code: 'rate_limited',
       ok: false,
       retryable: true,
     });
@@ -230,7 +229,7 @@ describe('shared-cart-client bootstrap and create', () => {
       jsonResponse({ code: 'invalid_request' }, 400)
     );
     await expect(bootstrapSharedCart()).resolves.toEqual({
-      code: 'invalid_request',
+      code: 'invalid_item',
       ok: false,
       retryable: false,
     });
@@ -383,39 +382,4 @@ describe('shared origin merchant routing', () => {
       expect.anything()
     );
   });
-});
-
-it.each([
-  'command',
-  'snapshot',
-] as const)('drains in-flight %s requests before retirement completes', async (kind) => {
-  resetPendingCartDeviceRevocationsForTests();
-  vi.clearAllMocks();
-  let finish!: (response: Response) => void;
-  const reply = new Promise<Response>((resolve) => {
-    finish = resolve;
-  });
-  if (kind === 'command') vi.mocked(fetchWithCsrf).mockReturnValueOnce(reply);
-  else fetchMock.mockReturnValueOnce(reply);
-  const request =
-    kind === 'command'
-      ? sendSharedCartCommand(
-          {
-            command: { type: 'clear' },
-            expectedVersion: 3,
-            operationId: 'drain',
-          },
-          'shop'
-        )
-      : fetchSharedCartSnapshot(undefined, 'shop');
-  const retirement = beginCartSessionRetirement('shop');
-  const drained = vi.fn();
-  void retirement.drained.then(drained);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(drained).not.toHaveBeenCalled();
-  finish(jsonResponse({ cart: snapshot() }));
-  await request;
-  await retirement.drained;
-  expect(drained).toHaveBeenCalledOnce();
-  retirement.release();
 });

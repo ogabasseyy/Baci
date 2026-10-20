@@ -1,6 +1,10 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { getCartFromStorage, saveCartToStorage } from './cart-storage';
+import {
+  getCartFromStorage,
+  saveCartToStorage,
+  saveSharedCartImportReceipt,
+} from './cart-storage';
 import {
   bootstrapSharedCart,
   createSharedCart,
@@ -66,4 +70,42 @@ it.each([
   await waitFor(() => expect(result.current.importStatus).toBe('done'));
   expect(result.current.cart).toHaveLength(1);
   expect(sendSharedCartCommand).not.toHaveBeenCalled();
+});
+
+it.each([
+  'receipt',
+  'server-line',
+] as const)('does not recreate consumed items marked by %s', async (marker) => {
+  saveCartToStorage(
+    [
+      cartItem(
+        marker === 'server-line' ? { serverLineId: 'purchased-line' } : {}
+      ),
+    ],
+    SLUG
+  );
+  if (marker === 'receipt')
+    saveSharedCartImportReceipt(SLUG, {
+      cartId: snapshot().cartId,
+      importedAt: '2026-10-20T00:00:00Z',
+      lineCount: 1,
+    });
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot({ state: 'completed', lines: [] }),
+    warnings: [],
+  });
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.importStatus).toBe('skipped'));
+  expect(createSharedCart).not.toHaveBeenCalled();
+  expect(bootstrapSharedCart).not.toHaveBeenCalled();
+  expect(result.current.cart).toHaveLength(0);
+  expect(getCartFromStorage(SLUG)).toEqual([]);
 });

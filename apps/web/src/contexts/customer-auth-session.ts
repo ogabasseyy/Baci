@@ -39,7 +39,7 @@ async function retirePreviousAccountCartAuthority(
 ): Promise<boolean> {
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
-  clearCartStorage(merchantSlug, previousUserId);
+  bumpCartSessionGeneration();
   try {
     await retirement.drained;
     const revoked = await revokeCartDeviceSession(merchantSlug);
@@ -47,6 +47,7 @@ async function retirePreviousAccountCartAuthority(
       setRememberedCustomerUserId(merchantSlug, previousUserId);
       return false;
     }
+    clearCartStorage(merchantSlug, previousUserId);
     clearCartDeviceRevocationPending?.(merchantSlug);
     setRememberedCustomerUserId(merchantSlug, null);
     return true;

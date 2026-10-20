@@ -506,8 +506,8 @@ describe('POST /api/storefront/cart', () => {
       headers: { cookie: cartCookie(sessionProof()) },
     });
 
-    expect(response.status).toBe(403);
-    expect((await response.json()).code).toBe('forbidden');
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('unauthorized');
   });
 
   it('rejects browser requests without a CSRF token', async () => {

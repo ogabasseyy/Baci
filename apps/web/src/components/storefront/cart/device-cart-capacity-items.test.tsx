@@ -78,3 +78,12 @@ it.each([
   expect(getCartWideNegotiationFromStorage('shop')).toBe(false);
   expect(getCartWideNegotiationFromStorage('other-shop')).toBe(true);
 });
+
+it('removes the intended stable line after its saved quantity changes', () => {
+  const selected = cartItem({ name: 'Phone' });
+  saveCartToStorage([selected], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([{ ...selected, quantity: 2 }], 'shop');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
+  expect(getCartFromStorage('shop')).toEqual([]);
+});

@@ -51,12 +51,7 @@ export default async function CheckoutPage({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      <CheckoutCartCapacityGate
-        allowOrderResume
-        cartHref={isDomainIdentifier(slug) ? '/cart' : `/${slug}/cart`}
-      >
-        <OgabasseyCheckoutPage />
-      </CheckoutCartCapacityGate>
+      <OgabasseyCheckoutPage />
     </CheckoutThemeProvider>
   );
 }

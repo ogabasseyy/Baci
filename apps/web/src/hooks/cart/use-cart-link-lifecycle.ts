@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
+import {
+  getCartFromStorage,
+  getSharedCartImportReceipt,
+  saveCartToStorage,
+} from './cart-storage';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
@@ -19,10 +23,12 @@ import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import {
   ensureCartDeviceRevocationCleared,
+  isCartDeviceRevocationPending,
   markCartDeviceSessionActive,
   retireDeEnrolledCartDeviceSession,
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
+import { unimportedTerminalLines } from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function useCartLinkLifecycle(
@@ -92,7 +98,11 @@ export function useCartLinkLifecycle(
     latestSnapshotRef.current = null;
     setLinkPhase('adopting');
 
-    const cached = getCartFromStorage(merchantSlug);
+    // Preserve the parked cache on failed retirement without displaying or
+    // importing a previous account's items into the replacement session.
+    let cached = isCartDeviceRevocationPending(merchantSlug)
+      ? []
+      : getCartFromStorage(merchantSlug);
     dispatch({
       cached,
       generation,
@@ -134,9 +144,18 @@ export function useCartLinkLifecycle(
       );
       if (cancelled || generationRef.current !== generation) return;
       if (result.ok && isTerminalCart(result.snapshot) && cached.length) {
-        adoptOutcomeRef.current = 'expired';
-        await provision(attempt);
-        return;
+        cached = unimportedTerminalLines(
+          cached,
+          result.snapshot.cartId,
+          getSharedCartImportReceipt(merchantSlug)
+        );
+        if (cached.length) {
+          // Provisioning reads the parked source again: remove only consumed mirror lines.
+          saveCartToStorage(cached, merchantSlug);
+          adoptOutcomeRef.current = 'expired';
+          await provision(attempt);
+          return;
+        }
       }
       if (result.ok) {
         adoptOutcomeRef.current = 'session';

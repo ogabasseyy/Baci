@@ -3,7 +3,6 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 
 const cart = vi.hoisted(() => ({
-  orderId: null as string | null,
   sharedCartEnabled: true,
   importWarnings: [] as string[],
   importConflicts: [],
@@ -11,12 +10,8 @@ const cart = vi.hoisted(() => ({
   discardLegacyImport: vi.fn(),
   returnToCart: vi.fn(),
 }));
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => ({ get: () => cart.orderId }),
-}));
 vi.mock('@/hooks/cart', () => ({ useCart: () => cart }));
 beforeEach(() => {
-  cart.orderId = null;
   cart.sharedCartEnabled = true;
   cart.importWarnings = [];
   vi.clearAllMocks();
@@ -72,10 +67,9 @@ it('preserves ordinary checkout when shared carts are disabled', () => {
 });
 
 it('lets existing order resume reach its own authorization and payment gate', () => {
-  cart.orderId = 'existing-order';
   cart.importWarnings = ['import_capacity_exceeded'];
   render(
-    <CheckoutCartCapacityGate allowOrderResume cartHref="/shop/cart">
+    <CheckoutCartCapacityGate validatedResume cartHref="/shop/cart">
       <p>Resume order</p>
     </CheckoutCartCapacityGate>
   );
@@ -83,4 +77,19 @@ it('lets existing order resume reach its own authorization and payment gate', ()
   expect(
     screen.queryByRole('region', { name: 'Cart import capacity' })
   ).toBeNull();
+});
+
+it('does not bypass recovery for an unvalidated order query', () => {
+  window.history.replaceState({}, '', '/checkout?orderId=not-authorized');
+  cart.importWarnings = ['import_capacity_exceeded'];
+  render(
+    <CheckoutCartCapacityGate>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  expect(
+    screen.getByRole('region', { name: 'Cart import capacity' })
+  ).toBeVisible();
+  window.history.replaceState({}, '', '/');
 });

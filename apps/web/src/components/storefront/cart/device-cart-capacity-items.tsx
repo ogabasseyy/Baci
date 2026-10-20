@@ -21,11 +21,21 @@ export function DeviceCartCapacityItems({
     setItems(getCartFromStorage(merchantSlug));
   }, [merchantSlug]);
   function remove(index: number) {
-    const selected = JSON.stringify(items[index]);
+    const selected = items[index];
+    if (!selected) return;
+    const identity = selected.cartItemId ?? selected.id;
+    const occurrence = items
+      .slice(0, index)
+      .filter((item) => (item.cartItemId ?? item.id) === identity).length;
+    let matched = 0;
     const current = getCartFromStorage(merchantSlug);
     let removed = false;
     let remaining = current.filter((item) => {
-      if (!removed && JSON.stringify(item) === selected) {
+      if (
+        !removed &&
+        (item.cartItemId ?? item.id) === identity &&
+        matched++ === occurrence
+      ) {
         removed = true;
         return false;
       }

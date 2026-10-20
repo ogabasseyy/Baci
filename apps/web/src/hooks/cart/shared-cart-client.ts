@@ -6,7 +6,7 @@ import type {
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
   isCartSessionRetiring,
-  runCartSessionWrite,
+  runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
 import {
   ensureCartDeviceRevocationCleared,
@@ -31,8 +31,11 @@ export function fetchSharedCartSnapshot(
   signal?: AbortSignal,
   merchantSlug?: string | null
 ): Promise<SharedCartFetchResult> {
-  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
-    requestSharedCartSnapshot(signal, merchantSlug)
+  return runBoundedCartSessionWrite(
+    merchantSlug,
+    UNAVAILABLE_FETCH,
+    (requestSignal) => requestSharedCartSnapshot(requestSignal, merchantSlug),
+    signal
   );
 }
 
@@ -43,7 +46,7 @@ async function requestSharedCartSnapshot(
   if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
   ) {
     return UNAVAILABLE_FETCH;
   }
@@ -82,18 +85,19 @@ export function createSharedCart(
   input: CreateSharedCartInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
-  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
-    requestCreateSharedCart(input, merchantSlug)
+  return runBoundedCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, (signal) =>
+    requestCreateSharedCart(input, merchantSlug, signal)
   );
 }
 
 async function requestCreateSharedCart(
   input: CreateSharedCartInput,
-  merchantSlug?: string | null
+  merchantSlug?: string | null,
+  signal?: AbortSignal
 ): Promise<SharedCartMutationResult> {
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
   ) {
     return UNAVAILABLE_FETCH;
   }
@@ -109,6 +113,7 @@ async function requestCreateSharedCart(
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal,
       }
     );
   } catch {
@@ -137,19 +142,20 @@ export function sendSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
-  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
-    requestSharedCartCommand(input, merchantSlug)
+  return runBoundedCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, (signal) =>
+    requestSharedCartCommand(input, merchantSlug, signal)
   );
 }
 
 async function requestSharedCartCommand(
   input: SendSharedCartCommandInput,
-  merchantSlug?: string | null
+  merchantSlug?: string | null,
+  signal?: AbortSignal
 ): Promise<SharedCartMutationResult> {
   if (isCartSessionRetiring(merchantSlug)) return UNAVAILABLE_FETCH;
   if (
     isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+    !(await ensureCartDeviceRevocationCleared(merchantSlug, signal))
   ) {
     return UNAVAILABLE_FETCH;
   }
@@ -165,6 +171,7 @@ async function requestSharedCartCommand(
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal,
       }
     );
   } catch {

@@ -3,6 +3,7 @@ import type {
   CartSnapshot,
   CartWarning,
 } from '@baci/shared/cart';
+import { isCartErrorCode } from '@baci/shared/cart';
 export type SharedCartFetchResult =
   | { ok: true; snapshot: CartSnapshot; warnings: CartWarning[] }
   | {
@@ -68,15 +69,34 @@ export async function readBody(
   }
 }
 
+function normalizeErrorCode(
+  value: unknown,
+  fallback: CartErrorCode
+): CartErrorCode {
+  if (isCartErrorCode(value)) return value;
+  switch (value) {
+    case 'missing_proof':
+    case 'invalid_proof':
+    case 'expired_proof':
+      return 'unauthorized';
+    case 'merchant_unresolved':
+    case 'merchant_mismatch':
+      return 'merchant_unavailable';
+    case 'invalid_request':
+      return 'invalid_item';
+    case 'quota_exceeded':
+      return 'rate_limited';
+    default:
+      return fallback;
+  }
+}
+
 export function failureOf(
   body: Record<string, unknown> | null,
   status: number,
   fallback: CartErrorCode = 'temporarily_unavailable'
 ): Extract<SharedCartFetchResult, { ok: false }> {
-  const code =
-    body?.code === 'forbidden'
-      ? 'unauthorized'
-      : ((body?.code as CartErrorCode | undefined) ?? fallback);
+  const code = normalizeErrorCode(body?.code, fallback);
   const snapshot =
     body && isSnapshot(body.cart) ? (body.cart as CartSnapshot) : null;
   const retryable =

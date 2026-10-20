@@ -1,3 +1,5 @@
+import { withCartRequestDeadline } from './cart-request-deadline';
+
 /** Drain authority-creating requests before retiring the cookie they can install. */
 const flights = new Map<Promise<unknown>, string>();
 const retirements = new Map<string, number>();
@@ -62,4 +64,15 @@ export function runCartSessionTransition<T>(
   });
   flights.set(pending, slug ?? '');
   return pending;
+}
+
+export function runBoundedCartSessionWrite<T>(
+  slug: string | null | undefined,
+  fallback: T,
+  operation: (signal: AbortSignal) => Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  return runCartSessionWrite(slug, fallback, () =>
+    withCartRequestDeadline(fallback, operation, signal)
+  );
 }

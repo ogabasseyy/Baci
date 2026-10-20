@@ -50,8 +50,10 @@ scripts/
 /tools/staging/existing-payment-projection/inspection_sql.test.py
 /tools/staging/existing-payment-projection/owned_transaction_drain.test.py
 /tools/staging/existing-payment-projection/projection_sql.test.py
-# --- tools/staging/interest-bridge/test-plan/ (1 files) ---
-/tools/staging/interest-bridge/test-plan/read_empty_wallet.py
+# NOTE: tools/staging/interest-bridge/test-plan/read_empty_wallet.py is
+# intentionally NOT excluded although its directory reads as test-like: it
+# is an operational credential-bearing wallet reader (token auth,
+# reads) whose exec-detected alert is owner-triageable signal.
 # --- tools/staging/isolated-savings/ (1 files) ---
 /tools/staging/isolated-savings/public-ingress.test.mjs
 # --- tools/staging/mobile-push/ (1 files) ---

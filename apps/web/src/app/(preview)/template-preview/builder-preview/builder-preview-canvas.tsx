@@ -76,17 +76,18 @@ function postPreviewResponse(response: BuilderPreviewResponse): void {
     }
   ).ReactNativeWebView;
   nativeBridge?.postMessage(message);
-  // Wildcard target origin is required because the parent frame varies across
-  // preview deployments (local/staging/production), so no static origin can
-  // be pinned. Framing is independently restricted by CSP frame-ancestors
-  // 'self' on this route (see lib/proxy/csp.ts), so a rendered parent is
-  // necessarily same-origin. The payload is schema-validated above and
+  // The parent frame varies across preview deployments
+  // (local/staging/production), so no static origin can be pinned; instead
+  // delivery is pinned dynamically to this document's own origin. Framing is
+  // independently restricted by CSP frame-ancestors 'self' on this route (see
+  // lib/proxy/csp.ts), so a rendered parent is necessarily same-origin and
+  // the dynamic target matches it. The payload is schema-validated above and
   // carries only non-sensitive preview status (ready/rendered/error,
-  // revision, capability hash/version), so an embedder receives status,
-  // never secrets. Inbound render events are additionally restricted to
-  // window.parent in receivePreview.
+  // revision, capability hash/version). Inbound render events are
+  // additionally restricted to window.parent in receivePreview.
   // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
-  if (window.parent !== window) window.parent.postMessage(message, '*');
+  if (window.parent !== window)
+    window.parent.postMessage(message, window.location.origin);
 }
 
 export function BuilderPreviewCanvas() {

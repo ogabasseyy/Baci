@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { protectedOfferFixture } from './piggyvest-protected-offer.test-support';
+import { protectedOfferFixture } from '../test-fixtures/piggyvest-protected-offer';
 import { createPiggyvestProtectedOfferController } from './piggyvest-protected-offer-controller';
 
 function setup(mode: 'publish' | 'history' = 'publish') {

@@ -2,10 +2,10 @@ import {
   createPiggyvestDraftClosureController,
   createPiggyvestScheduleController,
 } from '@baci/shared/lib';
+import { scheduleJourneyFixture } from '@baci/shared/test-fixtures/piggyvest-schedule';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
-import { scheduleJourneyFixture } from '../../../../../../packages/shared/src/lib/piggyvest-schedule.test-support';
 import { SavingsScreen } from './savings-screen';
 
 it('keeps real schedule and closure ready without recursive guards and blocks sibling resume during close', async () => {

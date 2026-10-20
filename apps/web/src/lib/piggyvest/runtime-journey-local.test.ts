@@ -2,7 +2,7 @@
 
 import { piggyvestCancellationReviewSchemas } from '@baci/shared/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { startRuntimeJourneyLocal } from './runtime-journey-local';
+import { startRuntimeJourneyLocal } from './runtime-journey-local.test-support';
 import { applyRuntimeJourneyFixture } from './runtime-journey-local-fixture';
 
 vi.mock('server-only', () => ({}));

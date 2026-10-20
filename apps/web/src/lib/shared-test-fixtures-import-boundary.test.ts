@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,9 +39,12 @@ describe('test-fixtures import boundary', () => {
   it('no developer tooling source imports shared fixtures directly', () => {
     // apps/*/tools runs in Node and is never bundled, so test-named
     // helpers are allowed there; a direct shared-fixture import is not.
-    expect(
-      findFixturePatternOffenders([join(repoRoot, 'apps/web/tools')])
-    ).toEqual([]);
+    const toolsRoots = [
+      join(repoRoot, 'apps/web/tools'),
+      join(repoRoot, 'apps/mobile-storefront/tools'),
+      join(repoRoot, 'apps/mobile-admin/tools'),
+    ].filter((dir) => existsSync(dir));
+    expect(findFixturePatternOffenders(toolsRoots)).toEqual([]);
   }, 60_000);
 
   it('flags a production -> test-utils helper -> fixture chain', () => {

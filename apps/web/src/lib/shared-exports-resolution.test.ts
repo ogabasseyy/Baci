@@ -146,4 +146,14 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       expect(existsSync(join(sharedPackageDir, target)), subpath).toBe(true);
     }
   });
+
+  it('Node-resolves every export key to its exact declared target', () => {
+    for (const [subpath, target] of Object.entries(pkg.exports)) {
+      const specifier =
+        subpath === '.' ? '@baci/shared' : `@baci/shared${subpath.slice(1)}`;
+      expect(appRequire.resolve(specifier), subpath).toBe(
+        join(sharedPackageDir, target)
+      );
+    }
+  });
 });

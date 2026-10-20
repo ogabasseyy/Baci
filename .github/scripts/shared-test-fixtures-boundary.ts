@@ -26,11 +26,11 @@ export const FIXTURE_PATTERNS = [
   // stems, whatever the callee (import, require, export-from,
   // createRequire results, dynamic import). Bare path-prefix
   // constants that do not end in a module name are not matched.
-  /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)*[\w.-]*\w(?:\.(?:m|c)?[tj]sx?)?['"`]/,
+  /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)*[\w.-]*\w(?:\.[\w]+)?['"`]/,
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'\"`]*(?:test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`]|__tests__\/)/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|[^'\"`]*?\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -43,6 +43,7 @@ export function isTestFile(path: string) {
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /\.test-fixtures?\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
   );
 }
@@ -52,7 +53,7 @@ export function isTestHelper(path: string) {
   return (
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
-    /[\w.-]*test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
+    /(?:^|[-_./])test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
       normalized
     )
   );

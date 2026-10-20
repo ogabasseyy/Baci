@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   findFixtureImportOffenders,
+  findFixturePatternOffenders,
   isTestFile,
   isTestHelper,
 } from './shared-test-fixtures-boundary.ts';
@@ -101,4 +102,14 @@ test('follows in-root symlinks and skips out-of-root links', async () => {
   assert.deepEqual(findFixtureImportOffenders([dir]), [
     join(dir, 'linked/hidden.ts'),
   ]);
+});
+
+test('fixture-pattern-only scan flags direct imports but allows helpers', () => {
+  const dir = fixtureDir({
+    'tool.ts':
+      "import { h } from './order-test-utils';\nexport const x = h;\n",
+    'direct.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
+  });
+  assert.deepEqual(findFixturePatternOffenders([dir]), [join(dir, 'direct.ts')]);
 });

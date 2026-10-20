@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { findFixtureImportOffenders } from '../../../../.github/scripts/shared-test-fixtures-boundary';
+import {
+  findFixtureImportOffenders,
+  findFixturePatternOffenders,
+} from '../../../../.github/scripts/shared-test-fixtures-boundary';
 
 // Import boundary: @baci/shared/test-fixtures/* is test-only surface.
 // The guard logic lives in one shared implementation
@@ -31,6 +34,14 @@ describe('test-fixtures import boundary', () => {
       file.replace(`${repoRoot}/`, '')
     );
     expect(offenders).toEqual([]);
+  }, 60_000);
+
+  it('no developer tooling source imports shared fixtures directly', () => {
+    // apps/*/tools runs in Node and is never bundled, so test-named
+    // helpers are allowed there; a direct shared-fixture import is not.
+    expect(
+      findFixturePatternOffenders([join(repoRoot, 'apps/web/tools')])
+    ).toEqual([]);
   }, 60_000);
 
   it('flags a production -> test-utils helper -> fixture chain', () => {

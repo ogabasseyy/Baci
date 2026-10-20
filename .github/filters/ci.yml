@@ -271,6 +271,7 @@ web:
   - 'supabase/tests/shipping-quote-proof-postgres-test-harness.mjs'
   - '.github/scripts/shipping-recovery-ci-contract.test.mjs'
   - 'apps/web/**'
+  - 'packages/tiktok-business/**'
   - '.github/scripts/shared-test-fixtures-boundary.ts'
   - '.github/scripts/shared-test-fixtures-boundary.test.mjs'
   - 'scripts/backfill-feed-images.ts'

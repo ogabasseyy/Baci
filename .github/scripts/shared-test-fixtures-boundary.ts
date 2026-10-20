@@ -161,6 +161,22 @@ export function collectSourceFiles(roots: string[]): string[] {
 // import is flagged too. That is a deliberate hard failure — the
 // specifier has no legitimate reason to appear in non-test code at
 // all — rather than an attempt at import-aware parsing.
+// Fixture-pattern-only scan, used for developer tooling trees
+// (apps/*/tools): tooling may freely use test-named helpers, but a
+// direct shared-fixture import there still executes test-double code
+// outside the apps, so it is flagged.
+export function findFixturePatternOffenders(roots: string[]): string[] {
+  const offenders: string[] = [];
+  for (const file of collectSourceFiles(roots)) {
+    if (isTestFile(file)) continue;
+    const content = readFileSync(file, 'utf8');
+    if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
+      offenders.push(file);
+    }
+  }
+  return offenders;
+}
+
 export function findFixtureImportOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {

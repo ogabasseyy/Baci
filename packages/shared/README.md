@@ -85,9 +85,12 @@ imports a fixture by a literal subpath or deep-relative specifier.
 Scan exclusions: generated-output directories (node_modules, .git,
 .turbo, .gradle, Pods, DerivedData, .next, .expo, web-build) are
 skipped at any depth; build, dist, and coverage are skipped at a scan
-root or under native ios/android trees; root-level developer tooling directories (apps/*/tools, which
-run in Node and are never bundled) are skipped; a fixture import
-inside an excluded tree is a code-review catch, not a guard catch.
+root or under native ios/android trees; root-level developer tooling
+directories (apps/*/tools, which run in Node and are never bundled)
+are exempt from the test-support pattern but are still scanned by a
+fixture-pattern-only pass, so a direct shared-fixture import in
+tooling is flagged. A fixture import inside an excluded tree is a
+code-review catch, not a guard catch.
 Symlinks that resolve inside a scan root are followed (with cycle
 protection); links resolving outside every scan root, and broken
 links, are skipped. The guards

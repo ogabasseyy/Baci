@@ -76,12 +76,15 @@ recorded as `throw`.
 Fixtures are exported as ordinary subpaths, so they are technically
 resolvable from production bundles (Next.js, Metro). The boundary is
 enforced by test, not by the exports map:
-`apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts` fails
+`apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts` (plus
+per-app mirrors in both mobile apps) fails
 if any non-test source in the three apps or in this package imports a
 fixture by a literal subpath or deep-relative specifier. The guards
 match literal specifiers only; dynamically assembled fixture paths
 are a code-review catch, not a guard catch. Never import a fixture
-from non-test code.
+from non-test code. These guard suites are force-run in CI for every
+test-plan mode (targeted and full; see `.github/workflows/ci.yml`),
+so enforcement does not depend on changed-file test selection.
 
 ## Platform isolation
 

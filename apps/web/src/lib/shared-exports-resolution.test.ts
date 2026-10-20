@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -93,6 +93,18 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       buildPendingVtuScopeTag: unknown;
     };
     expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');
+  });
+
+  it('every src domain directory with an index has a subpath export', () => {
+    // 'lib' is intentionally root-consumed internal utilities.
+    const allowlist = new Set(['lib', 'test-fixtures']);
+    for (const entry of readdirSync(join(sharedPackageDir, 'src'))) {
+      const dir = join(sharedPackageDir, 'src', entry);
+      if (!statSync(dir).isDirectory()) continue;
+      if (!existsSync(join(dir, 'index.ts'))) continue;
+      if (allowlist.has(entry)) continue;
+      expect(pkg.exports, `./${entry}`).toHaveProperty(`./${entry}`);
+    }
   });
 
   it('every exports target in package.json exists on disk', () => {

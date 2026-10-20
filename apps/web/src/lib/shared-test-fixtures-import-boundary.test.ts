@@ -48,7 +48,7 @@ const bannedPatterns = [
   // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
   // scan prefix, which does not end in a module name) are not matched.
   /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
-  /(?:from|require|import|export)\s*\(?\s*['"`][^'"`]*\.test-support/,
+  /['"`](?:\.{1,2}\/|@baci\/|packages\/)[^'"`]*\.test-support/,
 ];
 
 function isTestFile(path: string) {

@@ -162,15 +162,17 @@ export async function fetchOfferResolutions(
   callRpc: OfferAuthorityRpcCall,
   args: { merchantId?: string | null; productIds: readonly string[] }
 ): Promise<Map<string, ResolvedOfferResolution>> {
-  const unique = Array.from(new Set(args.productIds.filter((id) => id !== '')));
-  if (unique.length === 0) return new Map();
-  const malformed = unique.filter((id) => !isOfferAuthorityId(id));
+  const distinct = Array.from(
+    new Set(args.productIds.filter((id) => id !== ''))
+  );
+  if (distinct.length === 0) return new Map();
+  const malformed = distinct.filter((id) => !isOfferAuthorityId(id));
   if (malformed.length > 0) throw new OfferAuthorityInputError(malformed);
   const merged = new Map<string, ResolvedOfferResolution>();
-  for (let index = 0; index < unique.length; index += AUTHORITY_BATCH_SIZE) {
+  for (let index = 0; index < distinct.length; index += AUTHORITY_BATCH_SIZE) {
     const { data, error } = await callRpc({
       p_merchant_id: args.merchantId ?? null,
-      p_product_ids: unique.slice(index, index + AUTHORITY_BATCH_SIZE),
+      p_product_ids: distinct.slice(index, index + AUTHORITY_BATCH_SIZE),
     });
     if (error) throw new Error(error.message);
     for (const [key, resolution] of buildOfferResolutionMap(data)) {

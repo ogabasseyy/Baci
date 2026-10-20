@@ -33,15 +33,10 @@ export const CheckoutPage: React.FC = () => {
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
 
-  // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
-  // the pilot default when unset. Drives the state list source, the Places
-  // country bias, and whether the NG-only state->city sub-fetch runs — so a
-  // non-NG merchant's shoppers can populate state/city and reach merchant rates.
+  // Resolve address options and Places bias from the merchant's country.
   const merchantCountry = (merchant?.country?.trim() || 'NG').toUpperCase();
 
-  // Merchant-resolved currency (payout_currency first, country second, NGN
-  // fallback). `currencyCode` is sent to /api/payments/initialize instead of a
-  // hardcoded 'NGN'; the compact formatter renders order amounts.
+  // Use merchant currency for payment initialization and amount formatting.
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
 
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
@@ -87,7 +82,6 @@ export const CheckoutPage: React.FC = () => {
 
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
-  // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const checkoutAttempt = useCheckoutAttemptSession({
     searchParams,
@@ -295,5 +289,11 @@ export const CheckoutPage: React.FC = () => {
     },
   });
 
-  return <CheckoutCartScreen model={screenModel} order={resumedOrder} />;
+  return (
+    <CheckoutCartScreen
+      model={screenModel}
+      order={resumedOrder}
+      requestedId={searchParams.get('orderId')}
+    />
+  );
 };

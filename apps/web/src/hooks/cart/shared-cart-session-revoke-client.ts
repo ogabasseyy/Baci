@@ -1,6 +1,10 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { withCartRequestDeadline } from './cart-request-deadline';
 import { isCartSessionRetiring } from './cart-session-write-fence';
+import {
+  clearSharedCartImportReceipt,
+  getStorefrontCartStorageKey,
+} from './cart-storage';
 
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
 const ACTIVE_SESSION_KEY_PREFIX = 'baci-cart-device-session-active';
@@ -178,6 +182,18 @@ async function requestDeviceRevocation(
           body?.code === 'invalid_proof' ||
           body?.code === 'expired_proof');
     if (ok) {
+      // A pending retirement parks the previous account's cache. Erase it
+      // before releasing access: provisioning and preserved-session adoption
+      // read this key directly after passive revocation succeeds.
+      if (
+        isCartDeviceRevocationPending(merchantSlug) &&
+        typeof window !== 'undefined'
+      ) {
+        window.localStorage.removeItem(
+          getStorefrontCartStorageKey(merchantSlug)
+        );
+        clearSharedCartImportReceipt(merchantSlug);
+      }
       clearCartDeviceRevocationPending(merchantSlug);
       clearCartDeviceSessionActive(merchantSlug);
     }

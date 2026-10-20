@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { CheckoutThemeProvider } from '@/components/checkout-theme-provider';
 import { NewTemplateCheckoutPage } from '@/components/storefront/new-template';
 import { CheckoutCartCapacityGate } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutCartCapacityGate';
@@ -41,7 +42,9 @@ export default async function CheckoutPage({
         <CheckoutCartCapacityGate
           cartHref={isDomainIdentifier(slug) ? '/cart' : `/${slug}/cart`}
         >
-          <NewTemplateCheckoutPage />
+          <Suspense fallback={<p role="status">Loading checkout…</p>}>
+            <NewTemplateCheckoutPage />
+          </Suspense>
         </CheckoutCartCapacityGate>
       </CheckoutThemeProvider>
     );
@@ -51,7 +54,9 @@ export default async function CheckoutPage({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      <OgabasseyCheckoutPage />
+      <Suspense fallback={<p role="status">Loading checkout…</p>}>
+        <OgabasseyCheckoutPage />
+      </Suspense>
     </CheckoutThemeProvider>
   );
 }

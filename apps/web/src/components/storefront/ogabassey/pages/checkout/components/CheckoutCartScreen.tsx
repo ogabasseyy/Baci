@@ -1,5 +1,4 @@
 'use client';
-import { useSearchParams } from 'next/navigation';
 import type { useCheckoutAttemptSession } from '../hooks/use-checkout-attempt-session';
 import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 import { CheckoutScreen, type CheckoutScreenProps } from './CheckoutScreen';
@@ -14,11 +13,12 @@ export function matchesValidatedResume(
 export function CheckoutCartScreen({
   model,
   order,
+  requestedId,
 }: {
   model: CheckoutScreenProps;
+  requestedId: string | null;
   order: ReturnType<typeof useCheckoutAttemptSession>['resumedOrder'];
 }) {
-  const requestedId = useSearchParams().get('orderId');
   return (
     <CheckoutCartCapacityGate
       validatedResume={matchesValidatedResume(order, requestedId)}

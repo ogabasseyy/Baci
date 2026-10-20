@@ -37,8 +37,23 @@ END;
 $test$;
 -- Wildcards, case changes and malformed JSON must not enroll another tenant.
 RESET ROLE;
+-- The canonical writer rejects these values. Verify that boundary first,
+-- then stage a legacy row with only this trigger disabled in this rollback-
+-- only fixture. Restore the guard before testing the anonymous read.
+DO $guard$
+BEGIN
+  BEGIN
+    UPDATE public.merchants SET premium_features = '["SHARED_CART"]'::jsonb
+    WHERE id = '4d19ab10-0000-4000-8000-000000000001';
+    RAISE EXCEPTION 'canonical feature guard accepted non-exact enrollment';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+END;
+$guard$;
+ALTER TABLE public.merchants DISABLE TRIGGER commerce_cart_canonical_features_guard;
 UPDATE public.merchants SET premium_features = '["all_features","SHARED_CART"," shared_cart "]'::jsonb
 WHERE id = '4d19ab10-0000-4000-8000-000000000001';
+ALTER TABLE public.merchants ENABLE TRIGGER commerce_cart_canonical_features_guard;
 SET LOCAL ROLE anon;
 DO $test$
 DECLARE data jsonb;

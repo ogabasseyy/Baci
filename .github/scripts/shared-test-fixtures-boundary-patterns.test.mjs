@@ -65,3 +65,71 @@ test('config exemption is anchored to real config basenames', () => {
     join(dir, 'src/lib/vitest.config.helpers.ts'),
   ]);
 });
+
+test('flags split-literal fixture specifiers and config resolver calls', () => {
+  const dir = fixtureDir({
+    'prod.ts':
+      "const s = '@baci/shared/test-' + 'fixtures/piggyvest-purchase';\nexport const load = () => import(s);\n",
+    'vitest.config.ts':
+      "const sharedRequire = createRequire(import.meta.url);\nconst f = sharedRequire('@baci/shared/test-fixtures/piggyvest-schedule');\nexport const cfg = f;\n",
+    'jest.config.ts':
+      "import {\n  purchaseFixture\n} from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const cfg = purchaseFixture;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'jest.config.ts'),
+    join(dir, 'prod.ts'),
+    join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('detects nested prefixes, escaped literals, and arbitrary splits', () => {
+  const dir = fixtureDir({
+    'nested.ts':
+      "const root = '../test-fixtures/piggyvest/';\nexport const load = (n: string) => import(root + n);\n",
+    'escaped.ts':
+      "export const load = () => import('@baci/shared/test\\x2dfixtures/piggyvest-purchase');\n",
+    'split.ts':
+      "const specifier = '@baci/shared/test-fixt' + 'ures/piggyvest-purchase';\nexport const load = () => import(specifier);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'escaped.ts'),
+    join(dir, 'nested.ts'),
+    join(dir, 'split.ts'),
+  ]);
+});
+
+test('folds comment-separated literals; regex literals stay unflagged', () => {
+  const dir = fixtureDir({
+    'split.ts':
+      "const specifier = '@baci/shared/test-fixt' /* split */ + 'ures/piggyvest-purchase';\nexport const load = () => import(specifier);\n",
+    'regex.ts':
+      "export const re = /test-fixtures\\//;\nexport const digit = 'a\\\\d';\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'split.ts')]);
+});
+
+test('detects line continuations and no-space concatenations', () => {
+  const dir = fixtureDir({
+    'cont.ts':
+      "export const load = () => import('@baci/shared/test\\\n-fixtures/piggyvest-purchase');\n",
+    'nospace.ts':
+      "const s = '@baci/shared/test-fixt'+'ures/piggyvest-purchase';\nexport const load = () => import(s);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'cont.ts'),
+    join(dir, 'nospace.ts'),
+  ]);
+});
+
+test('classifies symlinked files by their resolved target', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    'src/prod.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'src/prod.ts'), join(dir, 'helper.test.ts'));
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(realpathSync(dir), 'src/prod.ts'),
+    join(dir, 'src/prod.ts'),
+  ]);
+});

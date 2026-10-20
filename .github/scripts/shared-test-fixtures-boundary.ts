@@ -222,13 +222,14 @@ function normalizeContent(content: string): string {
   );
   const gap = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*`;
   const fold = new RegExp(
-    String.raw`(['"])([^'"]*)\1` + gap + String.raw`\+` + gap + String.raw`(['"])([^'"]*)\3`,
+    '([\'"`])([^\'"`]*)\1' + gap + '\+' + gap + '([\'"`])([^\'"`]*)\3',
     'g'
   );
   let previous: string;
   do {
     previous = out;
-    out = out.replace(fold, '$1$2$4$1');
+    out = out.replace(fold, (m, q1: string, c1: string, _a: string, _b: string, _q: string, c2: string) =>
+      c1.includes('${') || c2.includes('${') ? m : q1 + c1 + c2 + q1);
   } while (out !== previous);
   return out;
 }

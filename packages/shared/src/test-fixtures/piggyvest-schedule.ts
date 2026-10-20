@@ -1,5 +1,8 @@
-import { vi } from 'vitest';
 import { piggyvestScheduleReviewSchemas as schemas } from '../contracts/piggyvest-schedule-review';
+import { createFixtureMock } from './fixture-mock';
+
+export type { FixtureMock } from './fixture-mock';
+export { createFixtureMock } from './fixture-mock';
 
 export function scheduleJourneyFixture() {
   const goalId = '11111111-1111-4111-8111-111111111111';
@@ -47,11 +50,11 @@ export function scheduleJourneyFixture() {
       dispatch: 'disabled',
       debitPermission: false,
     });
-  const read = vi.fn(async (operationId?: string) => ({
+  const read = createFixtureMock(async (operationId?: string) => ({
     ...snapshot(),
     historical: receipts.get(operationId ?? '') ?? null,
   }));
-  const submit = vi.fn(
+  const submit = createFixtureMock(
     async (request: ReturnType<typeof schemas.request.parse>) => {
       await Promise.resolve();
       const command = request.command;
@@ -109,8 +112,8 @@ export function scheduleJourneyFixture() {
       tenantKey: 'tenant',
       read,
       submit,
-      isCurrent: vi.fn(() => true),
-      nextOperationId: vi.fn(
+      isCurrent: createFixtureMock(() => true),
+      nextOperationId: createFixtureMock(
         () => `22222222-2222-4222-8222-${String(++sequence).padStart(12, '0')}`
       ),
     },

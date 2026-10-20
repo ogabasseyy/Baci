@@ -1,8 +1,8 @@
 import { createPiggyvestDeviceChangeController } from '@baci/shared/lib';
+import { deviceChangeFixture } from '@baci/shared/test-fixtures/piggyvest-device-change';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
-import { deviceChangeFixture } from '../../../../../../packages/shared/src/test-fixtures/piggyvest-device-change';
 import { BoundDeviceChangeReview } from './device-change-binding';
 
 it('requires exact revised terms consent and synchronously blocks incompatible confirmation', async () => {

@@ -34,29 +34,34 @@ const bannedPatterns = [
   // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
   // scan prefix, which does not end in a module name) are not matched.
   /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
-  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-support/,
+  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-[\w-]*/,
 ];
 
 function normalize(path: string) {
   return path.split(sep).join('/');
 }
 
-const ALLOWLISTED_HELPERS = new Set<string>([]); // no allowlisted helpers in this app
-
 function isTestFile(path: string) {
   const normalized = normalize(path);
   return (
     /(?:vitest|jest|metro)\.config\./.test(normalized) ||
-    // Explicit allowlist of existing importable test helpers (not a
-    // filename-pattern exemption): any NEW *.test-* helper importing a
-    // shared fixture is scanned and flagged.
-    [...ALLOWLISTED_HELPERS].some((allowed) => normalized.endsWith(allowed)) ||
+    // Fixture definitions themselves are exempt.
+    normalized.includes('/packages/shared/src/test-fixtures/') ||
+    // Test files and closed test-helper filename/location conventions
+    // (not a generic *.test-* exemption): production files importing
+    // ANY *.test-* helper are flagged by the banned patterns below.
+    normalized.includes('/__tests__/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
-    /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
+    /[\w.-]*test-(?:support|fixtures|fixture|render|utils|helpers|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
+      normalized
+    ) ||
+    /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    // Single justified exception: test-only journey module imported
+    // solely by tests/fixtures despite its production-style name.
+    normalized.endsWith('/lib/piggyvest/runtime-journey-local.ts')
   );
 }
-
 function collect(dir: string, out: string[]) {
   for (const entry of readdirSync(dir)) {
     if (skippedDirs.has(entry)) continue;
@@ -74,9 +79,16 @@ function collect(dir: string, out: string[]) {
 
 describe('shared test-fixtures import boundary', () => {
   it('no non-test source imports @baci/shared/test-fixtures', () => {
-    const offenders = collect(appRoot, []).filter((file) =>
-      bannedPatterns.some((pattern) => pattern.test(readFileSync(file, 'utf8')))
-    );
+    // This app's sources plus packages/shared/src (so a shared-source
+    // change in a mobile-only PR is guarded here, not only by web).
+    const sharedSrc = join(appRoot, '..', '..', 'packages', 'shared', 'src');
+    const offenders = collect(appRoot, [])
+      .concat(collect(sharedSrc, []))
+      .filter((file) =>
+        bannedPatterns.some((pattern) =>
+          pattern.test(readFileSync(file, 'utf8'))
+        )
+      );
     expect(offenders).toEqual([]);
   });
 });

@@ -30,5 +30,23 @@ describe('shared piggyvest fixtures (Jest smoke)', () => {
 
     schedule.read.mockRejectedValue(new Error('jest-boom'));
     await expect(schedule.read()).rejects.toThrow('jest-boom');
+
+    expect(schedule.submit.mock.calls).toHaveLength(0);
+    schedule.submit.mockImplementationOnce(
+      async () => ({ kind: 'ready' }) as never
+    );
+    await schedule.submit({} as never);
+    expect(schedule.submit.mock.calls).toHaveLength(1);
+
+    expect(schedule.options.nextOperationId()).toContain('22222222');
+    schedule.read.mockImplementationOnce(
+      async () =>
+        ({
+          kind: 'ready',
+        }) as never
+    );
+    await expect(schedule.read()).resolves.toEqual({ kind: 'ready' });
+    schedule.read.mockReset();
+    expect(schedule.read()).toBeUndefined();
   });
 });

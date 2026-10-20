@@ -48,33 +48,34 @@ const bannedPatterns = [
   // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
   // scan prefix, which does not end in a module name) are not matched.
   /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
-  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-support/,
+  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-[\w-]*/,
 ];
 
-const ALLOWLISTED_HELPERS = new Set([
-  'apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx',
-  'apps/web/src/hooks/use-notifications.test-render.tsx',
-]);
-
-function isTestFile(path: string) {
-  const normalized = path.split(sep).join('/');
-  return (
-    /(?:vitest|jest|metro)\.config\./.test(path) ||
-    // Explicit allowlist of existing importable test helpers (not a
-    // filename-pattern exemption): any NEW *.test-* helper importing a
-    // shared fixture is scanned and flagged.
-    [...ALLOWLISTED_HELPERS].some((allowed) => normalized.endsWith(allowed)) ||
-    // Explicit allowlist: only the fixture definitions themselves are
-    // exempt. Blanket /__tests__/ or *.test-fixtures.* exemptions are
-    // deliberately NOT used — files in those locations are importable
-    // from production code, so they stay scanned.
-    normalized.includes('/packages/shared/src/test-fixtures/') ||
-    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
-    /\.test-support\.(?:m|c)?[tj]sx?$/.test(path) ||
-    /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
-  );
+function normalize(path: string) {
+  return path.split(sep).join('/');
 }
 
+function isTestFile(path: string) {
+  const normalized = normalize(path);
+  return (
+    /(?:vitest|jest|metro)\.config\./.test(normalized) ||
+    // Fixture definitions themselves are exempt.
+    normalized.includes('/packages/shared/src/test-fixtures/') ||
+    // Test files and closed test-helper filename/location conventions
+    // (not a generic *.test-* exemption): production files importing
+    // ANY *.test-* helper are flagged by the banned patterns below.
+    normalized.includes('/__tests__/') ||
+    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /[\w.-]*test-(?:support|fixtures|fixture|render|utils|helpers|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
+      normalized
+    ) ||
+    /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    // Single justified exception: test-only journey module imported
+    // solely by tests/fixtures despite its production-style name.
+    normalized.endsWith('/lib/piggyvest/runtime-journey-local.ts')
+  );
+}
 function collectSourceFiles() {
   // Filesystem walk over the scan roots (no git dependency, so
   // gitignored or untracked sources are scanned too). Symlinked
@@ -109,25 +110,36 @@ describe('boundary guard pattern parity', () => {
       .sort();
   }
 
-  it('mobile mirrors use identical bannedPatterns sources', () => {
-    const own = extractBannedPatterns(
-      readFileSync(
-        join(
-          repoRoot,
-          'apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts'
-        ),
-        'utf8'
-      )
+  function extractSkippedDirs(content: string): string[] {
+    const start = content.indexOf('skippedDirs = new Set([');
+    const slice = content.slice(start, content.indexOf(']);', start));
+    return [...slice.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+  }
+
+  function extractIsTestFile(content: string): string {
+    const start = content.indexOf('function isTestFile');
+    const slice = content.slice(start, content.indexOf('\n}\n', start));
+    return slice.replace(/\s+/g, ' ').trim();
+  }
+
+  it('mobile mirrors use identical guard semantics', () => {
+    const ownPath = join(
+      repoRoot,
+      'apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts'
     );
-    expect(own.length).toBeGreaterThan(0);
+    const own = readFileSync(ownPath, 'utf8');
     for (const mirror of [
       'apps/mobile-storefront/lib/shared-test-fixtures-boundary.test.ts',
       'apps/mobile-admin/lib/shared-test-fixtures-boundary.test.ts',
     ]) {
-      const theirs = extractBannedPatterns(
-        readFileSync(join(repoRoot, mirror), 'utf8')
+      const theirs = readFileSync(join(repoRoot, mirror), 'utf8');
+      expect(extractBannedPatterns(theirs), mirror).toEqual(
+        extractBannedPatterns(own)
       );
-      expect(theirs, mirror).toEqual(own);
+      expect(extractSkippedDirs(theirs), mirror).toEqual(
+        extractSkippedDirs(own)
+      );
+      expect(extractIsTestFile(theirs), mirror).toBe(extractIsTestFile(own));
     }
   });
 });

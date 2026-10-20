@@ -248,6 +248,37 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     });
   });
 
+  it('fails closed without legacy fallback when v2 denies permission', async () => {
+    const supabase = {
+      rpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: null,
+          error: {
+            code: '42501',
+            message:
+              'permission denied for function public.redeem_receipt_claim_v2',
+          },
+        })
+        .mockResolvedValueOnce({
+          data: { redirectPath: '/receipts', status: 'ok' },
+          error: null,
+        }),
+    };
+    mockAuthenticatedSupabase(supabase);
+
+    const response = await POST(postRequest(), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: 'Failed to redeem receipt claim' });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith('redeem_receipt_claim_v2', {
+      p_source: 'web',
+      p_token_hash: hashReceiptClaimToken('claim-token'),
+    });
+  });
+
   it('returns 500 when redemption RPC data is malformed', async () => {
     const supabase = createSupabaseRpcMock({
       data: { status: 'unknown_status' },

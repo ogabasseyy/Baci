@@ -43,6 +43,7 @@ AS $function$
   INNER JOIN public.customers AS customer ON customer.id = order_row.customer_id
   WHERE (SELECT auth.uid()) IS NOT NULL
     AND customer.user_id = (SELECT auth.uid())
+    AND customer.deleted_at IS NULL
     AND coalesce(array_length(p_order_ids, 1), 0) <= 100
     AND account.order_id = ANY(coalesce(p_order_ids, ARRAY[]::uuid[]))
   ORDER BY account.order_id, account.created_at DESC NULLS LAST, account.account_number;

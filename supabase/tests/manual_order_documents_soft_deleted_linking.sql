@@ -77,4 +77,29 @@ SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('5f',32), 'web')->>'status' = 'ok', 'live row wins over soft-deleted duplicate');
 RESET ROLE;
 SELECT pg_temp.assert_true((SELECT user_id = '10000000-0000-4000-8000-000000000105' FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000101'), 'redeemer links the live row');
+-- Soft-deleted customer rows stay invisible to the ownership-checked
+-- document RPCs: a deleted-but-still-user-linked row must not leak tax
+-- subtotals or payment-account rows after deletion.
+INSERT INTO public.customers (id, merchant_id, email, user_id, deleted_at) VALUES ('10000000-0000-4000-8000-000000000114', '10000000-0000-4000-8000-000000000001', 'purged@example.com', '10000000-0000-4000-8000-000000000115', now());
+INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES ('10000000-0000-4000-8000-000000000117', '10000000-0000-4000-8000-000000000001', 'kept@example.com', '10000000-0000-4000-8000-000000000118');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000116', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000114', '10000000-0000-4000-8000-000000000010', 'purged@example.com', 'paid', 100);
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000119', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000117', '10000000-0000-4000-8000-000000000010', 'kept@example.com', 'paid', 100);
+INSERT INTO public.order_tax_subtotals (order_id, vat_category_code, vat_rate, taxable_amount, tax_amount) VALUES ('10000000-0000-4000-8000-000000000116', 'STD', 7.5, 100, 7.5);
+INSERT INTO public.order_tax_subtotals (order_id, vat_category_code, vat_rate, taxable_amount, tax_amount) VALUES ('10000000-0000-4000-8000-000000000119', 'STD', 7.5, 100, 7.5);
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider) VALUES ('10000000-0000-4000-8000-000000000116', '0123456789', 'GTBank', 'Shop', 'bank_transfer');
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider) VALUES ('10000000-0000-4000-8000-000000000119', '0123456789', 'GTBank', 'Shop', 'bank_transfer');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000115', 'purged@example.com', now(), null);
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000118', 'kept@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000115', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.get_customer_order_tax_subtotals(ARRAY['10000000-0000-4000-8000-000000000116']::uuid[])), 'soft-deleted customer sees no tax subtotals');
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.get_customer_order_payment_accounts(ARRAY['10000000-0000-4000-8000-000000000116']::uuid[])), 'soft-deleted customer sees no payment accounts');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000118', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.get_customer_order_tax_subtotals(ARRAY['10000000-0000-4000-8000-000000000119']::uuid[])), 'live customer still sees tax subtotals');
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.get_customer_order_payment_accounts(ARRAY['10000000-0000-4000-8000-000000000119']::uuid[])), 'live customer still sees payment accounts');
+RESET ROLE;
 ROLLBACK;

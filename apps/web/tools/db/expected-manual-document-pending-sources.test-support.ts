@@ -32,12 +32,12 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160080_customer_payment_accounts_row_id.sql',
-    sha256: '1c35f5fbeec2011afab31211baac6abe25a2a21f6a865fcb1c34e6813a9bcf12',
+    sha256: '5d7e1cd8edd53d5de15e56af9973fd2a463af89c849f424e797478a41666313c',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160085_customer_order_tax_subtotals_rpc.sql',
-    sha256: '232ea5ca4a164a1d276d058289650e5e7558cf6ba4d9ba7bce3e4bcc4dda16d6',
+    sha256: '17ebc8afcff6f4dcab1855cc3dd6800ddcbe170ea27f8a8c13d424db7ffcf195',
   },
   {
     repositoryPath:
@@ -57,7 +57,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: 'c02c72bac9eff44116ba2720622adf566ce8106d6530705aafa0dc8297331564',
+    sha256: '299afd569b4bddc6125f17b3044ebcff238111d2e4a69d784c7b51055be4b121',
   },
   {
     repositoryPath:

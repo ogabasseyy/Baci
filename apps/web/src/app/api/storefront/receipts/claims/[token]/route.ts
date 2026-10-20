@@ -55,12 +55,15 @@ function isMissingRedeemReceiptClaimV2Function(
     return true;
   }
 
+  // Narrow to true not-found signals only: a bare 'function' match would
+  // misclassify e.g. 'permission denied for function
+  // redeem_receipt_claim_v2' and silently downgrade redemption to the
+  // legacy RPC, which skips the verified-email and binding checks.
+  // Ambiguous errors fail closed (500) via the caller.
   const message = (error.message ?? '').toLowerCase();
   return (
     message.includes('redeem_receipt_claim_v2') &&
-    (message.includes('could not find') ||
-      message.includes('does not exist') ||
-      message.includes('function'))
+    (message.includes('could not find') || message.includes('does not exist'))
   );
 }
 

@@ -58,9 +58,14 @@ BEGIN
       ON CONFLICT (merchant_id, email) WHERE (email IS NOT NULL) DO NOTHING
       RETURNING * INTO v_owner;
       IF NOT FOUND THEN
+        -- Same live-first ordering as the email lookup above: under a
+        -- race the conflicting holder may be soft-deleted while a live
+        -- row for the verified redeemer exists, and an unordered pick
+        -- could return the dead row and strand the redemption.
         SELECT c.* INTO v_owner FROM public.customers AS c
         WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
           AND lower(btrim(COALESCE(c.email, ''))) = p_email
+        ORDER BY c.deleted_at NULLS FIRST
         LIMIT 1 FOR UPDATE;
       END IF;
     END IF;

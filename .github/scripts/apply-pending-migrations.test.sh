@@ -160,6 +160,49 @@ if PATH="$fake_bin:$PATH" \
 fi
 grep -q 'unexpected recorded/current name pair' "$fixture_root/invalid-output.log"
 
+version_alias_dir="$fixture_root/version-alias"
+mkdir -p "$version_alias_dir"
+for migration in \
+  20261003180000_storefront_available_search_facets.sql \
+  20261003193000_storefront_processor_filters.sql \
+  20261003194500_storefront_category_facets.sql; do
+  cp "$script_dir/../../supabase/migrations/$migration" "$version_alias_dir/$migration"
+done
+version_alias_log="$fixture_root/version-alias-queries.log"
+version_alias_output="$fixture_root/version-alias-output.log"
+PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$version_alias_log" \
+  FAKE_INITIAL_RESPONSE='[{"version":"20261003175517","name":"storefront_available_search_facets","statements_sha256":"ebcca693935aa385264f78b54becd4a1a8dc4695159b6dcd366ca9bceaa9166b"},{"version":"20261003183737","name":"storefront_processor_filters","statements_sha256":"1d2cd0d1eb95dff2334911ae0b51085705c16aa865eae4c5d2e90b39786e2fd7"},{"version":"20261003184149","name":"storefront_category_facets","statements_sha256":"14bd400f6d42cf80df4797dfd96c6f9db863f82488abeee9394fd6c7237d7769"}]' \
+  bash "$applier" >"$version_alias_output"
+grep -q 'already applied under version 20261003175517: 20261003180000  storefront_available_search_facets' "$version_alias_output"
+grep -q 'already applied under version 20261003183737: 20261003193000  storefront_processor_filters' "$version_alias_output"
+grep -q 'already applied under version 20261003184149: 20261003194500  storefront_category_facets' "$version_alias_output"
+grep -q 'Migrations summary: 0 applied, 3 skipped.' "$version_alias_output"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$version_alias_log"; then
+  echo 'Verified historical version aliases must not write duplicate migration history' >&2
+  exit 1
+fi
+
+wrong_version_alias_log="$fixture_root/wrong-version-alias-queries.log"
+if PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$wrong_version_alias_log" \
+  FAKE_INITIAL_RESPONSE='[{"version":"20261003175517","name":"storefront_available_search_facets","statements_sha256":"wrong"}]' \
+  bash "$applier" >"$fixture_root/wrong-version-alias-output.log" 2>&1; then
+  echo 'Expected a historical version alias with a non-matching SQL checksum to fail closed' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/wrong-version-alias-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_version_alias_log"; then
+  echo 'Rejected historical version aliases must not write migration state' >&2
+  exit 1
+fi
+
 historical_alias_dir="$fixture_root/historical-alias"
 mkdir -p "$historical_alias_dir"
 printf '%s\n' "SELECT 'current';" \

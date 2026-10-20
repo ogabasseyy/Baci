@@ -20,6 +20,31 @@ load_historical_migration_repair_handler() {
     echo "::error::historical_migration_repair_supersession_spec not defined by $repair_spec_file" >&2
     return 1
   fi
+  if ! declare -F historical_migration_version_alias_spec >/dev/null; then
+    echo "::error::historical_migration_version_alias_spec not defined by $repair_spec_file" >&2
+    return 1
+  fi
+}
+
+skip_verified_historical_migration_version_alias() {
+  local version="$1" name="$2" file="$3" alias_spec="$4"
+  local alias_version alias_name expected_sha recorded_name recorded_sha actual_sha
+
+  IFS=$'\t' read -r alias_version alias_name expected_sha <<<"$alias_spec"
+  recorded_name="$(awk -F '\t' -v version="$alias_version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  if [ -z "$recorded_name" ]; then
+    return 1
+  fi
+
+  recorded_sha="$(awk -F '\t' -v version="$alias_version" '$1 == version { print $3; exit }' <<<"$applied_migrations")"
+  actual_sha="$(sha256sum "$file" | awk '{print $1}')"
+  if [ "$recorded_name" != "$alias_name" ] || [ "$recorded_sha" != "$expected_sha" ] || [ "$actual_sha" != "$expected_sha" ]; then
+    echo "::error::Historical migration alias for $version $name failed exact-name or SQL checksum verification (recorded $alias_version: $recorded_name, stored SHA ${recorded_sha:-missing}, file SHA $actual_sha)" >&2
+    return 2
+  fi
+
+  echo "✓ already applied under version $alias_version: $version  $name"
+  skipped_count=$((skipped_count + 1))
 }
 
 apply_historical_migration_repair() {

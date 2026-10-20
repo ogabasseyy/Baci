@@ -61,6 +61,23 @@ fi
 grep -q 'historical_migration_repair_supersession_spec not defined' \
   "$fixture_root/missing-supersession-output.log"
 
+missing_version_alias_dir="$fixture_root/missing-version-alias"
+make_applier_fixture "$missing_version_alias_dir"
+cat >"$missing_version_alias_dir/historical-migration-repair-spec.sh" <<'EOF'
+historical_migration_repair_spec() { return 1; }
+historical_migration_repair_supersession_spec() { return 1; }
+EOF
+if MIGRATIONS_DIR="$missing_version_alias_dir/migrations" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  bash "$missing_version_alias_dir/apply-pending-migrations.sh" \
+  >"$fixture_root/missing-version-alias-output.log" 2>&1; then
+  echo 'Expected a repair specification without its version-alias resolver to fail closed' >&2
+  exit 1
+fi
+grep -q 'historical_migration_version_alias_spec not defined' \
+  "$fixture_root/missing-version-alias-output.log"
+
 . "$script_dir/historical-migration-repair-spec.sh"
 . "$script_dir/historical-migration-repair-handler.sh"
 

@@ -168,6 +168,9 @@ for migration in \
   20261003194500_storefront_category_facets.sql; do
   cp "$script_dir/../../supabase/migrations/$migration" "$version_alias_dir/$migration"
 done
+facets_sha="$(sha256sum "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" | awk '{print $1}')"
+processor_sha="$(sha256sum "$version_alias_dir/20261003193000_storefront_processor_filters.sql" | awk '{print $1}')"
+category_sha="$(sha256sum "$version_alias_dir/20261003194500_storefront_category_facets.sql" | awk '{print $1}')"
 version_alias_log="$fixture_root/version-alias-queries.log"
 version_alias_output="$fixture_root/version-alias-output.log"
 PATH="$fake_bin:$PATH" \
@@ -175,7 +178,15 @@ PATH="$fake_bin:$PATH" \
   SUPABASE_ACCESS_TOKEN=test \
   SUPABASE_PROJECT_REF=test \
   FAKE_QUERY_LOG="$version_alias_log" \
-  FAKE_INITIAL_RESPONSE='[{"version":"20261003175517","name":"storefront_available_search_facets","statements_sha256":"ebcca693935aa385264f78b54becd4a1a8dc4695159b6dcd366ca9bceaa9166b"},{"version":"20261003183737","name":"storefront_processor_filters","statements_sha256":"1d2cd0d1eb95dff2334911ae0b51085705c16aa865eae4c5d2e90b39786e2fd7"},{"version":"20261003184149","name":"storefront_category_facets","statements_sha256":"14bd400f6d42cf80df4797dfd96c6f9db863f82488abeee9394fd6c7237d7769"}]' \
+  FAKE_INITIAL_RESPONSE="$(jq -cn \
+    --arg facets "$facets_sha" \
+    --arg processor "$processor_sha" \
+    --arg category "$category_sha" \
+    '[
+      {version:"20261003175517",name:"storefront_available_search_facets",statements_sha256:$facets},
+      {version:"20261003183737",name:"storefront_processor_filters",statements_sha256:$processor},
+      {version:"20261003184149",name:"storefront_category_facets",statements_sha256:$category}
+    ]')" \
   bash "$applier" >"$version_alias_output"
 grep -q 'already applied under version 20261003175517: 20261003180000  storefront_available_search_facets' "$version_alias_output"
 grep -q 'already applied under version 20261003183737: 20261003193000  storefront_processor_filters' "$version_alias_output"
@@ -200,6 +211,64 @@ fi
 grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/wrong-version-alias-output.log"
 if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_version_alias_log"; then
   echo 'Rejected historical version aliases must not write migration state' >&2
+  exit 1
+fi
+
+tampered_version_alias_dir="$fixture_root/tampered-version-alias"
+mkdir -p "$tampered_version_alias_dir"
+cp "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" \
+  "$tampered_version_alias_dir/20261003180000_storefront_available_search_facets.sql"
+printf '\n-- tampered after deployment\n' \
+  >>"$tampered_version_alias_dir/20261003180000_storefront_available_search_facets.sql"
+tampered_version_alias_log="$fixture_root/tampered-version-alias-queries.log"
+if PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$tampered_version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$tampered_version_alias_log" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_sha" \
+    '[{version:"20261003175517",name:"storefront_available_search_facets",statements_sha256:$sha}]')" \
+  bash "$applier" >"$fixture_root/tampered-version-alias-output.log" 2>&1; then
+  echo 'Expected a modified local migration file to fail closed for a historical alias' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/tampered-version-alias-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$tampered_version_alias_log"; then
+  echo 'A tampered local migration must not write migration state' >&2
+  exit 1
+fi
+
+wrong_name_version_alias_log="$fixture_root/wrong-name-version-alias-queries.log"
+if PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$wrong_name_version_alias_log" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_sha" \
+    '[{version:"20261003175517",name:"unexpected_alias_name",statements_sha256:$sha}]')" \
+  bash "$applier" >"$fixture_root/wrong-name-version-alias-output.log" 2>&1; then
+  echo 'Expected an unexpected recorded alias name to fail closed' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/wrong-name-version-alias-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_name_version_alias_log"; then
+  echo 'A rejected alias name must not write migration state' >&2
+  exit 1
+fi
+
+absent_version_alias_log="$fixture_root/absent-version-alias-queries.log"
+absent_version_alias_output="$fixture_root/absent-version-alias-output.log"
+PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$absent_version_alias_log" \
+  FAKE_INITIAL_RESPONSE='[]' \
+  bash "$applier" >"$absent_version_alias_output"
+grep -q 'applied:         20261003180000  storefront_available_search_facets' "$absent_version_alias_output"
+grep -q 'Migrations summary: 3 applied, 0 skipped.' "$absent_version_alias_output"
+if [ "$(grep -c 'INSERT INTO supabase_migrations.schema_migrations' "$absent_version_alias_log")" -ne 3 ]; then
+  echo 'Absent historical aliases must continue through the regular three-migration apply path' >&2
   exit 1
 fi
 

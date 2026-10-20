@@ -86,10 +86,10 @@ fi
 
 payload="$(cat)"
 query="$(jq -r '.query' <<<"$payload")"
-if [[ "$query" == 'SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version' ]]; then
+if [[ "$query" == SELECT\ version,\ name,\ encode\(sha256\(* ]]; then
   rows="$(docker exec "$MIGRATION_TEST_CONTAINER" psql -X -qAt -F $'\t' -U postgres -h 127.0.0.1 -c "$query")"
   if [[ -n "$rows" ]]; then
-    jq -Rn '[inputs | split("\t") | {version: .[0], name: .[1]}]' <<<"$rows"
+    jq -Rn '[inputs | split("\t") | {version: .[0], name: .[1], statements_sha256: .[2]}]' <<<"$rows"
   else
     printf '[]\n'
   fi

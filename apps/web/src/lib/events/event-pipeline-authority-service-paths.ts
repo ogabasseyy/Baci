@@ -4,6 +4,19 @@ import { eventPipelineJumiaServicePaths } from '@/lib/events/event-pipeline-jumi
 export const eventPipelineAuthorityServicePaths = [
   ...eventPipelineAdsServicePaths,
   ...eventPipelineJumiaServicePaths,
+  // Only the proxy-rate-limited validate route (loyalty branch) and
+  // the orders checkout path may drive the branded loyalty resolver
+  // client (issue #3696; see the AGENTS.md temporary exception).
+  [
+    'apps/web/src/app/api/storefront/discount/validate/route.ts',
+    'apps/web/src/lib/loyalty/server-resolver-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',
+    'apps/web/src/lib/checkout/resolve-loyalty-checkout-code.ts',
+    'apps/web/src/lib/loyalty/server-resolver-client.ts',
+  ],
   // Only the HMAC-authenticated PiggyVest webhook may drive the branded
   // intake client (see server-intake-client.ts boundary doc).
   [

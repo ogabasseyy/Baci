@@ -40,6 +40,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: expectedHash,
       isLegacyIdempotencyReplay: false,
     });
@@ -61,6 +62,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: expectedHash,
       isLegacyIdempotencyReplay: true,
     });
@@ -79,6 +81,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: null,
       isLegacyIdempotencyReplay: false,
     });
@@ -140,6 +143,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
           supabase,
         })
       ).resolves.toEqual({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: localeHash,
         isLegacyIdempotencyReplay: false,
       });
@@ -210,6 +214,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
           supabase,
         })
       ).resolves.toEqual({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: localeLegacyHash,
         isLegacyIdempotencyReplay: true,
       });
@@ -220,5 +225,43 @@ describe('prepareCheckoutIdempotencyReplay', () => {
     } finally {
       localeCompare.mockRestore();
     }
+  });
+
+  it('adopts a stored alternate payload hash when the current hash is not stored', async () => {
+    const current = { ...basePayload, shipping_provider: null };
+    const alternate = { ...basePayload, shipping_provider: 'TOPSHIP' };
+    const alternateHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload(alternate)
+    );
+    const rpc = vi.fn(async (name: string, params?: Record<string, string>) => {
+      if (name === 'is_storefront_order_idempotency_hash') {
+        return {
+          data: params?.p_checkout_request_hash === alternateHash,
+          error: null,
+        };
+      }
+      return { data: false, error: null };
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    await expect(
+      prepareCheckoutIdempotencyReplay({
+        alternatePayloads: [alternate],
+        canonicalAirportType: basePayload.airport_type,
+        canonicalDeliveryMethod: basePayload.delivery_method,
+        merchantId: basePayload.merchant_id,
+        payload: current,
+        requestIdempotencyKey: 'checkout-1',
+        supabase,
+      })
+    ).resolves.toEqual({
+      adoptedAlternateShippingProvider: 'TOPSHIP',
+      checkoutRequestHash: alternateHash,
+      isLegacyIdempotencyReplay: false,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'is_storefront_order_idempotency_hash',
+      expect.objectContaining({ p_checkout_request_hash: alternateHash })
+    );
   });
 });

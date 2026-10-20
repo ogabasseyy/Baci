@@ -9,6 +9,16 @@ describe('eventPipelineAuthorityServicePaths', () => {
       ...eventPipelineAdsServicePaths,
       ...eventPipelineJumiaServicePaths,
       [
+        'apps/web/src/app/api/storefront/discount/validate/route.ts',
+        'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/orders/route.ts',
+        'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',
+        'apps/web/src/lib/checkout/resolve-loyalty-checkout-code.ts',
+        'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      ],
+      [
         'apps/web/src/app/api/webhooks/piggyvest/route.ts',
         'apps/web/src/lib/piggyvest/server-intake-client.ts',
       ],

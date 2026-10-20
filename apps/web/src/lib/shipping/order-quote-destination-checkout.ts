@@ -24,10 +24,26 @@ type CheckoutItemForQuote = PhysicalQuoteMetadata & {
 };
 
 export type QuoteCheckoutContext = {
+  /** Only order creation may adopt the pin from its validated checkout quote. */
+  isNewOrder?: boolean;
+  /**
+   * A confirmed same-key retry reproduces the first attempt so the order RPC
+   * can replay it: the time-based quote expiry check is skipped, and a
+   * cleaned-up quote row passes the address through untouched. Every other
+   * check still runs — matching is deterministic, so a live quote yields the
+   * first attempt's destination and hash exactly.
+   */
+  isConfirmedReplay?: boolean;
   items?: CheckoutItemForQuote[];
   merchantId?: string;
   shippingFee?: number;
   shippingProvider?: ShippingProviderCode | string | null;
+  /**
+   * Receives the validated merchant-scoped quote's carrier (or null when no
+   * usable quote row exists). Lets order creation persist the quote-derived
+   * provider without a second quote lookup.
+   */
+  onValidatedQuoteProvider?: (provider: string | null) => void;
 };
 
 function throwQuoteMismatch(code: string, status = 400): never {
@@ -141,7 +157,12 @@ export function validateQuoteCheckoutContext(
     throwQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
   }
 
-  if (!context.items) return;
+  // Item physical metadata is rebuilt from the mutable product catalog, so a
+  // confirmed retry must not re-judge it: a merchant edit between creation
+  // and retry would 400 a checkout the order RPC would replay. Skipping is
+  // safe because hash-significant item fields stay enforced by the RPC's own
+  // hash comparison; provider, merchant, and fee checks above still run.
+  if (!context.items || context.isConfirmedReplay) return;
   if (context.items.length !== quoteRequest.items.length) {
     throwQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
   }

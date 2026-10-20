@@ -56,5 +56,6 @@
 \ir enroll_customer_loyalty_cancel_reuse.sql
 \ir enroll_customer_loyalty_rdm_collisions.sql
 \ir enroll_customer_loyalty_rdm_release.sql
+\ir enroll_customer_loyalty_resolver_anon_revoked.sql
 
 ROLLBACK;

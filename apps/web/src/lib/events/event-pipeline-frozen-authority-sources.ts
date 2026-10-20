@@ -108,8 +108,14 @@ export const eventPipelineFrozenRoutes = {
   // Merge re-pin for #3693: shared-cart binding/condition-offer response
   // extraction plus this branch offer-economics union; both reviewed,
   // hash covers the union.
+  // Re-pinned for the #3687 merge with main: route keeps the branch's
+  // prepareCheckoutQuoteDestination extraction (live-offer prices ported
+  // into the helper) plus main's loyalty/offer replay behavior, and
+  // confirmed airport retries now count as quote replays; notification,
+  // payment, tenant authorization, and privileged-client authority are
+  // unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'e4d48e505455ab62f60be7a226853a1f45a31435101e739203fa17991d7c1db0',
+    '3b336bbab6fb055aa0efd668fa5be82ee517fe553131ba3102403c9d856828e5',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

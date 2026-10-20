@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import { GuestCartCanonicalError } from './guest-cart-errors';
+import { createGuestCanonicalBridge } from './guest-cart-canonical-bridge';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
 import { GuestCartStore } from './guest-cart-store';
 import { registerGuestCartTool } from './guest-cart-tool';
@@ -9,7 +10,13 @@ import { registerGuestCartTool } from './guest-cart-tool';
 const validate = vi.hoisted(() => vi.fn());
 vi.mock('./cart-handoff', () => ({ prepareCartHandoff: validate }));
 const id = '11111111-1111-4111-8111-111111111111';
-type Args = { product_id: string; quantity: number; cart_token?: string };
+type Args = {
+  product_id: string;
+  quantity: number;
+  cart_token?: string;
+  expectedVersion?: number;
+  operationId?: string;
+};
 function handlerFor(store: GuestCartStore) {
   let handler: ((args: Args) => Promise<unknown>) | undefined;
   const registerTool = vi.fn(
@@ -142,4 +149,114 @@ it('preserves canonical retry authority and version in the text transcript, but 
   });
   expect(update).toHaveBeenCalledTimes(2);
   expect(JSON.stringify(denied)).not.toContain(token);
+});
+
+it('retries a version conflict through the real store and canonical transport using text-derived authority', async () => {
+  const token = 'b'.repeat(64);
+  const camera = '22222222-2222-4222-8222-222222222222';
+  const cable = '33333333-3333-4333-8333-333333333333';
+  const current = {
+    cartId: '44444444-4444-4444-8444-444444444444',
+    version: 7,
+    expiresAt: '2099-01-01T00:00:00Z',
+    lines: [
+      { productId: id, quantity: 1 },
+      { productId: camera, quantity: 1 },
+      { productId: cable, quantity: 2 },
+    ],
+  };
+  const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+    expect(init?.headers).toMatchObject({
+      Authorization: `Bearer legacy_mcp_${token}`,
+    });
+    const input = JSON.parse(String(init?.body)) as {
+      productId: string;
+      quantity: number;
+      expectedVersion: number;
+      operationId: string;
+      handoff: boolean;
+    };
+    expect(input).toMatchObject({
+      productId: id,
+      quantity: 0,
+      operationId: 'remove-charger-intent',
+      handoff: true,
+    });
+    if (input.expectedVersion === 6) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          code: 'version_conflict',
+          state: current,
+          continueUrl: null,
+        }),
+        { status: 409 }
+      );
+    }
+    // The SQL writer checks the version before saving an operation receipt.
+    // Retry the same unchanged removal intent with its returned version.
+    expect(input.expectedVersion).toBe(7);
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        state: {
+          ...current,
+          version: 8,
+          lines: current.lines.filter((line) => line.productId !== id),
+        },
+        continueUrl: 'https://ogabassey.com/cart#handoff=test-only',
+      })
+    );
+  });
+  const fake = createFakeGuestCartSupabase();
+  const rpc = vi.spyOn(fake.supabase, 'rpc');
+  const bridge = createGuestCanonicalBridge(
+    'https://ogabassey.com/api/storefront/cart/legacy',
+    fetcher
+  );
+  const { handler } = handlerFor(new GuestCartStore(fake.supabase, bridge));
+  const readText = (result: unknown) => {
+    const reply = result as { content: { text: string }[] };
+    return JSON.parse(reply.content.at(-1)?.text ?? 'null') as {
+      success: boolean;
+      code?: string;
+      cart_token: string;
+      version: number;
+      items?: { product_id: string; quantity: number }[];
+    };
+  };
+  const conflicted = readText(
+    await handler({
+      product_id: id,
+      quantity: 0,
+      cart_token: token,
+      expectedVersion: 6,
+      operationId: 'remove-charger-intent',
+    })
+  );
+  expect(conflicted).toMatchObject({
+    success: false,
+    code: 'version_conflict',
+    version: 7,
+  });
+  const retried = readText(
+    await handler({
+      product_id: id,
+      quantity: 0,
+      cart_token: conflicted.cart_token,
+      expectedVersion: conflicted.version,
+      operationId: 'remove-charger-intent',
+    })
+  );
+  expect(retried).toMatchObject({
+    success: true,
+    cart_token: token,
+    version: 8,
+    items: [
+      { product_id: camera, quantity: 1 },
+      { product_id: cable, quantity: 2 },
+    ],
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(rpc).not.toHaveBeenCalled();
 });

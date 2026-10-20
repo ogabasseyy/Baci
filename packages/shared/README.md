@@ -55,6 +55,17 @@ Fixtures capture the contract clients actually parse (for HTTP, the
 response-builder output), and a fixture that is meant to prove a
 regression must fail against the pre-fix code.
 
+Fixture doubles must be runner-agnostic (no `vitest`/`jest` imports):
+fixtures are consumed by both runners. The runner-agnostic mock
+helper used by the piggyvest schedule fixture implements only this
+documented subset — `mock.calls`/`results`/`invocationCallOrder`,
+`mockClear`/`mockReset`, `mockReturnValue(Once)`,
+`mockImplementation(Once)`, `mockResolvedValue(Once)`,
+`mockRejectedValue(Once)` — do not assume full `vi.fn`/`jest.fn`
+parity (e.g. no `mock.contexts`, `mockRestore`, or
+`getMockImplementation`); extend the helper deliberately if a
+consumer needs more.
+
 Fixtures are exported as ordinary subpaths, so they are technically
 resolvable from production bundles (Next.js, Metro). The boundary is
 enforced by test, not by the exports map:

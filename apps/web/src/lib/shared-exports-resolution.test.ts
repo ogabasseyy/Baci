@@ -50,6 +50,18 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     }
   });
 
+  it('loads the schedule fixture through its exports-resolved path', async () => {
+    // Load (not just resolve) the module at the path the exports map
+    // produced, proving the file and its import graph load cleanly.
+    const resolved = appRequire.resolve(
+      '@baci/shared/test-fixtures/piggyvest-schedule'
+    );
+    const loaded = (await import(resolved)) as {
+      scheduleJourneyFixture: () => unknown;
+    };
+    expect(loaded.scheduleJourneyFixture()).toBeDefined();
+  });
+
   it('every exports target in package.json exists on disk', () => {
     for (const [subpath, target] of Object.entries(pkg.exports)) {
       expect(existsSync(join(sharedPackageDir, target)), subpath).toBe(true);

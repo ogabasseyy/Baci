@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -46,40 +47,43 @@ const bannedPatterns = [
 ];
 
 function isTestFile(path: string) {
+  const normalized = path.split(sep).join('/');
   return (
     /(?:vitest|jest|metro)\.config\./.test(path) ||
     // Explicit allowlist: only the fixture definitions themselves are
     // exempt. Blanket /__tests__/ or *.test-fixtures.* exemptions are
     // deliberately NOT used — files in those locations are importable
     // from production code, so they stay scanned.
-    path.includes('/packages/shared/src/test-fixtures/') ||
+    normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }
 
-function collectSourceFiles(dir: string, out: string[]) {
-  for (const entry of readdirSync(dir)) {
-    if (skippedDirs.has(entry)) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      collectSourceFiles(full, out);
-    } else if (/\.(?:m|c)?[tj]sx?$/.test(entry) && !isTestFile(full)) {
-      out.push(full);
-    }
-  }
-  return out;
+function collectSourceFiles() {
+  // Git-tracked files only: fast, and immune to local build artifacts.
+  const listed = execSync('git ls-files', {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return listed
+    .split('\n')
+    .filter(Boolean)
+    .map((relative) => join(repoRoot, relative))
+    .filter((file) => scanRoots.some((root) => file.startsWith(root + sep)))
+    .filter((file) => !file.split(sep).some((part) => skippedDirs.has(part)))
+    .filter((file) => /\.(?:m|c)?[tj]sx?$/.test(file))
+    .filter((file) => !isTestFile(file));
 }
 
 describe('test-fixtures import boundary', () => {
   it('no non-test source imports shared test fixtures by any path', () => {
     const offenders: string[] = [];
-    for (const root of scanRoots) {
-      for (const file of collectSourceFiles(root, [])) {
-        const content = readFileSync(file, 'utf8');
-        if (bannedPatterns.some((pattern) => pattern.test(content))) {
-          offenders.push(file.replace(`${repoRoot}/`, ''));
-        }
+    for (const file of collectSourceFiles()) {
+      const content = readFileSync(file, 'utf8');
+      if (bannedPatterns.some((pattern) => pattern.test(content))) {
+        offenders.push(file.replace(`${repoRoot}/`, ''));
       }
     }
     expect(offenders).toEqual([]);

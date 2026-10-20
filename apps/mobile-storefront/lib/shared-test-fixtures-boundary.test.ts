@@ -34,20 +34,28 @@ const bannedPatterns = [
   // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
   // scan prefix, which does not end in a module name) are not matched.
   /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
-  /['"`](?:\.{1,2}\/|@baci\/|packages\/)[^'"`]*\.test-support/,
+  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-support/,
 ];
 
 function normalize(path: string) {
   return path.split(sep).join('/');
 }
 
+const ALLOWLISTED_HELPERS = new Set([
+  'apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx',
+  'apps/web/src/hooks/use-notifications.test-render.tsx',
+]);
+
 function isTestFile(path: string) {
   const normalized = normalize(path);
   return (
     /(?:vitest|jest|metro)\.config\./.test(normalized) ||
+    // Explicit allowlist of existing importable test helpers (not a
+    // filename-pattern exemption): any NEW *.test-* helper importing a
+    // shared fixture is scanned and flagged.
+    [...ALLOWLISTED_HELPERS].some((allowed) => normalized.endsWith(allowed)) ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
-    /\.test-[\w-]+\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
   );
 }

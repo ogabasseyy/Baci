@@ -48,13 +48,22 @@ const bannedPatterns = [
   // prefix constants (e.g. a staging tool's '.../test-fixtures/piggyvest-'
   // scan prefix, which does not end in a module name) are not matched.
   /['"`][^'"`]*test-fixtures\/[\w-]*(?:\w|\.(?:m|c)?[tj]sx?)['"`]/,
-  /['"`](?:\.{1,2}\/|@baci\/|packages\/)[^'"`]*\.test-support/,
+  /['"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'"`]*\.test-support/,
 ];
+
+const ALLOWLISTED_HELPERS = new Set([
+  'apps/web/src/components/storefront/ogabassey/pages/checkout-page.test-fixtures.tsx',
+  'apps/web/src/hooks/use-notifications.test-render.tsx',
+]);
 
 function isTestFile(path: string) {
   const normalized = path.split(sep).join('/');
   return (
     /(?:vitest|jest|metro)\.config\./.test(path) ||
+    // Explicit allowlist of existing importable test helpers (not a
+    // filename-pattern exemption): any NEW *.test-* helper importing a
+    // shared fixture is scanned and flagged.
+    [...ALLOWLISTED_HELPERS].some((allowed) => normalized.endsWith(allowed)) ||
     // Explicit allowlist: only the fixture definitions themselves are
     // exempt. Blanket /__tests__/ or *.test-fixtures.* exemptions are
     // deliberately NOT used — files in those locations are importable
@@ -62,7 +71,6 @@ function isTestFile(path: string) {
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(path) ||
-    /\.test-[\w-]+\.(?:m|c)?[tj]sx?$/.test(path) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }
@@ -88,6 +96,27 @@ function collectSourceFiles() {
   for (const root of scanRoots) walk(root);
   return out;
 }
+
+describe('boundary guard pattern parity', () => {
+  it('mobile mirrors ban the same specifier classes', () => {
+    const mirrorPaths = [
+      'apps/mobile-storefront/lib/shared-test-fixtures-boundary.test.ts',
+      'apps/mobile-admin/lib/shared-test-fixtures-boundary.test.ts',
+    ];
+    const requiredFragments = [
+      '@baci\\/shared\\/test-fixtures',
+      'test-fixtures\\/',
+      '\\.test-support',
+      '@\\/',
+    ];
+    for (const mirror of mirrorPaths) {
+      const content = readFileSync(join(repoRoot, mirror), 'utf8');
+      for (const fragment of requiredFragments) {
+        expect(content, `${mirror} missing ${fragment}`).toContain(fragment);
+      }
+    }
+  });
+});
 
 describe('test-fixtures import boundary', () => {
   it('no non-test source imports shared test fixtures by any path', () => {

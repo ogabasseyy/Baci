@@ -82,9 +82,13 @@ if any non-test source in the three apps or in this package imports a
 fixture by a literal subpath or deep-relative specifier. The guards
 match literal specifiers only; dynamically assembled fixture paths
 are a code-review catch, not a guard catch. Never import a fixture
-from non-test code. These guard suites are force-run in CI for every
-test-plan mode (targeted and full; see `.github/workflows/ci.yml`),
-so enforcement does not depend on changed-file test selection.
+from non-test code. These guard suites are explicitly force-run in
+the targeted CI test-plan branches and the mobile-admin guardrail
+job, and run as part of the full suites in `full-affected` mode (see
+`.github/workflows/ci.yml`); the `config-smoke` mode (Turbo
+env-allowlist changes only) does not run them. Enforcement therefore
+does not depend on changed-file test selection in the modes that can
+change fixture imports.
 
 ## Platform isolation
 

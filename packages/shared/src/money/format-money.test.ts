@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   createMoneyFormatter,
+  type FormatMoneyOptions,
   formatMoney,
   formatMoneyCompact,
   formatMoneyMinor,
+  getMoneyCurrencyExponent,
   normalizeMoneyCurrency,
   resolveMoneyLocale,
   SUPPORTED_MONEY_CURRENCIES,
-} from './format-money';
+} from './index';
 
 // Characterization fixtures for the formatting wave (audit row 1). These
 // pin, per existing per-app call class, the output the shared formatter
 // must produce when that class adopts it:
-// - receipt standard: 2 fraction digits (receipt-money behaviour)
+// - receipt standard: currency-exponent fraction digits
 // - mobile-storefront formatPrice: NGN, 0 fraction digits
 // - web formatPrice (country-aware): currency-derived locale, 2 digits
 // - web utils formatCurrency: minor units in, 0 digits, en-NG
@@ -24,7 +26,7 @@ const NBSP = '\u00A0';
 const NNBSP = '\u202F';
 
 describe('shared money formatting characterization', () => {
-  it('pins the standard 2-digit class per allowlisted currency', () => {
+  it('pins the standard class per allowlisted currency', () => {
     expect(formatMoney(1234.5, 'NGN')).toBe('₦1,234.50');
     expect(formatMoney(1234.5, 'GHS')).toBe('GH₵1,234.50');
     expect(formatMoney(1234.5, 'KES')).toBe(`Ksh${NBSP}1,234.50`);
@@ -32,10 +34,9 @@ describe('shared money formatting characterization', () => {
     expect(formatMoney(1234.5, 'GBP')).toBe('£1,234.50');
     expect(formatMoney(1234.5, 'EUR')).toBe(`1.234,50${NBSP}€`);
     expect(formatMoney(1234.5, 'ZAR')).toBe(`R${NBSP}1${NBSP}234,50`);
-    expect(formatMoney(1234.5, 'XAF')).toBe(`1${NNBSP}234,50${NBSP}FCFA`);
-    expect(formatMoney(1234.5, 'XOF')).toBe(
-      `1${NNBSP}234,50${NBSP}F${NNBSP}CFA`
-    );
+    // Zero-decimal currencies render no fraction digits by default.
+    expect(formatMoney(1234.5, 'XAF')).toBe(`1${NNBSP}235${NBSP}FCFA`);
+    expect(formatMoney(1234.5, 'XOF')).toBe(`1${NNBSP}235${NBSP}F${NNBSP}CFA`);
   });
 
   it('pins zero, negative, and whole-amount (0-digit) outputs', () => {
@@ -67,6 +68,16 @@ describe('shared money formatting characterization', () => {
     expect(formatMoneyMinor(123450, 'NGN')).toBe('₦1,234.50');
   });
 
+  it('does not scale zero-decimal currencies in formatMoneyMinor', () => {
+    expect(getMoneyCurrencyExponent('XAF')).toBe(0);
+    expect(getMoneyCurrencyExponent('XOF')).toBe(0);
+    expect(getMoneyCurrencyExponent('NGN')).toBe(2);
+    expect(formatMoneyMinor(123450, 'XOF')).toBe(
+      `123${NNBSP}450${NBSP}F${NNBSP}CFA`
+    );
+    expect(formatMoneyMinor(123450, 'XAF')).toBe(`123${NNBSP}450${NBSP}FCFA`);
+  });
+
   it('pins compact outputs and keeps small amounts standard', () => {
     expect(formatMoneyCompact(1_200_000, 'NGN')).toBe('₦1.2M');
     expect(formatMoneyCompact(3_400_000_000, 'NGN')).toBe('₦3.4B');
@@ -90,5 +101,22 @@ describe('shared money formatting characterization', () => {
 
   it('surfaces structurally invalid currency codes', () => {
     expect(() => formatMoney(1, 'NG')).toThrow(RangeError);
+    expect(() => formatMoney(1, '')).toThrow(RangeError);
+    expect(() => formatMoney(1, '   ')).toThrow(RangeError);
+    expect(() => formatMoneyMinor(1, '')).toThrow(RangeError);
+  });
+
+  it('cannot be overridden into another currency via options', () => {
+    const rogue = {
+      currency: 'USD',
+      style: 'decimal',
+    } as unknown as FormatMoneyOptions;
+    expect(formatMoney(100, 'NGN', rogue)).toBe('₦100.00');
+  });
+
+  it('surfaces an invalid explicit locale instead of masking it', () => {
+    expect(() => formatMoney(1, 'USD', { locale: '!!invalid!!' })).toThrow(
+      RangeError
+    );
   });
 });

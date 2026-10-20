@@ -120,8 +120,9 @@ formatting wave: the currency code is the source of truth and the
 locale is derived from it via `MONEY_CURRENCY_LOCALES`; fraction digits
 are an explicit per-call-class option (standard 2, whole-amount 0,
 compact), not a hidden per-app default. `formatMoney` takes major
-units; `formatMoneyMinor` takes minor units and assumes a 2-decimal
-currency (true for every currency in `SUPPORTED_MONEY_CURRENCIES`).
+units; `formatMoneyMinor` takes minor units and scales by the
+currency's ISO 4217 exponent (100:1 for 2-decimal currencies, no
+scaling for zero-decimal XAF/XOF).
 
 Divergences this unification intentionally removes when the per-app
 adoption PRs land: mobile-storefront's NGN-only hardcoding, web's

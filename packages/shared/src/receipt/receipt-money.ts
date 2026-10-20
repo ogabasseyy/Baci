@@ -1,4 +1,4 @@
-import { MONEY_CURRENCY_LOCALES } from '../money/format-money';
+import { MONEY_CURRENCY_LOCALES } from '../money/currency-locales';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -21,13 +21,11 @@ export type VatBreakdownMerchant = Pick<
 const MONEY_TOLERANCE = 0.01;
 export const DEFAULT_NG_VAT_RATE = 7.5;
 
-// The money formatter now lives in ../money/format-money (formatting
-// wave extraction); re-exported here so receipt callers keep their
+// The money formatter now lives in ../money (formatting wave
+// extraction); re-exported here so receipt callers keep their
 // existing imports and there is one formatter/cache in the package.
-export {
-  createMoneyFormatter,
-  type MoneyFormatter,
-} from '../money/format-money';
+export { createMoneyFormatter } from '../money/create-money-formatter';
+export type { MoneyFormatter } from '../money/money-formatter';
 
 export function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '');

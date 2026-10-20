@@ -1,10 +1,7 @@
 'use client';
 
-import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect } from 'react';
-import { buildImportEntries } from './build-import-entries';
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
-import type { CartItem } from './cart-types';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
@@ -15,6 +12,7 @@ import {
   RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
+import { importInitialDeviceCart } from './shared-cart-initial-import';
 import { createInitialCartProvisioner } from './shared-cart-initial-provisioning';
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
@@ -135,6 +133,11 @@ export function useCartLinkLifecycle(
         optionsRef.current.merchantSlug
       );
       if (cancelled || generationRef.current !== generation) return;
+      if (result.ok && isTerminalCart(result.snapshot) && cached.length) {
+        adoptOutcomeRef.current = 'expired';
+        await provision(attempt);
+        return;
+      }
       if (result.ok) {
         adoptOutcomeRef.current = 'session';
         lastFetchRef.current = Date.now();
@@ -146,7 +149,13 @@ export function useCartLinkLifecycle(
         setLinkPhase('ready');
         void hydrateMissing(result.snapshot);
         if (!isTerminalCart(result.snapshot))
-          void maybeImport(result.snapshot, cached);
+          importInitialDeviceCart(
+            context,
+            result.snapshot,
+            cached,
+            generation,
+            () => !cancelled
+          );
         return;
       }
       if (result.retryable) {
@@ -170,62 +179,6 @@ export function useCartLinkLifecycle(
         return;
       }
       setLinkPhase('ready');
-    }
-
-    function maybeImport(snapshot: CartSnapshot, cached: CartItem[]): void {
-      if (cancelled || generationRef.current !== generation) return;
-      if (stateRef.current.importStatus !== 'none') return;
-      const receipt = getSharedCartImportReceipt(merchantSlug);
-      if (receipt?.cartId === snapshot.cartId) {
-        dispatch({ generation, status: 'done', type: 'import/resolved' });
-        return;
-      }
-      if (cached.length === 0) {
-        dispatch({ generation, status: 'skipped', type: 'import/resolved' });
-        return;
-      }
-      const planned = planLegacyImport(cached, snapshot, snapshot.cartId);
-      if (planned.kind === 'nothing') {
-        dispatch({ generation, status: 'skipped', type: 'import/resolved' });
-        return;
-      }
-      if (planned.kind === 'blocked') {
-        dispatch({ generation, type: 'import/capacity_exceeded' });
-        return;
-      }
-      if (planned.kind === 'conflicts') {
-        dispatch({
-          conflicts: planned.conflicts,
-          generation,
-          type: 'import/conflicts',
-        });
-        return;
-      }
-      if (planned.kind === 'create') {
-        // No server cart exists yet: the first sender pass creates with
-        // these lines instead of queueing per-line adds.
-        dispatch({
-          generation,
-          type: 'import/started',
-          warnings: planned.warnings,
-        });
-        importOpIdsRef.current = new Set([planned.operationId]);
-        return;
-      }
-      dispatch({
-        generation,
-        type: 'import/started',
-        warnings: planned.warnings,
-      });
-      const entries = buildImportEntries(planned, snapshot.cartId);
-      if (entries.length === 0) {
-        dispatch({ generation, status: 'done', type: 'import/resolved' });
-        return;
-      }
-      importOpIdsRef.current = new Set(
-        entries.map((entry) => entry.operationId)
-      );
-      dispatch({ entries, generation, type: 'import/enqueue' });
     }
 
     void adopt(0);

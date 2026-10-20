@@ -1,6 +1,7 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { CartAccountLinkInput } from '@/schemas/cart-account';
+import { runCartSessionTransition } from './cart-session-write-fence';
 import {
   cartRoute,
   failureOf,
@@ -15,7 +16,22 @@ import {
  * outcome is known, so a lost response replays the committed link
  * instead of linking twice.
  */
-export async function linkAccountCart(
+export function linkAccountCart(
+  input: CartAccountLinkInput,
+  merchantSlug?: string | null
+): Promise<SharedCartMutationResult> {
+  return runCartSessionTransition<SharedCartMutationResult>(
+    merchantSlug,
+    {
+      ok: false,
+      code: 'temporarily_unavailable',
+      retryable: true,
+      snapshot: null,
+    },
+    () => requestAccountCartLink(input, merchantSlug)
+  );
+}
+async function requestAccountCartLink(
   input: CartAccountLinkInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {

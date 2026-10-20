@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { fetchWithCsrf } from '@/lib/api-client';
+import { beginCartSessionRetirement } from './cart-session-write-fence';
 
 import {
   bootstrapSharedCart,
@@ -383,4 +383,39 @@ describe('shared origin merchant routing', () => {
       expect.anything()
     );
   });
+});
+
+it.each([
+  'command',
+  'snapshot',
+] as const)('drains in-flight %s requests before retirement completes', async (kind) => {
+  resetPendingCartDeviceRevocationsForTests();
+  vi.clearAllMocks();
+  let finish!: (response: Response) => void;
+  const reply = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  if (kind === 'command') vi.mocked(fetchWithCsrf).mockReturnValueOnce(reply);
+  else fetchMock.mockReturnValueOnce(reply);
+  const request =
+    kind === 'command'
+      ? sendSharedCartCommand(
+          {
+            command: { type: 'clear' },
+            expectedVersion: 3,
+            operationId: 'drain',
+          },
+          'shop'
+        )
+      : fetchSharedCartSnapshot(undefined, 'shop');
+  const retirement = beginCartSessionRetirement('shop');
+  const drained = vi.fn();
+  void retirement.drained.then(drained);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(drained).not.toHaveBeenCalled();
+  finish(jsonResponse({ cart: snapshot() }));
+  await request;
+  await retirement.drained;
+  expect(drained).toHaveBeenCalledOnce();
+  retirement.release();
 });

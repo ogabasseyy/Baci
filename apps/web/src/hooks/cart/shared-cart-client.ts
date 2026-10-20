@@ -1,9 +1,7 @@
 import type {
   CartCommand,
-  CartErrorCode,
   CartInputLine,
   CartSnapshot,
-  CartWarning,
 } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
@@ -15,96 +13,30 @@ import {
   isCartDeviceRevocationPending,
 } from './shared-cart-session-revoke-client';
 
-export type SharedCartFetchResult =
-  | { ok: true; snapshot: CartSnapshot; warnings: CartWarning[] }
-  | {
-      ok: false;
-      code: CartErrorCode;
-      snapshot: CartSnapshot | null;
-      retryable: boolean;
-    };
+export * from './shared-cart-client-support';
 
-export type SharedCartMutationResult =
-  | {
-      ok: true;
-      snapshot: CartSnapshot;
-      replayed: boolean;
-      warnings: CartWarning[];
-    }
-  | {
-      ok: false;
-      code: CartErrorCode;
-      snapshot: CartSnapshot | null;
-      retryable: boolean;
-    };
+import {
+  cartRoute,
+  failureOf,
+  isSnapshot,
+  readBody,
+  type SharedCartFetchResult,
+  type SharedCartMutationResult,
+  UNAVAILABLE_FETCH,
+  warningsOf,
+} from './shared-cart-client-support';
 
-export const RETRYABLE_CODES: ReadonlySet<string> = new Set([
-  'quota_exceeded',
-  'rate_limited',
-  'temporarily_unavailable',
-]);
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-export function isSnapshot(value: unknown): value is CartSnapshot {
-  return (
-    isRecord(value) &&
-    typeof value.cartId === 'string' &&
-    typeof value.merchantId === 'string' &&
-    typeof value.version === 'number' &&
-    Array.isArray(value.lines)
+/** Reads the authorized snapshot for the cookie session. */
+export function fetchSharedCartSnapshot(
+  signal?: AbortSignal,
+  merchantSlug?: string | null
+): Promise<SharedCartFetchResult> {
+  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
+    requestSharedCartSnapshot(signal, merchantSlug)
   );
 }
 
-export function warningsOf(value: Record<string, unknown>): CartWarning[] {
-  return Array.isArray(value.warnings) ? (value.warnings as CartWarning[]) : [];
-}
-
-/** The route validates this hint against its trusted host and proof. */
-export function cartRoute(path: string, merchantSlug?: string | null): string {
-  return merchantSlug
-    ? `${path}?merchantSlug=${encodeURIComponent(merchantSlug)}`
-    : path;
-}
-
-export async function readBody(
-  response: Response
-): Promise<Record<string, unknown> | null> {
-  try {
-    const parsed: unknown = await response.json();
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-export function failureOf(
-  body: Record<string, unknown> | null,
-  status: number,
-  fallback: CartErrorCode = 'temporarily_unavailable'
-): Extract<SharedCartFetchResult, { ok: false }> {
-  const code =
-    body?.code === 'forbidden'
-      ? 'unauthorized'
-      : ((body?.code as CartErrorCode | undefined) ?? fallback);
-  const snapshot =
-    body && isSnapshot(body.cart) ? (body.cart as CartSnapshot) : null;
-  const retryable =
-    status === 429 || status >= 500 || RETRYABLE_CODES.has(code);
-  return { code, ok: false, retryable, snapshot };
-}
-
-const UNAVAILABLE_FETCH: Extract<SharedCartFetchResult, { ok: false }> = {
-  code: 'temporarily_unavailable',
-  ok: false,
-  retryable: true,
-  snapshot: null,
-};
-
-/** Reads the authorized snapshot for the cookie session. */
-export async function fetchSharedCartSnapshot(
+async function requestSharedCartSnapshot(
   signal?: AbortSignal,
   merchantSlug?: string | null
 ): Promise<SharedCartFetchResult> {
@@ -138,70 +70,7 @@ export async function fetchSharedCartSnapshot(
   return failureOf(body, response.status);
 }
 
-/**
- * Mints a bounded anonymous retry identity for one merchant. The server
- * sets the session cookie; the body proof is only needed by callers
- * that cannot rely on cookies.
- */
-type BootstrapResult =
-  | { ok: true }
-  | { ok: false; code: CartErrorCode; retryable: boolean };
-
-const inFlightBootstraps = new Map<string, Promise<BootstrapResult>>();
-
-/**
- * Bootstrap is single-flight per resolved merchant: two concurrent
- * bootstraps can both leave without a live-session cookie, and
- * whichever Set-Cookie lands last wins — a cart-less bootstrap proof
- * arriving after provisioning would overwrite the proof bound to the
- * just-created cart and orphan it. Callers do not all name the
- * merchant the same way (the account panel omits the slug and lets
- * the host resolve it), so an unnamed flight coalesces with any
- * in-flight bootstrap, while distinct named merchants — the
- * client-side merchant-switch flow — keep separate flights.
- */
-export function bootstrapSharedCart(
-  merchantSlug?: string
-): Promise<BootstrapResult> {
-  const key = merchantSlug ?? '';
-  for (const [flightKey, pending] of inFlightBootstraps) {
-    if (flightKey === key || flightKey === '' || key === '') return pending;
-  }
-  const pending = runCartSessionWrite<BootstrapResult>(
-    merchantSlug,
-    { code: 'temporarily_unavailable', ok: false, retryable: true },
-    () => requestBootstrap(merchantSlug)
-  ).finally(() => {
-    if (inFlightBootstraps.get(key) === pending) inFlightBootstraps.delete(key);
-  });
-  inFlightBootstraps.set(key, pending);
-  return pending;
-}
-
-async function requestBootstrap(
-  merchantSlug?: string
-): Promise<BootstrapResult> {
-  if (
-    isCartDeviceRevocationPending(merchantSlug) &&
-    !(await ensureCartDeviceRevocationCleared(merchantSlug))
-  ) {
-    return { code: 'temporarily_unavailable', ok: false, retryable: true };
-  }
-  let response: Response;
-  try {
-    response = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
-      body: JSON.stringify(merchantSlug ? { merchantSlug } : {}),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-  } catch {
-    return { code: 'temporarily_unavailable', ok: false, retryable: true };
-  }
-  if (response.ok) return { ok: true };
-  const body = await readBody(response);
-  const failure = failureOf(body, response.status);
-  return { code: failure.code, ok: false, retryable: failure.retryable };
-}
+export { bootstrapSharedCart } from './shared-cart-bootstrap-client';
 
 export interface CreateSharedCartInput {
   operationId: string;
@@ -264,7 +133,16 @@ export interface SendSharedCartCommandInput {
   command: CartCommand;
 }
 
-export async function sendSharedCartCommand(
+export function sendSharedCartCommand(
+  input: SendSharedCartCommandInput,
+  merchantSlug?: string | null
+): Promise<SharedCartMutationResult> {
+  return runCartSessionWrite(merchantSlug, UNAVAILABLE_FETCH, () =>
+    requestSharedCartCommand(input, merchantSlug)
+  );
+}
+
+async function requestSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {

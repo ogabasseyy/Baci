@@ -13,6 +13,7 @@ import {
   markCartDeviceRevocationPending,
   revokeCartDeviceSession,
 } from '@/hooks/cart/shared-cart-session-revoke-client';
+import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
 import {
@@ -227,7 +228,7 @@ export async function performCustomerLogout(
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
-  clearCartStorage(merchantSlug, previousUserId ?? userId);
+  bumpCartSessionGeneration();
   try {
     await retirement.drained;
     const revoked = await revokeCartDeviceSession(merchantSlug);

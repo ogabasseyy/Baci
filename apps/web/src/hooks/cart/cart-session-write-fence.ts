@@ -47,3 +47,19 @@ export function beginCartSessionRetirement(slug: string) {
     },
   };
 }
+
+/** Serialize an explicit cart selection after writes that can overwrite its cookie. */
+export function runCartSessionTransition<T>(
+  slug: string | null | undefined,
+  blocked: T,
+  operation: () => Promise<T>
+): Promise<T> {
+  if (isCartSessionRetiring(slug)) return Promise.resolve(blocked);
+  const retirement = beginCartSessionRetirement(slug ?? '');
+  const pending = retirement.drained.then(operation).finally(() => {
+    retirement.release();
+    flights.delete(pending);
+  });
+  flights.set(pending, slug ?? '');
+  return pending;
+}

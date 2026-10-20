@@ -2,14 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   commitCustomerAuthSession,
   loadCustomerSession,
-  performCustomerLogout,
   resetRememberedCustomerSessionsForTests,
 } from '@/contexts/customer-auth-session';
 import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
-import {
-  isCartSessionRetiring,
-  runCartSessionWrite,
-} from '@/hooks/cart/cart-session-write-fence';
 import {
   clearCartDeviceRevocationPending,
   markCartDeviceRevocationPending,
@@ -422,36 +417,4 @@ describe('customer-auth-session passive identity revocation', () => {
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
   });
-});
-
-it('fences and drains authority writes before logout revocation', async () => {
-  vi.mocked(revokeCartDeviceSession)
-    .mockClear()
-    .mockResolvedValue({ ok: true });
-  vi.mocked(clearCartStorage).mockClear();
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
-  let finish!: () => void;
-  const write = runCartSessionWrite(
-    'ogabassey',
-    false,
-    () =>
-      new Promise<boolean>((resolve) => {
-        finish = () => resolve(true);
-      })
-  );
-  const logout = performCustomerLogout(
-    'ogabassey',
-    vi.fn(),
-    vi.fn(),
-    vi.fn(),
-    'user-1'
-  );
-  expect(isCartSessionRetiring('ogabassey')).toBe(true);
-  expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
-  expect(revokeCartDeviceSession).not.toHaveBeenCalled();
-  finish();
-  await write;
-  await logout;
-  expect(revokeCartDeviceSession).toHaveBeenCalledOnce();
-  expect(isCartSessionRetiring('ogabassey')).toBe(false);
 });

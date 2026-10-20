@@ -10,9 +10,15 @@ vi.mock('@/lib/loyalty/server-resolver-client', () => ({
   createLoyaltyResolverServiceClient: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(),
+}));
+
 import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
+import { createAnonClient } from '@/lib/supabase/anon';
 
 const mockCreateServiceClient = vi.mocked(createLoyaltyResolverServiceClient);
+const mockCreateAnonClient = vi.mocked(createAnonClient);
 
 const ROW = {
   redemption_id: '22222222-2222-4222-8222-222222222222',
@@ -32,8 +38,16 @@ function serviceClientWith(
   merchantRow: unknown = { country: 'NG', payout_currency: 'NGN' }
 ) {
   const rpc = vi.fn(async () => rpcImpl());
-  const client = {
-    rpc,
+  // Privilege split (issue #3696): the branded client is RPC-only —
+  // any table read through it throws, mirroring the production
+  // invariant. The merchant currency preview read goes over anon.
+  const from = vi.fn(() => {
+    throw new Error(
+      'The loyalty resolver service client must not query tables'
+    );
+  });
+  const client = { rpc, from } as unknown as SupabaseClient;
+  const anon = {
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -43,7 +57,8 @@ function serviceClientWith(
     })),
   } as unknown as SupabaseClient;
   mockCreateServiceClient.mockReturnValue(client as never);
-  return { client, rpc };
+  mockCreateAnonClient.mockReturnValue(anon as never);
+  return { client, rpc, anon };
 }
 
 describe('resolveLoyaltyCheckoutCode', () => {
@@ -51,8 +66,11 @@ describe('resolveLoyaltyCheckoutCode', () => {
     vi.clearAllMocks();
   });
 
-  it('resolves through the branded resolver client, never anon (issue #3696)', async () => {
-    const { rpc } = serviceClientWith(() => ({ data: [ROW], error: null }));
+  it('resolves the RPC through the branded client and reads merchants over anon (issue #3696)', async () => {
+    const { client, rpc, anon } = serviceClientWith(() => ({
+      data: [ROW],
+      error: null,
+    }));
 
     const resolution = await resolveLoyaltyCheckoutCode({
       merchantId: 'm',
@@ -64,6 +82,9 @@ describe('resolveLoyaltyCheckoutCode', () => {
       p_merchant_id: 'm',
       p_code: 'RDM-ABCDEF12',
     });
+    expect(mockCreateAnonClient).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(anon.from)).toHaveBeenCalledWith('merchants');
+    expect(vi.mocked(client.from)).not.toHaveBeenCalled();
     expect(resolution.ok).toBe(true);
   });
 

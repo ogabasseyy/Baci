@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
 import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { loyaltyCheckoutCodeRowSchema } from '@/schemas/storefront-discount';
 
 export type LoyaltyCheckoutCodeResolution =
@@ -27,8 +28,9 @@ export type LoyaltyCheckoutCodeResolution =
  * Privilege (issue #3696): the resolver RPC no longer grants anon
  * or authenticated EXECUTE (enumeration oracle), so this helper
  * builds its own branded resolver client instead of taking the
- * caller's scoped client. Callers stay behind the
- * proxy-rate-limited routes.
+ * caller's scoped client. The branded client is RPC-only: the
+ * merchant currency preview read stays on the anon client.
+ * Callers stay behind the proxy-rate-limited routes.
  */
 export async function resolveLoyaltyCheckoutCode({
   merchantId,
@@ -38,6 +40,7 @@ export async function resolveLoyaltyCheckoutCode({
   code: string;
 }): Promise<LoyaltyCheckoutCodeResolution> {
   const supabase = createLoyaltyResolverServiceClient();
+  const anon = createAnonClient();
   const { data: loyaltyRows, error: loyaltyLookupError } = await supabase.rpc(
     'get_loyalty_redemption_for_checkout',
     {
@@ -106,7 +109,7 @@ export async function resolveLoyaltyCheckoutCode({
     (discountType === 'fixed' || Number(loyaltyRow.minimum_order_amount) > 0) &&
     loyaltyRow.issuance_currency &&
     !(await isLoyaltyCodeCurrencyCurrent(
-      supabase,
+      anon,
       merchantId,
       loyaltyRow.issuance_currency
     ))

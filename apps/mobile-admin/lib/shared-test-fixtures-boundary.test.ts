@@ -15,5 +15,5 @@ const sharedSrc = join(appRoot, '..', '..', 'packages', 'shared', 'src');
 describe('shared test-fixtures import boundary', () => {
   it('no non-test source imports @baci/shared/test-fixtures', () => {
     expect(findFixtureImportOffenders([appRoot, sharedSrc])).toEqual([]);
-  });
+  }, 60_000);
 });

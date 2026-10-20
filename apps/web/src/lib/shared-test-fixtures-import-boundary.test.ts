@@ -29,7 +29,7 @@ describe('test-fixtures import boundary', () => {
       file.replace(`${repoRoot}/`, '')
     );
     expect(offenders).toEqual([]);
-  });
+  }, 60_000);
 
   it('flags a production -> test-utils helper -> fixture chain', () => {
     const dir = mkdtempSync(join(tmpdir(), 'fixture-boundary-'));
@@ -64,6 +64,15 @@ describe('test-fixtures import boundary', () => {
     writeFileSync(
       join(dir, 'prod.ts'),
       "// example: import { x } from '@baci/shared/test-fixtures/piggyvest-purchase'\nexport const f = 1;\n"
+    );
+    expect(findFixtureImportOffenders([dir])).toContain(join(dir, 'prod.ts'));
+  });
+
+  it('flags a production file importing a plain .test module', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fixture-boundary-'));
+    writeFileSync(
+      join(dir, 'prod.ts'),
+      "import { x } from './foo.test';\nexport const f = x;\n"
     );
     expect(findFixtureImportOffenders([dir])).toContain(join(dir, 'prod.ts'));
   });

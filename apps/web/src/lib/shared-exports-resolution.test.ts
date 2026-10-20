@@ -121,7 +121,13 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
     for (const entry of readdirSync(join(sharedPackageDir, 'src'))) {
       const dir = join(sharedPackageDir, 'src', entry);
       if (!statSync(dir).isDirectory()) continue;
-      if (!existsSync(join(dir, 'index.ts'))) continue;
+      if (
+        !(
+          existsSync(join(dir, 'index.ts')) ||
+          existsSync(join(dir, 'index.tsx'))
+        )
+      )
+        continue;
       if (allowlist.has(entry)) continue;
       expect(pkg.exports, `./${entry}`).toHaveProperty(`./${entry}`);
     }

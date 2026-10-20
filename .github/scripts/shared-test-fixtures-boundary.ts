@@ -30,7 +30,7 @@ export const FIXTURE_PATTERNS = [
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'\"`]*test-(?:support|fixtures|fixture|render|utils|helpers|subject)[\w-]*(?:\.|['\"`])/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'\"`]*(?:test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`])/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -52,7 +52,7 @@ export function isTestHelper(path: string) {
   const normalized = normalizePath(path);
   return (
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
-    /[\w.-]*test-(?:support|fixtures|fixture|render|utils|helpers|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
+    /[\w.-]*test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
       normalized
     ) ||
     // Single justified exception: test-only journey module imported
@@ -61,13 +61,11 @@ export function isTestHelper(path: string) {
   );
 }
 
-// Always-skipped at any depth.
-const ALWAYS_SKIPPED = new Set(['node_modules', '.git']);
-// Skipped only as direct children of a scan root (app/package root):
-// these names are generated-output or CLI-tooling directories at the
-// root level. A nested production directory that happens to be named
-// tools/build/dist deeper in a source tree is still scanned.
-const ROOT_LEVEL_SKIPPED = new Set([
+// Generated-output directories are skipped at any depth (for example
+// ios/Pods or android/app/build inside a mobile app root).
+const ALWAYS_SKIPPED = new Set([
+  'node_modules',
+  '.git',
   '.next',
   '.expo',
   '.turbo',
@@ -78,10 +76,12 @@ const ROOT_LEVEL_SKIPPED = new Set([
   'dist',
   'web-build',
   'Pods',
-  // Developer CLI tooling (apps/*/tools): executed in Node, never
-  // bundled into a production app.
-  'tools',
 ]);
+// Skipped only as direct children of a scan root: developer CLI
+// tooling (apps/*/tools) is executed in Node and never bundled, while
+// a nested production directory named tools deeper in a source tree
+// is still scanned.
+const ROOT_LEVEL_SKIPPED = new Set(['tools']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];

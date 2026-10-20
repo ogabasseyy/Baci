@@ -1,116 +1,32 @@
 -- Commit-safe VTU intent-claim overlap fence (PR #3730 review
--- round 4: Codex P1).
+-- round 4: Codex P1; split from the 305-line 20261020070000 per
+-- the 300-line modularity gate — Codex R5 P1). 20261020070000
+-- was removed unapplied pre-merge; this file and
+-- 20261020071000 carry its content unchanged.
 --
--- HOLE: terminal_at is stamped with NOW() — the terminal writer
--- transaction's START, not its commit. A terminal writer that began
--- (t0) but has not committed yet is invisible to a duplicate whose
--- admission stamp (t1 > t0) lands in that window; after preparing,
--- the duplicate's claim observes the committed terminal with
--- terminal_at < admitted_at, the stamp fence excludes it, and a
--- second mapping/fulfillment debits and vends twice. Comparing a
--- xact-start stamp against any post-commit timestamp is
--- fundamentally unsound — commit order is not stamp order
--- (pg_xact_commit_timestamp would fix it, but Supabase does not
--- enable track_commit_timestamp).
+-- HOLE: a terminal writer that began (t0) but has not committed
+-- yet is invisible to a duplicate admitted in that window (t1 >
+-- t0); after preparing, the duplicate's claim observes the
+-- committed terminal with terminal_at < admitted_at, the
+-- stamp-only fence excludes it, and a second mapping/fulfillment
+-- debits and vends twice.
 --
--- FIX (visibility, not clocks): the admission step now captures an
--- atomic admission PROOF — stamp + the scope's live (mapped,
--- non-terminal) transaction ids under ONE statement snapshot — via
--- vtu_admission_proof. The claim joins a terminal candidate that was
--- live at admission (it terminalized inside the claiming operation's
--- own window: same-operation overlap, stamp irrelevant) and applies
--- the terminal_at >= admitted_at fence ONLY to candidates already
--- terminal at admission — where MVCC visibility PROVES the writer
--- committed before admission, so the xact-start stamp genuinely
--- predates admission and the comparison is sound. Legacy NULL
+-- FIX (visibility, not clocks): the claim joins terminal
+-- candidates live at admission (the vtu_admission_proof snapshot
+-- from 20261020071000, captured atomically with the stamp —
+-- terminalized inside the claiming operation's own window:
+-- same-operation overlap, stamp irrelevant) and applies the
+-- terminal_at >= admitted_at fence ONLY to candidates already
+-- terminal at admission, where MVCC visibility PROVES the writer
+-- committed before admission, so its xact-start stamp genuinely
+-- predates it and the comparison is sound. Legacy NULL
 -- terminal_at stays definitively stale (R3 P2).
 --
--- The stamp is statement_timestamp() (statement start = snapshot
--- time), not NOW() (xact start): pre-statement SETs inside the
--- postgREST transaction would otherwise reopen a microsecond gap
--- between stamp and snapshot. Same DB clock both sides: no skew.
---
--- Scope note: the proof snapshots by (merchant, fingerprint) across
--- customers (customer_id is unknowable pre-prepare — the customer
--- row may not exist yet). The claim's WHERE still enforces the
--- exact (merchant, customer, fingerprint) scope on the snapshot-hit
--- path, so foreign ids can never match — the merchant-wide set is a
--- sound superset (no misses, no wrong joins). UUIDs only; the route
--- never logs or responds them. Merchant resolution mirrors the
--- route's alias fallback (direct slug, then merchant_slug_aliases);
--- an unknown slug yields an empty set and the stamp — downstream
--- ownership/prepare guards reject it exactly as today.
---
--- Signature change (append-only repair): vtu_admission_timestamp is
--- dropped (superseded by the proof — no dead privileged surface),
--- and the 6-arg claim is dropped and recreated with REQUIRED
--- p_admission_live (NULL raises: a caller that cannot prove
--- admission liveness must not silently fall back to the stamp-only
--- fence). Earlier claim migrations are untouched; grants are
--- re-applied after the drops (DROP does not preserve them).
-
-CREATE OR REPLACE FUNCTION public.vtu_admission_proof(
-  p_merchant_slug text,
-  p_fingerprint text
-)
-RETURNS TABLE (
-  admitted_at timestamptz,
-  live_transaction_ids uuid[]
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-  WITH merchant AS (
-    SELECT m.id
-    FROM public.merchants AS m
-    WHERE m.slug = p_merchant_slug
-    UNION ALL
-    SELECT a.merchant_id
-    FROM public.merchant_slug_aliases AS a
-    WHERE a.old_slug = p_merchant_slug
-      AND NOT EXISTS (
-        SELECT 1 FROM public.merchants AS live
-        WHERE live.slug = p_merchant_slug
-      )
-    LIMIT 1
-  )
-  SELECT
-    pg_catalog.statement_timestamp(),
-    COALESCE(
-      (
-        SELECT pg_catalog.array_agg(t.id)
-        FROM public.vtu_idempotency_keys AS k
-        JOIN public.vtu_transactions AS t
-          ON t.id = k.vtu_transaction_id
-        WHERE k.merchant_id = (SELECT id FROM merchant)
-          AND k.request_fingerprint = p_fingerprint
-          AND t.status NOT IN ('successful', 'failed')
-      ),
-      '{}'
-    );
-$$;
-
-COMMENT ON FUNCTION
-  public.vtu_admission_proof(text, text)
-IS
-  'Atomic VTU intent-claim admission proof: DB-clock stamp plus the merchant-scope live (mapped, non-terminal) transaction ids under one statement snapshot. The claim joins terminals live at admission (same-operation overlap) and stamps-fences the rest. service_role only; called exclusively from the wallet-only checkout route.';
-
-DROP FUNCTION IF EXISTS public.vtu_admission_timestamp();
-
-REVOKE ALL ON FUNCTION
-  public.vtu_admission_proof(text, text)
-FROM PUBLIC;
-REVOKE ALL ON FUNCTION
-  public.vtu_admission_proof(text, text)
-FROM anon;
-REVOKE ALL ON FUNCTION
-  public.vtu_admission_proof(text, text)
-FROM authenticated;
-GRANT EXECUTE ON FUNCTION
-  public.vtu_admission_proof(text, text)
-TO service_role;
+-- Signature change (append-only repair): the 6-arg claim is
+-- dropped and recreated with REQUIRED p_admission_live (NULL
+-- raises: a caller that cannot prove admission liveness must not
+-- silently fall back to the stamp-only fence). Grants are
+-- re-applied after the drop (DROP does not preserve them).
 
 DROP FUNCTION IF EXISTS
   public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz);

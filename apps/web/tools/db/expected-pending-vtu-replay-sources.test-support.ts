@@ -80,7 +80,17 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261020070000_claim_vtu_intent_admission_liveness.sql',
-    sha256: 'f3a886fd9e6fe8a9935c8336e0864c239b3e309e3bfecf459e2648b8d76eadcd',
+      'supabase/migrations/20261020071000_vtu_admission_proof.sql',
+    sha256: '844fbc15ad7c9022fab10cc4f1b09cddf25bead362892f21d5c854c4f2760d6f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020072000_claim_vtu_intent_admission_liveness.sql',
+    sha256: '143ebfaf389f25990edb62cbf3c9a85f67f008d7e786062a4717945052de6be0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020073000_vtu_admission_proof_index.sql',
+    sha256: '56003d758b19b39621cbe8801b82f2d14552778174fd5adb3e01f26a34b25b3c',
   },
 ];

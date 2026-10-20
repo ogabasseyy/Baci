@@ -228,7 +228,7 @@ function normalizeContent(content: string): string {
   let previous: string;
   do {
     previous = out;
-    out = out.replace(fold, (m, q1: string, c1: string, _a: string, _b: string, _q: string, c2: string) =>
+    out = out.replace(fold, (m, q1: string, c1: string, _q2: string, c2: string) =>
       c1.includes('${') || c2.includes('${') ? m : q1 + c1 + c2 + q1);
   } while (out !== previous);
   return out;

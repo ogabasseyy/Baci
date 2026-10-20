@@ -33,6 +33,14 @@ describe('fetch-storefront-product-offers', () => {
     });
   });
 
+  // Well-formed authority ids (the shared client rejects malformed
+  // ids before any RPC, exactly like the server would).
+  const uuid = (n: number) =>
+    `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const PRODUCT_1 = uuid(1);
+  const PRODUCT_2 = uuid(2);
+  const OFFER_7 = uuid(7);
+
   it('returns an empty object without calling the rpc when no offer product ids are provided', async () => {
     await expect(getStorefrontProductOffersByProductIds([])).resolves.toEqual(
       {}
@@ -45,8 +53,8 @@ describe('fetch-storefront-product-offers', () => {
       Promise.resolve({
         data: [
           {
-            product_id: 'product-1',
-            offer_id: 'offer-7',
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
             condition: 'used',
             price_basis: 80000,
             compare_at_price: 90000,
@@ -56,37 +64,33 @@ describe('fetch-storefront-product-offers', () => {
             condition_notes: 'Light wear',
             images: ['offer.jpg'],
           },
-          { product_id: 'product-1', offer_id: null },
+          { product_id: PRODUCT_1, offer_id: null },
         ],
         error: null,
       })
     );
 
     await expect(
-      getStorefrontProductOffersByProductIds([
-        'product-1',
-        'product-2',
-        'product-1',
-      ])
+      getStorefrontProductOffersByProductIds([PRODUCT_1, PRODUCT_2, PRODUCT_1])
     ).resolves.toEqual({
-      'product-1': [
+      [PRODUCT_1]: [
         {
           compare_at_price: 90000,
           condition: 'used',
           condition_notes: 'Light wear',
           grade: 'B',
-          id: 'offer-7',
+          id: OFFER_7,
           images: ['offer.jpg'],
           price: 80000,
           stock_quantity: 2,
         },
       ],
-      'product-2': [],
+      [PRODUCT_2]: [],
     });
     expect(mockRpc).toHaveBeenCalledTimes(1);
     expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
       p_merchant_id: null,
-      p_product_ids: ['product-1', 'product-2'],
+      p_product_ids: [PRODUCT_1, PRODUCT_2],
     });
   });
 
@@ -95,7 +99,7 @@ describe('fetch-storefront-product-offers', () => {
       Promise.resolve({ data: [], error: null })
     );
 
-    const ids = Array.from({ length: 25 }, (_, index) => `product-${index}`);
+    const ids = Array.from({ length: 25 }, (_, index) => uuid(100 + index));
     const result = await getStorefrontProductOffersByProductIds(ids);
 
     expect(Object.keys(result ?? {})).toHaveLength(25);
@@ -106,13 +110,42 @@ describe('fetch-storefront-product-offers', () => {
     });
   });
 
+  it('chunks past the 200-id unscoped cap and merges every chunk', async () => {
+    const chunkSizes: number[] = [];
+    mockRpc.mockImplementation((...call: unknown[]) => {
+      const ids = (call[1] as { p_product_ids: string[] }).p_product_ids;
+      chunkSizes.push(ids.length);
+      return Promise.resolve({
+        data: ids.map((id) => ({
+          product_id: id,
+          offer_id: OFFER_7,
+          condition: 'used',
+          price_basis: 80000,
+          allocatable_stock: 2,
+          parent_eligible: true,
+        })),
+        error: null,
+      });
+    });
+
+    const ids = Array.from({ length: 250 }, (_, index) => uuid(1000 + index));
+    const result = await getStorefrontProductOffersByProductIds(ids);
+
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(chunkSizes).toEqual([200, 50]);
+    expect(Object.keys(result ?? {})).toHaveLength(250);
+    expect(result?.[ids[0]]).toHaveLength(1);
+    expect(result?.[ids[249]]).toHaveLength(1);
+  });
+
   it('returns null when the offer lookup fails', async () => {
     mockRpc.mockReturnValueOnce(
       Promise.resolve({ data: null, error: { message: 'boom' } })
     );
 
     await expect(
-      getStorefrontProductOffersByProductIds(['product-1', 'product-2'])
+      getStorefrontProductOffersByProductIds([PRODUCT_1, PRODUCT_2])
     ).resolves.toBeNull();
+    expect(mockRpc).toHaveBeenCalledTimes(1);
   });
 });

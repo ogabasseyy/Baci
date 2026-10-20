@@ -162,10 +162,15 @@ export async function loadMcpProductVariants({
     } else {
       offers = ((data ?? []) as unknown[]).flatMap((row) => {
         const resolution = coerceOfferAuthorityRow(row);
+        // Live SQL withholds gated-out rows; a partial projection that
+        // still carries one must never be advertised (checkout rejects
+        // ineligible parents). Same fail-closed guard as cart, order,
+        // and native consumers.
         if (
           !resolution ||
           resolution.productId !== product.id ||
-          resolution.priceBasis === null
+          resolution.priceBasis === null ||
+          resolution.parentEligible !== true
         )
           return [];
         // Display prices from the live basis and availability from the

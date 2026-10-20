@@ -6,19 +6,19 @@ import { piggyvestScheduleReviewSchemas as schemas } from '../contracts/piggyves
 // mockReturnValue, mockImplementation) plus the _isMockFunction marker
 // both runners' called-times matchers check.
 type FixtureMock<A extends unknown[], R> = ((...args: A) => R) & {
-  mock: { calls: A[] };
-  mockClear: () => void;
-  mockReturnValue: (value: R) => void;
-  mockImplementation: (impl: (...args: A) => R) => void;
-  mockImplementationOnce: (impl: (...args: A) => R) => void;
-  mockResolvedValue: (value: Awaited<R>) => void;
-  mockResolvedValueOnce: (value: Awaited<R>) => void;
-  mockRejectedValue: (error: unknown) => void;
+  mock: { calls: A[]; results: Array<{ type: 'return'; value: R }> };
+  mockClear: () => FixtureMock<A, R>;
+  mockReturnValue: (value: R) => FixtureMock<A, R>;
+  mockImplementation: (impl: (...args: A) => R) => FixtureMock<A, R>;
+  mockImplementationOnce: (impl: (...args: A) => R) => FixtureMock<A, R>;
+  mockResolvedValue: (value: Awaited<R>) => FixtureMock<A, R>;
+  mockResolvedValueOnce: (value: Awaited<R>) => FixtureMock<A, R>;
+  mockRejectedValue: (error: unknown) => FixtureMock<A, R>;
   getMockName: () => string;
   _isMockFunction: true;
 };
 
-function createFixtureMock<A extends unknown[], R>(
+export function createFixtureMock<A extends unknown[], R>(
   impl: (...args: A) => R
 ): FixtureMock<A, R> {
   let current = impl;
@@ -26,31 +26,40 @@ function createFixtureMock<A extends unknown[], R>(
   const mockFn = ((...args: A) => {
     mockFn.mock.calls.push(args);
     const once = onceQueue.shift();
-    return (once ?? current)(...args);
+    const value = (once ?? current)(...args);
+    mockFn.mock.results.push({ type: 'return', value });
+    return value;
   }) as FixtureMock<A, R>;
-  mockFn.mock = { calls: [] };
+  mockFn.mock = { calls: [], results: [] };
   mockFn.mockClear = () => {
     mockFn.mock.calls.length = 0;
+    mockFn.mock.results.length = 0;
+    onceQueue.length = 0;
+    return mockFn;
   };
   mockFn.mockReturnValue = (value: R) => {
     current = () => value;
+    return mockFn;
   };
   mockFn.mockImplementation = (next: (...args: A) => R) => {
     current = next;
+    return mockFn;
   };
   mockFn.mockImplementationOnce = (next: (...args: A) => R) => {
     onceQueue.push(next);
+    return mockFn;
   };
   mockFn.mockResolvedValue = (value: Awaited<R>) => {
-    current = () => value as R;
+    current = () => Promise.resolve(value) as R;
+    return mockFn;
   };
   mockFn.mockResolvedValueOnce = (value: Awaited<R>) => {
-    onceQueue.push(() => value as R);
+    onceQueue.push(() => Promise.resolve(value) as R);
+    return mockFn;
   };
   mockFn.mockRejectedValue = (error: unknown) => {
-    current = () => {
-      throw error;
-    };
+    current = () => Promise.reject(error) as R;
+    return mockFn;
   };
   mockFn.getMockName = () => 'fixtureMock';
   mockFn._isMockFunction = true;

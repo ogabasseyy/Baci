@@ -55,6 +55,14 @@ Fixtures capture the contract clients actually parse (for HTTP, the
 response-builder output), and a fixture that is meant to prove a
 regression must fail against the pre-fix code.
 
+Fixtures are exported as ordinary subpaths, so they are technically
+resolvable from production bundles (Next.js, Metro). The boundary is
+enforced by test, not by the exports map:
+`apps/web/src/lib/shared-test-fixtures-import-boundary.test.ts` fails
+if any non-test source in the three apps or in this package imports a
+fixture by subpath or deep-relative path. Never import a fixture from
+non-test code.
+
 ## Platform isolation
 
 This package declares only `@noble/hashes` and a Zod peer dependency

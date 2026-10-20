@@ -77,7 +77,7 @@ const sharedAliases = [
     replacement: path.join(sharedPackagePath, 'vtu/index.ts'),
   },
   {
-    find: /^@baci\/shared\/test-fixtures\/(piggyvest-(?:purchase|device-change|protected-offer|draft-closure|schedule))$/,
+    find: /^@baci\/shared\/test-fixtures\/([\w-]+)$/,
     replacement: `${sharedPackagePath}/test-fixtures/$1.ts`,
   },
 ];

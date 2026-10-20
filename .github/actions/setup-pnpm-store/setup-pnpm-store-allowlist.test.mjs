@@ -100,7 +100,16 @@ test('every workflow caller command is allowlisted (contract test)', () => {
   for (const cmd of callers) {
     assert.ok(allowed.has(cmd), `caller command not allowlisted: ${cmd}`);
   }
+  const def = actionDefault(INSTALL_ACTION);
+  assert.ok(def, 'expected an install-command default in the action');
+  assert.ok(allowed.has(def), `action default not allowlisted: ${def}`);
 });
+
+function actionDefault(actionPath) {
+  const text = readFileSync(actionPath, 'utf8');
+  const m = text.match(/install-command:\s*\n(?:.*\n)*?\s*default:\s*['"]?(.+?)['"]?\s*$/m);
+  return m && m[1];
+}
 
 test('enumerated commands execute, hostile inputs fail closed', () => {
   const script = runBlock(INSTALL_ACTION, INSTALL_STEP);

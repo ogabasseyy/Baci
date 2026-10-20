@@ -73,7 +73,8 @@ scripts/
 /tools/staging/replay-complete-cutover-owner/replay_generation_probe_seal.test.py
 
 # Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
-/apps/mobile-storefront/__tests__/
+# Per-file: only the alert-generating file is excluded, not the whole tree.
+/apps/mobile-storefront/__tests__/config/quiz-ads-release-workflow.test.ts
 /apps/mobile-storefront/components/wallet/savings/PiggyvestProtectedOffer.test.tsx
 /apps/mobile-storefront/config/withAndroidGradleFixes.test.js
 /apps/mobile-storefront/constants/payment-clipboard-bridge.test.ts

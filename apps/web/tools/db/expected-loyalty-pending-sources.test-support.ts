@@ -136,6 +136,6 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261019000000_revoke_loyalty_resolver_anon_execute.sql',
-    sha256: 'de0d0068dd3f3fbc6b42f8067acebea6c4f0512e57cb05670349cf3b1f92d376',
+    sha256: 'd873752e1b9b885e5b1e5b315b62520b41cd235f509d55646e95685505a201a7',
   },
 ] as const;

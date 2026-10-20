@@ -58,8 +58,19 @@ function installBridge() {
   return postMessage;
 }
 
-function send(data: unknown, target: Window | Document = window) {
-  act(() => target.dispatchEvent(new MessageEvent('message', { data })));
+function send(
+  data: unknown,
+  target: Window | Document = window,
+  source?: Window | null
+) {
+  act(() => {
+    target.dispatchEvent(
+      new MessageEvent('message', {
+        data,
+        ...(source !== undefined ? { source } : {}),
+      })
+    );
+  });
 }
 
 describe('BuilderPreviewCanvas', () => {
@@ -102,6 +113,62 @@ describe('BuilderPreviewCanvas', () => {
         expect.stringContaining('"revision":3')
       )
     );
+  });
+
+  it('ignores render events posted from a non-parent window', async () => {
+    installBridge();
+    render(<BuilderPreviewCanvas />);
+
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const foreign = frame.contentWindow;
+    expect(foreign).not.toBeNull();
+    expect(foreign).not.toBe(window.parent);
+    try {
+      send(validMessage(9, 'foreign-window'), window, foreign as Window);
+      await act(async () => {});
+      expect(
+        screen.queryByTestId('builder-preview-render')
+      ).not.toBeInTheDocument();
+    } finally {
+      frame.remove();
+    }
+  });
+
+  it('accepts render events posted by the parent window', async () => {
+    installBridge();
+    render(<BuilderPreviewCanvas />);
+
+    send(validMessage(10, 'parent-window'), window, window.parent);
+
+    expect(await screen.findByText('parent-window')).toBeInTheDocument();
+  });
+
+  it('pins outbound responses to the document origin, never wildcard', async () => {
+    installBridge();
+    const parentPost = vi.fn();
+    const realParent = window.parent;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: { postMessage: parentPost },
+    });
+    try {
+      render(<BuilderPreviewCanvas />);
+
+      await waitFor(() => expect(parentPost).toHaveBeenCalled());
+      expect(parentPost.mock.calls.length).toBeGreaterThan(0);
+      for (const [message, targetOrigin] of parentPost.mock.calls) {
+        expect(targetOrigin).toBe(window.location.origin);
+        expect(JSON.parse(message as string)).toEqual(
+          expect.objectContaining({ type: expect.any(String) })
+        );
+      }
+    } finally {
+      Object.defineProperty(window, 'parent', {
+        configurable: true,
+        value: realParent,
+      });
+    }
   });
 
   it('accepts Android document and iOS window string transports before revision gating', async () => {

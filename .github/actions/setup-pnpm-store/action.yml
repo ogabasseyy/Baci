@@ -19,12 +19,22 @@ runs:
   steps:
     - name: Export PNPM_STORE_DIR
       shell: bash
-      run: echo "PNPM_STORE_DIR=${{ inputs.store-dir }}" >> "$GITHUB_ENV"
+      env:
+        STORE_DIR: ${{ inputs.store-dir }}
+      run: |
+        delimiter="EOF-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        {
+          echo "PNPM_STORE_DIR<<${delimiter}"
+          echo "$STORE_DIR"
+          echo "${delimiter}"
+        } >> "$GITHUB_ENV"
 
     - name: Reset pnpm store directory
       if: ${{ inputs.reset == 'true' }}
       shell: bash
-      run: rm -rf "${{ inputs.store-dir }}" || true
+      env:
+        STORE_DIR: ${{ inputs.store-dir }}
+      run: rm -rf -- "$STORE_DIR" || true
 
     - name: Configure pnpm store directory
       shell: bash

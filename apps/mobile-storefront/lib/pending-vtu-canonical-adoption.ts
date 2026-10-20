@@ -67,10 +67,11 @@ export async function adoptCanonicalVtuKey(
           return 'stale' as const;
         }
         if (live.key === expectedKey) {
-          // Already adopted (own retry or a sibling won): skip the
-          // rebind but still flush below — the winner must land.
+          // Loser key still live: rebind to the canonical winner.
           pendingPurchases.set(descriptor, { ...live, key });
         }
+        // Already adopted (own retry or a sibling won): skip the
+        // rebind but still flush below — the winner must land.
         return persistPendingVtuPurchases()
           ? ('saved' as const)
           : ('failed' as const);

@@ -4,10 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const sendEmail = vi.hoisted(() => vi.fn());
 vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail }));
-vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/receipt-pdf-generator')>()),
-  resolveReceiptLogoDataUri: vi.fn().mockResolvedValue(null),
-}));
+vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
+  const original: typeof import('@/lib/receipt-pdf-generator') =
+    await importOriginal();
+  return {
+    ...original,
+    resolveReceiptLogoDataUri: vi.fn().mockResolvedValue(null),
+  };
+});
 
 import { database, row } from './manual-order-document.test-utils';
 import { sendManualOrderDocument } from './send-manual-order-document';

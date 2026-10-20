@@ -19,7 +19,7 @@ import { type SavedItem, useSavedStore } from '@/stores/saved-store';
 // when no match basis was persisted (mirrors search.tsx PDP nav).
 const buildProductHref = (item: SavedItem) => {
   if (!item.match_variant_id && !item.match_offer_id && !item.match_condition) {
-    return `/product/${item.slug}`;
+    return `/product/${item.slug}` as const;
   }
   // An exact option id resolves its own live condition on the PDP. A
   // persisted snapshot condition can be stale (the merchant reconditioned

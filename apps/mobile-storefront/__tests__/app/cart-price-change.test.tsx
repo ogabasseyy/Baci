@@ -22,6 +22,9 @@ import {
   setupCartMocks,
 } from './cart.test-utils';
 
+// These isolated screen fixtures represent a focused navigation route.
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
+
 jest.mock('expo-router', () => mockExpoRouterModule());
 jest.mock('@tanstack/react-query', () => mockReactQueryModule());
 jest.mock('@/components/checkout/checkout-entry-prefetch', () =>

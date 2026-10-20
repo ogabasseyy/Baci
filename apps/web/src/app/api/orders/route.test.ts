@@ -709,6 +709,23 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
+// Issue #3696: the loyalty resolver runs on its own branded
+// resolver client. Only the unknown-code path reaches it here (SAVE10
+// resolves on the merchant path), and it must see no rows so the code
+// stays invalid; per-case overrides live in the bridge suites.
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(() => ({
+    rpc: vi.fn(async () => ({ data: [], error: null })),
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+        })),
+      })),
+    })),
+  })),
+}));
+
 // B3.5 round 7: the route now passes its own scoped supabase
 // client into the tax helper (CodeRabbit High — no service-role
 // in the Next.js layer). The helper's variant lookup routes

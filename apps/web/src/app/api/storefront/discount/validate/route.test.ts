@@ -14,7 +14,7 @@ describe('POST /api/storefront/discount/validate merchant codes', () => {
   });
 
   it('returns the merchant code without calling the loyalty resolve', async () => {
-    const rpc = mockRpc((fn) =>
+    const { rpc, serviceRpc } = mockRpc((fn) =>
       fn === 'get_storefront_discount_code'
         ? [
             {
@@ -48,6 +48,7 @@ describe('POST /api/storefront/discount/validate merchant codes', () => {
         ([fn]) => fn === 'get_loyalty_redemption_for_checkout'
       )
     ).toBe(false);
+    expect(serviceRpc).not.toHaveBeenCalled();
   });
   it('returns 500 when the merchant lookup fails instead of invalid', async () => {
     mockRpc(() => [], {
@@ -63,7 +64,7 @@ describe('POST /api/storefront/discount/validate merchant codes', () => {
     });
   });
   it('rejects invalid input before any lookup', async () => {
-    const rpc = mockRpc(() => []);
+    const { rpc, serviceRpc } = mockRpc(() => []);
 
     const response = await POST(request({ code: 'x' }));
     const body = await response.json();
@@ -71,5 +72,25 @@ describe('POST /api/storefront/discount/validate merchant codes', () => {
     expect(response.status).toBe(400);
     expect(body.valid).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
+    expect(serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it('resolves loyalty codes through the service client, not anon (issue #3696)', async () => {
+    const { rpc, serviceRpc } = mockRpc(() => []);
+
+    const response = await POST(request(baseBody));
+    const body = await response.json();
+
+    expect(body.valid).toBe(false);
+    expect(
+      serviceRpc.mock.calls.some(
+        ([fn]) => fn === 'get_loyalty_redemption_for_checkout'
+      )
+    ).toBe(true);
+    expect(
+      rpc.mock.calls.some(
+        ([fn]) => fn === 'get_loyalty_redemption_for_checkout'
+      )
+    ).toBe(false);
   });
 });

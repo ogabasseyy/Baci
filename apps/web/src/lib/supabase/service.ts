@@ -26,6 +26,9 @@ const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
 const searchAnalyticsClientBrand: unique symbol = Symbol(
   'baci.search-analytics.service-role-client'
 );
+const loyaltyResolverClientBrand: unique symbol = Symbol(
+  'baci.loyalty-resolver.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -119,6 +122,24 @@ export type SearchAnalyticsServiceClient = SupabaseClient<Database> & {
 };
 
 /**
+ * A service-role client reserved for the loyalty checkout-code
+ * resolver edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the resolver
+ * call graph cannot be driven by a generic service client from any
+ * other edge. Only the rate-limited validate route (loyalty branch)
+ * and `resolveLoyaltyCheckoutCode` may construct it, via
+ * `createLoyaltyResolverServiceClient`, and only for the
+ * `get_loyalty_redemption_for_checkout` RPC. Covered by the
+ * owner-approved temporary exception in AGENTS.md: the backend key
+ * inherently bypasses RLS; the brand constrains the approved call
+ * graph, not that capability.
+ */
+export type LoyaltyResolverServiceClient = SupabaseClient<Database> & {
+  readonly [loyaltyResolverClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -151,6 +172,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'search-analytics'
 ): SearchAnalyticsServiceClient;
+export function createServiceClient(
+  sentinel: 'loyalty-resolver'
+): LoyaltyResolverServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -162,6 +186,7 @@ export function createServiceClient(
     | 'piggyvest-intake'
     | 'immediate-notification-completion'
     | 'search-analytics'
+    | 'loyalty-resolver'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -232,6 +257,11 @@ export function createServiceClient(
   if (sentinel === 'search-analytics') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [searchAnalyticsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'loyalty-resolver') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [loyaltyResolverClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

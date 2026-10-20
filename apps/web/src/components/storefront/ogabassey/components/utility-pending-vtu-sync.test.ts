@@ -28,14 +28,16 @@ import {
 import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
   flushPendingVtuPurchases,
-  forgottenScopedKeys,
   hydratePendingVtuPurchases,
-  noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
+import {
+  forgottenScopedKeys,
+  noteForgottenVtuScope,
+} from './utility-pending-vtu-tombstones';
 
 // jsdom ships no navigator.locks, and the mint runner fails closed
 // in multi-tab browsers without it (Codex R152 P1) — pin an

@@ -2,8 +2,9 @@
  * Cross-tab persistence sync for the wallet-only VTU pending registry.
  *
  * Split from utility-pending-idempotency.ts per the 300-line budget:
- * this module owns the live entry map, the deletion tombstones, and
- * the localStorage merge/persist cycle; the registry module owns the
+ * this module owns the live entry map and the localStorage
+ * merge/persist cycle (tombstones live in
+ * utility-pending-vtu-tombstones.ts); the registry module owns the
  * recall/remember/note/complete/stale operations on top.
  */
 import {
@@ -16,6 +17,12 @@ import {
   parsePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './utility-pending-vtu-codec';
+import {
+  clearForgottenVtuScopes,
+  forgottenScopedKeys,
+  listForgottenVtuScopes,
+  noteForgottenVtuScope,
+} from './utility-pending-vtu-tombstones';
 
 export interface PendingVtuPurchase {
   key: string;
@@ -37,69 +44,13 @@ export interface PendingVtuPurchase {
 
 export const pendingVtuPurchases = new Map<string, PendingVtuPurchase>();
 
-/**
- * Scopes deliberately deleted since the last persist (scope ->
- * deletion record). Sync imports snapshot tombstones here too, so
- * a completed key deleted in another tab is dropped locally
- * instead of written back on the next persist. Cleared on every
- * persist (the snapshot then carries the tombstones).
- *
- * The record binds the deleted KEY generation, not just the scope:
- * a newer in-flight key under the same scope must survive a
- * tombstone written for an older generation (Codex R55 6rrMIj) —
- * timestamp-only arbitration would erase it and its retry would
- * mint fresh and double-debit. Keyless records (pre-binding
- * snapshots) fall back to timestamp arbitration.
- */
-export interface ForgottenVtuScope {
-  forgottenAt: number;
-  key?: string;
-}
-
-export const forgottenScopedKeys = new Map<string, ForgottenVtuScope[]>();
-
-/**
- * Records a deliberate deletion (single choke point so the key
- * binding cannot be forgotten at one of the forget sites).
- * Multi-key per scope (CodeRabbit Major, mobile mirror): a
- * non-durable canonical adoption tombstones the persisted loser,
- * then terminal settlement tombstones the winner — single-slot
- * replacement would drop the loser record and resurrect the
- * persisted loser on merge. Same-key records refresh (newest
- * wins); different generations accumulate until the next durable
- * persist carries them all. remember() deletes the records, so a
- * record always postdates the entry it names.
- */
-export function noteForgottenVtuScope(
-  scoped: string,
-  forgottenAt: number,
-  key?: string
-): void {
-  const known = forgottenScopedKeys.get(scoped) ?? [];
-  const same = known.find((record) => record.key === key);
-  if (same !== undefined) {
-    if (forgottenAt > same.forgottenAt) {
-      same.forgottenAt = forgottenAt;
-    }
-  } else {
-    known.push({ forgottenAt, key });
-  }
-  forgottenScopedKeys.set(scoped, known);
-}
-
 /** Serializes live entries for localStorage (prunes TTL-expired). */
 export function serializePendingVtuPurchases(
   now: number = Date.now()
 ): string {
   return serializePendingVtuEntries(
     pendingVtuPurchases,
-    [...forgottenScopedKeys].flatMap(([scoped, records]) =>
-      records.map((record) => ({
-        scoped,
-        forgottenAt: record.forgottenAt,
-        ...(typeof record.key === 'string' ? { key: record.key } : {}),
-      }))
-    ),
+    listForgottenVtuScopes(),
     now
   );
 }
@@ -221,7 +172,7 @@ export function persistPendingVtuPurchases(): boolean {
   // Returns the save outcome: the mint triple refuses to hand out
   // a minted key the retry cannot recover after reload (R96 P1).
   if (savePendingVtuSnapshot(serializePendingVtuPurchases())) {
-    forgottenScopedKeys.clear();
+    clearForgottenVtuScopes();
     return true;
   }
   return false;

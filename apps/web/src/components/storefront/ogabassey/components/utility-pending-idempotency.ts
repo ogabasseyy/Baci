@@ -16,13 +16,16 @@ export {
 export { forgetPendingVtuPurchaseDurable } from './utility-pending-vtu-sync';
 export { adoptCanonicalVtuKey } from './utility-pending-vtu-canonical-adoption';
 import {
-  forgottenScopedKeys,
-  noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   schedulePendingVtuFlush,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
+import {
+  clearForgottenVtuScopes,
+  forgottenScopedKeys,
+  noteForgottenVtuScope,
+} from './utility-pending-vtu-tombstones';
 
 /**
  * Cross-mount recall for wallet-only VTU idempotency keys (web):
@@ -278,6 +281,6 @@ export function getPendingVtuKey(
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingVtuPurchases.clear();
-  forgottenScopedKeys.clear();
+  clearForgottenVtuScopes();
   clearPendingVtuSnapshot();
 }

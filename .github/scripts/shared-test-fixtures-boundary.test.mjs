@@ -71,3 +71,22 @@ test('flags production importing a __tests__ helper and nested build sources', (
     join(dir, 'src/feature/build/prod.ts'),
   ]);
 });
+
+test('flags plainly-named __tests__ helpers importing fixtures', () => {
+  const dir = fixtureDir({
+    '__tests__/helper.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+    '__tests__/real.test.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, '__tests__/helper.ts'),
+  ]);
+});
+
+test('fails loudly on symlinked entries instead of skipping them', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({ 'real/prod.ts': 'export const x = 1;\n' });
+  symlinkSync(join(dir, 'real'), join(dir, 'linked'));
+  assert.throws(() => findFixtureImportOffenders([dir]), /symlinked entry/);
+});

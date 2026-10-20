@@ -42,7 +42,6 @@ export function isTestFile(path: string) {
     /(?:vitest|jest|metro)\.config\./.test(normalized) ||
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
-    normalized.includes('/__tests__/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
   );
@@ -51,6 +50,7 @@ export function isTestFile(path: string) {
 export function isTestHelper(path: string) {
   const normalized = normalizePath(path);
   return (
+    normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /[\w.-]*test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
       normalized
@@ -100,7 +100,11 @@ export function collectSourceFiles(roots: string[]): string[] {
       }
       const full = join(dir, entry);
       const stat = lstatSync(full);
-      if (stat.isSymbolicLink()) continue;
+      if (stat.isSymbolicLink()) {
+        throw new Error(
+          `Refusing to silently skip symlinked entry under a scan root: ${full}`
+        );
+      }
       if (stat.isDirectory()) {
         walk(full, false, entryRel);
       } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {

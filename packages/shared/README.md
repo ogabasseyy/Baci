@@ -84,9 +84,10 @@ Scan exclusions: generated-output directories (node_modules, .git,
 .turbo, .gradle, Pods, DerivedData, .next, .expo, web-build) are
 skipped at any depth; build, dist, and coverage are skipped at a scan
 root or under native ios/android trees; root-level developer tooling directories (apps/*/tools, which
-run in Node and are never bundled) are skipped, and symlinked entries
-are not followed; a fixture import inside an excluded tree is a
-code-review catch, not a guard catch. The guards
+run in Node and are never bundled) are skipped; a fixture import
+inside an excluded tree is a code-review catch, not a guard catch.
+Symlinked entries under a scan root are not skipped: the guard fails
+loudly and names the link instead of reporting a silent pass. The guards
 match literal specifiers only; dynamically assembled fixture paths
 are a code-review catch, not a guard catch. Never import a fixture
 from non-test code. These guard suites are explicitly force-run in

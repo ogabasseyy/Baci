@@ -309,7 +309,9 @@ BEGIN
     'wrpc-fp-claim-1',
     'd4d4d4d4-0000-4000-8000-000000000001',
     'e2e2e2e2-0000-4000-8000-000000000001',
-    'f3f3f3f3-0000-4000-8000-000000000001'
+    'f3f3f3f3-0000-4000-8000-000000000001',
+    now(),
+    '{}'
   );
   IF NOT FOUND
     OR v_claim.created IS NOT TRUE
@@ -329,7 +331,9 @@ BEGIN
       'wrpc-fp-claim-2',
       'd4d4d4d4-0000-4000-8000-000000000002',
       'e2e2e2e2-0000-4000-8000-000000000001',
-      'f3f3f3f3-0000-4000-8000-000000000002'
+      'f3f3f3f3-0000-4000-8000-000000000002',
+      now(),
+      '{}'
     );
     RAISE EXCEPTION 'C2: cross-customer claim unexpectedly allowed';
   EXCEPTION WHEN raise_exception THEN
@@ -351,7 +355,9 @@ BEGIN
     'wrpc-fp-1',
     'd4d4d4d4-0000-4000-8000-000000000003',
     'e2e2e2e2-0000-4000-8000-000000000001',
-    'f3f3f3f3-0000-4000-8000-000000000001'
+    'f3f3f3f3-0000-4000-8000-000000000001',
+    now(),
+    '{}'
   );
   IF NOT FOUND
     OR v_claim.created IS NOT FALSE
@@ -377,7 +383,9 @@ BEGIN
     'wrpc-fp-claim-4',
     'd4d4d4d4-0000-4000-8000-000000000002',
     'e2e2e2e2-0000-4000-8000-000000000001',
-    'f3f3f3f3-0000-4000-8000-000000000002'
+    'f3f3f3f3-0000-4000-8000-000000000002',
+    now(),
+    '{}'
   );
   IF NOT FOUND OR v_claim.created IS NOT TRUE THEN
     RAISE EXCEPTION 'C4: service_role claim failed';
@@ -398,7 +406,9 @@ BEGIN
       'wrpc-fp-claim-5',
       'd4d4d4d4-0000-4000-8000-000000000001',
       'e2e2e2e2-0000-4000-8000-000000000001',
-      'f3f3f3f3-0000-4000-8000-000000000001'
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      now(),
+      '{}'
     );
     RAISE EXCEPTION 'C5: anon claim unexpectedly allowed';
   EXCEPTION WHEN insufficient_privilege OR raise_exception THEN
@@ -567,7 +577,7 @@ BEGIN
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'authenticated',
-    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid)',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'authenticated must have EXECUTE on claim_vtu_intent';

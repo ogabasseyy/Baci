@@ -64,20 +64,6 @@ async function callRoute(
   return { status: response.status, body, headers: response.headers };
 }
 
-/** Delete-chain starters issued against vtu_transactions (orphan-cleanup observation). */
-function vtuTransactionDeletes(): ReturnType<typeof vi.fn>[] {
-  const fromMock = supabaseMockRef.current?.from;
-  return (fromMock?.mock.results ?? [])
-    .map(
-      (result) =>
-        (result.value as { delete?: ReturnType<typeof vi.fn> } | undefined)
-          ?.delete
-    )
-    .filter(
-      (del): del is ReturnType<typeof vi.fn> => typeof del === 'function'
-    );
-}
-
 interface ClaimMapping {
   key: string;
   vtu_transaction_id: string;
@@ -1126,6 +1112,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
+      rpcCalls: [],
       claimImpl: () => ({
         data: null,
         error: { message: 'claim_scope_mismatch: test collision' },
@@ -1144,14 +1131,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     // Rejection cleanup (Codex R1 P2): the certain-abort claim
-    // orphaned our prepared row — the guarded delete targeted it.
-    const deletes = vtuTransactionDeletes();
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]).toHaveBeenCalledTimes(1);
-    const firstEq = deletes[0]?.mock.results[0]?.value as {
-      eq?: ReturnType<typeof vi.fn>;
-    };
-    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
+    // orphaned our prepared row — discarded via the fail RPC on
+    // the user client (Phase 2 — no direct table writes).
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'fail_orphan_vtu_transaction',
+      args: {
+        p_transaction_id: 'vtu-tx-new',
+        p_merchant_id: 'merchant-1',
+        p_user_id: AUTH_USER_ID,
+      },
+    });
   });
 
   it('claim join: discards the orphan via the fail RPC, then replays the winner', async () => {
@@ -1535,7 +1524,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnTerminalAt: { 'vtu-tx-old': ADMISSION_TS },
       },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -1567,7 +1556,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
-      admissionLive: ['vtu-tx-old'],
       claimStore: {
         rows: [
           {
@@ -1582,7 +1570,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnTerminalAt: { 'vtu-tx-old': '2026-10-20T04:00:00.000Z' },
       },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
+    // The proof fires on the privileged client: stage the live
+    // snapshot on the admin mock.
+    supabaseMockRef.current = buildSupabase({
+      row: null,
+      insertCalls: 0,
+      admissionLive: ['vtu-tx-old'],
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -1609,6 +1604,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const state: IdempotencyRowState = {
       row: null,
       insertCalls: 0,
+      rpcCalls: [],
       claimImpl: () => ({
         data: null,
         error: { message: 'claim_fingerprint_mismatch: test collision' },
@@ -1626,14 +1622,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).not.toHaveBeenCalled();
     // Rejection cleanup (Codex R1 P2): the certain-abort claim
-    // orphaned our prepared row — the guarded delete targeted it.
-    const deletes = vtuTransactionDeletes();
-    expect(deletes).toHaveLength(1);
-    expect(deletes[0]).toHaveBeenCalledTimes(1);
-    const firstEq = deletes[0]?.mock.results[0]?.value as {
-      eq?: ReturnType<typeof vi.fn>;
-    };
-    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
+    // orphaned our prepared row — discarded via the fail RPC on
+    // the user client (Phase 2 — no direct table writes).
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'fail_orphan_vtu_transaction',
+      args: {
+        p_transaction_id: 'vtu-tx-new',
+        p_merchant_id: 'merchant-1',
+        p_user_id: AUTH_USER_ID,
+      },
+    });
   });
 
   it('fresh claim: success response carries no canonical-key wire', async () => {
@@ -2214,11 +2212,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
-  it('narrowed boundary: the service-role client reaches only fulfillment', async () => {
+  it('narrowed boundary: the service-role client reaches only the admission proof and fulfillment', async () => {
     // Phase 2 (#3694): lookup, ownership, prepare, claim, and
     // cleanup run on the authenticated client; createAdminClient's
-    // product is passed to fulfillPendingVtuTransaction and never
-    // otherwise touched.
+    // product fires the admission-proof RPC (its merchant-wide
+    // live set spans customers by design — fence input only) and
+    // is passed to fulfillPendingVtuTransaction — never otherwise
+    // touched.
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     userSupabaseMockRef.current = buildSupabase(state);
 
@@ -2236,7 +2236,15 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     ).toHaveLength(0);
     expect(
       (supabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
-    ).toHaveLength(0);
+    ).toEqual([
+      [
+        'vtu_admission_proof',
+        {
+          p_merchant_slug: 'ogabassey',
+          p_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+      ],
+    ]);
   });
 
   it('prepare runs on the user client with the RPC flags', async () => {

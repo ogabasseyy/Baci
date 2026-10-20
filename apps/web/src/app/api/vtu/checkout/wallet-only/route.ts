@@ -15,7 +15,6 @@ import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
-import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -239,6 +238,7 @@ export async function POST(request: NextRequest) {
           merchantId: prepared.merchant.id,
           supabase: userSupabase,
           transactionId: prepared.transaction.id,
+          userId: auth.user.id,
         });
       }
       return respondToClaimError(claimError, prepared.transaction.id);

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-20T13:49:37.437247+00:00",
-  "source_revision": "3e20436fe110d109b5c158627288edb527e61ea9",
-  "evidence_digest": "ea89c910eed66c7873539ab881b75517efd2eb7568ba50f5d84d87116f535f80",
-  "claims_digest": "ff65cd232bdb424de5f6c558d1d031836f3d4d9192fc4a2ef8ddaf85f153521d",
-  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review.",
+  "reviewed_at": "2026-10-20T20:58:30.000000+00:00",
+  "source_revision": "d3bf63a1e6a0660c44a8305a48429472e37aa69d",
+  "evidence_digest": "41c8d47bb474f6369876718ec37472679f435ddf74c796e8090022ccf50bd99e",
+  "claims_digest": "1b199ce8265ea80f0bbd97640d163bf03c554f1fbdb0dd43b94caddd96fe03fc",
+  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review. Scoped re-review of the agentic checkout offer surface: offer pricing now resolves through the merchant-scoped get_storefront_offer_resolution authority (published/platform-admin merchant gate in SQL) instead of per-product fan-outs; merchant scoping and the shared-cart fall-through are preserved.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

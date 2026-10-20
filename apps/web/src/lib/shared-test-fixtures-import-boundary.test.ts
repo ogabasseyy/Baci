@@ -1,5 +1,4 @@
-import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -65,21 +64,25 @@ function isTestFile(path: string) {
 }
 
 function collectSourceFiles() {
-  // Git-tracked files only: fast, and immune to local build artifacts.
-  const listed = execSync('git ls-files --cached --others --exclude-standard', {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return listed
-    .split('\n')
-    .filter(Boolean)
-    .map((relative) => join(repoRoot, relative))
-    .filter((file) => scanRoots.some((root) => file.startsWith(root + sep)))
-    .filter((file) => existsSync(file))
-    .filter((file) => !file.split(sep).some((part) => skippedDirs.has(part)))
-    .filter((file) => /\.(?:m|c)?[tj]sx?$/.test(file))
-    .filter((file) => !isTestFile(file));
+  // Filesystem walk over the scan roots (no git dependency, so
+  // gitignored or untracked sources are scanned too). Symlinked
+  // directories are not followed.
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir)) {
+      if (skippedDirs.has(entry)) continue;
+      const full = join(dir, entry);
+      const stat = lstatSync(full);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) {
+        walk(full);
+      } else if (/\.(?:m|c)?[tj]sx?$/.test(entry) && !isTestFile(full)) {
+        out.push(full);
+      }
+    }
+  };
+  for (const root of scanRoots) walk(root);
+  return out;
 }
 
 describe('test-fixtures import boundary', () => {

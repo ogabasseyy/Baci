@@ -72,14 +72,6 @@ const sharedAliases = [
     find: /^@baci\/shared\/gmc-feed$/,
     replacement: path.join(sharedPackagePath, 'gmc-feed/index.ts'),
   },
-  {
-    find: /^@baci\/shared\/vtu$/,
-    replacement: path.join(sharedPackagePath, 'vtu/index.ts'),
-  },
-  {
-    find: /^@baci\/shared\/test-fixtures\/([\w-]+)$/,
-    replacement: `${sharedPackagePath}/test-fixtures/$1.ts`,
-  },
 ];
 
 export default defineConfig({

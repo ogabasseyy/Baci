@@ -19,6 +19,18 @@ describe('generateReceiptHtml', () => {
     expect(html).not.toContain('12 Sep 2026');
   });
 
+  it('renders XOF receipt amounts as whole francs (zero-decimal currency)', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({ currency: 'XOF' }),
+      createReceiptMerchant()
+    );
+
+    // 500000 XOF groups with a narrow no-break space and carries no
+    // fictitious fraction digits (legacy receipts forced 2).
+    expect(html).toContain('500\u202F000');
+    expect(html).not.toContain('500\u202F000,00');
+  });
+
   it('uses the persisted calendar date for a midnight-offset manual order', () => {
     const html = generateReceiptHtml(
       createReceiptOrder({

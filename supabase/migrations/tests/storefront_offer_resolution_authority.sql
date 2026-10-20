@@ -18,6 +18,11 @@ VALUES ('31000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-00000000
 ('31000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','authority unmanaged','active',100,0,0,false,false,true),
 ('31000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','authority stray variant','active',100,5,5,true,false,true),
 ('31000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','authority inactive','inactive',100,5,5,true,false,true);
+-- Chunk page: 201 live products of one merchant, so the scoped call
+-- must slice the serialized-count page (200 ids) instead of tripping
+-- its too_many_product_ids guard.
+INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers)
+SELECT ('31000001-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid, '00000000-0000-4000-8000-000000000001', 'chunk-' || g, 'active', 100, 5, 5, true, false, true FROM generate_series(1, 201) g;
 ALTER TABLE public.products ENABLE TRIGGER USER;
 ALTER TABLE public.product_variants DISABLE TRIGGER USER;
 INSERT INTO public.product_variants(id,product_id,merchant_id,is_inventory_anchor)
@@ -64,6 +69,23 @@ BEGIN
  IF n <> 0 THEN RAISE EXCEPTION 'foreign merchant must resolve nothing'; END IF;
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution(NULL, ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]);
  IF n <> 2 THEN RAISE EXCEPTION 'NULL merchant must keep the unscoped read'; END IF;
+ -- Batch policy: 201 live ids of one merchant succeed scoped (sliced
+ -- into 200-pages for the serialized-count call), fail unscoped, and
+ -- 1001 ids fail even scoped.
+ SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_agg(('31000001-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid) FROM generate_series(1, 201) g));
+ IF n <> 0 THEN RAISE EXCEPTION 'chunked scoped call must resolve without offers'; END IF;
+ BEGIN
+  PERFORM public.get_storefront_offer_resolution(NULL, (SELECT array_agg(('31000001-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid) FROM generate_series(1, 201) g));
+  RAISE EXCEPTION 'unscoped 201-id call must raise the 200 cap';
+ EXCEPTION WHEN sqlstate '22023' THEN
+  IF SQLERRM NOT LIKE '%at most 200 product IDs without a merchant scope%' THEN RAISE; END IF;
+ END;
+ BEGIN
+  PERFORM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_agg(gen_random_uuid()) FROM generate_series(1, 1001)));
+  RAISE EXCEPTION 'scoped 1001-id call must raise the 1000 cap';
+ EXCEPTION WHEN sqlstate '22023' THEN
+  IF SQLERRM NOT LIKE '%at most 1000 product IDs%' THEN RAISE; END IF;
+ END;
  -- Search delegation: the stocked offer is advertised at its live price, the zeroed one is not.
  SELECT count(*) INTO n FROM public.get_storefront_search_price_options('00000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001');
  IF n <> 2 THEN RAISE EXCEPTION 'search must emit the stocked offer plus the base row'; END IF;

@@ -409,6 +409,7 @@ describe('POST /api/cart/validate', () => {
         condition: 'used',
         price: 400_000,
         stock_quantity: 3,
+        parent_eligible: true,
       },
       {
         product_id: PRODUCT_ID,
@@ -416,6 +417,7 @@ describe('POST /api/cart/validate', () => {
         condition: 'used',
         price: 420_000,
         stock_quantity: 2,
+        parent_eligible: true,
       },
     ];
 
@@ -468,6 +470,7 @@ describe('POST /api/cart/validate', () => {
         condition: 'refurbished',
         price: 400_000,
         stock_quantity: 1,
+        parent_eligible: true,
       },
     ];
 
@@ -522,12 +525,14 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        parent_eligible: true,
       },
       {
         product_id: PRODUCT_ID,
         offer_id: OTHER_OFFER_ID,
         condition: 'used',
         price: 430_000,
+        parent_eligible: true,
       },
     ];
 
@@ -613,6 +618,7 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        parent_eligible: true,
       },
     ];
 
@@ -662,6 +668,7 @@ describe('POST /api/cart/validate', () => {
         condition: 'used',
         price: 400_000,
         stock_quantity: 1,
+        parent_eligible: true,
       },
     ];
 
@@ -705,6 +712,7 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        parent_eligible: true,
       },
     ];
 
@@ -833,6 +841,7 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        parent_eligible: true,
       },
     ];
 
@@ -878,6 +887,7 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        parent_eligible: true,
       },
     ];
 
@@ -916,7 +926,14 @@ describe('POST /api/cart/validate', () => {
         inventory_tracking_policy: 'serialized_strict',
       },
     ];
-    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+    mocks.offers = [
+      {
+        offer_id: OFFER_ID,
+        condition: 'used',
+        price: 400_000,
+        parent_eligible: true,
+      },
+    ];
     mocks.baseInventory = [
       {
         product_id: PRODUCT_ID,

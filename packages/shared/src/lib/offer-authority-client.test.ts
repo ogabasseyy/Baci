@@ -46,6 +46,17 @@ describe('coerceOfferAuthorityRow', () => {
     ).toBeNull();
   });
 
+  it('fails closed when the eligibility flag is missing', () => {
+    const row = coerceOfferAuthorityRow({
+      product_id: PRODUCT_ID,
+      offer_id: OFFER_ID,
+      condition: 'used',
+      price_basis: 80,
+      allocatable_stock: 3,
+    });
+    expect(row?.parentEligible).toBe(false);
+  });
+
   it('keeps gated-out rows with the flag off', () => {
     const row = coerceOfferAuthorityRow({
       product_id: PRODUCT_ID,
@@ -91,6 +102,30 @@ describe('fetchOfferResolutions', () => {
       p_product_ids: [PRODUCT_ID],
     });
     expect(map.get(`${PRODUCT_ID}::${OFFER_ID}`)?.priceBasis).toBe(80);
+  });
+
+  it('chunks oversized batches across invocations and merges', async () => {
+    const ids = Array.from(
+      { length: 201 },
+      (_, index) => `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`
+    );
+    const callRpc = vi.fn(async (args: { p_product_ids: string[] }) => ({
+      data: args.p_product_ids.map((id) => ({
+        product_id: id,
+        offer_id: OFFER_ID,
+        price_basis: 80,
+      })),
+      error: null,
+    }));
+    const map = await fetchOfferResolutions(callRpc, {
+      merchantId: 'm',
+      productIds: ids,
+    });
+    expect(callRpc).toHaveBeenCalledTimes(2);
+    expect(callRpc.mock.calls[0][0].p_product_ids).toHaveLength(200);
+    expect(callRpc.mock.calls[1][0].p_product_ids).toHaveLength(1);
+    expect(map.size).toBe(201);
+    expect(map.get(`${ids[200]}::${OFFER_ID}`)?.priceBasis).toBe(80);
   });
 
   it('skips the call when no ids are given', async () => {

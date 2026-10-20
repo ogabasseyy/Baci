@@ -297,6 +297,6 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261020120000_storefront_offer_resolution_authority.sql',
-    sha256: 'b73051d12d7f88cf30a46af80d3bdf226a4dca4305402b5f8d55cc83906310d9',
+    sha256: '4fe384a506a38cff16c21e7d3bf4cc63e80268cdab728781f8421423cb67a6a7',
   },
 ] as const;

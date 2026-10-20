@@ -45,6 +45,21 @@ describe('findMismatchedOrderOffer', () => {
     });
   });
 
+  it('flags live but parent-ineligible offers and hides their economics', async () => {
+    const callRpc = vi.fn(async () => ({
+      data: [authorityRow(OFFER_ID, { parent_eligible: false })],
+      error: null,
+    }));
+
+    const line = { product_id: PRODUCT_ID, offer_id: OFFER_ID };
+    expect(await findMismatchedOrderOffer(callRpc, [line])).toEqual(line);
+
+    const live = await fetchLiveOrderOffers(callRpc, [line]);
+    expect(live.mismatch).toEqual(line);
+    expect(live.prices.size).toBe(0);
+    expect(live.conditions.size).toBe(0);
+  });
+
   it('flags offers that are gone or belong to another product', async () => {
     const callRpc = vi.fn(async () => ({
       data: [authorityRow(OFFER_ID)],

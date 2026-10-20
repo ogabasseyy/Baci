@@ -28,6 +28,10 @@
 -- same-condition exclusion, the 16-row PDP hydration window, and the
 -- 128-variant population cap remain in the search branch below, and
 -- PDP identity selection stays in the TypeScript caller module.
+-- Batch policy: at most 200 ids unscoped (NULL merchant, which can
+-- span merchants) and 1000 ids merchant-scoped; the serialized-count
+-- page holds 200 ids per merchant, so ids are sliced into 200-pages
+-- per merchant before that call. The TS client chunks larger sets.
 -- Plain CREATE OR REPLACE: the search function is owned by this chain.
 BEGIN;
 
@@ -55,9 +59,21 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF COALESCE(pg_catalog.cardinality(p_product_ids), 0) > 10000 THEN
+  -- Tiered batch caps: an unscoped (NULL merchant) call can span every
+  -- merchant, so it is capped at the serialized-count page size; a
+  -- merchant-scoped call may address up to 1000 ids (every legitimate
+  -- caller batch — carts, catalog pages, blog hydration — is dozens).
+  -- The TS client chunks larger sets across invocations.
+  IF p_merchant_id IS NULL
+    AND COALESCE(pg_catalog.cardinality(p_product_ids), 0) > 200 THEN
     RAISE EXCEPTION
-      'get_storefront_offer_resolution supports at most 10000 product IDs (received %)',
+      'get_storefront_offer_resolution supports at most 200 product IDs without a merchant scope (received %)',
+      pg_catalog.cardinality(p_product_ids)
+      USING ERRCODE = '22023';
+  END IF;
+  IF COALESCE(pg_catalog.cardinality(p_product_ids), 0) > 1000 THEN
+    RAISE EXCEPTION
+      'get_storefront_offer_resolution supports at most 1000 product IDs (received %)',
       pg_catalog.cardinality(p_product_ids)
       USING ERRCODE = '22023';
   END IF;
@@ -73,7 +89,7 @@ BEGIN
     FROM public.products AS p
     JOIN public.merchants AS m ON m.id = p.merchant_id
     WHERE COALESCE(pg_catalog.cardinality(p_product_ids), 0)
-      BETWEEN 1 AND 10000
+      BETWEEN 1 AND 1000
       AND p.id = ANY(p_product_ids)
       -- A NULL merchant keeps the public-catalog unscoped read (cart
       -- validation prices public data without a merchant session);
@@ -93,12 +109,23 @@ BEGIN
          ORDER BY av.id LIMIT 1),
         r.inventory_tracking_policy, 'legacy') AS effective_policy
     FROM requested AS r
+  -- The serialized-count page holds 200 ids (and rejects the empty
+  -- array), so slice each merchant's ids into 200-pages. GROUP BY
+  -- never emits an empty page, and the deterministic id order keeps
+  -- pages stable across plans.
+  ), merchant_slices AS MATERIALIZED (
+    SELECT merchant_id, array_agg(id ORDER BY id) AS ids
+    FROM (
+      SELECT r2.merchant_id, r2.id,
+        (row_number() OVER (PARTITION BY r2.merchant_id ORDER BY r2.id) - 1) / 200 AS slice_no
+      FROM requested AS r2
+    ) AS numbered
+    GROUP BY merchant_id, slice_no
   ), serialized AS MATERIALIZED (
     SELECT s.product_id, s.public_available_units
-    FROM (SELECT DISTINCT r.merchant_id FROM requested AS r) AS rm
+    FROM merchant_slices AS ms
     CROSS JOIN LATERAL public.get_public_serialized_variant_availability_counts(
-      rm.merchant_id,
-      (SELECT COALESCE(array_agg(r2.id), '{}') FROM requested AS r2 WHERE r2.merchant_id = rm.merchant_id)
+      ms.merchant_id, ms.ids
     ) AS s
     WHERE s.variant_id IS NULL
   )

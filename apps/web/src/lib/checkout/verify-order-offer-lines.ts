@@ -23,11 +23,11 @@ const uuidRegex =
 /**
  * Loads the live offers for every order line naming one, in a single
  * batched authority call. Returns the first line whose offer is not
- * live for its own product plus the live price map every offer-aware
- * check shares (assurance fees, negotiation catalog, VAT). Malformed
- * ids fail closed as mismatches (never a 22P02 500 from the offers
- * lookup or the order RPC). Throws lookup errors for the caller to
- * report as a 500.
+ * live AND parent-eligible for its own product, plus the live price
+ * map every offer-aware check shares (assurance fees, negotiation
+ * catalog, VAT). Malformed ids fail closed as mismatches (never a
+ * 22P02 500 from the offers lookup or the order RPC). Throws lookup
+ * errors for the caller to report as a 500.
  */
 export async function fetchLiveOrderOffers(
   callRpc: OfferAuthorityRpcCall,
@@ -56,7 +56,15 @@ export async function fetchLiveOrderOffers(
     productIds,
   });
 
-  for (const resolution of resolutions.values()) {
+  // The authority returns gated-out rows (parent_eligible=false) so
+  // membership and eligibility stay distinct; order lines may only
+  // bind eligible rows, and their economics must never publish.
+  const live = new Map(
+    Array.from(resolutions.entries()).filter(
+      ([, resolution]) => resolution.parentEligible === true
+    )
+  );
+  for (const resolution of live.values()) {
     const key = makeOfferLineKey(resolution.productId, resolution.offerId);
     if (resolution.priceBasis !== null) prices.set(key, resolution.priceBasis);
     if (resolution.condition !== null)
@@ -65,7 +73,7 @@ export async function fetchLiveOrderOffers(
   const mismatch =
     offerLines.find(
       (item) =>
-        !resolutions.has(
+        !live.has(
           makeOfferLineKey(String(item.product_id), String(item.offer_id))
         )
     ) ?? null;

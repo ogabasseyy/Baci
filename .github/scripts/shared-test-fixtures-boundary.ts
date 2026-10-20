@@ -255,45 +255,35 @@ function configSpecifiers(content: string): string {
   return parts.join('\n');
 }
 
-export function findFixturePatternOffenders(roots: string[]): string[] {
-  const offenders: string[] = [];
-  for (const file of collectSourceFiles(roots)) {
-    if (isExemptFile(file, roots)) continue;
-    const content = normalizeContent(readFileSync(file, 'utf8'));
-    if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
-      offenders.push(file);
-    }
+function isOffender(
+  file: string,
+  roots: string[],
+  withSupport: boolean
+): boolean {
+  const content = normalizeContent(readFileSync(file, 'utf8'));
+  if (isExemptFile(file, roots)) {
+    // Root runner configs are exempt for alias registrations, but an
+    // actual fixture import in a config still executes fixture code.
+    const base = normalizePath(file).split('/').pop() ?? '';
+    return (
+      RUNNER_CONFIG_BASENAME.test(base) &&
+      FIXTURE_PATTERNS.some((pattern) =>
+        pattern.test(configSpecifiers(content))
+      )
+    );
   }
-  return offenders;
+  if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) return true;
+  return withSupport && !isTestHelper(file) && TEST_SUPPORT_PATTERN.test(content);
+}
+
+export function findFixturePatternOffenders(roots: string[]): string[] {
+  return collectSourceFiles(roots).filter((file) =>
+    isOffender(file, roots, false)
+  );
 }
 
 export function findFixtureImportOffenders(roots: string[]): string[] {
-  const offenders: string[] = [];
-  for (const file of collectSourceFiles(roots)) {
-    const content = normalizeContent(readFileSync(file, 'utf8'));
-    if (isExemptFile(file, roots)) {
-      // Root runner configs are exempt for their alias/path-string
-      // registrations, but an actual fixture import statement in a
-      // config still executes fixture code, so import-like lines are
-      // scanned with the fixture patterns.
-      const base = normalizePath(file).split('/').pop() ?? '';
-      if (
-        RUNNER_CONFIG_BASENAME.test(base) &&
-        FIXTURE_PATTERNS.some((pattern) =>
-          pattern.test(configSpecifiers(content))
-        )
-      ) {
-        offenders.push(file);
-      }
-      continue;
-    }
-    if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
-      offenders.push(file);
-      continue;
-    }
-    if (!isTestHelper(file) && TEST_SUPPORT_PATTERN.test(content)) {
-      offenders.push(file);
-    }
-  }
-  return offenders;
+  return collectSourceFiles(roots).filter((file) =>
+    isOffender(file, roots, true)
+  );
 }

@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   collectSourceFiles,
-  findFixtureImportOffenders,
   findFixturePatternOffenders,
+  findFixtureImportOffenders,
   isTestFile,
   isTestHelper,
 } from './shared-test-fixtures-boundary.ts';
@@ -252,4 +252,14 @@ test('folds static template-literal specifiers', () => {
       'const specifier = `@baci/shared/test-fixt` + `ures/piggyvest-purchase`;\nexport const load = () => import(specifier);\n',
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'tpl.ts')]);
+});
+
+test('tools-tree pattern scan flags runner-config fixture imports', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const cfg = f;\n",
+  });
+  assert.deepEqual(findFixturePatternOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
 });

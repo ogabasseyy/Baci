@@ -45,7 +45,11 @@ export function useSharedCart(
   });
   useCartSendQueue({ ...runtime, ...snapshots, ...provisioning });
   const actions = createCartActions(runtime);
-  const recovery = createCartRecovery({ ...runtime, ...snapshots });
+  const recovery = createCartRecovery({
+    ...runtime,
+    ...snapshots,
+    ...provisioning,
+  });
   const {
     addToCart,
     removeFromCart,

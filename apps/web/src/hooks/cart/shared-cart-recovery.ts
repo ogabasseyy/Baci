@@ -3,13 +3,14 @@
 import { buildImportEntries } from './build-import-entries';
 
 import { getCartFromStorage } from './cart-storage';
-
+import type { createCartProvisioning } from './shared-cart-provisioning';
 import { planLegacyImport } from './shared-cart-reducer';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartRecovery(
   context: SharedCartRuntime &
+    Pick<ReturnType<typeof createCartProvisioning>, 'ensureCart'> &
     Pick<ReturnType<typeof createCartSnapshotActions>, 'refreshNow'>
 ) {
   const {
@@ -19,8 +20,12 @@ export function createCartRecovery(
     generationRef,
     importOpIdsRef,
     createAttemptedRef,
+    createRequestRef,
+    bootstrappingRef,
     optionsRef,
     refreshNow,
+    ensureCart,
+    setLinkPhase,
   } = context;
 
   function retryPendingSync(): void {
@@ -28,7 +33,15 @@ export function createCartRecovery(
     const failed = stateRef.current.queue.find(
       (entry) => entry.state === 'failed'
     );
-    if (!failed) return;
+    if (!failed) {
+      if (
+        stateRef.current.importStatus === 'failed' &&
+        !stateRef.current.confirmed
+      ) {
+        retryImport();
+      }
+      return;
+    }
     dispatch({
       generation: generationRef.current,
       operationId: failed.operationId,
@@ -53,11 +66,21 @@ export function createCartRecovery(
     const cached = getCartFromStorage(optionsRef.current.merchantSlug);
     if (cached.length === 0) {
       dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+      setLinkPhase('ready');
       return;
     }
     if (!current.confirmed) {
-      createAttemptedRef.current = false;
-      retryPendingSync();
+      if (bootstrappingRef.current || createAttemptedRef.current) return;
+      // Capacity can be resolved before any server cart or queue exists.
+      // Keep the exact provisioning request on retries and fence late replies.
+      void ensureCart().then((result) => {
+        if (generationRef.current !== generation || !result) return;
+        if (!result.ok) {
+          dispatch({ generation, code: result.code, type: 'import/failed' });
+          return;
+        }
+        setLinkPhase('ready');
+      });
       return;
     }
     const planned = planLegacyImport(
@@ -100,7 +123,10 @@ export function createCartRecovery(
     if (
       !enabled ||
       stateRef.current.importStatus !== 'failed' ||
-      !stateRef.current.confirmed
+      bootstrappingRef.current ||
+      (!stateRef.current.confirmed &&
+        (createAttemptedRef.current ||
+          Boolean(createRequestRef.current?.lines)))
     )
       return;
     dispatch({
@@ -108,6 +134,7 @@ export function createCartRecovery(
       status: 'skipped',
       type: 'import/resolved',
     });
+    setLinkPhase('ready');
   }
   function resolveImportConflicts(
     resolutions: import('@baci/shared/cart').CartMergeResolution[]

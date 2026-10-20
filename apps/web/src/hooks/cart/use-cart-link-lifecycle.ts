@@ -167,21 +167,34 @@ export function useCartLinkLifecycle(
         result.code === 'not_found' ? 'bootstrap' : 'none';
       if (cached.length === 0) {
         dispatch({ generation, status: 'skipped', type: 'import/resolved' });
-      } else if (planLegacyImport(cached, null, null).kind !== 'blocked') {
-        // Capacity-blocked imports retain the existing explicit resolution
-        // flow; do not start provisioning an invalid device cart.
-        // A restored device cart can reach checkout without another edit.
-        // Import it now through the same replay-safe provisioning path used
-        // by the sender; never leave visible lines without server authority.
-        const ensured = await ensureCart();
-        if (cancelled || generationRef.current !== generation) return;
-        if (ensured && !ensured.ok && ensured.retryable) {
-          adoptTimer = setTimeout(
-            () => void adopt(attempt + 1),
-            backoffMs(ADOPT_RETRY_BASE_MS, attempt)
-          );
-          return;
-        }
+      } else if (planLegacyImport(cached, null, null).kind === 'blocked') {
+        // No authority exists yet: surface the capacity chooser now and
+        // keep the sender paused until explicit retry/discard resolves it.
+        dispatch({ generation, type: 'import/capacity_exceeded' });
+        return;
+      } else {
+        await provision(attempt);
+        return;
+      }
+      setLinkPhase('ready');
+    }
+
+    async function provision(attempt: number): Promise<void> {
+      if (cancelled || generationRef.current !== generation) return;
+      const ensured = await ensureCart();
+      if (cancelled || generationRef.current !== generation) return;
+      if (!ensured) return;
+      if (!ensured.ok && ensured.retryable) {
+        // Reconcile an indeterminate create by replaying its exact body.
+        // A GET may see a committed cart but cannot finish the import receipt.
+        adoptTimer = setTimeout(
+          () => void provision(attempt + 1),
+          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
+        );
+        return;
+      }
+      if (!ensured.ok) {
+        dispatch({ generation, code: ensured.code, type: 'import/failed' });
       }
       setLinkPhase('ready');
     }

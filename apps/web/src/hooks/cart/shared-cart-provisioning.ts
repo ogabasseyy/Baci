@@ -31,7 +31,13 @@ export function createCartProvisioning(context: SharedCartRuntime) {
   async function ensureCart(): Promise<EnsureCartResult> {
     const generation = generationRef.current;
     const current = stateRef.current;
+    // A snapshot read can observe a committed create before its lost reply
+    // is reconciled. Replay that creation to finish the import and receipt.
+    const pendingCreateImport =
+      current.importStatus === 'pending' &&
+      Boolean(createRequestRef.current?.lines);
     if (
+      !pendingCreateImport &&
       current.cartId &&
       current.confirmed &&
       !isTerminalCart(current.confirmed)

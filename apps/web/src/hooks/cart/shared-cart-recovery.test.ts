@@ -25,7 +25,12 @@ it('retries the original failed operation in the live generation', () => {
     ],
   };
   const refreshNow = vi.fn().mockResolvedValue(undefined);
-  createCartRecovery({ ...runtime, dispatch, refreshNow }).retryPendingSync();
+  createCartRecovery({
+    ...runtime,
+    dispatch,
+    refreshNow,
+    ensureCart: vi.fn(),
+  }).retryPendingSync();
   expect(dispatch).toHaveBeenCalledWith({
     generation: 7,
     operationId: 'original',
@@ -52,6 +57,7 @@ it('resolves an empty retry instead of leaving an untracked pending import', () 
     ...runtime,
     dispatch,
     refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
   }).retryImport();
   expect(dispatch).toHaveBeenCalledWith({
     generation: 7,

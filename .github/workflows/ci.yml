@@ -794,6 +794,8 @@ jobs:
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: pnpm --dir apps/mobile-admin exec vitest run scripts/check-module-size.test.ts
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: pnpm --dir apps/mobile-admin exec vitest run lib/shared-test-fixtures-boundary.test.ts
+      - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: pnpm --dir apps/mobile-admin check:platform-drift
       - if: needs.changes.outputs.mobile_admin == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         run: pnpm --dir apps/mobile-admin check:module-size

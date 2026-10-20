@@ -36,6 +36,10 @@ const skippedDirs = new Set([
   'web-build',
   'Pods',
 ]);
+// Limitation: this guard matches literal specifiers only. A fixture
+// path assembled dynamically (string concatenation/template without a
+// literal test-fixtures segment) escapes static matching and remains
+// a code-review catch, not a guard catch.
 const bannedPatterns = [
   // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,

@@ -11,8 +11,14 @@ import { join, sep } from 'node:path';
 const appRoot = join(__dirname, '..');
 const skippedDirs = new Set([
   'node_modules',
+  '.next',
   '.expo',
+  '.git',
+  '.turbo',
+  '.gradle',
   'build',
+  'coverage',
+  'DerivedData',
   'dist',
   'web-build',
   'Pods',

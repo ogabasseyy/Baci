@@ -27,7 +27,7 @@ const pkg = JSON.parse(
   readFileSync(join(sharedPackageDir, 'package.json'), 'utf8')
 ) as { exports: Record<string, string> };
 const fixtureSubpaths = readdirSync(join(sharedPackageDir, 'src/test-fixtures'))
-  .filter((name) => name.endsWith('.ts') && !name.includes('.test.'))
+  .filter((name) => /\.tsx?$/.test(name) && !name.includes('.test.'))
   .map((name) => `@baci/shared/test-fixtures/${name.replace(/\.tsx?$/, '')}`);
 const subpaths = [
   ...Object.keys(pkg.exports)
@@ -82,6 +82,10 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       appRequire.resolve('@baci/shared/test-fixtures/piggyvest-schedule')
     )) as { scheduleJourneyFixture: () => unknown };
     expect(schedule.scheduleJourneyFixture()).toBeDefined();
+    const vtu = (await import(appRequire.resolve('@baci/shared/vtu'))) as {
+      buildPendingVtuScopeTag: unknown;
+    };
+    expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');
   });
 
   it('every exports target in package.json exists on disk', () => {

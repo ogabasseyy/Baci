@@ -127,8 +127,9 @@ interface IdempotencyRowState {
     /** Terminal settle times (ISO) for the overlap fence; absent = legacy-stale. */
     txnTerminalAt?: Record<string, string>;
   };
-  /** Admission-stamp override (null data / error fails admission). */
+  /** Admission-proof overrides (null data / error fails admission). */
   admissionTimestamp?: string | null;
+  admissionLive?: string[];
   admissionError?: { message: string } | null;
 }
 
@@ -156,12 +157,21 @@ function defaultClaim(
   const merchantId = args.p_merchant_id;
   const customerId = args.p_customer_id;
   const admittedAt = args.p_admitted_at ?? '';
+  const liveRaw: unknown = (args as Record<string, unknown>).p_admission_live;
+  const admissionLive = new Set(
+    Array.isArray(liveRaw)
+      ? liveRaw.filter((v): v is string => typeof v === 'string')
+      : []
+  );
   const statusOf = (id: string) => store.txnStatus[id] ?? 'processing';
-  // Overlap fence mirror (Codex R3): in-flight always joins;
-  // terminals join only with a stamp at/after admission.
+  // Overlap fence mirror (Codex R3, R4): in-flight always joins;
+  // terminals join when live at admission (terminalized inside our
+  // window — the xact-start stamp may predate admission while the
+  // writer commits after it) or with a stamp at/after admission.
   const joins = (id: string) => {
     const status = statusOf(id);
     if (status !== 'successful' && status !== 'failed') return true;
+    if (admissionLive.has(id)) return true;
     const settledAt = store.txnTerminalAt?.[id];
     return settledAt !== undefined && settledAt >= admittedAt;
   };
@@ -399,9 +409,21 @@ function buildSupabase(
     }),
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
-      if (fn === 'vtu_admission_timestamp') {
+      if (fn === 'vtu_admission_proof') {
+        const stamp =
+          state.admissionTimestamp === undefined
+            ? ADMISSION_TS
+            : state.admissionTimestamp;
         return Promise.resolve({
-          data: state.admissionTimestamp ?? ADMISSION_TS,
+          data:
+            stamp === null
+              ? null
+              : [
+                  {
+                    admitted_at: stamp,
+                    live_transaction_ids: state.admissionLive ?? [],
+                  },
+                ],
           error: state.admissionError ?? null,
         });
       }
@@ -440,7 +462,7 @@ const VALID_BODY_FINGERPRINT = computeVtuWalletRequestFingerprint({
 
 const VALID_KEY = '11111111-2222-3333-4444-555555555555';
 
-/** Fixed DB-clock admission stamp returned by the rpc mock. */
+/** Fixed DB-clock admission stamp returned by the proof mock. */
 const ADMISSION_TS = '2026-10-20T05:00:00.000Z';
 
 function makeRequest({
@@ -841,9 +863,17 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         },
       },
     ]);
-    // Admission stamp fires on the replay path too (concurrent
+    // Admission proof fires on the replay path too (concurrent
     // with the key lookup; unused when a mapping exists).
-    expect(state.rpcCalls).toEqual([{ fn: 'vtu_admission_timestamp' }]);
+    expect(state.rpcCalls).toEqual([
+      {
+        fn: 'vtu_admission_proof',
+        args: {
+          p_merchant_slug: 'ogabassey',
+          p_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+      },
+    ]);
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: expect.anything(),
       transactionId: 'vtu-tx-existing',
@@ -907,9 +937,17 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           },
         },
       ]);
-      // Admission stamp fires on the replay path too (concurrent
+      // Admission proof fires on the replay path too (concurrent
       // with the key lookup; unused when a mapping exists).
-      expect(state.rpcCalls).toEqual([{ fn: 'vtu_admission_timestamp' }]);
+      expect(state.rpcCalls).toEqual([
+        {
+          fn: 'vtu_admission_proof',
+          args: {
+            p_merchant_slug: 'ogabassey',
+            p_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        },
+      ]);
       expect(mockFulfill).toHaveBeenCalledWith({
         supabase: expect.anything(),
         transactionId: 'vtu-tx-existing',
@@ -1173,8 +1211,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         };
       }),
       rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
-        if (fn === 'vtu_admission_timestamp') {
-          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
         }
         if (fn === 'claim_vtu_intent') {
           claimArgs.push(args);
@@ -1214,10 +1260,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // Winner-key wire: the joined response carries the winner
     // key so client retries converge on one key.
     expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(WINNER_KEY);
-    // Admission wire (Codex R3 P1): the claim carries the DB-clock
-    // admission stamp for the overlap fence.
+    // Admission wire (Codex R3 P1, R4 P1): the claim carries
+    // the DB-clock admission stamp plus the admission-liveness
+    // snapshot for the overlap fence.
     expect(claimArgs).toHaveLength(1);
-    expect(claimArgs[0]).toMatchObject({ p_admitted_at: ADMISSION_TS });
+    expect(claimArgs[0]).toMatchObject({
+      p_admitted_at: ADMISSION_TS,
+      p_admission_live: [],
+    });
     // Join telemetry carries transaction IDs only: the winner key
     // is an unguessable replay credential (Codex R2 P2, R108).
     expect(consoleInfoSpy).toHaveBeenCalled();
@@ -1326,8 +1376,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         };
       }),
       rpc: vi.fn((fn: string) => {
-        if (fn === 'vtu_admission_timestamp') {
-          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
         }
         if (fn === 'claim_vtu_intent') {
           return Promise.resolve({
@@ -1501,6 +1559,51 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(OLD_KEY);
   });
 
+  it('claim terminal live at admission: joins despite a pre-admission settle stamp', async () => {
+    // Commit-safe fence (Codex R4 P1): the winner's settle stamp
+    // predates our admission (writer xact started first) but its
+    // commit landed inside our window — it was live in our
+    // admission snapshot, so the claim joins instead of debiting
+    // twice. The stamp alone would misread it as stale.
+    const OLD_KEY = 'eeeeeeee-5555-6555-8555-eeeeeeeeeeee';
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      admissionLive: ['vtu-tx-old'],
+      claimStore: {
+        rows: [
+          {
+            key: OLD_KEY,
+            vtu_transaction_id: 'vtu-tx-old',
+            customer_id: 'customer-1',
+            merchant_id: 'merchant-1',
+            request_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        ],
+        txnStatus: { 'vtu-tx-old': 'successful' },
+        txnTerminalAt: { 'vtu-tx-old': '2026-10-20T04:00:00.000Z' },
+      },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body, headers } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-old' })
+    );
+    expect(state.claimStore?.rows).toHaveLength(2);
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(OLD_KEY);
+  });
+
   it('claim race: same key mapped with another fingerprint returns 409', async () => {
     // Same-key changed-payload race (form edited between submits):
     // the RPC raises claim_fingerprint_mismatch; the route maps it
@@ -1652,8 +1755,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         };
       }),
       rpc: vi.fn((fn: string) => {
-        if (fn === 'vtu_admission_timestamp') {
-          return Promise.resolve({ data: ADMISSION_TS, error: null });
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
         }
         if (fn === 'claim_vtu_intent') {
           return Promise.resolve({
@@ -1681,8 +1792,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('admission stamp failure: 500s before preparing (nothing to orphan)', async () => {
-    // Without the admission stamp the RPC cannot fence the
+  it('admission proof failure: 500s before preparing (nothing to orphan)', async () => {
+    // Without the admission proof the RPC cannot fence the
     // overlap, so the route fails closed BEFORE prepare — no
     // prepared row exists to orphan, and the client retries with
     // the same key (Codex R3 P1).

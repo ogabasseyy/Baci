@@ -11,67 +11,84 @@ const ROW: ExistingIdempotencyRow = {
   request_fingerprint: 'fp-1',
 };
 
+const STAMP = '2026-10-20T06:00:00.000Z';
+
 function fakeClient({
   row = null,
   rowError = null,
-  stamp = '2026-10-20T06:00:00.000Z',
-  stampError = null,
-  onRpc,
-  onLookup,
+  proof = { admitted_at: STAMP, live_transaction_ids: [] as string[] },
+  proofError = null,
+  onProof,
 }: {
   row?: ExistingIdempotencyRow | null;
   rowError?: { message: string } | null;
-  stamp?: string | null;
-  stampError?: { message: string } | null;
-  onRpc?: (fn: string) => void;
-  onLookup?: () => void;
+  proof?: {
+    admitted_at: string;
+    live_transaction_ids: string[];
+  } | null;
+  proofError?: { message: string } | null;
+  onProof?: (fn: string, args: unknown) => void;
 } = {}): SupabaseClient {
   return {
     from: () => ({
       select: () => ({
         eq: () => ({
-          maybeSingle: async () => {
-            onLookup?.();
-            return { data: row, error: rowError };
-          },
+          maybeSingle: async () => ({ data: row, error: rowError }),
         }),
       }),
     }),
-    rpc: async (fn: string) => {
-      onRpc?.(fn);
-      return { data: stamp, error: stampError };
+    rpc: async (fn: string, args: unknown) => {
+      onProof?.(fn, args);
+      return { data: proof === null ? null : [proof], error: proofError };
     },
   } as unknown as SupabaseClient;
 }
 
 describe('admitVtuClaim', () => {
-  it('returns the existing row with the DB-clock admission stamp', async () => {
-    const seen: string[] = [];
+  it('returns the existing row with the admission stamp and live set', async () => {
+    const seen: Array<{ fn: string; args: unknown }> = [];
 
     const admission = await admitVtuClaim(
-      fakeClient({ row: ROW, onRpc: (fn) => seen.push(fn) }),
-      'key-1'
+      fakeClient({
+        row: ROW,
+        proof: { admitted_at: STAMP, live_transaction_ids: ['txn-9'] },
+        onProof: (fn, args) => seen.push({ fn, args }),
+      }),
+      'key-1',
+      'store-1',
+      'fp-1'
     );
 
     expect(admission).toEqual({
       existing: ROW,
-      admittedAt: '2026-10-20T06:00:00.000Z',
+      admittedAt: STAMP,
+      admissionLive: ['txn-9'],
     });
-    expect(seen).toEqual(['vtu_admission_timestamp']);
+    expect(seen).toEqual([
+      {
+        fn: 'vtu_admission_proof',
+        args: { p_merchant_slug: 'store-1', p_fingerprint: 'fp-1' },
+      },
+    ]);
   });
 
-  it('admits a fresh key with a null existing row', async () => {
-    const admission = await admitVtuClaim(fakeClient(), 'key-fresh');
+  it('admits a fresh key with a null existing row and empty live set', async () => {
+    const admission = await admitVtuClaim(
+      fakeClient(),
+      'key-fresh',
+      'store-1',
+      'fp-1'
+    );
 
     expect(admission.existing).toBeNull();
-    expect(admission.admittedAt).toBe('2026-10-20T06:00:00.000Z');
+    expect(admission.admittedAt).toBe(STAMP);
+    expect(admission.admissionLive).toEqual([]);
   });
 
-  it('issues the lookup and the stamp concurrently', async () => {
-    // Codex R3 P1: the stamp must not add latency, and the
-    // admission instant must coincide with the key read. Each
-    // side waits for the other to be issued before resolving —
-    // a sequential implementation deadlocks and times out.
+  it('issues the lookup and the proof concurrently', async () => {
+    // Codex R3 P1: admission must not add latency — both
+    // requests are in flight before either resolves. A sequential
+    // implementation deadlocks and times out.
     const issued: string[] = [];
     let release!: () => void;
     const bothIssued = new Promise<void>((resolve) => {
@@ -96,36 +113,48 @@ describe('admitVtuClaim', () => {
       rpc: async () => {
         markIssued('rpc');
         await bothIssued;
-        return { data: '2026-10-20T06:00:00.000Z', error: null };
+        return {
+          data: [{ admitted_at: STAMP, live_transaction_ids: [] }],
+          error: null,
+        };
       },
     } as unknown as SupabaseClient;
 
-    const admission = await admitVtuClaim(client, 'key-1');
+    const admission = await admitVtuClaim(client, 'key-1', 'store-1', 'fp-1');
 
     expect(issued.sort()).toEqual(['lookup', 'rpc']);
-    expect(admission.admittedAt).toBe('2026-10-20T06:00:00.000Z');
+    expect(admission.admittedAt).toBe(STAMP);
   });
 
-  it('fails closed with VtuAdmissionError when the stamp errors', async () => {
+  it('fails closed with VtuAdmissionError when the proof errors', async () => {
     await expect(
       admitVtuClaim(
-        fakeClient({ row: ROW, stampError: { message: 'db down' } }),
-        'key-1'
+        fakeClient({ row: ROW, proofError: { message: 'db down' } }),
+        'key-1',
+        'store-1',
+        'fp-1'
       )
     ).rejects.toBeInstanceOf(VtuAdmissionError);
   });
 
-  it('fails closed with VtuAdmissionError when no stamp is returned', async () => {
+  it('fails closed with VtuAdmissionError when no proof is returned', async () => {
     await expect(
-      admitVtuClaim(fakeClient({ row: ROW, stamp: null }), 'key-1')
-    ).rejects.toThrow('no timestamp returned');
+      admitVtuClaim(
+        fakeClient({ row: ROW, proof: null }),
+        'key-1',
+        'store-1',
+        'fp-1'
+      )
+    ).rejects.toThrow('no admission proof returned');
   });
 
   it('propagates key-lookup failures unchanged', async () => {
     await expect(
       admitVtuClaim(
         fakeClient({ rowError: { message: 'lookup boom' } }),
-        'key-1'
+        'key-1',
+        'store-1',
+        'fp-1'
       )
     ).rejects.toThrow('Failed to look up idempotency key: lookup boom');
   });

@@ -9,11 +9,12 @@
 -- (records exactly the loser-key mapping), admission-fenced
 -- terminal overlap (the crux: terminals settled before admission
 -- excluded so repeats start new, overlapping terminals joined to
--- preserve exactly-once; legacy NULL-stamp terminals definitively
--- stale), earliest-wins tie-break, fingerprint/scope mismatch
--- raises, cross-customer/cross-merchant isolation, spent-key
--- idempotence (winner + loser keys), service-role gating +
--- grants, admission-timestamp requirement.
+-- preserve exactly-once — including commit-skewed terminals proven
+-- live at admission by the liveness snapshot; legacy NULL-stamp
+-- terminals definitively stale), earliest-wins tie-break,
+-- fingerprint/scope mismatch raises, cross-customer/cross-merchant
+-- isolation, spent-key idempotence (winner + loser keys),
+-- service-role gating + grants, admission-proof requirement.
 --
 -- NOTE: this file runs in a single session, so it cannot prove
 -- two-backend race serialization directly. That rests on
@@ -58,6 +59,11 @@ DECLARE
   v_t15 uuid := 'c3c3c3c3-0000-4000-8000-000000000016';
   v_t16 uuid := 'c3c3c3c3-0000-4000-8000-000000000017';
   v_t17 uuid := 'c3c3c3c3-0000-4000-8000-000000000018';
+  v_t18 uuid := 'c3c3c3c3-0000-4000-8000-000000000019';
+  v_t19 uuid := 'c3c3c3c3-0000-4000-8000-000000000020';
+  v_t20 uuid := 'c3c3c3c3-0000-4000-8000-000000000021';
+  v_t21 uuid := 'c3c3c3c3-0000-4000-8000-000000000022';
+  v_t22 uuid := 'c3c3c3c3-0000-4000-8000-000000000023';
   v_k1 uuid := 'd4d4d4d4-0000-4000-8000-000000000001';
   v_k2 uuid := 'd4d4d4d4-0000-4000-8000-000000000002';
   v_k3 uuid := 'd4d4d4d4-0000-4000-8000-000000000003';
@@ -75,7 +81,13 @@ DECLARE
   v_k15 uuid := 'd4d4d4d4-0000-4000-8000-000000000015';
   v_k16 uuid := 'd4d4d4d4-0000-4000-8000-000000000016';
   v_k17 uuid := 'd4d4d4d4-0000-4000-8000-000000000017';
+  v_k18 uuid := 'd4d4d4d4-0000-4000-8000-000000000018';
+  v_k19 uuid := 'd4d4d4d4-0000-4000-8000-000000000019';
+  v_k20 uuid := 'd4d4d4d4-0000-4000-8000-000000000020';
+  v_k21 uuid := 'd4d4d4d4-0000-4000-8000-000000000021';
+  v_k22 uuid := 'd4d4d4d4-0000-4000-8000-000000000022';
   v_claim record;
+  v_proof record;
   v_rows_before integer;
   v_rows_after integer;
 BEGIN
@@ -105,7 +117,7 @@ BEGIN
 
   -- 1. First claim for a scope records the mapping.
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k1, 'fp-airtime-500', v_t1, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k1, 'fp-airtime-500', v_t1, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t1
     OR v_claim.idempotency_key IS DISTINCT FROM v_k1
@@ -118,7 +130,7 @@ BEGIN
   -- so loser-key retries replay instead of preparing fresh.
   SELECT count(*) INTO v_rows_before FROM public.vtu_idempotency_keys;
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k2, 'fp-airtime-500', v_t2, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k2, 'fp-airtime-500', v_t2, v_m1, v_c1, now(), '{}');
   SELECT count(*) INTO v_rows_after FROM public.vtu_idempotency_keys;
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t1
@@ -157,7 +169,7 @@ BEGIN
     'INTENT-CLAIM-003', now() + interval '1 hour'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k3, 'fp-airtime-500', v_t3, v_m1, v_c1, now() + interval '1 hour');
+  FROM public.claim_vtu_intent(v_k3, 'fp-airtime-500', v_t3, v_m1, v_c1, now() + interval '1 hour', '{}');
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t3
   THEN
@@ -177,7 +189,7 @@ BEGIN
     'INTENT-CLAIM-004', now() + interval '1 hour'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k4, 'fp-airtime-500', v_t4, v_m1, v_c1, now() + interval '1 hour');
+  FROM public.claim_vtu_intent(v_k4, 'fp-airtime-500', v_t4, v_m1, v_c1, now() + interval '1 hour', '{}');
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t4
   THEN
@@ -186,7 +198,7 @@ BEGIN
 
   -- 5. Earliest in-flight mapping wins (pre-deploy drain determinism).
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k5, 'fp-tie', v_t5, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k5, 'fp-tie', v_t5, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Tie-break setup claim must create, got %', v_claim;
   END IF;
@@ -197,7 +209,7 @@ BEGIN
     key, vtu_transaction_id, customer_id, merchant_id, request_fingerprint
   ) VALUES (v_k6, v_t6, v_c1, v_m1, 'fp-tie');
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k7, 'fp-tie', v_t7, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k7, 'fp-tie', v_t7, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t5
     OR v_claim.idempotency_key IS DISTINCT FROM v_k5
@@ -207,7 +219,7 @@ BEGIN
 
   -- 6. Same key + different fingerprint raises (409 contract).
   BEGIN
-    PERFORM public.claim_vtu_intent(v_k5, 'fp-other', v_t8, v_m1, v_c1, now());
+    PERFORM public.claim_vtu_intent(v_k5, 'fp-other', v_t8, v_m1, v_c1, now(), '{}');
     RAISE EXCEPTION 'Expected claim_fingerprint_mismatch';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_fingerprint_mismatch%' THEN
@@ -217,7 +229,7 @@ BEGIN
 
   -- 7. Same key + different scope raises (400 contract).
   BEGIN
-    PERFORM public.claim_vtu_intent(v_k5, 'fp-tie', v_t8, v_m1, v_c2, now());
+    PERFORM public.claim_vtu_intent(v_k5, 'fp-tie', v_t8, v_m1, v_c2, now(), '{}');
     RAISE EXCEPTION 'Expected claim_scope_mismatch';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%claim_scope_mismatch%' THEN
@@ -228,7 +240,7 @@ BEGIN
   -- 8. Same fingerprint under another customer is an independent
   -- intent (isolation is by scope, not fingerprint).
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k8, 'fp-airtime-500', v_t9, v_m1, v_c2, now());
+  FROM public.claim_vtu_intent(v_k8, 'fp-airtime-500', v_t9, v_m1, v_c2, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t9
   THEN
@@ -247,7 +259,7 @@ BEGIN
   FROM public.claim_vtu_intent(
     v_k9, 'fp-airtime-500',
     'c3c3c3c3-0000-4000-8000-000000000010', v_m2, v_c3
-  , now());
+  , now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Cross-merchant claim must create, got %', v_claim;
   END IF;
@@ -256,7 +268,7 @@ BEGIN
   -- recorded outcome, even after terminalization (same-key
   -- contract; terminal exclusion applies to cross-key claims).
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k1, 'fp-airtime-500', v_t2, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k1, 'fp-airtime-500', v_t2, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t1
     OR v_claim.idempotency_key IS DISTINCT FROM v_k1
@@ -269,7 +281,7 @@ BEGIN
     PERFORM pg_catalog.set_config(
       'request.jwt.claim.role', 'authenticated', true
     );
-    PERFORM public.claim_vtu_intent(v_k2, 'fp-gated', v_t2, v_m1, v_c1, now());
+    PERFORM public.claim_vtu_intent(v_k2, 'fp-gated', v_t2, v_m1, v_c1, now(), '{}');
     RAISE EXCEPTION 'Expected forbidden for authenticated role';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM NOT LIKE '%requires service_role%' THEN
@@ -283,14 +295,14 @@ BEGIN
   -- 12. Grants: service_role may execute; authenticated may not.
   IF pg_catalog.has_function_privilege(
     'authenticated',
-    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz)',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'authenticated must not have EXECUTE on claim_vtu_intent';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'service_role',
-    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz)',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'service_role must have EXECUTE on claim_vtu_intent';
@@ -317,13 +329,13 @@ BEGIN
     'INTENT-CLAIM-012', now() - interval '1 hour'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k10, 'fp-overlap', v_t10, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k10, 'fp-overlap', v_t10, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Overlap setup claim must create, got %', v_claim;
   END IF;
   UPDATE public.vtu_transactions SET status = 'successful' WHERE id = v_t10;
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k11, 'fp-overlap', v_t11, v_m1, v_c1, now() - interval '1 hour');
+  FROM public.claim_vtu_intent(v_k11, 'fp-overlap', v_t11, v_m1, v_c1, now() - interval '1 hour', '{}');
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t10
     OR v_claim.idempotency_key IS DISTINCT FROM v_k10
@@ -336,7 +348,7 @@ BEGIN
   -- retries presenting it (restart before canonical adoption,
   -- sibling-tab races) never prepare fresh.
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k2, 'fp-airtime-500', v_t2, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k2, 'fp-airtime-500', v_t2, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t1
     OR v_claim.idempotency_key IS DISTINCT FROM v_k2
@@ -365,7 +377,7 @@ BEGIN
     '2026-10-19 12:00:00+00'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k12, 'fp-touch', v_t12, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k12, 'fp-touch', v_t12, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Touch setup claim must create, got %', v_claim;
   END IF;
@@ -378,7 +390,7 @@ BEGIN
     'INTENT-CLAIM-014', '2026-10-19 18:00:00+00'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k13, 'fp-touch', v_t13, v_m1, v_c1, '2026-10-19 18:00:00+00');
+  FROM public.claim_vtu_intent(v_k13, 'fp-touch', v_t13, v_m1, v_c1, '2026-10-19 18:00:00+00', '{}');
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t13
   THEN
@@ -421,7 +433,7 @@ BEGIN
     'INTENT-CLAIM-015'
   );
   SELECT * INTO v_claim
-  FROM public.claim_vtu_intent(v_k14, 'fp-admit', v_t14, v_m1, v_c1, now());
+  FROM public.claim_vtu_intent(v_k14, 'fp-admit', v_t14, v_m1, v_c1, now(), '{}');
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Admit setup claim must create, got %', v_claim;
   END IF;
@@ -438,7 +450,7 @@ BEGIN
   );
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
-    v_k15, 'fp-admit', v_t15, v_m1, v_c1, now() - interval '1 hour'
+    v_k15, 'fp-admit', v_t15, v_m1, v_c1, now() - interval '1 hour', '{}'
   );
   IF v_claim.created IS DISTINCT FROM false
     OR v_claim.transaction_id IS DISTINCT FROM v_t14
@@ -464,7 +476,7 @@ BEGIN
   );
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
-    v_k16, 'fp-legacy', v_t16, v_m1, v_c1, '2026-10-20 03:00:00+00'
+    v_k16, 'fp-legacy', v_t16, v_m1, v_c1, '2026-10-20 03:00:00+00', '{}'
   );
   IF v_claim.created IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'Legacy setup claim must create, got %', v_claim;
@@ -479,7 +491,7 @@ BEGIN
   );
   SELECT * INTO v_claim
   FROM public.claim_vtu_intent(
-    v_k17, 'fp-legacy', v_t17, v_m1, v_c1, '2026-10-20 03:30:00+00'
+    v_k17, 'fp-legacy', v_t17, v_m1, v_c1, '2026-10-20 03:30:00+00', '{}'
   );
   IF v_claim.created IS DISTINCT FROM true
     OR v_claim.transaction_id IS DISTINCT FROM v_t17
@@ -491,7 +503,7 @@ BEGIN
   -- requires it (no silent fallback to row time).
   BEGIN
     PERFORM public.claim_vtu_intent(
-      v_k17, 'fp-legacy', v_t17, v_m1, v_c1, NULL
+      v_k17, 'fp-legacy', v_t17, v_m1, v_c1, NULL, '{}'
     );
     RAISE EXCEPTION 'Expected claim_invalid_arguments for NULL admission';
   EXCEPTION WHEN OTHERS THEN
@@ -499,6 +511,158 @@ BEGIN
       RAISE;
     END IF;
   END;
+
+  -- 19. Admission-liveness join (Codex R4 P1): terminal_at is the
+  -- terminal writer's XACT START, not its commit. A winner whose
+  -- transaction began before our admission but committed inside
+  -- our window carries terminal_at < admitted_at — the stamp fence
+  -- alone would exclude it and debit twice. Candidates live at
+  -- admission join (same-operation overlap, stamp irrelevant).
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference
+  )
+  VALUES (
+    v_t18, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500,
+    'INTENT-CLAIM-019'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k18, 'fp-live', v_t18, v_m1, v_c1, '2026-10-20 02:30:00+00', '{}'
+  );
+  IF v_claim.created IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Liveness setup claim must create, got %', v_claim;
+  END IF;
+  -- Terminalize, then skew the stamp before the duplicate's
+  -- admission (same-status write: the transition trigger does
+  -- not refire — control 15c).
+  UPDATE public.vtu_transactions SET status = 'successful' WHERE id = v_t18;
+  UPDATE public.vtu_transactions
+  SET terminal_at = '2026-10-20 02:00:00+00'
+  WHERE id = v_t18;
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference
+  )
+  VALUES (
+    v_t19, v_m1, v_c1, 'airtime', 'mtn', '08030000008', 500,
+    'INTENT-CLAIM-020'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k19, 'fp-live', v_t19, v_m1, v_c1, '2026-10-20 03:00:00+00',
+    ARRAY[v_t18]
+  );
+  IF v_claim.created IS DISTINCT FROM false
+    OR v_claim.transaction_id IS DISTINCT FROM v_t18
+    OR v_claim.idempotency_key IS DISTINCT FROM v_k18
+  THEN
+    RAISE EXCEPTION 'Live-at-admission terminal must join (t18/k18), got %', v_claim;
+  END IF;
+
+  -- 20. Liveness negative: a terminal settled before admission and
+  -- ABSENT from the live set stays excluded — the snapshot hit
+  -- must not over-join genuine repeats.
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference, status,
+    created_at, updated_at, terminal_at
+  )
+  VALUES (
+    v_t20, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500,
+    'INTENT-CLAIM-021', 'successful',
+    '2026-09-02 00:00:00+00', '2026-09-02 00:00:00+00',
+    '2026-09-02 00:00:00+00'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k20, 'fp-stale20', v_t20, v_m1, v_c1, '2026-09-02 00:00:00+00', '{}'
+  );
+  IF v_claim.created IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Stale setup claim must create, got %', v_claim;
+  END IF;
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference
+  )
+  VALUES (
+    v_t21, v_m1, v_c1, 'airtime', 'mtn', '08030000009', 500,
+    'INTENT-CLAIM-022'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k21, 'fp-stale20', v_t21, v_m1, v_c1, '2026-10-20 03:00:00+00', '{}'
+  );
+  IF v_claim.created IS DISTINCT FROM true
+    OR v_claim.transaction_id IS DISTINCT FROM v_t21
+  THEN
+    RAISE EXCEPTION 'Pre-admission terminal outside the live set must stay stale (t21), got %', v_claim;
+  END IF;
+
+  -- 21. Missing admission liveness is rejected: the fence
+  -- requires it (no silent fallback to the stamp-only fence,
+  -- which cannot see commit-skewed terminals).
+  BEGIN
+    PERFORM public.claim_vtu_intent(
+      v_k1, 'fp-live', v_t1, v_m1, v_c1, now(), NULL
+    );
+    RAISE EXCEPTION 'Expected claim_invalid_arguments for NULL liveness';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%claim_invalid_arguments%' THEN
+      RAISE;
+    END IF;
+  END;
+
+  -- 22. Admission proof contract: atomic stamp + live-scope
+  -- snapshot by (merchant slug, fingerprint); alias slugs
+  -- resolve like the route; unknown slugs yield an empty set
+  -- with the stamp (downstream guards reject them as today).
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference
+  )
+  VALUES (
+    v_t22, v_m1, v_c1, 'airtime', 'mtn', '08030000010', 500,
+    'INTENT-CLAIM-023'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(
+    v_k22, 'fp-proof', v_t22, v_m1, v_c1, now(), '{}'
+  );
+  IF v_claim.created IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Proof setup claim must create, got %', v_claim;
+  END IF;
+  SELECT * INTO v_proof
+  FROM public.vtu_admission_proof('intent-claim-m1', 'fp-proof');
+  IF v_proof.admitted_at IS NULL
+    OR NOT (v_t22 = ANY (v_proof.live_transaction_ids))
+  THEN
+    RAISE EXCEPTION 'Proof must stamp and list the live mapping, got %', v_proof;
+  END IF;
+  -- Alias rows grant service_role no INSERT (prod writes go
+  -- through rename_merchant_slug), so seed as the session role.
+  RESET ROLE;
+  INSERT INTO public.merchant_slug_aliases (old_slug, merchant_id)
+  VALUES ('intent-claim-old', v_m1);
+  SET LOCAL ROLE service_role;
+  SELECT * INTO v_proof
+  FROM public.vtu_admission_proof('intent-claim-old', 'fp-proof');
+  IF NOT (v_t22 = ANY (v_proof.live_transaction_ids)) THEN
+    RAISE EXCEPTION 'Proof must resolve alias slugs, got %', v_proof;
+  END IF;
+  UPDATE public.vtu_transactions SET status = 'successful' WHERE id = v_t22;
+  SELECT * INTO v_proof
+  FROM public.vtu_admission_proof('intent-claim-m1', 'fp-proof');
+  IF v_t22 = ANY (v_proof.live_transaction_ids) THEN
+    RAISE EXCEPTION 'Proof must drop terminalized mappings, got %', v_proof;
+  END IF;
+  SELECT * INTO v_proof
+  FROM public.vtu_admission_proof('no-such-store', 'fp-proof');
+  IF v_proof.admitted_at IS NULL
+    OR coalesce(cardinality(v_proof.live_transaction_ids), -1) <> 0
+  THEN
+    RAISE EXCEPTION 'Proof on unknown slug must stamp an empty set, got %', v_proof;
+  END IF;
 END;
 $test$;
 

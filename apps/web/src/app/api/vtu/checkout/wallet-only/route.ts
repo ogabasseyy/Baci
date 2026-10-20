@@ -91,19 +91,23 @@ export async function POST(request: NextRequest) {
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     const supabase = createAdminClient();
-    // Admission (Codex R3 P1): key lookup + DB-clock stamp for the
-    // claim overlap fence. No stamp → fail closed BEFORE preparing
+    // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
+    // admission proof (stamp + live-scope snapshot) for the claim
+    // overlap fence. No proof → fail closed BEFORE preparing
     // (nothing to orphan; the client retries the same key).
     let existing: ExistingIdempotencyRow | null;
     let admittedAt: string;
+    let admissionLive: string[];
     try {
-      ({ existing, admittedAt } = await admitVtuClaim(
+      ({ existing, admittedAt, admissionLive } = await admitVtuClaim(
         supabase,
-        idempotencyKey
+        idempotencyKey,
+        input.merchantSlug,
+        requestFingerprint
       ));
     } catch (error) {
       if (!(error instanceof VtuAdmissionError)) throw error;
-      console.error('VTU admission timestamp unavailable:', {
+      console.error('VTU admission proof unavailable:', {
         message: error.message,
       });
       return createErrorResponse('Failed to admit VTU claim.', 500);
@@ -181,8 +185,11 @@ export async function POST(request: NextRequest) {
     // (repeat purchases share fingerprints); terminals overlapping
     // our admission join (same in-flight operation, even when
     // preparation delays our row past terminalization — Codex R3
-    // P1). The RPC returns the authoritative mapping, subsuming
-    // the old insert + PK-race re-read (Codex R124 P2).
+    // P1 — or the writer's xact-start stamp predates our admission
+    // while its commit lands inside our window, proven by the
+    // admission-liveness snapshot — Codex R4 P1). The RPC returns
+    // the authoritative mapping, subsuming the old insert +
+    // PK-race re-read (Codex R124 P2).
     const { data: claimRows, error: claimError } = await supabase.rpc(
       'claim_vtu_intent',
       {
@@ -192,6 +199,7 @@ export async function POST(request: NextRequest) {
         p_merchant_id: prepared.merchant.id,
         p_customer_id: prepared.customer.id,
         p_admitted_at: admittedAt,
+        p_admission_live: admissionLive,
       }
     );
     if (claimError) {

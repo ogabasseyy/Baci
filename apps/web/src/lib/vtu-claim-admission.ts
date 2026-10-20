@@ -4,7 +4,7 @@ import {
   findExistingIdempotencyRow,
 } from './vtu-idempotency-key-lookup';
 
-/** Admission-stamp failure (the overlap fence requires the stamp). */
+/** Admission-proof failure (the overlap fence requires the proof). */
 export class VtuAdmissionError extends Error {
   constructor(message: string) {
     super(message);
@@ -15,31 +15,49 @@ export class VtuAdmissionError extends Error {
 export interface VtuClaimAdmission {
   existing: ExistingIdempotencyRow | null;
   admittedAt: string;
+  /** Scope transactions live at admission (commit-safe fence input). */
+  admissionLive: string[];
 }
 
 /**
- * Wallet-only claim admission (Codex R3 P1): issues the key-row
- * lookup + DB-clock admission stamp concurrently so no latency is
- * added. The stamp fences the claim overlap (operation admission,
- * not row insert): duplicates admitted while the winner is in
- * flight join even when preparation delays their row past
- * terminalization. Same-clock both sides (DB NOW()): no app/DB
- * skew hazard. Throws VtuAdmissionError when the stamp is
- * unavailable (fail closed before preparing); key-lookup
- * failures propagate unchanged.
+ * Wallet-only claim admission (Codex R3 P1, R4 P1): issues the
+ * key-row lookup + DB admission proof concurrently so no latency
+ * is added. The proof is atomic (stamp + live-scope snapshot under
+ * one statement snapshot): the claim joins terminals live at
+ * admission — terminalized inside our own window — regardless of
+ * their xact-start stamp, which can predate the writer's commit
+ * (comparing it against any post-commit timestamp is unsound).
+ * Same-clock both sides (DB statement time): no app/DB skew
+ * hazard. Throws VtuAdmissionError when the proof is unavailable
+ * (fail closed before preparing); key-lookup failures propagate
+ * unchanged.
  */
 export async function admitVtuClaim(
   supabase: SupabaseClient,
-  idempotencyKey: string
+  idempotencyKey: string,
+  merchantSlug: string,
+  fingerprint: string
 ): Promise<VtuClaimAdmission> {
-  const [existing, admission] = await Promise.all([
+  const [existing, proof] = await Promise.all([
     findExistingIdempotencyRow(supabase, idempotencyKey),
-    supabase.rpc('vtu_admission_timestamp'),
+    supabase.rpc('vtu_admission_proof', {
+      p_merchant_slug: merchantSlug,
+      p_fingerprint: fingerprint,
+    }),
   ]);
-  if (admission.error || !admission.data) {
+  const row = proof.data?.[0];
+  if (
+    proof.error ||
+    !row?.admitted_at ||
+    !Array.isArray(row.live_transaction_ids)
+  ) {
     throw new VtuAdmissionError(
-      `Failed to admit VTU claim: ${admission.error?.message ?? 'no timestamp returned'}`
+      `Failed to admit VTU claim: ${proof.error?.message ?? 'no admission proof returned'}`
     );
   }
-  return { existing, admittedAt: admission.data };
+  return {
+    existing,
+    admittedAt: row.admitted_at,
+    admissionLive: row.live_transaction_ids,
+  };
 }

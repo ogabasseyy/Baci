@@ -33,6 +33,13 @@ export const FIXTURE_PATTERNS = [
   // slip past the literal patterns; fully dynamic specifiers built
   // from variables remain a documented code-review catch.
   /['"`][^'"`]*test-fixtures\/['"`]/,
+  // Split-literal assembly: a quoted fragment ending in test-
+  // concatenated with the rest of the specifier, or a fixtures/
+  // fragment concatenated onto a prefix. Statically knowable, so
+  // flagged; only fully variable-built specifiers remain a
+  // code-review catch.
+  /['"`](?:[^'"`]*?[-_./]|)test-['"`]\s*\+/,
+  /\+\s*['"`][^'"`]*fixtures\/[^'"`]*['"`]/,
 ];
 
 export const TEST_SUPPORT_PATTERN =
@@ -98,8 +105,25 @@ const ROOT_LEVEL_SKIPPED = new Set(['tools', 'build', 'coverage', 'dist']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
-  const visitedDirs = new Set<string>();
-  const walk = (dir: string, isRoot: boolean, rel: string) => {
+  // Cycle protection is ancestry-based (realpaths of the current
+  // directory chain), not a global visited set: the same real
+  // directory reached through a second logical path is emitted again
+  // under that path, because file classification is path-based.
+  const walk = (
+    dir: string,
+    isRoot: boolean,
+    rel: string,
+    ancestors: ReadonlySet<string>
+  ) => {
+    let dirReal: string;
+    try {
+      dirReal = realpathSync(dir);
+    } catch {
+      dirReal = dir;
+    }
+    if (ancestors.has(dirReal)) return;
+    const chain = new Set(ancestors);
+    chain.add(dirReal);
     for (const entry of readdirSync(dir)) {
       if (ALWAYS_SKIPPED.has(entry)) continue;
       if (isRoot && ROOT_LEVEL_SKIPPED.has(entry)) continue;
@@ -114,7 +138,7 @@ export function collectSourceFiles(roots: string[]): string[] {
       const stat = lstatSync(full);
       if (stat.isSymbolicLink()) {
         // Symlink policy: follow links that resolve inside a scan root
-        // (with cycle protection via visitedDirs); skip links that
+        // (with ancestry-based cycle protection); skip links that
         // resolve outside every scan root or are broken. Content
         // reachable inside a root is scanned, never silently hidden.
         let target: string;
@@ -134,9 +158,7 @@ export function collectSourceFiles(roots: string[]): string[] {
         if (!inside) continue;
         const targetStat = lstatSync(target);
         if (targetStat.isDirectory()) {
-          if (visitedDirs.has(target)) continue;
-          visitedDirs.add(target);
-          walk(full, false, entryRel);
+          walk(full, false, entryRel, chain);
         } else if (/\.(?:m|c)?[tj]sx?$/.test(target)) {
           // Classify by the resolved target's extension: a link with
           // an extensionless or non-source name still surfaces its
@@ -146,15 +168,7 @@ export function collectSourceFiles(roots: string[]): string[] {
         continue;
       }
       if (stat.isDirectory()) {
-        let real: string;
-        try {
-          real = realpathSync(full);
-        } catch {
-          real = full;
-        }
-        if (visitedDirs.has(real)) continue;
-        visitedDirs.add(real);
-        walk(full, false, entryRel);
+        walk(full, false, entryRel, chain);
       } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
         out.push(full);
       }
@@ -168,12 +182,7 @@ export function collectSourceFiles(roots: string[]): string[] {
     }
   });
   for (const root of roots) {
-    try {
-      visitedDirs.add(realpathSync(root));
-    } catch {
-      // walk will surface the error
-    }
-    walk(root, true, '');
+    walk(root, true, '', new Set());
   }
   return out;
 }
@@ -208,7 +217,12 @@ function isExemptFile(file: string, roots: string[]): boolean {
 function fixtureImportLines(content: string): string {
   return content
     .split('\n')
-    .filter((line) => /^\s*(?:import|export)\b/.test(line) || /\b(?:require|import)\s*\(/.test(line))
+    .filter(
+      (line) =>
+        /^\s*(?:import|export)\b/.test(line) ||
+        /\bfrom\s*['"`]/.test(line) ||
+        /\w+\s*\(\s*['"`]/.test(line)
+    )
     .join('\n');
 }
 

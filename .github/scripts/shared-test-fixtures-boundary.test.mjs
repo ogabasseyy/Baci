@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  collectSourceFiles,
   findFixtureImportOffenders,
   findFixturePatternOffenders,
   isTestFile,
@@ -221,4 +222,31 @@ test('flags production imports of .tests modules', () => {
       "import { h } from './route.list.tests';\nexport const x = h;\n",
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'prod.ts')]);
+});
+
+test('flags split-literal fixture specifiers and config resolver calls', () => {
+  const dir = fixtureDir({
+    'prod.ts':
+      "const s = '@baci/shared/test-' + 'fixtures/piggyvest-purchase';\nexport const load = () => import(s);\n",
+    'vitest.config.ts':
+      "const sharedRequire = createRequire(import.meta.url);\nconst f = sharedRequire('@baci/shared/test-fixtures/piggyvest-schedule');\nexport const cfg = f;\n",
+    'jest.config.ts':
+      "import {\n  purchaseFixture\n} from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const cfg = purchaseFixture;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'jest.config.ts'),
+    join(dir, 'prod.ts'),
+    join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('emits the same real directory under a second logical path', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    '__tests__/helper.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, '__tests__'), join(dir, 'prod-link'));
+  const files = collectSourceFiles([dir]);
+  assert.ok(files.includes(join(dir, 'prod-link/helper.ts')));
 });

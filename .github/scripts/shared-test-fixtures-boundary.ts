@@ -101,17 +101,20 @@ export function collectSourceFiles(roots: string[]): string[] {
     const chain = new Set(ancestors);
     chain.add(dirReal);
     for (const entry of readdirSync(dir)) {
-      if (ALWAYS_SKIPPED.has(entry)) continue;
-      if (isRoot && ROOT_LEVEL_SKIPPED.has(entry)) continue;
+      const full = join(dir, entry);
+      const stat = lstatSync(full);
+      // Symlinks bypass name-based exclusions (containment below).
+      const isLink = stat.isSymbolicLink();
+      if (!isLink && ALWAYS_SKIPPED.has(entry)) continue;
+      if (!isLink && isRoot && ROOT_LEVEL_SKIPPED.has(entry)) continue;
       const entryRel = rel ? `${rel}/${entry}` : entry;
       if (
+        !isLink &&
         GENERATED_AT_ROOT_OR_NATIVE.has(entry) &&
         /(?:^|\/)(?:ios|android)(?:\/|$)/.test(entryRel)
       ) {
         continue;
       }
-      const full = join(dir, entry);
-      const stat = lstatSync(full);
       if (stat.isSymbolicLink()) {
         // Symlink policy: follow links that resolve inside a scan root
         // (with ancestry-based cycle protection); skip links that
@@ -188,7 +191,7 @@ function isExemptFile(file: string, roots: string[]): boolean {
 const CONFIG_SPECIFIER_EXTRACTORS = [
   /(?:import|export)\b[^;]*?from\s*['"`][^'"`]*['"`]/g,
   /(?:import|export)\s*['"`][^'"`]*['"`]/g,
-  /\bimport\s*\([^)]*\)/g,
+  /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)?\([^)]*\)/g,
   /\w+\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)?['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
   /(?:const|let|var)\s+(\w+)(?:\s*:\s*[^=;]+)?\s*=\s*(['"`][^'"`]*['"`])/g,
 ];

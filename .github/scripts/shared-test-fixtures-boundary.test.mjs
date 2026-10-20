@@ -289,3 +289,24 @@ test('flags require.resolve fixture loads in runner configs', () => {
     join(dir, 'vitest.config.ts'),
   ]);
 });
+
+test('skipped-name symlinks still go through containment', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    'src/prod.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'src'), join(dir, 'node_modules'));
+  const offenders = findFixtureImportOffenders([dir]);
+  assert.ok(offenders.includes(join(dir, 'node_modules/prod.ts')));
+});
+
+test('flags comment-separated dynamic imports in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "export const load = () => import /* lazy */ ('@baci/shared/test-fixtures/piggyvest-purchase');\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});

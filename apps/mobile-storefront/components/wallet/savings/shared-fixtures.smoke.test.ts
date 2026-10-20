@@ -21,6 +21,7 @@ describe('shared piggyvest fixtures (Jest smoke)', () => {
       'piggyvest-draft-closure',
       'piggyvest-schedule',
       'builder-ai-edit',
+      'fixture-mock',
     ]) {
       expect(
         nodeRequire.resolve(`@baci/shared/test-fixtures/${name}`)

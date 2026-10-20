@@ -125,6 +125,12 @@ describe('shared money formatting characterization', () => {
     ).toBe('₦1.2M');
   });
 
+  it('equalizes fraction bounds for roundingIncrement > 1', () => {
+    const options = { roundingIncrement: 5 } as FormatMoneyOptions;
+    expect(formatMoneyCompact(1200, 'NGN', options)).toBe('₦1.20K');
+    expect(formatMoney(1200, 'NGN', options)).toBe('₦1,200.00');
+  });
+
   it('receipt formatter construction performs no Intl exponent derivation', () => {
     // BHD is non-allowlisted and unused elsewhere in this file, so a
     // derivation would show up as a second Intl.NumberFormat call.

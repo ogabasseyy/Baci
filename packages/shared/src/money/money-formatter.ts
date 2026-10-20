@@ -58,6 +58,14 @@ export function getMoneyFormatter(
       maxOption ??
       (minOption !== undefined ? Math.max(exponent, minOption) : exponent),
   };
+  // Intl requires equal fraction bounds when roundingIncrement > 1;
+  // equalize on the resolved maximum instead of throwing.
+  const roundingIncrement = (
+    numberFormatOptions as { roundingIncrement?: number }
+  ).roundingIncrement;
+  if (roundingIncrement !== undefined && roundingIncrement > 1) {
+    finalOptions.minimumFractionDigits = finalOptions.maximumFractionDigits;
+  }
   // Canonical key: sorted entries so logically identical options in
   // different property order share one cache entry.
   const cacheKey = `${locale}:${JSON.stringify(

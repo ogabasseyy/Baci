@@ -1,7 +1,7 @@
+import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
-import { purchaseFixture } from '../../../../../../packages/shared/src/test-fixtures/piggyvest-purchase';
 import { PurchaseScreenJourney } from './purchase-screen-journey';
 
 it('keeps funding unavailable without matching server eligibility', () => {

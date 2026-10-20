@@ -9,7 +9,7 @@ jest.mock('expo-router', () => ({
 }));
 
 const item = {
-  ctaLink: '/deals/elite',
+  ctaLink: '/category/elite' as const,
   ctaText: 'Shop elite',
   image: 'https://example.com/elite.jpg',
   subtitle: 'Members-only prices',
@@ -43,6 +43,6 @@ describe('EliteSlide', () => {
     fireEvent.press(screen.getByLabelText('Shop elite'));
 
     // Assert
-    expect(mockPush).toHaveBeenCalledWith('/deals/elite');
+    expect(mockPush).toHaveBeenCalledWith('/category/elite');
   });
 });

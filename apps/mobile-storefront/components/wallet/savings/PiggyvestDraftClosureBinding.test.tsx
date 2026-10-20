@@ -1,5 +1,5 @@
+import { draftClosureReviewFixture } from '@baci/shared/test-fixtures/piggyvest-draft-closure';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { draftClosureReviewFixture } from '../../../../../packages/shared/src/lib/piggyvest-draft-closure.test-support';
 import { PiggyvestDraftClosureBinding } from './PiggyvestDraftClosureBinding';
 
 jest.mock('@/components/useColorScheme', () => ({

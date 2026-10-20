@@ -3,7 +3,7 @@ import {
   GuestCartPersistedError,
 } from './guest-cart-errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { McpServer } from "@modelcontextprotocol/server";
+import type { McpServer } from '@modelcontextprotocol/server';
 import {
   MCP_GUEST_CART_DESCRIPTION,
   mcpGuestCartInputSchema,
@@ -16,6 +16,7 @@ import {
   reserveGuestCartCreation,
 } from './guest-cart-creation-quota';
 import type { GuestCartStoreLike } from './guest-cart-health';
+import { withGuestCartTranscript } from './guest-cart-transcript';
 import {
   ProductUnavailable,
   VariantSelectionRequired,
@@ -30,9 +31,15 @@ export function registerGuestCartTool(
     getMerchantId: () => Promise<string | null>;
     formatPrice: (price: number) => string;
     clientIp?: string;
+    /** Server-only candidate opt-in; keep production off until live exposure QA passes. */
+    enablePrivateTextContinuation?: boolean;
   }
 ) {
-
+  function transcript<T extends Parameters<typeof withGuestCartTranscript>[0]>(reply: T) {
+    return withGuestCartTranscript(reply, {
+      enabled: options.enablePrivateTextContinuation === true,
+    });
+  }
   server.registerTool(
     'update_ogabassey_guest_cart',
     {
@@ -65,7 +72,7 @@ export function registerGuestCartTool(
         // invoking this registered handler.
         const parsed = mcpGuestCartInputSchema.safeParse(args);
         if (!parsed.success) {
-          return {
+          return transcript({
             isError: true,
             content: [
               {
@@ -76,7 +83,7 @@ export function registerGuestCartTool(
               },
             ],
             structuredContent: { success: false },
-          };
+          });
         }
         // Tokenless calls mint a fresh cart file, so anonymous creation (but
         // never token-bound updates) is capped per caller IP. Reserve
@@ -102,7 +109,7 @@ export function registerGuestCartTool(
                 retry_after_seconds: quota.retryAfterSeconds,
               })
             );
-            return {
+            return transcript({
               isError: true,
               content: [
                 {
@@ -115,7 +122,7 @@ export function registerGuestCartTool(
                 quota_exceeded: true,
                 retry_after_seconds: quota.retryAfterSeconds,
               },
-            };
+            });
           }
         }
         // UUID text is case-insensitive but the variants check compares
@@ -191,7 +198,7 @@ export function registerGuestCartTool(
         // page instead of a guest_cart=[] link the website would reject.
         if (!canonicalUrl && cart.items.length > 0)
           url.searchParams.set('guest_cart', JSON.stringify(cart.items));
-        return {
+        return transcript({
           content: [
             {
               type: 'text' as const,
@@ -203,9 +210,9 @@ export function registerGuestCartTool(
             ...cart,
             cart_url: url.toString(),
           },
-        };
+        });
       } catch (error) {
-        return mapGuestCartToolError(error);
+        return transcript(mapGuestCartToolError(error));
       }
     }
   );

@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { scheduleJourneyFixture } from './piggyvest-schedule.test-support';
+import { scheduleJourneyFixture } from '../test-fixtures/piggyvest-schedule';
 import { createPiggyvestScheduleClient } from './piggyvest-schedule-client';
 
 function fixture() {

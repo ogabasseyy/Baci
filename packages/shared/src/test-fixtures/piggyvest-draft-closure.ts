@@ -1,6 +1,6 @@
 import { piggyvestDraftClosureSchemas as schemas } from '../contracts/piggyvest-draft-closure';
 import { piggyvestSavingsScreenSchema } from '../contracts/piggyvest-savings-screen';
-import { createPiggyvestDraftClosureController } from './piggyvest-draft-closure-controller';
+import { createPiggyvestDraftClosureController } from '../lib/piggyvest-draft-closure-controller';
 
 export async function draftClosureReviewFixture() {
   const goalId = 'abcdefab-0000-4000-8000-000000000816';

@@ -35,6 +35,9 @@ export const FIXTURE_PATTERNS = [
   /['"`][^'"`]*test-fixtures\/['"`]/,
   // Template-literal prefix: `.../test-fixtures/${name}`.
   /['"`][^'"`]*test-fixtures\/\${/,
+  // Nested path-prefix constant: a quoted literal inside the fixture
+  // tree ending at a directory boundary ('../test-fixtures/piggyvest/').
+  /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)+['"`]/,
   // Split-literal assembly: a quoted fragment ending in test-
   // concatenated with the rest of the specifier, or a fixtures/
   // fragment concatenated onto a prefix. Statically knowable, so
@@ -232,6 +235,35 @@ const CONFIG_SPECIFIER_EXTRACTORS = [
   /\w+\s*\(\s*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
 ];
 
+// Scanning runs on a normalized view of the source: literal escape
+// sequences are decoded (so test\x2dfixtures is seen as test-fixtures)
+// and adjacent string literals are constant-folded (so
+// 'test-' + 'fixtures/x' is seen as one specifier). This closes
+// statically knowable assembly forms; only specifiers built from
+// runtime variables remain a documented code-review catch.
+function normalizeContent(content: string): string {
+  let out = content
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    )
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_m, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16))
+    )
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_m, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    )
+    .replace(/\\(.)/g, '$1');
+  let previous: string;
+  do {
+    previous = out;
+    out = out.replace(
+      /(['"])([^'"]*)\1\s*\+\s*(['"])([^'"]*)\3/g,
+      '$1$2$4$1'
+    );
+  } while (out !== previous);
+  return out;
+}
+
 function configSpecifiers(content: string): string {
   return CONFIG_SPECIFIER_EXTRACTORS.flatMap((pattern) =>
     [...content.matchAll(pattern)].map((match) => match[0])
@@ -242,7 +274,7 @@ export function findFixturePatternOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
     if (isExemptFile(file, roots)) continue;
-    const content = readFileSync(file, 'utf8');
+    const content = normalizeContent(readFileSync(file, 'utf8'));
     if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
       offenders.push(file);
     }
@@ -253,7 +285,7 @@ export function findFixturePatternOffenders(roots: string[]): string[] {
 export function findFixtureImportOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
-    const content = readFileSync(file, 'utf8');
+    const content = normalizeContent(readFileSync(file, 'utf8'));
     if (isExemptFile(file, roots)) {
       // Root runner configs are exempt for their alias/path-string
       // registrations, but an actual fixture import statement in a

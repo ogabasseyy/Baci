@@ -275,3 +275,19 @@ test('retains multiline runner-config resolver calls', () => {
     join(dir, 'vitest.config.ts'),
   ]);
 });
+
+test('detects nested prefixes, escaped literals, and arbitrary splits', () => {
+  const dir = fixtureDir({
+    'nested.ts':
+      "const root = '../test-fixtures/piggyvest/';\nexport const load = (n: string) => import(root + n);\n",
+    'escaped.ts':
+      "export const load = () => import('@baci/shared/test\\x2dfixtures/piggyvest-purchase');\n",
+    'split.ts':
+      "const specifier = '@baci/shared/test-fixt' + 'ures/piggyvest-purchase';\nexport const load = () => import(specifier);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'escaped.ts'),
+    join(dir, 'nested.ts'),
+    join(dir, 'split.ts'),
+  ]);
+});

@@ -222,7 +222,7 @@ function normalizeContent(content: string): string {
   );
   const gap = String.raw`(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*`;
   const fold = new RegExp(
-    '([\'"`])([^\'"`]*)\1' + gap + '\+' + gap + '([\'"`])([^\'"`]*)\3',
+    '([\'"`])([^\'"`]*)\\1' + gap + '\\+' + gap + '([\'"`])([^\'"`]*)\\3',
     'g'
   );
   let previous: string;

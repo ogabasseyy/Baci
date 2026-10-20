@@ -76,7 +76,6 @@ function renderClient(
   return render(
     <ReceiptClaimPageClient
       initialClaim={preview}
-      initialEmailHint=""
       initialError={null}
       token="claim-token"
       {...props}
@@ -111,16 +110,16 @@ describe('ReceiptClaimPageClient guest login', () => {
     vi.unstubAllGlobals();
   });
 
-  it('prefers a sanitized legacy URL email hint when one is present', () => {
+  it('never places email hints in the login URL; the login page resolves prefill by token', () => {
     mockSearchParams.set('email', '  UrlHint@Yahoo.CO.UK  ');
 
-    renderClient({ initialEmailHint: 'server-hint@example.com' });
+    renderClient();
 
     expect(
       screen.getByRole('link', { name: 'Sign in to claim receipt' })
     ).toHaveAttribute(
       'href',
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=urlhint%40yahoo.co.uk'
+      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
     );
   });
 
@@ -140,7 +139,7 @@ describe('ReceiptClaimPageClient guest login', () => {
   it('records login-start activity when guests click the claim CTA', async () => {
     const user = userEvent.setup();
 
-    renderClient({ initialEmailHint: 'customer@example.com' });
+    renderClient();
 
     await user.click(
       screen.getByRole('link', { name: 'Sign in to claim receipt' })
@@ -156,7 +155,7 @@ describe('ReceiptClaimPageClient guest login', () => {
       }
     );
     expect(mockPush).toHaveBeenCalledWith(
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=customer%40example.com'
+      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
     );
   });
 

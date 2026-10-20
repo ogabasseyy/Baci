@@ -76,7 +76,6 @@ function renderClient(
   return render(
     <ReceiptClaimPageClient
       initialClaim={preview}
-      initialEmailHint=""
       initialError={null}
       token="claim-token"
       {...props}
@@ -112,7 +111,7 @@ describe('ReceiptClaimPageClient', () => {
   });
 
   it('shows the personalized preview and routes guests to login with a return URL', () => {
-    renderClient({ initialEmailHint: 'customer@example.com' });
+    renderClient();
 
     expect(screen.getByText('Welcome Bassey John')).toBeInTheDocument();
     expect(
@@ -130,7 +129,7 @@ describe('ReceiptClaimPageClient', () => {
       screen.getByRole('link', { name: 'Sign in to claim receipt' })
     ).toHaveAttribute(
       'href',
-      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token&email=customer%40example.com'
+      '/account/login?redirect=%2Freceipts%2Fclaim%2Fclaim-token'
     );
     expect(mockPush).not.toHaveBeenCalled();
   });

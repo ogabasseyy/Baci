@@ -64,7 +64,6 @@ function renderClient(
   return render(
     <ReceiptClaimPageClient
       initialClaim={preview}
-      initialEmailHint=""
       initialError={null}
       token="claim-token"
       {...props}

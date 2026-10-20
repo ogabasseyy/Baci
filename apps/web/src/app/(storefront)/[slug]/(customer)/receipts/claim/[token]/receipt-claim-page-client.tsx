@@ -1,7 +1,7 @@
 'use client';
 import { AlertTriangle, Loader2, ReceiptText, Smartphone } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { type MouseEvent, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,7 +14,6 @@ import {
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import { rememberReceiptClaimAppDownloadToken } from '@/lib/import-notifications/receipt-claim-app-download-storage';
 import type { ReceiptClaimPreview } from '@/lib/import-notifications/receipt-claim-preview';
 import { asRoute } from '@/lib/routes';
@@ -28,19 +27,16 @@ import { waitForReceiptClaimLoginStartedTrackingWindow } from './wait-for-receip
 
 interface ReceiptClaimPageClientProps {
   initialClaim: ReceiptClaimPreview | null;
-  initialEmailHint: string;
   initialError: string | null;
   token: string;
 }
 
 export default function ReceiptClaimPageClient({
   initialClaim,
-  initialEmailHint,
   initialError,
   token,
 }: ReceiptClaimPageClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { basePath, loading: merchantLoading, merchant } = useMerchant();
   const { isAuthenticated, isLoading: authLoading } = useCustomerAuth();
   const [error, setError] = useState<string | null>(initialError);
@@ -137,15 +133,12 @@ export default function ReceiptClaimPageClient({
     basePath,
     `/receipts/claim/${encodeURIComponent(token)}`
   );
+  // The login page resolves its own email prefill from the claim token via
+  // the token-scoped login-email endpoint, so the full address is never
+  // placed in this URL (query strings leak into history, logs, Referer).
   const loginSearchParams = new URLSearchParams({
     redirect: loginRedirectPath,
   });
-  const emailHint =
-    sanitizeCustomerLoginEmailPrefill(searchParams.get('email')) ||
-    sanitizeCustomerLoginEmailPrefill(initialEmailHint);
-  if (emailHint) {
-    loginSearchParams.set('email', emailHint);
-  }
   const loginPath = joinBasePath(
     basePath,
     `/account/login?${loginSearchParams.toString()}`

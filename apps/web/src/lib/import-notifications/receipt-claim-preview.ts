@@ -27,10 +27,6 @@ export type ReceiptClaimLoginEmailHintResult =
   | { ok: true; emailHint: string }
   | { ok: false; error: string; status: 400 | 404 | 410 };
 
-export type ReceiptClaimPreviewWithLoginEmailHintResult =
-  | { ok: true; claim: ReceiptClaimPreview; emailHint: string }
-  | { ok: false; error: string; status: 400 | 404 | 410 };
-
 export function parseReceiptClaimToken(token: string | undefined) {
   const parsed = receiptClaimRouteParamsSchema.safeParse({ token });
   return parsed.success ? parsed.data.token : null;
@@ -124,26 +120,6 @@ export async function loadReceiptClaimPreview({
   }
 
   return { claim: buildClaimPreview(record.claim), ok: true };
-}
-
-export async function loadReceiptClaimPreviewWithLoginEmailHint({
-  supabase,
-  token,
-}: {
-  supabase: SupabaseClient;
-  token: string;
-}): Promise<ReceiptClaimPreviewWithLoginEmailHintResult> {
-  const record = await loadReceiptClaimRecord({ supabase, token });
-
-  if (!record.ok) {
-    return record;
-  }
-
-  return {
-    claim: buildClaimPreview(record.claim),
-    emailHint: sanitizeCustomerLoginEmailPrefill(record.claim.customer_email),
-    ok: true,
-  };
 }
 
 export async function loadReceiptClaimLoginEmailHint({

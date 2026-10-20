@@ -27,7 +27,7 @@ test('test files and helpers keep their exemptions', () => {
   assert.equal(isTestHelper('/repo/order-helper.ts'), false);
 });
 
-test('classifies .test-fixtures modules as test files', () => {
+test('classifies .test-fixtures modules as test helpers', () => {
   const dir = fixtureDir({
     'route.test-fixtures.ts':
       "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
@@ -36,10 +36,12 @@ test('classifies .test-fixtures modules as test files', () => {
     'data.ts':
       "import data from '../test-fixtures/expected.json';\nexport const z = data;\n",
   });
-  assert.equal(isTestFile(join(dir, 'route.test-fixtures.ts')), true);
+  assert.equal(isTestFile(join(dir, 'route.test-fixtures.ts')), false);
+  assert.equal(isTestHelper(join(dir, 'route.test-fixtures.ts')), true);
   assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
     join(dir, 'data.ts'),
     join(dir, 'prod.ts'),
+    join(dir, 'route.test-fixtures.ts'),
   ]);
 });
 
@@ -173,5 +175,17 @@ test('flags comment-separated dynamic imports in runner configs', () => {
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), [
     join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('bare __tests__ specifier and .test-fixtures chain are caught', () => {
+  const dir = fixtureDir({
+    'prod.ts': "import { h } from './__tests__';\nexport const x = h;\n",
+    'route.test-fixtures.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'prod.ts'),
+    join(dir, 'route.test-fixtures.ts'),
   ]);
 });

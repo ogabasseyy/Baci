@@ -63,7 +63,11 @@ documented subset — `mock.calls`/`results`/`invocationCallOrder`,
 `mockImplementation(Once)`, `mockResolvedValue(Once)`,
 `mockRejectedValue(Once)` — do not assume full `vi.fn`/`jest.fn`
 parity (e.g. no `mock.contexts`, `mockRestore`, or
-`getMockImplementation`); extend the helper deliberately if a
+`getMockImplementation`). One parity caveat: `mockReset` installs an
+`undefined` implementation exactly like Jest/Vitest, so a reset async
+fixture mock returns `undefined` rather than a promise — post-reset
+calls must only be awaited, never chained with `.then`/`.catch`.
+Extend the helper deliberately if a
 consumer needs more. Note the helper's mocks are not registered with
 either runner, so `jest.clearAllMocks()` / `vi.clearAllMocks()` do
 not reset them — call `mockClear()` explicitly — and

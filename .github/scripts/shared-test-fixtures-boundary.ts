@@ -10,6 +10,8 @@ import { join, resolve, sep } from 'node:path';
 // The test-support pattern applies only to files that are neither
 // test files nor test-named helpers. Full semantics: shared README.
 
+const SOURCE_EXT = /\.(?:m|c)?[tj]sx?$/;
+
 export const FIXTURE_PATTERNS = [
   // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
@@ -27,7 +29,7 @@ export const FIXTURE_PATTERNS = [
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:[./]|['\"`])|[^'\"`]*?\.(?:test|spec|tests)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:[./]|['\"`])|[^'\"`]*?\.(?:test|spec|tests)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__(?:\/|['\"`]))/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -41,7 +43,6 @@ export function isTestFile(path: string) {
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
-    /\.test-fixtures?\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /\.tests\.(?:m|c)?[tj]sx?$/.test(normalized)
   );
 }
@@ -57,6 +58,7 @@ export function isTestHelper(path: string) {
     /(?:^|\/)(?:metro\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
+    /\.test-fixtures?\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /(?:^|[-_./])test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
       normalized
     )
@@ -140,7 +142,7 @@ export function collectSourceFiles(roots: string[]): string[] {
           // Emit under both link and target paths for classification.
           walk(full, false, entryRel, chain);
           walk(target, false, entryRel, chain);
-        } else {
+        } else if (targetStat.isFile() && (SOURCE_EXT.test(entry) || SOURCE_EXT.test(target))) {
           out.push(full);
           if (target !== full) out.push(target);
         }
@@ -166,9 +168,8 @@ export function collectSourceFiles(roots: string[]): string[] {
   return out;
 }
 
-// Matching is intentionally raw-text and conservative (comments,
-// plain strings, and type-only imports are flagged too).
-// Fixture-pattern-only scan for developer tooling trees.
+// Matching is intentionally raw-text and conservative.
+
 const RUNNER_CONFIG_BASENAME =
   /^(?:(?:vitest|jest|metro)\.config\.|vitest\.(?:workspace|projects)\.)(?:m|c)?[tj]sx?$/;
 
@@ -186,8 +187,7 @@ function isExemptFile(file: string, roots: string[]): boolean {
 }
 
 // For exempt runner configs, only specifier-bearing constructs are
-// scanned (import/export-from, dynamic imports, first-string-arg
-// resolver calls); alias registrations stay exempt.
+// scanned; alias registrations stay exempt.
 const CONFIG_SPECIFIER_EXTRACTORS = [
   /(?:import|export)\b[^;]*?from(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`]/g,
   /(?:import|export)\s*['"`][^'"`]*['"`]/g,

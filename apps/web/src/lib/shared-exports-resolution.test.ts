@@ -92,6 +92,7 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
         'src/test-fixtures/fixture-mock.ts',
       '@baci/shared/test-fixtures/order-wallet-funding-intent':
         'src/test-fixtures/order-wallet-funding-intent.ts',
+      '@baci/shared/money': 'src/money/index.ts',
     };
     for (const [specifier, target] of Object.entries(expectedTargets)) {
       const resolved = appRequire.resolve(specifier);

@@ -1,3 +1,4 @@
+import { MONEY_CURRENCY_LOCALES } from '../money/format-money';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -17,46 +18,16 @@ export type VatBreakdownMerchant = Pick<
   'vat_rate' | 'vat_registration_status'
 >;
 
-const CURRENCY_LOCALE_MAP: Record<string, string> = {
-  NGN: 'en-NG',
-  GHS: 'en-GH',
-  KES: 'en-KE',
-  USD: 'en-US',
-  GBP: 'en-GB',
-  EUR: 'de-DE',
-  ZAR: 'en-ZA',
-  XAF: 'fr-CM',
-  XOF: 'fr-SN',
-};
-
 const MONEY_TOLERANCE = 0.01;
 export const DEFAULT_NG_VAT_RATE = 7.5;
 
-export type MoneyFormatter = (amount: number) => string;
-
-const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
-
-function getMoneyFormatter(currencyCode: string): Intl.NumberFormat {
-  const cached = moneyFormatterCache.get(currencyCode);
-  if (cached) {
-    return cached;
-  }
-
-  const locale = CURRENCY_LOCALE_MAP[currencyCode] || 'en-NG';
-  const formatter = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  moneyFormatterCache.set(currencyCode, formatter);
-  return formatter;
-}
-
-export function createMoneyFormatter(currencyCode: string): MoneyFormatter {
-  const formatter = getMoneyFormatter(currencyCode);
-  return (amount) => formatter.format(amount);
-}
+// The money formatter now lives in ../money/format-money (formatting
+// wave extraction); re-exported here so receipt callers keep their
+// existing imports and there is one formatter/cache in the package.
+export {
+  createMoneyFormatter,
+  type MoneyFormatter,
+} from '../money/format-money';
 
 export function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '');
@@ -103,7 +74,7 @@ function getIncludedTaxAmount(total: number, taxRate: number): number {
 }
 
 function getDefaultVatRateForCurrency(currencyCode: string): number | null {
-  const locale = CURRENCY_LOCALE_MAP[currencyCode.toUpperCase()];
+  const locale = MONEY_CURRENCY_LOCALES[currencyCode.toUpperCase()];
   return locale === 'en-NG' ? DEFAULT_NG_VAT_RATE : null;
 }
 

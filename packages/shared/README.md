@@ -110,6 +110,28 @@ env-allowlist changes only) does not run them. Enforcement therefore
 does not depend on changed-file test selection in the modes that can
 change fixture imports.
 
+## Money formatting (`@baci/shared/money`)
+
+The canonical money formatter lives in `src/money/format-money.ts`,
+extracted from the receipt-scoped formatter in
+`src/receipt/receipt-money.ts` (which re-exports `createMoneyFormatter`
+from it — one implementation, one cache). Semantic decision for the
+formatting wave: the currency code is the source of truth and the
+locale is derived from it via `MONEY_CURRENCY_LOCALES`; fraction digits
+are an explicit per-call-class option (standard 2, whole-amount 0,
+compact), not a hidden per-app default. `formatMoney` takes major
+units; `formatMoneyMinor` takes minor units and assumes a 2-decimal
+currency (true for every currency in `SUPPORTED_MONEY_CURRENCIES`).
+
+Divergences this unification intentionally removes when the per-app
+adoption PRs land: mobile-storefront's NGN-only hardcoding, web's
+country-derived currency/locale split, and mobile-admin's device-locale
+default. Adoption is one PR per app via thin wrappers preserving
+call-site signatures; only allowlisted currencies may be switched, and
+mobile adoption must first verify those currencies on-device (Hermes
+Intl data can differ from the Node ICU output pinned in
+`format-money.test.ts`).
+
 ## Platform isolation
 
 This package declares only `@noble/hashes` and a Zod peer dependency

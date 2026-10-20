@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  # v1.0.0 of the discovery action only analyzes and uploads to APIsec;
+  # it no longer opens spec PRs, so no write permissions are needed.
+  contents: read
 
 jobs:
   discover:
@@ -16,8 +17,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The API discovery action creates and pushes update PR branches when dry-run is false.
-          persist-credentials: true
+          # Nothing in this workflow pushes back to the repo (the v1.0.0
+          # discovery action no longer opens spec PRs), so do not persist
+          # credentials on the checkout.
+          persist-credentials: false
           fetch-depth: 0
 
       - name: API Discovery

@@ -31,8 +31,15 @@ export function registerGuestCartTool(
     getMerchantId: () => Promise<string | null>;
     formatPrice: (price: number) => string;
     clientIp?: string;
+    /** Server-only candidate opt-in; keep production off until live exposure QA passes. */
+    enablePrivateTextContinuation?: boolean;
   }
 ) {
+  function transcript<T extends Parameters<typeof withGuestCartTranscript>[0]>(reply: T) {
+    return withGuestCartTranscript(reply, {
+      enabled: options.enablePrivateTextContinuation === true,
+    });
+  }
   server.registerTool(
     'update_ogabassey_guest_cart',
     {
@@ -65,7 +72,7 @@ export function registerGuestCartTool(
         // invoking this registered handler.
         const parsed = mcpGuestCartInputSchema.safeParse(args);
         if (!parsed.success) {
-          return withGuestCartTranscript({
+          return transcript({
             isError: true,
             content: [
               {
@@ -102,7 +109,7 @@ export function registerGuestCartTool(
                 retry_after_seconds: quota.retryAfterSeconds,
               })
             );
-            return withGuestCartTranscript({
+            return transcript({
               isError: true,
               content: [
                 {
@@ -191,7 +198,7 @@ export function registerGuestCartTool(
         // page instead of a guest_cart=[] link the website would reject.
         if (!canonicalUrl && cart.items.length > 0)
           url.searchParams.set('guest_cart', JSON.stringify(cart.items));
-        return withGuestCartTranscript({
+        return transcript({
           content: [
             {
               type: 'text' as const,
@@ -205,7 +212,7 @@ export function registerGuestCartTool(
           },
         });
       } catch (error) {
-        return withGuestCartTranscript(mapGuestCartToolError(error));
+        return transcript(mapGuestCartToolError(error));
       }
     }
   );

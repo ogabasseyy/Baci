@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GuestCartBridgePendingError,
   GuestCartCanonicalError,
+  GuestCartExpiredError,
   GuestCartMigratedError,
 } from './guest-cart-errors';
 import { mapGuestCartToolError } from './guest-cart-tool-responses';
@@ -10,47 +11,54 @@ import { withGuestCartTranscript } from './guest-cart-transcript';
 const token = 'a'.repeat(64);
 
 describe('withGuestCartTranscript', () => {
-  it('preserves the real bridge-pending recovery contract', () => {
+  it('leaves capability delivery unchanged unless the server explicitly opts in', () => {
+    const original = mapGuestCartToolError(new GuestCartBridgePendingError(token));
+    expect(withGuestCartTranscript(original)).toBe(original);
+    expect(withGuestCartTranscript(original, { enabled: false })).toBe(original);
+    expect(original.content).toHaveLength(1);
+    expect(original.content[0].text).not.toContain(token);
+  });
+
+  it('allowlists continuation fields and excludes URLs, cart IDs and future fields', () => {
+    const structuredContent = {
+      success: true, cart_token: token, version: 2,
+      items: [{ product_id: 'product', quantity: 1, futureCredential: 'secret' }],
+      cart_url: 'https://ogabassey.com/cart#handoff=private',
+      canonical_cart_id: 'canonical', migrated_cart_id: 'migrated', futureSecret: 'secret',
+    };
+    const result = withGuestCartTranscript({ content: [], structuredContent }, { enabled: true });
+    expect(result.structuredContent).toBe(structuredContent);
+    expect(JSON.parse(result.content.at(-1)?.text ?? 'null')).toEqual({
+      success: true, cart_token: token, version: 2,
+      items: [{ product_id: 'product', quantity: 1 }],
+    });
+  });
+
+  it('preserves the real bridge-pending recovery contract for an opted-in candidate', () => {
     const result = withGuestCartTranscript(
-      mapGuestCartToolError(new GuestCartBridgePendingError(token))
+      mapGuestCartToolError(new GuestCartBridgePendingError(token)), { enabled: true }
     );
     expect(JSON.parse(result.content.at(-1)?.text ?? 'null')).toEqual({
-      success: false,
-      code: 'refresh_required',
-      cart_token: token,
-      retryable: true,
+      success: false, code: 'refresh_required', cart_token: token, retryable: true,
     });
   });
 
   it.each([
-    { success: true, cart_token: token, version: 2, items: [] },
     { success: false }, // Invalid input and quota replies.
     mapGuestCartToolError(new GuestCartCanonicalError('unauthorized', token)).structuredContent,
+    mapGuestCartToolError(new GuestCartExpiredError()).structuredContent,
     mapGuestCartToolError(new GuestCartMigratedError('canonical-cart')).structuredContent,
-    mapGuestCartToolError(new GuestCartBridgePendingError(token)).structuredContent,
-    mapGuestCartToolError(
-      new GuestCartCanonicalError('version_conflict', token, 'canonical-cart', 3)
-    ).structuredContent,
     { success: true, cart_emptied: true, items: [] },
-  ])('preserves the structured capability contract: %j', (structuredContent) => {
-    const original = {
-      content: [{ type: 'text' as const, text: 'Shopper-facing summary' }],
-      structuredContent,
-    };
-    const result = withGuestCartTranscript(original);
-    expect(result.structuredContent).toBe(structuredContent);
-    expect(result.content[0]).toBe(original.content[0]);
+  ])('keeps authority-free replies token-free in both content blocks: %j', (structuredContent) => {
+    const original = { content: [{ type: 'text' as const, text: 'Summary' }], structuredContent };
+    const result = withGuestCartTranscript(original, { enabled: true });
     expect(result.content).toHaveLength(2);
-    const transcript = result.content[1];
-    expect(transcript).toMatchObject({
-      type: 'text',
+    expect(result.content[0]).toBe(original.content[0]);
+    expect(JSON.stringify(result.content)).not.toContain(token);
+    expect(JSON.stringify(result.content)).not.toContain('cart_token');
+    expect(result.content[1]).toMatchObject({
       annotations: { audience: ['assistant'], priority: 1 },
     });
-    expect(JSON.parse(transcript.text)).toEqual(structuredContent);
-    if (!('cart_token' in structuredContent)) {
-      expect(transcript.text).not.toContain('cart_token');
-      expect(transcript.text).not.toContain(token);
-    }
     expect(original.content).toHaveLength(1);
   });
 });

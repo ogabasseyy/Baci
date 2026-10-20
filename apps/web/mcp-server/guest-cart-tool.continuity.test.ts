@@ -30,6 +30,7 @@ function handlerFor(store: GuestCartStore) {
   );
   registerGuestCartTool({ registerTool } as unknown as McpServer, {
     store,
+    enablePrivateTextContinuation: true,
     supabase: {} as SupabaseClient,
     getMerchantId: async () => 'merchant',
     formatPrice: String,
@@ -66,7 +67,7 @@ it('continues one multi-item cart across text-only tool-result turns', async () 
       items: { product_id: string; quantity: number }[];
       cart_emptied?: boolean;
     };
-    expect(state).toEqual(result.structuredContent);
+    expect(result.structuredContent).toMatchObject(state);
     expect(state.success).toBe(true);
     return state;
   }
@@ -125,7 +126,7 @@ it('preserves canonical retry authority and version in the text transcript, but 
     structuredContent: unknown;
   };
   const state = JSON.parse(result.content.at(-1)?.text ?? 'null');
-  expect(state).toEqual(result.structuredContent);
+  expect(result.structuredContent).toMatchObject(state);
   expect(state).toMatchObject({
     success: false,
     retryable: true,
@@ -166,9 +167,6 @@ it('retries a version conflict through the real store and canonical transport us
     ],
   };
   const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
-    expect(init?.headers).toMatchObject({
-      Authorization: `Bearer legacy_mcp_${token}`,
-    });
     const input = JSON.parse(String(init?.body)) as {
       productId: string;
       quantity: number;
@@ -176,12 +174,6 @@ it('retries a version conflict through the real store and canonical transport us
       operationId: string;
       handoff: boolean;
     };
-    expect(input).toMatchObject({
-      productId: id,
-      quantity: 0,
-      operationId: 'remove-charger-intent',
-      handoff: true,
-    });
     if (input.expectedVersion === 6) {
       return new Response(
         JSON.stringify({
@@ -195,7 +187,6 @@ it('retries a version conflict through the real store and canonical transport us
     }
     // The SQL writer checks the version before saving an operation receipt.
     // Retry the same unchanged removal intent with its returned version.
-    expect(input.expectedVersion).toBe(7);
     return new Response(
       JSON.stringify({
         ok: true,
@@ -258,5 +249,12 @@ it('retries a version conflict through the real store and canonical transport us
     ],
   });
   expect(fetcher).toHaveBeenCalledTimes(2);
+  for (const [index, [, init]] of fetcher.mock.calls.entries()) {
+    expect(init?.headers).toMatchObject({ Authorization: `Bearer legacy_mcp_${token}` });
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      productId: id, quantity: 0, operationId: 'remove-charger-intent',
+      handoff: true, expectedVersion: index === 0 ? 6 : 7,
+    });
+  }
   expect(rpc).not.toHaveBeenCalled();
 });

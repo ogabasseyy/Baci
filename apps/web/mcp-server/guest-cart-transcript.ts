@@ -11,14 +11,35 @@ export function withGuestCartTranscript<
     content: { type: 'text'; text: string }[];
     structuredContent: Record<string, unknown>;
   },
->(result: T) {
+>(result: T, options: { enabled?: boolean } = {}) {
+  // Production registration leaves this off. Enabling a candidate requires
+  // isolated host-rendering QA; an audience hint cannot enforce privacy.
+  if (options.enabled !== true) return result;
+  const keys = [
+    'success', 'code', 'retryable', 'cart_token', 'version', 'cart_emptied',
+    'expires_at', 'cart_expired', 'cart_full', 'cart_migrated',
+    'requires_variant_selection', 'product_unavailable',
+  ] as const;
+  const continuation: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (Object.hasOwn(result.structuredContent, key)) {
+      continuation[key] = result.structuredContent[key];
+    }
+  }
+  if (Array.isArray(result.structuredContent.items)) {
+    continuation.items = result.structuredContent.items.map((item: unknown) => {
+      if (!item || typeof item !== 'object') return {};
+      const line = item as Record<string, unknown>;
+      return { product_id: line.product_id, quantity: line.quantity };
+    });
+  }
   return {
     ...result,
     content: [
       ...result.content,
       {
         type: 'text' as const,
-        text: JSON.stringify(result.structuredContent),
+        text: JSON.stringify(continuation),
         annotations: { audience: ['assistant' as const], priority: 1 },
       },
     ],

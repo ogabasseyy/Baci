@@ -56,3 +56,18 @@ test('test files and helpers keep their exemptions', () => {
   assert.equal(isTestHelper('/repo/order-test-utils.ts'), true);
   assert.equal(isTestHelper('/repo/order-helper.ts'), false);
 });
+
+test('flags production importing a __tests__ helper and nested build sources', () => {
+  const dir = fixtureDir({
+    'prod.ts':
+      "import { h } from '../__tests__/helper';\nexport const x = h;\n",
+    'src/feature/build/prod.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
+    'android/app/build/gen.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const z = f;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(dir, 'prod.ts'),
+    join(dir, 'src/feature/build/prod.ts'),
+  ]);
+});

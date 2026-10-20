@@ -30,7 +30,7 @@ export const FIXTURE_PATTERNS = [
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'\"`]*(?:test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`])/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)[^'\"`]*(?:test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`]|__tests__\/)/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -70,36 +70,45 @@ const ALWAYS_SKIPPED = new Set([
   '.expo',
   '.turbo',
   '.gradle',
-  'build',
-  'coverage',
   'DerivedData',
-  'dist',
   'web-build',
   'Pods',
 ]);
+// Generic output names are skipped at a scan root, or under native
+// ios/android trees (android/app/build, ios build output), where they
+// are generated. A nested source directory with one of these names
+// elsewhere in a source tree is still scanned.
+const GENERATED_AT_ROOT_OR_NATIVE = new Set(['build', 'coverage', 'dist']);
 // Skipped only as direct children of a scan root: developer CLI
 // tooling (apps/*/tools) is executed in Node and never bundled, while
 // a nested production directory named tools deeper in a source tree
 // is still scanned.
-const ROOT_LEVEL_SKIPPED = new Set(['tools']);
+const ROOT_LEVEL_SKIPPED = new Set(['tools', 'build', 'coverage', 'dist']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
-  const walk = (dir: string, isRoot: boolean) => {
+  const walk = (dir: string, isRoot: boolean, rel: string) => {
     for (const entry of readdirSync(dir)) {
       if (ALWAYS_SKIPPED.has(entry)) continue;
       if (isRoot && ROOT_LEVEL_SKIPPED.has(entry)) continue;
+      const entryRel = rel ? `${rel}/${entry}` : entry;
+      if (
+        GENERATED_AT_ROOT_OR_NATIVE.has(entry) &&
+        /(?:^|\/)(?:ios|android)(?:\/|$)/.test(entryRel)
+      ) {
+        continue;
+      }
       const full = join(dir, entry);
       const stat = lstatSync(full);
       if (stat.isSymbolicLink()) continue;
       if (stat.isDirectory()) {
-        walk(full, false);
+        walk(full, false, entryRel);
       } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
         out.push(full);
       }
     }
   };
-  for (const root of roots) walk(root, true);
+  for (const root of roots) walk(root, true, '');
   return out;
 }
 

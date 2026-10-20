@@ -7,7 +7,7 @@ describe('review fix: order entrypoint body squash migration in pending registry
     const repositoryPath =
       'supabase/migrations/20261020090000_storefront_order_entrypoint_body_squash.sql';
     const sha256 =
-      '35d90f8b7c138d20a4bd4bca54f6c18a76f2e7951da8a2769a3b02fe3cfa1fa2';
+      '3ba96b2452996d1d4d1e88e27acd9a34b22abc3c4f6db0ade5e5ee5bc65a0141';
 
     expect(EXPECTED_PENDING_SOURCES).toContainEqual({
       repositoryPath,

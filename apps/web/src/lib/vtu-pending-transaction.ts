@@ -21,10 +21,21 @@ import {
 export { resolveVtuCustomer };
 
 import { calculateCommerce } from '@/lib/supabase/client';
+import {
+  getVtuCheckoutSettings,
+  linkCheckoutCustomerByEmail,
+  type VtuCheckoutSettings,
+} from '@/lib/vtu-checkout-customer-rpcs';
 import { MONNIFY_VALIDATION_FAILED_MESSAGE } from '@/lib/vtu-checkout-error-classifier';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
 import { buildVtuSubmissionMarkerEraMetadata } from '@/lib/vtu-flagged-recovery';
 import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
+import {
+  type InsertedPreparedVtuTransaction,
+  insertPreparedVtuTransactionDirect,
+  insertPreparedVtuTransactionViaRpc,
+  type VtuTransactionInsertPayload,
+} from '@/lib/vtu-prepare-insert';
 import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
 import { COMMISSION_CATEGORY_MAP, type PurchaseInput } from '@/schemas/vtu';
@@ -401,7 +412,6 @@ interface MerchantRecord {
   id: string;
   slug: string;
   business_name: string;
-  paystack_subaccount_code: string | null;
 }
 
 interface FeatureSettingsRecord {
@@ -443,6 +453,8 @@ export async function preparePendingVtuTransaction({
   source,
   requireCustomer = false,
   strictLookups = false,
+  linkCustomerViaRpc = false,
+  insertViaRpc = false,
 }: {
   supabase: SupabaseClient;
   user: User;
@@ -457,6 +469,17 @@ export async function preparePendingVtuTransaction({
   requireCustomer?: boolean;
   /** Fail 5xx (not 400/404) on transient lookup errors; see resolver. */
   strictLookups?: boolean;
+  /**
+   * Resolve + link the customer through the ownership-verifying RPC
+   * (RLS-bound callers). False keeps the client-side resolver for
+   * privileged callers. Phase 2, epic #3694.
+   */
+  linkCustomerViaRpc?: boolean;
+  /**
+   * Insert the prepared row through the ownership-verifying RPC.
+   * False keeps the direct insert for privileged callers.
+   */
+  insertViaRpc?: boolean;
 }): Promise<PreparedVtuTransaction> {
   const isTelco = input.type === 'airtime' || input.type === 'data';
   const formattedPhone =
@@ -482,20 +505,49 @@ export async function preparePendingVtuTransaction({
     supabase,
   });
 
-  const { data: settings, error: settingsError } = await supabase
-    .from('merchant_feature_settings')
-    .select(
-      'vtu_enabled, vtu_airtime_enabled, vtu_data_enabled, vtu_electricity_enabled, vtu_tv_enabled, vtu_betting_enabled, vtu_merchant_commission_rate, vtu_customer_cashback_enabled, vtu_customer_cashback_rate, paystack_enabled, korapay_enabled'
-    )
-    .eq('merchant_id', merchant.id)
-    .single();
-  throwIfStrictVtuLookupError({
-    context: 'load VTU merchant settings',
-    error: settingsError,
-    strictLookups,
-  });
+  // Settings via the membership-gated projection RPC (Phase 2):
+  // the base table is secret-bearing with no buyer policy. Zero
+  // rows (null) = not-a-member OR no settings row — NOT an error.
+  // Transport errors throw and take strict policy below.
+  let settings: VtuCheckoutSettings | null;
+  try {
+    settings = await getVtuCheckoutSettings(supabase, merchant.id, user.id);
+  } catch (error) {
+    throwIfStrictVtuLookupError({
+      context: 'load VTU merchant settings',
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+      },
+      strictLookups,
+    });
+    // Non-strict parity: today's ignored error falls through to the
+    // disabled check via {} — never to customer resolution.
+    settings = {} as VtuCheckoutSettings;
+  }
 
-  const featureSettings = (settings ?? {}) as FeatureSettingsRecord;
+  const resolveCustomerForPrepare = (): Promise<CustomerRecord | null> =>
+    linkCustomerViaRpc
+      ? linkCheckoutCustomerByEmail(supabase, merchant.id, user.id)
+      : resolveVtuCustomer({
+          supabase,
+          merchantId: merchant.id,
+          strictLookups,
+          user,
+        });
+
+  let customer: CustomerRecord | null | undefined;
+  if (settings === null) {
+    // Zero rows: resolve identity FIRST so strangers get the
+    // customer 404 (parity), not a misleading disabled error. A
+    // resolved customer with zero rows means the merchant genuinely
+    // has no settings row → disabled either way.
+    customer = await resolveCustomerForPrepare();
+    if (!customer && requireCustomer) {
+      throw new Error('Customer account not found for this storefront');
+    }
+    throw new Error('VTU is not enabled for this merchant');
+  }
+  const featureSettings: FeatureSettingsRecord = settings;
   if (!featureSettings.vtu_enabled) {
     throw new Error('VTU is not enabled for this merchant');
   }
@@ -512,12 +564,7 @@ export async function preparePendingVtuTransaction({
     throw new Error(`${VTU_TYPE_LABELS[input.type]} purchases are not enabled`);
   }
 
-  const customer = await resolveVtuCustomer({
-    supabase,
-    merchantId: merchant.id,
-    strictLookups,
-    user,
-  });
+  customer ??= await resolveCustomerForPrepare();
 
   if (requireCustomer && !customer) {
     throw new Error('Customer account not found for this storefront');
@@ -754,108 +801,114 @@ export async function preparePendingVtuTransaction({
         ? input.requireValidationRef
         : monnifyBillPaymentValidation?.requireValidationRef;
 
-  const { data: transaction, error: transactionError } = await supabase
-    .from('vtu_transactions')
-    .insert({
-      merchant_id: merchant.id,
-      customer_id: customer?.id ?? input.customerId ?? null,
-      order_id: input.orderId ?? null,
-      type: input.type,
-      network_provider: isTelco
-        ? normalizedNetworkProvider
-        : (input.billerName ?? ''),
-      phone_number: isTelco
-        ? formattedPhone
-        : (normalizedCustomerPhone ?? input.customerIdentifier ?? ''),
-      amount: purchaseAmount,
-      request_reference: requestReference,
-      status: 'pending',
-      source,
-      platform_commission: commissions.platformEarning,
-      merchant_commission: effectiveMerchantEarning,
-      customer_cashback: customerCashback,
-      biller_name: input.billerName ?? null,
-      biller_item_code: input.billItemIdentifier ?? null,
-      customer_identifier:
-        resolvedProvider === 'monnify'
-          ? (monnifyCustomerIdentifier ?? null)
-          : (input.customerIdentifier ?? null),
-      customer_name: monnifyCustomerName,
-      metadata: {
-        provider: resolvedProvider,
-        ...buildVtuSubmissionMarkerEraMetadata(),
-        ...(resolvedProvider === 'monnify'
-          ? {
-              billerCode: monnifyBillerCode,
-              productCode: monnifyProductCode,
-              validationReference: monnifyValidationReference || undefined,
-              requireValidationRef:
-                typeof monnifyRequireValidationRef === 'boolean'
-                  ? monnifyRequireValidationRef
-                  : undefined,
-            }
-          : {}),
-        dataPlanCode: resolvedDataPlan?.itemCode ?? input.dataPlanCode,
-        ...(resolvedDataPlan &&
-        resolvedDataPlan.originalDataPlanCode !== resolvedDataPlan.itemCode
-          ? { originalDataPlanCode: resolvedDataPlan.originalDataPlanCode }
-          : {}),
-        ...(resolvedDataPlan
-          ? {
-              dataPlanAmount: resolvedDataPlan.amount,
-              dataPlanIsAmountFixed: resolvedDataPlan.isAmountFixed,
-              dataPlanName: resolvedDataPlan.itemName,
-              dataPlanProvider: resolvedDataPlan.providerName,
-              dataPlanResolvedFrom: resolvedDataPlan.resolvedFrom,
-            }
-          : {}),
-        originalPhoneNumber: input.phoneNumber,
-        customerPhone: normalizedCustomerPhone ?? null,
-        // Meter/customer address shown on the receipt — server-validated value
-        // preferred, client field as fallback; only set when one is present.
-        ...(resolvedCustomerAddress
-          ? { address: resolvedCustomerAddress }
-          : {}),
-        originalMerchantCommission: commissions.merchantEarning,
-        customerCashbackEnabled,
-        customerCashbackRate,
-        paystackEnabled: featureSettings.paystack_enabled ?? true,
-        korapayEnabled: featureSettings.korapay_enabled ?? true,
-        paymentPending: true,
-        // Wallet payment split. Written ONLY for checkout-sourced
-        // rows whenever walletAmount > 0 (including the wallet-only
-        // case where wallet === amount and card === 0). Phase B.5's
-        // debit hook in fulfillPendingVtuTransaction reads
-        // `paymentSplit.wallet > 0` as the signal to call
-        // redeem_vtu_wallet_payment.
-        //
-        // Source gate: non-checkout flows (loyalty_reward / gift /
-        // direct / storefront_modal) settle via different paths and
-        // the refund helper would skip a non-checkout row, leaving
-        // any debit stranded. The schema enforces this at the API
-        // boundary (`walletAmount is only valid for checkout-sourced
-        // purchases`) and the fulfillment debit gate enforces it at
-        // the money-movement layer; this guard keeps the persisted
-        // metadata coherent with both.
-        ...(source === 'checkout' &&
-        input.walletAmount &&
-        input.walletAmount > 0
-          ? {
-              paymentSplit: {
-                wallet: input.walletAmount,
-                card: purchaseAmount - input.walletAmount,
-              },
-            }
-          : {}),
-      },
-    })
-    .select(
-      'id, amount, customer_identifier, metadata, request_reference, status, type'
-    )
-    .single();
+  const insertPayload: VtuTransactionInsertPayload = {
+    merchant_id: merchant.id,
+    customer_id: customer?.id ?? input.customerId ?? null,
+    order_id: input.orderId ?? null,
+    type: input.type,
+    network_provider: isTelco
+      ? (normalizedNetworkProvider ?? '')
+      : (input.billerName ?? ''),
+    phone_number: isTelco
+      ? formattedPhone
+      : (normalizedCustomerPhone ?? input.customerIdentifier ?? ''),
+    amount: purchaseAmount,
+    request_reference: requestReference,
+    status: 'pending',
+    source,
+    platform_commission: commissions.platformEarning,
+    merchant_commission: effectiveMerchantEarning,
+    customer_cashback: customerCashback,
+    biller_name: input.billerName ?? null,
+    biller_item_code: input.billItemIdentifier ?? null,
+    customer_identifier:
+      resolvedProvider === 'monnify'
+        ? (monnifyCustomerIdentifier ?? null)
+        : (input.customerIdentifier ?? null),
+    customer_name: monnifyCustomerName,
+    metadata: {
+      provider: resolvedProvider,
+      ...buildVtuSubmissionMarkerEraMetadata(),
+      ...(resolvedProvider === 'monnify'
+        ? {
+            billerCode: monnifyBillerCode,
+            productCode: monnifyProductCode,
+            validationReference: monnifyValidationReference || undefined,
+            requireValidationRef:
+              typeof monnifyRequireValidationRef === 'boolean'
+                ? monnifyRequireValidationRef
+                : undefined,
+          }
+        : {}),
+      dataPlanCode: resolvedDataPlan?.itemCode ?? input.dataPlanCode,
+      ...(resolvedDataPlan &&
+      resolvedDataPlan.originalDataPlanCode !== resolvedDataPlan.itemCode
+        ? { originalDataPlanCode: resolvedDataPlan.originalDataPlanCode }
+        : {}),
+      ...(resolvedDataPlan
+        ? {
+            dataPlanAmount: resolvedDataPlan.amount,
+            dataPlanIsAmountFixed: resolvedDataPlan.isAmountFixed,
+            dataPlanName: resolvedDataPlan.itemName,
+            dataPlanProvider: resolvedDataPlan.providerName,
+            dataPlanResolvedFrom: resolvedDataPlan.resolvedFrom,
+          }
+        : {}),
+      originalPhoneNumber: input.phoneNumber,
+      customerPhone: normalizedCustomerPhone ?? null,
+      // Meter/customer address shown on the receipt — server-validated value
+      // preferred, client field as fallback; only set when one is present.
+      ...(resolvedCustomerAddress ? { address: resolvedCustomerAddress } : {}),
+      originalMerchantCommission: commissions.merchantEarning,
+      customerCashbackEnabled,
+      customerCashbackRate,
+      paystackEnabled: featureSettings.paystack_enabled ?? true,
+      korapayEnabled: featureSettings.korapay_enabled ?? true,
+      paymentPending: true,
+      // Wallet payment split. Written ONLY for checkout-sourced
+      // rows whenever walletAmount > 0 (including the wallet-only
+      // case where wallet === amount and card === 0). Phase B.5's
+      // debit hook in fulfillPendingVtuTransaction reads
+      // `paymentSplit.wallet > 0` as the signal to call
+      // redeem_vtu_wallet_payment.
+      //
+      // Source gate: non-checkout flows (loyalty_reward / gift /
+      // direct / storefront_modal) settle via different paths and
+      // the refund helper would skip a non-checkout row, leaving
+      // any debit stranded. The schema enforces this at the API
+      // boundary (`walletAmount is only valid for checkout-sourced
+      // purchases`) and the fulfillment debit gate enforces it at
+      // the money-movement layer; this guard keeps the persisted
+      // metadata coherent with both.
+      ...(source === 'checkout' && input.walletAmount && input.walletAmount > 0
+        ? {
+            paymentSplit: {
+              wallet: input.walletAmount,
+              card: purchaseAmount - input.walletAmount,
+            },
+          }
+        : {}),
+    },
+  };
 
-  if (transactionError || !transaction) {
-    throw new Error('Failed to initiate purchase');
+  // Direct insert for privileged callers; ownership-verified RPC
+  // for the RLS-bound checkout (no buyer INSERT policy exists by
+  // design). Same payload, same prepared shape, same error.
+  let transaction: InsertedPreparedVtuTransaction;
+  if (insertViaRpc) {
+    if (!customer?.id) {
+      throw new Error('Customer account not found for this storefront');
+    }
+    transaction = await insertPreparedVtuTransactionViaRpc(
+      supabase,
+      { ...insertPayload, customer_id: customer.id },
+      user.id
+    );
+  } else {
+    transaction = await insertPreparedVtuTransactionDirect(
+      supabase,
+      insertPayload
+    );
   }
 
   return {

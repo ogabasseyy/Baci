@@ -41,6 +41,14 @@ const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d
 const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
 const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
 const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
+const VTU_CHECKOUT_RLS_PENDING_SOURCES = `085106d8245cc8f7a7d7e9ef7d6131469f33e85625a28df15c9919302955da08 20261019120000_claim_vtu_intent.sql
+bc8b1fa52c90cf0c416bad6bea58a8b69b2968a5bc63fc6090b24c51d522adcc 20261020090000_vtu_checkout_buyer_select_policy.sql
+1404c72f2c5eac3602eaaad4654d35570bce6ef608e82cfd4f77eb980bf32be1 20261020090001_vtu_checkout_customer_rpcs.sql
+55e0915d0b9772fe92f72b13ee600ec50f4c8cdf631301e646f340f3b36c3bf5 20261020090002_vtu_checkout_settings_projection.sql
+90f6c056f2e17203f092a2294c165d77658c18fdc6dc134a866130859c827531 20261020090003_vtu_prepare_insert_rpc.sql
+3f51401672bbe2ed2b3f6d7e26eaace7467f01565d903cff6df5a41878534dcb 20261020090004_vtu_idempotency_lookup_rpc.sql
+a42621a38b3c1387986c4c7c1d797fa745673b3a1ab65d97adf0653e45be1182 20261020090005_harden_claim_vtu_intent.sql
+be9b2383b7145fe13f07c9d8ad569b1c36573d92a522a1b4ac272d34323e6dd2 20261020090006_vtu_orphan_fail_rpc.sql`;
 const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
 const TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES = `8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c 20260923150000_include_tracking_order_method_and_import_source.sql`;
 const INVOICE_ARTIFACT_PROOF_RPCS_PENDING_SOURCES = `ce700c747390cbaddac5282dd933b7c83273ad747dec77a70fb2b7b4b3b12425 20260923150100_invoice_artifact_proof_bound_rpcs.sql`;
@@ -286,6 +294,7 @@ const PENDING_SOURCES = [
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
+  VTU_CHECKOUT_RLS_PENDING_SOURCES,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })

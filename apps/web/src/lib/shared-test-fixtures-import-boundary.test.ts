@@ -21,6 +21,8 @@ const scanRoots = [
   join(repoRoot, 'apps/mobile-storefront'),
   join(repoRoot, 'apps/mobile-admin'),
   join(repoRoot, 'packages/shared/src'),
+  join(repoRoot, 'packages/tiktok-business'),
+  join(repoRoot, 'apps/cloudflare-evidence-qualification-worker'),
 ];
 
 describe('test-fixtures import boundary', () => {

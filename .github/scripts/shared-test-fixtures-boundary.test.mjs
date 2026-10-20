@@ -84,9 +84,21 @@ test('flags plainly-named __tests__ helpers importing fixtures', () => {
   ]);
 });
 
-test('fails loudly on symlinked entries instead of skipping them', async () => {
+test('follows in-root symlinks and skips out-of-root links', async () => {
   const { symlinkSync } = await import('node:fs');
-  const dir = fixtureDir({ 'real/prod.ts': 'export const x = 1;\n' });
-  symlinkSync(join(dir, 'real'), join(dir, 'linked'));
-  assert.throws(() => findFixtureImportOffenders([dir]), /symlinked entry/);
+  // build/ at a scan root is skipped by name; an in-root symlink to it
+  // is followed, so its fixture import is still flagged.
+  const dir = fixtureDir({
+    'build/hidden.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'build'), join(dir, 'linked'));
+  const outside = fixtureDir({
+    'out.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
+  });
+  symlinkSync(outside, join(dir, 'external'));
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'linked/hidden.ts'),
+  ]);
 });

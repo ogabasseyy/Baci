@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { expect, it, vi } from 'vitest';
-import { startRuntimeJourneyLocal } from './runtime-journey-local';
+import { startRuntimeJourneyLocal } from './runtime-journey-local.test-support';
 
 vi.mock('server-only', () => ({}));
 

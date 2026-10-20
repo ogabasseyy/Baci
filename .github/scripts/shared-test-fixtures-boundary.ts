@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
 // Single source of truth for the shared test-fixtures import boundary,
@@ -54,10 +54,7 @@ export function isTestHelper(path: string) {
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /[\w.-]*test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(
       normalized
-    ) ||
-    // Single justified exception: test-only journey module imported
-    // solely by tests/fixtures despite its production-style name.
-    normalized.endsWith('/lib/piggyvest/runtime-journey-local.ts')
+    )
   );
 }
 
@@ -87,6 +84,7 @@ const ROOT_LEVEL_SKIPPED = new Set(['tools', 'build', 'coverage', 'dist']);
 
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
+  const visitedDirs = new Set<string>();
   const walk = (dir: string, isRoot: boolean, rel: string) => {
     for (const entry of readdirSync(dir)) {
       if (ALWAYS_SKIPPED.has(entry)) continue;
@@ -101,18 +99,60 @@ export function collectSourceFiles(roots: string[]): string[] {
       const full = join(dir, entry);
       const stat = lstatSync(full);
       if (stat.isSymbolicLink()) {
-        throw new Error(
-          `Refusing to silently skip symlinked entry under a scan root: ${full}`
+        // Symlink policy: follow links that resolve inside a scan root
+        // (with cycle protection via visitedDirs); skip links that
+        // resolve outside every scan root or are broken. Content
+        // reachable inside a root is scanned, never silently hidden.
+        let target: string;
+        try {
+          target = realpathSync(full);
+        } catch {
+          continue;
+        }
+        const inside = rootRealPaths.some(
+          (root) => target === root || target.startsWith(`${root}/`)
         );
+        if (!inside) continue;
+        const targetStat = lstatSync(target);
+        if (targetStat.isDirectory()) {
+          if (visitedDirs.has(target)) continue;
+          visitedDirs.add(target);
+          walk(full, false, entryRel);
+        } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
+          out.push(full);
+        }
+        continue;
       }
       if (stat.isDirectory()) {
+        let real: string;
+        try {
+          real = realpathSync(full);
+        } catch {
+          real = full;
+        }
+        if (visitedDirs.has(real)) continue;
+        visitedDirs.add(real);
         walk(full, false, entryRel);
       } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
         out.push(full);
       }
     }
   };
-  for (const root of roots) walk(root, true, '');
+  const rootRealPaths = roots.map((root) => {
+    try {
+      return realpathSync(root);
+    } catch {
+      return root;
+    }
+  });
+  for (const root of roots) {
+    try {
+      visitedDirs.add(realpathSync(root));
+    } catch {
+      // walk will surface the error
+    }
+    walk(root, true, '');
+  }
   return out;
 }
 

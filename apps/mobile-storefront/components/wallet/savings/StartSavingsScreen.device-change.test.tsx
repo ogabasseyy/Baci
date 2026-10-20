@@ -1,7 +1,7 @@
 import { piggyvestSavingsScreenSchema } from '@baci/shared/contracts';
 import { createPiggyvestDeviceChangeController } from '@baci/shared/lib';
+import { deviceChangeFixture } from '@baci/shared/test-fixtures/piggyvest-device-change';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { deviceChangeFixture } from '../../../../../packages/shared/src/test-fixtures/piggyvest-device-change';
 import { StartSavingsScreen } from './StartSavingsScreen';
 
 jest.mock('@/components/useColorScheme', () => ({

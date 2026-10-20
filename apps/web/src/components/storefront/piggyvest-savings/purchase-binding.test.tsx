@@ -1,8 +1,8 @@
 import { createPiggyvestPurchaseController } from '@baci/shared/lib';
+import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
-import { purchaseFixture } from '../../../../../../packages/shared/src/test-fixtures/piggyvest-purchase';
 import { BoundPurchaseReview } from './purchase-binding';
 
 function setup() {

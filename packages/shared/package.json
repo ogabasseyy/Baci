@@ -33,7 +33,10 @@
     "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",
     "./storefront/prioritize-smartphone-products": "./src/storefront/prioritize-smartphone-products.ts",
     "./gmc-feed": "./src/gmc-feed/index.ts",
-    "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts"
+    "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts",
+    "./vtu": "./src/vtu/index.ts",
+    "./test-fixtures/piggyvest-device-change": "./src/test-fixtures/piggyvest-device-change.ts",
+    "./test-fixtures/piggyvest-purchase": "./src/test-fixtures/piggyvest-purchase.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

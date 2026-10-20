@@ -38,6 +38,9 @@ export interface MerchantData {
    */
   paystack_subaccount_configured?: boolean;
   price_negotiation_enabled?: boolean;
+  shared_cart_enabled?: boolean;
+  shared_cart_accounts_enabled?: boolean;
+  shared_cart_realtime_enabled?: boolean;
   bank_account_number?: string | null;
   bank_account_name?: string | null;
   bank_code?: string | null;

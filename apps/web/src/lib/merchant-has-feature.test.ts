@@ -155,3 +155,25 @@ describe('prerender-safe feature checks', () => {
     }
   });
 });
+
+it.each([
+  'shared_cart',
+  'shared_cart_accounts',
+  'shared_cart_realtime',
+] as const)('uses a public derived hint for %s without exposing premium features', (feature) => {
+  expect(merchantHasFeature({ [`${feature}_enabled`]: true }, feature)).toBe(
+    true
+  );
+  expect(merchantHasFeature({ [`${feature}_enabled`]: false }, feature)).toBe(
+    false
+  );
+  expect(merchantHasFeature({ [`${feature}_enabled`]: 'true' }, feature)).toBe(
+    false
+  );
+  expect(
+    merchantHasFeature(
+      { premium_features: [], [`${feature}_enabled`]: true },
+      feature
+    )
+  ).toBe(false);
+});

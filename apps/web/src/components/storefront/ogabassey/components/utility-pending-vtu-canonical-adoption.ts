@@ -81,7 +81,9 @@ export async function adoptCanonicalVtuKey(
       if (outcome === 'stale' || outcome === 'saved') return true;
       // 'failed' or lock-unacquired (null) → retry.
     } catch {
-      break;
+      // Transient throw → retry the remaining attempts (fall
+      // through: bounded loop, a persistent throw still lands in
+      // the scheduled-retry path below).
     }
   }
   console.error(

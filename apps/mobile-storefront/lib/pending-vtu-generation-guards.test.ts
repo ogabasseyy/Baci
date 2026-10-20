@@ -15,7 +15,9 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './pending-vtu-idempotency';
+import { parsePendingVtuSnapshot } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
+import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
 
 describe('pending-vtu-generation-guards', () => {
   beforeEach(() => {
@@ -94,5 +96,31 @@ describe('pending-vtu-generation-guards', () => {
 
     expect(recallPendingVtuKey('d-mine')).toBeNull();
     expect(recallPendingVtuKey('d-newer')).toBe('key-newer');
+  });
+
+  it('a generation minted during the durable-forget flush survives', async () => {
+    // Jules #3730 High refutation (lock-in): the ownership check
+    // and the memory delete run synchronously with no yield
+    // between them, and the tombstone is key-bound — so a new
+    // generation minted after the check but before the flush
+    // completes is never deleted by the in-flight forget (the
+    // key-bound live-delete/merge in syncFromSnapshot lets K2
+    // survive K1's tombstone, same-tab and cross-tab).
+    rememberPendingVtuPurchase('d-race', 'key-k1');
+    await flushPendingVtuPurchases();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Start the K1 forget: the sync check-then-delete prefix runs
+    // now; the locked flush completes after our mint below.
+    const forgotten = forgetOwnPendingVtuPurchaseDurable('d-race', 'key-k1');
+    // A sibling flow mints K2 while the K1 flush is in flight.
+    rememberPendingVtuPurchase('d-race', 'key-k2');
+    await expect(forgotten).resolves.toBe(true);
+
+    expect(recallPendingVtuKey('d-race')).toBe('key-k2');
+    const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([
+      ['d-race', expect.objectContaining({ key: 'key-k2' })],
+    ]);
   });
 });

@@ -213,4 +213,42 @@ describe('pending-vtu-canonical-adoption', () => {
     const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
     expect(snapshot.entries).toEqual([]);
   });
+
+  it('retries the remaining attempts after a transient lock error', async () => {
+    // Jules #3730 Medium: the catch inside the 3-attempt loop
+    // must not break on the first throw — a transient lock
+    // error would bypass the remaining retries and report
+    // not-durable even though the next attempt would land.
+    rememberPendingVtuPurchase('desc-throwonce', 'key-minted');
+    // Drain the remember's scheduled flush BEFORE installing the
+    // throw-once spy, so the adoption's lock run is the call
+    // that throws (not a background flush sharing the runner).
+    await flushPendingVtuPurchases();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const real = vtuSync.runPendingVtuMintLocked;
+    let calls = 0;
+    const lockSpy = jest
+      .spyOn(vtuSync, 'runPendingVtuMintLocked')
+      .mockImplementation((async (callback: () => unknown) => {
+        calls += 1;
+        if (calls === 1) {
+          throw new Error('transient lock timeout');
+        }
+        return real(callback);
+      }) as typeof real);
+    try {
+      await expect(
+        adoptCanonicalVtuKey('desc-throwonce', 'key-minted', 'key-winner')
+      ).resolves.toBe(true);
+    } finally {
+      lockSpy.mockRestore();
+    }
+
+    expect(calls).toBeGreaterThan(1);
+    expect(recallPendingVtuKey('desc-throwonce')).toBe('key-winner');
+    const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([
+      ['desc-throwonce', expect.objectContaining({ key: 'key-winner' })],
+    ]);
+  });
 });

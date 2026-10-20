@@ -14,4 +14,21 @@ describe('shared piggyvest fixtures (Jest smoke)', () => {
     await expect(schedule.read()).resolves.toBeDefined();
     expect(schedule.options.isCurrent()).toBe(true);
   });
+
+  it('fixture mocks satisfy Jest matcher semantics', async () => {
+    const schedule = scheduleJourneyFixture();
+    expect(schedule.read).not.toHaveBeenCalled();
+    await schedule.read();
+    await schedule.read();
+    expect(schedule.read).toHaveBeenCalledTimes(2);
+    schedule.read.mockClear();
+    expect(schedule.read).not.toHaveBeenCalled();
+
+    schedule.options.isCurrent.mockReturnValueOnce(false);
+    expect(schedule.options.isCurrent()).toBe(false);
+    expect(schedule.options.isCurrent()).toBe(true);
+
+    schedule.read.mockRejectedValue(new Error('jest-boom'));
+    await expect(schedule.read()).rejects.toThrow('jest-boom');
+  });
 });

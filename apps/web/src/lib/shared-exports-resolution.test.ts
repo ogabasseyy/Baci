@@ -7,8 +7,9 @@ import { describe, expect, it } from 'vitest';
 // Exercises the real package.json `exports` map of @baci/shared via
 // Node resolution (createRequire), bypassing the Vitest aliases and
 // Jest/tsconfig mappers that otherwise rewrite these specifiers, so a
-// missing/misspelled exports entry fails here instead of in a
-// production Next/Metro build.
+// missing/misspelled exports entry fails here. This proves path
+// resolution through the exports map only; it does not prove a
+// production Next/Metro build can load the modules.
 const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',

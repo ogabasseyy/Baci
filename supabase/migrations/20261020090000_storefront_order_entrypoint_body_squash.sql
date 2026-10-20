@@ -1,25 +1,80 @@
 -- Append-only: pin the effective storefront order entrypoint bodies.
 --
 -- The order entrypoints evolved through pg_get_functiondef string-patch
--- migrations (08300000-09330000, 19090000-19100000). This forward
--- migration installs the exact effective bodies via CREATE OR REPLACE,
--- so the pair contract is reviewable in one place and future changes
--- diff against pinned bodies instead of extending the patch chain.
+-- migrations plus one wholesale replacement. This forward migration
+-- installs the exact effective bodies via CREATE OR REPLACE, so the
+-- pair contract is reviewable in one place and future changes diff
+-- against pinned bodies instead of extending the patch chain.
 --
--- Provenance: the checked body is captured pg_get_functiondef output
--- (that entrypoint is an untouched delegating wrapper since 20260828).
--- The unchecked body is captured output plus the exact 19090000
--- final-state port (blocks 1-10) applied in order; the capture source
--- predates 19090000, so the port is simulated here with the same
--- anchors and guards (all 10 anchors hit exactly once).
+-- Lineage of the pinned unchecked body (applied in version order):
+-- 20261015130500 wholesale-replaces the function (this discards the
+--   08300000-09330000 M18-era patches in chronological replay);
+-- 20261015140000 adds the serialized-claim ORDER BY;
+-- 20261015175000 removes the nonexistent variant lifecycle predicate;
+-- 20261019090000 ports the final offer state (blocks 1-10: temp
+--   staging, item key, insert list, staging select, offer join,
+--   invalid_offer validation, unguarded offer decrement, item insert
+--   columns, live condition bind, identity select columns).
+-- The checked body is an untouched delegating wrapper since 20260828.
 --
--- Semantically a no-op: the installed bodies equal the replayed
--- definitions; the chronological replay effect digest enforces this
--- (any drift fails the digest comparison).
+-- Provenance: both bodies start from captured pg_get_functiondef
+-- output; the capture source predates 19090000, so that migration's
+-- port is applied here with identical anchors (each verified to hit
+-- exactly once) to reproduce the replayed definition.
+--
+-- Semantically a no-op on a converged database: the installed bodies
+-- equal the replayed definitions. Equivalence is enforced by (1) the
+-- pre-image guard below, which fails this migration loudly when the
+-- live definitions differ from the pinned bytes, and (2) the order
+-- sql-check suites (both-entrypoints, entrypoints behavior, line
+-- identity) which run over the final state. NOTE: the chronological
+-- replay effect digest does NOT cover these two functions (its
+-- function_names scope lists neither), so the digest is not part of
+-- this pin's enforcement; the guard + suites are.
 --
 -- Historical patch files are untouched (migrations are append-only):
 -- they still run with their convergence and sibling-delegation guards
 -- intact. CREATE OR REPLACE preserves existing ownership and grants.
+-- The guard also fails closed when either function is absent, so a
+-- divergent database can never silently CREATE one fresh with default
+-- PUBLIC EXECUTE (the chain revokes these entrypoints from PUBLIC).
+
+DO $squash_guard$
+DECLARE
+  v_checked_def text;
+  v_unchecked_def text;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(p.oid)
+    INTO v_checked_def
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private'
+    AND p.proname = 'create_storefront_order'
+    AND p.pronargs = 24;
+  IF v_checked_def IS NULL THEN
+    RAISE EXCEPTION 'storefront_order_function_not_found';
+  END IF;
+  IF md5(v_checked_def) <> 'cbb7f92e90a128c1fea05640d616ba09' THEN
+    RAISE EXCEPTION 'storefront_order_squash_pre_image_mismatch'
+      USING DETAIL = 'private.create_storefront_order(24) differs from the pinned bytes';
+  END IF;
+
+  SELECT pg_catalog.pg_get_functiondef(p.oid)
+    INTO v_unchecked_def
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private'
+    AND p.proname = 'create_storefront_order_unchecked'
+    AND p.pronargs = 24;
+  IF v_unchecked_def IS NULL THEN
+    RAISE EXCEPTION 'storefront_order_function_not_found';
+  END IF;
+  IF md5(v_unchecked_def) <> '0ac27900ce2d27f5b8f0c66f78fd2d32' THEN
+    RAISE EXCEPTION 'storefront_order_squash_pre_image_mismatch'
+      USING DETAIL = 'private.create_storefront_order_unchecked(24) differs from the pinned bytes';
+  END IF;
+END;
+$squash_guard$;
 
 CREATE OR REPLACE FUNCTION private.create_storefront_order(p_merchant_id uuid, p_customer_email text, p_customer_name text, p_items jsonb, p_customer_phone text DEFAULT NULL::text, p_shipping_fee numeric DEFAULT 0, p_discount_amount numeric DEFAULT 0, p_tax_amount numeric DEFAULT 0, p_payment_method text DEFAULT 'card'::text, p_payment_status text DEFAULT 'unpaid'::text, p_shipping_status text DEFAULT 'pending'::text, p_shipping_address jsonb DEFAULT NULL::jsonb, p_source text DEFAULT 'online_store'::text, p_notes text DEFAULT NULL::text, p_ad_tracking jsonb DEFAULT NULL::jsonb, p_selected_quote_id uuid DEFAULT NULL::uuid, p_shipping_provider text DEFAULT NULL::text, p_tracking_number text DEFAULT NULL::text, p_user_id uuid DEFAULT NULL::uuid, p_tax_basis text DEFAULT 'exclusive'::text, p_gift_wrapping_fee numeric DEFAULT 0, p_expected_total numeric DEFAULT NULL::numeric, p_checkout_idempotency_key text DEFAULT NULL::text, p_checkout_request_hash text DEFAULT NULL::text)
  RETURNS TABLE(id uuid, order_number text, tracking_token text, subtotal numeric, shipping_fee numeric, discount_amount numeric, tax_amount numeric, total numeric, customer_id uuid, customer_email text, customer_name text, customer_phone text, payment_status text, shipping_status text, payment_method text, shipping_address jsonb, merchant_id uuid, tax_basis text, gift_wrapping_fee numeric, idempotency_replayed boolean)

@@ -31,8 +31,14 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection,
 }));
 
-vi.mock('@/lib/api-auth', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/api-auth')>();
+vi.mock('@/lib/api-auth', async () => {
+  // vi.importActual — not importOriginal<typeof import(...)>: the
+  // generic typeof-import call syntax trips the Semgrep parser
+  // (PartialParsing analysis error) and fails the SAST gate.
+  const actual = (await vi.importActual('@/lib/api-auth')) as Record<
+    string,
+    unknown
+  >;
   return {
     ...actual,
     authenticateApiRequest,

@@ -112,6 +112,18 @@ describe('shared money formatting characterization', () => {
     );
   });
 
+  it('ignores explicitly-undefined compact options', () => {
+    expect(formatMoneyCompact(1_200_000, 'NGN', { notation: undefined })).toBe(
+      '₦1.2M'
+    );
+    expect(
+      formatMoneyCompact(1_200_000, 'NGN', {
+        minimumFractionDigits: undefined,
+        maximumFractionDigits: undefined,
+      })
+    ).toBe('₦1.2M');
+  });
+
   it('exposes frozen currency metadata maps', () => {
     expect(Object.isFrozen(MONEY_CURRENCY_LOCALES)).toBe(true);
     expect(Object.isFrozen(MONEY_CURRENCY_EXPONENTS)).toBe(true);
@@ -191,11 +203,11 @@ describe('shared money formatting characterization', () => {
       `1${NNBSP}235${NBSP}F${NNBSP}CFA`
     );
     expect(createMoneyFormatter('NGN')(1234.5)).toBe('₦1,234.50');
-    // Full exponent-class characterization for receipts: the legacy
-    // forced-2-digit rendering also changes for non-allowlisted
-    // 0-exponent (JPY) and 3-exponent (KWD) currencies.
-    expect(createMoneyFormatter('JPY')(1234.5)).toBe('JP¥1,235');
-    expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.456`);
+    // Receipt path is table-only: non-allowlisted currencies keep the
+    // legacy 2-digit rendering (no on-device Intl exponent derivation),
+    // unlike the formatMoney entry point (JPY pin above renders whole).
+    expect(createMoneyFormatter('JPY')(1234.5)).toBe('JP¥1,234.50');
+    expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.46`);
   });
 
   it('surfaces an invalid explicit locale instead of masking it', () => {

@@ -62,10 +62,9 @@ export function resolveMoneyLocale(currencyCode: string): string {
 /**
  * Display fraction-digit default: the currency's ISO exponent for
  * every well-formed code (allowlisted exponents are table-pinned;
- * others are Intl-derived), matching formatMoneyMinor scaling. This
- * intentionally changes legacy receipt rendering for non-2-exponent
- * currencies (previously forced to 2 digits); the receipt-class
- * fixtures pin the 0-, 2-, and 3-exponent outputs.
+ * others are Intl-derived), matching formatMoneyMinor scaling. The
+ * receipt path does not use this derivation (table-only; see
+ * create-money-formatter.ts).
  */
 export function getMoneyDisplayExponent(currencyCode: string): number {
   return getMoneyCurrencyExponent(currencyCode);
@@ -82,7 +81,12 @@ export function getMoneyCurrencyExponent(currencyCode: string): number {
   // (JPY/KRW are 0, BHD/KWD are 3) instead of assuming 2, so minor-unit
   // scaling never silently mis-scales an unsupported code.
   const cached = derivedExponentCache.get(normalized);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    // Refresh recency so eviction is LRU, like the formatter cache.
+    derivedExponentCache.delete(normalized);
+    derivedExponentCache.set(normalized, cached);
+    return cached;
+  }
   const derived =
     new Intl.NumberFormat(resolveMoneyLocale(normalized), {
       style: 'currency',

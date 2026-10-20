@@ -6,8 +6,14 @@ import type { FormatMoneyOptions } from './money-formatter';
 export function formatMoneyCompact(
   amount: number,
   currencyCode = 'NGN',
-  options: FormatMoneyOptions = {}
+  rawOptions: FormatMoneyOptions = {}
 ): string {
+  // Strip explicitly-undefined values (common when callers spread
+  // optional props) so they cannot overwrite the notation/defaults
+  // computed below via the trailing spread.
+  const options = Object.fromEntries(
+    Object.entries(rawOptions).filter(([, value]) => value !== undefined)
+  ) as FormatMoneyOptions;
   // Effective notation: a caller-supplied notation overrides the
   // amount-based choice, and the fraction-digit defaults derive from
   // the effective notation so the two never desync.

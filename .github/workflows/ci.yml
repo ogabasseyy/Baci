@@ -346,6 +346,7 @@ jobs:
           --sql-check supabase/tests/shipping_provider_settings.sql
           --sql-check supabase/tests/negotiation_customer_contact.sql
           --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
+          --sql-check supabase/tests/storefront_cart_public_hints.sql
           --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql
           --sql-check supabase/tests/storefront_cluster_guide_classifier_behavior.sql
           --sql-check supabase/tests/storefront_comparison_revisions.sql

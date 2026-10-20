@@ -10,6 +10,9 @@ export type MerchantFeatureSource = {
   plan_expires_at?: string | null;
   plan_tier?: string | null;
   premium_features?: unknown;
+  shared_cart_enabled?: boolean;
+  shared_cart_accounts_enabled?: boolean;
+  shared_cart_realtime_enabled?: boolean;
 };
 
 export function merchantHasFeature(
@@ -22,12 +25,12 @@ export function merchantHasFeature(
     feature === 'shared_cart_accounts' ||
     feature === 'shared_cart_realtime'
   ) {
-    return (
-      Array.isArray(merchant?.premium_features) &&
-      merchant.premium_features.some(
-        (value) => typeof value === 'string' && value === feature
-      )
-    );
+    // Server callers with raw enrollment stay authoritative. The public
+    // snapshot intentionally exposes only derived presentation hints.
+    if (Array.isArray(merchant?.premium_features)) {
+      return merchant.premium_features.some((value) => value === feature);
+    }
+    return merchant?.[`${feature}_enabled`] === true;
   }
   const features = new Set(
     Array.isArray(merchant?.premium_features)

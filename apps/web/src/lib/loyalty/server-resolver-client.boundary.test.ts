@@ -22,9 +22,12 @@ describe('loyalty resolver service-role boundary', () => {
     // spelling (@/.../server-resolver-client.ts) still matches.
     const edgeImportPattern =
       /(?:import|from|require)\s*\(?\s*['"`][^'"`]*loyalty\/server-resolver-client(\.(ts|tsx|js|mts|cts))?['"`]/;
+    // Sort: readdirSync traversal order is not guaranteed, so never assert
+    // on filesystem order.
     const importers = productionTypeScriptFiles(sourceRoot)
       .filter((path) => edgeImportPattern.test(readFileSync(path, 'utf8')))
-      .map((path) => relative(sourceRoot, path));
+      .map((path) => relative(sourceRoot, path))
+      .sort();
 
     expect(importers).toEqual([
       'app/api/storefront/discount/validate/route.ts',
@@ -40,7 +43,8 @@ describe('loyalty resolver service-role boundary', () => {
       /createServiceClient\(\s*['"`]loyalty-resolver['"`]\)/;
     const constructors = productionTypeScriptFiles(sourceRoot)
       .filter((path) => constructionPattern.test(readFileSync(path, 'utf8')))
-      .map((path) => relative(sourceRoot, path));
+      .map((path) => relative(sourceRoot, path))
+      .sort();
 
     expect(constructors).toEqual(['lib/loyalty/server-resolver-client.ts']);
   });

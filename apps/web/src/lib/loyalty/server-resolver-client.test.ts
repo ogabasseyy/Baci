@@ -24,6 +24,10 @@ describe('createLoyaltyResolverServiceClient', () => {
     expect(createServiceClient).toHaveBeenCalledWith('loyalty-resolver');
   });
 
+  it('exposes only the RPC surface at runtime', () => {
+    expect(Object.keys(createLoyaltyResolverServiceClient())).toEqual(['rpc']);
+  });
+
   it('declares the server-only marker before any runtime imports', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'src/lib/loyalty/server-resolver-client.ts'),

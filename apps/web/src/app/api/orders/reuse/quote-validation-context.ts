@@ -4,6 +4,8 @@ import type {
 } from '@/lib/shipping/international-shipment-items';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import type { OrderShippingAddressForQuote } from '@/lib/shipping/order-quote-destination';
+import { readCoordinate } from '@/lib/shipping/read-coordinate';
+import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 
 type ReuseOrderQuoteValidationContext = {
   order_items: ReturnType<typeof toInternationalQuoteValidationItemsFromOrder>;
@@ -32,7 +34,24 @@ function readOrderShippingAddress(
     return undefined;
   }
 
+  // Stored addresses are database JSON: coordinates may be numeric strings
+  // (the booking guard's coordinate reader accepts them, and its address
+  // type declares them unknown). Coerce with the same reader so reuse keeps
+  // pins the booking path accepts; garbage or out-of-range values still void
+  // the address, and the pair rule below still rejects partial pins.
+  const latitude = readCoordinate(value.latitude, -90, 90);
+  const longitude = readCoordinate(value.longitude, -180, 180);
+  if (latitude.status === 'invalid' || longitude.status === 'invalid') {
+    return undefined;
+  }
+  const pin = shippingCoordinatePairSchema.safeParse({
+    ...(latitude.status === 'valid' ? { latitude: latitude.value } : {}),
+    ...(longitude.status === 'valid' ? { longitude: longitude.value } : {}),
+  });
+  if (!pin.success) return undefined;
+
   return {
+    ...pin.data,
     address,
     city,
     country: typeof value.country === 'string' ? value.country : undefined,

@@ -38,6 +38,40 @@ describe('matchesReceiverCountryFields', () => {
 });
 
 describe('matchesDomesticReceiverAddress', () => {
+  it('preserves the existing prefix fallback after a composed quote city/state suffix', () => {
+    expect(
+      matchesDomesticReceiverAddress(
+        {
+          ...domesticReceiver,
+          address: '12 Admiralty Way, Lagos, Lagos, additional delivery note',
+        },
+        { ...domesticReceiver, address: '12 Admiralty Way, Lagos, Lagos' }
+      )
+    ).toBe(true);
+  });
+
+  it('accepts matching composed domestic streets on the order and quote', () => {
+    const composedReceiver = {
+      ...domesticReceiver,
+      address: '12 Admiralty Way, Lagos, Lagos',
+    };
+    expect(
+      matchesDomesticReceiverAddress(composedReceiver, composedReceiver)
+    ).toBe(true);
+  });
+
+  it('does not broaden composed quote matching to a different building suffix', () => {
+    expect(
+      matchesDomesticReceiverAddress(
+        {
+          ...domesticReceiver,
+          address: '12 Admiralty Way, Block B, Lagos, Lagos',
+        },
+        { ...domesticReceiver, address: '12 Admiralty Way, Lagos, Lagos' }
+      )
+    ).toBe(false);
+  });
+
   it('accepts place-order composed street, city, state format', () => {
     expect(
       matchesDomesticReceiverAddress(

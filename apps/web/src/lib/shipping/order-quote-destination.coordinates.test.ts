@@ -76,13 +76,24 @@ describe('GIGL checkout attested destination coordinates', () => {
     { latitude: 6.6, longitude: Number.POSITIVE_INFINITY },
     { latitude: 91, longitude: 3.35 },
     { latitude: 6.6, longitude: -181 },
-    { latitude: '6.6', longitude: 3.35 },
   ])('rejects an incomplete or invalid attested pin: %j', async (coordinates) => {
     await expect(
       enrich({ ...request, receiver: { ...receiver, ...coordinates } })
     ).rejects.toMatchObject({
       code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
     });
+  });
+
+  it('persists a numeric-string quote pin as coerced numbers', async () => {
+    // Stored quote receivers are database JSON: fulfillment accepts
+    // numeric-string pins via readCoordinate, so checkout must persist
+    // the same coerced pin instead of rejecting it as a mismatch.
+    const persisted = await enrich({
+      ...request,
+      receiver: { ...receiver, latitude: '6.6', longitude: '3.35' },
+    });
+
+    expect(persisted).toMatchObject({ latitude: 6.6, longitude: 3.35 });
   });
 
   it('keeps legacy unpinned quotes unpinned', async () => {
@@ -111,7 +122,10 @@ describe('GIGL checkout attested destination coordinates', () => {
     expect(persisted).not.toHaveProperty('longitude');
   });
 
-  it('takes coordinates from the validated quote after untrusted checkout body pins are stripped', async () => {
+  it('takes coordinates from the validated quote when the checkout body carries no pin', async () => {
+    // Merge reconciliation: order input preserves validated body pins, so
+    // this scenario uses a pin-less body; the route strips body pins for
+    // quoted checkouts before enrichment, where quote adoption is tested.
     const parsedAddress = orderCreateSchema.parse({
       merchant_id: '11111111-1111-4111-8111-111111111111',
       customer_email: 'synthetic@example.test',
@@ -126,7 +140,7 @@ describe('GIGL checkout attested destination coordinates', () => {
       ],
       subtotal: 100_000,
       payment_method: 'card',
-      shipping_address: { ...destination, latitude: 0, longitude: 0 },
+      shipping_address: destination,
     }).shipping_address;
     expect(parsedAddress).not.toHaveProperty('latitude');
     expect(parsedAddress).not.toHaveProperty('longitude');

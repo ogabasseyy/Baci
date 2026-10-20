@@ -134,10 +134,10 @@ export function collectSourceFiles(roots: string[]): string[] {
         if (!inside) continue;
         const targetStat = lstatSync(target);
         if (targetStat.isDirectory()) {
-          walk(full, false, entryRel, chain);
+          // Emit under the resolved target path for classification.
+          walk(target, false, entryRel, chain);
         } else if (/\.(?:m|c)?[tj]sx?$/.test(target)) {
-          // Classify by the resolved target's extension.
-          out.push(full);
+          out.push(target);
         }
         continue;
       }
@@ -243,7 +243,7 @@ function configSpecifiers(content: string): string {
         // is actually loaded (dynamic import or resolver call) in the
         // same config; a bare alias registration stays exempt.
         const used = new RegExp(
-          String.raw`\b(?:import|\w+)\s*\(\s*` + name + String.raw`\b`
+          String.raw`\b(?:import|\w+)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)?` + name + String.raw`\b`
         );
         if (used.test(content)) parts.push(literal);
         continue;

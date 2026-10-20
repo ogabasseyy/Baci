@@ -1,8 +1,8 @@
 import { piggyvestScheduleReviewSchemas as schemas } from '../contracts/piggyvest-schedule-review';
-import { createFixtureMock } from '../lib/fixture-mock';
+import { createFixtureMock } from './fixture-mock';
 
-export type { FixtureMock } from '../lib/fixture-mock';
-export { createFixtureMock } from '../lib/fixture-mock';
+export type { FixtureMock } from './fixture-mock';
+export { createFixtureMock } from './fixture-mock';
 
 export function scheduleJourneyFixture() {
   const goalId = '11111111-1111-4111-8111-111111111111';

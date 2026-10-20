@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -93,8 +98,10 @@ test('follows in-root symlinks and skips out-of-root links', async () => {
       "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const y = f;\n",
   });
   symlinkSync(outside, join(dir, 'external'));
+  // Emitted under the resolved target path (build/hidden.ts), not
+  // the link name, so classification follows the target.
   assert.deepEqual(findFixtureImportOffenders([dir]), [
-    join(dir, 'linked/hidden.ts'),
+    join(realpathSync(dir), 'build/hidden.ts'),
   ]);
 });
 
@@ -136,7 +143,7 @@ test('follows extensionless in-root file symlinks to source targets', async () =
   });
   symlinkSync(join(dir, 'src/feature/helper.ts'), join(dir, 'linked-helper'));
   const offenders = findFixtureImportOffenders([dir]);
-  assert.ok(offenders.includes(join(dir, 'linked-helper')));
+  assert.ok(offenders.includes(join(dir, 'src/feature/helper.ts')));
 });
 
 test('nested files reusing a config basename are not exempt', () => {
@@ -193,7 +200,7 @@ test('flags split-literal fixture specifiers and config resolver calls', () => {
   ]);
 });
 
-test('emits the same real directory under a second logical path', async () => {
+test('classifies a linked directory by its resolved target path', async () => {
   const { symlinkSync } = await import('node:fs');
   const dir = fixtureDir({
     '__tests__/helper.ts':
@@ -201,7 +208,8 @@ test('emits the same real directory under a second logical path', async () => {
   });
   symlinkSync(join(dir, '__tests__'), join(dir, 'prod-link'));
   const files = collectSourceFiles([dir]);
-  assert.ok(files.includes(join(dir, 'prod-link/helper.ts')));
+  assert.ok(files.includes(join(dir, '__tests__/helper.ts')));
+  assert.ok(!files.some((f) => f.includes('prod-link')));
 });
 
 test('flags template prefixes, multiline config calls, helper directories', () => {
@@ -290,5 +298,18 @@ test('retains typed constant fixture specifiers in runner configs', () => {
   });
   assert.deepEqual(findFixtureImportOffenders([dir]), [
     join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('classifies symlinked files by their resolved target', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    'src/prod.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'src/prod.ts'), join(dir, 'helper.test.ts'));
+  assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
+    join(realpathSync(dir), 'src/prod.ts'),
+    join(dir, 'src/prod.ts'),
   ]);
 });

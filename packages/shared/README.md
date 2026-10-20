@@ -129,9 +129,12 @@ fraction digits for every currency, so XAF/XOF receipts rendered
 fictitious hundredths; `createMoneyFormatter` now defaults to the
 currency exponent for allowlisted currencies (0 for XAF/XOF), pinned
 by a receipt-class fixture in `format-money.test.ts`.
-Non-allowlisted currencies keep the legacy 2-digit display default
-until characterized; minor-unit scaling (`formatMoneyMinor`) uses
-the Intl-derived ISO exponent for every code.
+Display defaults use the ISO exponent for every well-formed code
+(allowlisted exponents are table-pinned; others are Intl-derived),
+matching `formatMoneyMinor` scaling — so the same legacy change also
+applies to non-allowlisted 0-exponent (JPY/KRW) and 3-exponent
+(BHD/KWD) receipt currencies, and the receipt-class fixtures pin
+all three exponent classes (0, 2, 3).
 
 Divergences this unification intentionally removes when the per-app
 adoption PRs land: mobile-storefront's NGN-only hardcoding, web's

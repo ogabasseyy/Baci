@@ -60,15 +60,15 @@ export function resolveMoneyLocale(currencyCode: string): string {
 }
 
 /**
- * Display fraction-digit default: the ISO exponent for allowlisted
- * (characterized) currencies, and the legacy 2-digit default for all
- * other codes until they are characterized.
+ * Display fraction-digit default: the currency's ISO exponent for
+ * every well-formed code (allowlisted exponents are table-pinned;
+ * others are Intl-derived), matching formatMoneyMinor scaling. This
+ * intentionally changes legacy receipt rendering for non-2-exponent
+ * currencies (previously forced to 2 digits); the receipt-class
+ * fixtures pin the 0-, 2-, and 3-exponent outputs.
  */
 export function getMoneyDisplayExponent(currencyCode: string): number {
-  const normalized = normalizeMoneyCurrency(currencyCode);
-  return (SUPPORTED_MONEY_CURRENCIES as readonly string[]).includes(normalized)
-    ? getMoneyCurrencyExponent(normalized)
-    : 2;
+  return getMoneyCurrencyExponent(currencyCode);
 }
 
 const MAX_DERIVED_EXPONENT_CACHE_SIZE = 100;

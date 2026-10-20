@@ -147,13 +147,15 @@ describe('shared money formatting characterization', () => {
   it('derives exponents for non-allowlisted currencies from Intl', () => {
     expect(getMoneyCurrencyExponent('JPY')).toBe(0);
     expect(getMoneyCurrencyExponent('KWD')).toBe(3);
-    // Display defaults stay at the legacy 2 digits outside the
-    // allowlist until characterized, even though minor-unit scaling
-    // uses the derived exponent for every code.
-    expect(getMoneyDisplayExponent('JPY')).toBe(2);
+    // Display defaults use the same derived exponent as minor-unit
+    // scaling for every well-formed code.
+    expect(getMoneyDisplayExponent('JPY')).toBe(0);
+    expect(getMoneyDisplayExponent('KWD')).toBe(3);
     expect(getMoneyDisplayExponent('XOF')).toBe(0);
     // Zero-exponent JPY minor units are already major units.
     expect(formatMoneyMinor(123450, 'JPY')).toBe(formatMoney(123450, 'JPY'));
+    expect(formatMoney(1234.5, 'JPY')).toBe('JP¥1,235');
+    expect(formatMoneyMinor(123456, 'KWD')).toBe(`KWD${NBSP}123.456`);
   });
 
   it('shares one formatter for logically identical options in any order', () => {
@@ -176,6 +178,11 @@ describe('shared money formatting characterization', () => {
       `1${NNBSP}235${NBSP}F${NNBSP}CFA`
     );
     expect(createMoneyFormatter('NGN')(1234.5)).toBe('₦1,234.50');
+    // Full exponent-class characterization for receipts: the legacy
+    // forced-2-digit rendering also changes for non-allowlisted
+    // 0-exponent (JPY) and 3-exponent (KWD) currencies.
+    expect(createMoneyFormatter('JPY')(1234.5)).toBe('JP¥1,235');
+    expect(createMoneyFormatter('KWD')(123.456)).toBe(`KWD${NBSP}123.456`);
   });
 
   it('surfaces an invalid explicit locale instead of masking it', () => {

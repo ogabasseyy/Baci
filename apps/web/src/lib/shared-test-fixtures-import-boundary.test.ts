@@ -23,24 +23,30 @@ const skippedDirs = new Set([
   '.next',
   '.expo',
   '.git',
+  '.turbo',
+  '.gradle',
   'build',
+  'coverage',
+  'DerivedData',
+  'dist',
   'Pods',
 ]);
 const bannedPatterns = [
-  /@baci\/shared\/test-fixtures\//,
-  /packages\/shared\/src\/test-fixtures\//,
+  // Any quoted specifier pointing at the fixture tree: subpath imports,
+  // deep-relative paths, require(), side-effect imports, and dynamic
+  // imports are all covered by matching the quoted path itself.
+  /['"`][^'"`]*test-fixtures\//,
   /packages\/shared\/src\/lib\/[^'"]*\.test-support/,
-  /from\s+['"](?:\.{1,2}\/)+test-fixtures\//,
-  /import\(\s*['"](?:\.{1,2}\/)+test-fixtures\//,
 ];
 
 function isTestFile(path: string) {
   return (
     /(?:vitest|jest|metro)\.config\./.test(path) ||
     path.includes('/__tests__/') ||
-    path.includes('/test-fixtures/') ||
-    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
-    /\.test-support\.(?:m|c)?[tj]s$/.test(path)
+    // Only the fixture definitions themselves are exempt; an app-side
+    // test-support helper is still scanned.
+    path.includes('/packages/shared/src/test-fixtures/') ||
+    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }
 

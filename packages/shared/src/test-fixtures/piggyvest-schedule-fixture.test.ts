@@ -19,15 +19,18 @@ describe('createFixtureMock async semantics', () => {
     await expect(fn()).rejects.toThrow('boom');
   });
 
-  it('once queue is consumed in order and cleared by mockClear', async () => {
+  it('mockClear keeps queued once values (runner semantics); mockReset drops them', async () => {
     const fn = createFixtureMock(async () => 'base');
     fn.mockResolvedValueOnce('once');
     await expect(fn()).resolves.toBe('once');
     await expect(fn()).resolves.toBe('base');
-    fn.mockResolvedValueOnce('never');
+    fn.mockResolvedValueOnce('still-queued');
     fn.mockClear();
-    await expect(fn()).resolves.toBe('base');
-    expect(fn.mock.calls).toHaveLength(1);
+    expect(fn.mock.calls).toHaveLength(0);
+    await expect(fn()).resolves.toBe('still-queued');
+    fn.mockResolvedValueOnce('never');
+    fn.mockReset();
+    expect(fn()).toBeUndefined();
   });
 
   it('schedule fixture read/submit keep promise contracts', async () => {

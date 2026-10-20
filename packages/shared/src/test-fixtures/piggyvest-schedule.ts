@@ -6,7 +6,11 @@ import { piggyvestScheduleReviewSchemas as schemas } from '../contracts/piggyves
 // mockReturnValue, mockImplementation) plus the _isMockFunction marker
 // both runners' called-times matchers check.
 type FixtureMock<A extends unknown[], R> = ((...args: A) => R) & {
-  mock: { calls: A[]; results: Array<{ type: 'return'; value: R }> };
+  mock: {
+    calls: A[];
+    results: Array<{ type: 'return' | 'throw'; value: unknown }>;
+    invocationCallOrder: number[];
+  };
   mockClear: () => FixtureMock<A, R>;
   mockReturnValue: (value: R) => FixtureMock<A, R>;
   mockImplementation: (impl: (...args: A) => R) => FixtureMock<A, R>;
@@ -14,9 +18,13 @@ type FixtureMock<A extends unknown[], R> = ((...args: A) => R) & {
   mockResolvedValue: (value: Awaited<R>) => FixtureMock<A, R>;
   mockResolvedValueOnce: (value: Awaited<R>) => FixtureMock<A, R>;
   mockRejectedValue: (error: unknown) => FixtureMock<A, R>;
+  mockRejectedValueOnce: (error: unknown) => FixtureMock<A, R>;
+  mockReset: () => FixtureMock<A, R>;
   getMockName: () => string;
   _isMockFunction: true;
 };
+
+let invocationSequence = 0;
 
 export function createFixtureMock<A extends unknown[], R>(
   impl: (...args: A) => R
@@ -25,16 +33,31 @@ export function createFixtureMock<A extends unknown[], R>(
   const onceQueue: Array<(...args: A) => R> = [];
   const mockFn = ((...args: A) => {
     mockFn.mock.calls.push(args);
+    mockFn.mock.invocationCallOrder.push(++invocationSequence);
     const once = onceQueue.shift();
-    const value = (once ?? current)(...args);
-    mockFn.mock.results.push({ type: 'return', value });
-    return value;
+    try {
+      const value = (once ?? current)(...args);
+      mockFn.mock.results.push({ type: 'return', value });
+      return value;
+    } catch (error) {
+      mockFn.mock.results.push({ type: 'throw', value: error });
+      throw error;
+    }
   }) as FixtureMock<A, R>;
-  mockFn.mock = { calls: [], results: [] };
+  mockFn.mock = { calls: [], results: [], invocationCallOrder: [] };
+  // Runner-faithful: mockClear resets only calls/results/order (Jest and
+  // Vitest semantics); queued once-implementations survive it. mockReset
+  // additionally drops the once-queue and the installed implementation.
   mockFn.mockClear = () => {
     mockFn.mock.calls.length = 0;
     mockFn.mock.results.length = 0;
+    mockFn.mock.invocationCallOrder.length = 0;
+    return mockFn;
+  };
+  mockFn.mockReset = () => {
+    mockFn.mockClear();
     onceQueue.length = 0;
+    current = () => undefined as R;
     return mockFn;
   };
   mockFn.mockReturnValue = (value: R) => {
@@ -59,6 +82,10 @@ export function createFixtureMock<A extends unknown[], R>(
   };
   mockFn.mockRejectedValue = (error: unknown) => {
     current = () => Promise.reject(error) as R;
+    return mockFn;
+  };
+  mockFn.mockRejectedValueOnce = (error: unknown) => {
+    onceQueue.push(() => Promise.reject(error) as R);
     return mockFn;
   };
   mockFn.getMockName = () => 'fixtureMock';

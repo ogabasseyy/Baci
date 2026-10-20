@@ -1,5 +1,5 @@
-import { formatOrderItemDisplayName } from '../lib/order-item-display';
 import { escapeHtml, escapeJsString } from './escape-html';
+import { formatOrderItemDisplayName } from '../lib/order-item-display';
 import {
   getReceiptFulfillmentRowsFromDetails,
   getReceiptFulfillmentSummary,

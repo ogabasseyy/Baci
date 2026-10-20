@@ -29,3 +29,4 @@ describe('maturityStatus', () => {
     ).toThrow(RangeError);
   });
 });
+

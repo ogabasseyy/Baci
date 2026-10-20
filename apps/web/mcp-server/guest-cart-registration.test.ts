@@ -1,10 +1,10 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
 import { GuestCartStore } from './guest-cart-store';
-import { registerGuestCartTool } from './guest-cart-tool';
+import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 
 vi.mock('./cart-handoff', () => ({
   prepareCartHandoff: vi.fn().mockResolvedValue({ structuredContent: { success: true } }),
@@ -12,16 +12,18 @@ vi.mock('./cart-handoff', () => ({
 const charger = '11111111-1111-4111-8111-111111111111';
 const camera = '22222222-2222-4222-8222-222222222222';
 
-it.each([false, true])('serializes cart replies through the installed MCP transport with candidate opt-in %s', async (enabled) => {
+afterEach(() => vi.unstubAllEnvs());
+it.each([undefined, 'false', 'TRUE', '1', 'true'])('serializes the actual server registration policy for flag %s', async (flag) => {
+  vi.stubEnv('BACI_MCP_PRIVATE_TEXT_CONTINUATION', flag);
+  const enabled = flag === 'true';
   const server = new McpServer({ name: 'cart-test-server', version: '1.0.0' });
   const client = new Client({ name: 'cart-test-client', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  registerGuestCartTool(server, {
+  registerConfiguredGuestCartTool(server, {
     store: new GuestCartStore(createFakeGuestCartSupabase().supabase),
     supabase: {} as SupabaseClient,
     getMerchantId: async () => 'merchant', formatPrice: String,
-    clientIp: `transport-test-${enabled}`,
-    ...(enabled ? { enablePrivateTextContinuation: true } : {}),
+    clientIp: `transport-policy-${flag}`,
   });
   await server.connect(serverTransport);
   await client.connect(clientTransport);

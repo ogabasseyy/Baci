@@ -19,6 +19,7 @@ export function withGuestCartTranscript<
     'success', 'code', 'retryable', 'cart_token', 'version', 'cart_emptied',
     'expires_at', 'cart_expired', 'cart_full', 'cart_migrated',
     'requires_variant_selection', 'product_unavailable',
+    'quota_exceeded', 'retry_after_seconds', 'product_id', 'product_url',
   ] as const;
   const continuation: Record<string, unknown> = {};
   for (const key of keys) {

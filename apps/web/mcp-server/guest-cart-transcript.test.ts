@@ -69,3 +69,12 @@ describe('withGuestCartTranscript', () => {
     expect(original.content).toHaveLength(1);
   });
 });
+
+it.each([
+  { success: false, quota_exceeded: true, retry_after_seconds: 60 },
+  { success: false, requires_variant_selection: true, product_id: 'product', product_url: 'https://ogabassey.com/product' },
+  { success: false, product_unavailable: true, product_id: 'product' },
+])('preserves public recovery fields for text-only clients: %j', (structuredContent) => {
+  const result = withGuestCartTranscript({ content: [], structuredContent }, { enabled: true });
+  expect(JSON.parse(result.content.at(-1)?.text ?? 'null')).toEqual(structuredContent);
+});

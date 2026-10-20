@@ -196,3 +196,29 @@ test('nested files reusing a config basename are not exempt', () => {
     join(dir, 'src/lib/vitest.config.ts'),
   ]);
 });
+
+test('root runner config importing a fixture is flagged', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nconst alias = './test-fixtures/x';\nexport const cfg = [f, alias];\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('flags quoted fixture-tree prefix constants', () => {
+  const dir = fixtureDir({
+    'prod.ts':
+      "const p = '../test-fixtures/' + name;\nexport const load = () => import(p);\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'prod.ts')]);
+});
+
+test('flags production imports of .tests modules', () => {
+  const dir = fixtureDir({
+    'prod.ts':
+      "import { h } from './route.list.tests';\nexport const x = h;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [join(dir, 'prod.ts')]);
+});

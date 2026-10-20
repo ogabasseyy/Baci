@@ -27,10 +27,16 @@ export const FIXTURE_PATTERNS = [
   // createRequire results, dynamic import). Bare path-prefix
   // constants that do not end in a module name are not matched.
   /['"`][^'"`]*test-fixtures\/(?:[\w.-]+\/)*[\w.-]*\w(?:\.[\w]+)?['"`]/,
+  // A quoted path-prefix constant ending at the fixture-tree root:
+  // the shape used to assemble a specifier dynamically
+  // ('.../test-fixtures/' + name). Flagged so assembled imports cannot
+  // slip past the literal patterns; fully dynamic specifiers built
+  // from variables remain a documented code-review catch.
+  /['"`][^'"`]*test-fixtures\/['"`]/,
 ];
 
 export const TEST_SUPPORT_PATTERN =
-  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|[^'\"`]*?\.(?:test|spec)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
+  /['\"`](?:\.{1,2}\/|@baci\/|@\/|packages\/)(?:(?:[^'\"`]*?[-_./]|)test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*(?:\.|['\"`])|[^'\"`]*?\.(?:test|spec|tests)(?:\.(?:m|c)?[tj]sx?)?['\"`]|[^'\"`]*?__tests__\/)/;
 
 export function normalizePath(path: string) {
   return path.split(sep).join('/');
@@ -199,6 +205,13 @@ function isExemptFile(file: string, roots: string[]): boolean {
   );
 }
 
+function fixtureImportLines(content: string): string {
+  return content
+    .split('\n')
+    .filter((line) => /^\s*(?:import|export)\b/.test(line) || /\b(?:require|import)\s*\(/.test(line))
+    .join('\n');
+}
+
 export function findFixturePatternOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
@@ -214,8 +227,23 @@ export function findFixturePatternOffenders(roots: string[]): string[] {
 export function findFixtureImportOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {
-    if (isExemptFile(file, roots)) continue;
     const content = readFileSync(file, 'utf8');
+    if (isExemptFile(file, roots)) {
+      // Root runner configs are exempt for their alias/path-string
+      // registrations, but an actual fixture import statement in a
+      // config still executes fixture code, so import-like lines are
+      // scanned with the fixture patterns.
+      const base = normalizePath(file).split('/').pop() ?? '';
+      if (
+        RUNNER_CONFIG_BASENAME.test(base) &&
+        FIXTURE_PATTERNS.some((pattern) =>
+          pattern.test(fixtureImportLines(content))
+        )
+      ) {
+        offenders.push(file);
+      }
+      continue;
+    }
     if (FIXTURE_PATTERNS.some((pattern) => pattern.test(content))) {
       offenders.push(file);
       continue;

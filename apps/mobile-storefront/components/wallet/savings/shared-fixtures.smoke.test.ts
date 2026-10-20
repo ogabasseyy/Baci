@@ -5,6 +5,30 @@ import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { scheduleJourneyFixture } from '@baci/shared/test-fixtures/piggyvest-schedule';
 
 describe('shared piggyvest fixtures (Jest smoke)', () => {
+  it('resolves every fixture subpath through the package exports map', () => {
+    // Node resolution (createRequire) honors package.json exports and
+    // bypasses Jest's path mapper, so a missing or mistyped
+    // ./test-fixtures/* exports entry fails here even though Jest's
+    // mapper would mask it. Metro itself, which consumes the same
+    // exports map (unstable_enablePackageExports), is not exercised.
+    const { createRequire } =
+      require('node:module') as typeof import('node:module');
+    const nodeRequire = createRequire(__filename);
+    for (const name of [
+      'piggyvest-purchase',
+      'piggyvest-device-change',
+      'piggyvest-protected-offer',
+      'piggyvest-draft-closure',
+      'piggyvest-schedule',
+      'builder-ai-edit',
+    ]) {
+      expect(
+        nodeRequire.resolve(`@baci/shared/test-fixtures/${name}`)
+      ).toContain(`test-fixtures/${name}.`);
+    }
+    expect(nodeRequire.resolve('@baci/shared/vtu')).toContain('vtu');
+  });
+
   it('constructs every exported fixture without a Vitest runtime', async () => {
     expect(purchaseFixture()).toBeDefined();
     expect(deviceChangeFixture()).toBeDefined();

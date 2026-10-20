@@ -94,8 +94,10 @@ code-review catch, not a guard catch.
 Symlinks that resolve inside a scan root are followed (with cycle
 protection); links resolving outside every scan root, and broken
 links, are skipped. The guards
-match literal specifiers only; dynamically assembled fixture paths
-are a code-review catch, not a guard catch. Never import a fixture
+match literal specifiers and quoted fixture-tree prefix constants
+(the shape used to assemble a specifier dynamically); specifiers
+built from variables at runtime remain a code-review catch, not a
+guard catch. Never import a fixture
 from non-test code. These guard suites are explicitly force-run in
 the targeted CI test-plan branches and the mobile-admin guardrail
 job, and run as part of the full suites in `full-affected` mode (see

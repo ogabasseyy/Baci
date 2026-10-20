@@ -2052,16 +2052,27 @@ export async function POST(request: NextRequest) {
     if (idempotencyPayload) {
       idempotencyPayload.shipping_provider = effectiveShippingProvider;
     }
-    const { checkoutRequestHash, isLegacyIdempotencyReplay } =
-      await prepareCheckoutIdempotencyReplay({
-        alternatePayloads,
-        canonicalAirportType,
-        canonicalDeliveryMethod,
-        merchantId: merchant_id,
-        payload: idempotencyPayload,
-        requestIdempotencyKey,
-        supabase,
-      });
+    const {
+      adoptedAlternateShippingProvider,
+      checkoutRequestHash,
+      isLegacyIdempotencyReplay,
+    } = await prepareCheckoutIdempotencyReplay({
+      alternatePayloads,
+      canonicalAirportType,
+      canonicalDeliveryMethod,
+      merchantId: merchant_id,
+      payload: idempotencyPayload,
+      requestIdempotencyKey,
+      supabase,
+    });
+    // When the replay probe adopts a per-provider alternate, that matched
+    // carrier is the original order's provider: the RPC must receive the
+    // same carrier the adopted hash encodes, never a leftover null.
+    const rpcShippingProvider =
+      adoptedAlternateShippingProvider ?? effectiveShippingProvider;
+    if (idempotencyPayload && adoptedAlternateShippingProvider) {
+      idempotencyPayload.shipping_provider = adoptedAlternateShippingProvider;
+    }
 
     const savingsRedemptionIdempotencyKey = requestedSavingsRedemption
       ? getSavingsRedemptionIdempotencyKey({
@@ -2112,7 +2123,7 @@ export async function POST(request: NextRequest) {
       p_notes: notes || null,
       p_ad_tracking: orderAdTrackingPayload,
       p_selected_quote_id: resolvedSelectedQuoteId,
-      p_shipping_provider: effectiveShippingProvider,
+      p_shipping_provider: rpcShippingProvider,
       p_tracking_number: resolvedTrackingNumber || null,
       p_user_id: resolvedUserId,
       // Server-computed tax — replaces the client-supplied value

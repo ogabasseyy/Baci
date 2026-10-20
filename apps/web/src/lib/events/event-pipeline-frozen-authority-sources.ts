@@ -115,7 +115,7 @@ export const eventPipelineFrozenRoutes = {
   // payment, tenant authorization, and privileged-client authority are
   // unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '9f6b9765fa126b20553fbb36c8b1776b380aa67ce88525ecb03a82888287364d',
+    '3b336bbab6fb055aa0efd668fa5be82ee517fe553131ba3102403c9d856828e5',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -40,6 +40,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: expectedHash,
       isLegacyIdempotencyReplay: false,
     });
@@ -61,6 +62,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: expectedHash,
       isLegacyIdempotencyReplay: true,
     });
@@ -79,6 +81,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: null,
       isLegacyIdempotencyReplay: false,
     });
@@ -140,6 +143,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
           supabase,
         })
       ).resolves.toEqual({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: localeHash,
         isLegacyIdempotencyReplay: false,
       });
@@ -210,6 +214,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
           supabase,
         })
       ).resolves.toEqual({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: localeLegacyHash,
         isLegacyIdempotencyReplay: true,
       });
@@ -250,6 +255,7 @@ describe('prepareCheckoutIdempotencyReplay', () => {
         supabase,
       })
     ).resolves.toEqual({
+      adoptedAlternateShippingProvider: 'TOPSHIP',
       checkoutRequestHash: alternateHash,
       isLegacyIdempotencyReplay: false,
     });

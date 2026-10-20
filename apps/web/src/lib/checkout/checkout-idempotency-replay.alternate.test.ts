@@ -59,6 +59,35 @@ describe('quote cleanup alternate replay hash precedence', () => {
         : buildOrderIdempotencyPayload(original)
     );
     await expect(replay(client(storedHash))).resolves.toEqual({
+      adoptedAlternateShippingProvider: null,
+      checkoutRequestHash: storedHash,
+      isLegacyIdempotencyReplay: true,
+    });
+  });
+
+  it('returns the matched per-provider alternate carrier for the RPC', async () => {
+    // Quote cleanup left the provider unresolved, so the route probes one
+    // alternate per carrier. The stored match identifies the original
+    // carrier; the RPC must receive it, not the unresolved null.
+    const current = { ...retry, shipping_provider: null };
+    const topshipAlternate = { ...retry, shipping_provider: 'TOPSHIP' };
+    const storedHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload(topshipAlternate)
+    );
+    const result = await prepareCheckoutIdempotencyReplay({
+      payload: current,
+      alternatePayloads: [
+        { ...retry, shipping_provider: 'GIGL' },
+        topshipAlternate,
+      ],
+      canonicalDeliveryMethod: retry.delivery_method,
+      canonicalAirportType: undefined,
+      merchantId: retry.merchant_id,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: client(storedHash),
+    });
+    expect(result).toEqual({
+      adoptedAlternateShippingProvider: 'TOPSHIP',
       checkoutRequestHash: storedHash,
       isLegacyIdempotencyReplay: true,
     });

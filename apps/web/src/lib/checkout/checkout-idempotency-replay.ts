@@ -25,6 +25,7 @@ type CheckoutIdempotencyReplayInput = {
 };
 
 type CheckoutIdempotencyReplayResult = {
+  adoptedAlternateShippingProvider: string | null;
   checkoutRequestHash: string | null;
   isLegacyIdempotencyReplay: boolean;
 };
@@ -83,6 +84,7 @@ export async function prepareCheckoutIdempotencyReplay({
 }: CheckoutIdempotencyReplayInput): Promise<CheckoutIdempotencyReplayResult> {
   if (!requestIdempotencyKey || !payload) {
     return {
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: null,
       isLegacyIdempotencyReplay: false,
     };
@@ -92,6 +94,7 @@ export async function prepareCheckoutIdempotencyReplay({
   let checkoutRequestHash = hashOrderIdempotencyPayload(checkoutRequestPayload);
   let isLegacyIdempotencyReplay = false;
   let hasStoredHashMatch = false;
+  let adoptedAlternateShippingProvider: string | null = null;
   const localeRequestHash = hashOrderIdempotencyPayload(
     buildOrderIdempotencyPayload(payload, { itemSort: 'locale' })
   );
@@ -130,6 +133,8 @@ export async function prepareCheckoutIdempotencyReplay({
     if (alternateStored) {
       checkoutRequestHash = alternateHash;
       hasStoredHashMatch = true;
+      adoptedAlternateShippingProvider =
+        alternatePayload.shipping_provider ?? null;
       break;
     }
     // A retry can also add delivery metadata the original lacked: probe the
@@ -156,6 +161,8 @@ export async function prepareCheckoutIdempotencyReplay({
       checkoutRequestHash = legacyAlternateHash;
       hasStoredHashMatch = true;
       isLegacyIdempotencyReplay = true;
+      adoptedAlternateShippingProvider =
+        alternatePayload.shipping_provider ?? null;
       break;
     }
   }
@@ -184,7 +191,11 @@ export async function prepareCheckoutIdempotencyReplay({
       // Metadata detection controls post-replay metadata persistence. It must
       // never replace a hash that the database has already confirmed stored.
       if (hasStoredHashMatch) {
-        return { checkoutRequestHash, isLegacyIdempotencyReplay };
+        return {
+          adoptedAlternateShippingProvider,
+          checkoutRequestHash,
+          isLegacyIdempotencyReplay,
+        };
       }
       let legacyHash = hashOrderIdempotencyPayload(
         buildLegacyOrderIdempotencyPayload(payload)
@@ -210,5 +221,9 @@ export async function prepareCheckoutIdempotencyReplay({
     }
   }
 
-  return { checkoutRequestHash, isLegacyIdempotencyReplay };
+  return {
+    adoptedAlternateShippingProvider,
+    checkoutRequestHash,
+    isLegacyIdempotencyReplay,
+  };
 }

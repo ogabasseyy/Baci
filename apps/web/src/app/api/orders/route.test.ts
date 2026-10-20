@@ -935,6 +935,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     const prepareSpy = vi
       .spyOn(idempotency, 'prepareCheckoutIdempotencyReplay')
       .mockResolvedValue({
+        adoptedAlternateShippingProvider: null,
         checkoutRequestHash: 'test-request-hash',
         isLegacyIdempotencyReplay: false,
       });

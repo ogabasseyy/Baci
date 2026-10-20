@@ -6,12 +6,14 @@ import {
   formatMoneyCompact,
   formatMoneyMinor,
   getMoneyCurrencyExponent,
+  getMoneyDisplayExponent,
   MONEY_CURRENCY_EXPONENTS,
   MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,
   resolveMoneyLocale,
   SUPPORTED_MONEY_CURRENCIES,
 } from './index';
+import { getMoneyFormatter } from './money-formatter';
 
 // Characterization fixtures for the formatting wave (audit row 1). These
 // pin, per existing per-app call class, the output the shared formatter
@@ -145,8 +147,25 @@ describe('shared money formatting characterization', () => {
   it('derives exponents for non-allowlisted currencies from Intl', () => {
     expect(getMoneyCurrencyExponent('JPY')).toBe(0);
     expect(getMoneyCurrencyExponent('KWD')).toBe(3);
+    // Display defaults stay at the legacy 2 digits outside the
+    // allowlist until characterized, even though minor-unit scaling
+    // uses the derived exponent for every code.
+    expect(getMoneyDisplayExponent('JPY')).toBe(2);
+    expect(getMoneyDisplayExponent('XOF')).toBe(0);
     // Zero-exponent JPY minor units are already major units.
     expect(formatMoneyMinor(123450, 'JPY')).toBe(formatMoney(123450, 'JPY'));
+  });
+
+  it('shares one formatter for logically identical options in any order', () => {
+    const first = getMoneyFormatter('NGN', {
+      currencyDisplay: 'code',
+      signDisplay: 'always',
+    });
+    const second = getMoneyFormatter('NGN', {
+      signDisplay: 'always',
+      currencyDisplay: 'code',
+    });
+    expect(second).toBe(first);
   });
 
   it('pins the receipt class: createMoneyFormatter defaults per currency', () => {

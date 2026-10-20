@@ -1,4 +1,4 @@
-import { getMoneyCurrencyExponent } from './currency-locales';
+import { getMoneyDisplayExponent } from './currency-locales';
 import { formatMoney } from './format-money';
 import type { FormatMoneyOptions } from './money-formatter';
 
@@ -9,7 +9,7 @@ export function formatMoneyCompact(
   options: FormatMoneyOptions = {}
 ): string {
   const useCompact = Math.abs(amount) >= 1_000;
-  const exponent = getMoneyCurrencyExponent(currencyCode);
+  const exponent = getMoneyDisplayExponent(currencyCode);
   // Apply compact defaults only when the caller supplied neither
   // bound: a lone caller bound must reach getMoneyFormatter's joint
   // min/max resolution alone instead of being paired with a compact

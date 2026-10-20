@@ -59,6 +59,19 @@ export function resolveMoneyLocale(currencyCode: string): string {
   );
 }
 
+/**
+ * Display fraction-digit default: the ISO exponent for allowlisted
+ * (characterized) currencies, and the legacy 2-digit default for all
+ * other codes until they are characterized.
+ */
+export function getMoneyDisplayExponent(currencyCode: string): number {
+  const normalized = normalizeMoneyCurrency(currencyCode);
+  return (SUPPORTED_MONEY_CURRENCIES as readonly string[]).includes(normalized)
+    ? getMoneyCurrencyExponent(normalized)
+    : 2;
+}
+
+const MAX_DERIVED_EXPONENT_CACHE_SIZE = 100;
 const derivedExponentCache = new Map<string, number>();
 
 export function getMoneyCurrencyExponent(currencyCode: string): number {
@@ -75,6 +88,12 @@ export function getMoneyCurrencyExponent(currencyCode: string): number {
       style: 'currency',
       currency: normalized,
     }).resolvedOptions().maximumFractionDigits ?? 2;
+  // Bounded like the formatter cache: arbitrary well-formed codes from
+  // stored data must not grow this map without limit.
+  if (derivedExponentCache.size >= MAX_DERIVED_EXPONENT_CACHE_SIZE) {
+    const oldest = derivedExponentCache.keys().next().value;
+    if (oldest !== undefined) derivedExponentCache.delete(oldest);
+  }
   derivedExponentCache.set(normalized, derived);
   return derived;
 }

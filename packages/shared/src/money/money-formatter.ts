@@ -1,5 +1,5 @@
 import {
-  getMoneyCurrencyExponent,
+  getMoneyDisplayExponent,
   normalizeMoneyCurrency,
   resolveMoneyLocale,
 } from './currency-locales';
@@ -35,7 +35,7 @@ export function getMoneyFormatter(
   const { locale: localeOverride, ...numberFormatOptions } = options;
   const currency = normalizeMoneyCurrency(currencyCode);
   const locale = localeOverride ?? resolveMoneyLocale(currency);
-  const exponent = getMoneyCurrencyExponent(currency);
+  const exponent = getMoneyDisplayExponent(currency);
   // Resolve the fraction-digit pair jointly: a single supplied bound
   // must not combine with the exponent default into min > max (which
   // Intl rejects). The omitted bound derives from the supplied one.
@@ -52,7 +52,13 @@ export function getMoneyFormatter(
       maxOption ??
       (minOption !== undefined ? Math.max(exponent, minOption) : exponent),
   };
-  const cacheKey = `${locale}:${JSON.stringify(finalOptions)}`;
+  // Canonical key: sorted entries so logically identical options in
+  // different property order share one cache entry.
+  const cacheKey = `${locale}:${JSON.stringify(
+    Object.entries(finalOptions)
+      .filter(([, value]) => value !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+  )}`;
 
   const cached = formatterCache.get(cacheKey);
   if (cached) {

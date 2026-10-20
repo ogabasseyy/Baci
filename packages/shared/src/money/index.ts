@@ -4,6 +4,7 @@
 export { createMoneyFormatter } from './create-money-formatter';
 export {
   getMoneyCurrencyExponent,
+  getMoneyDisplayExponent,
   MONEY_CURRENCY_EXPONENTS,
   MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,

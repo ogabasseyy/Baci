@@ -72,6 +72,7 @@ function collectSourceFiles() {
     .filter(Boolean)
     .map((relative) => join(repoRoot, relative))
     .filter((file) => scanRoots.some((root) => file.startsWith(root + sep)))
+    .filter((file) => existsSync(file))
     .filter((file) => !file.split(sep).some((part) => skippedDirs.has(part)))
     .filter((file) => /\.(?:m|c)?[tj]sx?$/.test(file))
     .filter((file) => !isTestFile(file));

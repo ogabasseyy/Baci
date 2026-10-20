@@ -33,6 +33,15 @@ describe('createFixtureMock async semantics', () => {
     expect(fn()).toBeUndefined();
   });
 
+  it('records rejected promises as return results (runner behavior)', async () => {
+    const fn = createFixtureMock(async () => 'base');
+    fn.mockRejectedValue(new Error('async-boom'));
+    await expect(fn()).rejects.toThrow('async-boom');
+    // Like Jest/Vitest, an async rejection is a returned promise:
+    // mock.results records it as 'return'; only sync throws are 'throw'.
+    expect(fn.mock.results[0]?.type).toBe('return');
+  });
+
   it('schedule fixture read/submit keep promise contracts', async () => {
     const fixture = scheduleJourneyFixture();
     await expect(fixture.read()).resolves.toBeDefined();

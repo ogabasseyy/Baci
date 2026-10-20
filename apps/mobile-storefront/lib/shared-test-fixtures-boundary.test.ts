@@ -20,6 +20,7 @@ const skippedDirs = new Set([
 const bannedPatterns = [
   /['"`]@baci\/shared\/test-fixtures\//,
   /(?:from|require|import)\s*\(?\s*['"`][^'"`]*test-fixtures\//,
+  /packages\/shared\/src\/lib\/[^'"]*\.test-support/,
 ];
 
 function normalize(path: string) {

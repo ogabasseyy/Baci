@@ -69,6 +69,9 @@ either runner, so `jest.clearAllMocks()` / `vi.clearAllMocks()` do
 not reset them — call `mockClear()` explicitly — and
 `mock.invocationCallOrder` uses a module-level counter, so it is
 only comparable as relative ordering within a test process.
+`mock.results` mirrors runner behavior: a rejected promise is
+recorded as a `return` of that promise; only synchronous throws are
+recorded as `throw`.
 
 Fixtures are exported as ordinary subpaths, so they are technically
 resolvable from production bundles (Next.js, Metro). The boundary is

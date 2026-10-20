@@ -28,7 +28,7 @@ const pkg = JSON.parse(
 ) as { exports: Record<string, string> };
 const fixtureSubpaths = readdirSync(join(sharedPackageDir, 'src/test-fixtures'))
   .filter((name) => name.endsWith('.ts') && !name.includes('.test.'))
-  .map((name) => `@baci/shared/test-fixtures/${name.replace(/\.ts$/, '')}`);
+  .map((name) => `@baci/shared/test-fixtures/${name.replace(/\.tsx?$/, '')}`);
 const subpaths = [
   ...Object.keys(pkg.exports)
     .filter((key) => key.startsWith('./test-fixtures/') || key === './vtu')

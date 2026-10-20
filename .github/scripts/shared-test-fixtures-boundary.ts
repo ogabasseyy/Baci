@@ -18,25 +18,6 @@ import { join, sep } from 'node:path';
 //   applies only to files that are neither test files nor test-named
 //   helpers, so helpers may freely import other helpers.
 
-export const SKIPPED_DIRS = new Set([
-  'node_modules',
-  '.next',
-  '.expo',
-  '.git',
-  '.turbo',
-  '.gradle',
-  'build',
-  'coverage',
-  'DerivedData',
-  'dist',
-  'web-build',
-  'Pods',
-  // Developer CLI tooling (apps/*/tools, scripts): executed in Node,
-  // never bundled into a production app, so its imports cannot reach
-  // a production bundle.
-  'tools',
-]);
-
 export const FIXTURE_PATTERNS = [
   // Package-specifier imports of the fixture tree.
   /['"`]@baci\/shared\/test-fixtures\//,
@@ -80,25 +61,53 @@ export function isTestHelper(path: string) {
   );
 }
 
+// Always-skipped at any depth.
+const ALWAYS_SKIPPED = new Set(['node_modules', '.git']);
+// Skipped only as direct children of a scan root (app/package root):
+// these names are generated-output or CLI-tooling directories at the
+// root level. A nested production directory that happens to be named
+// tools/build/dist deeper in a source tree is still scanned.
+const ROOT_LEVEL_SKIPPED = new Set([
+  '.next',
+  '.expo',
+  '.turbo',
+  '.gradle',
+  'build',
+  'coverage',
+  'DerivedData',
+  'dist',
+  'web-build',
+  'Pods',
+  // Developer CLI tooling (apps/*/tools): executed in Node, never
+  // bundled into a production app.
+  'tools',
+]);
+
 export function collectSourceFiles(roots: string[]): string[] {
   const out: string[] = [];
-  const walk = (dir: string) => {
+  const walk = (dir: string, isRoot: boolean) => {
     for (const entry of readdirSync(dir)) {
-      if (SKIPPED_DIRS.has(entry)) continue;
+      if (ALWAYS_SKIPPED.has(entry)) continue;
+      if (isRoot && ROOT_LEVEL_SKIPPED.has(entry)) continue;
       const full = join(dir, entry);
       const stat = lstatSync(full);
       if (stat.isSymbolicLink()) continue;
       if (stat.isDirectory()) {
-        walk(full);
+        walk(full, false);
       } else if (/\.(?:m|c)?[tj]sx?$/.test(entry)) {
         out.push(full);
       }
     }
   };
-  for (const root of roots) walk(root);
+  for (const root of roots) walk(root, true);
   return out;
 }
 
+// Matching is intentionally raw-text and conservative: a fixture
+// specifier appearing in a comment, a plain string, or a type-only
+// import is flagged too. That is a deliberate hard failure — the
+// specifier has no legitimate reason to appear in non-test code at
+// all — rather than an attempt at import-aware parsing.
 export function findFixtureImportOffenders(roots: string[]): string[] {
   const offenders: string[] = [];
   for (const file of collectSourceFiles(roots)) {

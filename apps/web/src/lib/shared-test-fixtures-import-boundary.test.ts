@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +44,28 @@ describe('test-fixtures import boundary', () => {
     const offenders = findFixtureImportOffenders([dir]);
     expect(offenders).toContain(join(dir, 'order-test-utils.ts'));
     expect(offenders).toContain(join(dir, 'prod.ts'));
+  });
+
+  it('flags fixture imports under nested production tools dirs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fixture-boundary-'));
+    const nested = join(dir, 'src', 'feature', 'tools');
+    mkdirSync(nested, { recursive: true });
+    writeFileSync(
+      join(nested, 'prod.ts'),
+      "import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const f = purchaseFixture;\n"
+    );
+    expect(findFixtureImportOffenders([dir])).toContain(
+      join(nested, 'prod.ts')
+    );
+  });
+
+  it('flags fixture specifiers in comments (intentional raw-text rule)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fixture-boundary-'));
+    writeFileSync(
+      join(dir, 'prod.ts'),
+      "// example: import { x } from '@baci/shared/test-fixtures/piggyvest-purchase'\nexport const f = 1;\n"
+    );
+    expect(findFixtureImportOffenders([dir])).toContain(join(dir, 'prod.ts'));
   });
 
   it('flags nested deep-relative fixture specifiers', () => {

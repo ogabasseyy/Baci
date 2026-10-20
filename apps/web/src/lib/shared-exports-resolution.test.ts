@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -9,36 +9,47 @@ import { describe, expect, it } from 'vitest';
 // Jest/tsconfig mappers that otherwise rewrite these specifiers, so a
 // missing/misspelled exports entry fails here instead of in a
 // production Next/Metro build.
-const repoRoot = dirname(fileURLToPath(import.meta.url)).replace(
-  /\/apps\/web\/src\/lib$/,
-  ''
+const repoRoot = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '..'
 );
 const sharedPackageDir = join(repoRoot, 'packages/shared');
 const appRequire = createRequire(join(repoRoot, 'apps/web/package.json'));
 
+// Derived, not hard-coded: every test-fixtures file and the domain
+// subpaths this PR added must have an exports entry, and every
+// exports entry is resolved below.
+const pkg = JSON.parse(
+  readFileSync(join(sharedPackageDir, 'package.json'), 'utf8')
+) as { exports: Record<string, string> };
+const fixtureSubpaths = readdirSync(join(sharedPackageDir, 'src/test-fixtures'))
+  .filter((name) => name.endsWith('.ts') && !name.includes('.test.'))
+  .map((name) => `@baci/shared/test-fixtures/${name.replace(/\.ts$/, '')}`);
 const subpaths = [
-  '@baci/shared/vtu',
-  '@baci/shared/test-fixtures/builder-ai-edit',
-  '@baci/shared/test-fixtures/piggyvest-purchase',
-  '@baci/shared/test-fixtures/piggyvest-device-change',
-  '@baci/shared/test-fixtures/piggyvest-protected-offer',
-  '@baci/shared/test-fixtures/piggyvest-draft-closure',
-  '@baci/shared/test-fixtures/piggyvest-schedule',
+  ...Object.keys(pkg.exports)
+    .filter((key) => key.startsWith('./test-fixtures/') || key === './vtu')
+    .map((key) => `@baci/shared${key.slice(1)}`),
 ];
 
 describe('@baci/shared exports resolution (no test aliases)', () => {
+  it('every test-fixtures file has an exports entry', () => {
+    for (const specifier of fixtureSubpaths) {
+      expect(subpaths, specifier).toContain(specifier);
+    }
+  });
+
   it('resolves every new subpath through the exports map to a real file', () => {
     for (const specifier of subpaths) {
       const resolved = appRequire.resolve(specifier);
       expect(existsSync(resolved), specifier).toBe(true);
-      expect(resolved).toContain('/packages/shared/src/');
+      expect(resolved.startsWith(join(sharedPackageDir, 'src'))).toBe(true);
     }
   });
 
   it('every exports target in package.json exists on disk', () => {
-    const pkg = JSON.parse(
-      readFileSync(join(sharedPackageDir, 'package.json'), 'utf8')
-    ) as { exports: Record<string, string> };
     for (const [subpath, target] of Object.entries(pkg.exports)) {
       expect(existsSync(join(sharedPackageDir, target)), subpath).toBe(true);
     }

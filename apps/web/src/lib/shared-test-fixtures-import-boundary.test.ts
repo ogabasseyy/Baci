@@ -8,9 +8,12 @@ import { describe, expect, it } from 'vitest';
 // itself — must never import it, by subpath specifier or by
 // deep-relative path, even though the subpaths are resolvable
 // through the package exports map.
-const repoRoot = dirname(fileURLToPath(import.meta.url)).replace(
-  /\/apps\/web\/src\/lib$/,
-  ''
+const repoRoot = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+  '..'
 );
 const scanRoots = [
   join(repoRoot, 'apps/web'),

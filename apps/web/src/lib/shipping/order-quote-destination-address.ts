@@ -38,7 +38,7 @@ export function normalizeAddressForQuoteMatch(
   return normalizedAddress;
 }
 
-function matchesDomesticGiglQuoteAddress(
+function matchesDomesticQuoteAddress(
   shippingAddress: OrderShippingAddressForQuote,
   receiver: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>['receiver']
 ): boolean {
@@ -49,7 +49,11 @@ function matchesDomesticGiglQuoteAddress(
     return false;
   }
 
-  const quoteStreet = normalizeText(receiver.address);
+  const quoteStreet = normalizeAddressForQuoteMatch(
+    receiver.address,
+    receiver.city,
+    receiver.state
+  );
   const orderStreet = normalizeAddressForQuoteMatch(
     shippingAddress.address,
     shippingAddress.city,
@@ -65,7 +69,7 @@ export function matchesQuoteDestination(
   const receiver = quoteRequest.receiver;
   const addressMatches =
     quoteRequest.shipmentType === 'domestic'
-      ? matchesDomesticGiglQuoteAddress(shippingAddress, receiver)
+      ? matchesDomesticQuoteAddress(shippingAddress, receiver)
       : normalizeText(shippingAddress.address) ===
         normalizeText(receiver.address);
 

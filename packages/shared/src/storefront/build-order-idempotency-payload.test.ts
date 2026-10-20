@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { buildOrderIdempotencyPayload } from './build-order-idempotency-payload';
 
 describe('buildOrderIdempotencyPayload', () => {
+  it('includes zero coordinates for quote-less destinations while preserving quoted payloads', () => {
+    const input = {
+      merchant_id: 'merchant-one',
+      customer_email: 'buyer@example.com',
+      customer_name: 'Buyer',
+      items: [],
+      shipping_address: {
+        address: '15 Marina Road',
+        latitude: 0,
+        longitude: 3.35,
+      },
+    };
+    expect(buildOrderIdempotencyPayload(input).shipping_address).toMatchObject({
+      latitude: 0,
+      longitude: 3.35,
+    });
+    const quoted = buildOrderIdempotencyPayload({
+      ...input,
+      selected_quote_id: 'quote-one',
+    });
+    expect(JSON.stringify(quoted.shipping_address)).toBe(
+      '{"address":"15 marina road","city":"","state":""}'
+    );
+    const absent = buildOrderIdempotencyPayload({
+      ...input,
+      shipping_address: { address: '15 Marina Road' },
+    });
+    expect(JSON.stringify(absent.shipping_address)).toBe(
+      '{"address":"15 marina road","city":"","state":""}'
+    );
+  });
+
   it('normalizes email casing and delivery whitespace', () => {
     const base = {
       customer_email: 'Buyer@Example.com',

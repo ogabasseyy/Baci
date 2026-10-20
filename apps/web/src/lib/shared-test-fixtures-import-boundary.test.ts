@@ -29,6 +29,7 @@ const skippedDirs = new Set([
   'coverage',
   'DerivedData',
   'dist',
+  'web-build',
   'Pods',
 ]);
 const bannedPatterns = [
@@ -46,7 +47,9 @@ function isTestFile(path: string) {
     // Only the fixture definitions themselves are exempt; an app-side
     // test-support helper is still scanned.
     path.includes('/packages/shared/src/test-fixtures/') ||
-    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path)
+    /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(path) ||
+    /\.test-fixtures\.(?:m|c)?[tj]sx?$/.test(path) ||
+    /\.tests\.(?:m|c)?[tj]sx?$/.test(path)
   );
 }
 

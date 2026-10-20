@@ -1,16 +1,36 @@
 import { describe, expect, it } from 'vitest';
+import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
+  GuestCartMigratedError,
+} from './guest-cart-errors';
+import { mapGuestCartToolError } from './guest-cart-tool-responses';
 import { withGuestCartTranscript } from './guest-cart-transcript';
 
 const token = 'a'.repeat(64);
 
 describe('withGuestCartTranscript', () => {
+  it('preserves the real bridge-pending recovery contract', () => {
+    const result = withGuestCartTranscript(
+      mapGuestCartToolError(new GuestCartBridgePendingError(token))
+    );
+    expect(JSON.parse(result.content.at(-1)?.text ?? 'null')).toEqual({
+      success: false,
+      code: 'refresh_required',
+      cart_token: token,
+      retryable: true,
+    });
+  });
+
   it.each([
     { success: true, cart_token: token, version: 2, items: [] },
     { success: false }, // Invalid input and quota replies.
-    { success: false, code: 'unauthorized' },
-    { success: false, code: 'cart_migrated' },
-    { success: false, code: 'bridge_pending', cart_token: token },
-    { success: false, code: 'version_conflict', cart_token: token, version: 3 },
+    mapGuestCartToolError(new GuestCartCanonicalError('unauthorized', token)).structuredContent,
+    mapGuestCartToolError(new GuestCartMigratedError('canonical-cart')).structuredContent,
+    mapGuestCartToolError(new GuestCartBridgePendingError(token)).structuredContent,
+    mapGuestCartToolError(
+      new GuestCartCanonicalError('version_conflict', token, 'canonical-cart', 3)
+    ).structuredContent,
     { success: true, cart_emptied: true, items: [] },
   ])('preserves the structured capability contract: %j', (structuredContent) => {
     const original = {

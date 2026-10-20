@@ -32,17 +32,16 @@ function parseOptionalPrice(value: number | string | null | undefined) {
     : undefined;
 }
 
-function parseRequiredPrice(value: number | string | null | undefined) {
-  return parseOptionalPrice(value) ?? 0;
-}
-
 function isProductCondition(value: unknown): value is Product['condition'] {
   return PRODUCT_CONDITIONS.includes(
     value as (typeof PRODUCT_CONDITIONS)[number]
   );
 }
 
-function normalizeActiveOffers(offers: DetailedCachedProduct['offers']) {
+function normalizeActiveOffers(
+  offers: DetailedCachedProduct['offers'],
+  parentStock: number
+) {
   if (!Array.isArray(offers)) return [];
 
   return offers.flatMap((offer) => {
@@ -53,7 +52,11 @@ function normalizeActiveOffers(offers: DetailedCachedProduct['offers']) {
     const price = parseOptionalPrice(offer.price);
     if (price === undefined || price < 0) return [];
 
-    const stockQuantity = parseRequiredPrice(offer.stock_quantity);
+    // A null offer quantity inherits parent stock (mirroring the variant
+    // normalizer's parentStock and the price-options CTE): coercing to 0
+    // here would mark a search-advertised offer out of stock on the PDP.
+    const stockQuantity =
+      parseOptionalPrice(offer.stock_quantity) ?? parentStock;
     return [
       {
         id: offer.id,
@@ -87,6 +90,7 @@ export interface DetailedCachedProduct {
   min_variant_price?: number | null;
   max_variant_price?: number | null;
   manage_stock?: boolean | null;
+  inventory_tracking_policy?: string | null;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
   images?: RawProductImage[] | null;
@@ -146,6 +150,7 @@ export function mapDetailedCachedProductToProduct(
     {
       merchantId: detailedProduct.merchant_id || merchantId,
       productId: detailedProduct.id,
+      parentStock: getEffectiveStock(detailedProduct),
     }
   );
   const categoryInput = {
@@ -156,6 +161,23 @@ export function mapDetailedCachedProductToProduct(
   const categoryName = resolveStorefrontProductCategoryName(categoryInput);
   const categorySlug =
     resolveMappedStorefrontProductCategorySlug(categoryInput);
+  // Anchor-first effective policy (mirrors the base-inventory RPC CTE):
+  // a simple product whose hidden anchor supplies serialized tracking
+  // while the row policy is null must still cap offer adds by the pool.
+  // Derived from the raw snapshot rows — the normalized variants may
+  // exclude non-public anchors.
+  const rawVariants = Array.isArray(detailedProduct.product_variants)
+    ? detailedProduct.product_variants
+    : [];
+  const anchorSerializedPolicy = rawVariants.find(
+    (variant) =>
+      variant?.is_inventory_anchor === true &&
+      (variant.inventory_tracking_policy === 'serialized_strict' ||
+        variant.inventory_tracking_policy === 'serialized_then_unlimited' ||
+        variant.inventory_tracking_policy === 'off')
+  )?.inventory_tracking_policy;
+  const effectiveInventoryPolicy =
+    anchorSerializedPolicy ?? detailedProduct.inventory_tracking_policy;
 
   return {
     id: detailedProduct.id,
@@ -187,8 +209,15 @@ export function mapDetailedCachedProductToProduct(
     compare_at_price: parseOptionalPrice(detailedProduct.compare_at_price),
     min_variant_price: detailedProduct.min_variant_price ?? undefined,
     max_variant_price: detailedProduct.max_variant_price ?? undefined,
-    manage_stock: detailedProduct.manage_stock ?? false,
+    // NULL means managed (platform policy shared with search, the cart,
+    // and order creation): only explicit false disables stock checks.
+    manage_stock: detailedProduct.manage_stock ?? true,
+    inventory_tracking_policy: effectiveInventoryPolicy ?? undefined,
     stock: getEffectiveStock(detailedProduct),
+    // Strict-pool aggregate cap reads stock_quantity (offer adds
+    // overwrite stock with the selected allocation): without the folded
+    // quantity here the cap disables itself on mapped PDP products.
+    stock_quantity: getEffectiveStock(detailedProduct),
     image: firstImage,
     imageLarge: firstImage,
     imageHint: detailedProduct.imageHint || detailedProduct.name,
@@ -217,7 +246,10 @@ export function mapDetailedCachedProductToProduct(
       )
         ? (detailedProduct.available_conditions as Product['available_conditions'])
         : undefined,
-    offers: normalizeActiveOffers(detailedProduct.offers),
+    offers: normalizeActiveOffers(
+      detailedProduct.offers,
+      getEffectiveStock(detailedProduct)
+    ),
     variants: normalizedVariants,
     specifications: detailedProduct.specifications as Product['specifications'],
     product_key_specs: normalizeProductKeySpecs(

@@ -1,4 +1,5 @@
 import type { ImageProps } from 'expo-image';
+import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import type { AnimatedStyle } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
@@ -21,6 +22,7 @@ export interface BaseProductCardVariantProps {
 }
 
 export interface GridProductCardProps extends BaseProductCardVariantProps {
+  footer?: ReactNode;
   gridWidth: number;
   shadowColor: string;
   colors?: (typeof Colors)['light'];

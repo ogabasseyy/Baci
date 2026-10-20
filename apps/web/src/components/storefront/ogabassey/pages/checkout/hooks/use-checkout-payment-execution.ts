@@ -170,7 +170,9 @@ export function useCheckoutPaymentExecution({
     },
     payment: {
       ...payment,
-      redvaultAvailable: redvaultAvailability.available,
+      // Bound shared-cart orders have no REDVAULT path; offering it only
+      // defers a deterministic server rejection to submit time.
+      redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
     },
     resumed: {
       order: attempt.resumedOrder,
@@ -191,7 +193,7 @@ export function useCheckoutPaymentExecution({
     crypto,
     dva,
     handlePlaceOrder,
-    redvaultAvailable: redvaultAvailability.available,
+    redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
     walletFundedTransfer,
   };
 }

@@ -251,7 +251,7 @@ export function NavbarSearch({
         // Match the shared navbar limit (and the fallback input below)
         // so the persistent value can never exceed the submitted query.
         maxLength={NAVBAR_SEARCH_MAX_LENGTH}
-        placeholder="Search products, brands and categories"
+        placeholder="Search or ask a question…"
         className={SEARCH_INPUT_CLASS_NAME}
         autoFocus={shouldAutoFocusAutocomplete}
       />
@@ -274,7 +274,7 @@ export function NavbarSearch({
           }}
           onFocus={() => activateAutocomplete(true)}
           onPointerDown={() => activateAutocomplete(false)}
-          placeholder="Search products, brands and categories"
+          placeholder="Search or ask a question…"
           maxLength={NAVBAR_SEARCH_MAX_LENGTH}
           aria-label="Search products"
           id="search-input"

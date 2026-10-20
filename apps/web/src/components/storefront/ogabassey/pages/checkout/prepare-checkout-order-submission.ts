@@ -1,5 +1,10 @@
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
-import type { SavedAddress, DeliveryMethod, PaymentMethod } from './types';
+import type {
+  SavedAddress,
+  DeliveryMethod,
+  PaymentMethod,
+  SharedCartOrderBinding,
+} from './types';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import { prepareCheckoutDelivery } from './handlers/prepare-checkout-delivery';
 import type { PreparedCheckoutDelivery } from './handlers/prepare-checkout-delivery';
@@ -71,7 +76,11 @@ export type PrepareCheckoutOrderSubmissionResult =
         merchantRateId: string | null;
         shippingProvider: string | null;
       };
-      identity: ReturnType<typeof prepareCheckoutOrderIdentity>;
+      // The submission hook attaches the prepared binding after review;
+      // the identity builder itself never sets it.
+      identity: ReturnType<typeof prepareCheckoutOrderIdentity> & {
+        sharedCartBinding?: SharedCartOrderBinding;
+      };
     };
 
 /** Validate the selected payment/delivery path, then freeze delivery and order identity for this submit. */

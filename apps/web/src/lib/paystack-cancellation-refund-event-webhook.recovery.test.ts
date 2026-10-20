@@ -51,7 +51,7 @@ describe('handlePaystackCancellationRefundEvent unknown-refund recovery', () => 
 
     expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
       db,
-      202,
+      '202',
       'PSK-1'
     );
     expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
@@ -69,7 +69,7 @@ describe('handlePaystackCancellationRefundEvent unknown-refund recovery', () => 
 
     expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
       db,
-      202,
+      '202',
       undefined
     );
     expect(response.status).toBe(200);

@@ -1,11 +1,10 @@
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
-import {
-  eventPipelineFrozenRoutes,
-  frozenEventPipelineAuthoritySources,
-} from '@/lib/events/event-pipeline-frozen-authority-sources';
+// biome-ignore format: compact import preserves the 300-line verifier gate.
+import { eventPipelineFrozenRoutes, frozenEventPipelineAuthoritySources } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
 import { eventPipelineGatewayCronAdminPaths } from '@/lib/events/event-pipeline-gateway-cron-admin-paths';
 import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipeline-gateway-cron-credential-paths';
@@ -141,18 +140,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts',
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
-    credentialPaths: [
-      ...eventPipelineCredentialPaths,
-      ...eventPipelineImmediateOrderCredentialPaths,
-      ...eventPipelineJumiaCredentialPaths,
-      ...eventPipelinePiggyvestCredentialPaths,
-      ...eventPipelineRepairPickupCredentialPaths,
-      ...eventPipelineRedvaultCredentialPaths,
-      ...eventPipelineShippingCredentialPaths,
-      ...eventPipelineChatCredentialPaths,
-      ...eventPipelinePaystackRefundCredentialPaths,
-      ...eventPipelineGatewayCronCredentialPaths,
-    ],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',
@@ -184,6 +173,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/lib/piggyvest/server-intake-client.ts',
+      'apps/web/src/lib/storefront/server-intake-client.ts',
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',

@@ -86,7 +86,7 @@ describe('CartPageWrapper', () => {
     );
     window.history.pushState({}, '', '/ogabassey/cart?item_id=55555555-5555-4555-8555-555555555555&qty=3');
     const addToCart = mockUseCart();
-    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [] }], error: null });
+    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [], manage_stock: false }], error: null });
 
     render(<CartPageWrapper merchantId="merchant-1" />);
 
@@ -102,7 +102,7 @@ describe('CartPageWrapper', () => {
     const addToCart = mockUseCart({
       cart: [{ id: '55555555-5555-4555-8555-555555555555', quantity: 2 }],
     });
-    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [] }], error: null });
+    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [], manage_stock: false }], error: null });
 
     render(<CartPageWrapper merchantId="merchant-1" />);
 
@@ -148,7 +148,7 @@ describe('CartPageWrapper', () => {
       new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=0') as ReturnType<typeof useSearchParams>
     );
     const addToCart = mockUseCart();
-    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [] }], error: null });
+    setupProductsQuery({ data: [{ id: '55555555-5555-4555-8555-555555555555', name: 'Phone', status: 'active', images: [], manage_stock: false }], error: null });
 
     render(<CartPageWrapper merchantId="merchant-1" />);
 
@@ -200,6 +200,22 @@ describe('CartPageWrapper', () => {
     ));
   });
 
+
+  it('treats a null manage_stock handoff row as managed inventory', async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
+    );
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{
+      id: '55555555-5555-4555-8555-555555555555', name: 'Legacy Phone',
+      status: 'active', images: [], manage_stock: null, stock_quantity: 0, stock: 3,
+    }], error: null });
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Not enough stock', variant: 'destructive' })
+    ));
+    expect(addToCart).not.toHaveBeenCalled();
+  });
 
   it('rejects managed legacy stock when checkout stock_quantity is zero', async () => {
     vi.mocked(useSearchParams).mockReturnValue(

@@ -1,0 +1,72 @@
+export interface RefundSummary {
+  currency: string;
+  amountPaid: number;
+  refunded: number;
+  remaining: number;
+  pending: number;
+  reversedInternal?: number;
+  status:
+    | 'refunded'
+    | 'processing'
+    | 'requires_review'
+    | 'queued'
+    | 'failed'
+    | 'not_started';
+  // Fixed display label mapped at the API boundary, never raw
+  // worker/provider text: the route maps the RPC's strings before
+  // responding so provider internals stay server-side.
+  error: string | null;
+  // The requires-review guidance branches on this instead of sniffing
+  // the (now mapped) error text for a provider mention.
+  needsPaystackCheck: boolean;
+  attempts: number;
+  retryRequests: number;
+  canRetry: boolean;
+  canRecordManual: boolean;
+  canManageRefunds: boolean;
+  events?: Array<{
+    id: string;
+    action: string;
+    date: string;
+    details: {
+      error?: string | null;
+      previousError?: string | null;
+      attempts?: number;
+      amount?: number;
+      reference?: string;
+    };
+  }>;
+  history: Array<{
+    id: string;
+    amount: number;
+    status: string;
+    method: string;
+    reference: string;
+    date: string;
+    note: string | null;
+  }>;
+  // Pin candidates for Paystack attestations: completed Paystack
+  // captures with money still outstanding, oldest first. Only
+  // Paystack legs are listed because preflight cannot verify an
+  // attestation pinned anywhere else. The manual form offers them
+  // when more than one exists; the RPC resolves a sole leg itself
+  // on live data (fresher than polling).
+  legs: Array<{
+    id: string;
+    amount: number;
+    outstanding: number;
+    gateway: string | null;
+    reference: string | null;
+  }>;
+  // Durable provider-backed signal: legs lists only outstanding
+  // captures, so this stays true after a full Paystack refund while
+  // a later contradictory provider verdict can still re-open the
+  // balance. The panel keeps polling on it past refunded.
+  hasPaystackPayment: boolean;
+  // Truncation signals for the bounded tails: history and events
+  // cap at the newest 50 rows, and the timeline says so instead of
+  // posing as the complete record. Normalized to booleans by the
+  // mask, so partial payloads read untruncated.
+  historyTruncated: boolean;
+  eventsTruncated: boolean;
+}

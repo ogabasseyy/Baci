@@ -1,7 +1,13 @@
 'use client';
 
+import {
+  prepareSharedCartCheckout,
+  reviewedCheckoutItems,
+} from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
+import type { SharedCartOrderBinding } from '../types';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
@@ -138,7 +144,112 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       return;
     }
 
-    await submitPreparedCheckout({ ...context, merchant }, prepared);
+    // Shared carts review the authoritative cart first; the order submit
+    // binds to the returned session and generation. A stale review
+    // refreshes the cart view and stops: the shopper reviews the updated
+    // cart and submits again, never silently resubmitting changed lines.
+    let sharedCartBinding: SharedCartOrderBinding | null = null;
+    let reviewedCheckoutItemsResult: ReturnType<
+      typeof buildCheckoutOrderItems
+    > | null = null;
+    if (cart.sharedCartEnabled && !cart.sharedCartRef) {
+      toast({ title: 'Cart Syncing', description: 'Your cart is still connecting. Wait a moment and submit again.', variant: 'destructive' });
+      processing.isOrderInFlightRef.current = false;
+      return;
+    }
+    if (cart.sharedCartRef) {
+      // The binding pins the reviewed version, but the order items come
+      // from the display cart: submitting with unconfirmed optimistic
+      // lines would order lines outside the reviewed version. Wait for
+      // a clean sync so display and confirmed lines agree.
+      if (cart.sharedCartSyncStatus !== 'synced') {
+        if (cart.sharedCartSyncStatus === 'error') {
+          toast({ title: 'Cart Sync Failed', description: 'Your cart could not sync. Retry the sync and submit again.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Cart Syncing', description: 'Your cart is still syncing. Wait a moment and submit again.', variant: 'destructive' });
+        }
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      const review = await prepareSharedCartCheckout({
+        cartId: cart.sharedCartRef.cartId,
+        expectedVersion: cart.sharedCartRef.version,
+        operationId: crypto.randomUUID(),
+      }, merchant?.slug);
+      if (!review.ok) {
+        if (review.code === 'refresh_required') {
+          await cart.refreshSharedCart?.();
+          toast({ title: 'Cart Changed', description: 'Your cart changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Checkout Unavailable', description: 'We could not review your cart. Please try again.', variant: 'destructive' });
+        }
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      // The review is authoritative for availability and price. A line
+      // that became unavailable, or a subtotal that moved without a
+      // version change, stops here with a refreshed cart: the shopper
+      // reviews the updated lines and submits again, mirroring the
+      // native checkout path.
+      if (
+        review.review.unavailableCount > 0 ||
+        review.review.lines.some((line) => !line.available)
+      ) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Update Your Cart', description: 'Some items are unavailable. Review your updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      // The reviewed subtotal is items-only: assurance is priced per
+      // order item at binding time, so comparing against the
+      // assurance-inclusive checkoutCartTotal would reject every
+      // insured cart. checkoutCart is already entitlement-sanitized,
+      // hence the permissive flag on the recompute.
+      if (
+        Math.abs(
+          review.review.subtotalMinor / 100 -
+            calculateCartItemSubtotal(cart.checkoutCart, true)
+        ) > 0.005
+      ) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Prices Updated', description: 'Prices changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      const reviewedItems = reviewedCheckoutItems(
+        cart.checkoutCart,
+        review.review
+      );
+      if (!reviewedItems) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Cart Changed', description: 'Your cart changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      reviewedCheckoutItemsResult = buildCheckoutOrderItems(reviewedItems);
+      sharedCartBinding = {
+        cart_id: review.review.cartId,
+        cart_version: review.review.cartVersion,
+        checkout_generation: review.review.generation,
+        checkout_session_id: review.review.checkoutSessionId,
+      };
+    }
+
+    await submitPreparedCheckout(
+      { ...context, merchant },
+      sharedCartBinding
+        ? {
+            ...prepared,
+            identity: {
+              ...prepared.identity,
+              ...(reviewedCheckoutItemsResult
+                ? { items: reviewedCheckoutItemsResult }
+                : {}),
+              sharedCartBinding,
+            },
+          }
+        : prepared
+    );
   };
 
   return { handlePlaceOrder };

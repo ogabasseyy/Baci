@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { CartPriceChange, RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { useCheckoutSubmit } from './use-checkout-submit';
@@ -48,6 +49,8 @@ jest.mock('@/services/cart-reprice', () => ({
     }
     return out;
   },
+  pickChangedConditionById: () => ({}),
+  pickChangedOfferIdById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -249,6 +252,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
       orderId: 'order-rv',
@@ -387,7 +395,15 @@ describe('useCheckoutSubmit', () => {
         voucher_award_id: 'award-1',
       },
     ];
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     const params = createParams({ selectedPayment: 'credit_direct' });
 
     const { result } = renderHook(() => useCheckoutSubmit(params));
@@ -425,7 +441,15 @@ describe('useCheckoutSubmit', () => {
         voucher_award_id: 'award-1',
       },
     ];
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     const params = createParams({ selectedPayment: 'pay_on_delivery' });
 
     const { result } = renderHook(() => useCheckoutSubmit(params));
@@ -451,6 +475,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes,
       priceById: { 'line-1': 1250000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     const setIsProcessing = jest.fn();
     const params = createParams({ setIsProcessing });
@@ -462,7 +491,11 @@ describe('useCheckoutSubmit', () => {
     });
 
     expect(mockRepriceCartItems).toHaveBeenCalledWith([cartItem], 'merchant-1');
-    expect(mockRepriceItems).toHaveBeenCalledWith({ 'line-1': 1250000 });
+    expect(mockRepriceItems).toHaveBeenCalledWith(
+      { 'line-1': 1250000 },
+      {},
+      {}
+    );
     expect(Alert.alert).toHaveBeenCalledWith(
       'Prices updated',
       expect.stringContaining('please review the new total'),
@@ -516,6 +549,11 @@ describe('useCheckoutSubmit', () => {
       resolveReprice({
         changes: [],
         priceById: { 'line-1': 1200000 },
+        conditionById: {},
+        conditionChanges: [],
+        offerIdById: {},
+        adoptions: [],
+        unavailable: [],
       });
       await firstSubmit;
     });
@@ -527,6 +565,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 1201500,
@@ -562,6 +605,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     // A 100% discount zeroes the gateway amount while the order stays
     // unpaid; the server still generates and emails the proforma — but
@@ -597,6 +645,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue({
       amountDueToGateway: 0,
@@ -631,6 +684,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     let resolvePersistedRead: (value: null) => void = () => undefined;
     mockReadPersistedRedvaultOrder.mockImplementationOnce(
@@ -679,6 +737,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     const setIsProcessing = jest.fn();
     const params = createParams({ setIsProcessing });
@@ -711,6 +774,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     const params = createParams();
 
@@ -733,6 +801,11 @@ describe('useCheckoutSubmit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
 
     const { result } = renderHook(() => useCheckoutSubmit(createParams()));
@@ -769,7 +842,15 @@ describe('useCheckoutSubmit', () => {
   });
 
   it('preserves the payforme method so the server dispatches the payment request', async () => {
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     const params = createParams({ selectedPayment: 'payforme' });
 
     const { result } = renderHook(() => useCheckoutSubmit(params));
@@ -788,7 +869,15 @@ describe('useCheckoutSubmit', () => {
   });
 
   it('threads the nested Klump order id into init failures', async () => {
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     const initError = new Error('klump init failed');
     mockSubmitBnplCheckout.mockImplementation((params) => {
       params.onOrderCreated?.('order-klump-1');
@@ -816,7 +905,15 @@ describe('useCheckoutSubmit', () => {
   });
 
   it('threads the committed order id into post-creation init failures', async () => {
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     const initError = new Error('provider init threw');
     const { finalizeCheckoutPayment } = jest.requireMock(
       './checkout-payment-finalization'
@@ -850,7 +947,15 @@ describe('useCheckoutSubmit', () => {
     // The server conversion payload joins on external_id: the signed-in
     // auth identity wins cross-device matching, never the storefront
     // customer row.
-    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
     // Unique order identity: the durable purchase claim persists across
     // tests in this file, so reusing the default order would read as an
     // already-recorded conversion and skip the tracking under test.
@@ -883,5 +988,27 @@ describe('useCheckoutSubmit', () => {
         userId: 'auth-user-1',
       })
     );
+  });
+  it('explains a missing shared cart review without sending an order', async () => {
+    useNativeSharedCartStore.setState({
+      enabled: true,
+      checkoutReview: null,
+      snapshot: null,
+    });
+    try {
+      const params = createParams({ selectedPayment: 'paystack' });
+      const { result } = renderHook(() => useCheckoutSubmit(params));
+      await act(async () => {
+        await result.current(address);
+      });
+      expect(mockCreateOrder).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Cart is syncing',
+        expect.stringContaining('review')
+      );
+      expect(params.setStep).toHaveBeenCalledWith('review');
+    } finally {
+      useNativeSharedCartStore.setState({ enabled: false });
+    }
   });
 });

@@ -79,6 +79,7 @@ const defaultMockPaymentSettings = {
   korapay_enabled: false,
   pay_on_delivery_enabled: false,
   paystack_enabled: true,
+  shipping_insurance_enabled: false,
   vat_rate: 7.5,
   vat_registration_status: 'unregistered',
   wallet_order_auto_debit_enabled: false,
@@ -295,7 +296,15 @@ jest.mock('@/services/cart-reprice', () => {
   );
   return {
     ...actual,
-    repriceCartItems: jest.fn(async () => ({ priceById: {}, changes: [] })),
+    repriceCartItems: jest.fn(async () => ({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+      unavailable: [],
+      offerIdById: {},
+      adoptions: [],
+    })),
   };
 });
 

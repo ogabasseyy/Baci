@@ -71,6 +71,73 @@ describe('order idempotency hashing', () => {
     );
   });
 
+  it('omits offer_id from pre-offer payloads so stored hashes stay byte-identical', () => {
+    const payload = buildOrderIdempotencyPayload(baseOrder);
+
+    expect(JSON.stringify(payload)).not.toContain('offer_id');
+  });
+
+  it('distinguishes two condition offers on the same product line', () => {
+    const offerA = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      items: [
+        {
+          ...baseOrder.items[0],
+          offer_id: '55555555-5555-5555-5555-555555555555',
+        },
+      ],
+    });
+    const offerB = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      items: [
+        {
+          ...baseOrder.items[0],
+          offer_id: '66666666-6666-6666-6666-666666666666',
+        },
+      ],
+    });
+    const offerAAgain = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      items: [
+        {
+          ...baseOrder.items[0],
+          offerId: '55555555-5555-5555-5555-555555555555',
+        },
+      ],
+    });
+
+    expect(hashOrderIdempotencyPayload(offerA)).not.toBe(
+      hashOrderIdempotencyPayload(offerB)
+    );
+    expect(hashOrderIdempotencyPayload(offerA)).toBe(
+      hashOrderIdempotencyPayload(offerAAgain)
+    );
+  });
+
+  it('hashes offer-only line differences identically after line reordering', () => {
+    const firstOfferLine = {
+      ...baseOrder.items[0],
+      offer_id: '55555555-5555-5555-5555-555555555555',
+    };
+    const secondOfferLine = {
+      ...baseOrder.items[0],
+      offer_id: '66666666-6666-6666-6666-666666666666',
+    };
+
+    const left = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      items: [firstOfferLine, secondOfferLine],
+    });
+    const right = buildOrderIdempotencyPayload({
+      ...baseOrder,
+      items: [secondOfferLine, firstOfferLine],
+    });
+
+    expect(hashOrderIdempotencyPayload(left)).toBe(
+      hashOrderIdempotencyPayload(right)
+    );
+  });
+
   it('hashes duplicate product and variant lines identically after line reordering', () => {
     const blueLine = {
       ...baseOrder.items[0],

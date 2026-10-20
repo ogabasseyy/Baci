@@ -26,6 +26,7 @@ import {
 } from '@/contexts/customer-auth-context';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { useToast } from '@/hooks/use-toast';
 import { asRoute } from '@/lib/routes';
 
 const accountLinks = [
@@ -70,6 +71,7 @@ interface AccountPageClientProps {
 export function AccountPageClient({
   initialCustomer = null,
 }: AccountPageClientProps = {}) {
+  const { toast } = useToast();
   const router = useRouter();
   const { merchant, loading: merchantLoading, basePath } = useMerchant();
   const {
@@ -93,8 +95,11 @@ export function AccountPageClient({
       await logout();
       router.push(asRoute(getHref('/')));
     } catch {
-      // Redirect to home even on failure to avoid broken state
-      router.push(asRoute(getHref('/')));
+      toast({
+        title: 'Could not sign out',
+        description: 'Please reconnect and try again.',
+        variant: 'destructive',
+      });
     }
   };
 

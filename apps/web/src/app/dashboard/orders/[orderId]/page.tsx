@@ -1,7 +1,9 @@
 import { notFound } from 'next/navigation';
 import { getMerchantForUser } from '@/lib/merchant-server';
+import { shouldShowOrderRefundPanel } from '@/lib/orders/should-show-order-refund-panel';
 import { getOrder, type Order } from '../actions';
 import OrderDetailsClientPage from './client-page';
+import { getInitialRefundSummary } from './initial-refund-summary';
 
 export const metadata = {
   title: 'Order Details - Baci',
@@ -31,5 +33,18 @@ export default async function OrderDetailsPage({ params }: Props) {
     return notFound();
   }
 
-  return <OrderDetailsClientPage initialOrder={order} />;
+  // The summary fetch chains after the order (never parallel): most
+  // orders cannot show the panel, and getOrder resolves order_number
+  // identifiers to the canonical UUID the uuid-typed RPC needs. The
+  // gate mirrors the section exactly, so a shown panel always paints
+  // first content from the server instead of flashing a loader.
+  const initialRefundSummary = shouldShowOrderRefundPanel(order)
+    ? await getInitialRefundSummary(order.id)
+    : null;
+  return (
+    <OrderDetailsClientPage
+      initialOrder={order}
+      initialRefundSummary={initialRefundSummary}
+    />
+  );
 }

@@ -13,6 +13,7 @@ export interface CheckoutOrderItemInput {
   image?: string;
   image_url?: string;
   variantId?: string;
+  offerId?: string;
   variantAttributes?: Record<string, string>;
   selectedColor?: string;
   selectedStorage?: string;
@@ -20,10 +21,13 @@ export interface CheckoutOrderItemInput {
   assuranceRate?: number;
   quizAwardId?: string;
   quizVoucherToken?: string;
+  /** Confirmed shared-cart line id; absent for legacy lines. */
+  serverLineId?: string | null;
 }
 
 export interface CheckoutOrderItem {
   condition?: CheckoutOrderItemCondition;
+  cart_line_id?: string;
   product_id: string;
   name: string;
   quantity: number;
@@ -32,6 +36,7 @@ export interface CheckoutOrderItem {
   image?: string;
   image_url?: string;
   variantId?: string;
+  offer_id?: string;
   variantAttributes: Record<string, string>;
   voucher_award_id?: string;
   voucher_token?: string;
@@ -56,8 +61,14 @@ export function buildCheckoutOrderItems(
       variantAttributes.storage = item.selectedStorage;
     }
 
+    const serverLineId =
+      typeof item.serverLineId === 'string' && item.serverLineId.trim()
+        ? item.serverLineId.trim()
+        : undefined;
+
     return {
       condition: item.condition,
+      ...(serverLineId ? { cart_line_id: serverLineId } : {}),
       product_id: String(item.product_id ?? item.id),
       name: item.name,
       quantity: item.quantity,
@@ -66,6 +77,7 @@ export function buildCheckoutOrderItems(
       image: item.image,
       image_url: item.image_url,
       variantId: item.variantId,
+      offer_id: item.offerId,
       variantAttributes,
       ...(hasQuizVoucher
         ? {

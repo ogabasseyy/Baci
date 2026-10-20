@@ -6,23 +6,32 @@ import {
   sanitizeCartItems,
 } from '@/lib/checkout/cart-entitlement-sanitizer';
 
+export interface SharedCartRef {
+  cartId: string;
+  version: number;
+}
+
 export interface CheckoutCartModel {
   checkoutCart: CartItem[];
   checkoutCartCatalogSubtotal: number;
   checkoutCartTotal: number;
   itemSubtotal: number;
   quoteItemsFingerprint: string;
+  /** Authoritative cart identity for bound checkout; null for legacy carts. */
+  sharedCartRef: SharedCartRef | null;
 }
 
 /** Derive the sanitized cart values used by checkout and shipping quotes. */
 export function deriveCheckoutCartModel(
   cart: CartItem[],
-  hasPriceNegotiation: boolean
+  hasPriceNegotiation: boolean,
+  sharedCartRef?: SharedCartRef | null
 ): CheckoutCartModel {
   const checkoutCart = sanitizeCartItems(cart, hasPriceNegotiation);
 
   return {
     checkoutCart,
+    sharedCartRef: sharedCartRef ?? null,
     // Shipping tiers use catalog goods prices even when the buyer has an
     // entitled negotiated checkout price; the order endpoint verifies the
     // quote against the same canonical catalog subtotal.

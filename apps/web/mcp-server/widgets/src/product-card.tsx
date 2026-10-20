@@ -1,3 +1,5 @@
+import { getConfirmedStockLabel } from '../../confirmed-stock-label';
+import { openOgabasseyUrl } from './open-ogabassey-url';
 import { useState } from 'react';
 import { getProductImageUrl } from './product-image';
 import { formatPrice } from './format-price';
@@ -19,6 +21,7 @@ export function ProductCard({
   onViewCart: () => void;
 }) {
   const [imageError, setImageError] = useState(false);
+  const stockLabel = getConfirmedStockLabel(product.in_stock, product.stock_level);
   const imageUrl = getProductImageUrl(product);
   const hasDiscount =
     product.compare_at_price && product.compare_at_price > product.price;
@@ -69,8 +72,8 @@ export function ProductCard({
             </span>
           )}
         </div>
-        {product.stock_level && (
-          <span className="stock-badge">{product.stock_level}</span>
+        {stockLabel && (
+          <span className="stock-badge">{stockLabel}</span>
         )}
       </div>
       <div className="product-actions">
@@ -117,11 +120,7 @@ export function ProductCard({
           className="btn-buy-now"
           onClick={() => {
             const url = resolveOptionAwareProductUrl(product).url;
-            if (window.openai?.openExternal) {
-              window.openai.openExternal({ href: url });
-            } else {
-              window.open(url, '_blank');
-            }
+            openOgabasseyUrl(url);
           }}
         >
           Review on Ogabassey

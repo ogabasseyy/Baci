@@ -32,10 +32,14 @@ export interface StickyAddToCartProps {
   selectedAttributes?: Record<string, string>;
   /** Selected condition for offer-driven or conditioned variant products */
   selectedCondition?: string;
+  /** Selected condition-offer id (two offers can share one condition) */
+  selectedOfferId?: string;
   /** Selected display price for the current condition / variant */
   selectedPrice?: number;
   /** Selected stock for the current condition / variant */
   selectedStock?: number;
+  /** Externally forced unavailable state (e.g. a dead exact-offer link) */
+  purchaseDisabled?: boolean;
   /** Minimum distance from top before showing (default: 400px) */
   showAfterScroll?: number;
   /** Custom class name */
@@ -61,8 +65,10 @@ export function StickyAddToCart({
   selectedVariant,
   selectedAttributes,
   selectedCondition,
+  selectedOfferId,
   selectedPrice,
   selectedStock,
+  purchaseDisabled,
   showAfterScroll = 400,
   className,
 }: StickyAddToCartProps) {
@@ -90,18 +96,21 @@ export function StickyAddToCart({
   // Don't render on desktop
   if (!isMobile) return null;
 
-  // Find cart item matching product and variant
+  // Find cart item matching product and variant (mirrors the PDP main
+  // matching: two offers can share one displayed condition, so match the
+  // selected offer by id and require no offer id for the base line).
   const cartItem = cart.find((item) => {
     if (selectedVariant) {
       return item.id === product.id && item.variantId === selectedVariant.id;
     }
+    if (item.id !== product.id || item.variantId) return false;
+    if (selectedOfferId) return item.offerId === selectedOfferId;
+    if (item.offerId) return false;
     const effectiveSelectedCondition =
       normalizeCanonicalProductCondition(
         selectedCondition ?? product.condition
       ) || 'new';
     return (
-      item.id === product.id &&
-      !item.variantId &&
       (normalizeCanonicalProductCondition(
         item.condition ?? product.condition
       ) || 'new') === effectiveSelectedCondition
@@ -123,12 +132,14 @@ export function StickyAddToCart({
   };
 
   const handleAddToCart = () => {
+    // The cart guard reads product stock: carry the resolved selection
+    // stock (already serialized/offer-aware) instead of the parent stock.
     const productToAdd =
       selectedVariant || selectedCondition
-        ? { ...product, price: currentPrice }
+        ? { ...product, price: currentPrice, stock: currentStock }
         : product;
 
-    addToCart(
+    const outcome = addToCart(
       productToAdd,
       quantity,
       selectedVariant
@@ -138,9 +149,21 @@ export function StickyAddToCart({
             variantAttributes: selectedAttributes || {},
           }
         : selectedCondition
-          ? { condition: selectedCondition }
+          ? {
+              condition: selectedCondition,
+              ...(selectedOfferId ? { offerId: selectedOfferId } : null),
+            }
           : undefined
     );
+
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     const variantInfo = selectedVariant
       ? ` (${Object.values(selectedAttributes || {}).join(', ')})`
@@ -255,10 +278,10 @@ export function StickyAddToCart({
                   size="sm"
                   className="gap-1.5 px-4"
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
+                  disabled={isOutOfStock || purchaseDisabled}
                 >
                   <ShoppingCart className="size-4" />
-                  {isOutOfStock ? 'Unavailable' : 'Add'}
+                  {isOutOfStock || purchaseDisabled ? 'Unavailable' : 'Add'}
                 </ThemedButton>
               </div>
             )}

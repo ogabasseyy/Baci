@@ -163,3 +163,28 @@ describe('OrderResponseSchema currency', () => {
     }
   });
 });
+
+it('preserves the shared-cart checkout binding and line IDs through request validation', () => {
+  const binding = {
+    cart_id: '11111111-1111-4111-8111-111111111111',
+    checkout_session_id: '22222222-2222-4222-8222-222222222222',
+    checkout_generation: 2,
+    cart_version: 4,
+  };
+  const line = '33333333-3333-4333-8333-333333333333';
+  const parsed = CreateOrderRequestSchema.parse({
+    ...baseOrder,
+    shared_cart: binding,
+    items: [{ ...baseOrder.items[0], cart_line_id: line }],
+  });
+  expect(parsed).toEqual(
+    expect.objectContaining({
+      shared_cart: binding,
+      items: [expect.objectContaining({ cart_line_id: line })],
+    })
+  );
+  expect(
+    CreateOrderRequestSchema.safeParse({ ...baseOrder, shared_cart: binding })
+      .success
+  ).toBe(false);
+});

@@ -4,6 +4,10 @@ import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { StickyBottomActions } from './StickyBottomActions';
 
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  useMerchantPaymentSettings: () => ({ data: undefined }),
+}));
+
 const mockPrefetch = jest.fn();
 const mockNavigate = jest.fn();
 

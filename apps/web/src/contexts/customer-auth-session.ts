@@ -7,38 +7,87 @@
 //
 // The type imports below are type-only (erased at compile time); there is no
 // runtime cycle back into the context module.
+import {
+  clearCartDeviceRevocationPending,
+  markCartDeviceRevocationPending,
+  revokeCartDeviceSession,
+} from '@/hooks/cart/shared-cart-session-revoke-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
+import {
+  clearCustomerAuthRollbackPending,
+  getRememberedCustomerUserId,
+  isCustomerAuthRollbackPending,
+  resetRememberedCustomerSessionsForTests,
+  rollbackCustomerAuthSession,
+  setRememberedCustomerUserId,
+} from './customer-auth-storage';
 import { publishCustomerIdentity } from './customer-live-identity';
+
+export { resetRememberedCustomerSessionsForTests };
 
 interface CustomerSession {
   customer: Customer;
   user: CustomerUser;
 }
 
+async function retirePreviousAccountCartAuthority(
+  merchantSlug: string,
+  previousUserId: string
+): Promise<boolean> {
+  // Always mark revocation pending, clear local cart storage, and bump
+  // cartSessionGeneration so the browser drops local cart items and
+  // fences shared-cart adoption until server revocation succeeds.
+  markCartDeviceRevocationPending?.(merchantSlug);
+  clearCartStorage(merchantSlug, previousUserId);
+  const revoked = await revokeCartDeviceSession(merchantSlug);
+  if (!revoked.ok) {
+    setRememberedCustomerUserId(merchantSlug, previousUserId);
+    return false;
+  }
+  clearCartDeviceRevocationPending?.(merchantSlug);
+  setRememberedCustomerUserId(merchantSlug, null);
+  return true;
+}
+
+type CustomerSessionFetchResult =
+  | { status: 'authenticated'; session: CustomerSession }
+  | { status: 'unauthenticated' }
+  | { status: 'lookup_failed'; userId: string | null };
+
 async function fetchCustomerSession(
   merchantSlug: string
-): Promise<CustomerSession | null> {
+): Promise<CustomerSessionFetchResult> {
   const response = await fetch(
     `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
   );
+  if (response.ok === false) {
+    return { status: 'lookup_failed', userId: null };
+  }
   const data = (await response.json()) as {
     authenticated?: boolean;
     customer?: Customer;
     user?: CustomerUser;
   };
 
+  if (data.authenticated === false) {
+    return { status: 'unauthenticated' };
+  }
   if (!data.authenticated || !data.user || !data.customer) {
-    return null;
+    return { status: 'lookup_failed', userId: data.user?.id ?? null };
   }
 
   return {
-    customer: data.customer,
-    user: data.user,
+    status: 'authenticated',
+    session: {
+      customer: data.customer,
+      user: data.user,
+    },
   };
 }
 
 interface SessionSetters {
+  currentUserId?: string | null;
   setUser: (user: CustomerUser | null) => void;
   setCustomer: (customer: Customer | null) => void;
   setIsLoading: (loading: boolean) => void;
@@ -48,18 +97,65 @@ interface SessionSetters {
 // component body, keeping the provider compilable by the React Compiler.
 export async function loadCustomerSession(
   merchantSlug: string,
-  { setUser, setCustomer, setIsLoading }: SessionSetters,
+  { currentUserId, setUser, setCustomer, setIsLoading }: SessionSetters,
   isCancelled: () => boolean = () => false
 ): Promise<void> {
+  const previousUserId = getRememberedCustomerUserId(
+    merchantSlug,
+    currentUserId
+  );
   try {
-    const session = await fetchCustomerSession(merchantSlug);
+    if (isCustomerAuthRollbackPending(merchantSlug)) {
+      if (previousUserId) {
+        await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
+        if (isCancelled()) return;
+      }
+      await rollbackCustomerAuthSession(merchantSlug);
+      if (isCancelled()) return;
+      setUser(null);
+      setCustomer(null);
+      publishCustomerIdentity(null, null, merchantSlug);
+      return;
+    }
+
+    const result = await fetchCustomerSession(merchantSlug);
     if (isCancelled()) return;
 
-    if (session) {
+    if (result.status === 'authenticated') {
+      const { session } = result;
+      if (previousUserId && previousUserId !== session.user.id) {
+        const retired = await retirePreviousAccountCartAuthority(
+          merchantSlug,
+          previousUserId
+        );
+        if (isCancelled()) return;
+        if (!retired) {
+          // Mirror commitCustomerAuthSession: clearing React state
+          // is not enough, because the browser already holds the new
+          // account's auth cookie. Roll the auth session back so a
+          // later session-aware page cannot authenticate the new
+          // customer while the old cart authority is unretired.
+          await rollbackCustomerAuthSession(merchantSlug);
+          if (isCancelled()) return;
+          setUser(null);
+          setCustomer(null);
+          publishCustomerIdentity(null, null, merchantSlug);
+          return;
+        }
+      }
+      setRememberedCustomerUserId(merchantSlug, session.user.id);
       setUser(session.user);
       setCustomer(session.customer);
       publishCustomerIdentity(session.user, session.customer, merchantSlug);
     } else {
+      if (
+        previousUserId &&
+        (result.status === 'unauthenticated' ||
+          (result.userId !== null && result.userId !== previousUserId))
+      ) {
+        await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
+        if (isCancelled()) return;
+      }
       setUser(null);
       setCustomer(null);
       publishCustomerIdentity(null, null, merchantSlug);
@@ -75,23 +171,77 @@ export async function loadCustomerSession(
   }
 }
 
+export async function commitCustomerAuthSession(
+  merchantSlug: string,
+  session: CustomerSession,
+  {
+    currentUserId,
+    setUser,
+    setCustomer,
+    setOtpState,
+  }: {
+    currentUserId?: string | null;
+    setUser: (user: CustomerUser | null) => void;
+    setCustomer: (customer: Customer | null) => void;
+    setOtpState: (otp: OtpState | null) => void;
+  }
+): Promise<boolean> {
+  const previousUserId = getRememberedCustomerUserId(
+    merchantSlug,
+    currentUserId
+  );
+  if (previousUserId && previousUserId !== session.user.id) {
+    const retired = await retirePreviousAccountCartAuthority(
+      merchantSlug,
+      previousUserId
+    );
+    if (!retired) {
+      await rollbackCustomerAuthSession(merchantSlug);
+      setUser(null);
+      setCustomer(null);
+      publishCustomerIdentity(null, null, merchantSlug);
+      return false;
+    }
+  }
+  clearCustomerAuthRollbackPending(merchantSlug);
+  setRememberedCustomerUserId(merchantSlug, session.user.id);
+  setUser(session.user);
+  setCustomer(session.customer);
+  publishCustomerIdentity(session.user, session.customer, merchantSlug);
+  setOtpState(null);
+  return true;
+}
+
 // Module-scope helper for logout so its try/catch/finally stays outside render.
 export async function performCustomerLogout(
   merchantSlug: string,
   setUser: (user: CustomerUser | null) => void,
   setCustomer: (customer: Customer | null) => void,
-  setOtpState: (otp: OtpState | null) => void
+  setOtpState: (otp: OtpState | null) => void,
+  userId?: string | null
 ): Promise<void> {
+  const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
+  // Do not clear Auth or report success until this device's cart
+  // authority is retired.
+  const revoked = await revokeCartDeviceSession(merchantSlug);
+  if (!revoked.ok)
+    throw new Error('Could not safely sign out. Please retry when connected.');
   try {
-    await fetch('/api/storefront/auth/logout', { method: 'POST' });
+    const response = await fetch('/api/storefront/auth/logout', {
+      method: 'POST',
+    });
+    if (response.ok) {
+      clearCustomerAuthRollbackPending(merchantSlug);
+    }
   } catch (error) {
     console.error('Logout error:', error);
   } finally {
+    setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug);
+    clearCartStorage(merchantSlug, previousUserId ?? userId);
   }
 }

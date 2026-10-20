@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
+import { widgetHost } from './widget-host';
 
 const products = [
   { id: '11111111-1111-4111-8111-111111111111', name: 'Phone One', slug: 'phone-one', price: 100000 },
@@ -8,8 +9,11 @@ const products = [
 ];
 
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
 });
+
+beforeEach(() => widgetHost.reset());
 
 describe('Ogabassey cart handoff widget', () => {
   it('shows an incomplete price search instead of an empty catalog prompt', () => {
@@ -33,6 +37,58 @@ describe('Ogabassey cart handoff widget', () => {
     expect(setOpenInAppUrl).toHaveBeenCalledWith({ href: 'https://ogabassey.com' });
     fireEvent.click(screen.getByRole('button', { name: 'Expand catalog' }));
     expect(requestDisplayMode).toHaveBeenCalledWith({ mode: 'fullscreen' });
+  });
+
+  it('reveals fullscreen support when standard host actions become ready', () => {
+    window.openai = { toolOutput: { products } };
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Expand catalog' })).toBeNull();
+
+    act(() => {
+      widgetHost.update({
+        mcpAppReady: true,
+        requestDisplayMode: vi.fn().mockResolvedValue(undefined),
+      });
+    });
+
+    expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
+  });
+
+  it('reveals fullscreen support when the legacy host injects it late', () => {
+    window.openai = { toolOutput: { products } };
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Expand catalog' })).toBeNull();
+
+    act(() => {
+      if (window.openai) window.openai.requestDisplayMode = vi.fn().mockResolvedValue(undefined);
+      window.dispatchEvent(new CustomEvent('openai:set_globals', {
+        detail: { globals: { requestDisplayMode: window.openai?.requestDisplayMode } },
+      }));
+    });
+
+    expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
+  });
+
+  it('reports inline height again when standard host actions become ready', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    const notifyIntrinsicHeight = vi.fn();
+    window.openai = { toolOutput: { products }, notifyIntrinsicHeight };
+    render(<App />);
+    const initialCalls = notifyIntrinsicHeight.mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
+
+    act(() => {
+      widgetHost.update({
+        mcpAppReady: true,
+        notifyIntrinsicHeight,
+        requestDisplayMode: vi.fn().mockResolvedValue(undefined),
+      });
+    });
+
+    expect(notifyIntrinsicHeight.mock.calls.length).toBeGreaterThan(initialCalls);
+    vi.unstubAllGlobals();
   });
 
   it('updates the catalog layout when the host enters fullscreen', () => {

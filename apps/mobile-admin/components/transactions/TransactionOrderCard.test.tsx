@@ -25,7 +25,7 @@ vi.mock('react-native', async () => {
       accessibilityState?: { expanded?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
-      onPress?: () => void;
+      onPress?: (event?: { stopPropagation?: () => void }) => void;
     }) =>
       React.createElement(
         'button',
@@ -34,7 +34,7 @@ vi.mock('react-native', async () => {
           'aria-expanded': accessibilityState?.expanded,
           disabled,
           role: accessibilityRole,
-          onClick: () => onPress?.(),
+          onClick: (event) => onPress?.(event),
         },
         children
       ),
@@ -76,6 +76,14 @@ vi.mock('@react-native-vector-icons/ionicons', async () => {
     __esModule: true,
   };
 });
+
+const clipboardMocks = vi.hoisted(() => ({
+  setStringAsync: vi.fn(),
+}));
+
+vi.mock('expo-clipboard', () => ({
+  setStringAsync: clipboardMocks.setStringAsync,
+}));
 
 vi.mock('@/components/transactions/transactions.styles', () => ({
   styles: {},
@@ -293,5 +301,124 @@ describe('TransactionOrderCard', () => {
       color: LIGHT_COLORS.error,
     });
     expect(screen.queryByText('Profit NGN -500')).not.toBeInTheDocument();
+  });
+
+  it('renders the stored condition and offer ref so offer lines stay distinguishable', () => {
+    const offerItem = {
+      ...editableItem,
+      condition: 'refurbished',
+      offerId: '55555555-5555-4555-8555-555555555555',
+      offerGrade: 'B',
+      offerConditionNotes: 'Light wear',
+    };
+
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={vi.fn()}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [offerItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+
+    expect(screen.getByText(/Condition /)).toHaveTextContent(
+      'Condition Open Box · Grade B · Light wear'
+    );
+    expect(screen.getByText('Offer 55555555')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/55555555-5555-4555-8555-555555555555/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('copies the full offer id when the truncated transaction ref is pressed', async () => {
+    const offerItem = {
+      ...editableItem,
+      offerId: '55555555-5555-4555-8555-555555555555',
+    };
+
+    const onOpenEditor = vi.fn();
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={onOpenEditor}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [offerItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: /copy full offer reference/i })
+    );
+
+    await vi.waitFor(() => {
+      expect(clipboardMocks.setStringAsync).toHaveBeenCalledWith(
+        '55555555-5555-4555-8555-555555555555'
+      );
+    });
+    // The copy press must not bubble to the row editor on web targets.
+    expect(onOpenEditor).not.toHaveBeenCalled();
+  });
+
+  it('omits the condition row when a line has neither condition nor offer', () => {
+    render(
+      <TransactionOrderCard
+        colors={LIGHT_COLORS}
+        formatCurrency={(amount) => `NGN ${amount}`}
+        onOpenEditor={vi.fn()}
+        order={{
+          createdAt: '2026-04-11T09:00:00.000Z',
+          customerEmail: null,
+          customerName: 'Bassey',
+          customerPhone: null,
+          estimatedProfit: 3400,
+          id: 'order-1',
+          items: [editableItem],
+          missingCostCount: 0,
+          orderNumber: 'ORD-1',
+          paymentMethod: 'card',
+          searchText: 'ord-1 bassey',
+          total: 4600,
+        }}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /view order details for bassey/i })
+    );
+
+    expect(screen.queryByText(/Condition /)).not.toBeInTheDocument();
   });
 });

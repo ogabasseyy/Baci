@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { openOgabasseyUrl } from './open-ogabassey-url';
+import { widgetHost } from './widget-host';
 
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
   vi.restoreAllMocks();
 });
@@ -26,8 +28,8 @@ it('navigates a live pending tab instead of opening a new one', () => {
   expect(
     openOgabasseyUrl(
       'https://ogabassey.com/cart',
-      pendingTab as unknown as Window
-    )
+      pendingTab as unknown as Window,
+    ),
   ).toBe(true);
   expect(pendingTab.location.href).toBe('https://ogabassey.com/cart');
   expect(opened).not.toHaveBeenCalled();
@@ -43,33 +45,42 @@ it('opens a noopener tab when no bridge or pending tab exists', () => {
   expect(opened).toHaveBeenCalledWith(
     'https://ogabassey.com/cart',
     '_blank',
-    'noopener,noreferrer'
+    'noopener,noreferrer',
   );
 });
 
-it('reports blocked popups instead of throwing', () => {
+it('does not report a failed popup from the null result required by noopener', () => {
   window.openai = {};
   vi.spyOn(window, 'open').mockReturnValue(null);
 
+  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(true);
+});
+
+it.each([
+  null,
+  { closed: true, location: { href: '' } },
+])('reports an unavailable reserved tab without an async popup retry', (tab) => {
+  const opened = vi.spyOn(window, 'open');
+  expect(
+    openOgabasseyUrl('https://ogabassey.com/cart', tab as Window | null),
+  ).toBe(false);
+  expect(opened).not.toHaveBeenCalled();
+});
+
+it('reports a browser exception as a failed navigation request', () => {
+  window.openai = {};
+  vi.spyOn(window, 'open').mockImplementation(() => {
+    throw new Error('navigation rejected');
+  });
   expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(false);
 });
 
-it('falls back to a fresh tab when the pending tab was closed', () => {
-  window.openai = {};
-  const opened = vi
-    .spyOn(window, 'open')
-    .mockReturnValue({} as unknown as Window);
-  const pendingTab = { closed: true, location: { href: '' } };
-
-  expect(
-    openOgabasseyUrl(
-      'https://ogabassey.com/cart',
-      pendingTab as unknown as Window
-    )
-  ).toBe(true);
-  expect(opened).toHaveBeenCalledWith(
-    'https://ogabassey.com/cart',
-    '_blank',
-    'noopener,noreferrer'
-  );
+it('surfaces a rejected retained-bridge call as a host error', async () => {
+  window.openai = {
+    openExternal: vi.fn().mockRejectedValueOnce(new Error('denied')),
+  };
+  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(true);
+  await vi.waitFor(() => {
+    expect(widgetHost.get()?.hostError).toContain('Could not open');
+  });
 });

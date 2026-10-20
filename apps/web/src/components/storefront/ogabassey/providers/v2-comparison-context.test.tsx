@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 import {
@@ -40,6 +41,7 @@ function ComparisonConsumer() {
 describe('V2ComparisonProvider', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    sessionStorage.clear();
     localStorage.clear();
   });
 
@@ -49,67 +51,55 @@ describe('V2ComparisonProvider', () => {
     vi.restoreAllMocks();
   });
 
-  it('defers comparison storage hydration until idle timeout', () => {
-    const getItemSpy = vi
-      .spyOn(Storage.prototype, 'getItem')
-      .mockReturnValue(JSON.stringify([baseProduct]));
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
-
-    render(
-      <V2ComparisonProvider>
-        <ComparisonConsumer />
-      </V2ComparisonProvider>
-    );
-
-    expect(getItemSpy).not.toHaveBeenCalled();
-    expect(setItemSpy).not.toHaveBeenCalled();
-    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
-
-    act(() => {
-      vi.advanceTimersByTime(1200);
-    });
-
-    expect(getItemSpy).toHaveBeenCalledOnce();
-    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+  it('continues in memory when browser storage reads and writes are denied', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Denied', 'SecurityError'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Denied', 'SecurityError'); });
+    function MemoryConsumer() {
+      const { addToCompare, isInCompare, compareItems, clearCompare } = useV2Comparison();
+      return <div>
+        <span>{isInCompare(baseProduct.id) ? 'Selected' : 'Not selected'}</span>
+        <span data-testid="memory-count">{compareItems.length}</span>
+        <button type="button" onClick={() => addToCompare(baseProduct)}>Select product</button>
+        <button type="button" onClick={clearCompare}>Clear selection</button>
+      </div>;
+    }
+    render(<V2ComparisonProvider><MemoryConsumer /></V2ComparisonProvider>);
+    expect(screen.getByText('Not selected')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1200));
+    fireEvent.click(screen.getByRole('button', {name: 'Select product'}));
+    expect(screen.getByText('Selected')).toBeInTheDocument();
+    expect(screen.getByTestId('memory-count')).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    expect(screen.getByText('Not selected')).toBeInTheDocument();
   });
 
-  it('hydrates synchronously before the first comparison mutation', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
-      JSON.stringify([baseProduct])
-    );
+  it('ignores legacy selections from a previous browser session', () => {
+    localStorage.setItem('ogabassey_v2_compare', JSON.stringify([baseProduct]));
+    localStorage.setItem('ogabassey_v2_compare:merchant-a', JSON.stringify([baseProduct]));
+    render(<V2ComparisonProvider storageNamespace="merchant-a"><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', {name: 'Add to compare'}));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    expect(JSON.parse(sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]')).toHaveLength(1);
+  });
 
-    const nextProduct: Product = {
-      ...baseProduct,
-      id: 'product-2',
-      name: 'Xbox Series X',
-    };
-
-    function MutatingConsumer() {
-      const { addToCompare, compareItems } = useV2Comparison();
-
-      return (
-        <div>
-          <span data-testid="compare-count">{compareItems.length}</span>
-          <button onClick={() => addToCompare(nextProduct)} type="button">
-            Add to compare
-          </button>
-        </div>
-      );
-    }
-
-    render(
-      <V2ComparisonProvider>
-        <MutatingConsumer />
-      </V2ComparisonProvider>
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
-
-    expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
+  it('starts empty in a new browser session while retaining same-session selections', () => {
+    const first = render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    fireEvent.click(screen.getByRole('button', {name: 'Add to compare'}));
+    first.unmount();
+    const same = render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    same.unmount();
+    sessionStorage.clear();
+    render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
   });
 
   it('keeps persisted comparison items isolated by merchant namespace', () => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       'ogabassey_v2_compare',
       JSON.stringify([baseProduct])
     );
@@ -129,11 +119,11 @@ describe('V2ComparisonProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
 
     expect(
-      JSON.parse(localStorage.getItem('ogabassey_v2_compare') ?? '[]')
+      JSON.parse(sessionStorage.getItem('ogabassey_v2_compare') ?? '[]')
     ).toHaveLength(1);
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
   });
@@ -155,7 +145,7 @@ describe('V2ComparisonProvider', () => {
 
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
 
@@ -167,7 +157,7 @@ describe('V2ComparisonProvider', () => {
       </V2ComparisonProvider>
     );
 
-    expect(localStorage.getItem('ogabassey_v2_compare:merchant-b')).toBeNull();
+    expect(sessionStorage.getItem('ogabassey_v2_compare:merchant-b')).toBeNull();
     expect(setItemSpy).not.toHaveBeenCalledWith(
       'ogabassey_v2_compare:merchant-b',
       expect.any(String)
@@ -180,12 +170,98 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-b') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-b') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
     expect(setItemSpy).toHaveBeenCalledWith(
       'ogabassey_v2_compare:merchant-b',
       expect.any(String)
     );
+  });
+
+  it('reports the evicted stored item when adding to a full tray before hydration', () => {
+    const stored = [baseProduct, 2, 3, 4].map((entry, index) =>
+      typeof entry === 'number'
+        ? { ...baseProduct, id: `product-${entry}`, name: `Product ${entry}` }
+        : { ...entry, name: `Product ${index + 1}` }
+    );
+    sessionStorage.setItem('ogabassey_v2_compare', JSON.stringify(stored));
+    const nextProduct: Product = {
+      ...baseProduct,
+      id: 'product-5',
+      name: 'Product 5',
+    };
+    function ReportingConsumer() {
+      const { addToCompare, compareItems } = useV2Comparison();
+      const [replacedName, setReplacedName] = useState<string | null>(null);
+      return (
+        <div>
+          <span data-testid="compare-count">{compareItems.length}</span>
+          <span data-testid="replaced-name">{replacedName ?? 'none'}</span>
+          <button
+            onClick={() =>
+              setReplacedName(addToCompare(nextProduct)?.name ?? null)
+            }
+            type="button"
+          >
+            Add to compare
+          </button>
+        </div>
+      );
+    }
+    render(
+      <V2ComparisonProvider>
+        <ReportingConsumer />
+      </V2ComparisonProvider>
+    );
+
+    // No timer advance and no activation event: state is still empty while
+    // storage already holds four selections.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
+
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('4');
+    expect(screen.getByTestId('replaced-name')).toHaveTextContent('Product 1');
+  });
+
+  it('adds no duplicate when the first tap targets a stored id before hydration', () => {
+    sessionStorage.setItem(
+      'ogabassey_v2_compare',
+      JSON.stringify([baseProduct])
+    );
+    function AddProbe() {
+      const { addToCompare, compareItems } = useV2Comparison();
+      const [replacedName, setReplacedName] = useState<string | null>(null);
+      return (
+        <div>
+          <span data-testid="compare-count">{compareItems.length}</span>
+          <span data-testid="replaced-name">{replacedName ?? 'none'}</span>
+          <button
+            onClick={() =>
+              setReplacedName(addToCompare(baseProduct)?.name ?? null)
+            }
+            type="button"
+          >
+            Add to compare
+          </button>
+        </div>
+      );
+    }
+    render(
+      <V2ComparisonProvider>
+        <AddProbe />
+      </V2ComparisonProvider>
+    );
+
+    // No timer advance and no interaction: isInCompare still reads the
+    // empty pre-hydration state (matching the server snapshot), so the
+    // card takes the add branch for this stored id.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
+
+    // The mutation hydrates on demand and dedups: exactly one row and no
+    // reported replacement.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('replaced-name')).toHaveTextContent('none');
   });
 });

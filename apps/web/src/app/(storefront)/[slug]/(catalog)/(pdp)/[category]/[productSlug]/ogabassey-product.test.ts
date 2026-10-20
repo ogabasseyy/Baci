@@ -144,4 +144,16 @@ describe('toOgabasseyProduct', () => {
       },
     ]);
   });
+
+  it('forwards the strict-pool fields the cart aggregate cap reads', () => {
+    const product = makeSeoProduct({
+      inventory_tracking_policy: 'serialized_strict',
+      stock_quantity: 2,
+    });
+
+    const result = toOgabasseyProduct(product, ghanaianCurrency);
+
+    expect(result.inventory_tracking_policy).toBe('serialized_strict');
+    expect(result.stock_quantity).toBe(2);
+  });
 });

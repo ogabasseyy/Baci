@@ -12,8 +12,18 @@ vi.mock('next/image', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href }: { children: ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    children,
+    href,
+    'aria-label': label,
+  }: {
+    children: ReactNode;
+    href: string;
+    'aria-label'?: string;
+  }) => (
+    <a href={href} aria-label={label}>
+      {children}
+    </a>
   ),
 }));
 
@@ -143,6 +153,78 @@ describe('ProductIndexCard', () => {
     expect(screen.getByText('Multiple Conditions')).toBeInTheDocument();
   });
 
+  it('labels the matched condition beside the matched price', () => {
+    render(
+      <ProductIndexCard
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          available_conditions: ['new', 'used'],
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText('Used')).toBeInTheDocument();
+    expect(screen.queryByText('New & Used')).not.toBeInTheDocument();
+  });
+
+  it('omits the snapshot condition when an exact option id is present', () => {
+    render(
+      <ProductIndexCard
+        modern
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            offerId: 'o1',
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    const href = screen
+      .getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+      .getAttribute('href');
+    expect(href).toContain('offer_id=o1');
+    expect(href).not.toContain('condition=');
+    expect(href).not.toContain('match_base=');
+  });
+
+  it('forwards a condition-only match without an exact id', () => {
+    render(
+      <ProductIndexCard
+        modern
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+    ).toHaveAttribute('href', expect.stringContaining('condition=used'));
+    expect(
+      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+    ).toHaveAttribute('href', expect.stringContaining('match_base=1'));
+  });
+
   it('shows the no-image fallback when the product image is blank', () => {
     render(
       <ProductIndexCard
@@ -156,4 +238,76 @@ describe('ProductIndexCard', () => {
       screen.getByRole('img', { name: 'No image available for iPhone 13 Pro' })
     ).toBeInTheDocument();
   });
+});
+
+it('shows modern search text and separate compare and purchase actions', () => {
+  render(
+    <ProductIndexCard
+      modern
+      footer={<button type="button">Compare</button>}
+      formattedPrice="₦550,000"
+      pathPrefix=""
+      product={makeProduct({
+        searchMatch: {
+          productId: 'product-1',
+          total: 1,
+          price: 550000,
+          variantId: 'v1',
+          condition: 'used',
+        },
+      })}
+    />
+  );
+  expect(screen.getByText('iPhone 13 Pro')).toBeInTheDocument();
+  expect(screen.getByText('₦550,000')).toBeInTheDocument();
+  expect(screen.queryByText('View')).not.toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: 'Compare' }).closest('a')
+  ).toBeNull();
+  expect(
+    screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+  ).toHaveAttribute('href', expect.stringContaining('v1'));
+});
+
+it.each([
+  {
+    label: 'legacy variant match',
+    product: { variant_model: 'legacy' as const, has_condition_offers: false },
+    match: { variantId: 'v1' },
+    expected: 'Options',
+  },
+  {
+    label: 'plain product without a match',
+    product: { variant_model: 'legacy' as const, has_condition_offers: false },
+    match: undefined,
+    expected: 'Buy',
+  },
+])('labels the card action $expected for a $label', ({
+  product,
+  match,
+  expected,
+}) => {
+  render(
+    <ProductIndexCard
+      modern
+      formattedPrice="₦550,000"
+      pathPrefix=""
+      product={makeProduct({
+        ...product,
+        ...(match
+          ? {
+              searchMatch: {
+                productId: 'product-1',
+                total: 1,
+                price: 550000,
+                ...match,
+              },
+            }
+          : {}),
+      })}
+    />
+  );
+  expect(
+    screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+  ).toHaveTextContent(expected);
 });

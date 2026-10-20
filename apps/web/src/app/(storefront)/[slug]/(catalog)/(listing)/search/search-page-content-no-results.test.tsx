@@ -45,6 +45,11 @@ vi.mock('next/link', () => ({
   }) => <a {...props}>{children}</a>,
 }));
 
+vi.mock('./search-comparison', () => ({
+  SearchCompareButton: () => null,
+  SearchComparisonTray: () => <section data-testid="search-comparison-tray" />,
+}));
+
 vi.mock('../products/product-index-card', () => ({
   ProductIndexCard: ({
     pathPrefix,
@@ -175,6 +180,25 @@ describe('SearchPageContent', () => {
       'href',
       '/ogabassey/search?q=iphone'
     );
+  });
+
+  it('mounts the comparison tray on empty results so saved selections stay reachable', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 0,
+      didYouMean: null,
+      products: [],
+      productIds: [],
+      query: 'phone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'phone' })
+      )) as React.ReactElement
+    );
+
+    expect(screen.getByTestId('search-comparison-tray')).toBeInTheDocument();
   });
 
   it('shows recovery actions when a search has no results', async () => {

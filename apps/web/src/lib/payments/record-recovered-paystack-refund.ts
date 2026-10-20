@@ -31,7 +31,7 @@ export async function recordRecoveredPaystackRefund(
     current: VerifiedUnknownRefundProvider['current'];
     evidence: RefundRecoveryEvidence;
     payment: CompletedPaymentMatch & { order_id: string };
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<void> {
   const { data: order, error: orderError } = await supabase

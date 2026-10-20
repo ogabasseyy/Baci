@@ -1,6 +1,12 @@
 interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+  /**
+   * Abuse-sensitive buckets deny when the distributed backend is
+   * unavailable instead of falling back to the per-instance memory
+   * store (which cold starts and horizontal scaling would multiply).
+   */
+  failClosedWithoutRedis?: boolean;
 }
 
 interface RateLimitMatch {
@@ -11,6 +17,9 @@ interface RateLimitMatch {
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Submission writes have their own budget; typing and result reads do not consume it.
   '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
+  // Search assistance is an expensive public AI call — keep it at the same
+  // per-IP budget as quiz generation instead of the generic 50/min default.
+  '/api/search/assist': { maxRequests: 5, windowMs: 60_000 },
   // Migration preview validation polls the active job about once per second.
   // Keep this prefix above the default ceiling so the UI can stream progress
   // without tripping middleware rate limiting during normal use.
@@ -27,6 +36,20 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Keep a details lookup available even after a long autocomplete burst.
   '/api/places/details': { maxRequests: 60, windowMs: 60_000 },
   '/api/storefront': { maxRequests: 100, windowMs: 60_000 },
+  // Anonymous cart bootstrap mints retry identity without a proof, so it
+  // gets its own tight per-IP bucket below the storefront ceiling. Cart
+  // reads/writes stay on the parent bucket plus tenant/principal quotas.
+  '/api/storefront/cart/bootstrap': { maxRequests: 20, windowMs: 60_000 },
+  // Handoff preview is unauthenticated and redemption carries a
+  // single-use capability: bound below the storefront ceiling.
+  '/api/storefront/cart/handoff': { maxRequests: 20, windowMs: 60_000 },
+  // The MCP legacy bridge is a server-to-server capability behind one
+  // egress identity. Middleware keys this bucket by a hash of the
+  // well-formed legacy token (see checkRateLimit), never by the shared
+  // broker IP, so tokens do not couple; 600/min per token is the
+  // pre-authentication bound on merchant resolution, above the route's
+  // per merchant + token quota (120/min) enforced after resolution.
+  '/api/storefront/cart/legacy': { maxRequests: 600, windowMs: 60_000 },
   '/api/storefront/negotiation-evidence': {
     maxRequests: 10,
     windowMs: 60_000,
@@ -34,6 +57,19 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   '/api/storefront/imei-check': { maxRequests: 10, windowMs: 60_000 },
   '/api/storefront/auth/send-code': { maxRequests: 3, windowMs: 60_000 },
   '/api/storefront/auth/verify-code': { maxRequests: 5, windowMs: 60_000 },
+  // Product-request intake writes to the merchant inbox. The DB also caps
+  // each merchant at 50/hour, so bound one IP to 10/hour: a single caller
+  // can no longer exhaust the merchant-wide budget, while genuine
+  // zero-result requests (rare, form-gated) stay well under the ceiling
+  // even behind carrier NAT. Fail closed without Redis: the per-instance
+  // memory fallback would let one caller burn the merchant-wide DB
+  // budget during an outage, blocking genuine requests and spamming
+  // the inbox — a 429 outage for a rare form beats inbox exhaustion.
+  '/api/storefront/product-requests': {
+    maxRequests: 10,
+    windowMs: 3_600_000,
+    failClosedWithoutRedis: true,
+  },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },
   '/api/wallet': { maxRequests: 5, windowMs: 60_000 },

@@ -138,7 +138,11 @@ export function useSantaChat() {
           getMerchantCartState(resolvedMerchantSlug).cart,
           product
         ) >= 0;
-      addToCart(product, 1);
+      const outcome = addToCart(product, 1);
+      if (outcome === 'rejected') {
+        showNotification(`"${product.name}" is out of stock`);
+        return;
+      }
 
       const cartItemId = product.id;
       if (

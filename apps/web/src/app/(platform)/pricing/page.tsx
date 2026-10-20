@@ -67,8 +67,6 @@ const PRICING_PLANS: readonly PricingPlan[] = [
       'Multiple Staff Accounts',
       'Advanced Report Builder',
       'Dedicated Account Manager',
-      'API Access',
-      'Wholesale Features',
     ],
     cta: 'Contact Sales',
     href: '/contact' as Route,

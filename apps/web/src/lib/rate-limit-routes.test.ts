@@ -43,6 +43,54 @@ describe('rate-limit route matching', () => {
     ).toBe(100);
   });
 
+  it('caps the expensive search-assist AI call below the default bucket', () => {
+    expect(getRateLimitConfig('/api/search/assist')).toMatchObject({
+      pattern: '/api/search/assist',
+      config: { maxRequests: 5, windowMs: 60_000 },
+    });
+  });
+
+  it('bounds product-request intake per IP below the merchant DB budget', () => {
+    expect(
+      getRateLimitConfig('/api/storefront/product-requests')
+    ).toMatchObject({
+      pattern: '/api/storefront/product-requests',
+      config: { maxRequests: 10, windowMs: 3_600_000 },
+    });
+  });
+
+  it('bounds anonymous cart bootstraps below the storefront bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/bootstrap')).toMatchObject({
+      pattern: '/api/storefront/cart/bootstrap',
+      config: { maxRequests: 20, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/storefront/cart').config.maxRequests).toBe(
+      100
+    );
+    expect(
+      getRateLimitConfig('/api/storefront/cart/commands').config.maxRequests
+    ).toBe(100);
+  });
+
+  it('bounds handoff issue, redeem and preview below the storefront bucket', () => {
+    for (const path of [
+      '/api/storefront/cart/handoff',
+      '/api/storefront/cart/handoff/redeem',
+    ]) {
+      expect(getRateLimitConfig(path)).toMatchObject({
+        config: { maxRequests: 20, windowMs: 60_000 },
+        pattern: '/api/storefront/cart/handoff',
+      });
+    }
+  });
+
+  it('bounds unauthenticated legacy bridge traffic per token bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
+      pattern: '/api/storefront/cart/legacy',
+      config: { maxRequests: 600, windowMs: 60_000 },
+    });
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

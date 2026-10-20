@@ -150,8 +150,44 @@ describe('CartSidebarLineItem', () => {
     expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
   });
 
+  it('shows the fee and opt-out control for an untouched default-on line', () => {
+    // hasAssurance: true as materialized by the Ogabassey default (the
+    // shopper never touched the toggle): the fee must be visible and the
+    // toggle must offer removal before checkout.
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey' }
+    );
+
+    expect(screen.getByText('Ogabassey Assurance')).toBeInTheDocument();
+    expect(screen.getByText(/\+₦[\d,]+/)).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onToggleAssurance).toHaveBeenCalledWith('line-1');
+  });
+
   it('hides assurance when the merchant context does not match', () => {
     setup(makeItem(), { cartMerchantContextMatches: false });
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps the removal control for an assured line when insurance is off', () => {
+    // The merchant disabled the setting after the line was assured (or
+    // the line restored from storage): the fee still charges, so the
+    // toggle must stay visible as a removal control.
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey', shippingInsuranceEnabled: false }
+    );
+
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onToggleAssurance).toHaveBeenCalledWith('line-1');
+  });
+
+  it('hides assurance for an unassured line when insurance is off', () => {
+    setup(makeItem(), { shippingInsuranceEnabled: false });
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });

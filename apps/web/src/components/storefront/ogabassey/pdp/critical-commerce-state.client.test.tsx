@@ -9,11 +9,13 @@ import {
 const cartMocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   setIsCartOpen: vi.fn(),
+  cart: [] as Array<{ quantity: number } & Record<string, unknown>>,
 }));
 
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
     addToCart: cartMocks.addToCart,
+    cart: cartMocks.cart,
     setIsCartOpen: cartMocks.setIsCartOpen,
   }),
 }));
@@ -61,6 +63,7 @@ function CriticalCommerceStateProbe() {
     <>
       <p>{commerce.productForCart.price}</p>
       <p>currency:{commerce.currency.code}</p>
+      <p>in cart:{commerce.quantityInCart}</p>
       <p>{commerce.canAddToCart ? 'ready' : 'blocked'}</p>
       <p>axes:{commerce.renderableVariantAxes.join(',')}</p>
       <p>explicit axes:{commerce.explicitSelectedAxes.join(',')}</p>
@@ -122,6 +125,7 @@ function CriticalCommerceStateProbe() {
 beforeEach(() => {
   cartMocks.addToCart.mockClear();
   cartMocks.setIsCartOpen.mockClear();
+  cartMocks.cart = [];
 });
 
 afterEach(() => {
@@ -170,6 +174,58 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       })
     );
     expect(cartMocks.setIsCartOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('reports zero in-cart units for a fresh selection', () => {
+    render(
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={variantCartProduct}
+        variantAxes={['storage', 'ram']}
+        variantCount={2}
+      >
+        <CriticalCommerceStateProbe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+
+    expect(screen.getByText('in cart:0')).toBeInTheDocument();
+  });
+
+  it('reports the merging line quantity for the exact selection', () => {
+    cartMocks.cart = [
+      {
+        id: 'simple-1',
+        condition: 'new',
+        quantity: 2,
+      },
+    ];
+    render(
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={{
+          brand: 'OgaBassey',
+          condition: 'new',
+          description: 'Simple Widget',
+          gtin: '',
+          has_variants: false,
+          id: 'simple-1',
+          image: 'https://cdn.ogabassey.com/simple-1.avif',
+          imageHint: 'Simple Widget',
+          imageLarge: 'https://cdn.ogabassey.com/simple-1.avif',
+          manage_stock: false,
+          mpn: 'simple-1',
+          name: 'Simple Widget',
+          price: 5000,
+          status: 'active',
+          stock: 0,
+          variants: [],
+        }}
+        variantAxes={[]}
+        variantCount={0}
+      >
+        <CriticalCommerceStateProbe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+
+    expect(screen.getByText('in cart:2')).toBeInTheDocument();
   });
 
   it('exposes the merchant-resolved currency supplied to the provider', () => {

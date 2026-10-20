@@ -1,0 +1,298 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ initiateRefund: vi.fn() }));
+
+vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('@/lib/initiate-paystack-refund', () => ({
+  initiateRefund: mocks.initiateRefund,
+}));
+vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
+  buildOrderCancellationEmailMessage: vi.fn(),
+}));
+
+import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
+import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
+import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+
+const merchant = {
+  business_name: 'Store',
+  cac_rc_number: null,
+  email: 'store@example.com',
+  email_sender_name: null,
+  id: 'merchant-1',
+  slug: 'store',
+  support_email: null,
+  tax_identification_number: null,
+};
+const order = {
+  amount_paid: 100,
+  currency: 'NGN',
+  customer_email: 'buyer@example.com',
+  customer_id: null,
+  customer_name: 'Buyer',
+  id: 'order-1',
+  merchant_id: 'merchant-1',
+  order_items: [],
+  order_number: 'ORD-1',
+  payment_status: 'paid',
+  total: 100,
+};
+
+function payment(id: string, amount: number, reference: string) {
+  return {
+    amount,
+    currency: 'NGN',
+    gateway: 'paystack',
+    gateway_reference: reference,
+    id,
+  };
+}
+
+function completedRefund(
+  paymentId: string,
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    amount: 100,
+    currency: 'NGN',
+    gateway: 'paystack',
+    gateway_reference: '42',
+    metadata: {
+      payment_transaction_id: paymentId,
+      provider_refund_status: 'processed',
+    },
+    status: 'completed',
+    ...overrides,
+  };
+}
+
+function transactionQuery(data: unknown) {
+  return {
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockResolvedValue({ data, error: null }),
+    select: vi.fn().mockReturnThis(),
+  };
+}
+
+describe('cancellation refund in-flight deferral', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('lets an in-flight remainder take precedence over mismatch quarantine', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([payment('payment-1', 100, 'paystack-ref')])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          completedRefund('payment-1', { amount: 40 }),
+          {
+            amount: 60,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: '42',
+            metadata: { payment_transaction_id: 'payment-1' },
+            status: 'refund_pending',
+          },
+        ])
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ update });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeliveryUncertainError);
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    // The order-level budget was consumed before these legs settled:
+    // reset it so the resumed run retries the outstanding legs fresh
+    // instead of mistaking their first failure for exhaustion.
+    expect(from).toHaveBeenCalledTimes(4);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+    expect(eq).toHaveBeenCalledWith('order_id', 'order-1');
+    expect(eq).toHaveBeenCalledWith('step', 'refund');
+  });
+
+  it('defers a self-terminal-only order instead of failing it', async () => {
+    const eq = vi.fn().mockReturnThis();
+    const update = vi.fn().mockReturnValue({ eq });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-ref',
+            id: 'payment-1',
+            status: 'refunded',
+          },
+        ])
+      )
+      // The terminal-anomaly probe loads refund rows before the
+      // deferral; none here, so the run still defers for claim
+      // finalization.
+      .mockReturnValueOnce(transactionQuery([]))
+      .mockReturnValueOnce({ update });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    expect((error as Error).message).toBe(
+      'cancellation_refund_awaiting_provider_completion'
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    expect(from).toHaveBeenCalledTimes(3);
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+  });
+
+  it('ignores refunded legs while processing actionable ones', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paypal',
+            gateway_reference: 'paypal-ref',
+            id: 'payment-paypal',
+            status: 'refunded',
+          },
+          payment('payment-1', 100, 'paystack-ref'),
+        ])
+      )
+      // The mixed-order probe loads the same refund rows first; the
+      // processed row covers its leg, so the probe resolves.
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(auditReviewsQuery([]));
+
+    const result = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    expect(result).toEqual({ refundIds: [] });
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+
+  it('accepts terminal refunds linked to self-terminal refunded legs', async () => {
+    const refundInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            ...payment('payment-1', 100, 'paystack-ref-1'),
+            status: 'refunded',
+          },
+          payment('payment-2', 100, 'paystack-ref-2'),
+        ])
+      )
+      // The mixed-order probe loads the same refund rows first; the
+      // row linked to the refunded leg is legitimate evidence.
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(transactionQuery([completedRefund('payment-1')]))
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: refundInsert });
+    mocks.initiateRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: 42,
+        status: 'pending',
+        transaction: { id: 123, reference: 'paystack-ref-2' },
+      },
+    });
+
+    await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    });
+
+    // The row linked to the refunded leg is legitimate evidence, not
+    // an outside-order link: the sibling still initiates instead of
+    // quarantining.
+    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
+    expect(mocks.initiateRefund).toHaveBeenCalledWith(
+      'paystack-ref-2',
+      10000,
+      'Order cancelled',
+      undefined
+    );
+    expect(refundInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway_reference: '42',
+        status: 'refund_pending',
+      })
+    );
+  });
+
+  it('quarantines terminal anomalies when every leg already refunded', async () => {
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            ...payment('payment-1', 100, 'paystack-ref-1'),
+            status: 'refunded',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: '42',
+            id: 'refund-orphan',
+            metadata: { provider_refund_status: 'processed' },
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    const error = await executeOrderCancellationSideEffect({
+      merchant,
+      order,
+      step: 'refund',
+      supabase: { from } as never,
+    }).catch((reason: unknown) => reason);
+
+    // The claim routes anomalous terminal evidence here instead of
+    // finalizing: deferring past it would spin the drain forever
+    // with settlement unrunnable, so the blocker quarantines.
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+      })
+    );
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+  });
+});

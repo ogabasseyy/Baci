@@ -171,4 +171,15 @@ describe('useEffectivePrice', () => {
       comparePrice: 560000,
     });
   });
+
+  it('keeps the base price for suppressed base-row entries', () => {
+    const { result } = renderHook(() =>
+      useEffectivePrice(baseProduct, null, 'used', null, null, true)
+    );
+
+    expect(result.current).toEqual({
+      price: 552000,
+      comparePrice: 600000,
+    });
+  });
 });

@@ -14,6 +14,7 @@ interface MobileCheckoutIdempotencyItem {
   condition?: string | null;
   hasAssurance?: boolean | null;
   id: string;
+  offerId?: string | null;
   price: number;
   productId?: string | null;
   quantity: number;
@@ -75,12 +76,16 @@ export interface MobileCheckoutOrderItemPayload {
   condition?: string;
   image_url?: string;
   variant_id?: string;
+  /** Exact condition-offer id: two offers can share one condition. */
+  offer_id?: string;
   variant_name?: string;
   variant_attributes?: Record<string, string>;
   has_assurance: boolean;
   assurance_fee: number;
   voucher_token?: string;
   voucher_award_id?: string;
+  /** Stable canonical cart line id, present only for shared-cart orders. */
+  cart_line_id?: string;
 }
 
 function normalizeString(value: string | null | undefined) {
@@ -129,6 +134,10 @@ export function buildMobileCheckoutFingerprint(
       condition: normalizeString(item.condition),
       hasAssurance: Boolean(item.hasAssurance),
       id: normalizeString(item.id),
+      // Two offers can share one condition: without the offer id, reusing a
+      // checkout across offers yields the same fingerprint and replays the
+      // original key. Omit when empty so legacy fingerprints stay identical.
+      offerId: normalizeString(item.offerId) || undefined,
       price: normalizeNumber(item.price),
       productId: normalizeString(item.productId ?? item.id),
       quantity: normalizeNumber(item.quantity),
@@ -140,6 +149,7 @@ export function buildMobileCheckoutFingerprint(
       const comparisons = [
         left.productId.localeCompare(right.productId),
         left.variantId.localeCompare(right.variantId),
+        (left.offerId ?? '').localeCompare(right.offerId ?? ''),
         left.id.localeCompare(right.id),
         left.quantity - right.quantity,
         left.price - right.price,
@@ -190,6 +200,7 @@ export function buildMobileCheckoutOrderItems(
 ): MobileCheckoutOrderItemPayload[] {
   return items.map((item) => {
     const effectivePrice = item.negotiatedPrice ?? item.price;
+    const effectivePriceMinor = Math.round(effectivePrice * 100);
     return {
       id: item.product_id,
       product_id: item.product_id,
@@ -204,10 +215,10 @@ export function buildMobileCheckoutOrderItems(
       has_assurance: item.hasAssurance || false,
       assurance_fee: item.hasAssurance
         ? Math.round(
-            effectivePrice *
+            effectivePriceMinor *
               item.quantity *
               (item.assuranceRate ?? defaultAssuranceRate)
-          )
+          ) / 100
         : 0,
     };
   });
@@ -217,21 +228,23 @@ export function calculateMobileCheckoutAssuranceFee(
   items: readonly MobileCheckoutOrderItemInput[],
   defaultAssuranceRate = 0.05
 ) {
-  return items.reduce((sum, item) => {
+  const totalMinor = items.reduce((sum, item) => {
     if (!item.hasAssurance) {
       return sum;
     }
 
     const effectivePrice = item.negotiatedPrice ?? item.price;
+    const effectivePriceMinor = Math.round(effectivePrice * 100);
     return (
       sum +
       Math.round(
-        effectivePrice *
+        effectivePriceMinor *
           item.quantity *
           (item.assuranceRate ?? defaultAssuranceRate)
       )
     );
   }, 0);
+  return totalMinor / 100;
 }
 
 export function buildMobileCheckoutOrderFingerprint({
@@ -247,6 +260,7 @@ export function buildMobileCheckoutOrderFingerprint({
       condition: item.condition,
       hasAssurance: item.has_assurance,
       id: item.id,
+      offerId: item.offer_id,
       price: item.price,
       productId: item.product_id,
       quantity: item.quantity,

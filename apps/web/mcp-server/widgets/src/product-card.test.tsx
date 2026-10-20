@@ -47,6 +47,7 @@ describe('ProductCard', () => {
     render(<ProductCard product={{ ...product, in_stock: false, stock_level: 'Out of Stock' }} isInCart={false} onAddToCart={onAddToCart} onViewCart={vi.fn()} />);
     const button = screen.getByRole('button', { name: 'Out of Stock' });
     expect(button).toBeDisabled();
+    expect(screen.getByText('Out of Stock', { selector: '.stock-badge' })).toBeInTheDocument();
     fireEvent.click(button);
     expect(onAddToCart).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Review on Ogabassey' })).toBeEnabled();
@@ -56,7 +57,7 @@ describe('ProductCard', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<ProductCard product={product} isInCart={false} onAddToCart={vi.fn()} onViewCart={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Review on Ogabassey' }));
-    expect(open).toHaveBeenCalledWith('https://ogabassey.com/products/redmi', '_blank');
+    expect(open).toHaveBeenCalledWith('https://ogabassey.com/products/redmi', '_blank', 'noopener,noreferrer');
     open.mockRestore();
   });
   it.each([null, ''])('uses the product ID when the slug is %s', (slug) => {
@@ -67,4 +68,34 @@ describe('ProductCard', () => {
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone%2Fid' });
   });
 
+});
+
+
+describe('bugfix: unknown stock does not show an availability badge', () => {
+  it.each([null, undefined])('hides the badge for unknown stock %s', (inStock) => {
+    const { container } = render(
+      <ProductCard
+        product={{ ...product, in_stock: inStock, stock_level: 'Confirm availability' }}
+        isInCart={false}
+        onAddToCart={vi.fn()}
+        onViewCart={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('Confirm availability')).not.toBeInTheDocument();
+    expect(container.querySelector('.stock-badge')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add to cart' })).toBeEnabled();
+  });
+
+  it.each(['High Stock', 'Low Stock', 'Last Units'])('keeps confirmed %s visible', (stockLevel) => {
+    const { container } = render(
+      <ProductCard
+        product={{ ...product, in_stock: true, stock_level: stockLevel }}
+        isInCart={false}
+        onAddToCart={vi.fn()}
+        onViewCart={vi.fn()}
+      />
+    );
+    expect(container.querySelector('.stock-badge')).toHaveTextContent(stockLevel);
+    expect(screen.getByRole('button', { name: 'Add to cart' })).toBeEnabled();
+  });
 });

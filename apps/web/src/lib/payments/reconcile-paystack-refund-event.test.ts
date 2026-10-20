@@ -27,8 +27,8 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     provider.fetchRefund.mockResolvedValue({
       success: true,
       data: {
-        id: 42,
-        transaction: 123,
+        id: '42',
+        transaction: '123',
         amount: 10000,
         currency: 'NGN',
         status: 'processed',
@@ -36,7 +36,7 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     });
     provider.verifyTransaction.mockResolvedValue({
       success: true,
-      data: { id: 123, reference: 'PSK-1', amount: 10000, currency: 'NGN' },
+      data: { id: '123', reference: 'PSK-1', amount: 10000, currency: 'NGN' },
     });
   });
 
@@ -73,8 +73,8 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       .mockResolvedValueOnce({
         success: true,
         data: {
-          id: 42,
-          transaction: 999,
+          id: '42',
+          transaction: '999',
           amount: 10000,
           currency: 'NGN',
           status: 'processed',
@@ -83,8 +83,8 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       .mockResolvedValueOnce({
         success: true,
         data: {
-          id: 43,
-          transaction: 123,
+          id: '43',
+          transaction: '123',
           amount: 10000,
           currency: 'NGN',
           status: 'processed',
@@ -140,8 +140,8 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
-        id: 42,
-        transaction: 999,
+        id: '42',
+        transaction: '999',
         amount: 10000,
         currency: 'NGN',
         status: 'processed',

@@ -366,6 +366,9 @@ export interface CachedMerchant {
    */
   paystack_subaccount_configured?: boolean;
   price_negotiation_enabled?: boolean;
+  shared_cart_enabled?: boolean;
+  shared_cart_accounts_enabled?: boolean;
+  shared_cart_realtime_enabled?: boolean;
   is_published: boolean;
   template_id: string;
   plan_expires_at?: string | null;

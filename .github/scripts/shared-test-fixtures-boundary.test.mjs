@@ -273,3 +273,13 @@ test('retains comment-prefixed fixture calls in runner configs', () => {
     join(dir, 'vitest.config.ts'),
   ]);
 });
+
+test('flags require.resolve fixture loads in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const fixture = require.resolve('@baci/shared/test-fixtures/piggyvest-purchase');\nconst loaded = require(fixture);\nconst alias = path.resolve(__dirname, '../../packages/shared/src/test-fixtures/builder-ai-edit.ts');\nexport const cfg = [loaded, alias];\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});

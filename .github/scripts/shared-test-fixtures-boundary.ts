@@ -193,6 +193,8 @@ const CONFIG_SPECIFIER_EXTRACTORS = [
 
 const PATH_CONSTRUCTOR_CALL =
   /^(?:\w+\.)?(?:resolve|join|dirname|basename|extname|relative|normalize|parse|format|isAbsolute)\s*\(/;
+// Module resolvers (require.resolve, import.meta.resolve) resolve
+// module specifiers, unlike path constructors; they stay scanned.
 
 // Scanning runs on a normalized view of the source: literal escape
 // sequences are decoded (so test\x2dfixtures is seen as test-fixtures)
@@ -249,7 +251,12 @@ function configSpecifiers(content: string): string {
         if (used.test(content)) parts.push(literal);
         continue;
       }
-      if (!PATH_CONSTRUCTOR_CALL.test(text)) parts.push(text);
+      const owner = /([\w$]+)\.$/.exec(content.slice(0, match.index))?.[1];
+      const isPathCall =
+        PATH_CONSTRUCTOR_CALL.test(text) &&
+        owner !== 'require' &&
+        owner !== 'meta';
+      if (!isPathCall) parts.push(text);
     }
   }
   return parts.join('\n');

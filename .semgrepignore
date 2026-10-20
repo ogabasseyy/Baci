@@ -1,9 +1,92 @@
 # Semgrep Ignore File
 # Suppress false positive security alerts
 
-# Internal dev tooling - not production code
+# Pre-existing entries (main). (The PR-added /.claude/ entry was dropped:
+# agent config with no alert evidence stays scanned like everything else.)
 .gemini/
 scripts/
+
+# NOTE: production/operational trees are NOT excluded here: apps/web/mcp-server
+# (deployed token-handling server), apps/web/tools/connector-gateway
+# (Dockerfile.production, bearerToken server), vps-workers (deploy.yml),
+# infra (nginx/CDN runtime), ci_scripts (CI-executed).
+
+# tools/ + apps/web/tools/: per-file exclusions ONLY for test/fixture
+# files that generated code-scanning alerts (mock tokens, synthetic
+# secrets, fixture data, test-only harnesses). EVERY operational file
+# — replay/attestation executors, credential staging helpers, gateway
+# code, financial operator scripts — stays scanned, as does any future
+# file. Re-opened operational alerts are owner-triageable signal, not
+# noise to suppress.
+# --- apps/web/tools/db/ (5 files) ---
+/apps/web/tools/db/apply-supabase-replay-sql.test.ts
+/apps/web/tools/db/canonical-replay-fixture-json.test.ts
+/apps/web/tools/db/capture-production-effect-provenance.test.ts
+/apps/web/tools/db/extract-github-migration-semantic-lines.test.ts
+/apps/web/tools/db/supabase-replay-contract.test.ts
+# --- apps/web/tools/events/ (1 files) ---
+/apps/web/tools/events/event-pipeline-governed-paths.test.ts
+# --- apps/web/tools/perf/ (1 files) ---
+/apps/web/tools/perf/merchant-image-pilot-preflight-served-mounts-routes.test.mjs
+# --- apps/web/tools/piggyvest-staging/ (10 files) ---
+/apps/web/tools/piggyvest-staging/checkout-proxy-config.test.ts
+/apps/web/tools/piggyvest-staging/customer-draft-proxy-routes.test.ts
+/apps/web/tools/piggyvest-staging/customer-funding-routes.test.ts
+/apps/web/tools/piggyvest-staging/intake-handler.test.ts
+/apps/web/tools/piggyvest-staging/intake-server.test.ts
+/apps/web/tools/piggyvest-staging/receiver-handler.test.ts
+/apps/web/tools/piggyvest-staging/replay-accrual-runtime.test.ts
+/apps/web/tools/piggyvest-staging/replay-accrual-store.test.ts
+/apps/web/tools/piggyvest-staging/replay-financial-postgres.test.ts
+/apps/web/tools/piggyvest-staging/replay-prefunded.test.ts
+# --- apps/web/tools/piggyvest-staging/funding-artifact/ (2 files) ---
+/apps/web/tools/piggyvest-staging/funding-artifact/package-funding-deploy.test.py
+/apps/web/tools/piggyvest-staging/funding-artifact/snapshot-funding-source.test.py
+# --- apps/web/tools/piggyvest-staging/schemas/ (3 files) ---
+/apps/web/tools/piggyvest-staging/schemas/replay-accrual-observer.test.ts
+/apps/web/tools/piggyvest-staging/schemas/replay-financial.test.ts
+/apps/web/tools/piggyvest-staging/schemas/replay-runtime-config.test.ts
+# --- tools/staging/existing-payment-projection/ (3 files) ---
+/tools/staging/existing-payment-projection/inspection_sql.test.py
+/tools/staging/existing-payment-projection/owned_transaction_drain.test.py
+/tools/staging/existing-payment-projection/projection_sql.test.py
+# NOTE: tools/staging/interest-bridge/test-plan/read_empty_wallet.py is
+# intentionally NOT excluded although its directory reads as test-like: it
+# is an operational credential-bearing wallet reader (token auth,
+# reads) whose exec-detected alert is owner-triageable signal.
+# --- tools/staging/isolated-savings/ (1 files) ---
+/tools/staging/isolated-savings/public-ingress.test.mjs
+# --- tools/staging/mobile-push/ (1 files) ---
+/tools/staging/mobile-push/preflight.test.mjs
+# --- tools/staging/prefunded-card/ (2 files) ---
+/tools/staging/prefunded-card/checkout_retirement_diagnostic.test.py
+/tools/staging/prefunded-card/recovery-runner-flock.test.py
+# --- tools/staging/prefunded-card/replay-native-upgrade/ (1 files) ---
+/tools/staging/prefunded-card/replay-native-upgrade/artifact.test.mjs
+# --- tools/staging/prefunded-card/snapshot-transition/ (2 files) ---
+/tools/staging/prefunded-card/snapshot-transition/current_renewal_capture.test.py
+/tools/staging/prefunded-card/snapshot-transition/snapshot_collector.test.py
+# --- tools/staging/replay-complete-cutover-owner/ (4 files) ---
+/tools/staging/replay-complete-cutover-owner/cutover_probes.test.py
+/tools/staging/replay-complete-cutover-owner/financial_report.test.py
+/tools/staging/replay-complete-cutover-owner/receipt_crypto.test.cjs
+/tools/staging/replay-complete-cutover-owner/replay_generation_probe_seal.test.py
+
+# Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
+# Per-file: only the alert-generating file is excluded, not the whole tree.
+/apps/mobile-storefront/__tests__/config/quiz-ads-release-workflow.test.ts
+/apps/mobile-storefront/components/wallet/savings/PiggyvestProtectedOffer.test.tsx
+/apps/mobile-storefront/config/withAndroidGradleFixes.test.js
+/apps/mobile-storefront/constants/payment-clipboard-bridge.test.ts
+/apps/mobile-storefront/node-forge-rsa-verify.test.ts
+/apps/web/next.config.routing.test.ts
+/apps/web/src/app/(storefront)/storefront-core.test.ts
+/apps/web/src/app/(storefront)/storefront-css-partition-dark-utilities.test.ts
+/apps/web/src/app/dashboard/blog/blog-client-status.test.tsx
+/apps/web/src/components/storefront/ogabassey/pages/checkout-page.bnpl-8.test.tsx
+/apps/web/src/components/storefront/ogabassey/pages/checkout-page.rendering-3.test.tsx
+/apps/web/src/config/pilot-public-assets-runtime.test.ts
+
 # Restore only these shared runtime checks; other scripts remain excluded.
 !/packages/shared/scripts/
 /packages/shared/scripts/*

@@ -3,7 +3,7 @@ const ALPHABET =
 
 /** Decode base64url without relying on a global atob (absent in some runtimes). */
 export function decodeBase64UrlToUtf8(value: string): string {
-  if (!/^[A-Za-z0-9_+\/-]*={0,2}$/.test(value))
+  if (!/^[A-Za-z0-9_+/-]*={0,2}$/.test(value))
     throw new Error('Invalid base64url value');
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
   const core = padding ? value.slice(0, -padding) : value;

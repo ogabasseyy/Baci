@@ -161,7 +161,6 @@ export function useCartAccountLink(options: Options) {
   useEffect(() => {
     state.current.options = options;
   });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Each authority scope invalidates prior observations and async completions.
   useEffect(() => {
     state.current.pending = null;
     state.current.savedCart = null;

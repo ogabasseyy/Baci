@@ -237,11 +237,12 @@ export async function POST(request: NextRequest) {
       });
       // Joins should be rare (registries normally reuse keys); a
       // join storm signals client key churn — investigate the
-      // registry, not the claim.
+      // registry, not the claim. Transaction IDs only: the winner
+      // key is an unguessable replay credential and must never
+      // reach logs (Codex R2 P2, Muse R108).
       console.info('VTU intent claim joined in-flight transaction:', {
         preparedTransactionId: prepared.transaction.id,
         winnerTransactionId: claim.transaction_id,
-        winnerKey: claim.idempotency_key,
       });
       const replayResponse = await fulfillReplayVtuTransaction({
         authSupabase: auth.supabase,

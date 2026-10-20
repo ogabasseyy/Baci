@@ -50,6 +50,8 @@ DECLARE
   v_t9 uuid := 'c3c3c3c3-0000-4000-8000-000000000009';
   v_t10 uuid := 'c3c3c3c3-0000-4000-8000-000000000011';
   v_t11 uuid := 'c3c3c3c3-0000-4000-8000-000000000012';
+  v_t12 uuid := 'c3c3c3c3-0000-4000-8000-000000000013';
+  v_t13 uuid := 'c3c3c3c3-0000-4000-8000-000000000014';
   v_k1 uuid := 'd4d4d4d4-0000-4000-8000-000000000001';
   v_k2 uuid := 'd4d4d4d4-0000-4000-8000-000000000002';
   v_k3 uuid := 'd4d4d4d4-0000-4000-8000-000000000003';
@@ -61,6 +63,8 @@ DECLARE
   v_k9 uuid := 'd4d4d4d4-0000-4000-8000-000000000009';
   v_k10 uuid := 'd4d4d4d4-0000-4000-8000-000000000010';
   v_k11 uuid := 'd4d4d4d4-0000-4000-8000-000000000011';
+  v_k12 uuid := 'd4d4d4d4-0000-4000-8000-000000000012';
+  v_k13 uuid := 'd4d4d4d4-0000-4000-8000-000000000013';
   v_claim record;
   v_rows_before integer;
   v_rows_after integer;
@@ -328,6 +332,69 @@ BEGIN
     OR v_claim.idempotency_key IS DISTINCT FROM v_k2
   THEN
     RAISE EXCEPTION 'Loser key must replay (t1/k2), got %', v_claim;
+  END IF;
+
+  -- 15. Post-terminal touches must not suppress a legitimate
+  -- repeat (Codex R2 P2): (a) the fence reads terminal_at, never
+  -- updated_at — simulated settled-at-T1/touched-at-T2 row, with
+  -- the repeat prepared between T1 and T2, starts new (an
+  -- updated_at fence would wrongly join); (b) the trigger stamps
+  -- terminal_at on entry into terminal status; (c) same-status
+  -- touches never move terminal_at. Fixed literals (not now())
+  -- keep the T1 < prepare < T2 ordering deterministic under the
+  -- frozen single-xact clock.
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference, status,
+    created_at, updated_at, terminal_at
+  )
+  VALUES (
+    v_t12, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500,
+    'INTENT-CLAIM-013', 'successful',
+    '2026-10-01 00:00:00+00', '2026-10-20 04:00:00+00',
+    '2026-10-19 12:00:00+00'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(v_k12, 'fp-touch', v_t12, v_m1, v_c1);
+  IF v_claim.created IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Touch setup claim must create, got %', v_claim;
+  END IF;
+  INSERT INTO public.vtu_transactions (
+    id, merchant_id, customer_id, type, network_provider,
+    phone_number, amount, request_reference, created_at
+  )
+  VALUES (
+    v_t13, v_m1, v_c1, 'airtime', 'mtn', '08030000005', 500,
+    'INTENT-CLAIM-014', '2026-10-19 18:00:00+00'
+  );
+  SELECT * INTO v_claim
+  FROM public.claim_vtu_intent(v_k13, 'fp-touch', v_t13, v_m1, v_c1);
+  IF v_claim.created IS DISTINCT FROM true
+    OR v_claim.transaction_id IS DISTINCT FROM v_t13
+  THEN
+    RAISE EXCEPTION 'Post-touch repeat must create (t13), got %', v_claim;
+  END IF;
+  -- (b) Entry into terminal status stamps terminal_at.
+  UPDATE public.vtu_transactions SET status = 'failed' WHERE id = v_t13;
+  PERFORM 1
+  FROM public.vtu_transactions
+  WHERE id = v_t13 AND terminal_at IS NOT NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Terminal transition must stamp terminal_at';
+  END IF;
+  -- (c) Same-status touches never move terminal_at (control value
+  -- survives both a non-status update and a metadata touch).
+  UPDATE public.vtu_transactions
+  SET terminal_at = '2025-06-01 00:00:00+00'
+  WHERE id = v_t13;
+  UPDATE public.vtu_transactions
+  SET error_message = 'touch: post-settlement metadata write'
+  WHERE id = v_t13;
+  PERFORM 1
+  FROM public.vtu_transactions
+  WHERE id = v_t13 AND terminal_at = '2025-06-01 00:00:00+00';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Same-status touch must not move terminal_at';
   END IF;
 END;
 $test$;

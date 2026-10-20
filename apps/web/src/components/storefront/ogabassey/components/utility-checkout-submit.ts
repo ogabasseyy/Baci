@@ -123,9 +123,9 @@ export const submitUtilityCheckout = async ({
     } finally {
       clearTimeout(timer);
     }
-    // Winner-key wire (intent-claim join): the caller's key has no
-    // mapping, so the caller adopts this key for retries. Present
-    // on joins regardless of outcome; absent otherwise.
+    // Winner-key wire (intent-claim join): the caller adopts this
+    // key for retries so attempts converge on one key. Present on
+    // joins regardless of outcome; absent otherwise.
     const canonicalIdempotencyKey =
       response.headers.get(VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER) ?? undefined;
     let parsedData: unknown;

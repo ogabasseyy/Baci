@@ -25,8 +25,8 @@ export async function discardOrphanedClaimTransaction({
   });
   if (outcome === 'unresolved') {
     console.error(
-      `Orphan VTU cleanup unresolved after intent-claim ${context}; row may strand pending:`,
-      { transactionId }
+      'Orphan VTU cleanup unresolved after intent-claim; row may strand pending:',
+      { context, transactionId }
     );
   }
 }

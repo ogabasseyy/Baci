@@ -1151,6 +1151,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       }),
     };
 
+    const consoleInfoSpy = vi
+      .spyOn(console, 'info')
+      .mockImplementation(() => {});
+
     const { status, body, headers } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
     );
@@ -1165,9 +1169,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-winner' })
     );
-    // Winner-key wire: the loser's key has no mapping, so the
-    // joined response carries the winner key for client adoption.
+    // Winner-key wire: the joined response carries the winner
+    // key so client retries converge on one key.
     expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(WINNER_KEY);
+    // Join telemetry carries transaction IDs only: the winner key
+    // is an unguessable replay credential (Codex R2 P2, R108).
+    expect(consoleInfoSpy).toHaveBeenCalled();
+    for (const call of consoleInfoSpy.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(WINNER_KEY);
+    }
+    consoleInfoSpy.mockRestore();
   });
 
   it('claim twin: same-transaction mapping fulfills directly without cleanup', async () => {

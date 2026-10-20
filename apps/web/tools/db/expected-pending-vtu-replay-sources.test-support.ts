@@ -68,4 +68,9 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261020053000_join_overlapping_terminal_vtu_intent.sql',
     sha256: '9b002b402f7e6a38bda2fe1329474fdb0811be0ca6841b76264b515cfcd57fff',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020061000_stamp_vtu_terminal_transition.sql',
+    sha256: '0e46b29e365197d00ad956045a382b3836ee75c0bebe043dd9318aedb6c26ceb',
+  },
 ];

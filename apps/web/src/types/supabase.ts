@@ -15253,6 +15253,7 @@ export type Database = {
           request_reference: string;
           source: string;
           status: string;
+          terminal_at: string | null;
           transaction_id: string | null;
           type: string;
           updated_at: string | null;
@@ -15278,6 +15279,7 @@ export type Database = {
           request_reference: string;
           source?: string;
           status?: string;
+          terminal_at?: string | null;
           transaction_id?: string | null;
           type: string;
           updated_at?: string | null;
@@ -15303,6 +15305,7 @@ export type Database = {
           request_reference?: string;
           source?: string;
           status?: string;
+          terminal_at?: string | null;
           transaction_id?: string | null;
           type?: string;
           updated_at?: string | null;

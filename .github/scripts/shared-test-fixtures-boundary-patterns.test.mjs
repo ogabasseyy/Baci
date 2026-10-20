@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   findFixtureImportOffenders,
+  findFixturePatternOffenders,
   isTestFile,
   isTestHelper,
 } from './shared-test-fixtures-boundary.ts';
@@ -131,5 +132,46 @@ test('classifies symlinked files by their resolved target', async () => {
   assert.deepEqual(findFixtureImportOffenders([dir]).sort(), [
     join(realpathSync(dir), 'src/prod.ts'),
     join(dir, 'src/prod.ts'),
+  ]);
+});
+
+test('tools-tree pattern scan flags runner-config fixture imports', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const cfg = f;\n",
+  });
+  assert.deepEqual(findFixturePatternOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('flags require.resolve fixture loads in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const fixture = require.resolve('@baci/shared/test-fixtures/piggyvest-purchase');\nconst loaded = require(fixture);\nconst alias = path.resolve(__dirname, '../../packages/shared/src/test-fixtures/builder-ai-edit.ts');\nexport const cfg = [loaded, alias];\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
+  ]);
+});
+
+test('skipped-name symlinks still go through containment', async () => {
+  const { symlinkSync } = await import('node:fs');
+  const dir = fixtureDir({
+    'src/prod.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+  });
+  symlinkSync(join(dir, 'src'), join(dir, 'node_modules'));
+  const offenders = findFixtureImportOffenders([dir]);
+  assert.ok(offenders.includes(join(dir, 'node_modules/prod.ts')));
+});
+
+test('flags comment-separated dynamic imports in runner configs', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "export const load = () => import /* lazy */ ('@baci/shared/test-fixtures/piggyvest-purchase');\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'vitest.config.ts'),
   ]);
 });

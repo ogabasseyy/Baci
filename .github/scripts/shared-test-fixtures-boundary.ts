@@ -189,10 +189,10 @@ function isExemptFile(file: string, roots: string[]): boolean {
 // scanned (import/export-from, dynamic imports, first-string-arg
 // resolver calls); alias registrations stay exempt.
 const CONFIG_SPECIFIER_EXTRACTORS = [
-  /(?:import|export)\b[^;]*?from\s*['"`][^'"`]*['"`]/g,
+  /(?:import|export)\b[^;]*?from(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`]/g,
   /(?:import|export)\s*['"`][^'"`]*['"`]/g,
-  /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)?\([^)]*\)/g,
-  /\w+\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)?['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
+  /\bimport(?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*\([^)]*\)/g,
+  /\w+\s*\((?:\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*(?:\n|$))*['"`][^'"`]*['"`](?:\s*,[^)]*)?\s*\)/g,
   /(?:const|let|var)\s+(\w+)(?:\s*:\s*[^=;]+)?\s*=\s*(['"`][^'"`]*['"`])/g,
 ];
 

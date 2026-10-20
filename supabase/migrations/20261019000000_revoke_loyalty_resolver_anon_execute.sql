@@ -19,5 +19,14 @@
 -- merchant-code resolver get_storefront_discount_code has the same
 -- shape and stays as-is (out of scope for #3696).
 
+-- Rollout: this migration is classified postdeploy (see
+-- .github/scripts/deferred-production-migrations.sh) so the revoke lands
+-- only after the branded service-client web code is serving traffic.
+-- Applying it ahead of the web deploy would 403 every loyalty validation.
 REVOKE EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM anon;
 REVOKE EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM authenticated;
+-- Defence in depth: PostgreSQL grants EXECUTE to PUBLIC by default and
+-- anon/authenticated inherit through it, so revoke the PUBLIC grant as well
+-- and explicitly grant service_role (the only remaining caller).
+REVOKE EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_loyalty_redemption_for_checkout(uuid, text) TO service_role;

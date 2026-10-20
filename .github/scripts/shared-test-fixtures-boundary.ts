@@ -132,7 +132,12 @@ export function collectSourceFiles(roots: string[]): string[] {
           );
         });
         if (!inside) continue;
-        const targetStat = lstatSync(target);
+        let targetStat: ReturnType<typeof lstatSync>;
+        try {
+          targetStat = lstatSync(target);
+        } catch {
+          continue;
+        }
         if (targetStat.isDirectory()) {
           // Emit under both link and target paths for classification.
           walk(full, false, entryRel, chain);

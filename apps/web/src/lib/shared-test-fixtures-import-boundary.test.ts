@@ -27,7 +27,11 @@ const allScanRoots = [
   join(repoRoot, 'packages/tiktok-business'),
   join(repoRoot, 'apps/cloudflare-evidence-qualification-worker'),
 ];
-const scanRoots = allScanRoots.filter((root) => existsSync(root));
+const scanRoots = allScanRoots;
+// Missing roots must fail loudly, not silently shrink the scan.
+it.each(allScanRoots)('scan root exists: %s', (root) => {
+  expect(existsSync(root)).toBe(true);
+});
 
 describe('test-fixtures import boundary', () => {
   it('no non-test source imports shared test fixtures by any path', () => {
@@ -44,6 +48,8 @@ describe('test-fixtures import boundary', () => {
       join(repoRoot, 'apps/web/tools'),
       join(repoRoot, 'apps/mobile-storefront/tools'),
       join(repoRoot, 'apps/mobile-admin/tools'),
+      join(repoRoot, 'packages/tiktok-business/tools'),
+      join(repoRoot, 'apps/cloudflare-evidence-qualification-worker/tools'),
     ].filter((dir) => existsSync(dir));
     expect(findFixturePatternOffenders(toolsRoots)).toEqual([]);
   }, 60_000);

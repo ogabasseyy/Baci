@@ -1,38 +1,134 @@
 # Semgrep Ignore File
 # Suppress false positive security alerts
 
-# Internal dev tooling & staging - not production code.
-# NOTE: production/operational trees are intentionally NOT excluded here:
-# apps/web/mcp-server (deployed token-handling server),
-# apps/web/tools/connector-gateway (production grant/token gateway:
-# Dockerfile.production, compose.production.yaml, bearerToken server),
-# vps-workers (deploy.yml), infra (nginx/CDN runtime), ci_scripts
-# (CI-executed).
-.gemini/
-/.claude/
-scripts/
-/tools/
-# apps/web/tools, narrowed per-directory: connector-gateway is production
-# (see NOTE) and stays scanned; connector-harness is test-only (refuses to
-# start under NODE_ENV=production, binds 127.0.0.1); the rest are local
-# analysis/migration/perf scripts.
-/apps/web/tools/connector-harness/
-/apps/web/tools/cost/
-/apps/web/tools/db/
-/apps/web/tools/events/
-/apps/web/tools/perf/
-/apps/web/tools/piggyvest-staging/
-/apps/web/tools/savings-notifications/
-/apps/web/tools/search/
-/apps/web/tools/seo/
-/apps/web/tools/shipping/
-# NOTE: connector-http.ts is intentionally NOT excluded: it defines the
-# production gateway's token helpers (issueTokenSchema, bearerToken,
-# secretsEqual) and is imported by connector-gateway/server.ts et al.
-/apps/web/tools/connector-http.test.ts
-/apps/web/tools/typedoc-portable-paths.test.mjs
-/apps/web/tools/typedoc-typescript6.mjs
-/apps/web/tools/typedoc-typescript6.test.mjs
+# NOTE: production/operational trees are NOT excluded here: apps/web/mcp-server
+# (deployed token-handling server), apps/web/tools/connector-gateway
+# (Dockerfile.production, bearerToken server), vps-workers (deploy.yml),
+# infra (nginx/CDN runtime), ci_scripts (CI-executed).
+
+# tools/ + apps/web/tools/: per-file exclusions ONLY for files that
+# generated code-scanning alerts (audit-grade operator-script noise:
+# exec/file-permission/httpsconnection/non-literal-regexp, plus test
+# fixtures with synthetic secrets). Files without alerts — including
+# production replay/attestation executors, credential staging helpers,
+# and the connector gateway — stay scanned, as does any future file.
+# Non-test error-severity findings (receipt_crypto.cjs,
+# psql_transaction.py, owned_transaction_drain.py, replay-crypto.ts,
+# storefront-edge-source-authority.ts) are intentionally NOT excluded:
+# those alerts should re-open for owner triage.
+# --- apps/web/tools/db/ (6 files) ---
+/apps/web/tools/db/apply-supabase-replay-sql.test.ts
+/apps/web/tools/db/canonical-replay-fixture-json.test.ts
+/apps/web/tools/db/capture-production-effect-provenance.test.ts
+/apps/web/tools/db/extract-github-migration-semantic-lines.test.ts
+/apps/web/tools/db/run-replay-command.ts
+/apps/web/tools/db/supabase-replay-contract.test.ts
+# --- apps/web/tools/events/ (1 files) ---
+/apps/web/tools/events/event-pipeline-governed-paths.test.ts
+# --- apps/web/tools/perf/ (4 files) ---
+/apps/web/tools/perf/measure-ogabassey-cache-hit-rate.mjs
+/apps/web/tools/perf/merchant-image-pilot-codec-smoke.mjs
+/apps/web/tools/perf/merchant-image-pilot-preflight-served-mounts-routes.test.mjs
+/apps/web/tools/perf/merchant-image-pilot-runner-finish-log.mjs
+# --- apps/web/tools/piggyvest-staging/ (14 files) ---
+/apps/web/tools/piggyvest-staging/checkout-proxy-config.test.ts
+/apps/web/tools/piggyvest-staging/checkout-proxy-config.ts
+/apps/web/tools/piggyvest-staging/customer-draft-proxy-routes.test.ts
+/apps/web/tools/piggyvest-staging/customer-funding-routes.test.ts
+/apps/web/tools/piggyvest-staging/funding-staging-transport.py
+/apps/web/tools/piggyvest-staging/intake-handler.test.ts
+/apps/web/tools/piggyvest-staging/intake-server.test.ts
+/apps/web/tools/piggyvest-staging/receiver-handler.test.ts
+/apps/web/tools/piggyvest-staging/replay-accrual-observer.test-support.ts
+/apps/web/tools/piggyvest-staging/replay-accrual-runtime.test.ts
+/apps/web/tools/piggyvest-staging/replay-accrual-store.test.ts
+/apps/web/tools/piggyvest-staging/replay-financial-postgres.test.ts
+/apps/web/tools/piggyvest-staging/replay-prefunded.test.ts
+/apps/web/tools/piggyvest-staging/validate-customer-draft-routes.ts
+# --- apps/web/tools/piggyvest-staging/cutover/ (2 files) ---
+/apps/web/tools/piggyvest-staging/cutover/install-savings-drafts-cutover.py
+/apps/web/tools/piggyvest-staging/cutover/repair_draft_routes.py
+# --- apps/web/tools/piggyvest-staging/funding-artifact/ (3 files) ---
+/apps/web/tools/piggyvest-staging/funding-artifact/install-funding-artifact.py
+/apps/web/tools/piggyvest-staging/funding-artifact/package-funding-deploy.test.py
+/apps/web/tools/piggyvest-staging/funding-artifact/snapshot-funding-source.test.py
+# --- apps/web/tools/piggyvest-staging/funding-gateway-transition/ (1 files) ---
+/apps/web/tools/piggyvest-staging/funding-gateway-transition/funding-gateway-transition-activator.py
+# --- apps/web/tools/piggyvest-staging/schemas/ (3 files) ---
+/apps/web/tools/piggyvest-staging/schemas/replay-accrual-observer.test.ts
+/apps/web/tools/piggyvest-staging/schemas/replay-financial.test.ts
+/apps/web/tools/piggyvest-staging/schemas/replay-runtime-config.test.ts
+# --- apps/web/tools/piggyvest-staging/wallet-route-repair/ (1 files) ---
+/apps/web/tools/piggyvest-staging/wallet-route-repair/wallet-route-owner-diagnostic.py
+# --- tools/staging/existing-payment-projection/ (6 files) ---
+/tools/staging/existing-payment-projection/continuation_evidence.py
+/tools/staging/existing-payment-projection/continuation_release.py
+/tools/staging/existing-payment-projection/continuation_root.py
+/tools/staging/existing-payment-projection/inspection_sql.test.py
+/tools/staging/existing-payment-projection/owned_transaction_drain.test.py
+/tools/staging/existing-payment-projection/projection_sql.test.py
+# --- tools/staging/interest-bridge/activation/ (2 files) ---
+/tools/staging/interest-bridge/activation/activation_retry.py
+/tools/staging/interest-bridge/activation/provider-wallet-shape.py
+# --- tools/staging/interest-bridge/identity-policy/ (1 files) ---
+/tools/staging/interest-bridge/identity-policy/read_provider_identity.py
+# --- tools/staging/interest-bridge/notifications/ (2 files) ---
+/tools/staging/interest-bridge/notifications/notification_adapter.py
+/tools/staging/interest-bridge/notifications/notification_cli.py
+# --- tools/staging/interest-bridge/test-plan/ (1 files) ---
+/tools/staging/interest-bridge/test-plan/read_empty_wallet.py
+# --- tools/staging/isolated-savings/ (3 files) ---
+/tools/staging/isolated-savings/install-managed-gateway.py
+/tools/staging/isolated-savings/managed-nginx-owner-actions.mjs
+/tools/staging/isolated-savings/public-ingress.test.mjs
+# --- tools/staging/ledger-balance-repair/ (1 files) ---
+/tools/staging/ledger-balance-repair/owner.py
+# --- tools/staging/mobile-push/ (1 files) ---
+/tools/staging/mobile-push/preflight.test.mjs
+# --- tools/staging/piggyvest-goal-funding/ (2 files) ---
+/tools/staging/piggyvest-goal-funding/bootstrap.py
+/tools/staging/piggyvest-goal-funding/deploy.py
+# --- tools/staging/prefunded-card/ (6 files) ---
+/tools/staging/prefunded-card/checkout_retirement_diagnostic.test.py
+/tools/staging/prefunded-card/launch-public.ts
+/tools/staging/prefunded-card/public_http_probes.py
+/tools/staging/prefunded-card/recovery-runner-flock.test.py
+/tools/staging/prefunded-card/replay_cutover_installation.py
+/tools/staging/prefunded-card/treasury-owner.py
+# --- tools/staging/prefunded-card/gateway-fresh-evidence/ (1 files) ---
+/tools/staging/prefunded-card/gateway-fresh-evidence/endpoint_refresh.py
+# --- tools/staging/prefunded-card/replay-native-upgrade/ (1 files) ---
+/tools/staging/prefunded-card/replay-native-upgrade/artifact.test.mjs
+# --- tools/staging/prefunded-card/replay-native-upgrade-owner/ (1 files) ---
+/tools/staging/prefunded-card/replay-native-upgrade-owner/owner.py
+# --- tools/staging/prefunded-card/snapshot-transition/ (2 files) ---
+/tools/staging/prefunded-card/snapshot-transition/current_renewal_capture.test.py
+/tools/staging/prefunded-card/snapshot-transition/snapshot_collector.test.py
+# --- tools/staging/replay-complete-cutover-owner/ (13 files) ---
+/tools/staging/replay-complete-cutover-owner/cutover_probes.test.py
+/tools/staging/replay-complete-cutover-owner/financial_readiness_owner.py
+/tools/staging/replay-complete-cutover-owner/financial_reconcile_owner.py
+/tools/staging/replay-complete-cutover-owner/financial_report.test.py
+/tools/staging/replay-complete-cutover-owner/probe_transport.py
+/tools/staging/replay-complete-cutover-owner/projection_owner.py
+/tools/staging/replay-complete-cutover-owner/public_resume_bootstrap.py
+/tools/staging/replay-complete-cutover-owner/receipt_crypto.test.cjs
+/tools/staging/replay-complete-cutover-owner/replay_fence_commit_seal.py
+/tools/staging/replay-complete-cutover-owner/replay_generation_probe_seal.py
+/tools/staging/replay-complete-cutover-owner/replay_generation_probe_seal.test.py
+/tools/staging/replay-complete-cutover-owner/replay_rehearsal_seal.py
+/tools/staging/replay-complete-cutover-owner/replay_start_seal.py
+# --- tools/staging/savings-engagement/ (6 files) ---
+/tools/staging/savings-engagement/artifact.py
+/tools/staging/savings-engagement/bootstrap.py
+/tools/staging/savings-engagement/gateway.py
+/tools/staging/savings-engagement/nginx.py
+/tools/staging/savings-engagement/owner.py
+/tools/staging/savings-engagement/proxy.py
+# --- tools/staging/wallet-test-payments/ (1 files) ---
+/tools/staging/wallet-test-payments/bootstrap.py
+# --- tools/testing/native-screen-transition/ (1 files) ---
+/tools/testing/native-screen-transition/generate.mjs
 
 # Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
 /apps/mobile-storefront/__tests__/

@@ -118,12 +118,12 @@ test('enumerated commands execute, hostile inputs fail closed', () => {
     assert.ok(readFileSync(log, 'utf8').length > 0, 'stubs must observe execution');
 
     const evil = [
-      "'; rm -rf /tmp/pwned-allowlist; echo '",
-      '$(touch /tmp/pwned-allowlist)',
+      `'; touch "${sentinel}"; echo '`,
+      '$(touch "$SENTINEL")',
       '',
       'pnpm install --frozen-lockfile --prefer-offline --extra-flag',
       'PNPM INSTALL',
-      'pnpm install --frozen-lockfile --prefer-offline\ntouch /tmp/pwned-allowlist',
+      'pnpm install --frozen-lockfile --prefer-offline\ntouch "$SENTINEL"',
       'npm ci',
       `x"; touch "${sentinel}"; echo "`,
     ];

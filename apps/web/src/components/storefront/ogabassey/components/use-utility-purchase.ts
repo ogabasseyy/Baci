@@ -12,6 +12,7 @@ import {
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
 import { settleUtilityPurchaseResult } from './utility-purchase-result-settlement';
+import { adoptSubmittedCanonicalKey } from './utility-purchase-canonical-adoption';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import {
   type AirtimeDataSubmit,
@@ -219,19 +220,11 @@ export function useUtilityPurchase({
         return captured.attempt.key;
       },
     });
-    // Adopt the winner key after a claim join (retries replay
-    // it) — awaited (Codex R1 P1) so the winner is durable before
-    // the submit resolves, generation-bound (Codex R2 P1) on the
-    // submitted loser key.
-    const canonicalKey = result.canonicalIdempotencyKey;
-    if (canonicalKey && captured.attempt) {
-      await adoptCanonicalKey(
-        captured.attempt.scoped,
-        captured.attempt.key,
-        canonicalKey
-      );
-      captured.attempt = { ...captured.attempt, key: canonicalKey };
-    }
+    captured.attempt = await adoptSubmittedCanonicalKey({
+      adoptCanonicalKey,
+      attempt: captured.attempt,
+      canonicalKey: result.canonicalIdempotencyKey,
+    });
 
     await settleUtilityPurchaseResult({
       activeTab,

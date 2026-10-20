@@ -73,6 +73,20 @@ async function callRoute(
   return { status: response.status, body, headers: response.headers };
 }
 
+/** Delete-chain starters issued against vtu_transactions (orphan-cleanup observation). */
+function vtuTransactionDeletes(): ReturnType<typeof vi.fn>[] {
+  const fromMock = supabaseMockRef.current?.from;
+  return (fromMock?.mock.results ?? [])
+    .map(
+      (result) =>
+        (result.value as { delete?: ReturnType<typeof vi.fn> } | undefined)
+          ?.delete
+    )
+    .filter(
+      (del): del is ReturnType<typeof vi.fn> => typeof del === 'function'
+    );
+}
+
 interface ClaimMapping {
   key: string;
   vtu_transaction_id: string;
@@ -979,6 +993,15 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       error: expect.stringMatching(/idempotency/i),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
+    // Rejection cleanup (Codex R1 P2): the certain-abort claim
+    // orphaned our prepared row — the guarded delete targeted it.
+    const deletes = vtuTransactionDeletes();
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toHaveBeenCalledTimes(1);
+    const firstEq = deletes[0]?.mock.results[0]?.value as {
+      eq?: ReturnType<typeof vi.fn>;
+    };
+    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
   });
 
   it('claim join: marks the orphan failed when its delete fails, then replays the winner', async () => {
@@ -1395,11 +1418,20 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       error: expect.stringMatching(/different request payload/),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
+    // Rejection cleanup (Codex R1 P2): the certain-abort claim
+    // orphaned our prepared row — the guarded delete targeted it.
+    const deletes = vtuTransactionDeletes();
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toHaveBeenCalledTimes(1);
+    const firstEq = deletes[0]?.mock.results[0]?.value as {
+      eq?: ReturnType<typeof vi.fn>;
+    };
+    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
   });
 
   it('fresh claim: success response carries no canonical-key wire', async () => {
     // The client knows its own key on the fresh path; the wire
-    // exists only for joins (the loser's key has no mapping).
+    // exists only for joins (clients converge retries on it).
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     supabaseMockRef.current = buildSupabase(state);
 

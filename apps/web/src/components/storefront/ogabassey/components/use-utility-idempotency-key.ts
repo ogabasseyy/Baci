@@ -36,7 +36,7 @@ export interface UtilityIdempotencyAttempt {
 }
 
 interface UseUtilityIdempotencyKeyResult {
-  adoptCanonicalKey: (scoped: string, key: string) => void;
+  adoptCanonicalKey: (scoped: string, key: string) => Promise<boolean>;
   captureAttemptKey: (
     payloadSignature: string
   ) => Promise<UtilityIdempotencyAttempt>;
@@ -203,8 +203,10 @@ export function useUtilityIdempotencyKey({
     forgetPendingVtuPurchase(scoped);
   };
 
+  // Durable (Codex R1 P1): callers await so the winner key lands
+  // before the submit resolves.
   const adoptCanonicalKey = (scoped: string, key: string) => {
-    adoptCanonicalVtuKey(scoped, key);
+    return adoptCanonicalVtuKey(scoped, key);
   };
 
   const noteScopedReference = (scoped: string, reference: string) => {

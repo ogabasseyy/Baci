@@ -14,6 +14,7 @@ export {
   notePendingVtuReference,
 } from './utility-pending-vtu-reference-registry';
 export { forgetPendingVtuPurchaseDurable } from './utility-pending-vtu-sync';
+export { adoptCanonicalVtuKey } from './utility-pending-vtu-canonical-adoption';
 import {
   forgottenScopedKeys,
   noteForgottenVtuScope,
@@ -101,22 +102,6 @@ export function rememberPendingVtuPurchase(
     completedAt: null,
   });
   forgottenScopedKeys.delete(payloadSignature);
-  schedulePendingVtuFlush();
-}
-
-/** Rebinds a minted entry to the server's canonical (winner) key
- * after an intent-claim join, preserving reference/scopeTag/
- * completion. No-op when the entry is missing (forgotten/rotated
- * meanwhile — never resurrect) or already canonical. */
-export function adoptCanonicalVtuKey(
-  payloadSignature: string,
-  key: string
-): void {
-  const entry = pendingVtuPurchases.get(payloadSignature);
-  if (!entry || entry.key === key) {
-    return;
-  }
-  pendingVtuPurchases.set(payloadSignature, { ...entry, key });
   schedulePendingVtuFlush();
 }
 

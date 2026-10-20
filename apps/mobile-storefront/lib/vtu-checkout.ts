@@ -121,7 +121,11 @@ export async function chargeWalletForVtu(
   const canonicalKey =
     response.headers.get(VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER) ?? undefined;
   if (canonicalKey && pendingDescriptor) {
-    adoptCanonicalVtuKey(pendingDescriptor, canonicalKey);
+    // Awaited (Codex R1 P1): the winner key must be durable
+    // before this response resolves — a restart on a scheduled-
+    // only flush would resurrect the loser key and double-debit
+    // once the winner terminalizes.
+    await adoptCanonicalVtuKey(pendingDescriptor, canonicalKey);
   }
   if (!response.ok) {
     throw new HttpError(response.status, getResponseErrorMessage(data));

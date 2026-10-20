@@ -5,10 +5,10 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
+import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import { findExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
-import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -156,12 +156,14 @@ export async function POST(request: NextRequest) {
 
     // Exactly-once intent claim (epic #3694): the RPC records our
     // (key, transaction) mapping for this intent scope, or joins the
-    // scope's in-flight transaction when another key won the race
-    // (second tab/device, registry loss, double submit). Terminal
-    // transactions are never joined: a new key after terminalization
-    // starts a new purchase (repeat purchases share fingerprints).
-    // The RPC returns the authoritative mapping, subsuming the old
-    // insert + PK-race re-read (Codex R124 P2).
+    // scope's live-or-overlapping transaction when another key won
+    // the race (second tab/device, registry loss, double submit).
+    // Terminals that settled before our prepare are never joined: a
+    // new key after terminalization starts a new purchase (repeat
+    // purchases share fingerprints); terminals overlapping our
+    // prepare join (same in-flight operation). The RPC returns the
+    // authoritative mapping, subsuming the old insert + PK-race
+    // re-read (Codex R124 P2).
     const { data: claimRows, error: claimError } = await supabase.rpc(
       'claim_vtu_intent',
       {
@@ -173,6 +175,20 @@ export async function POST(request: NextRequest) {
       }
     );
     if (claimError) {
+      // Certain-abort claim rejections (claim_*): the RPC raised,
+      // so NOTHING was recorded — our prepared row is orphaned and
+      // must be discarded before responding (Codex R1 P2).
+      // Transport/unknown errors skip cleanup: the claim may still
+      // have committed, and deleting a referenced row would
+      // CASCADE-kill the mapping (see the transport-failure test).
+      if (claimError.message.startsWith('claim_')) {
+        await discardOrphanedClaimTransaction({
+          context: 'rejection',
+          merchantId: prepared.merchant.id,
+          supabase,
+          transactionId: prepared.transaction.id,
+        });
+      }
       // Same-key race lost on a changed payload: the key is mapped
       // with another fingerprint — same 409 contract as the replay
       // path. Scope mismatch (key-UUID collision; the route's
@@ -207,24 +223,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (claim.transaction_id !== prepared.transaction.id) {
-      // Loser path: another key owns this intent's in-flight
-      // transaction. Discard our prepared row via the existing
-      // orphan cleanup (guarded pending→failed + no-collection
-      // marker; no reversal — prepare doesn't debit), then replay
-      // the winner. Same-scope/same-fingerprint by RPC
-      // construction, so no ownership re-check is needed. The
-      // cleanup outcome never masks the replay (Muse R55 HIGH).
-      const cleanupOutcome = await cleanupOrphanVtuTransactionAfterKeyRace({
+      // Loser path: another key owns this intent's transaction.
+      // Discard our prepared row (guarded pending→failed +
+      // no-collection marker; no reversal — prepare doesn't
+      // debit), then replay the winner. Same-scope/
+      // same-fingerprint by RPC construction, so no ownership
+      // re-check is needed.
+      await discardOrphanedClaimTransaction({
+        context: 'join',
         merchantId: prepared.merchant.id,
         supabase,
         transactionId: prepared.transaction.id,
       });
-      if (cleanupOutcome === 'unresolved') {
-        console.error(
-          'Orphan VTU cleanup unresolved after intent-claim join; row may strand pending:',
-          { transactionId: prepared.transaction.id }
-        );
-      }
       // Joins should be rare (registries normally reuse keys); a
       // join storm signals client key churn — investigate the
       // registry, not the claim.
@@ -246,10 +256,12 @@ export async function POST(request: NextRequest) {
         supabase,
         user: auth.user,
       });
-      // Winner-key wire: the loser's key has no mapping, so the
-      // clients adopt the winner key for subsequent retries instead
-      // of re-preparing + orphaning on every attempt. Same-scope by
-      // RPC construction — nothing cross-principal is disclosed.
+      // Winner-key wire: the loser key maps to the winner
+      // server-side (loser-key retries replay), and clients adopt
+      // the winner key for subsequent retries so every attempt
+      // converges on one key instead of re-preparing + orphaning
+      // per attempt. Same-scope by RPC construction — nothing
+      // cross-principal is disclosed.
       replayResponse.headers.set(
         VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER,
         claim.idempotency_key

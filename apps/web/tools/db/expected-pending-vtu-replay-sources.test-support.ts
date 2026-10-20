@@ -59,4 +59,13 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261016132000_drop_vtu_replay_owner_policy_after_repair.sql',
     sha256: 'fff472cbedce07e61a8968d9294e03dc77c5d6ee02db625f24298f1bfe487e21',
   },
+  {
+    repositoryPath: 'supabase/migrations/20261019120000_claim_vtu_intent.sql',
+    sha256: '085106d8245cc8f7a7d7e9ef7d6131469f33e85625a28df15c9919302955da08',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020053000_join_overlapping_terminal_vtu_intent.sql',
+    sha256: '9b002b402f7e6a38bda2fe1329474fdb0811be0ca6841b76264b515cfcd57fff',
+  },
 ];

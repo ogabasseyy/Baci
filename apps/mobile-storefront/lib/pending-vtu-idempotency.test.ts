@@ -829,7 +829,9 @@ describe('pending-vtu-idempotency', () => {
     rememberPendingVtuPurchase('desc-adopt', 'key-minted', 'scope-1');
     notePendingVtuReference('desc-adopt', 'REF-1');
 
-    adoptCanonicalVtuKey('desc-adopt', 'key-winner');
+    await expect(
+      adoptCanonicalVtuKey('desc-adopt', 'key-winner')
+    ).resolves.toBe(true);
 
     expect(recallPendingVtuKey('desc-adopt')).toBe('key-winner');
     expect(pendingPurchases.get('desc-adopt')).toMatchObject({
@@ -837,24 +839,72 @@ describe('pending-vtu-idempotency', () => {
       reference: 'REF-1',
       scopeTag: 'scope-1',
     });
-    await flushPendingVtuPurchases();
-    expect(recallPendingVtuKey('desc-adopt')).toBe('key-winner');
+    // Durable before resolving (Codex R1 P1): a restart recovers
+    // the winner key, not the loser.
+    const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([
+      ['desc-adopt', expect.objectContaining({ key: 'key-winner' })],
+    ]);
   });
 
-  it('adoption is a no-op for a missing entry (never resurrect)', () => {
-    adoptCanonicalVtuKey('desc-gone', 'key-winner');
+  it('adoption is a no-op for a missing entry (never resurrect)', async () => {
+    await expect(adoptCanonicalVtuKey('desc-gone', 'key-winner')).resolves.toBe(
+      true
+    );
 
     expect(recallPendingVtuKey('desc-gone')).toBeNull();
     expect(pendingPurchases.has('desc-gone')).toBe(false);
   });
 
-  it('adoption is a no-op when the entry is already canonical', () => {
+  it('adoption is a no-op when the entry is already canonical', async () => {
     rememberPendingVtuPurchase('desc-same', 'key-winner');
     const before = pendingPurchases.get('desc-same');
 
-    adoptCanonicalVtuKey('desc-same', 'key-winner');
+    await expect(adoptCanonicalVtuKey('desc-same', 'key-winner')).resolves.toBe(
+      true
+    );
 
     expect(pendingPurchases.get('desc-same')).toBe(before);
     expect(recallPendingVtuKey('desc-same')).toBe('key-winner');
+  });
+
+  it('adoption keeps the memory rebind and schedules a retry when the flush fails', async () => {
+    // Codex R1 P1: storage outage during adoption — memory still
+    // rebinds (live retries converge on the winner), false
+    // reports the crash window (server-side loser mapping
+    // backstops it), and the scheduled retry lands the winner
+    // once storage works. Pins the navigator fallback (R149):
+    // this jsdom's LockManager never releases a lock whose
+    // callback throws.
+    clearPendingVtuKeys();
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
+    rememberPendingVtuPurchase('desc-flushfail', 'key-minted');
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    const consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    try {
+      await expect(
+        adoptCanonicalVtuKey('desc-flushfail', 'key-winner')
+      ).resolves.toBe(false);
+      expect(recallPendingVtuKey('desc-flushfail')).toBe('key-winner');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/not durable/)
+      );
+    } finally {
+      persistSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+      g.navigator = priorNavigator;
+    }
+    // Storage works again: the scheduled retry persists the winner.
+    await flushPendingVtuPurchases();
+    const snapshot = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(snapshot.entries).toEqual([
+      ['desc-flushfail', expect.objectContaining({ key: 'key-winner' })],
+    ]);
   });
 });

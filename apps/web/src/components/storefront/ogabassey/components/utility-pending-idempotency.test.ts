@@ -18,7 +18,10 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { loadPendingVtuSnapshot } from './utility-pending-idempotency-store';
+import {
+  loadPendingVtuSnapshot,
+} from './utility-pending-idempotency-store';
+import * as vtuStore from './utility-pending-idempotency-store';
 import {
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
@@ -551,7 +554,9 @@ describe('utility-pending-idempotency', () => {
     rememberPendingVtuPurchase('{"a":1}', 'key-minted', 'scope-1');
     notePendingVtuReference('{"a":1}', 'REF-1');
 
-    adoptCanonicalVtuKey('{"a":1}', 'key-winner');
+    await expect(
+      adoptCanonicalVtuKey('{"a":1}', 'key-winner')
+    ).resolves.toBe(true);
 
     expect(recallPendingVtuKey('{"a":1}')).toBe('key-winner');
     expect(pendingVtuPurchases.get('{"a":1}')).toMatchObject({
@@ -559,24 +564,65 @@ describe('utility-pending-idempotency', () => {
       reference: 'REF-1',
       scopeTag: 'scope-1',
     });
-    await flushPendingVtuPurchases();
-    expect(recallPendingVtuKey('{"a":1}')).toBe('key-winner');
+    // Durable before resolving (Codex R1 P1): a restart recovers
+    // the winner key, not the loser. (Entries key by scope digest;
+    // the payload carries the adopted key.)
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-winner' });
   });
 
-  it('adoption is a no-op for a missing entry (never resurrect)', () => {
-    adoptCanonicalVtuKey('{"gone":1}', 'key-winner');
+  it('adoption is a no-op for a missing entry (never resurrect)', async () => {
+    await expect(
+      adoptCanonicalVtuKey('{"gone":1}', 'key-winner')
+    ).resolves.toBe(true);
 
     expect(recallPendingVtuKey('{"gone":1}')).toBeUndefined();
     expect(pendingVtuPurchases.has('{"gone":1}')).toBe(false);
   });
 
-  it('adoption is a no-op when the entry is already canonical', () => {
+  it('adoption is a no-op when the entry is already canonical', async () => {
     rememberPendingVtuPurchase('{"a":2}', 'key-winner');
     const before = pendingVtuPurchases.get('{"a":2}');
 
-    adoptCanonicalVtuKey('{"a":2}', 'key-winner');
+    await expect(
+      adoptCanonicalVtuKey('{"a":2}', 'key-winner')
+    ).resolves.toBe(true);
 
     expect(pendingVtuPurchases.get('{"a":2}')).toBe(before);
     expect(recallPendingVtuKey('{"a":2}')).toBe('key-winner');
+  });
+
+  it('adoption keeps the memory rebind and schedules a retry when the flush fails', async () => {
+    // Codex R1 P1 (mobile mirror): storage outage during adoption
+    // — memory still rebinds (live retries converge on the
+    // winner), false reports the crash window (server-side loser
+    // mapping backstops it), and the scheduled retry lands the
+    // winner once storage works.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('{"f":1}', 'key-minted');
+    const saveSpy = vi
+      .spyOn(vtuStore, 'savePendingVtuSnapshot')
+      .mockReturnValue(false);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    try {
+      await expect(
+        adoptCanonicalVtuKey('{"f":1}', 'key-winner')
+      ).resolves.toBe(false);
+      expect(recallPendingVtuKey('{"f":1}')).toBe('key-winner');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/not durable/)
+      );
+    } finally {
+      saveSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    }
+    // Storage works again: the scheduled retry persists the winner.
+    await flushPendingVtuPurchases();
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.[1]).toMatchObject({ key: 'key-winner' });
   });
 });

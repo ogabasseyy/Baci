@@ -141,3 +141,23 @@ test('does not flag innocuous names containing test- mid-word', () => {
   assert.equal(isTestHelper(join(dir, 'latest-utils.ts')), false);
   assert.equal(isTestHelper(join(dir, 'order-test-utils.ts')), true);
 });
+
+test('flags runner config files importing shared fixtures', () => {
+  const dir = fixtureDir({
+    'metro.config.ts':
+      "import { f } from '@baci/shared/test-fixtures/piggyvest-purchase';\nexport const x = f;\n",
+    'vitest.config.ts':
+      "import { h } from './order-test-utils';\nexport const y = h;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), [
+    join(dir, 'metro.config.ts'),
+  ]);
+});
+
+test('test-runner configs may register fixture aliases', () => {
+  const dir = fixtureDir({
+    'vitest.config.ts':
+      "const alias = '../../packages/shared/src/test-fixtures/builder-ai-edit.ts';\nexport const x = alias;\n",
+  });
+  assert.deepEqual(findFixtureImportOffenders([dir]), []);
+});

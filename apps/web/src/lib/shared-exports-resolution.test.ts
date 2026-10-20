@@ -32,7 +32,8 @@ const listFixtureFiles = (dir: string, prefix = ''): string[] =>
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory())
       return listFixtureFiles(join(dir, entry.name), rel);
-    return /\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')
+    return /\.tsx?$/.test(entry.name) &&
+      !/\.(test|spec)\.[tj]sx?$/.test(entry.name)
       ? [rel]
       : [];
   });

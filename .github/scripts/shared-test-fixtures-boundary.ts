@@ -39,7 +39,9 @@ export function normalizePath(path: string) {
 export function isTestFile(path: string) {
   const normalized = normalizePath(path);
   return (
-    /(?:vitest|jest|metro)\.config\./.test(normalized) ||
+    // Test-runner configs (Vitest/Jest) only ever execute tests, so
+    // their alias registrations for fixture subpaths are legitimate.
+    /(?:vitest|jest)\.config\./.test(normalized) ||
     // Fixture definitions themselves are exempt.
     normalized.includes('/packages/shared/src/test-fixtures/') ||
     /\.(test|spec)\.(?:m|c)?[tj]sx?$/.test(normalized) ||
@@ -51,6 +53,11 @@ export function isTestFile(path: string) {
 export function isTestHelper(path: string) {
   const normalized = normalizePath(path);
   return (
+    // Metro config is a production bundle entry point: it stays
+    // exempt from the test-support pattern but NOT from the fixture
+    // patterns, so a Metro config importing a shared fixture (as
+    // opposed to a test-runner alias registration) is flagged.
+    /metro\.config\./.test(normalized) ||
     normalized.includes('/__tests__/') ||
     /\.test-support\.(?:m|c)?[tj]sx?$/.test(normalized) ||
     /(?:^|[-_./])test-(?:support|fixtures?|render|utils|helpers?|subject)[\w-]*\.(?:m|c)?[tj]sx?$/.test(

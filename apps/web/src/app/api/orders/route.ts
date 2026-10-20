@@ -1467,6 +1467,19 @@ export async function POST(request: NextRequest) {
       ? null
       : (body.selected_quote_id ?? null);
     const resolvedTrackingNumber = body.tracking_number ?? null;
+    // Quoted checkouts: body pins are untrusted (main #3704), so strip them
+    // and let the validated quote's pin attach at enrichment. Quote-less
+    // (merchant-rate) orders keep their validated body pin — it is the only
+    // destination pin and stays bound into the idempotency hash.
+    const quoteDestinationAddress =
+      resolvedSelectedQuoteId && shipping_address
+        ? (() => {
+            const stripped = { ...shipping_address };
+            delete stripped.latitude;
+            delete stripped.longitude;
+            return stripped;
+          })()
+        : shipping_address;
     const quotePreparation = await prepareCheckoutQuoteDestination({
       isIdempotentLocalAirportReplay,
       isIdempotentOrderReplay,
@@ -1475,7 +1488,7 @@ export async function POST(request: NextRequest) {
       offerPrices: liveOfferPrices,
       requestIdempotencyKey,
       selectedQuoteId: resolvedSelectedQuoteId,
-      shippingAddress: shipping_address,
+      shippingAddress: quoteDestinationAddress,
       shippingFee: shippingFeeValue,
       shippingProvider: resolvedShippingProvider,
       supabase,

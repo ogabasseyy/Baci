@@ -90,7 +90,8 @@ describe('prepareCheckoutQuoteDestination', () => {
         shippingProvider: null,
         merchantId: 'merchant',
         items: [{ name: 'Item', quantity: 1, value: 100 }],
-      })
+      }),
+      { persistAttestedCoordinates: true }
     );
   });
   it('reproduces new-order shape on confirmed retries without bypassing fee/provider validation', async () => {
@@ -110,7 +111,8 @@ describe('prepareCheckoutQuoteDestination', () => {
         isConfirmedReplay: true,
         shippingFee: 100,
         shippingProvider: 'GIGL',
-      })
+      }),
+      { persistAttestedCoordinates: false }
     );
   });
   it('treats a confirmed airport replay as a quote replay without a new keyed replay probe', async () => {
@@ -128,7 +130,8 @@ describe('prepareCheckoutQuoteDestination', () => {
         isConfirmedReplay: true,
         shippingFee: 100,
         shippingProvider: null,
-      })
+      }),
+      { persistAttestedCoordinates: false }
     );
   });
   it('keeps legacy metadata-free replay context if the keyed precheck cannot confirm it', async () => {
@@ -146,7 +149,8 @@ describe('prepareCheckoutQuoteDestination', () => {
         isConfirmedReplay: false,
         shippingFee: undefined,
         shippingProvider: null,
-      })
+      }),
+      { persistAttestedCoordinates: false }
     );
   });
   it('does not load products or probe replay when there is no selected quote', async () => {

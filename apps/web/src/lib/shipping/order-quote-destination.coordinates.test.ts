@@ -112,9 +112,9 @@ describe('GIGL checkout attested destination coordinates', () => {
   });
 
   it('takes coordinates from the validated quote when the checkout body carries no pin', async () => {
-    // Merge reconciliation: #3687 deliberately preserves validated body
-    // pins through orderCreateSchema (mismatches fail at enrichment), so
-    // this scenario uses a pin-less body; quote adoption is unchanged.
+    // Merge reconciliation: order input preserves validated body pins, so
+    // this scenario uses a pin-less body; the route strips body pins for
+    // quoted checkouts before enrichment, where quote adoption is tested.
     const parsedAddress = orderCreateSchema.parse({
       merchant_id: '11111111-1111-4111-8111-111111111111',
       customer_email: 'synthetic@example.test',

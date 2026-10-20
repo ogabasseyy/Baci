@@ -202,6 +202,12 @@ export async function prepareCheckoutQuoteDestination({
         },
         shippingFee: bypassCheckoutContext ? undefined : shippingFee,
         shippingProvider: bypassCheckoutContext ? null : shippingProvider,
+      },
+      {
+        // Main #3704 contract: only new-order creation attaches the
+        // quote's attested coordinates; replays never repair pins here.
+        persistAttestedCoordinates:
+          !isIdempotentLocalAirportReplay && !isIdempotentOrderReplay,
       }
     );
     return {

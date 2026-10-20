@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-20T13:49:37.437247+00:00",
-  "source_revision": "3e20436fe110d109b5c158627288edb527e61ea9",
-  "evidence_digest": "ea89c910eed66c7873539ab881b75517efd2eb7568ba50f5d84d87116f535f80",
-  "claims_digest": "ff65cd232bdb424de5f6c558d1d031836f3d4d9192fc4a2ef8ddaf85f153521d",
+  "reviewed_at": "2026-10-20T16:53:59.497852+00:00",
+  "source_revision": "46fc5112e8409ee1d98bec2ccdddb829dee58aaf",
+  "evidence_digest": "7a7dd086c0f95964dec5f8dd93bd3b00c440c2aa548be93b2b9d14d91dd8ba1c",
+  "claims_digest": "7eb1d3997f6820f96019e76877528cbd74604fee2af502904043125957817cf9",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review.",
   "capabilities": [
     {

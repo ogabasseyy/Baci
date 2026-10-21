@@ -89,7 +89,8 @@ query="$(jq -r '.query' <<<"$payload")"
 if [ -n "${FAKE_QUERY_LOG:-}" ]; then
   printf '%s\n' "$payload" >>"$FAKE_QUERY_LOG"
 fi
-if [[ "$query" == "SELECT version, name,"* ]]; then
+expected_history_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+if [ "$query" = "$expected_history_query" ]; then
   rows="$(docker exec "$MIGRATION_TEST_CONTAINER" psql -X -qAt -F $'\t' -U postgres -h 127.0.0.1 -c "$query")"
   if [[ -n "$rows" ]]; then
     jq -Rn '[inputs | split("\t") | {version: .[0], name: .[1], statements_sha256: .[2]}]' <<<"$rows"
@@ -112,6 +113,21 @@ PATH="$fixture_root/bin:$PATH" \
 
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
   < "$repo_root/supabase/tests/gigl_tracking_retry_repair.sql"
+
+docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 <<'SQL'
+DO $$
+DECLARE
+  joined_statement_digest text;
+  split_statement_digest text;
+BEGIN
+  joined_statement_digest := encode(sha256(convert_to(array_to_json(ARRAY[E'a\nb'])::text, 'UTF8')), 'hex');
+  split_statement_digest := encode(sha256(convert_to(array_to_json(ARRAY['a', 'b'])::text, 'UTF8')), 'hex');
+  IF joined_statement_digest = split_statement_digest THEN
+    RAISE EXCEPTION 'Statement-array checksum encoding must preserve element boundaries';
+  END IF;
+END;
+$$;
+SQL
 
 alias_migrations="$fixture_root/version-alias-migrations"
 mkdir -p "$alias_migrations"

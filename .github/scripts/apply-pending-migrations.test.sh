@@ -171,7 +171,9 @@ done
 facets_sha="$(sha256sum "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" | awk '{print $1}')"
 processor_sha="$(sha256sum "$version_alias_dir/20261003193000_storefront_processor_filters.sql" | awk '{print $1}')"
 category_sha="$(sha256sum "$version_alias_dir/20261003194500_storefront_category_facets.sql" | awk '{print $1}')"
-category_stored_sha='14bd400f6d42cf80df4797dfd96c6f9db863f82488abeee9394fd6c7237d7769'
+facets_stored_sha='f9c57f6e4670efab9295f83a3cb2db50f06196d244131104c42af04db7f301fd'
+processor_stored_sha='cbb407f313bc113344c694eadea4564d10026be75067d5c82d93ed69f0cc0c80'
+category_stored_sha='d4fcaf725c66fd10748159bedc1df5f5d3eeba13b2b49b395de8c99eb2c2c1a2'
 version_alias_log="$fixture_root/version-alias-queries.log"
 version_alias_output="$fixture_root/version-alias-output.log"
 PATH="$fake_bin:$PATH" \
@@ -180,8 +182,8 @@ PATH="$fake_bin:$PATH" \
   SUPABASE_PROJECT_REF=test \
   FAKE_QUERY_LOG="$version_alias_log" \
   FAKE_INITIAL_RESPONSE="$(jq -cn \
-    --arg facets "$facets_sha" \
-    --arg processor "$processor_sha" \
+    --arg facets "$facets_stored_sha" \
+    --arg processor "$processor_stored_sha" \
     --arg category "$category_stored_sha" \
     '[
       {version:"20261003175517",name:"storefront_available_search_facets",statements_sha256:$facets},
@@ -189,7 +191,7 @@ PATH="$fake_bin:$PATH" \
       {version:"20261003184149",name:"storefront_category_facets",statements_sha256:$category}
     ]')" \
   bash "$applier" >"$version_alias_output"
-if ! jq -r '.query' "$version_alias_log" | grep -Fq "CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256"; then
+if ! jq -r '.query' "$version_alias_log" | grep -Fq "CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8'))"; then
   echo 'Migration history must hash only the three pinned alias rows' >&2
   exit 1
 fi
@@ -223,6 +225,27 @@ if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_version_a
   exit 1
 fi
 
+alias_preflight_dir="$fixture_root/alias-preflight"
+mkdir -p "$alias_preflight_dir"
+cp "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" "$alias_preflight_dir/"
+printf 'SELECT 1;\n' >"$alias_preflight_dir/20261003170000_pending_before_alias.sql"
+alias_preflight_log="$fixture_root/alias-preflight-queries.log"
+if PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$alias_preflight_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$alias_preflight_log" \
+  FAKE_INITIAL_RESPONSE='[{"version":"20261003175517","name":"storefront_available_search_facets","statements_sha256":"wrong"}]' \
+  bash "$applier" >"$fixture_root/alias-preflight-output.log" 2>&1; then
+  echo 'Expected alias verification to fail before applying earlier pending migrations' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/alias-preflight-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$alias_preflight_log"; then
+  echo 'A rejected alias must be preflighted before earlier migrations write state' >&2
+  exit 1
+fi
+
 tampered_version_alias_dir="$fixture_root/tampered-version-alias"
 mkdir -p "$tampered_version_alias_dir"
 cp "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" \
@@ -235,7 +258,7 @@ if PATH="$fake_bin:$PATH" \
   SUPABASE_ACCESS_TOKEN=test \
   SUPABASE_PROJECT_REF=test \
   FAKE_QUERY_LOG="$tampered_version_alias_log" \
-  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_sha" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_stored_sha" \
     '[{version:"20261003175517",name:"storefront_available_search_facets",statements_sha256:$sha}]')" \
   bash "$applier" >"$fixture_root/tampered-version-alias-output.log" 2>&1; then
   echo 'Expected a modified local migration file to fail closed for a historical alias' >&2
@@ -253,7 +276,7 @@ if PATH="$fake_bin:$PATH" \
   SUPABASE_ACCESS_TOKEN=test \
   SUPABASE_PROJECT_REF=test \
   FAKE_QUERY_LOG="$wrong_name_version_alias_log" \
-  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_sha" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_stored_sha" \
     '[{version:"20261003175517",name:"unexpected_alias_name",statements_sha256:$sha}]')" \
   bash "$applier" >"$fixture_root/wrong-name-version-alias-output.log" 2>&1; then
   echo 'Expected an unexpected recorded alias name to fail closed' >&2

@@ -141,7 +141,7 @@ build_register_migration_query() {
 . "$script_dir/apply-pending-migration.sh"
 . "$script_dir/repair-sales-migration-collision.sh"
 
-applied_versions_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_string(statements, E'\n'), 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+applied_versions_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
 applied_versions_body="$(jq -n --arg query "$applied_versions_query" '{query: $query}')"
 applied_versions_response="$(api_query <<<"$applied_versions_body")"
 applied_migrations="$(jq -r '.[] | [.version, .name, (.statements_sha256 // "")] | @tsv' <<<"$applied_versions_response")"
@@ -168,6 +168,30 @@ applied_count=0
 skipped_count=0
 deferred_count=0
 atomic_group_skip_bases=''
+
+# Validate every in-scope historical alias against the single history snapshot
+# before any earlier migration can be applied and recorded in this run.
+for file in "${sorted_files[@]}"; do
+  base="$(basename "$file" .sql)"
+  version="${base%%_*}"
+  name="${base#*_}"
+  recorded_name="$(awk -F '\t' -v version="$version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  [ -z "$recorded_name" ] || continue
+  if ! alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+    continue
+  fi
+  if [ "$migration_phase" = "predeploy" ] && is_postdeploy_migration "$base"; then
+    continue
+  fi
+  if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+    continue
+  fi
+  alias_version="$(cut -f1 <<<"$alias_spec")"
+  alias_recorded_name="$(awk -F '\t' -v version="$alias_version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  if [ -n "$alias_recorded_name" ] && ! verify_historical_migration_version_alias "$file" "$alias_spec"; then
+    exit 1
+  fi
+done
 
 if [ "$checkout_recovery_legacy_upgrade_required" -eq 1 ]; then
   . "$script_dir/reconcile-checkout-recovery-legacy.sh"

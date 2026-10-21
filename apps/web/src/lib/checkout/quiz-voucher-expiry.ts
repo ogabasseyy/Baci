@@ -23,8 +23,20 @@ function decodeBase64Url(value: string): string {
     return new TextDecoder().decode(bytes);
   }
 
-  // Node/SSR fallback (e.g. Vitest without jsdom globals).
-  return Buffer.from(padded, 'base64').toString('utf8');
+  // Node/SSR fallback (e.g. Vitest without jsdom globals). Access via
+  // globalThis indirection so client bundlers do not inject the Node `buffer`
+  // polyfill (~34 KiB) into storefront chunks.
+  const nodeBuffer = (
+    globalThis as {
+      Buffer?: {
+        from(
+          input: string,
+          encoding: string
+        ): { toString(encoding: string): string };
+      };
+    }
+  ).Buffer;
+  return nodeBuffer ? nodeBuffer.from(padded, 'base64').toString('utf8') : '';
 }
 
 /**

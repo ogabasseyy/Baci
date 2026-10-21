@@ -41,7 +41,7 @@ vi.mock('@/components/ui/button', () => ({
     </button>
   ),
 }));
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({
     children,
     initialMerchant,

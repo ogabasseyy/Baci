@@ -29,8 +29,10 @@ vi.mock('@/hooks/use-cart', () => ({
     merchantSlug: 'store',
   }),
 }));
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: () => ({ merchant: null, basePath: '' }),
 }));
 vi.mock('@/components/checkout-theme-provider', () => ({

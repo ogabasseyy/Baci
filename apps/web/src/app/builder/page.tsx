@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { CopilotBuilderWrapper } from '@/components/builder/copilot-builder-wrapper';
 import { CsrfInitializer } from '@/components/csrf-initializer';
 import { StorefrontProvider } from '@/contexts/storefront-context';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import BuilderClient from './builder-client';
 
 export const metadata: Metadata = {

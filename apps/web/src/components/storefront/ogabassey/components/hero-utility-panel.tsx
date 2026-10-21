@@ -158,7 +158,7 @@ export function HeroUtilityPanel({
                 single-word span grew/shrank past its 60px floor on every
                 rotation, shifting the surrounding copy (field CLS).
               */}
-              <span className="text-primary font-bold transition-all duration-500 inline-grid min-w-[60px] text-left align-baseline">
+              <span className="text-primary font-bold leading-none transition-all duration-500 inline-grid min-w-[60px] text-left align-baseline">
                 {UTILITY_WORDS.map((word, index) => (
                   <span
                     aria-hidden={index === activeUtilityIndex ? undefined : true}
@@ -216,7 +216,7 @@ export function HeroUtilityPanel({
               through it resized the box. Stacked grid cells size to the
               longest word once; rotation is paint-only.
             */}
-            <span className="text-primary font-bold transition-all duration-500 inline-grid min-w-[80px] text-left align-baseline">
+            <span className="text-primary font-bold leading-none transition-all duration-500 inline-grid min-w-[80px] text-left align-baseline">
               {UTILITY_WORDS.map((word, index) => (
                 <span
                   aria-hidden={index === activeUtilityIndex ? undefined : true}

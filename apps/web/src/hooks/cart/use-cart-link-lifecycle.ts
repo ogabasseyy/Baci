@@ -13,6 +13,7 @@ import {
   backoffMs,
   FALLBACK_POLL_MS,
   jittered,
+  MAX_AUTO_RETRIES,
   RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
@@ -84,6 +85,7 @@ export function useCartLinkLifecycle(
     if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
     const generation = sessionGeneration;
     let cancelled = false;
+    let adoptRun = 0;
     let adoptTimer: ReturnType<typeof setTimeout> | null = null;
     const visibility = createCartVisibilityWaiter();
     adoptOutcomeRef.current = 'unknown';
@@ -111,19 +113,36 @@ export function useCartLinkLifecycle(
       type: 'link/start',
     });
     setHydrated(true);
+    const provision = (attempt: number, run: number) =>
+      createInitialCartProvisioner(context, {
+        isLive: () => !cancelled && run === adoptRun,
+        whenVisible: visibility.wait,
+        schedule: (callback, delay) => {
+          adoptTimer = setTimeout(callback, delay);
+        },
+      })(attempt);
 
-    const provision = createInitialCartProvisioner(context, {
-      isLive: () => !cancelled,
-      whenVisible: visibility.wait,
-      schedule: (callback, delay) => {
-        adoptTimer = setTimeout(callback, delay);
-      },
-    });
+    function retryAdopt(attempt: number, run: number) {
+      if (attempt >= MAX_AUTO_RETRIES) {
+        dispatch({
+          generation,
+          type: 'import/failed',
+          code: 'temporarily_unavailable',
+        });
+        setLinkPhase('ready');
+        return;
+      }
+      adoptTimer = setTimeout(
+        () => void adopt(attempt + 1, run),
+        backoffMs(ADOPT_RETRY_BASE_MS, attempt)
+      );
+    }
 
-    async function adopt(attempt: number): Promise<void> {
-      if (cancelled || generationRef.current !== generation) return;
+    async function adopt(attempt: number, run: number): Promise<void> {
+      if (cancelled || generationRef.current !== generation || run !== adoptRun)
+        return;
       if (document.hidden) {
-        visibility.wait(() => void adopt(attempt));
+        visibility.wait(() => void adopt(attempt, run));
         return;
       }
       if (
@@ -131,18 +150,21 @@ export function useCartLinkLifecycle(
           optionsRef.current.merchantSlug
         )) === false
       ) {
-        if (cancelled || generationRef.current !== generation) return;
-        adoptTimer = setTimeout(
-          () => void adopt(attempt + 1),
-          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
-        );
+        if (
+          cancelled ||
+          generationRef.current !== generation ||
+          run !== adoptRun
+        )
+          return;
+        retryAdopt(attempt, run);
         return;
       }
       const result = await fetchSharedCartSnapshot(
         undefined,
         optionsRef.current.merchantSlug
       );
-      if (cancelled || generationRef.current !== generation) return;
+      if (cancelled || generationRef.current !== generation || run !== adoptRun)
+        return;
       if (result.ok && isTerminalCart(result.snapshot) && cached.length) {
         cached = unimportedTerminalLines(
           cached,
@@ -153,7 +175,7 @@ export function useCartLinkLifecycle(
           // Provisioning reads the parked source again: remove only consumed mirror lines.
           saveCartToStorage(cached, merchantSlug);
           adoptOutcomeRef.current = 'expired';
-          await provision(attempt);
+          await provision(attempt, run);
           return;
         }
       }
@@ -173,15 +195,12 @@ export function useCartLinkLifecycle(
             result.snapshot,
             cached,
             generation,
-            () => !cancelled
+            () => !cancelled && run === adoptRun
           );
         return;
       }
       if (result.retryable) {
-        adoptTimer = setTimeout(
-          () => void adopt(attempt + 1),
-          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
-        );
+        retryAdopt(attempt, run);
         return;
       }
       adoptOutcomeRef.current =
@@ -194,14 +213,24 @@ export function useCartLinkLifecycle(
         dispatch({ generation, type: 'import/capacity_exceeded' });
         return;
       } else {
-        await provision(attempt);
+        await provision(attempt, run);
         return;
       }
       setLinkPhase('ready');
     }
 
-    void adopt(0);
+    context.retryLinkRef.current = () => {
+      if (adoptTimer) clearTimeout(adoptTimer);
+      visibility.cancel();
+      adoptRun += 1;
+      linkRunRef.current += 1;
+      dispatch({ generation, type: 'link/retry' });
+      setLinkPhase('adopting');
+      void adopt(0, adoptRun);
+    };
+    void adopt(0, adoptRun);
     return () => {
+      context.retryLinkRef.current = null;
       cancelled = true;
       if (adoptTimer) clearTimeout(adoptTimer);
       visibility.cancel();

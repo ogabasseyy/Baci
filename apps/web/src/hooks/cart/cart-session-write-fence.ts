@@ -8,6 +8,7 @@ import {
   CART_REQUEST_TIMEOUT_MS,
   withCartRequestDeadline,
 } from './cart-request-deadline';
+import { bumpCartSessionGeneration } from './shared-cart-storage';
 
 /** Drain authority-creating requests before retiring the cookie they can install. */
 const flights = new Map<Promise<unknown>, string>();
@@ -86,17 +87,40 @@ export function beginCartSessionRetirement(
 export function runCartSessionTransition<T>(
   slug: string | null | undefined,
   blocked: T,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  outcome?: {
+    isSuccessful(result: T): boolean;
+    operationId?: string;
+    canRetry?(result: T): boolean;
+  }
 ): Promise<T> {
   if (isCartSessionRetiring(slug)) return Promise.resolve(blocked);
   const retirement = beginCartSessionRetirement(slug ?? '', {
     expectedEpoch: getCartCookieEpoch(),
   });
+  let ran = false;
+  let succeeded = false;
+  let replayOperationId = outcome?.operationId;
   const pending = retirement.drained
-    .then(operation, () => blocked)
+    .then(
+      async () => {
+        ran = true;
+        const result = await operation();
+        succeeded = outcome?.isSuccessful(result) ?? true;
+        if (outcome?.canRetry?.(result) === false)
+          replayOperationId = undefined;
+        return result;
+      },
+      () => blocked
+    )
     .finally(() => {
       retirement.release();
       flights.delete(pending);
+      if (ran && !succeeded)
+        bumpCartSessionGeneration({
+          merchantSlug: slug,
+          operationId: replayOperationId,
+        });
     });
   flights.set(pending, slug ?? '');
   return pending;

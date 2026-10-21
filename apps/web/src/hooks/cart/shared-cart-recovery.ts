@@ -33,6 +33,19 @@ export function createCartRecovery(
     const failed = stateRef.current.queue.find(
       (entry) => entry.state === 'failed'
     );
+    if (
+      context.adoptOutcomeRef.current === 'unknown' &&
+      context.retryLinkRef.current
+    ) {
+      if (failed)
+        dispatch({
+          generation: generationRef.current,
+          operationId: failed.operationId,
+          type: 'command/retry',
+        });
+      context.retryLinkRef.current();
+      return;
+    }
     if (!failed) {
       if (stateRef.current.importStatus === 'failed') {
         retryImport();
@@ -60,6 +73,13 @@ export function createCartRecovery(
     const generation = generationRef.current;
     const current = stateRef.current;
     if (current.importStatus !== 'failed') return;
+    if (
+      context.adoptOutcomeRef.current === 'unknown' &&
+      context.retryLinkRef.current
+    ) {
+      context.retryLinkRef.current();
+      return;
+    }
     const cached = getCartFromStorage(optionsRef.current.merchantSlug);
     if (cached.length === 0) {
       dispatch({ generation, status: 'skipped', type: 'import/resolved' });

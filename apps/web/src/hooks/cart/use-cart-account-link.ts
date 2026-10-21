@@ -6,6 +6,7 @@ import { linkAccountCart } from './shared-cart-account-link-client';
 import { fetchSavedAccountCart } from './shared-cart-saved-cart-client';
 import {
   getCartSessionGeneration,
+  getCartSessionGenerationChange,
   subscribeCartSessionGeneration,
 } from './shared-cart-storage';
 
@@ -66,6 +67,10 @@ export function useCartAccountLink(options: Options) {
   } | null>(null);
   if (!actions.current) {
     const loadSavedCart = async () => {
+      if (state.current.pending) {
+        setStatus('error');
+        return;
+      }
       const captured = state.current.scope;
       const generation = getCartSessionGeneration();
       const run = ++state.current.readRun;
@@ -162,19 +167,34 @@ export function useCartAccountLink(options: Options) {
     state.current.options = options;
   });
   useEffect(() => {
-    state.current.pending = null;
+    const change = getCartSessionGenerationChange();
+    // A failed selection relinks the ordinary cart, but its unknown outcome
+    // must retain the exact replay body for this same account and operation.
+    const keepPending = Boolean(
+      state.current.pending &&
+        change?.generation === generation &&
+        change.transition?.operationId === state.current.pending.operationId &&
+        change.transition.merchantSlug === options.merchantSlug &&
+        state.current.scope ===
+          JSON.stringify([
+            options.merchantSlug,
+            options.ownerSubject,
+            change.from,
+          ])
+    );
+    if (!keepPending) state.current.pending = null;
     state.current.savedCart = null;
     state.current.loadedScope = null;
     state.current.readRun += 1;
     state.current.scope = scope;
     setSavedCart(null);
-    setStatus('idle');
-    setPending(false);
+    setStatus(keepPending ? 'error' : 'idle');
+    setPending(keepPending);
     return () => {
       state.current.readRun += 1;
       state.current.lifecycle += 1;
     };
-  }, [scope]);
+  }, [scope, generation, options.merchantSlug, options.ownerSubject]);
   const savedCartLoaded =
     state.current.loadedScope === scope && status === 'ready';
   return {

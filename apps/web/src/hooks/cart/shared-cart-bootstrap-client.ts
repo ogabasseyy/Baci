@@ -3,7 +3,6 @@ import { fetchWithCsrf } from '@/lib/api-client';
 import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
-  runCartSessionWrite,
 } from './cart-session-write-fence';
 import { failureOf, readBody } from './shared-cart-client-support';
 import {
@@ -28,10 +27,9 @@ const inFlightBootstraps = new Map<string, Promise<BootstrapResult>>();
  * whichever Set-Cookie lands last wins — a cart-less bootstrap proof
  * arriving after provisioning would overwrite the proof bound to the
  * just-created cart and orphan it. Callers do not all name the
- * merchant the same way (the account panel omits the slug and lets
- * the host resolve it), so an unnamed flight coalesces with any
- * in-flight bootstrap, while distinct named merchants — the
- * client-side merchant-switch flow — keep separate flights.
+ * merchant the same way. Coalesce only identical keys: an unnamed
+ * host-resolved caller cannot safely infer a named flight's merchant.
+ * The origin-wide write lock serializes distinct physical requests.
  */
 export function bootstrapSharedCart(
   merchantSlug?: string
@@ -43,16 +41,8 @@ export function bootstrapSharedCart(
   };
   if (isCartSessionRetiring(merchantSlug)) return Promise.resolve(unavailable);
   const key = merchantSlug ?? '';
-  for (const [flightKey, pending] of inFlightBootstraps) {
-    if (flightKey === key || flightKey === '' || key === '') {
-      // An unnamed caller may belong to any merchant on this origin. Its
-      // dependency must overlap every retirement even if the original
-      // request was registered under a different named merchant.
-      return key === ''
-        ? runCartSessionWrite(undefined, unavailable, () => pending)
-        : pending;
-    }
-  }
+  const existing = inFlightBootstraps.get(key);
+  if (existing) return existing;
   const pending = runBoundedCartSessionWrite<BootstrapResult>(
     merchantSlug,
     { code: 'temporarily_unavailable', ok: false, retryable: true },

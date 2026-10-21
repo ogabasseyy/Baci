@@ -2,13 +2,16 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { buildImportEntries } from './build-import-entries';
 import { getCartFromStorage } from './cart-storage';
 import { planLegacyImport } from './shared-cart-reducer';
+import { isCartDeviceRevocationPending } from './shared-cart-session-revoke-client';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 /** Bootstrap can preserve a live cookie installed by another tab. */
 export function adoptPreservedCart(
   runtime: SharedCartRuntime,
   snapshot: CartSnapshot
-): void {
+): boolean {
+  if (isCartDeviceRevocationPending(runtime.optionsRef.current.merchantSlug))
+    return false;
   const generation = runtime.generationRef.current;
   runtime.adoptOutcomeRef.current = 'session';
   runtime.dispatch({ generation, snapshot, type: 'link/snapshot' });
@@ -46,4 +49,5 @@ export function adoptPreservedCart(
       status: 'skipped',
     });
   }
+  return true;
 }

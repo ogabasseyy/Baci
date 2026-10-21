@@ -191,8 +191,13 @@ export function createCartProvisioning(
         );
         if (!fenced()) return null;
         if (preserved.ok && !isTerminalCart(preserved.snapshot)) {
+          if (!adoptPreservedCart(context, preserved.snapshot))
+            return {
+              ok: false,
+              code: 'temporarily_unavailable',
+              retryable: true,
+            };
           createRequestRef.current = null;
-          adoptPreservedCart(context, preserved.snapshot);
           void context.hydrateMissing?.(preserved.snapshot);
           return { ok: true };
         }

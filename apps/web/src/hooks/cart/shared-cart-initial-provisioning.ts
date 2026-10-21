@@ -1,6 +1,10 @@
 'use client';
 
-import { ADOPT_RETRY_BASE_MS, backoffMs } from './shared-cart-hook-support';
+import {
+  ADOPT_RETRY_BASE_MS,
+  backoffMs,
+  MAX_AUTO_RETRIES,
+} from './shared-cart-hook-support';
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -28,17 +32,20 @@ export function createInitialCartProvisioner(
     }
     const result = await runtime.ensureCart(() => live() && !document.hidden);
     if (!live()) return;
-    if (!result || (!result.ok && result.retryable)) {
+    if (
+      (!result || (!result.ok && result.retryable)) &&
+      attempt < MAX_AUTO_RETRIES
+    ) {
       lifecycle.schedule(
         () => void provision(attempt + 1),
         backoffMs(ADOPT_RETRY_BASE_MS, attempt)
       );
       return;
     }
-    if (!result.ok)
+    if (!result?.ok)
       runtime.dispatch({
         generation,
-        code: result.code,
+        code: result?.ok === false ? result.code : 'temporarily_unavailable',
         type: 'import/failed',
       });
     runtime.setLinkPhase('ready');

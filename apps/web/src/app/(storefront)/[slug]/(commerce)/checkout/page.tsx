@@ -37,6 +37,8 @@ export default async function CheckoutPage({
     (merchant as unknown as { template_id?: string }).template_id ===
     'new-template'
   ) {
+    // This template reads only the live cart/local steps; it has no orderId
+    // lookup or validated resumed-order path, so no resume bypass applies.
     return (
       <CheckoutThemeProvider>
         <CheckoutCartCapacityGate

@@ -84,6 +84,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   // Invalidates in-flight hydration when the link restarts (merchant,
   // slug, or generation change) or unmounts.
   const linkRunRef = useRef(0);
+  const retryLinkRef = useRef<(() => void) | null>(null);
 
   const tempCounterRef = useRef(0);
 
@@ -118,6 +119,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     pendingHydrationRef,
     latestSnapshotRef,
     linkRunRef,
+    retryLinkRef,
     tempCounterRef,
     optionsRef,
   };

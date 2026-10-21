@@ -134,3 +134,14 @@ export function targetTempId(intent: SharedCartIntent): string | undefined {
   }
   return undefined;
 }
+
+/** Clear only an adoption failure when the shopper explicitly retries linking. */
+export function retryAdoption(state: SharedCartState): SharedCartState {
+  return withDisplay({
+    ...state,
+    importStatus: state.importStatus === 'failed' ? 'none' : state.importStatus,
+    syncError: state.queue.some((entry) => entry.state === 'failed')
+      ? state.syncError
+      : null,
+  });
+}

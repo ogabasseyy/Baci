@@ -46,7 +46,7 @@ export function DeviceCartCapacityItems({
     // ID, remove one equivalent legacy occurrence, preserving siblings whose
     // quantity or assurance differs from the selected row.
     const target = selected.cartItemId
-      ? candidates.find((item) => item.cartItemId === selected.cartItemId)
+      ? current.find((item) => item.cartItemId === selected.cartItemId)
       : candidates.length === 1 &&
           items.filter(matchesSelected).length === 1 &&
           !candidates[0].cartItemId
@@ -59,12 +59,15 @@ export function DeviceCartCapacityItems({
                 (selected.hasAssurance ?? false) &&
               item.assuranceRate === selected.assuranceRate
           );
-    const removed = target !== undefined;
-    const targetIndex = target ? current.indexOf(target) : -1;
-    let remaining = removed
-      ? current.filter((_, currentIndex) => currentIndex !== targetIndex)
-      : current;
-    if (removed && getCartWideNegotiationFromStorage(merchantSlug)) {
+    if (!target) {
+      setItems(current);
+      return;
+    }
+    const targetIndex = current.indexOf(target);
+    let remaining = current.filter(
+      (_, currentIndex) => currentIndex !== targetIndex
+    );
+    if (getCartWideNegotiationFromStorage(merchantSlug)) {
       remaining = remaining.map(
         ({ negotiatedPrice: _price, negotiationStatus: _status, ...item }) =>
           item

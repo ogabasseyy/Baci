@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import {
   getCartFromStorage,
   getCartWideNegotiationFromStorage,
@@ -152,4 +152,33 @@ it('removes a unique legacy line after its saved quantity changes', () => {
   saveCartToStorage([{ ...selected, quantity: 3 }], 'shop');
   fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
   expect(getCartFromStorage('shop')).toEqual([]);
+});
+
+it('uses the stable saved ID even after a negotiation changes', () => {
+  const selected = cartItem({
+    cartItemId: 'selected',
+    negotiatedPrice: 10,
+    negotiationStatus: 'accepted',
+  });
+  saveCartToStorage([selected], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage(
+    [{ ...selected, negotiatedPrice: undefined, negotiationStatus: undefined }],
+    'shop'
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
+  expect(getCartFromStorage('shop')).toEqual([]);
+});
+it('does not write storage when a stale selected ID no longer exists', () => {
+  const selected = cartItem({ cartItemId: 'selected' });
+  saveCartToStorage([selected], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([], 'shop');
+  const write = vi.spyOn(Storage.prototype, 'setItem');
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
+    expect(write).not.toHaveBeenCalled();
+  } finally {
+    write.mockRestore();
+  }
 });

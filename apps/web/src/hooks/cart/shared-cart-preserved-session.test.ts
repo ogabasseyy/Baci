@@ -4,6 +4,10 @@ import { saveCartToStorage } from './cart-storage';
 import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
 import { createCartRecovery } from './shared-cart-recovery';
+import {
+  markCartDeviceRevocationPending,
+  resetPendingCartDeviceRevocationsForTests,
+} from './shared-cart-session-revoke-client';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
 
 it('adopts a preserved live cart and queues the saved items against its identity', () => {
@@ -85,4 +89,29 @@ it('surfaces temporary busy recovery rather than silently ignoring a retry', () 
     type: 'import/failed',
     code: 'temporarily_unavailable',
   });
+});
+
+it('does not adopt or import parked cache while revocation is pending', () => {
+  window.localStorage.clear();
+  saveCartToStorage([cartItem()], 'shop');
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const dispatch = vi.fn();
+  markCartDeviceRevocationPending('shop');
+  try {
+    expect(
+      adoptPreservedCart(
+        { ...result.current, dispatch },
+        snapshot({ lines: [] })
+      )
+    ).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  } finally {
+    resetPendingCartDeviceRevocationsForTests();
+  }
 });

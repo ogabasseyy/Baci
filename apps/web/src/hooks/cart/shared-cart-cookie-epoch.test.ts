@@ -1,5 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { CookieLockHarness } from './cart-cross-tab-lock.test-support';
+import { runCartSessionTransition } from './cart-session-write-fence';
 import { saveCartToStorage } from './cart-storage';
 import {
   bootstrapSharedCart,
@@ -16,6 +19,10 @@ import {
   SLUG,
   snapshot,
 } from './shared-cart-provisioning.test-support';
+import {
+  getCartSessionGeneration,
+  subscribeCartSessionGeneration,
+} from './shared-cart-storage';
 import { useSharedCart } from './use-shared-cart';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -167,5 +174,45 @@ it('surfaces a retryable queued-command failure when storage becomes denied', as
     expect(sendSharedCartCommand).not.toHaveBeenCalled();
   } finally {
     denied.mockRestore();
+  }
+});
+
+it('sends the first fresh edit after a failed transition relinks the cart', async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, 'locks');
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: new CookieLockHarness(),
+  });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot({ lines: [] }),
+    warnings: [],
+  });
+  try {
+    const { result } = renderHook(() => {
+      const generation = useSyncExternalStore(
+        subscribeCartSessionGeneration,
+        getCartSessionGeneration
+      );
+      return useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: generation,
+      });
+    });
+    await waitFor(() => expect(result.current.importStatus).toBe('skipped'));
+    await act(async () => {
+      await runCartSessionTransition(SLUG, false, async () => false, {
+        isSuccessful: Boolean,
+      });
+    });
+    await waitFor(() =>
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2)
+    );
+    act(() => result.current.addToCart(product({ id: 'new-item' }), 1));
+    await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledOnce());
+  } finally {
+    if (descriptor) Object.defineProperty(navigator, 'locks', descriptor);
+    else Reflect.deleteProperty(navigator, 'locks');
   }
 });

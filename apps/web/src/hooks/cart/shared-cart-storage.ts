@@ -94,8 +94,23 @@ export const cartSessionGenerationListeners = new Set<() => void>();
 
 export const getCartSessionGeneration = (): number => cartSessionGeneration;
 
-export const bumpCartSessionGeneration = (): number => {
+export interface CartTransitionChange {
+  merchantSlug?: string | null;
+  operationId?: string;
+}
+let generationChange: {
+  from: number;
+  generation: number;
+  transition?: CartTransitionChange;
+} | null = null;
+export const getCartSessionGenerationChange = () => generationChange;
+
+export const bumpCartSessionGeneration = (
+  transition?: CartTransitionChange
+): number => {
+  const from = cartSessionGeneration;
   cartSessionGeneration += 1;
+  generationChange = { from, generation: cartSessionGeneration, transition };
   for (const listener of [...cartSessionGenerationListeners]) {
     listener();
   }

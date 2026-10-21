@@ -15,7 +15,12 @@ export function importInitialDeviceCart(
     context;
 
   if (!isLive() || generationRef.current !== generation) return;
-  if (stateRef.current.importStatus !== 'none') return;
+  if (
+    stateRef.current.generation === generation &&
+    stateRef.current.importStatus !== 'none' &&
+    stateRef.current.importStatus !== 'failed'
+  )
+    return;
   const receipt = getSharedCartImportReceipt(merchantSlug);
   if (receipt?.cartId === snapshot.cartId) {
     dispatch({ generation, status: 'done', type: 'import/resolved' });

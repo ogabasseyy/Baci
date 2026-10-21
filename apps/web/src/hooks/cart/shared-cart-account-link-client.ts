@@ -46,7 +46,12 @@ export function linkAccountCart(
           snapshot: null,
         },
         (signal) => requestAccountCartLink(input, merchantSlug, signal)
-      )
+      ),
+    {
+      isSuccessful: (result) => result.ok,
+      operationId: input.operationId,
+      canRetry: (result) => !result.ok && result.retryable,
+    }
   );
 }
 async function requestAccountCartLink(

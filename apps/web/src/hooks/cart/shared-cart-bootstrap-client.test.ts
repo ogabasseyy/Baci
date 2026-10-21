@@ -37,28 +37,29 @@ it('preserves CSRF rejection as forbidden instead of authorizing preserved-sessi
   });
 });
 
-it('drains a named flight joined by an unnamed caller during another merchant retirement', async () => {
-  let finish!: (response: Response) => void;
+it('keeps host-resolved bootstrap independent of named merchant flights', async () => {
+  const finishes: ((response: Response) => void)[] = [];
   vi.mocked(fetchWithCsrf).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      })
+    () => new Promise((resolve) => finishes.push(resolve))
   );
-  const named = bootstrapSharedCart('merchant-a');
+  const first = bootstrapSharedCart('merchant-a');
+  const second = bootstrapSharedCart('merchant-b');
   const unnamed = bootstrapSharedCart();
-  const retirement = beginCartSessionRetirement('merchant-b');
+  expect(fetchWithCsrf).toHaveBeenCalledTimes(3);
+  expect(fetchWithCsrf).toHaveBeenLastCalledWith(
+    '/api/storefront/cart/bootstrap',
+    expect.objectContaining({ body: '{}' })
+  );
+  const retirement = beginCartSessionRetirement('merchant-c');
   const drained = vi.fn();
   void retirement.drained.then(drained);
   try {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(drained).not.toHaveBeenCalled();
-    finish(new Response('{}', { status: 200 }));
-    await Promise.all([named, unnamed, retirement.drained]);
+    for (const finish of finishes) finish(new Response('{}', { status: 200 }));
+    await Promise.all([first, second, unnamed, retirement.drained]);
     expect(drained).toHaveBeenCalledOnce();
   } finally {
-    finish(new Response('{}', { status: 200 }));
-    await Promise.allSettled([named, unnamed]);
     retirement.release();
   }
 });

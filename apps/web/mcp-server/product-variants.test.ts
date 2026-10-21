@@ -82,7 +82,7 @@ describe('loadMcpProductVariants', () => {
       },
     );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'get_product_offers',
+      'get_storefront_offer_resolution',
       expect.anything(),
     );
     expect(supabase.query.select).toHaveBeenCalledWith(
@@ -115,6 +115,136 @@ describe('loadMcpProductVariants', () => {
     expect(result.structuredContent).toMatchObject({
       catalog_colors: { labels: ['Silver'], source: 'product.color_images' },
       variants: [{ attributes: { storage: '128GB' }, availability: 'in_stock' }],
+    });
+  });
+
+  it('skips stocked offers without a finite price instead of pricing them at zero', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: null, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('No variant options were returned');
+    expect(result.content[0].text).not.toContain('• used:');
+    expect(result.structuredContent).toMatchObject({ condition_offers: [] });
+  });
+
+  it('drops a gated row a partial projection still carries', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: 2, parent_eligible: false, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('No variant options were returned');
+    expect(result.content[0].text).not.toContain('• used:');
+    expect(result.structuredContent).toMatchObject({ condition_offers: [] });
+  });
+
+  it('fails closed to zero when a non-unlimited policy has no allocation', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: null, effective_policy: 'legacy', parent_eligible: true, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).not.toContain('• used: 70000 - In Stock');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [{ condition: 'used', availability: 'out_of_stock' }],
+    });
+  });
+
+  it('treats unlimited null allocations as unbounded', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: null, effective_policy: 'serialized_then_unlimited', parent_eligible: true, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('• used: 70000 - In Stock');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [
+        { offer_id: 'offer-used', condition: 'used', availability: 'in_stock' },
+      ],
+    });
+  });
+
+  it('matches an uppercase caller id to a lowercase live row', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: {
+        id: 'PHONE-1', name: 'Phone', manage_stock: true, has_variants: false,
+        has_condition_offers: true, color: null, color_images: null,
+      }, error: null,
+    });
+    supabase.rpc.mockResolvedValue({
+      data: [
+        { product_id: 'phone-1', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+      ],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('• used: 70000 - In Stock');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [{ condition: 'used', availability: 'in_stock' }],
     });
   });
 

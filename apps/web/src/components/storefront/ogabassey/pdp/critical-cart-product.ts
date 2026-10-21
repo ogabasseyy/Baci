@@ -20,6 +20,7 @@ type CriticalCartSource = Pick<
   | 'condition'
   | 'default_variant_id'
   | 'description'
+  | 'effective_policy'
   | 'gtin'
   | 'has_variants'
   | 'id'
@@ -72,6 +73,9 @@ export function createCriticalCartProduct(
     // Retained for the cart aggregate pool cap: offer adds overwrite
     // stock with the selected allocation, so the cap reads stock_quantity.
     inventory_tracking_policy: product.inventory_tracking_policy,
+    // Anchor-derived effective policy (preferred over the row policy
+    // by the offer-stock helpers).
+    effective_policy: product.effective_policy,
     mpn: product.mpn || product.slug || product.id,
     name: product.name,
     offers: product.offers,

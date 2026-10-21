@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import { orderConditionPrice } from '@/lib/checkout/order-condition-prices';
 
 export type AgenticTaxLinePriceVariant = {
@@ -49,9 +50,11 @@ export function resolveAgenticTaxLinePrice({
   // Mirror the RPC precedence: the key pins the offer to this line's
   // product, so a cross-product offer_id falls through to the parent
   // price (the route rejects the mismatch before the RPC runs).
+  // Canonical key: the live map is keyed lowercase, so an
+  // uppercase caller spelling must normalize to meet it.
   const offerPrice =
     item.offer_id && item.product_id
-      ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
+      ? offerPrices?.get(makeOfferLineKey(item.product_id, item.offer_id))
       : undefined;
   const priceRaw =
     (conditionPrices

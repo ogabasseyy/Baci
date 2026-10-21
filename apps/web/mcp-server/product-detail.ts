@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { resolveMcpDetailOffers } from './resolve-mcp-detail-offers';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
@@ -42,11 +43,17 @@ export async function buildMcpProductDetail({
   supabase,
   formatPrice,
   getSafeCatalogImageUrl,
+  merchantId,
 }: {
   product: ProductDetailSource;
   supabase: SupabaseClient;
   formatPrice: (price: number) => string;
   getSafeCatalogImageUrl: (imageUrl: string | null | undefined) => string | undefined;
+  // Tenant scope for the offer-resolution RPC: the product was already
+  // resolved for this merchant, and the variants surface scopes the
+  // identical call — unscoped here would silently drop offers the
+  // sibling returns (or vice versa).
+  merchantId: string;
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
@@ -73,27 +80,11 @@ export async function buildMcpProductDetail({
   }
 
   // Fetch condition offers if available
-  let conditionOffers: Array<{
-    offer_id: string;
-    condition: string;
-    price: number;
-    compare_at_price: number | null;
-    stock_quantity: number;
-    grade: string | null;
-    condition_notes: string | null;
-  }> = [];
-  let offerLookupFailed = false;
-  if (product.has_condition_offers) {
-    const { data: offerData, error: offerError } = await supabase.rpc('get_product_offers', {
-      p_product_id: product.id,
-    });
-    if (offerError) {
-      console.error('Failed to fetch public product offers:', offerError);
-      offerLookupFailed = true;
-    } else {
-      conditionOffers = offerData || [];
-    }
-  }
+  const detailOffers = product.has_condition_offers
+    ? await resolveMcpDetailOffers({ supabase, product, merchantId })
+    : { offers: [], lookupFailed: false };
+  const conditionOffers = detailOffers.offers;
+  const offerLookupFailed = detailOffers.lookupFailed;
 
   // Get rating from schema_markup if available
   const rating = product.schema_markup?.aggregateRating?.ratingValue;

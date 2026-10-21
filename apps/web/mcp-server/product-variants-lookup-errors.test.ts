@@ -22,10 +22,13 @@ describe('loadMcpProductVariants partial lookup failures', () => {
         : {
             data: [
               {
+                product_id: 'phone-1',
+                offer_id: 'offer-used',
                 condition: 'used',
                 grade: null,
-                price: 70000,
-                stock_quantity: 2,
+                price_basis: 70000,
+                allocatable_stock: 2,
+                parent_eligible: true,
                 condition_notes: null,
               },
             ],
@@ -41,8 +44,9 @@ describe('loadMcpProductVariants partial lookup failures', () => {
         sanitizeString: (value) => value,
         formatPrice: String,
       });
-      expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
-        p_product_id: 'phone-1',
+      expect(supabase.rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+        p_merchant_id: 'merchant-1',
+        p_product_ids: ['phone-1'],
       });
       expect(result.content[0].text).toContain('• used: 70000 - In Stock');
       expect(result.structuredContent).toMatchObject({
@@ -66,7 +70,7 @@ describe('loadMcpProductVariants partial lookup failures', () => {
       error: null,
     });
     supabase.rpc.mockImplementation(async (name: string) =>
-      name === 'get_product_offers'
+      name === 'get_storefront_offer_resolution'
         ? { data: null, error: { message: 'offers unavailable' } }
         : {
             data: [

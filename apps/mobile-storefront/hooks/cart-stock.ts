@@ -219,7 +219,7 @@ export async function checkStock(
     };
   }
   const resolved = options?.offerId
-    ? await resolveOfferStock(productId, options.offerId, parentStock)
+    ? await resolveOfferStock(productId, options.offerId)
     : await resolveBaseStock(productId, parentStock);
   // Under strict serialized tracking the per-identity total keeps its
   // scalar allocation, but the base line and every sibling offer draw

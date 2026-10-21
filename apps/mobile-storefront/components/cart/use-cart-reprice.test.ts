@@ -378,4 +378,26 @@ describe('useCartReprice', () => {
     expect(mockRepriceItems).not.toHaveBeenCalled();
     expect(result.current.priceChanges).toEqual([]);
   });
+  it('fences checkout when repricing reports only unavailable lines', async () => {
+    const { sharedCartWriteRevision } = await import(
+      '@/stores/shared-cart-writer'
+    );
+    mockItems = [createItem({ id: 'line-1' })];
+    mockRepriceCartItems.mockResolvedValue({
+      priceById: {},
+      changes: [],
+      conditionChanges: [],
+      conditionById: {},
+      adoptions: [],
+      offerIdById: {},
+      unavailable: [{ id: 'line-1' }],
+    });
+    const before = sharedCartWriteRevision();
+    const { result } = renderHook(() => useCartReprice());
+    await waitFor(() =>
+      expect(result.current.unavailableLines).toHaveLength(1)
+    );
+    expect(mockRepriceItems).not.toHaveBeenCalled();
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+  });
 });

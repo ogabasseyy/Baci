@@ -44,7 +44,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setConflicts,
     setResolutions,
     setLoadError,
-    refreshPreview: () => loadPreview(),
+    refreshPreview: (signal) => loadPreview(signal),
   });
   const { lockedChoice, setLockedChoice, sentBody, lockChoice, postRedeem } =
     redeem;
@@ -82,15 +82,20 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setDestChecked(true);
   }
 
-  async function loadPreview(): Promise<PreviewResponse | null> {
+  async function loadPreview(
+    signal?: AbortSignal
+  ): Promise<PreviewResponse | null> {
     setLoadError(null);
     setPreviewRetryable(false);
     try {
       const response = await fetchJson(
         `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
-        { headers: { 'x-handoff-token': token } }
+        { headers: { 'x-handoff-token': token }, signal }
       );
       const payload = (await response.json()) as PreviewResponse;
+      // A superseded refresh (deadline elapsed, retry started) must not
+      // mutate preview, attempt, or locked-choice state afterwards.
+      if (signal?.aborted) return null;
       if (!response.ok) {
         if (response.status >= 500 || response.status === 429) {
           setPreviewRetryable(true);
@@ -146,6 +151,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       }
       return payload;
     } catch {
+      if (signal?.aborted) return null;
       setPreviewRetryable(true);
       setLoadError('Could not load this cart link. Check your connection.');
       return null;

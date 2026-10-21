@@ -4,10 +4,10 @@ import { isCartDeviceRevocationPending } from '@/hooks/cart/shared-cart-session-
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { MergeConflictView } from './cart-handoff-support';
 
-/** Bound the post-outcome preview refresh so a stalled refresh cannot strand the redeeming state. */
+/** Bound the post-outcome preview refresh so a stalled refresh cannot strand the redeeming state; the deadline signal cancels the refresh so it cannot mutate state after a retry starts. */
 function refreshPreviewBounded(deps: HandoffRedeemDeps): Promise<unknown> {
-  return withCartRequestDeadline(null, async () => {
-    await deps.refreshPreview();
+  return withCartRequestDeadline(null, async (signal) => {
+    await deps.refreshPreview(signal);
     return null;
   });
 }
@@ -27,7 +27,7 @@ export interface HandoffRedeemDeps {
   onTerminalOutcome(): void;
   /** Definitive merge conflict: release the sent body for fresh picks. */
   onMergeConflict(): void;
-  refreshPreview(): Promise<unknown>;
+  refreshPreview(signal?: AbortSignal): Promise<unknown>;
 }
 
 /**

@@ -35,7 +35,7 @@ verify_historical_migration_version_alias() {
   version="${base%%_*}"
   name="${base#*_}"
   recorded_name="$(awk -F '\t' -v version="$alias_version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
-  if [ -z "$recorded_name" ]; then
+  if ! historical_migration_version_is_recorded "$alias_version"; then
     return 1
   fi
 
@@ -46,6 +46,11 @@ verify_historical_migration_version_alias() {
     return 2
   fi
   return 0
+}
+
+historical_migration_version_is_recorded() {
+  local version="$1"
+  awk -F '\t' -v version="$version" '$1 == version { found = 1; exit } END { exit !found }' <<<"$applied_migrations"
 }
 
 skip_verified_historical_migration_version_alias() {

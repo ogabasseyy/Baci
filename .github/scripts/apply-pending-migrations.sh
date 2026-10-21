@@ -141,16 +141,6 @@ build_register_migration_query() {
 . "$script_dir/apply-pending-migration.sh"
 . "$script_dir/repair-sales-migration-collision.sh"
 
-applied_versions_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
-applied_versions_body="$(jq -n --arg query "$applied_versions_query" '{query: $query}')"
-applied_versions_response="$(api_query <<<"$applied_versions_body")"
-applied_migrations="$(jq -r '.[] | [.version, .name, (.statements_sha256 // "")] | @tsv' <<<"$applied_versions_response")"
-
-verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
-
-applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
-echo "Applied versions on remote: ${applied_count_remote}"
-
 shopt -s nullglob
 files=("$migrations_dir"/*.sql)
 shopt -u nullglob
@@ -163,6 +153,36 @@ fi
 # Bash expands globs in lexical order, which is the migration timestamp order.
 # Avoid mapfile so the deployment preflight is also testable with macOS Bash.
 sorted_files=("${files[@]}")
+
+# Build the checksum predicate from the checked-in alias specs instead of
+# maintaining a second copy of their historical version list in this query.
+alias_version_sql=''
+for file in "${sorted_files[@]}"; do
+  base="$(basename "$file" .sql)"
+  version="${base%%_*}"
+  name="${base#*_}"
+  if alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+    IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
+    if ! [[ "$alias_version" =~ ^[0-9]{14}$ ]]; then
+      echo "::error::Historical migration alias for $version $name has an invalid recorded version" >&2
+      exit 1
+    fi
+    alias_version_sql="${alias_version_sql}${alias_version_sql:+, }'${alias_version}'"
+  fi
+done
+if [ -z "$alias_version_sql" ]; then
+  alias_version_sql="''"
+fi
+
+applied_versions_query="SELECT version, name, CASE WHEN version IN (${alias_version_sql}) THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+applied_versions_body="$(jq -n --arg query "$applied_versions_query" '{query: $query}')"
+applied_versions_response="$(api_query <<<"$applied_versions_body")"
+applied_migrations="$(jq -r '.[] | [.version, .name, (.statements_sha256 // "")] | @tsv' <<<"$applied_versions_response")"
+
+verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
+
+applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
+echo "Applied versions on remote: ${applied_count_remote}"
 
 applied_count=0
 skipped_count=0
@@ -187,8 +207,7 @@ for file in "${sorted_files[@]}"; do
     continue
   fi
   alias_version="$(cut -f1 <<<"$alias_spec")"
-  alias_recorded_name="$(awk -F '\t' -v version="$alias_version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
-  if [ -n "$alias_recorded_name" ] && ! verify_historical_migration_version_alias "$file" "$alias_spec"; then
+  if historical_migration_version_is_recorded "$alias_version" && ! verify_historical_migration_version_alias "$file" "$alias_spec"; then
     exit 1
   fi
 done

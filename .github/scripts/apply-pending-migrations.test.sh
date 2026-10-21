@@ -288,6 +288,24 @@ if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$wrong_name_vers
   exit 1
 fi
 
+nameless_version_alias_log="$fixture_root/nameless-version-alias-queries.log"
+if PATH="$fake_bin:$PATH" \
+  MIGRATIONS_DIR="$version_alias_dir" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  FAKE_QUERY_LOG="$nameless_version_alias_log" \
+  FAKE_INITIAL_RESPONSE="$(jq -cn --arg sha "$facets_stored_sha" \
+    '[{version:"20261003175517",name:"",statements_sha256:$sha}]')" \
+  bash "$applier" >"$fixture_root/nameless-version-alias-output.log" 2>&1; then
+  echo 'Expected a present historical alias row with an empty name to fail closed' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/nameless-version-alias-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$nameless_version_alias_log"; then
+  echo 'A nameless historical alias row must not be treated as absent or write migration state' >&2
+  exit 1
+fi
+
 capped_version_alias_dir="$fixture_root/capped-version-alias"
 mkdir -p "$capped_version_alias_dir"
 cp "$version_alias_dir/20261003193000_storefront_processor_filters.sql" \

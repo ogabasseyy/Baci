@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export REPO_ROOT_FOR_TEST="$repo_root"
 container="baci-gigl-retry-repair-${RANDOM}-$$"
 fixture_root="$(mktemp -d)"
 
@@ -89,7 +90,22 @@ query="$(jq -r '.query' <<<"$payload")"
 if [ -n "${FAKE_QUERY_LOG:-}" ]; then
   printf '%s\n' "$payload" >>"$FAKE_QUERY_LOG"
 fi
-expected_history_query="SELECT version, name, CASE WHEN version IN ('20261003175517', '20261003183737', '20261003184149') THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+. "$REPO_ROOT_FOR_TEST/.github/scripts/historical-migration-repair-spec.sh"
+history_alias_versions=''
+for migration_file in "${MIGRATIONS_DIR:-}"/*.sql; do
+  [ -f "$migration_file" ] || continue
+  migration_base="$(basename "$migration_file" .sql)"
+  migration_version="${migration_base%%_*}"
+  migration_name="${migration_base#*_}"
+  if alias_spec="$(historical_migration_version_alias_spec "$migration_version" "$migration_name")"; then
+    IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
+    history_alias_versions="${history_alias_versions}${history_alias_versions:+, }'${alias_version}'"
+  fi
+done
+if [ -z "$history_alias_versions" ]; then
+  history_alias_versions="''"
+fi
+expected_history_query="SELECT version, name, CASE WHEN version IN (${history_alias_versions}) THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
 if [ "$query" = "$expected_history_query" ]; then
   rows="$(docker exec "$MIGRATION_TEST_CONTAINER" psql -X -qAt -F $'\t' -U postgres -h 127.0.0.1 -c "$query")"
   if [[ -n "$rows" ]]; then
@@ -176,6 +192,29 @@ grep -q 'already applied under version 20261003184149: 20261003194500  storefron
 grep -q 'Migrations summary: 0 applied, 3 skipped.' "$alias_output"
 if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$alias_log"; then
   echo 'PostgreSQL-backed historical aliases must not write duplicate migration rows' >&2
+  exit 1
+fi
+
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 <<'SQL'
+UPDATE supabase_migrations.schema_migrations
+SET statements = ARRAY['SELECT ''tampered'';']
+WHERE version = '20261003183737';
+SQL
+printf 'SELECT 1;\n' >"$alias_migrations/20261003170000_pending_before_alias.sql"
+alias_negative_log="$fixture_root/version-alias-negative-queries.log"
+if PATH="$fixture_root/bin:$PATH" \
+  MIGRATION_TEST_CONTAINER="$container" \
+  MIGRATIONS_DIR="$alias_migrations" \
+  FAKE_QUERY_LOG="$alias_negative_log" \
+  SUPABASE_ACCESS_TOKEN=test \
+  SUPABASE_PROJECT_REF=test \
+  bash "$repo_root/.github/scripts/apply-pending-migrations.sh" >"$fixture_root/version-alias-negative-output.log" 2>&1; then
+  echo 'Expected PostgreSQL-backed historical alias checksum mismatch to fail closed' >&2
+  exit 1
+fi
+grep -q 'failed exact-name or SQL checksum verification' "$fixture_root/version-alias-negative-output.log"
+if grep -q 'INSERT INTO supabase_migrations.schema_migrations' "$alias_negative_log"; then
+  echo 'A PostgreSQL-backed rejected alias must fail before recording earlier pending migrations' >&2
   exit 1
 fi
 

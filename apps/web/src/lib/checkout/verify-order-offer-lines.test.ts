@@ -45,6 +45,23 @@ describe('findMismatchedOrderOffer', () => {
     });
   });
 
+  it('matches uppercase UUID spellings to lowercase live rows', async () => {
+    const callRpc = vi.fn(async () => ({
+      data: [authorityRow(OFFER_ID)],
+      error: null,
+    }));
+
+    const line = {
+      product_id: PRODUCT_ID.toUpperCase(),
+      offer_id: OFFER_ID.toUpperCase(),
+    };
+    expect(await findMismatchedOrderOffer(callRpc, [line])).toBeNull();
+
+    const live = await fetchLiveOrderOffers(callRpc, [line]);
+    expect(live.mismatch).toBeNull();
+    expect(live.prices.size).toBe(1);
+  });
+
   it('flags live but parent-ineligible offers and hides their economics', async () => {
     const callRpc = vi.fn(async () => ({
       data: [authorityRow(OFFER_ID, { parent_eligible: false })],

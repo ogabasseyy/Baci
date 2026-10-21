@@ -23,12 +23,10 @@ import { CONFIG } from '@/lib/config';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { markSharedCartIntent } from '@/stores/shared-cart-writer';
-import {
-  dismissPairingLink,
-  pairingRetryOperation,
-  pairWithSharedCart,
-  retryPairingSync,
-} from './pairing-sync';
+import { dismissPairingLink } from './dismiss-pairing-link';
+import { pairWithSharedCart } from './pair-with-shared-cart';
+import { pairingRetryOperation } from './pairing-retry-operation';
+import { retryPairingSync } from './retry-pairing-sync';
 
 import { usePairingOperation } from './use-pairing-operation';
 

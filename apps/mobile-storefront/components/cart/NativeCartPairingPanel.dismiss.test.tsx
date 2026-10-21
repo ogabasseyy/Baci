@@ -1,11 +1,11 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
-  captureCartPairingLink,
   clearCartPairingLink,
   peekCartPairingLink,
 } from '@/lib/cart/pairing-link';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
+import { capturePairingLink } from './capture-pairing-link.test-support';
 import { NativeCartPairingPanel } from './NativeCartPairingPanel';
 
 jest.mock('@/components/ui/ModalSheet', () => {
@@ -60,14 +60,7 @@ it('clears pairing-owned conflicts when the shopper dismisses the sheet', async 
     mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
     mergeConflictReason: 'price_mismatch',
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const close = await waitFor(() =>
     screen.getByRole('button', { name: 'Close cart link' })
@@ -85,14 +78,7 @@ it('keeps legacy choice conflicts gated when dismissing a pairing sheet', async 
     pair: jest.fn().mockResolvedValue(undefined),
     mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const close = await waitFor(() =>
     screen.getByRole('button', { name: 'Close cart link' })
@@ -107,14 +93,7 @@ it('marks checkout intent when dismissing clears pairing conflicts', async () =>
     pair: jest.fn().mockResolvedValue(undefined),
     mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const close = await waitFor(() =>
     screen.getByRole('button', { name: 'Close cart link' })
@@ -152,16 +131,7 @@ it('retains the resolution sheet when close is pressed before pairing publishes 
     mergeConflicts: [],
     mergeConflictReason: undefined,
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  captureCartPairingLink(
-    `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`,
-    {
-      merchantId: merchant,
-      merchantSlug: 'shop',
-      merchantDomain: 'shop.example.com',
-    }
-  );
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const view = render(<NativeCartPairingPanel />);
   const connect = await waitFor(() =>
     view.getByRole('button', { name: 'Combine carts' })

@@ -1,11 +1,9 @@
 import { peekCartPairingLink } from '@/lib/cart/pairing-link';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
-import {
-  dismissPairingLink,
-  pairingRetryOperation,
-  retryPairingSync,
-} from './pairing-sync';
+import { dismissPairingLink } from './dismiss-pairing-link';
+import { pairingRetryOperation } from './pairing-retry-operation';
+import { retryPairingSync } from './retry-pairing-sync';
 
 const prepare = jest.fn().mockResolvedValue(undefined);
 const refresh = jest.fn().mockResolvedValue(undefined);

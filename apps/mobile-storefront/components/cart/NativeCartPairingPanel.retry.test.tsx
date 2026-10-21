@@ -1,10 +1,8 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import {
-  captureCartPairingLink,
-  clearCartPairingLink,
-} from '@/lib/cart/pairing-link';
+import { clearCartPairingLink } from '@/lib/cart/pairing-link';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
+import { capturePairingLink } from './capture-pairing-link.test-support';
 import { NativeCartPairingPanel } from './NativeCartPairingPanel';
 
 jest.mock('@/components/ui/ModalSheet', () => {
@@ -61,14 +59,7 @@ it('marks a pairing retry sync as a checkout-fencing intent', async () => {
     refresh,
     mergeConflicts: [],
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const connect = await waitFor(() =>
     screen.getByRole('button', { name: 'Connect cart' })
@@ -95,14 +86,7 @@ it('offers pairing retry through prepare when refresh is not bound', async () =>
     snapshot: null,
     mergeConflicts: [],
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const keep = await waitFor(() =>
     screen.getByRole('button', { name: 'Keep my current cart' })
@@ -128,14 +112,7 @@ it('offers no dead retry when refresh is unbound but a snapshot exists', async (
     snapshot: { cartId: 'cart-1', version: 1 } as never,
     mergeConflicts: [],
   });
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
   const screen = render(<NativeCartPairingPanel />);
   const keep = await waitFor(() =>
     screen.getByRole('button', { name: 'Keep my current cart' })

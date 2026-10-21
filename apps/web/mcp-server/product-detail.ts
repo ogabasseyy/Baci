@@ -120,8 +120,15 @@ export async function buildMcpProductDetail({
             condition: resolution.condition ?? product.condition ?? 'new',
             price: resolution.priceBasis,
             compare_at_price: resolution.compareAtPrice ?? null,
+            // Null is unbounded only for serialized_then_unlimited;
+            // any other policy with a missing allocation fails closed
+            // at zero (the SQL legacy arm always coalesces, so null
+            // there means a partial projection).
             stock_quantity:
-              resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
+              resolution.allocatableStock ??
+              (resolution.effectivePolicy === 'serialized_then_unlimited'
+                ? Number.MAX_SAFE_INTEGER
+                : 0),
             grade: resolution.grade ?? null,
             condition_notes: resolution.conditionNotes ?? null,
           },

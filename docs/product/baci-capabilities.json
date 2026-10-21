@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-21T06:23:26.813914+00:00",
-  "source_revision": "a66ae039e2c36b8092fb321a75556292174f7352",
-  "evidence_digest": "e3ca00e2ca650604b22bbfb4dbc923644fa95fa8d9f7b2e766911864538b3471",
-  "claims_digest": "2bc3ec76f4b678e2d6f7a222e68f2db917747e5ff3d9a98bf4ebf61a20cde592",
+  "reviewed_at": "2026-10-21T11:38:42.987754+00:00",
+  "source_revision": "10f9f10ee7c1c5541ef13003b98123129a722395",
+  "evidence_digest": "4be123fc389f941d4ea20dde4e25405d7ae4968e112e2d4c994d0a953b28697e",
+  "claims_digest": "9172feb82825c7a9b0897d573e2f84758bcd114754ef13c0106f6e3138c625fd",
   "review_scope": "Source audit; no prod verification claimed. Refs are reviewer evidence. MCP: buyer tools merchant-fixed; private continuation server-configured, off by default. ChatGPT privacy/retention/activation not established. Checkout offers via merchant-scoped get_storefront_offer_resolution (published/admin gate); scoping plus cart fall-through kept. RPC: one awaited factory, three sites. PDP snapshot emits anchor effective_policy; strict offer caps. Chunks 1000 scoped, 200 unscoped. Strict-null logs; outage throws retryable. Anchors lowest-id everywhere; strict zero-unit emits 0. Explicit picks win (pinned). Eligibility string false parses closed. MCP detail merchant-scoped. Duplicate-case ids hydrate all spellings.",
   "capabilities": [
     {

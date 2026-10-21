@@ -117,6 +117,23 @@ describe('ReceiptDetailSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts explicit null locality from mobile-admin edits', () => {
+    // The admin "same as customer" path persists city/state nulls, which
+    // the sender accepts and the renderer filters; the detail must not
+    // fail closed on them.
+    const result = ReceiptDetailSchema.safeParse({
+      ...detailItem,
+      shipping_address: {
+        address: '12 Allen Ave',
+        city: null,
+        name: 'Ada',
+        phone: '',
+        state: null,
+      },
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('MerchantReceiptInfoSchema', () => {

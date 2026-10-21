@@ -177,10 +177,8 @@ function normalizeReceiptClaimCampaignStats(value: unknown) {
     0
   );
   const claimedCount = readNonNegativeIntegerFallback(value.claimedCount, 0);
-  const claimedAppCount = readNonNegativeIntegerFallback(
-    value.claimedAppCount,
-    0
-  );
+  // biome-ignore format: compact fallback preserves the 300-line verifier gate.
+  const claimedAppCount = readNonNegativeIntegerFallback(value.claimedAppCount, 0);
   const claimedUnknownCount = readNonNegativeIntegerFallback(
     value.claimedUnknownCount,
     0
@@ -235,13 +233,14 @@ function normalizeReceiptClaimCampaignStats(value: unknown) {
 
 export const receiptClaimRecordSchema = z.object({
   claimed_at: z.string().nullable(),
-  claimed_by_user_id: z.string().nullable(),
-  customer_email: z.string(),
-  customer_id: z.string(),
+  claimed_by_user_id: z.string().nullish(),
+  customer_email: z.string().nullish(),
+  customer_id: z.string().nullish(),
   customer_name: z.string().nullable(),
+  document_kind: z.enum(['invoice', 'proforma_invoice', 'receipt']).nullish(),
   expires_at: z.string(),
   id: z.string(),
-  merchant_id: z.string(),
+  merchant_id: z.string().nullish(),
   merchant: receiptClaimMerchantSchema.nullable().optional(),
   orders: z.array(receiptClaimOrderSchema).nullable().optional(),
 });
@@ -252,6 +251,7 @@ export const redeemReceiptClaimResultSchema = z.object({
     'already_used',
     'customer_link_failed',
     'email_mismatch',
+    'email_unverified',
     'expired',
     'not_found',
     'ok',

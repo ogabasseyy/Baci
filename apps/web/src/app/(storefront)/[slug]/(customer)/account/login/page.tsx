@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import {
-  fetchCustomerLoginEmailPrefillForRedirect,
+  fetchCustomerLoginEmailHintForRedirect,
   sanitizeCustomerLoginEmailPrefill,
 } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
@@ -96,6 +96,7 @@ function DefaultLoginPage() {
   } = useCustomerAuth();
 
   const [email, setEmail] = useState(prefillEmail);
+  const [emailHint, setEmailHint] = useState('');
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -120,13 +121,14 @@ function DefaultLoginPage() {
       };
     }
 
-    void fetchCustomerLoginEmailPrefillForRedirect(redirectTo).then(
-      (emailHint) => {
-        if (!cancelled && emailHint) {
-          setEmail((currentEmail) => currentEmail || emailHint);
-        }
+    // The claim login hint is masked guidance (never the full address):
+    // display it so the customer knows which inbox to open, but never
+    // place it in the input — the OTP code must go to the real address.
+    void fetchCustomerLoginEmailHintForRedirect(redirectTo).then((hint) => {
+      if (!cancelled && hint) {
+        setEmailHint(hint);
       }
-    );
+    });
 
     return () => {
       cancelled = true;
@@ -294,6 +296,12 @@ function DefaultLoginPage() {
               <form onSubmit={handleSendCode} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address</Label>
+                  {emailHint ? (
+                    <p className="text-sm text-muted-foreground">
+                      This receipt was sent to {emailHint} — sign in with that
+                      address to continue.
+                    </p>
+                  ) : null}
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
                     <Input

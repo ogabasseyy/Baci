@@ -2,6 +2,7 @@ import {
   MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,
 } from '../money/currency-locales';
+import type { MoneyFormatter } from '../money/money-formatter';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -173,4 +174,45 @@ export function getReceiptDisplaySubtotal(
   const displaySubtotal =
     order.total - order.tax_amount - order.shipping_fee + order.discount_amount;
   return displaySubtotal >= 0 ? displaySubtotal : order.subtotal;
+}
+
+// Narrow item view for shared line math: the single source both the HTML
+// preview renderer and the emailed/downloaded PDF renderer consume, so the
+// two can never disagree on line totals or detail labels again.
+export interface ReceiptLineItemLike {
+  price: number;
+  quantity: number;
+  line_extension_amount?: number | null;
+  unit_code?: string | null;
+  vat_rate?: number | null;
+  vat_amount?: number | null;
+  sellers_item_id?: string | null;
+}
+
+export function getReceiptItemLineTotal(item: ReceiptLineItemLike): number {
+  return typeof item.line_extension_amount === 'number' &&
+    Number.isFinite(item.line_extension_amount)
+    ? item.line_extension_amount
+    : item.price * item.quantity;
+}
+
+export function getReceiptItemVatLines(
+  item: ReceiptLineItemLike,
+  formatMoney: MoneyFormatter
+): string[] {
+  const lines: string[] = [];
+  if (typeof item.vat_rate === 'number' && Number.isFinite(item.vat_rate)) {
+    lines.push(`VAT: ${item.vat_rate.toFixed(2)}%`);
+  }
+  if (typeof item.vat_amount === 'number' && Number.isFinite(item.vat_amount)) {
+    lines.push(formatMoney(item.vat_amount));
+  }
+  return lines;
+}
+
+export function getReceiptItemDetailLines(item: ReceiptLineItemLike): string[] {
+  const lines: string[] = [];
+  if (item.sellers_item_id) lines.push(`SKU: ${item.sellers_item_id}`);
+  if (item.unit_code) lines.push(`Unit: ${item.unit_code}`);
+  return lines;
 }

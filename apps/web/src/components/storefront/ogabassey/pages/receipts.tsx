@@ -1,11 +1,6 @@
 'use client';
 
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
-import { formatCanonicalProductConditionLabel } from '@baci/shared/lib';
 import {
-  AlertCircle,
-  CheckCircle2,
-  Clock,
   ExternalLink,
   FileText,
   Leaf,
@@ -15,112 +10,13 @@ import {
   X,
 } from 'lucide-react';
 import type React from 'react';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { EmptyState } from '../components/empty-state';
 import { ReceiptModal } from '../components/ReceiptModal';
-import { useCustomerAuth } from '@/contexts/customer-auth-context';
-import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { ReceiptStatusBadge } from '../components/ReceiptStatusBadge';
 import { ReceiptClaimAppDownloadBanner } from './receipt-claim-app-download-banner';
-import { formatReceiptListDate } from '../receipt-list-date';
-
-const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
-
-function getCurrencyFormatter(currency: string): Intl.NumberFormat {
-  let formatter = currencyFormatterCache.get(currency);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    });
-    currencyFormatterCache.set(currency, formatter);
-  }
-  return formatter;
-}
-
-/** List item for display in the receipts grid */
-interface ReceiptListItem {
-  id: string;
-  order_number: string;
-  date: string;
-  total: string;
-  status: 'Paid' | 'Partially Paid' | 'Unpaid';
-  paymentStatus: 'paid' | 'partially_paid' | 'unpaid';
-  balance: string;
-  firstProductName: string;
-  firstProductImage: string | null;
-  additionalDeviceCount: number;
-  /** Raw order data for the shared receipt generator */
-  rawOrder: ReceiptOrder;
-}
-
-interface ReceiptCustomerInfo {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}
-
-function getStringValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function getReceiptItemImage(item: Record<string, unknown> | undefined) {
-  if (!item) {
-    return null;
-  }
-
-  return (
-    getStringValue(item.product_image) ||
-    getStringValue(item.image) ||
-    getStringValue(item.image_url) ||
-    (Array.isArray(item.product_images)
-      ? getStringValue(item.product_images[0])
-      : null)
-  );
-}
-
-function getReceiptItemName(item: Record<string, unknown> | undefined) {
-  if (!item) {
-    return 'Unknown item';
-  }
-
-  return (
-    getStringValue(item.product_name) ||
-    getStringValue(item.name) ||
-    'Unknown item'
-  );
-}
-
-function getReceiptItemVariantName(item: Record<string, unknown> | undefined) {
-  return (
-    getStringValue(item?.variant_name) ||
-    formatCanonicalProductConditionLabel(getStringValue(item?.condition))
-  );
-}
-
-function getReceiptItemDisplayName(item: Record<string, unknown> | undefined) {
-  const baseName = getReceiptItemName(item);
-  const variantName = getReceiptItemVariantName(item);
-  return variantName && !baseName.includes(`(${variantName})`)
-    ? `${baseName} (${variantName})`
-    : baseName;
-}
-
-function getReceiptItemQuantity(item: Record<string, unknown>) {
-  const quantity = Number(item.quantity);
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
-}
-
-function getAdditionalDeviceCount(items: Array<Record<string, unknown>>) {
-  const totalDeviceCount = items.reduce(
-    (count, item) => count + getReceiptItemQuantity(item),
-    0
-  );
-
-  return Math.max(0, totalDeviceCount - 1);
-}
+import { useReceiptList } from './use-receipt-list';
 
 function ReceiptProductThumbnail({
   imageSrc,
@@ -162,199 +58,21 @@ function ReceiptProductThumbnail({
   );
 }
 
-// Module-scope helper keeps async fetch/mapping logic out of the component
-// body so React Compiler can memoize the component.
-async function fetchReceiptListItems(
-  merchantSlug: string,
-  customer: ReceiptCustomerInfo | null
-): Promise<ReceiptListItem[] | null> {
-  const res = await fetch(
-    `/api/storefront/orders?merchantSlug=${encodeURIComponent(merchantSlug)}`
-  );
-  const data = await res.json();
-
-  if (!data.orders) {
-    return null;
-  }
-
-  const customerName = customer
-    ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() ||
-      'Customer'
-    : 'Customer';
-
-  return data.orders.map((order: Record<string, unknown>) => {
-    const items = (order.items as Array<Record<string, unknown>>) ?? [];
-    const currency = (order.currency as string) || 'NGN';
-    const total = Number(order.total) || 0;
-    const amountPaid = Number(order.amount_paid ?? total);
-    const paymentStatus = (order.payment_status as string) || 'unpaid';
-    const firstProductName = getReceiptItemDisplayName(items[0]);
-    const additionalDeviceCount = getAdditionalDeviceCount(items);
-
-    const formatCurrency = (val: number) =>
-      getCurrencyFormatter(currency).format(val);
-
-    const rawOrder: ReceiptOrder = {
-      order_number:
-        (order.order_number as string) ||
-        String(order.id).slice(0, 8).toUpperCase(),
-      created_at: order.created_at as string,
-      transaction_date: order.transaction_date as string | null | undefined,
-      invoice_issue_date: order.invoice_issue_date as string | null | undefined,
-      currency,
-      total,
-      subtotal: Number(order.subtotal ?? total),
-      shipping_fee: Number(order.shipping_fee ?? 0),
-      tax_amount: Number(order.tax_amount ?? 0),
-      discount_amount: Number(order.discount_amount ?? 0),
-      amount_paid: amountPaid,
-      balance: Number(order.balance ?? total - amountPaid),
-      payment_status: paymentStatus,
-      payment_method: (order.payment_method as string) ?? null,
-      is_credit_order: (order.is_credit_order as boolean) ?? false,
-      customer_name: customerName,
-      customer_email: customer?.email || '',
-      customer_phone: customer?.phone ?? null,
-      shipping_address:
-        (order.shipping_address as ReceiptOrder['shipping_address']) ?? null,
-      virtual_account:
-        (order.virtual_account as ReceiptOrder['virtual_account']) ?? null,
-      fulfillment_details:
-        (order.fulfillment_details as ReceiptOrder['fulfillment_details']) ??
-        null,
-      items: items.map((item) => ({
-        product_name: getReceiptItemName(item),
-        variant_name: getReceiptItemVariantName(item) || undefined,
-        quantity: getReceiptItemQuantity(item),
-        price: Number(item.price) || 0,
-      })),
-    };
-
-    const statusLabel =
-      paymentStatus === 'paid'
-        ? 'Paid'
-        : paymentStatus === 'partially_paid'
-          ? 'Partially Paid'
-          : 'Unpaid';
-
-    return {
-      id: order.id as string,
-      order_number: rawOrder.order_number,
-      date: formatReceiptListDate(
-        (order.invoice_issue_date as string | null | undefined) ||
-          (order.transaction_date as string | null | undefined) ||
-          (order.created_at as string)
-      ),
-      total: formatCurrency(total),
-      status: statusLabel,
-      paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],
-      balance: formatCurrency(Math.max(0, total - amountPaid)),
-      firstProductName,
-      firstProductImage: getReceiptItemImage(items[0]),
-      additionalDeviceCount,
-      rawOrder,
-    } satisfies ReceiptListItem;
-  });
-}
-
 export const OgabasseyV2Receipts: React.FC = () => {
-  const { customer, isAuthenticated } = useCustomerAuth();
-  const merchantContext = useMerchantSafe();
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [receipts, setReceipts] = useState<ReceiptListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState<ReceiptOrder | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Fetch orders
-  useEffect(() => {
-    const fetchOrders = () => {
-      if (!isAuthenticated || !merchantContext?.merchant?.slug) {
-        setIsLoading(false);
-        return;
-      }
-
-      fetchReceiptListItems(merchantContext.merchant.slug, customer)
-        .then((mapped) => {
-          if (mapped) {
-            setReceipts(mapped);
-          }
-        })
-        .catch((err) => {
-          console.error('Failed to fetch receipts', err);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    };
-
-    fetchOrders();
-  }, [isAuthenticated, merchantContext?.merchant?.slug, customer]);
-
-  // Derive merchant receipt data from context during render
-  const m = merchantContext?.merchant;
-  const shouldShowOgabasseyAppBanner = m?.slug === 'ogabassey';
-  const merchantReceiptData: ReceiptMerchant | null = m
-    ? {
-        business_name: m.business_name || null,
-        logo_url: m.logo_url || null,
-        email: m.email || '',
-        phone: m.phone || null,
-        support_email: m.support_email || null,
-        support_phone: m.support_phone || null,
-        business_address: m.business_address || null,
-        cac_rc_number: null,
-        tax_identification_number: null,
-        legal_entity_name: null,
-        brand_colors: m.brand_colors,
-        vat_registration_status: m.vat_registration_status || null,
-        vat_rate: m.vat_rate ?? null,
-        bank_code: null,
-        bank_account_number: null,
-        bank_name: null,
-        bank_account_name: null,
-        social_media: m.social_media,
-        pages: m.pages,
-      }
-    : null;
-
-  const filteredReceipts = receipts.filter((receipt) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      receipt.order_number.toLowerCase().includes(query) ||
-      receipt.firstProductName.toLowerCase().includes(query) ||
-      receipt.status.toLowerCase().includes(query)
-    );
-  });
-
-  const handleViewReceipt = (receipt: ReceiptListItem) => {
-    setSelectedOrder(receipt.rawOrder);
-    setIsModalOpen(true);
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Paid':
-        return (
-          <span className="bg-green-50 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-100 flex items-center gap-1 w-fit">
-            <CheckCircle2 size={12} /> Paid
-          </span>
-        );
-      case 'Partially Paid':
-        return (
-          <span className="bg-yellow-50 text-yellow-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-yellow-100 flex items-center gap-1 w-fit">
-            <Clock size={12} /> Partial
-          </span>
-        );
-      default:
-        return (
-          <span className="bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-100 flex items-center gap-1 w-fit">
-            <AlertCircle size={12} /> Unpaid
-          </span>
-        );
-    }
-  };
+  const {
+    filteredReceipts,
+    handleViewReceipt,
+    isAuthenticated,
+    isLoading,
+    isModalOpen,
+    merchantReceiptData,
+    searchQuery,
+    selectedDocumentKind,
+    selectedOrder,
+    setIsModalOpen,
+    setSearchQuery,
+    shouldShowOgabasseyAppBanner,
+  } = useReceiptList();
 
   if (isLoading) {
     return (
@@ -465,7 +183,7 @@ export const OgabasseyV2Receipts: React.FC = () => {
                     {/* Column 1: Order Details */}
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        {getStatusBadge(receipt.status)}
+                        <ReceiptStatusBadge status={receipt.status} />
                         <span className="text-xs text-gray-400">&bull;</span>
                         <span className="text-xs text-gray-500 font-medium">
                           {receipt.date}
@@ -523,9 +241,17 @@ export const OgabasseyV2Receipts: React.FC = () => {
                           className="group-hover/btn:scale-110 transition-transform"
                         />
                         View{' '}
-                        {receipt.paymentStatus === 'unpaid'
-                          ? 'Invoice'
-                          : 'Receipt'}
+                        {/*
+                          Mirror the modal exactly (paid renders the receipt,
+                          otherwise proforma, otherwise invoice): the raw list
+                          status misses pending/partial balances that open an
+                          invoice. Uses the modal's own renderer input.
+                        */}
+                        {receipt.rawOrder.payment_status === 'paid'
+                          ? 'Receipt'
+                          : receipt.documentKind === 'proforma'
+                            ? 'Proforma'
+                            : 'Invoice'}
                       </button>
                     </div>
                   </div>
@@ -541,6 +267,7 @@ export const OgabasseyV2Receipts: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         orderData={selectedOrder}
         merchantData={merchantReceiptData}
+        documentKind={selectedDocumentKind}
       />
     </div>
   );

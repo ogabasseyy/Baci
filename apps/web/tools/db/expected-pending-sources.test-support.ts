@@ -11,6 +11,7 @@ import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-w
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
+import { EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES } from './expected-manual-document-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -255,17 +256,99 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
+  ...EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
   {
     repositoryPath:
-      'supabase/migrations/20261002090046_storefront_search_refinements.sql',
-    sha256: 'f2a1e439271d32eeb9e83dbde9f79782f00aedfdf318f28020c5edaef8a58372',
+      'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
+    sha256: 'e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4',
+  },
+  ...EXPECTED_PRIMARY_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
+    sha256: '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013194440_fix_shipping_quote_proof_canonicalization.sql',
+    sha256: '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013213516_customer_checkout_shipping_recovery_context.sql',
+    sha256: 'ae81f71311b41528d8d730d90f2824a0a848223be0e2cdafb48b0ff77f27504f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261013213522_customer_checkout_shipping_recovery_confirmation.sql',
+    sha256: 'd771210edf2a907516c2c5739be97dcea90e1dbea0a15f3515802fb29b7ff48e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014080000_customer_checkout_shipping_recovery_scalar_address.sql',
+    sha256: '112b39558139a8a4851659abc8ac6d73a4a5f1d68afd0a567d4cd0702eddf1a4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014120000_customer_checkout_shipping_recovery_review_followups.sql',
+    sha256: '3182b0dbcc855c7a7838fb807dddcfd72c6c4bda1f8c966d0d8e210c613c8ca1',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014130000_customer_checkout_shipping_recovery_hardening.sql',
+    sha256: '7bb0c5c818d6082db126c1da3a443746a4ff0ea59ee67a44a3e2c5eaef2a7b54',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql',
+    sha256: '7e33008871585fe87dac30ca66c3e952841b099cadacab4c68cd39b4ede15059',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261014210000_lease_vtu_customer_email_notification_attempt.sql',
+    sha256: 'e4090f77f17032a4a0adc7e639f74e3e89794bb4f4792e717ac554791899de14',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015010000_fence_vtu_customer_email_notification_clear_by_lease.sql',
+    sha256: '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
   },
   {
     repositoryPath:
       'supabase/migrations/20261015090001_storefront_payment_settings_shipping_insurance.sql',
     sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql',
+    sha256: 'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
+    sha256: '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql',
+    sha256: '1c411255bf10472a71c0f38a2b744d246764453832b7a6e32091a72226f8ac6b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015145945_customer_checkout_shipping_recovery_committed_retry.sql',
+    sha256: '6336d903431424e3824ab52afa21213eeeac968406b519cc8bdd0f1944734627',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015215000_customer_checkout_shipping_recovery_activation_gate.sql',
+    sha256: '3131a8c8f65cc8d2a892d0e020cd67dfaaa425fa8dce6a2b8f7b605b1eddb0cc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015232000_pair_vtu_customer_email_notification_keys.sql',
+    sha256: '91c1c8b4d8934b33b39e6c61c27e0e948ad8f1dac925a8a689b30f2d7b09d597',
   },
   {
     repositoryPath:
@@ -289,8 +372,23 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261016120000_finalize_vtu_customer_email_notification_attempt.sql',
+    sha256: '300563b107439d9d998a06681a1f22c9d619b62cc651133c4d5e3f2903ee90f4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016123000_finalize_vtu_customer_email_notification_success.sql',
+    sha256: 'd55343f9a7c3079f09ace5e32778917e994ceef097b24773a3194d5f5bd78bc9',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261016125000_storefront_order_replay_economics_offer_snapshot.sql',
     sha256: '3e4ef56adae86434136c65c4c19e63c1ab04c2a62e4316ad0cbec1f77222b4e7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016130000_guard_vtu_customer_email_claim_against_unknown.sql',
+    sha256: 'e304307c90cb3e52c3c1e4dfa8b1cbec46edaea6eca1b67fde5b164743681fd3',
   },
   {
     repositoryPath:

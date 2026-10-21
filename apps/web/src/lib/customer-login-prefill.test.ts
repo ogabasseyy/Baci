@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  fetchCustomerLoginEmailPrefillForRedirect,
+  fetchCustomerLoginEmailHintForRedirect,
   getReceiptClaimTokenFromLoginRedirect,
   sanitizeCustomerLoginEmailPrefill,
 } from './customer-login-prefill';
@@ -31,37 +31,70 @@ describe('getReceiptClaimTokenFromLoginRedirect', () => {
     ).toBe('token_123');
   });
 
+  it('extracts tokens beneath a storefront base path', () => {
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/ogabassey/receipts/claim/token_123'
+      )
+    ).toBe('token_123');
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/ogabassey/receipts/claim/token_123?from=email'
+      )
+    ).toBe('token_123');
+  });
+
   it('ignores non-claim redirects', () => {
     expect(getReceiptClaimTokenFromLoginRedirect('/receipts')).toBeNull();
     expect(
       getReceiptClaimTokenFromLoginRedirect('/account?redirect=/receipts')
     ).toBeNull();
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/account?redirect=/receipts/claim/token_123'
+      )
+    ).toBeNull();
   });
 });
 
-describe('fetchCustomerLoginEmailPrefillForRedirect', () => {
-  it('loads and sanitizes the email hint for receipt claim redirects', async () => {
+describe('fetchCustomerLoginEmailHintForRedirect', () => {
+  it('loads the masked email hint for receipt claim redirects', async () => {
     const fetchImpl = (_url: string | URL | Request) =>
       Promise.resolve(
-        new Response(
-          JSON.stringify({ emailHint: '  BasseyBJohn@Yahoo.CO.UK  ' }),
-          { status: 200 }
-        )
+        new Response(JSON.stringify({ emailHint: 'b***@yahoo.co.uk' }), {
+          status: 200,
+        })
       );
 
     await expect(
-      fetchCustomerLoginEmailPrefillForRedirect(
+      fetchCustomerLoginEmailHintForRedirect(
         '/receipts/claim/token_123',
         fetchImpl
       )
-    ).resolves.toBe('basseybjohn@yahoo.co.uk');
+    ).resolves.toBe('b***@yahoo.co.uk');
+  });
+
+  it('drops unmasked addresses from hint responses', async () => {
+    const fetchImpl = (_url: string | URL | Request) =>
+      Promise.resolve(
+        new Response(JSON.stringify({ emailHint: 'basseybjohn@yahoo.co.uk' }), {
+          status: 200,
+        })
+      );
+
+    await expect(
+      fetchCustomerLoginEmailHintForRedirect(
+        '/receipts/claim/token_123',
+        fetchImpl
+      )
+    ).resolves.toBe('');
   });
 
   it('does not fetch email hints for non-claim redirects', async () => {
     const fetchImpl = vi.fn() as unknown as typeof fetch;
 
     await expect(
-      fetchCustomerLoginEmailPrefillForRedirect('/receipts', fetchImpl)
+      fetchCustomerLoginEmailHintForRedirect('/receipts', fetchImpl)
     ).resolves.toBe('');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
@@ -71,19 +104,19 @@ describe('fetchCustomerLoginEmailPrefillForRedirect', () => {
       Promise.resolve(new Response(null, { status: 404 }));
     const invalidEmailFetch = () =>
       Promise.resolve(
-        new Response(JSON.stringify({ emailHint: 'not-an-email' }), {
+        new Response(JSON.stringify({ emailHint: 'not-a-hint' }), {
           status: 200,
         })
       );
 
     await expect(
-      fetchCustomerLoginEmailPrefillForRedirect(
+      fetchCustomerLoginEmailHintForRedirect(
         '/receipts/claim/token_123',
         failedFetch
       )
     ).resolves.toBe('');
     await expect(
-      fetchCustomerLoginEmailPrefillForRedirect(
+      fetchCustomerLoginEmailHintForRedirect(
         '/receipts/claim/token_123',
         invalidEmailFetch
       )
@@ -94,7 +127,7 @@ describe('fetchCustomerLoginEmailPrefillForRedirect', () => {
     const fetchImpl = () => Promise.reject(new Error('network failed'));
 
     await expect(
-      fetchCustomerLoginEmailPrefillForRedirect(
+      fetchCustomerLoginEmailHintForRedirect(
         '/receipts/claim/token_123',
         fetchImpl
       )

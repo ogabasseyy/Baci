@@ -11,11 +11,11 @@
  */
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import {
-  fetchCustomerLoginEmailPrefillForRedirect,
+  fetchCustomerLoginEmailHintForRedirect,
   sanitizeCustomerLoginEmailPrefill,
 } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
@@ -83,6 +83,11 @@ function OgabasseyLoginPageContent() {
     codeInputRefs,
   } = useOgabasseyLogin({ initialEmail, redirectTo });
 
+  // The claim login hint is masked guidance (never the full address):
+  // display it so the customer knows which inbox to open, but never
+  // place it in the input — the OTP code must go to the real address.
+  const [emailHint, setEmailHint] = useState('');
+
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -99,18 +104,16 @@ function OgabasseyLoginPageContent() {
       };
     }
 
-    void fetchCustomerLoginEmailPrefillForRedirect(redirectTo).then(
-      (emailHint) => {
-        if (!cancelled && emailHint) {
-          setEmail(emailHint);
-        }
+    void fetchCustomerLoginEmailHintForRedirect(redirectTo).then((hint) => {
+      if (!cancelled && hint) {
+        setEmailHint(hint);
       }
-    );
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [email, initialEmail, redirectTo, setEmail]);
+  }, [email, initialEmail, redirectTo]);
 
   // Show loading screen while checking auth/merchant
   if (merchantLoading || authLoading) {
@@ -146,7 +149,9 @@ function OgabasseyLoginPageContent() {
             <p className="text-gray-500 text-sm">
               {isCodeSent
                 ? `We sent a 6-digit code to ${sentToEmail}`
-                : 'Enter your email to sign in or sign up instantly'}
+                : emailHint
+                  ? `This receipt was sent to ${emailHint} — sign in with that address.`
+                  : 'Enter your email to sign in or sign up instantly'}
             </p>
           </div>
 

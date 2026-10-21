@@ -60,6 +60,8 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+      'apps/web/src/lib/send-manual-order-document.ts',
+      'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',

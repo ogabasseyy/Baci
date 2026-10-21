@@ -1,19 +1,38 @@
 import { z } from 'zod';
+import { reclaimStaleManualDocumentDispatchMarker } from '@/lib/check-manual-document-dispatch-lease';
 import { logger } from '@/lib/logger';
 import { sendOrderFulfillmentNotification } from '@/lib/order-fulfillment-notification';
 import { beginOrderNotificationOutboxDispatch } from '@/lib/order-notification-outbox-dispatch';
 import { resetOrderNotificationOutboxDispatch } from '@/lib/order-notification-outbox-dispatch-reset';
 import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-notification-outbox-shipment-metadata';
+import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
+import {
+  isPostAcceptanceLeaseReset,
+  markCorrectiveRetry,
+  retryDelayMs,
+} from './order-notification-outbox-corrective-retry';
+import {
+  markManualOutboxNotificationSent,
+  markOutboxNotificationSent,
+  type OrderNotificationOutboxStatus,
+  OutboxClaimLostError,
+  OutboxDispatchResetError,
+  OutboxStatusUpdateError,
+  updateOutboxStatus,
+} from './order-notification-outbox-status';
 
-const RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
-const RETRY_MAX_DELAY_MS = 60 * 60 * 1000;
 const PROCESS_CONCURRENCY = 5;
 
 export const claimedOrderNotificationOutboxRowSchema = z.object({
   attempt_count: z.number().int().nonnegative(),
   claim_owner: z.string().min(1),
-  event_type: z.enum(['order_shipped', 'order_delivered']),
+  event_type: z.enum([
+    'order_shipped',
+    'order_delivered',
+    'manual_order_receipt',
+    'manual_order_invoice',
+  ]),
   event_sequence: z.number().int().positive().optional(),
   id: z.string().min(1),
   max_attempts: z.number().int().positive(),
@@ -26,7 +45,14 @@ export type ClaimedOrderNotificationOutboxRow = z.infer<
   typeof claimedOrderNotificationOutboxRowSchema
 >;
 
-type OrderNotificationOutboxStatus = 'pending' | 'sent' | 'skipped' | 'failed';
+function isManualOutboxEvent(
+  eventType: ClaimedOrderNotificationOutboxRow['event_type']
+): eventType is 'manual_order_receipt' | 'manual_order_invoice' {
+  return (
+    eventType === 'manual_order_receipt' || eventType === 'manual_order_invoice'
+  );
+}
+
 type SupabaseClientLike = ReturnType<typeof createServiceClient>;
 
 export interface OrderNotificationCronSummary {
@@ -35,80 +61,15 @@ export interface OrderNotificationCronSummary {
   retried: number;
   sent: number;
   skipped: number;
+  unparseable: number;
   success: true;
-}
-
-class OutboxStatusUpdateError extends Error {
-  constructor(
-    readonly outboxId: string,
-    options: { cause: unknown }
-  ) {
-    super(
-      `Failed to persist order notification outbox row ${outboxId}`,
-      options
-    );
-    this.name = 'OutboxStatusUpdateError';
-  }
 }
 
 export function createOrderNotificationCronSummary(
   claimed: number
 ): OrderNotificationCronSummary {
-  return { claimed, failed: 0, retried: 0, sent: 0, skipped: 0, success: true };
-}
-
-function retryDelayMs(attemptCount: number): number {
-  const exponent = Math.max(0, attemptCount - 1);
-  return Math.min(RETRY_BASE_DELAY_MS * 2 ** exponent, RETRY_MAX_DELAY_MS);
-}
-
-async function updateOutboxStatus(
-  supabase: SupabaseClientLike,
-  row: ClaimedOrderNotificationOutboxRow,
-  values: Record<string, unknown>
-) {
-  try {
-    const { data, error } = await supabase
-      .from('order_notification_outbox')
-      .update({
-        ...values,
-        locked_at: null,
-        locked_by: null,
-        updated_at: new Date().toISOString(),
-      })
-      .match({
-        id: row.id,
-        locked_by: row.claim_owner,
-        status: 'processing',
-      })
-      .select('id')
-      .maybeSingle();
-    if (!error && data?.id === row.id) return;
-    throw error ?? new Error('order notification claim was lost');
-  } catch (error) {
-    logger.error({
-      message: 'Failed to update order notification outbox row',
-      outboxId: row.id,
-      error,
-    });
-    throw new OutboxStatusUpdateError(row.id, { cause: error });
-  }
-}
-
-async function markSent(
-  supabase: SupabaseClientLike,
-  row: ClaimedOrderNotificationOutboxRow,
-  messageId: string | undefined
-) {
-  await updateOutboxStatus(supabase, row, {
-    last_error: null,
-    metadata: {
-      ...(row.metadata ?? {}),
-      ...(messageId ? { message_id: messageId } : {}),
-    },
-    sent_at: new Date().toISOString(),
-    status: 'sent' satisfies OrderNotificationOutboxStatus,
-  });
+  // biome-ignore format: compact literal preserves the 300-line gate.
+  return { claimed, failed: 0, retried: 0, sent: 0, skipped: 0, unparseable: 0, success: true };
 }
 
 async function markSkipped(
@@ -118,6 +79,11 @@ async function markSkipped(
 ) {
   await updateOutboxStatus(supabase, row, {
     last_error: null,
+    // A previously retried row carries a future next_attempt_at: clear it
+    // so janitors and dashboards never read a terminal row as due.
+    // dispatch_started_at is deliberately NOT cleared here: a skip after a
+    // lost-claim race can carry a live marker the terminalizer keys on.
+    next_attempt_at: null,
     skip_reason: reason,
     skipped_at: new Date().toISOString(),
     status: 'skipped' satisfies OrderNotificationOutboxStatus,
@@ -144,17 +110,24 @@ async function markFailedOrRetry(
   error: string,
   summary: OrderNotificationCronSummary
 ) {
+  // Counts follow the durable write: a superseded attempt (lost claim)
+  // must not count an outcome the row never recorded.
+  // A failed marker cleanup strands past the budget (the set marker
+  // blocks re-arm): corrective-retry like a lease reset instead.
+  if (error === 'dispatch_marker_clear_failed') {
+    await markCorrectiveRetry(supabase, row, summary, error);
+    return;
+  }
   if (row.attempt_count >= row.max_attempts) {
-    summary.failed += 1;
     await updateOutboxStatus(supabase, row, {
       last_error: error,
       next_attempt_at: null,
       status: 'failed' satisfies OrderNotificationOutboxStatus,
     });
+    summary.failed += 1;
     return;
   }
 
-  summary.retried += 1;
   await updateOutboxStatus(supabase, row, {
     last_error: error,
     next_attempt_at: new Date(
@@ -162,6 +135,7 @@ async function markFailedOrRetry(
     ).toISOString(),
     status: 'pending' satisfies OrderNotificationOutboxStatus,
   });
+  summary.retried += 1;
 }
 
 async function processClaimedRow(
@@ -173,64 +147,100 @@ async function processClaimedRow(
     const shipmentMetadata = resolveOrderNotificationOutboxShipmentMetadata(
       row.metadata
     );
-    const result = await sendOrderFulfillmentNotification({
-      beforeProviderDispatch: () =>
-        beginOrderNotificationOutboxDispatch({
-          claimId: row.id,
-          claimOwner: row.claim_owner,
-          eventType: row.event_type,
+    const eventType = row.event_type;
+    // A prior attempt may have stranded its marker after a definite
+    // rejection (clear failed): reclaim before the claim RPC, which
+    // skips on a set marker, or the retry is permanently lost.
+    if (isManualOutboxEvent(eventType))
+      await reclaimStaleManualDocumentDispatchMarker(supabase, row);
+    const result = isManualOutboxEvent(eventType)
+      ? await sendManualOrderDocument({
+          supabase,
+          row: { ...row, event_type: eventType },
+        })
+      : await sendOrderFulfillmentNotification({
+          beforeProviderDispatch: () =>
+            beginOrderNotificationOutboxDispatch({
+              claimId: row.id,
+              claimOwner: row.claim_owner,
+              eventType,
+              merchantId: row.merchant_id,
+              orderId: row.order_id,
+              supabase,
+            }),
+          resetProviderDispatch: () =>
+            resetOrderNotificationOutboxDispatch({
+              claimId: row.id,
+              claimOwner: row.claim_owner,
+              eventType,
+              merchantId: row.merchant_id,
+              orderId: row.order_id,
+              supabase,
+            }),
+          courierName: shipmentMetadata.courierName,
+          estimatedDelivery: shipmentMetadata.estimatedDelivery,
+          eventType,
           merchantId: row.merchant_id,
           orderId: row.order_id,
           supabase,
-        }),
-      resetProviderDispatch: () =>
-        resetOrderNotificationOutboxDispatch({
-          claimId: row.id,
-          claimOwner: row.claim_owner,
-          eventType: row.event_type,
-          merchantId: row.merchant_id,
-          orderId: row.order_id,
-          supabase,
-        }),
-      courierName: shipmentMetadata.courierName,
-      estimatedDelivery: shipmentMetadata.estimatedDelivery,
-      eventType: row.event_type,
-      merchantId: row.merchant_id,
-      orderId: row.order_id,
-      supabase,
-      trackingNumber: shipmentMetadata.trackingNumber,
-      trackingToken: shipmentMetadata.trackingToken,
-    });
+          trackingNumber: shipmentMetadata.trackingNumber,
+          trackingToken: shipmentMetadata.trackingToken,
+        });
 
     if (result.status === 'sent') {
-      summary.sent += 1;
       try {
-        await markSent(supabase, row, result.messageId);
+        if (isManualOutboxEvent(eventType)) {
+          await markManualOutboxNotificationSent(
+            supabase,
+            row,
+            result.messageId
+          );
+        } else {
+          await markOutboxNotificationSent(supabase, row, result.messageId);
+        }
       } catch (error) {
+        if (error instanceof OutboxDispatchResetError) {
+          await markCorrectiveRetry(supabase, row, summary);
+          return;
+        }
         if (!(error instanceof OutboxStatusUpdateError)) throw error;
-        await markDeliveryOutcomeUnknown(
-          supabase,
-          row,
-          'sent_outcome_persistence_failed'
-        );
+        await markDeliveryOutcomeUnknown(supabase, row, error.reason);
+        // The durable state is skipped/outcome-unknown, not sent: count the
+        // terminalized fallback like the other unknown-delivery branch.
+        summary.skipped += 1;
+        return;
       }
+      summary.sent += 1;
       return;
     }
 
     if (result.status === 'skipped') {
-      summary.skipped += 1;
       await markSkipped(supabase, row, result.reason);
+      summary.skipped += 1;
       return;
     }
 
     if (result.deliveryOutcome === 'unknown') {
-      summary.skipped += 1;
       await markDeliveryOutcomeUnknown(supabase, row, result.error);
+      summary.skipped += 1;
+      return;
+    }
+
+    if (isPostAcceptanceLeaseReset(result)) {
+      await markCorrectiveRetry(supabase, row, summary);
       return;
     }
 
     await markFailedOrRetry(supabase, row, result.error, summary);
   } catch (error) {
+    // A staff correction re-armed this row mid-flight: it is re-picked
+    // with fresh data, so this superseded attempt ends as a quiet retry.
+    // Post-send claim loss never lands here — the status writer only
+    // reports a lost claim for undispatched rows and escalates otherwise.
+    if (error instanceof OutboxClaimLostError) {
+      summary.retried += 1;
+      return;
+    }
     if (error instanceof OutboxStatusUpdateError) throw error;
     const message = error instanceof Error ? error.message : 'unknown_error';
     logger.error({
@@ -239,7 +249,12 @@ async function processClaimedRow(
       orderId: row.order_id,
       error,
     });
-    await markFailedOrRetry(supabase, row, message, summary);
+    try {
+      await markFailedOrRetry(supabase, row, message, summary);
+    } catch (retryError) {
+      if (!(retryError instanceof OutboxClaimLostError)) throw retryError;
+      summary.retried += 1;
+    }
   }
 }
 

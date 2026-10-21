@@ -29,6 +29,9 @@ const searchAnalyticsClientBrand: unique symbol = Symbol(
 const loyaltyResolverClientBrand: unique symbol = Symbol(
   'baci.loyalty-resolver.service-role-client'
 );
+const receiptLoginHintClientBrand: unique symbol = Symbol(
+  'baci.receipt-login-hint.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -140,6 +143,21 @@ export type LoyaltyResolverServiceClient = SupabaseClient<Database> & {
 };
 
 /**
+ * A service-role client reserved for the receipt-claim login-hint edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the login-hint call
+ * graph cannot be driven by a generic service client from any other edge.
+ * Only the token-scoped login-email route may construct it, via
+ * `createReceiptLoginHintServiceClient`, and only for the
+ * `get_receipt_claim_login_hint` RPC. Covered by the owner-approved
+ * temporary exception in AGENTS.md: the backend key inherently bypasses
+ * RLS; the brand constrains the approved call graph, not that capability.
+ */
+export type ReceiptLoginHintServiceClient = SupabaseClient<Database> & {
+  readonly [receiptLoginHintClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -175,6 +193,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'loyalty-resolver'
 ): LoyaltyResolverServiceClient;
+export function createServiceClient(
+  sentinel: 'receipt-login-hint'
+): ReceiptLoginHintServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -187,6 +208,7 @@ export function createServiceClient(
     | 'immediate-notification-completion'
     | 'search-analytics'
     | 'loyalty-resolver'
+    | 'receipt-login-hint'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -262,6 +284,11 @@ export function createServiceClient(
   if (sentinel === 'loyalty-resolver') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [loyaltyResolverClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'receipt-login-hint') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [receiptLoginHintClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

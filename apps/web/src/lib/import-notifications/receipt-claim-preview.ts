@@ -1,10 +1,11 @@
+import { maskCustomerLoginEmailHint } from '@baci/shared/schemas';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import {
   buildReceiptDeviceList,
   hashReceiptClaimToken,
   type ReceiptClaimOrderForDeviceList,
 } from '@/lib/import-notifications/receipt-claim-links';
+import type { ReceiptLoginHintRpcClient } from '@/lib/receipts/server-login-hint-client';
 import { receiptClaimRouteParamsSchema } from '@/schemas/receipt-claim-route-params';
 import {
   type ReceiptClaimRecord,
@@ -15,6 +16,7 @@ export interface ReceiptClaimPreview {
   claimed: boolean;
   customerName: string | null;
   devices: string[];
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt' | 'unknown';
   merchantName: string;
 }
 
@@ -24,10 +26,6 @@ export type ReceiptClaimPreviewResult =
 
 export type ReceiptClaimLoginEmailHintResult =
   | { ok: true; emailHint: string }
-  | { ok: false; error: string; status: 400 | 404 | 410 };
-
-export type ReceiptClaimPreviewWithLoginEmailHintResult =
-  | { ok: true; claim: ReceiptClaimPreview; emailHint: string }
   | { ok: false; error: string; status: 400 | 404 | 410 };
 
 export function parseReceiptClaimToken(token: string | undefined) {
@@ -47,6 +45,16 @@ function buildClaimPreview(claim: ReceiptClaimRecord): ReceiptClaimPreview {
     claimed: Boolean(claim.claimed_at),
     customerName: claim.customer_name,
     devices: buildReceiptDeviceList(orders as ReceiptClaimOrderForDeviceList[]),
+    // Legacy claims predate document_kind: surface the gap instead of
+    // mislabeling a possible invoice as a receipt.
+    documentKind:
+      claim.document_kind === 'invoice'
+        ? 'invoice'
+        : claim.document_kind === 'proforma_invoice'
+          ? 'proforma_invoice'
+          : claim.document_kind === 'receipt'
+            ? 'receipt'
+            : 'unknown',
     merchantName:
       claim.merchant?.business_name ?? claim.merchant?.slug ?? 'Store',
   };
@@ -72,6 +80,17 @@ async function loadReceiptClaimRecord({
 
   if (!data) {
     return { error: 'Receipt claim link not found', ok: false, status: 404 };
+  }
+
+  // The preview RPC answers expired claims with a non-sensitive sentinel
+  // (no identity or order details) so direct RPC calls past expiry reveal
+  // nothing while the documented 410 contract survives.
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { expired?: unknown }).expired === true
+  ) {
+    return { error: 'Receipt claim link has expired', ok: false, status: 410 };
   }
 
   const parsedClaim = receiptClaimRecordSchema.safeParse(data);
@@ -104,31 +123,31 @@ export async function loadReceiptClaimPreview({
   return { claim: buildClaimPreview(record.claim), ok: true };
 }
 
-export async function loadReceiptClaimPreviewWithLoginEmailHint({
-  supabase,
-  token,
-}: {
-  supabase: SupabaseClient;
-  token: string;
-}): Promise<ReceiptClaimPreviewWithLoginEmailHintResult> {
-  const record = await loadReceiptClaimRecord({ supabase, token });
-
-  if (!record.ok) {
-    return record;
+function isMissingLoginHintFunction(
+  error: { code?: string | null; message?: string | null } | null
+) {
+  if (!error) {
+    return false;
   }
 
-  return {
-    claim: buildClaimPreview(record.claim),
-    emailHint: sanitizeCustomerLoginEmailPrefill(record.claim.customer_email),
-    ok: true,
-  };
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return true;
+  }
+
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('get_receipt_claim_login_hint') &&
+    (message.includes('could not find') || message.includes('does not exist'))
+  );
 }
 
 export async function loadReceiptClaimLoginEmailHint({
   supabase,
+  serviceSupabase,
   token,
 }: {
   supabase: SupabaseClient;
+  serviceSupabase?: ReceiptLoginHintRpcClient;
   token: string;
 }): Promise<ReceiptClaimLoginEmailHintResult> {
   const record = await loadReceiptClaimRecord({ supabase, token });
@@ -137,8 +156,30 @@ export async function loadReceiptClaimLoginEmailHint({
     return record;
   }
 
+  // The recipient address travels through the branded single-RPC
+  // login-hint handle so the anon preview payload never carries it, and
+  // only a masked hint leaves the server: an anonymous token holder learns
+  // which inbox to open, never the full address. During the predeploy
+  // window the function does not exist yet: fall back to the legacy preview
+  // email, which the schema still tolerates.
+  let rawEmail: string | null = null;
+  if (serviceSupabase) {
+    const { data, error } = await serviceSupabase.rpc(
+      'get_receipt_claim_login_hint',
+      { p_token_hash: hashReceiptClaimToken(token) }
+    );
+
+    if (!error) {
+      rawEmail = typeof data === 'string' ? data : null;
+    } else if (!isMissingLoginHintFunction(error)) {
+      throw new Error(`Failed to load receipt claim: ${error.message}`);
+    }
+  }
+
   return {
-    emailHint: sanitizeCustomerLoginEmailPrefill(record.claim.customer_email),
+    emailHint: maskCustomerLoginEmailHint(
+      rawEmail ?? record.claim.customer_email ?? null
+    ),
     ok: true,
   };
 }

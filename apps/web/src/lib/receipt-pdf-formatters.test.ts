@@ -16,5 +16,7 @@ describe('receipt pdf formatters', () => {
 
   it('returns a dash for invalid receipt dates', () => {
     expect(formatReceiptDate('not-a-date')).toBe('-');
+    expect(formatReceiptDate(null)).toBe('-');
+    expect(formatReceiptDate(undefined)).toBe('-');
   });
 });

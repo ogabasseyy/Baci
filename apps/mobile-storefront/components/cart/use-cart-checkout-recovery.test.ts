@@ -83,6 +83,26 @@ it('keeps items parked and shows actionable retry guidance on failure', async ()
     expect.stringContaining('tap Checkout to retry')
   );
 });
+it('shows retry guidance instead of an unhandled rejection when navigation throws', async () => {
+  mockState = {
+    ...mockState,
+    metadataReady: true,
+    snapshot: { state: 'active', lines: [{}] },
+  };
+  const next = jest.fn(() => {
+    throw new Error('router unavailable');
+  });
+  const { result } = renderHook(() => useCartCheckoutRecovery(next));
+  await act(async () => {
+    await expect(result.current.recoverCheckout()).resolves.toBeUndefined();
+  });
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(result.current.isPreparing).toBe(false);
+  expect(alert).toHaveBeenCalledWith(
+    'Could not sync cart',
+    expect.stringContaining('tap Checkout to retry')
+  );
+});
 it('does not navigate after the cart screen unmounts during preparation', async () => {
   let finish!: () => void;
   mockState.prepare = jest.fn(

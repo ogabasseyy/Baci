@@ -118,6 +118,20 @@ it('retries hydration once when prepare discovers the canonical cart', async () 
   expect(state.prepare).toHaveBeenCalledTimes(1);
   expect(state.refresh).toHaveBeenCalledTimes(1);
 });
+it('accepts a ready snapshot published before a later refresh step rejects', async () => {
+  let state: CheckoutCartState = {
+    ...live,
+    snapshot: { state: 'active', lines: [{}] },
+  };
+  state.refresh = jest.fn(async () => {
+    state = { ...state, metadataReady: true };
+    throw new Error('re-read failed');
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: true,
+  });
+  expect(state.refresh).toHaveBeenCalledTimes(1);
+});
 it('stops after one unsuccessful hydration retry without recreating the cart', async () => {
   let state: CheckoutCartState = { ...live };
   state.prepare = jest.fn(async () => {

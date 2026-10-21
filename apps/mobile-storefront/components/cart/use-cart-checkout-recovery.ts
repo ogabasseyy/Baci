@@ -52,6 +52,14 @@ export function useCartCheckoutRecovery(onReady: () => void) {
           'Could not sync cart',
           'Your items are still saved. Check your connection and tap Checkout to retry.'
         );
+    } catch {
+      // Throws outside prepareCartCheckout (state reads, navigation) must
+      // still give the shopper retry guidance instead of a silent dead tap.
+      if (!mounted.current) return;
+      Alert.alert(
+        'Could not sync cart',
+        'Your items are still saved. Check your connection and tap Checkout to retry.'
+      );
     } finally {
       pending.current = false;
       if (mounted.current) setIsPreparing(false);

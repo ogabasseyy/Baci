@@ -52,10 +52,14 @@ export async function prepareCartCheckout(
     }
   } catch {
     if (replaced()) return { ready: false, reason: 'session_changed' };
+    const current = getState();
+    // A sync can publish a checkout-ready snapshot and then fail a later
+    // re-read; the published cart is still usable for checkout.
+    if (sharedCartCheckoutReady(current)) return { ready: true };
     return {
       ready: false,
       reason:
-        getState().status === 'choice_required'
+        current.status === 'choice_required'
           ? 'choice_required'
           : 'unavailable',
     };

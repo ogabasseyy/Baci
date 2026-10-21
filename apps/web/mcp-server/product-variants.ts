@@ -3,6 +3,7 @@ import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
+import { resolveMcpVariantOffers } from './resolve-mcp-variant-offers';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import { getMcpVariantColorValue } from './variant-color-value';
@@ -136,26 +137,20 @@ export async function loadMcpProductVariants({
     }
   }
 
-  let offers: Array<{
-    condition: string;
-    grade: string | null;
-    price: number;
-    stock_quantity: number;
-    condition_notes: string | null;
-  }> = [];
+  let offers: Awaited<ReturnType<typeof resolveMcpVariantOffers>>['offers'] = [];
   if (product.has_condition_offers) {
-    const { data, error } = await supabase.rpc('get_product_offers', {
-      p_product_id: product.id,
+    const variantOffers = await resolveMcpVariantOffers({
+      supabase,
+      productId: product.id,
+      merchantId,
     });
-    if (error) {
-      console.error('Failed to fetch public product offers:', error);
+    offers = variantOffers.offers;
+    if (variantOffers.lookupFailed) {
       if (!product.has_variants) {
         offerLookupFailed = true;
         return unavailableOptions('Product offers are temporarily unavailable.');
       }
       offerLookupFailed = true;
-    } else {
-      offers = data || [];
     }
   }
 

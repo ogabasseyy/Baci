@@ -24,6 +24,10 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
+const PRODUCT_1 = '11111111-1111-4111-8111-111111111111';
+const PRODUCT_2 = '22222222-2222-4222-8222-222222222222';
+const OFFER_7 = '77777777-7777-4777-8777-777777777777';
+
 describe('storefront-product-offers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -34,33 +38,40 @@ describe('storefront-product-offers', () => {
   });
 
   it('attaches offers to matching rows and leaves the rest untouched', async () => {
-    mockRpc
-      .mockReturnValueOnce(
-        Promise.resolve({
-          data: [{ offer_id: 'offer-7', condition: 'used', price: 80000 }],
-          error: null,
-        })
-      )
-      .mockReturnValueOnce(Promise.resolve({ data: [], error: null }));
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
+            condition: 'used',
+            price_basis: 80000,
+            allocatable_stock: null,
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
+    );
 
-    const rows = [{ id: 'product-1' }, { id: 'product-2' }];
+    const rows = [{ id: PRODUCT_1 }, { id: PRODUCT_2 }];
     await expect(hydrateProductRowsWithConditionOffers(rows)).resolves.toEqual([
       {
-        id: 'product-1',
+        id: PRODUCT_1,
         offers: [
           {
             compare_at_price: null,
             condition: 'used',
             condition_notes: null,
             grade: null,
-            id: 'offer-7',
+            id: OFFER_7,
             images: undefined,
             price: 80000,
             stock_quantity: null,
           },
         ],
       },
-      { id: 'product-2', offers: [] },
+      { id: PRODUCT_2, offers: [] },
     ]);
   });
 
@@ -69,10 +80,10 @@ describe('storefront-product-offers', () => {
       Promise.resolve({ data: null, error: { message: 'boom' } })
     );
 
-    const rows = [{ id: 'product-1', offers: [{ id: 'nested' }] }];
+    const rows = [{ id: PRODUCT_1, offers: [{ id: 'nested' }] }];
     await expect(hydrateProductRowsWithConditionOffers(rows)).resolves.toEqual([
       {
-        id: 'product-1',
+        id: PRODUCT_1,
         offers: [{ id: 'nested' }],
         offers_hydration_failed: true,
       },

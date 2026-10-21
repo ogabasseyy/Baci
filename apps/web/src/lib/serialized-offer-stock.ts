@@ -1,3 +1,8 @@
+import {
+  resolveOfferAllocatableStock,
+  toFiniteStockQuantity,
+} from '@baci/shared/lib';
+
 export interface SerializedOfferStockLike {
   stock_quantity?: number | string | null;
 }
@@ -8,25 +13,15 @@ export interface SerializedOfferBaseLike {
   stock?: number | string | null;
 }
 
-function toFiniteStock(
-  value: number | string | null | undefined
-): number | null {
-  if (value === null || value === undefined) return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 /**
  * Effective purchasable stock for a selected condition offer on a simple
- * product. Serialized policies fold exact units into product stock at the
- * snapshot layer (strict: units; unlimited: units when positive, else an
- * unbounded sentinel). Only strict caps the finite advertised offer
- * allocation by that base count: the unlimited policy permits sales
- * after serialized inventory is exhausted and order creation binds
- * only the offer allocation, so a dwindling positive unit count must
- * not shrink the offer below its scalar. A null offer quantity
- * inherits the base count under both policies. Other policies return
- * undefined so callers apply their scalar/parent logic.
+ * product. Thin folded-snapshot adapter over the shared offer
+ * authority: strict caps the finite advertised offer allocation by the
+ * folded base unit count, unlimited binds only the offer scalar (an
+ * unbounded allocation returns undefined so callers fall through to
+ * their scalar/parent logic), and other policies return undefined so
+ * callers apply their scalar/parent logic. A strict selection with no
+ * folded unit count resolves zero (fail closed, matching search).
  */
 export function resolveSerializedOfferStock(
   offer: SerializedOfferStockLike,
@@ -39,13 +34,13 @@ export function resolveSerializedOfferStock(
   ) {
     return undefined;
   }
-  const scalar = toFiniteStock(offer.stock_quantity);
-  const baseUnits = toFiniteStock(base.stock);
-  if (scalar === null) {
-    return baseUnits === null ? undefined : Math.max(0, baseUnits);
-  }
-  if (policy === 'serialized_then_unlimited' || baseUnits === null) {
-    return Math.max(0, scalar);
-  }
-  return Math.min(Math.max(0, scalar), Math.max(0, baseUnits));
+  const baseUnits = toFiniteStockQuantity(base.stock);
+  return (
+    resolveOfferAllocatableStock(offer.stock_quantity, {
+      effective_policy: policy,
+      inventory_tracking_policy: policy,
+      availableUnits: baseUnits,
+      parentStock: baseUnits ?? 0,
+    }) ?? undefined
+  );
 }

@@ -1,77 +1,79 @@
+import { buildOfferResolutionMap, makeOfferLineKey } from '@baci/shared/lib';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 const log = createLogger('Cart');
 
 /**
- * Offer stock through the anon-executable get_product_offers RPC (active
- * offers only) combined with the shopper-safe base inventory
- * projection. A finite offer quantity is capped by strict serialized
- * units (effective minimum, mirroring the price-options offer branch
- * and the PDP predicate); a null one inherits the base effective
- * stock, and unlimited tracking bypasses the unit cap. `strictUnits`
- * carries the shared serialized pool when the base policy is strict so
- * the caller can cap the aggregate across the base line and every
- * sibling offer (all claim the same hidden-anchor inventory); it is
- * null otherwise. An offer missing from the projection (vanished,
- * inactive, or unlisted) reports zero; other lookup failures throw so
- * the caller retries instead of overselling.
+ * Offer stock through the single offer-resolution authority
+ * (anon-executable, active offers only). The allocatable stock arrives
+ * policy-capped and parent-inherited from SQL — exactly what checkout
+ * enforces — so no per-layer rule restatement remains here.
+ * `strictUnits` carries the shared serialized pool when the base
+ * policy is strict so the caller can cap the aggregate across the base
+ * line and every sibling offer (all claim the same hidden-anchor
+ * inventory); it is null otherwise. An offer missing from the
+ * projection (vanished, inactive, or unlisted) reports zero; lookup
+ * failures throw so the caller retries instead of overselling.
  */
 export async function resolveOfferStock(
   productId: string,
-  offerId: string,
-  parentStock: number
+  offerId: string
 ): Promise<{ stock: number; strictUnits: number | null }> {
-  const [{ data, error }, baseInventory] = await Promise.all([
-    supabase.rpc('get_product_offers', {
-      p_product_id: productId,
-    }),
-    supabase.rpc('get_storefront_product_base_inventory', {
+  const { data, error } = await supabase.rpc(
+    'get_storefront_offer_resolution',
+    {
+      p_merchant_id: null,
       p_product_ids: [productId],
-    }),
-  ]);
+    }
+  );
   if (error) {
     log.error('Offer stock check failed:', error);
     throw new Error('Cannot verify stock availability. Please try again.');
   }
-  const row = (Array.isArray(data) ? data : []).find(
-    (entry: { offer_id?: unknown }) => String(entry?.offer_id ?? '') === offerId
-  ) as { stock_quantity?: unknown } | undefined;
-  if (!row) {
+  const resolution = buildOfferResolutionMap(data).get(
+    makeOfferLineKey(productId, offerId)
+  );
+  if (!resolution) {
     log.error('Offer stock check found no such offer:', offerId);
     return { stock: 0, strictUnits: null };
   }
-  if (baseInventory.error) {
-    log.error('Offer base inventory check failed:', baseInventory.error);
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  const baseRow = (
-    Array.isArray(baseInventory.data) ? baseInventory.data : []
-  ).find(
-    (entry: { product_id?: unknown }) => entry?.product_id === productId
-  ) as { effective_policy?: unknown; available_units?: unknown } | undefined;
-  if (!baseRow) {
-    log.error('Offer stock check found no such product:', productId);
-    return { stock: 0, strictUnits: null };
-  }
-  const offerScalar =
-    typeof row.stock_quantity === 'number' &&
-    Number.isFinite(row.stock_quantity)
-      ? row.stock_quantity
-      : null;
-  if (baseRow.effective_policy === 'serialized_strict') {
+  // No parent-shape gate: the order RPC stages offers from
+  // variant-bearing and flag-disabled parents alike, so a
+  // resolved row reads with its allocation whatever
+  // parentEligible says (discovery surfaces filter on it).
+  if (resolution.effectivePolicy === 'serialized_strict') {
+    // A strict row with no unit count is a serialized-projection
+    // outage, not a genuine sell-out (live SQL coalesces genuine
+    // sell-outs to 0): throw retryable like the RPC-error branch so
+    // the caller retries instead of reporting sold-out.
     if (
-      typeof baseRow.available_units !== 'number' ||
-      !Number.isFinite(baseRow.available_units)
+      resolution.availableUnits === null ||
+      resolution.allocatableStock === null
     ) {
-      log.error('Offer stock check found no unit count:', offerId);
+      log.error('Strict offer stock arrived with no unit count:', {
+        productId,
+        offerId,
+      });
       throw new Error('Cannot verify stock availability. Please try again.');
     }
-    const units = Math.max(0, baseRow.available_units);
-    return { stock: Math.min(offerScalar ?? units, units), strictUnits: units };
+    const units = resolution.availableUnits;
+    return {
+      stock: resolution.allocatableStock,
+      strictUnits: units,
+    };
   }
-  if (baseRow.effective_policy === 'serialized_then_unlimited') {
-    return { stock: offerScalar ?? Number.MAX_SAFE_INTEGER, strictUnits: null };
+  // Null is unbounded only for serialized_then_unlimited (the SQL
+  // legacy arm always coalesces to the parent stock): any other
+  // policy with a missing allocation fails closed at zero.
+  if (resolution.allocatableStock === null) {
+    return {
+      stock:
+        resolution.effectivePolicy === 'serialized_then_unlimited'
+          ? Number.MAX_SAFE_INTEGER
+          : 0,
+      strictUnits: null,
+    };
   }
-  return { stock: offerScalar ?? parentStock, strictUnits: null };
+  return { stock: resolution.allocatableStock, strictUnits: null };
 }

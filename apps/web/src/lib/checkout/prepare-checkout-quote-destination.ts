@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
@@ -74,9 +75,11 @@ async function buildOrderQuoteValidationItems({
       // it), not the submitted price the shopper quoted days ago.
       // Validating against the stale value accepts checkout while the
       // booking guard later rejects fulfillment as a quote mismatch.
+      // Canonical key: the live map is keyed lowercase, so an
+      // uppercase caller spelling must normalize to meet it.
       const liveOfferPrice =
         item.offer_id && item.product_id
-          ? offerPrices.get(`${item.product_id}::${item.offer_id}`)
+          ? offerPrices.get(makeOfferLineKey(item.product_id, item.offer_id))
           : undefined;
       return {
         name: product?.name ?? null,

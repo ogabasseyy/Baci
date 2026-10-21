@@ -101,6 +101,23 @@ describe('applyCriticalRouteOfferToCartProduct', () => {
     expect(applied.stock).toBe(2);
   });
 
+  it('prefers the anchor-derived effective policy over an off row policy', () => {
+    const base = {
+      effective_policy: 'serialized_strict',
+      inventory_tracking_policy: 'off',
+      price: 100,
+      stock: 2,
+      stock_quantity: 2,
+    } as CartProduct;
+    const applied = applyCriticalRouteOfferToCartProduct(
+      base,
+      { id: 'offer-big', condition: 'used', price: 60, stock_quantity: 5 },
+      base
+    );
+
+    expect(applied.stock).toBe(2);
+  });
+
   it('keeps the scalar under then-unlimited and unpolicied bases', () => {
     const unlimited = {
       inventory_tracking_policy: 'serialized_then_unlimited',

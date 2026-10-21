@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import {
   roundCurrency,
   SERVER_ASSURANCE_RATE,
@@ -42,7 +43,7 @@ export function recomputeOfferAssuranceFees(
   lines.forEach((line, index) => {
     if (!line.offer_id || !line.has_assurance) return;
     const livePrice = liveOfferPrices.get(
-      `${line.product_id}::${line.offer_id}`
+      makeOfferLineKey(String(line.product_id), String(line.offer_id))
     );
     if (livePrice === undefined) return;
     const validatedReduction = discount.applied

@@ -36,6 +36,18 @@ describe('resolveRedvaultQuoteOffer', () => {
     ).toEqual({ offerCondition: 'used', offerPrice: 80000 });
   });
 
+  it('meets lowercase live keys from an uppercase caller spelling', () => {
+    expect(
+      resolveRedvaultQuoteOffer(
+        { offer_id: 'OFFER-1', product_id: 'PRODUCT-1' },
+        {
+          offerConditions: new Map([['product-1::offer-1', 'used']]),
+          offerPrices: new Map([['product-1::offer-1', 80000]]),
+        }
+      )
+    ).toEqual({ offerCondition: 'used', offerPrice: 80000 });
+  });
+
   it('fails closed when the offer line lacks verified economics', () => {
     expect(() =>
       resolveRedvaultQuoteOffer(

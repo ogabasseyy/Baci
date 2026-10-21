@@ -1723,7 +1723,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         };
       }
 
-      return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl });
+      return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl, merchantId });
     };
   // Tool: Get product details
 

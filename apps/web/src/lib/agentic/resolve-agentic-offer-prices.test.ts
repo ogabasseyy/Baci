@@ -34,10 +34,12 @@ describe('resolveAgenticOfferPrices', () => {
   it('returns the verified live prices on success', async () => {
     const supabase = supabaseWithOffers([
       {
+        product_id: PRODUCT_ID,
         offer_id: OFFER_ID,
-        price: 400_000,
+        price_basis: 400_000,
         condition: 'used',
-        is_active: true,
+        allocatable_stock: 3,
+        parent_eligible: true,
       },
     ]);
 

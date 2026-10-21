@@ -39,6 +39,10 @@ describe('getDurableProductSeoText', () => {
     'Pixel 10 Price – 999',
     'Buy Pixel 10 for 999.99 today',
     'Buy Laptop for R 9,000.',
+    'The iPhone 13 price in Nigeria is 350,000.',
+    'The iPhone 13 cost in Lagos: 350,000.',
+    'iPhone 13 usd 900 in Lagos',
+    'Phone ngn 350,000',
     '<p>Buy this phone for ₦&nbsp;350,000.</p>',
     '<p>Buy this phone for &#8358;&#160;350,000.</p>',
   ])('rejects an unbound monetary claim: %s', (text) => {
@@ -61,6 +65,23 @@ describe('getDurableProductSeoText', () => {
         currency: 'NGN',
       })
     ).toBe(text);
+  });
+
+  it('rejects a foreign naira amount without confusing a compact model prefix', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'iPhone 13 N350,000',
+        product: { name: 'iPhone 13' },
+        currency: 'USD',
+      })
+    ).toBe('');
+    expect(
+      getDurableProductSeoText({
+        text: 'N16 processor',
+        product: { name: 'Device' },
+        currency: 'USD',
+      })
+    ).toBe('N16 processor');
   });
 
   it('rejects the imported generic shopping description', () => {

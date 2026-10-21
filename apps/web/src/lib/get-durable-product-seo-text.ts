@@ -14,6 +14,20 @@ const MAX_SOURCE_LENGTH = 20_000;
 const MAX_NAME_LENGTH = 1_000;
 const QUANTITY_UNIT =
   /^\s*(?:photos?|songs?|files?|people|users?|models?|colou?rs?|options?|years?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+// These ISO spellings are also ordinary words, unlike unambiguous usd/ngn.
+const LEXICAL_CURRENCY_CODES = new Set([
+  'ALL',
+  'TRY',
+  'TOP',
+  'CUP',
+  'PEN',
+  'GEL',
+  'BAM',
+  'MAD',
+  'MOP',
+  'BOB',
+  'SOS',
+]);
 
 function retailRelation(text: string, start: number) {
   const clause =
@@ -25,56 +39,69 @@ function retailRelation(text: string, start: number) {
     /\b(prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
     )?.[1] ?? '';
+  const predicate =
+    /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){1,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
+      clause
+    );
   return {
     cue,
+    predicate,
     strong: /^(?:price|cost|priced|start|pay|only)/i.test(cue),
-    purchase: /\b(?:buy|purchase)\b/i.test(clause),
+    purchase: /\b(?:buy|purchase|shop|get)\b/i.test(clause),
   };
 }
 
-function isPrice(
-  candidate: ProductSeoMoneyCandidate,
-  text: string,
-  currency: string
-): boolean {
+function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
   const relation = retailRelation(text, candidate.start);
   const quantity = QUANTITY_UNIT.test(text.slice(candidate.end));
   const rawAmount = candidate.rawAmount.replace(/[.,]+$/, '');
   if (!candidate.marker) {
-    if (!relation.cue || quantity || candidate.amount === null) return false;
+    if ((!relation.cue && !relation.predicate) || quantity) return false;
     return (
+      relation.predicate ||
       relation.strong ||
       relation.purchase ||
       /[,km]/i.test(rawAmount) ||
       rawAmount.replace(/\D/g, '').length >= 5
     );
   }
-  // Ordinary lower/title-case ISO homonyms require a direct financial cue.
-  if (
-    /^[a-z]{3}$/i.test(candidate.marker) &&
-    candidate.marker !== candidate.marker.toUpperCase()
-  ) {
+  // Casing alone does not disambiguate ordinary words from ISO homonyms.
+  if (LEXICAL_CURRENCY_CODES.has(candidate.marker.toUpperCase())) {
     const isIsoCode = candidate.currencies.includes(
       candidate.marker.toUpperCase()
     );
     if (
       isIsoCode &&
       !relation.strong &&
+      !relation.predicate &&
+      !(
+        candidate.marker === candidate.marker.toUpperCase() &&
+        !quantity &&
+        (/[,km]/i.test(rawAmount) || rawAmount.replace(/\D/g, '').length >= 5)
+      ) &&
       !(relation.purchase && relation.cue === 'for' && !quantity)
     )
       return false;
   }
+  // AMD is both a currency and a hardware brand; the following noun disambiguates.
+  if (
+    candidate.marker.toUpperCase() === 'AMD' &&
+    !relation.cue &&
+    !relation.predicate &&
+    (/^\s+(?:processors?|cpus?|gpus?|graphics)\b/i.test(
+      text.slice(candidate.end)
+    ) ||
+      /\bpowered\s+by\s*$/i.test(
+        text.slice(Math.max(0, candidate.start - 30), candidate.start)
+      ))
+  )
+    return false;
   // Compact single-letter aliases are also model prefixes. Spaced/explicit
   // foreign prices remain monetary; unqualified compact N/R16 stays a model.
   if (/^[nr]$/i.test(candidate.marker)) {
     if (
-      candidate.marker.toUpperCase() === 'N' &&
-      !candidate.currencies.includes(currency.toUpperCase()) &&
-      !relation.cue
-    )
-      return false;
-    if (
       !relation.cue &&
+      !relation.predicate &&
       !/\s/.test(text.slice(candidate.start, candidate.end)) &&
       !/[,km]/i.test(rawAmount) &&
       rawAmount.replace(/\D/g, '').length < 5
@@ -93,7 +120,8 @@ function isDenomination(
   if (
     !candidate.marker ||
     candidate.amount === null ||
-    retailRelation(text, candidate.start).cue
+    retailRelation(text, candidate.start).cue ||
+    retailRelation(text, candidate.start).predicate
   )
     return false;
   if (
@@ -123,7 +151,6 @@ function isDenomination(
 export function getDurableProductSeoText({
   text,
   product,
-  currency,
 }: {
   text: string | null | undefined;
   product: { name: string; slug?: string | null };
@@ -162,7 +189,7 @@ export function getDurableProductSeoText({
     : [];
   return getProductSeoMoneyCandidates(monetaryText).some(
     (candidate) =>
-      isPrice(candidate, monetaryText, currency) &&
+      isPrice(candidate, monetaryText) &&
       !isDenomination(candidate, monetaryText, productName, denominations)
   )
     ? ''

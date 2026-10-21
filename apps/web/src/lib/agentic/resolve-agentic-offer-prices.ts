@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import type { AgenticCheckoutOrderResult } from './checkout-order-dispatch';
 import { prepareAgenticOfferEconomics } from './prepare-agentic-offer-economics';
 
@@ -17,14 +17,13 @@ export type ResolvedAgenticOfferPrices =
 export async function resolveAgenticOfferPrices(
   supabase: SupabaseClient,
   orderItemsPayload: Parameters<typeof prepareAgenticOfferEconomics>[1],
-  sharedCartBinding: unknown
+  sharedCartBinding: unknown,
+  merchantId?: string | null
 ): Promise<ResolvedAgenticOfferPrices> {
   const preparedOffers = await prepareAgenticOfferEconomics(
-    (productId) =>
-      supabase.rpc('get_product_offers', {
-        p_product_id: productId,
-      }) as unknown as Promise<OrderOfferQueryResult>,
-    orderItemsPayload
+    createOfferAuthorityRpcCall(supabase),
+    orderItemsPayload,
+    merchantId
   );
   if (!preparedOffers.ok) {
     // A committed bound order must still replay when the offer catalog

@@ -116,6 +116,9 @@ export interface Product {
   // selected allocation.
   stock_quantity?: number;
   inventory_tracking_policy?: string | null;
+  // Anchor-derived effective policy (preferred over the row policy by
+  // the offer-stock helpers); undefined on cache-fed projections.
+  effective_policy?: string | null;
   videoUrl?: string; // YouTube URL for unboxing/review
   // Technical specs from API (optional but typed)
   product_key_specs?: ProductKeySpecs;

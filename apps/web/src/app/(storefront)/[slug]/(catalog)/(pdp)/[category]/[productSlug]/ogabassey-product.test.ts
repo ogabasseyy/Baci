@@ -156,4 +156,16 @@ describe('toOgabasseyProduct', () => {
     expect(result.inventory_tracking_policy).toBe('serialized_strict');
     expect(result.stock_quantity).toBe(2);
   });
+
+  it('forwards the anchor-derived effective policy with the row policy', () => {
+    const product = makeSeoProduct({
+      effective_policy: 'serialized_strict',
+      inventory_tracking_policy: 'off',
+    });
+
+    const result = toOgabasseyProduct(product, ghanaianCurrency);
+
+    expect(result.effective_policy).toBe('serialized_strict');
+    expect(result.inventory_tracking_policy).toBe('off');
+  });
 });

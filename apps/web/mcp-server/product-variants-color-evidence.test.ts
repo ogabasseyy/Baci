@@ -110,7 +110,7 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
       error: null,
     });
     supabase.rpc.mockImplementation(async (name: string) =>
-      name === 'get_product_offers'
+      name === 'get_storefront_offer_resolution'
         ? { data: null, error: { message: 'unavailable' } }
         : {
             data: [

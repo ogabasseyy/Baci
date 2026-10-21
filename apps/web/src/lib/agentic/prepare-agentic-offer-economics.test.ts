@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import {
   roundCurrency,
   SERVER_ASSURANCE_RATE,
@@ -10,10 +9,17 @@ const productId = '22222222-2222-4222-8222-222222222222';
 const offerId = '33333333-3333-4333-8333-333333333333';
 
 function liveOffers(
-  offers: { offer_id: string; price: number; condition: string }[] = [
-    { offer_id: offerId, price: 400_000, condition: 'open_box' },
+  offers: Record<string, unknown>[] = [
+    {
+      product_id: productId,
+      offer_id: offerId,
+      price_basis: 400_000,
+      condition: 'open_box',
+      allocatable_stock: 3,
+      parent_eligible: true,
+    },
   ]
-): OrderOfferQueryResult {
+) {
   return { data: offers, error: null };
 }
 
@@ -77,9 +83,12 @@ describe('prepareAgenticOfferEconomics', () => {
       async () =>
         liveOffers([
           {
+            product_id: productId,
             offer_id: '44444444-4444-4444-8444-444444444444',
-            price: 350_000,
+            price_basis: 350_000,
             condition: 'open_box',
+            allocatable_stock: 3,
+            parent_eligible: true,
           },
         ]),
       items

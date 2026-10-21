@@ -162,15 +162,16 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       });
       return true;
     }
-    if (url.pathname.endsWith('/rest/v1/rpc/get_product_offers')) {
+    if (url.pathname.endsWith('/rest/v1/rpc/get_storefront_offer_resolution')) {
       let body = '';
       request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
       request.on('end', () => {
-        const requested = JSON.parse(body) as { p_product_id?: string };
-        response.end(JSON.stringify(requested.p_product_id === 'untracked-offer-product'
-          ? [{ condition: 'used', price: 80000, stock_quantity: 0, grade: 'A', condition_notes: null }]
-          : requested.p_product_id === 'condition-offer-product'
-            ? [{ condition: 'used', price: 80000, stock_quantity: 2, grade: 'A', condition_notes: null }]
+        const requested = JSON.parse(body) as { p_product_ids?: string[] };
+        const ids = requested.p_product_ids ?? [];
+        response.end(JSON.stringify(ids.includes('untracked-offer-product')
+          ? [{ product_id: 'untracked-offer-product', offer_id: 'offer-untracked', condition: 'used', price_basis: 80000, allocatable_stock: 0, parent_eligible: true, grade: 'A', condition_notes: null }]
+          : ids.includes('condition-offer-product')
+            ? [{ product_id: 'condition-offer-product', offer_id: 'offer-condition-1', condition: 'used', price_basis: 80000, allocatable_stock: 2, parent_eligible: true, grade: 'A', condition_notes: null }]
             : []));
       });
       return true;

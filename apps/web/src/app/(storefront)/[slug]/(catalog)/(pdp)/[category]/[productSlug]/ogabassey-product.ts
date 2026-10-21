@@ -82,6 +82,7 @@ export function toOgabasseyProduct(
     // and sibling lines over-claim until order creation rejects.
     stock_quantity: product.stock_quantity ?? undefined,
     inventory_tracking_policy: product.inventory_tracking_policy,
+    effective_policy: product.effective_policy,
     storage: storageOptions,
     colors: product.colors,
     variant_attributes: normalizedVariantAttributes,

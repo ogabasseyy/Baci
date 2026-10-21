@@ -1,8 +1,9 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import {
-  fetchLiveOrderOffers,
-  type OrderOfferQueryResult,
-} from './verify-order-offer-lines';
+  makeOfferLineKey,
+  normalizeCanonicalProductCondition,
+  type OfferAuthorityRpcCall,
+} from '@baci/shared/lib';
+import { fetchLiveOrderOffers } from './verify-order-offer-lines';
 
 export type ResolvableOrderOfferLine = {
   product_id?: string | null;
@@ -34,8 +35,9 @@ export type ResolvedOrderOfferEconomics =
  * priced offer exactly.
  */
 export async function resolveOrderOfferEconomics(
-  fetchOffers: (productId: string) => Promise<OrderOfferQueryResult>,
-  items: ResolvableOrderOfferLine[]
+  callRpc: OfferAuthorityRpcCall,
+  items: ResolvableOrderOfferLine[],
+  merchantId?: string | null
 ): Promise<ResolvedOrderOfferEconomics> {
   if (!items.some((item) => item.offer_id)) {
     return {
@@ -46,7 +48,7 @@ export async function resolveOrderOfferEconomics(
   }
   let liveOffers: Awaited<ReturnType<typeof fetchLiveOrderOffers>>;
   try {
-    liveOffers = await fetchLiveOrderOffers(fetchOffers, items);
+    liveOffers = await fetchLiveOrderOffers(callRpc, items, merchantId);
   } catch (error) {
     return { ok: false, reason: 'verification_failed', error };
   }
@@ -54,7 +56,7 @@ export async function resolveOrderOfferEconomics(
   for (const item of items) {
     if (!item.offer_id) continue;
     const liveCondition = liveOffers.conditions.get(
-      `${item.product_id}::${item.offer_id}`
+      makeOfferLineKey(String(item.product_id), String(item.offer_id))
     );
     // A live row without a condition cannot bind fulfillment: reject
     // rather than persist an unverified caller label.

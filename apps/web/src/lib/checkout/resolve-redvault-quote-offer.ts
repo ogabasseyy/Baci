@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
 
 type QuoteOfferLine = {
@@ -21,9 +22,11 @@ export function resolveRedvaultQuoteOffer(
     offerPrices?: Map<string, number>;
   }
 ): { offerCondition: string | undefined; offerPrice: number | undefined } {
+  // Canonical key: the live maps are keyed lowercase, so an
+  // uppercase caller spelling must normalize to meet them.
   const offerKey =
     !item.variant_id && item.offer_id && item.product_id
-      ? `${item.product_id}::${item.offer_id}`
+      ? makeOfferLineKey(item.product_id, item.offer_id)
       : null;
   const offerPrice =
     offerKey !== null ? maps.offerPrices?.get(offerKey) : undefined;

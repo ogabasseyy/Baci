@@ -122,11 +122,31 @@ export async function loadReceiptClaimPreview({
   return { claim: buildClaimPreview(record.claim), ok: true };
 }
 
+function isMissingLoginHintFunction(
+  error: { code?: string | null; message?: string | null } | null
+) {
+  if (!error) {
+    return false;
+  }
+
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return true;
+  }
+
+  const message = (error.message ?? '').toLowerCase();
+  return (
+    message.includes('get_receipt_claim_login_hint') &&
+    (message.includes('could not find') || message.includes('does not exist'))
+  );
+}
+
 export async function loadReceiptClaimLoginEmailHint({
   supabase,
+  serviceSupabase,
   token,
 }: {
   supabase: SupabaseClient;
+  serviceSupabase?: Pick<SupabaseClient, 'rpc'>;
   token: string;
 }): Promise<ReceiptClaimLoginEmailHintResult> {
   const record = await loadReceiptClaimRecord({ supabase, token });
@@ -135,8 +155,34 @@ export async function loadReceiptClaimLoginEmailHint({
     return record;
   }
 
+  // The recipient address travels through the service-role-only hint
+  // function so the anon preview payload never carries it. During the
+  // predeploy window the function does not exist yet: fall back to the
+  // legacy preview email, which the schema still tolerates.
+  if (serviceSupabase) {
+    const { data, error } = await serviceSupabase.rpc(
+      'get_receipt_claim_login_hint',
+      { p_token_hash: hashReceiptClaimToken(token) }
+    );
+
+    if (!error) {
+      return {
+        emailHint: sanitizeCustomerLoginEmailPrefill(
+          typeof data === 'string' ? data : null
+        ),
+        ok: true,
+      };
+    }
+
+    if (!isMissingLoginHintFunction(error)) {
+      throw new Error(`Failed to load receipt claim: ${error.message}`);
+    }
+  }
+
   return {
-    emailHint: sanitizeCustomerLoginEmailPrefill(record.claim.customer_email),
+    emailHint: sanitizeCustomerLoginEmailPrefill(
+      record.claim.customer_email ?? null
+    ),
     ok: true,
   };
 }

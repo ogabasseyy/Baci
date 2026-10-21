@@ -274,4 +274,77 @@ describe('useReceipts settled history', () => {
     // must too instead of demoting to an invoice that opens a receipt.
     expect(receipts.map((row) => row.document_kind)).toEqual(['receipt']);
   });
+
+  it('keeps the list when the transaction RPC fails, demoting only manual rows', async () => {
+    const { useReceipts } = await import('@/hooks/use-receipts');
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: 'order-manual',
+          order_number: 'ORD-M',
+          payment_status: 'paid',
+          shipping_status: 'delivered',
+          recorded_by_user_id: 'staff-1',
+          import_job_id: null,
+          external_source: null,
+          total: 500,
+          subtotal: 500,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          amount_paid: 500,
+          currency: 'NGN',
+          created_at: '2026-07-08T12:33:00.000Z',
+          order_items: [
+            { id: 'item-m', name: 'Phone', quantity: 1, price: 500 },
+          ],
+        },
+        {
+          id: 'order-plain',
+          order_number: 'ORD-P',
+          payment_status: 'paid',
+          shipping_status: 'delivered',
+          recorded_by_user_id: null,
+          import_job_id: null,
+          external_source: null,
+          total: 700,
+          subtotal: 700,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          amount_paid: 700,
+          currency: 'NGN',
+          created_at: '2026-07-08T12:33:00.000Z',
+          order_items: [
+            { id: 'item-p', name: 'Case', quantity: 1, price: 700 },
+          ],
+        },
+      ],
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: new Error('transactions unavailable'),
+    });
+
+    function Probe() {
+      useReceipts('auth-user-1');
+      return <View testID="probe" />;
+    }
+
+    render(<Probe />);
+    const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const receipts = (await options.queryFn()) as Array<{
+      id: string;
+      document_kind: string;
+    }>;
+
+    // A transient history failure must not blank the archive: the manual
+    // row demotes (unverifiable history fails closed per row) while the
+    // unrelated paid row still lists as a receipt.
+    expect(receipts.map((row) => `${row.id}:${row.document_kind}`)).toEqual([
+      'order-manual:invoice',
+      'order-plain:receipt',
+    ]);
+  });
 });

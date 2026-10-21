@@ -43,22 +43,36 @@ async function loadReceiptCompletionDates(
     offset < orderIds.length;
     offset += TRANSACTION_RPC_BATCH_SIZE
   ) {
-    const { data, error: txError } = await withSupabaseRetry(
-      async () =>
-        await supabase.rpc('get_customer_order_transactions', {
-          p_order_ids: orderIds.slice(
-            offset,
-            offset + TRANSACTION_RPC_BATCH_SIZE
-          ),
-        }),
-      { maxRetries: 2 }
+    const batchIds = orderIds.slice(
+      offset,
+      offset + TRANSACTION_RPC_BATCH_SIZE
     );
-    // Fail closed like the web orders route (which 500s when its
-    // transaction fetch fails): a receipt must never file under a
-    // stale invoice date.
-    if (txError) {
-      log.warn('Failed to fetch receipt transactions:', txError.message);
-      throw txError;
+    let data: unknown;
+    try {
+      const response = await withSupabaseRetry(
+        async () =>
+          await supabase.rpc('get_customer_order_transactions', {
+            p_order_ids: batchIds,
+          }),
+        { maxRetries: 2 }
+      );
+      // Fail closed per batch — never for the whole list: a receipt must
+      // never file under a stale invoice date, but a transient RPC failure
+      // must not blank unrelated receipts either (the query has no retry).
+      if (response.error) throw response.error;
+      data = response.data;
+    } catch (batchError) {
+      log.warn(
+        'Failed to fetch receipt transactions:',
+        batchError instanceof Error ? batchError.message : batchError
+      );
+      for (const orderId of batchIds) {
+        completionByOrderId.set(orderId, {
+          completionDate: null,
+          settledPaymentsValid: false,
+        });
+      }
+      continue;
     }
     const byOrderId = new Map<string, unknown[]>();
     for (const txn of mapCustomerTransactionRpcRows(data) ?? []) {

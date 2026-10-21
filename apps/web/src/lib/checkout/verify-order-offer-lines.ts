@@ -1,17 +1,12 @@
+import {
+  fetchOfferResolutions,
+  makeOfferLineKey,
+  type OfferAuthorityRpcCall,
+} from '@baci/shared/lib';
+
 export type OrderOfferLine = {
   product_id?: string | null;
   offer_id?: string | null;
-};
-
-export type OrderOfferQueryResult = {
-  data:
-    | {
-        offer_id: string;
-        price?: number | string | null;
-        condition?: string | null;
-      }[]
-    | null;
-  error: { message: string } | null;
 };
 
 export type LiveOrderOffers = {
@@ -27,15 +22,17 @@ const uuidRegex =
 
 /**
  * Loads the live offers for every order line naming one, in a single
- * per-product fan-out. Returns the first line whose offer is not live for
- * its own product plus the live price map every offer-aware check shares
- * (assurance fees, negotiation catalog, VAT). Malformed ids fail closed as
- * mismatches (never a 22P02 500 from the offers lookup or the order RPC).
- * Throws the first lookup error for the caller to report as a 500.
+ * batched authority call. Returns the first line whose offer is not
+ * live AND parent-eligible for its own product, plus the live price
+ * map every offer-aware check shares (assurance fees, negotiation
+ * catalog, VAT). Malformed ids fail closed as mismatches (never a
+ * 22P02 500 from the offers lookup or the order RPC). Throws lookup
+ * errors for the caller to report as a 500.
  */
 export async function fetchLiveOrderOffers(
-  fetchOffers: (productId: string) => Promise<OrderOfferQueryResult>,
-  items: OrderOfferLine[]
+  callRpc: OfferAuthorityRpcCall,
+  items: OrderOfferLine[],
+  merchantId?: string | null
 ): Promise<LiveOrderOffers> {
   const prices = new Map<string, number>();
   const conditions = new Map<string, string>();
@@ -50,54 +47,42 @@ export async function fetchLiveOrderOffers(
       !uuidRegex.test(item.offer_id)
   );
   if (malformed) return { mismatch: malformed, prices, conditions };
+  // A supplied merchant must be a uuid too: otherwise the authority
+  // call raises 22P02 and the order misclassifies caller input as a
+  // verification failure (500) instead of an invalid offer (400).
+  // offerLines is non-empty here, so the first line always exists.
+  if (
+    merchantId !== undefined &&
+    merchantId !== null &&
+    !uuidRegex.test(merchantId)
+  ) {
+    return { mismatch: offerLines[0], prices, conditions };
+  }
 
   const productIds = Array.from(
     new Set(offerLines.map((item) => String(item.product_id)))
   );
-  // Bounded fan-out: a public order can name up to 200 lines, so never run
-  // one live lookup per product concurrently — chunk the reads instead.
-  const results: {
-    productId: string;
-    data: OrderOfferQueryResult['data'];
-    error: OrderOfferQueryResult['error'];
-  }[] = [];
-  for (let index = 0; index < productIds.length; index += 10) {
-    const chunk = await Promise.all(
-      productIds.slice(index, index + 10).map(async (productId) => ({
-        productId,
-        ...(await fetchOffers(productId)),
-      }))
-    );
-    results.push(...chunk);
-  }
-  const lookupError = results.find((result) => result.error)?.error;
-  if (lookupError) throw new Error(lookupError.message);
+  const resolutions = await fetchOfferResolutions(callRpc, {
+    merchantId: merchantId ?? null,
+    productIds,
+  });
 
-  const liveOfferIds = new Set(
-    results.flatMap((result) =>
-      (result.data ?? []).map((offer) => {
-        const key = `${result.productId}::${String(offer.offer_id)}`;
-        // Number(null) and Number('') are 0 — an unpriced row must stay out
-        // of the map (membership still counts it live) rather than pricing
-        // checks at zero.
-        if (
-          offer.price !== null &&
-          offer.price !== undefined &&
-          offer.price !== ''
-        ) {
-          const price = Number(offer.price);
-          if (Number.isFinite(price)) prices.set(key, price);
-        }
-        if (typeof offer.condition === 'string' && offer.condition !== '') {
-          conditions.set(key, offer.condition);
-        }
-        return key;
-      })
-    )
-  );
+  // No parent-shape filter: the order RPC stages offers from
+  // variant-bearing and flag-disabled parents alike, so every
+  // resolved row is a live offer checkout would stage.
+  const live = resolutions;
+  for (const resolution of live.values()) {
+    const key = makeOfferLineKey(resolution.productId, resolution.offerId);
+    if (resolution.priceBasis !== null) prices.set(key, resolution.priceBasis);
+    if (resolution.condition !== null)
+      conditions.set(key, resolution.condition);
+  }
   const mismatch =
     offerLines.find(
-      (item) => !liveOfferIds.has(`${item.product_id}::${item.offer_id}`)
+      (item) =>
+        !live.has(
+          makeOfferLineKey(String(item.product_id), String(item.offer_id))
+        )
     ) ?? null;
   return { mismatch, prices, conditions };
 }
@@ -105,12 +90,13 @@ export async function fetchLiveOrderOffers(
 /**
  * Finds the first order line whose exact condition offer does not name a
  * live offer of its own product. Malformed ids fail closed as mismatches
- * (never a 22P02 500 from the offers lookup or the order RPC). Throws the
- * first lookup error for the caller to report as a 500.
+ * (never a 22P02 500 from the offers lookup or the order RPC). Throws
+ * lookup errors for the caller to report as a 500.
  */
 export async function findMismatchedOrderOffer(
-  fetchOffers: (productId: string) => Promise<OrderOfferQueryResult>,
-  items: OrderOfferLine[]
+  callRpc: OfferAuthorityRpcCall,
+  items: OrderOfferLine[],
+  merchantId?: string | null
 ): Promise<OrderOfferLine | null> {
-  return (await fetchLiveOrderOffers(fetchOffers, items)).mismatch;
+  return (await fetchLiveOrderOffers(callRpc, items, merchantId)).mismatch;
 }

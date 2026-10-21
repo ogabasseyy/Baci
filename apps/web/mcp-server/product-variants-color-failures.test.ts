@@ -70,7 +70,7 @@ describe('loadMcpProductVariants catalog colors during lookup failures', () => {
       });
       if (has_variants && has_condition_offers) {
         expect(supabase.rpc).toHaveBeenCalledWith('get_storefront_product_variants', { p_product_ids: ['phone-1'] });
-        expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', { p_product_id: 'phone-1' });
+        expect(supabase.rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', { p_merchant_id: 'merchant-1', p_product_ids: ['phone-1'] });
       }
     } finally {
       log.mockRestore();

@@ -127,14 +127,13 @@ BEGIN
   END IF;
 
   -- The anon-facing payload carries only what the claim UI renders:
-  -- top-level customer/merchant UUIDs and the redeemer id are consumed by
-  -- no caller (the server loader reads claimed_at, customer_name, and the
-  -- login-hint email), so they stay out of the directly invocable anon
-  -- surface. customer_email remains solely as the server-side login-hint
-  -- input and never reaches the client unmasked.
+  -- top-level customer/merchant UUIDs, the redeemer id, and the recipient
+  -- email are consumed by no anon caller, so they stay out of the directly
+  -- invocable anon surface. The login-hint email lives behind the
+  -- service-role-only get_receipt_claim_login_hint below and reaches the
+  -- client solely through the token-scoped login-email route.
   RETURN jsonb_build_object(
     'id', v_claim.id,
-    'customer_email', v_claim.customer_email,
     'customer_name', v_claim.customer_name,
     'expires_at', v_claim.expires_at,
     'claimed_at', v_claim.claimed_at,
@@ -156,3 +155,57 @@ GRANT EXECUTE ON FUNCTION private.preview_receipt_claim(text)
 -- private (delegates boundary), and an INVOKER wrapper 42501s for signed-in
 -- claim-link opens before automatic redemption can run.
 ALTER FUNCTION public.preview_receipt_claim(text) SECURITY DEFINER;
+-- Server-only login-hint email. The anon preview payload above no longer
+-- carries customer_email, so the token-scoped login-email route fetches it
+-- here through the service-role key. Granted to service_role only: direct
+-- PostgREST callers can never reach the raw recipient address, while the
+-- bearer token remains the only credential the server needs.
+CREATE OR REPLACE FUNCTION private.get_receipt_claim_login_hint(p_token_hash text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_email text;
+  v_expires_at timestamptz;
+BEGIN
+  SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+  FROM public.receipt_claims AS rc
+  WHERE rc.token_hash = p_token_hash
+  LIMIT 1;
+  IF NOT FOUND THEN
+    SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+    FROM public.receipt_claims AS rc
+    WHERE rc.previous_token_hash = p_token_hash
+    LIMIT 1;
+  END IF;
+  IF NOT FOUND THEN
+    SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+    FROM public.receipt_claims AS rc
+    WHERE rc.delivered_token_hash = p_token_hash
+    LIMIT 1;
+  END IF;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  IF v_expires_at IS NOT NULL AND v_expires_at <= now() THEN
+    RETURN NULL;
+  END IF;
+  RETURN v_email;
+END;
+$$;
+CREATE OR REPLACE FUNCTION public.get_receipt_claim_login_hint(p_token_hash text)
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $$ SELECT private.get_receipt_claim_login_hint(p_token_hash); $$;
+REVOKE ALL ON FUNCTION private.get_receipt_claim_login_hint(text)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_receipt_claim_login_hint(text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.get_receipt_claim_login_hint(text)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_receipt_claim_login_hint(text)
+  TO service_role;

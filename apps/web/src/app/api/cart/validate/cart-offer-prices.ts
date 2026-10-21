@@ -1,8 +1,17 @@
+import {
+  fetchOfferResolutions,
+  makeOfferLineKey,
+  type OfferAuthorityRpcCall,
+  type ResolvedOfferResolution,
+} from '@baci/shared/lib';
+
 export type CartOfferRow = {
   offer_id: string;
   price: number | string | null;
   condition: string | null;
   stock_quantity?: number | string | null;
+  /** M28 parent shape, computed by the SQL authority (never re-derived). */
+  parent_eligible?: boolean;
 };
 
 export type OfferValidationItem = {
@@ -11,24 +20,29 @@ export type OfferValidationItem = {
   offerId?: string;
 };
 
-export type OfferQueryResult = {
-  data: CartOfferRow[] | null;
-  error: { message: string } | null;
-};
-
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toCartOfferRow(resolution: ResolvedOfferResolution): CartOfferRow {
+  return {
+    offer_id: resolution.offerId,
+    price: resolution.priceBasis,
+    condition: resolution.condition,
+    stock_quantity: resolution.allocatableStock,
+    parent_eligible: resolution.parentEligible,
+  };
+}
 
 /**
  * Live condition-offer prices for a cart validation pass, keyed by
  * `${productId}::${offerId}`. Only non-variant lines with a well-formed
  * offer id trigger a fetch (variant lines price from the variant
- * override). The public RPC returns active rows only, so a missing row
- * means the offer is gone. Throws the first query error for the caller
- * to report as a 500.
+ * override). Reads the single offer-resolution authority in one batched
+ * call; a missing row means the offer is gone. Throws the query error
+ * for the caller to report as a 500.
  */
 export async function fetchCartOfferPrices(
-  fetchOffers: (productId: string) => Promise<OfferQueryResult>,
+  callRpc: OfferAuthorityRpcCall,
   validationItems: OfferValidationItem[]
 ): Promise<Map<string, CartOfferRow>> {
   const offerProductIds = Array.from(
@@ -45,35 +59,19 @@ export async function fetchCartOfferPrices(
     )
   );
 
-  // Bounded fan-out: a public validation can name up to 50 cart lines,
-  // so never run one live lookup per product concurrently — chunk the
-  // reads like the order-offer verifier does.
-  const results: {
-    productId: string;
-    data: OfferQueryResult['data'];
-    error: OfferQueryResult['error'];
-  }[] = [];
-  for (let index = 0; index < offerProductIds.length; index += 10) {
-    const chunk = await Promise.all(
-      offerProductIds.slice(index, index + 10).map(async (productId) => ({
-        productId,
-        ...(await fetchOffers(productId)),
-      }))
+  // Public-catalog intent: unscoped by merchant (see the route) — the
+  // authority still gates on published-or-admin merchants.
+  const resolutions = await fetchOfferResolutions(callRpc, {
+    merchantId: null,
+    productIds: offerProductIds,
+  });
+
+  const rows = new Map<string, CartOfferRow>();
+  for (const resolution of resolutions.values()) {
+    rows.set(
+      makeOfferLineKey(resolution.productId, resolution.offerId),
+      toCartOfferRow(resolution)
     );
-    results.push(...chunk);
   }
-
-  const offerError = results.find((result) => result.error)?.error;
-  if (offerError) {
-    throw new Error(offerError.message);
-  }
-
-  return new Map(
-    results.flatMap((result) =>
-      (result.data || []).map(
-        (offer) =>
-          [`${result.productId}::${String(offer.offer_id)}`, offer] as const
-      )
-    )
-  );
+  return rows;
 }

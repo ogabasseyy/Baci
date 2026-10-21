@@ -155,6 +155,61 @@ describe('receipt claim preview', () => {
     });
   });
 
+  it('serves the login hint from the service-role function when the preview carries no email', async () => {
+    const { customer_email: _dropped, ...trimmedClaim } = baseClaim;
+    const supabase = createSupabaseRpcMock({
+      data: trimmedClaim,
+      error: null,
+    });
+    const serviceSupabase = createSupabaseRpcMock({
+      data: '  BasseyBJohn@Yahoo.CO.UK  ',
+      error: null,
+    });
+
+    const result = await loadReceiptClaimLoginEmailHint({
+      supabase,
+      serviceSupabase,
+      token: 'claim-token',
+    });
+
+    expect(serviceSupabase.rpc).toHaveBeenCalledWith(
+      'get_receipt_claim_login_hint',
+      { p_token_hash: hashReceiptClaimToken('claim-token') }
+    );
+    expect(result).toEqual({
+      emailHint: 'basseybjohn@yahoo.co.uk',
+      ok: true,
+    });
+  });
+
+  it('falls back to the preview email when the hint function is missing', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: {
+        ...baseClaim,
+        customer_email: '  BasseyBJohn@Yahoo.CO.UK  ',
+      },
+      error: null,
+    });
+    const serviceSupabase = createSupabaseRpcMock({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find function public.get_receipt_claim_login_hint',
+      },
+    });
+
+    const result = await loadReceiptClaimLoginEmailHint({
+      supabase,
+      serviceSupabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      emailHint: 'basseybjohn@yahoo.co.uk',
+      ok: true,
+    });
+  });
+
   it('drops invalid login email hints from claim data', async () => {
     const supabase = createSupabaseRpcMock({
       data: {

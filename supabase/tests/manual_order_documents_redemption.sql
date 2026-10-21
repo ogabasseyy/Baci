@@ -275,4 +275,12 @@ DROP TABLE exp_probe;
 -- identity UUIDs stay out of the directly invocable anon surface, while
 -- the login-hint email and rendered claim fields remain.
 SELECT pg_temp.assert_true((SELECT p IS NOT NULL AND NOT (p ? 'customer_id') AND NOT (p ? 'merchant_id') AND NOT (p ? 'claimed_by_user_id') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview omits retired identity fields');
-SELECT pg_temp.assert_true((SELECT (p ? 'customer_email') AND (p ? 'customer_name') AND (p ? 'orders') AND (p ? 'merchant') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview keeps rendered fields');
+SELECT pg_temp.assert_true((SELECT NOT (p ? 'customer_email') AND (p ? 'customer_name') AND (p ? 'orders') AND (p ? 'merchant') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview keeps rendered fields without the email');
+-- The login-hint function is service-role-only: direct anon/authenticated
+-- PostgREST callers can never reach the raw recipient address, while the
+-- server resolves the live claim email through the service-role key.
+SELECT pg_temp.assert_true((SELECT NOT has_function_privilege('anon', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'anon cannot execute the login-hint function');
+SELECT pg_temp.assert_true((SELECT NOT has_function_privilege('authenticated', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'authenticated cannot execute the login-hint function');
+SELECT pg_temp.assert_true((SELECT has_function_privilege('service_role', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'service_role can execute the login-hint function');
+SELECT pg_temp.assert_true((SELECT public.get_receipt_claim_login_hint(repeat('c7', 32)) = 'moved@example.com'), 'login hint resolves the live claim email');
+SELECT pg_temp.assert_true((SELECT public.get_receipt_claim_login_hint(repeat('e9', 32)) IS NULL), 'login hint is null for unknown hashes');

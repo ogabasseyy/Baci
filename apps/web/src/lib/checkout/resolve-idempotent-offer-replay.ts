@@ -12,8 +12,8 @@ import {
   type ResolvableOrderOfferLine,
   resolveOrderOfferEconomics,
 } from '@/lib/checkout/resolve-order-offer-economics';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 
 export interface IdempotentOfferReplayResolution {
   isIdempotentOfferOrderReplay: boolean;
@@ -133,11 +133,9 @@ export async function resolveIdempotentOfferReplay({
     // two offers can share one condition, so the stored id is the only
     // thing distinguishing them at fulfillment time.
     const offerEconomics = await resolveOrderOfferEconomics(
-      (productId) =>
-        supabase.rpc('get_product_offers', {
-          p_product_id: productId,
-        }) as unknown as Promise<OrderOfferQueryResult>,
-      orderItemsPayload
+      createOfferAuthorityRpcCall(supabase),
+      orderItemsPayload,
+      merchantId
     );
     if (!offerEconomics.ok) {
       return offerEconomics;

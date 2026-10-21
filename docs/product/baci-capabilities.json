@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-20T21:53:28.679874+00:00",
-  "source_revision": "40672ea6113bc412682af0bd938c7cd78f7cd718",
-  "evidence_digest": "f522ab2d91f25333d483dcba7adcbb5040f873145eabdf1fa43ce3501804c2ea",
-  "claims_digest": "28eb29d81e66874bee4b4342bb8669fb17828f42ee9ce2463850adc85a86e08c",
-  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review. Scoped re-review of the agentic checkout offer surface: offer pricing now resolves through the merchant-scoped get_storefront_offer_resolution authority (published/platform-admin merchant gate in SQL) instead of per-product fan-outs; merchant scoping and the shared-cart fall-through are preserved. Scoped re-review of the authority RPC adapter consolidation: the three server call sites share one awaited factory for the same get_storefront_offer_resolution call; request shape, merchant scoping, and fall-through behavior are unchanged.",
+  "reviewed_at": "2026-10-21T05:39:56.004892+00:00",
+  "source_revision": "b24e8336a75267e7c4f0161162d10d15b9c0a1fc",
+  "evidence_digest": "7227ffa1687fe783375a6e6c8e88a67b4c6628dc5b16ff7e39093b4b45fdeaee",
+  "claims_digest": "66599021e3b78ce838a37e6033a283d96d5809dcb91d252552382c1421e22082",
+  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review. Scoped re-review of the agentic checkout offer surface: offer pricing now resolves through the merchant-scoped get_storefront_offer_resolution authority (published/platform-admin merchant gate in SQL) instead of per-product fan-outs; merchant scoping and the shared-cart fall-through are preserved. Scoped re-review of the authority RPC adapter consolidation: the three server call sites share one awaited factory for the same get_storefront_offer_resolution call; request shape, merchant scoping, and fall-through behavior are unchanged. Scoped re-review of the PDP snapshot effective-policy emission: get_storefront_pdp_core_v2 emits the anchor-derived effective_policy so v2 PDP offer pricing caps by the strict serialized pool for simple anchor-strict products; merchant-aware authority chunking (1000 scoped / 200 unscoped); error-level logging for strict rows missing unit counts. Request shape, merchant scoping, and fail-closed behavior are unchanged.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

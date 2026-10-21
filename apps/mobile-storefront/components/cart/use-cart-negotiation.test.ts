@@ -288,3 +288,57 @@ describe('useCartNegotiation', () => {
     });
   });
 });
+
+describe('checkout fencing intent', () => {
+  it('marks opening a cart-wide negotiation as a checkout intent', async () => {
+    const { sharedCartWriteRevision } = await import(
+      '@/stores/shared-cart-writer'
+    );
+    const items = [createItem()];
+    const { result } = renderHook(() =>
+      useCartNegotiation({ items, grandTotal: 500000 })
+    );
+    const before = sharedCartWriteRevision();
+    act(() => {
+      result.current.openTotalNegotiation();
+    });
+    expect(mockOpenNegotiation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'total' })
+    );
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+  });
+
+  it('marks opening an item negotiation warning as a checkout intent', async () => {
+    const { sharedCartWriteRevision } = await import(
+      '@/stores/shared-cart-writer'
+    );
+    const items = [createItem()];
+    const { result } = renderHook(() =>
+      useCartNegotiation({ items, grandTotal: 500000 })
+    );
+    const before = sharedCartWriteRevision();
+    act(() => {
+      result.current.openItemNegotiation(items[0]);
+    });
+    expect(result.current.showNegotiateWarning).toBe(true);
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+  });
+
+  it('marks opening an item negotiation as a checkout intent', async () => {
+    const { sharedCartWriteRevision } = await import(
+      '@/stores/shared-cart-writer'
+    );
+    const items = [createItem({ negotiatedPrice: 450000 })];
+    const { result } = renderHook(() =>
+      useCartNegotiation({ items, grandTotal: 450000 })
+    );
+    const before = sharedCartWriteRevision();
+    act(() => {
+      result.current.actuallyOpenItemNegotiation(items[0]);
+    });
+    expect(mockOpenNegotiation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'single' })
+    );
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+  });
+});

@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { getCartItemEffectivePrice } from '@/lib/cart-pricing';
 import { type CartItem, useCartStore } from '@/stores/cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 import { useUIStore } from '@/stores/ui-store';
 
 interface UseCartNegotiationParams {
@@ -31,6 +32,7 @@ export function useCartNegotiation({
   );
 
   const actuallyOpenItemNegotiation = (item: CartItem) => {
+    markSharedCartIntent();
     const priceToUse = getCartItemEffectivePrice(item);
     openNegotiation({
       type: 'single',
@@ -75,12 +77,14 @@ export function useCartNegotiation({
     if (hasAnyIndividualNegotiation) {
       actuallyOpenItemNegotiation(item);
     } else {
+      markSharedCartIntent();
       setPendingNegotiateItem(item);
       setShowNegotiateWarning(true);
     }
   };
 
   const proceedToTotalNegotiation = (total: number) => {
+    markSharedCartIntent();
     openNegotiation({
       type: 'total',
       productName: 'Total Cart',

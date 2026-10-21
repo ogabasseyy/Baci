@@ -5,14 +5,11 @@ describe('durable SEO monetary context', () => {
   it('preserves matching localized gift-card identity but rejects its retail price', () => {
     const text = 'Use this EUR 50,00 Amazon gift card';
     const product = { name: 'Amazon Gift Card EUR 50,00' };
-    expect(getDurableProductSeoText({ text, product, currency: 'NGN' })).toBe(
-      text
-    );
+    expect(getDurableProductSeoText({ text, product })).toBe(text);
     expect(
       getDurableProductSeoText({
         text: `${text}. Buy for EUR 50,00.`,
         product,
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -22,7 +19,6 @@ describe('durable SEO monetary context', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'Amazon Gift Card 50 USD' },
-        currency: 'USD',
       })
     ).toBe(text);
   });
@@ -45,7 +41,6 @@ describe('durable SEO monetary context', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'Device' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -59,7 +54,6 @@ describe('durable SEO monetary context', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -86,7 +80,6 @@ describe('durable SEO monetary context', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'Device' },
-        currency: 'USD',
       })
     ).toBe(text);
   });
@@ -95,10 +88,10 @@ describe('durable SEO monetary context', () => {
     'ALL',
     'TRY',
     'TOP',
-  ])('preserves ordinary code words on a %s storefront', (currency) => {
-    const text = 'Buy all 3 colours; try 2 sizes and compare the top 3 models.';
+  ])('preserves ordinary code words spelled %s', (word) => {
+    const text = `Buy phones; ${word.toLowerCase()} 3 models.`;
     expect(
-      getDurableProductSeoText({ text, product: { name: 'Device' }, currency })
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
     ).toBe(text);
   });
 });

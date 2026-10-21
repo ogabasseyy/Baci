@@ -639,11 +639,7 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  const safeDescription = getProductSchemaDescription(
-    product,
-    merchantName,
-    currency
-  );
+  const safeDescription = getProductSchemaDescription(product, merchantName);
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;

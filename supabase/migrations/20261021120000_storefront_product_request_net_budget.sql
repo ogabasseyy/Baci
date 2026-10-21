@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS storefront_search_private.intake_net_windows (
 -- explicit revokes. storefront_search_private is not PostgREST-exposed.
 ALTER TABLE storefront_search_private.intake_net_windows ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON storefront_search_private.intake_net_windows FROM PUBLIC, anon, authenticated, service_role;
+-- The composite PK cannot serve the window_start-only prune predicate, so
+-- index it: every admission deletes expired windows, and the scan cost
+-- would otherwise grow with the (attacker-inflatable) origin population.
+CREATE INDEX IF NOT EXISTS intake_net_windows_window_start_idx
+  ON storefront_search_private.intake_net_windows (window_start);
 
 CREATE OR REPLACE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid, p_caller_net_hash text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$

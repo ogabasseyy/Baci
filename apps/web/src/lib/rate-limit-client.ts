@@ -15,15 +15,19 @@ function isValidIP(ip: string): boolean {
 }
 
 function finalChainIp(value: string | null): string | null {
-  // Only the FINAL entry is ever returned: every earlier entry is
-  // attacker-supplied, so falling back to one when the final entry is
-  // invalid would let a caller choose its own bucket with a
-  // '<chosen-ip>, garbage' chain. An invalid final entry returns null
-  // and the caller falls through to the next signal (fail-closed).
+  // Only the final NON-EMPTY entry is ever returned: every earlier entry
+  // is attacker-supplied, so falling back past an invalid final entry
+  // would let a caller choose its own bucket with a '<chosen-ip>,
+  // garbage' chain. Trailing commas/whitespace are skipped (benign
+  // formatting some proxies emit); anything else invalid returns null and
+  // the caller falls through to the next signal (fail-closed).
   if (!value) return null;
   const entries = value.split(',');
-  const final = entries[entries.length - 1]?.trim();
-  if (final && isValidIP(final)) return final;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const candidate = entries[i]?.trim();
+    if (!candidate) continue;
+    return isValidIP(candidate) ? candidate : null;
+  }
   return null;
 }
 

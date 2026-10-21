@@ -2,15 +2,18 @@ import { productRequestSchema } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import { getClientIdentifier } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { hashIntakeCallerNet } from '@/lib/storefront/hash-intake-caller-net';
 import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
 
 // Public intake threat model. This route exercises no session authority: it
 // forwards Zod-validated input to the restricted storefront_intake RPC, so
 // there is no login, cookie, or device signal to bind abuse budgets to —
-// the network origin is the only server-verifiable caller signal, and it
-// is trustworthy only behind an overwriting edge (see getClientIdentifier).
+// the network origin is the only server-verifiable caller signal. The
+// durable budget is keyed on the TRUSTED identifier (see
+// getTrustedClientIdentifier), never the lenient proxy one: header values
+// a caller can mint per request would mint a fresh DB bucket per request
+// too, leaving the durable layer with no binding power at all.
 // Deliberately rejected controls, with bypass reasons:
 // - Host binding (Host merchant must equal body slug): an attacker POSTs
 //   directly to the victim host with the victim slug and passes; a native
@@ -30,11 +33,15 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 //   (any version-gated grace lets the attacker claim the old version).
 //   Both need owner sign-off; they are not unilateral per-request fixes.
 // What IS enforced, in binding order: the proxy's per-IP sliding window
-// (10/hour across all merchants) binds first while Redis is healthy; the
-// RPC's durable per-(merchant, network-origin) fixed window (10/hour)
-// backstops it across Redis outages and per-instance memory fallbacks,
-// when one IP could otherwise spend the whole merchant budget; the
-// merchant (50/hour) and contact (3/hour) budgets bound total harm.
+// (10/hour across all merchants, lenient signal) binds first while Redis
+// is healthy; the RPC's durable per-(merchant, network-origin) fixed
+// window (10/hour, trusted signal) backstops it across Redis outages and
+// per-instance memory fallbacks, when one IP could otherwise spend the
+// whole merchant budget; the merchant (50/hour) and contact (3/hour)
+// budgets bound total harm. On Vercel the lenient and trusted signals
+// agree (same edge-verified IP), so both layers measure the same caller;
+// anywhere the edge guarantee is absent the durable key collapses into
+// the shared 'unknown' bucket (fail-closed) instead of rotating.
 // Budgets fail closed (503/429, never silent allow). Residual: callers
 // with many real network origins can still pool the merchant budget
 // (inbox volume plus legit-shopper 429s) — this needs the owner-gated
@@ -71,10 +78,13 @@ export async function POST(request: NextRequest) {
       p_contact: parsed.data.contact,
       p_merchant_slug: parsed.data.merchantSlug,
       p_request_id: parsed.data.requestId,
-      // Same network signal the proxy buckets on, HMAC-hashed so raw IPs
-      // never reach the database. The RPC enforces the durable
-      // per-(merchant, origin) budget on this value.
-      p_caller_net_hash: hashIntakeCallerNet(getClientIdentifier(request)),
+      // Trusted network signal (never the lenient proxy one), HMAC-hashed
+      // with the dedicated intake-net key so raw IPs never reach the
+      // database. The RPC enforces the durable per-(merchant, origin)
+      // budget on this value.
+      p_caller_net_hash: hashIntakeCallerNet(
+        getTrustedClientIdentifier(request)
+      ),
     });
   } catch {
     // Fail closed (e.g. narrow intake key unprovisioned): never serve

@@ -103,6 +103,11 @@ describe('getClientIdentifier header trust', () => {
         requestWith({ 'x-forwarded-for': '203.0.113.6, not-an-ip' })
       )
     ).toBe('unknown');
+    // Trailing commas/whitespace are benign proxy formatting, not an
+    // attacker bucket-selection attempt, so they resolve to the final IP.
+    expect(
+      getClientIdentifier(requestWith({ 'x-forwarded-for': '198.51.100.9, ' }))
+    ).toBe('198.51.100.9');
   });
 
   it('tolerates padded single-value headers and reports unknown otherwise', () => {

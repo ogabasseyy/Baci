@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCsrfProtection } from '@/lib/csrf';
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +47,9 @@ beforeEach(() => {
   mocks.warn.mockReset();
   vi.mocked(checkCsrfProtection).mockReset().mockResolvedValue({ valid: true });
 });
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 describe('product request intake', () => {
   it('rejects cookie-bearing posts without a valid CSRF token', async () => {
     vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: false });
@@ -76,14 +79,17 @@ describe('product request intake', () => {
       p_caller_net_hash: 'net-hash:unknown',
     });
   });
-  it('binds the durable network budget to the proxy network signal', async () => {
+  it('binds the durable network budget to the trusted network signal', async () => {
+    // On Vercel the edge overwrites x-real-ip, so the trusted identifier
+    // is the edge-verified IP and both budget layers measure one caller.
+    vi.stubEnv('VERCEL', '1');
     const response = await POST(request(input, { 'x-real-ip': '192.0.2.10' }));
 
     expect(response.status).toBe(200);
-    // The route must hash the same identifier the proxy buckets on, so a
-    // caller cannot spend the proxy budget as one identity and the durable
-    // budget as another. (That the hash leaks no raw IP is covered by the
-    // intake-client HMAC tests with the real implementation.)
+    // The route must hash the trusted identifier, never the lenient proxy
+    // one: mintable header values would mint fresh DB buckets per request.
+    // (That the hash leaks no raw IP is covered by the HMAC tests with the
+    // real implementation.)
     expect(mocks.hashNet).toHaveBeenCalledWith('192.0.2.10');
     expect(mocks.submit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -91,7 +97,18 @@ describe('product request intake', () => {
       })
     );
   });
+  it('collapses mintable header signals into the unknown bucket off Vercel', async () => {
+    // Without the edge guarantee x-real-ip is caller-supplied, so the
+    // durable key must fail closed into the shared bucket, not rotate.
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    const response = await POST(request(input, { 'x-real-ip': '192.0.2.10' }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.hashNet).toHaveBeenCalledWith('unknown');
+  });
   it('derives the same network key for CSRF-verified web callers', async () => {
+    vi.stubEnv('VERCEL', '1');
     const response = await POST(
       request(input, {
         cookie: 'csrf-token=ok',

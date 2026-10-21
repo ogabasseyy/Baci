@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { JsonLd } from '@/components/seo/json-ld';
 import {
   OGABASSEY_DESCRIPTION,
@@ -26,9 +27,9 @@ const ogabasseyStaticHomepageSchema = {
 
 export function OgabasseyHomeStaticShellHead() {
   return (
-    <>
+    <Suspense fallback={null}>
       <JsonLd data={ogabasseyStaticHomepageSchema} />
       <OgabasseyHomeStyleLoader />
-    </>
+    </Suspense>
   );
 }

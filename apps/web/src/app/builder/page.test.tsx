@@ -8,7 +8,7 @@ vi.mock('@/components/csrf-initializer', () => ({
   CsrfInitializer: () => <div data-testid="csrf-initializer" />,
 }));
 
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="merchant-provider">{children}</div>
   ),

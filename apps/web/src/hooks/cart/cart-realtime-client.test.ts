@@ -6,11 +6,11 @@ import {
 } from './cart-realtime-client';
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
-vi.mock('@/env', () => ({
-  getSupabaseUrl: () => 'https://test.supabase.co',
-  getSupabaseAnonKey: () => 'public-test-key',
-}));
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'public-test-key');
+});
 it('projects only short-lived receive fields from an uncached same-origin request', async () => {
   const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(
@@ -83,4 +83,26 @@ it('keeps temporary access outages retryable without treating them as revocation
     'temporarily unavailable'
   );
   fetcher.mockRestore();
+});
+
+it('normalizes a failed lazy dependency load into the connection-unavailable error', async () => {
+  vi.resetModules();
+  vi.doMock('@supabase/supabase-js', () => {
+    throw new Error('ChunkLoadError');
+  });
+  try {
+    const { openCartReceiveConnection: openWithBrokenChunk } = await import(
+      './cart-realtime-client'
+    );
+    await expect(
+      openWithBrokenChunk(
+        { topic: 'cart:m:c', token: 'receive', expiresAt: '2099-01-01' },
+        vi.fn(),
+        vi.fn()
+      )
+    ).rejects.toThrow('Cart receive connection unavailable');
+  } finally {
+    vi.doUnmock('@supabase/supabase-js');
+    vi.resetModules();
+  }
 });

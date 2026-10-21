@@ -1,5 +1,27 @@
 import { OgabasseyHomeHeroPreloadLink } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-preload-link';
-import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
+import {
+  type OgabasseyHomeHeroShellResult,
+  resolveOgabasseyHomeHeroShell,
+} from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
+import { peekSettledCanonicalOgabasseyHomeState } from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
+
+function renderSlideZeroPreloadFromShell(
+  heroShell: OgabasseyHomeHeroShellResult | null
+) {
+  const slideZeroUrl =
+    heroShell?.status === 'published'
+      ? heroShell.slides[0]?.imageUrl
+      : undefined;
+  if (!slideZeroUrl) {
+    return null;
+  }
+  return <OgabasseyHomeHeroPreloadLink src={slideZeroUrl} />;
+}
+
+async function renderSlideZeroPreloadAsync() {
+  const heroShell = await resolveOgabasseyHomeHeroShell();
+  return renderSlideZeroPreloadFromShell(heroShell);
+}
 
 /**
  * Slide-0 preload resolved beneath its own boundary, so the shell lookup
@@ -12,14 +34,11 @@ import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogab
  * unused image, while the recovery path renders from actual product data.
  * Do not read request APIs here; the URL is inert hint bytes, never UI.
  */
-export async function OgabasseyHomeCommittedSlideZeroPreload() {
-  const heroShell = await resolveOgabasseyHomeHeroShell();
-  const slideZeroUrl =
-    heroShell?.status === 'published'
-      ? heroShell.slides[0]?.imageUrl
-      : undefined;
-  if (!slideZeroUrl) {
-    return null;
+export function OgabasseyHomeCommittedSlideZeroPreload() {
+  const settled = peekSettledCanonicalOgabasseyHomeState();
+  if (settled?.heroShellSettled) {
+    return renderSlideZeroPreloadFromShell(settled.heroShell);
   }
-  return <OgabasseyHomeHeroPreloadLink src={slideZeroUrl} />;
+
+  return renderSlideZeroPreloadAsync();
 }

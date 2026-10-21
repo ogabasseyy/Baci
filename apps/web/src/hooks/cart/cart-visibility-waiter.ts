@@ -17,6 +17,9 @@ export function createCartVisibilityWaiter() {
     };
     remove = () => document.removeEventListener('visibilitychange', onVisible);
     document.addEventListener('visibilitychange', onVisible);
+    // The tab may have become visible between the caller's hidden check
+    // and this registration; no further event would fire in that case.
+    if (!document.hidden) onVisible();
   }
   return { wait, cancel };
 }

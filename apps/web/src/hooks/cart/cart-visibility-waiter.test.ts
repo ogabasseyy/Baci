@@ -19,11 +19,18 @@ it('runs only the latest waiter once the document is visible', () => {
   expect(second).toHaveBeenCalledOnce();
 });
 it('cancels an outstanding waiter', () => {
-  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
   const waiter = createCartVisibilityWaiter();
   const callback = vi.fn();
   waiter.wait(callback);
   waiter.cancel();
   document.dispatchEvent(new Event('visibilitychange'));
   expect(callback).not.toHaveBeenCalled();
+});
+it('runs immediately when the tab became visible before registration', () => {
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  const waiter = createCartVisibilityWaiter();
+  const callback = vi.fn();
+  waiter.wait(callback);
+  expect(callback).toHaveBeenCalledOnce();
 });

@@ -18,6 +18,7 @@ import {
   displayLineMatchesAddLane,
   identityKeyOfDisplay,
 } from '@/hooks/cart/shared-cart-display-identity';
+import { removeCapacityLineFromLiveCart } from '@/hooks/cart/shared-cart-live-removal';
 
 /** Edit only the parked merchant-scoped device cache, before any create exists. */
 export function DeviceCartCapacityItems({
@@ -51,9 +52,28 @@ export function DeviceCartCapacityItems({
         return Promise.resolve(undefined);
       },
       merchantSlug
-    ).then(() => {
-      if (!applied) setItems(getCartFromStorage(merchantSlug));
-    });
+    )
+      .then(() => {
+        if (!applied) {
+          setItems(getCartFromStorage(merchantSlug));
+          return;
+        }
+        // A create in another tab may have committed while this removal
+        // was queued behind it; the cache edit cannot undo that create,
+        // so remove the line from the now-live server cart as well.
+        void removeCapacityLineFromLiveCart(selected, merchantSlug).then(
+          (ok) => {
+            if (!ok)
+              setError(
+                'Saved items updated, but the live cart could not be updated. Remove the item from the cart and retry.'
+              );
+          }
+        );
+      })
+      .catch(() => {
+        setItems(getCartFromStorage(merchantSlug));
+        setError('Could not save that change. Check storage access and retry.');
+      });
   }
   function applyRemoval(selected: CartItem) {
     const current = getCartFromStorage(merchantSlug);

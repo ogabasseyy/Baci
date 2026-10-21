@@ -122,6 +122,7 @@ export function NativeCartPairingPanel() {
       cartPairingRevision() !== revision
     )
       return;
+    markSharedCartIntent();
     try {
       await WebBrowser.openBrowserAsync(current.browserUrl);
     } catch {

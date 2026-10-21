@@ -189,3 +189,23 @@ it('marks a pairing retry sync as a checkout-fencing intent', async () => {
   await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   expect(sharedCartWriteRevision()).toBe(before + 1);
 });
+it('marks a web pairing continuation as a checkout-fencing intent', async () => {
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const cont = await waitFor(() =>
+    screen.getByRole('button', { name: 'Continue on website' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(cont);
+  await waitFor(() =>
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(url)
+  );
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});

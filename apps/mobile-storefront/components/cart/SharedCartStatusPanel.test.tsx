@@ -133,3 +133,17 @@ it('requires new picks after a conflict attempt changes status', () => {
     combine.props.accessibilityState?.disabled ?? combine.props.disabled
   ).toBeTruthy();
 });
+it('retries a failed initial cart creation using prepare rather than a read-only refresh', async () => {
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    prepare,
+    refresh,
+    snapshot: null,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  fireEvent.press(view.getByText('Retry sync'));
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
+});

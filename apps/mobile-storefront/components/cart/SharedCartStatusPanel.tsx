@@ -194,13 +194,7 @@ export function SharedCartStatusPanel() {
       ) : !busy && state.status !== 'choice_required' ? (
         <Pressable
           accessibilityRole="button"
-          onPress={() =>
-            run(
-              state.snapshot || state.status === 'error'
-                ? state.refresh
-                : state.prepare
-            )
-          }
+          onPress={() => run(state.snapshot ? state.refresh : state.prepare)}
         >
           <Text style={{ color: colors.primary }}>
             {state.snapshot || state.status === 'error'

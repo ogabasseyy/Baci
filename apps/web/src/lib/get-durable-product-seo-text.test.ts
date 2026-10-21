@@ -44,6 +44,13 @@ describe('getDurableProductSeoText', () => {
     'Phone ngn 350,000',
     '<p>Buy this phone for ₦&nbsp;350,000.</p>',
     '<p>Buy this phone for &#8358;&#160;350,000.</p>',
+    'iPhone 13 Price – NGN:350,000',
+    '₦: 350,000',
+    '350,000 naira',
+    'iPhone 13 – 900 dollars',
+    'Price: USD: 900',
+    'iPhone 13 – 350 000',
+    "iPhone 13 – 350'000",
   ])('rejects an unbound monetary claim: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -62,6 +69,24 @@ describe('getDurableProductSeoText', () => {
         product: { name: 'iPhone 13' },
       })
     ).toBe(text);
+  });
+
+  it('still rejects a retail price in copy that also mentions a bonus', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Includes a $25 gift-card bonus, but the phone costs $900.',
+        product: { name: 'Phone' },
+      })
+    ).toBe('');
+  });
+
+  it('strips separator-only prices when the slug adds a product disambiguator', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'iPhone 13 – 350,000',
+        product: { name: 'iPhone 13', slug: 'iphone-13-128gb' },
+      })
+    ).toBe('');
   });
 
   it('rejects a foreign naira amount without confusing a compact model prefix', () => {
@@ -174,6 +199,14 @@ describe('getDurableProductSeoText', () => {
     'Buy a 2025 iPhone with storage for 4,000 photos.',
     'Buy all 3 colours with fast delivery',
     'RAM 16GB, R16 processor, 512GB SSD and 4,000mAh battery.',
+    'Rated for 10,000 charge cycles.',
+    'Rated for 10,000 hours of use.',
+    '4K display with HDR support.',
+    'AMD 7900 XT graphics.',
+    'Includes a $25 gift-card bonus.',
+    '€50 trade-in credit available.',
+    '$50 cashback is available on selected plans.',
+    'Weighs 5 pounds with packaging.',
   ])('preserves specifications and non-price numeric context: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -181,6 +214,24 @@ describe('getDurableProductSeoText', () => {
         product: { name: 'Device' },
       })
     ).toBe(text);
+  });
+
+  it('keeps a pound-denominated retail price after a physical weight', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Weighs 5 pounds and costs 900 pounds.',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+  });
+
+  it('does not treat a per-hour rental rate as a lifespan quantity', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Rental costs 900 per hour.',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
   });
 
   it('does not confuse different dollar currencies with the same face value', () => {

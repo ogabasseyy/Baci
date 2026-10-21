@@ -10,6 +10,32 @@ export interface ProductSeoMoneyCandidate {
 }
 
 const isoCurrencies = new Set(Intl.supportedValuesOf('currency'));
+const namedCurrencyAliases: Record<string, string[]> = {
+  NAIRA: ['NGN'],
+  NAIRAS: ['NGN'],
+  'NIGERIAN NAIRA': ['NGN'],
+  'NIGERIAN NAIRAS': ['NGN'],
+  DOLLAR: ['currency-name:DOLLAR'],
+  DOLLARS: ['currency-name:DOLLAR'],
+  'US DOLLAR': ['USD'],
+  'US DOLLARS': ['USD'],
+  'CANADIAN DOLLAR': ['CAD'],
+  'CANADIAN DOLLARS': ['CAD'],
+  'AUSTRALIAN DOLLAR': ['AUD'],
+  'AUSTRALIAN DOLLARS': ['AUD'],
+  EURO: ['EUR'],
+  EUROS: ['EUR'],
+  POUND: ['GBP'],
+  POUNDS: ['GBP'],
+  YEN: ['JPY'],
+  RUPEE: ['INR'],
+  RUPEES: ['INR'],
+  RAND: ['ZAR'],
+  CEDI: ['GHS'],
+  CEDIS: ['GHS'],
+  PESO: ['currency-name:PESO'],
+  PESOS: ['currency-name:PESO'],
+};
 const aliases: Record<string, string[]> = {};
 for (const [code, symbol] of Object.entries(CURRENCY_SYMBOLS)) {
   const key = symbol.toUpperCase();
@@ -21,13 +47,15 @@ const escapePattern = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const isoPattern = [...isoCurrencies].join('|');
 const markerPattern = [...new Set([...isoCurrencies, ...Object.keys(aliases)])]
+  .concat(Object.keys(namedCurrencyAliases))
   .sort((a, b) => b.length - a.length)
   .map(escapePattern)
   .join('|');
 // Bounded token grammar: no rescanning arbitrarily long numeric/comma runs.
-const amountPattern = '\\d[\\d,.]{0,30}(?:[km])?';
+const amountPattern =
+  "(?:\\d{1,3}(?:,\\d{3})+|\\d{1,3}(?:\\.\\d{3})+|\\d{1,2}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:[ '\\u2019\\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?(?:[km])?";
 const taggedPattern = new RegExp(
-  `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N},])`,
+  `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N},])`,
   'giu'
 );
 const barePattern = new RegExp(
@@ -37,18 +65,40 @@ const barePattern = new RegExp(
 
 function parseAmount(raw: string): number | null {
   const normalized = raw.replace(/[.,]+$/, '').toLowerCase();
-  if (!/^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?[km]?$/.test(normalized))
+  const suffix = normalized.match(/[km]$/)?.[0] ?? '';
+  const amount = suffix ? normalized.slice(0, -1) : normalized;
+  const spaceGrouped =
+    /^\d{1,3}([ '\u2019\u00a0\u202f])\d{3}(?:\1\d{3})*(?:[.,]\d{1,2})?$/.test(
+      amount
+    );
+  let decimal = amount;
+
+  if (spaceGrouped) {
+    decimal = amount.replace(/[ '\u2019\u00a0\u202f]/g, '');
+  } else if (/^\d{1,2}(?:,\d{2})*,\d{3}$/.test(amount)) {
+    decimal = amount.replace(/,/g, '');
+  } else if (/^\d{1,3}(?:,\d{3})+$/.test(amount)) {
+    decimal = amount.replace(/,/g, '');
+  } else if (/^\d{1,3}(?:\.\d{3})+$/.test(amount)) {
+    decimal = amount.replace(/\./g, '');
+  } else if (/^\d{1,3}(?:,\d{3})+\.\d{1,2}$/.test(amount)) {
+    decimal = amount.replace(/,/g, '');
+  } else if (/^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(amount)) {
+    decimal = amount.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d+(?:[.,]\d{1,2})?$/.test(amount)) {
+    decimal = amount.replace(',', '.');
+  } else {
     return null;
-  const magnitude = normalized.endsWith('m')
-    ? 1_000_000
-    : normalized.endsWith('k')
-      ? 1_000
-      : 1;
-  return Number(normalized.replace(/,/g, '').replace(/[km]$/, '')) * magnitude;
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(decimal)) return null;
+  const magnitude = suffix === 'm' ? 1_000_000 : suffix === 'k' ? 1_000 : 1;
+  return Number(decimal) * magnitude;
 }
 
 function currencyCodes(marker: string): string[] {
   const code = marker.toUpperCase();
+  if (Object.hasOwn(namedCurrencyAliases, code))
+    return namedCurrencyAliases[code];
   return isoCurrencies.has(code)
     ? [code]
     : (aliases[code] ?? [`symbol:${code}`]);

@@ -13,6 +13,18 @@ describe('durable SEO monetary context', () => {
       })
     ).toBe('');
   });
+
+  it('matches equivalent gift-card denominations with localized separators', () => {
+    const product = { name: 'Amazon Gift Card EUR 50,00' };
+    const text = 'Use this EUR 50.00 Amazon gift card';
+    expect(getDurableProductSeoText({ text, product })).toBe(text);
+    expect(
+      getDurableProductSeoText({
+        text: 'Use this EUR 50 Amazon gift card',
+        product,
+      })
+    ).toBe('Use this EUR 50 Amazon gift card');
+  });
   it('does not confuse a separate price observation with gift-card face value', () => {
     const text = 'The price varies and its face value is USD 50 credit.';
     expect(

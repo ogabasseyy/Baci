@@ -261,6 +261,7 @@ export function NativeCartPairingPanel() {
             ? button(
                 'Retry sync',
                 async () => {
+                  markSharedCartIntent();
                   try {
                     await shared.refresh?.();
                   } catch {

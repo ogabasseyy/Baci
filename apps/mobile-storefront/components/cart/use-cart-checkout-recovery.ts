@@ -1,15 +1,10 @@
 import { useIsFocused } from 'expo-router';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
-import { useAuthStore } from '@/stores/auth-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
-
-/** Read synchronously: controller replacement lags auth in passive effects. */
-function authSessionKey(): string {
-  return useAuthStore.getState().user?.id ?? 'guest';
-}
 
 /** One shopper checkout intent at a time, including recovery and navigation. */
 export function useCartCheckoutRecovery(onReady: () => void) {
@@ -31,18 +26,25 @@ export function useCartCheckoutRecovery(onReady: () => void) {
   useLayoutEffect(() => {
     focused.current = isFocused;
   }, [isFocused]);
+  // Controller replacement lags auth in passive effects, so compare the
+  // commit-synchronous session against the one captured at tap time.
+  const { user } = useAuthStatus();
+  const session = useRef(user?.id ?? 'guest');
+  useLayoutEffect(() => {
+    session.current = user?.id ?? 'guest';
+  }, [user]);
   const recoverCheckout = async () => {
     if (pending.current) return;
     pending.current = true;
     setIsPreparing(true);
     const writeRevision = sharedCartWriteRevision();
-    const sessionAtStart = authSessionKey();
+    const sessionAtStart = session.current;
     try {
       const result = await prepareCartCheckout(
         useNativeSharedCartStore.getState
       );
       if (!mounted.current || !focused.current) return;
-      if (authSessionKey() !== sessionAtStart) {
+      if (session.current !== sessionAtStart) {
         Alert.alert(
           'Cart session changed',
           'Your account or store changed. Tap Checkout again to continue with your current cart.'

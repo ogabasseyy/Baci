@@ -52,14 +52,12 @@ export async function prepareCartCheckout(
     }
   } catch {
     if (replaced()) return { ready: false, reason: 'session_changed' };
-    const current = getState();
-    // A sync can publish a checkout-ready snapshot and then fail a later
-    // re-read; the published cart is still usable for checkout.
-    if (sharedCartCheckoutReady(current)) return { ready: true };
+    // serial() flips status to 'error' on any rejection, so a failed sync
+    // is never checkout-ready here; the shopper retries explicitly.
     return {
       ready: false,
       reason:
-        current.status === 'choice_required'
+        getState().status === 'choice_required'
           ? 'choice_required'
           : 'unavailable',
     };

@@ -36,34 +36,28 @@ export async function fulfillReplayVtuTransaction({
   supabase: SupabaseClient;
   user: ReplayAuthUser;
 }) {
-  // Owner binding: the key row's owner was validated above;
-  // the transaction row must match before fulfilling. Binding reads
-  // run on the authenticated client through the narrow binding RPC
-  // (no buyer SELECT policy exists — Codex P1); only the fulfill
-  // below stays privileged.
-  const binding = await verifyReplayTransactionBinding({
-    supabase: authSupabase,
-    keyRow,
-  });
-  if ('error' in binding) {
-    return NextResponse.json({ error: binding.error }, { status: 400 });
-  }
-  // Owner presence (Muse R128 medium, Codex R129 P1): legacy/manual
-  // key rows can reference an unlinked guest customer, a vanished
-  // row, or a row since claimed by someone else. The replay path is
-  // READ-ONLY for customers (approved exception: linking happens
-  // only on the fresh path inside prepare), so an unbound owner
-  // must not debit a row never linked to the caller. Lookup ERRORS
-  // throw (500, key kept): a 400 would rotate the key and risk a
-  // second debit under a fresh key for an already-debited
-  // transaction — and the same holds for an unbound owner (Codex
-  // R152 P1): the old transaction may already be debited or still
-  // processing, so a fresh-key rotation followed by a fresh prepare
-  // (which links the same customer) can debit a second transaction.
-  // Hence 425, not 400: both clients' rotation predicates carve out
-  // 425 as no-rotation (ambiguous/infrastructure), so the key is
-  // kept and the retry dedupes instead of re-debiting. The message
-  // must never instruct a fresh key.
+  // Owner presence FIRST (Muse R128 medium, Codex R129 P1, Codex
+  // P1 PR #3741): legacy/manual key rows can reference an unlinked
+  // guest customer, a vanished row, or a row since claimed by
+  // someone else. The replay path is READ-ONLY for customers
+  // (approved exception: linking happens only on the fresh path
+  // inside prepare), so an unbound owner must not debit a row
+  // never linked to the caller. This check must precede the
+  // binding read: for an email-verified-but-unlinked owner the
+  // binding RPC hides the transaction (zero rows), and a binding
+  // 400 here would rotate the key — the retry links the customer
+  // and can debit a second transaction for an already-debited
+  // first. Lookup ERRORS throw (500, key kept): a 400 would
+  // rotate the key and risk a second debit under a fresh key for
+  // an already-debited transaction — and the same holds for an
+  // unbound owner (Codex R152 P1): the old transaction may
+  // already be debited or still processing, so a fresh-key
+  // rotation followed by a fresh prepare (which links the same
+  // customer) can debit a second transaction. Hence 425, not 400:
+  // both clients' rotation predicates carve out 425 as
+  // no-rotation (ambiguous/infrastructure), so the key is kept and
+  // the retry dedupes instead of re-debiting. The message must
+  // never instruct a fresh key.
   // Buyer-visible by construction: linked-to-caller rows pass
   // customers_select_policy; unlinked/vanished/foreign rows are
   // invisible (null) and take the same 425 below (parity with the
@@ -84,6 +78,18 @@ export async function fulfillReplayVtuTransaction({
       },
       { status: 425 }
     );
+  }
+  // Owner binding: the key row's owner was validated above;
+  // the transaction row must match before fulfilling. Binding reads
+  // run on the authenticated client through the narrow binding RPC
+  // (no buyer SELECT policy exists — Codex P1); only the fulfill
+  // below stays privileged.
+  const binding = await verifyReplayTransactionBinding({
+    supabase: authSupabase,
+    keyRow,
+  });
+  if ('error' in binding) {
+    return NextResponse.json({ error: binding.error }, { status: 400 });
   }
   // Current-attempt overlay: the retry carries the freshest
   // phone/reference; attempt-1's snapshot must not win. Runs on

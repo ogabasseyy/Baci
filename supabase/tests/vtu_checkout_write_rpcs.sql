@@ -498,7 +498,10 @@ BEGIN
 END;
 $c5$;
 
--- --- D1: owner fail-orphan deletes the pending row --------------------
+-- --- D1: mapped row is refused (active purchase, never orphan) -------
+-- ...001 was mapped by C1: deleting it would cascade away its
+-- replay mapping (Codex P1). Verdict owned_elsewhere; row and
+-- mapping both survive.
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(
@@ -509,34 +512,97 @@ DO $d1$
 DECLARE
   v_verdict text;
   v_count integer;
+  v_maps_before integer;
+  v_maps_after integer;
 BEGIN
+  SET LOCAL ROLE service_role;
+  SELECT count(*) INTO v_maps_before
+  FROM public.vtu_idempotency_keys
+  WHERE vtu_transaction_id = 'd4d4d4d4-0000-4000-8000-000000000001';
+  SET LOCAL ROLE authenticated;
+  IF v_maps_before < 1 THEN
+    RAISE EXCEPTION 'D1: fixture has no mapping (count %)', v_maps_before;
+  END IF;
+
   v_verdict := public.fail_orphan_vtu_transaction(
     'd4d4d4d4-0000-4000-8000-000000000001',
     'e2e2e2e2-0000-4000-8000-000000000001',
     'b22df000-0000-4000-8000-000000000001'
   );
-  IF v_verdict IS DISTINCT FROM 'deleted' THEN
-    RAISE EXCEPTION 'D1: expected deleted, got %', v_verdict;
+  IF v_verdict IS DISTINCT FROM 'owned_elsewhere' THEN
+    RAISE EXCEPTION 'D1: expected owned_elsewhere, got %', v_verdict;
   END IF;
 
   SET LOCAL ROLE service_role;
   SELECT count(*) INTO v_count
   FROM public.vtu_transactions
   WHERE id = 'd4d4d4d4-0000-4000-8000-000000000001';
+  IF v_count <> 1 THEN
+    RAISE EXCEPTION 'D1: mapped row removed';
+  END IF;
+  SELECT count(*) INTO v_maps_after
+  FROM public.vtu_idempotency_keys
+  WHERE vtu_transaction_id = 'd4d4d4d4-0000-4000-8000-000000000001';
   SET LOCAL ROLE authenticated;
-  IF v_count <> 0 THEN
-    RAISE EXCEPTION 'D1: row still present';
+  IF v_maps_after IS DISTINCT FROM v_maps_before THEN
+    RAISE EXCEPTION 'D1: replay mapping disturbed (% -> %)', v_maps_before, v_maps_after;
   END IF;
 END;
 $d1$;
+
+-- --- D1b: unmapped owned pending row is deleted -----------------------
+-- I1's WRPC-INSERT-001 row: owned, pending, never claimed.
+DO $d1b$
+DECLARE
+  v_verdict text;
+  v_txn uuid;
+  v_count integer;
+BEGIN
+  SET LOCAL ROLE service_role;
+  SELECT id INTO v_txn
+  FROM public.vtu_transactions
+  WHERE request_reference = 'WRPC-INSERT-001';
+  SET LOCAL ROLE authenticated;
+  IF v_txn IS NULL THEN
+    RAISE EXCEPTION 'D1b: I1 fixture row missing';
+  END IF;
+
+  v_verdict := public.fail_orphan_vtu_transaction(
+    v_txn,
+    'e2e2e2e2-0000-4000-8000-000000000001',
+    'b22df000-0000-4000-8000-000000000001'
+  );
+  IF v_verdict IS DISTINCT FROM 'deleted' THEN
+    RAISE EXCEPTION 'D1b: expected deleted, got %', v_verdict;
+  END IF;
+
+  SET LOCAL ROLE service_role;
+  SELECT count(*) INTO v_count
+  FROM public.vtu_transactions
+  WHERE id = v_txn;
+  SET LOCAL ROLE authenticated;
+  IF v_count <> 0 THEN
+    RAISE EXCEPTION 'D1b: row still present';
+  END IF;
+END;
+$d1b$;
 
 -- --- D2: repeat call is idempotent ------------------------------------
 DO $d2$
 DECLARE
   v_verdict text;
+  v_txn uuid;
 BEGIN
+  SET LOCAL ROLE service_role;
+  SELECT id INTO v_txn
+  FROM public.vtu_transactions
+  WHERE request_reference = 'WRPC-INSERT-001';
+  SET LOCAL ROLE authenticated;
+  -- Already gone (D1b deleted it): gone is gone.
   v_verdict := public.fail_orphan_vtu_transaction(
-    'd4d4d4d4-0000-4000-8000-000000000001',
+    COALESCE(
+      v_txn, 'd4d4d4d4-0000-4000-8000-000000000099'
+    ),
     'e2e2e2e2-0000-4000-8000-000000000001',
     'b22df000-0000-4000-8000-000000000001'
   );
@@ -618,15 +684,31 @@ END;
 $d5$;
 
 -- --- D6: service_role (server callers) works --------------------------
+-- ...002 is mapped (C4), so D6 prepares a fresh c2 row through the
+-- service-role-only insert, then discards it: insert + delete both
+-- privileged, both green.
 SET LOCAL ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $d6$
 DECLARE
   v_verdict text;
+  v_txn uuid;
 BEGIN
+  SELECT id INTO v_txn
+  FROM public.insert_prepared_vtu_transaction(
+    'e2e2e2e2-0000-4000-8000-000000000001',
+    'f3f3f3f3-0000-4000-8000-000000000002',
+    'b22df000-0000-4000-8000-000000000002',
+    NULL, 'airtime', 'mtn', '08030000019', 700, 'WRPC-D6-001',
+    'checkout', 0, 0, 0,
+    NULL, NULL, NULL, NULL, '{}'::jsonb
+  );
+  IF v_txn IS NULL THEN
+    RAISE EXCEPTION 'D6: setup insert failed';
+  END IF;
   v_verdict := public.fail_orphan_vtu_transaction(
-    'd4d4d4d4-0000-4000-8000-000000000002',
+    v_txn,
     'e2e2e2e2-0000-4000-8000-000000000001',
     'b22df000-0000-4000-8000-000000000002'
   );

@@ -8,7 +8,10 @@
 -- matches the TS OrphanVtuCleanupOutcome exactly:
 --
 --   deleted        → row removed (or already gone: retry-safe).
---   owned_elsewhere→ row left pending by someone else; untouched.
+--   owned_elsewhere→ row left pending: live, or MAPPED (an active
+--                    purchase is never an orphan — deleting it
+--                    would cascade away its replay mapping; Codex
+--                    P1). Untouched either way.
 --   marked_failed  → still-pending re-read, CAS-marked failed with
 --                    the exact TS markers (fixed discard message,
 --                    customerSafe flag, no-collection refund skip).
@@ -67,10 +70,28 @@ BEGIN
     RETURN 'owned_elsewhere';
   END IF;
 
-  -- Verified delete first (TS parity).
+  -- Unmapped proof (Codex P1): a mapped row is an ACTIVE purchase,
+  -- never an orphan — deleting it would cascade away its replay
+  -- mapping and disrupt the purchase. Without this gate the RPC is
+  -- a buyer DELETE primitive on any owned pending row.
+  PERFORM 1
+  FROM public.vtu_idempotency_keys AS k
+  WHERE k.vtu_transaction_id = p_transaction_id;
+  IF FOUND THEN
+    RETURN 'owned_elsewhere';
+  END IF;
+
+  -- Verified delete first (TS parity). The NOT EXISTS re-checks
+  -- the unmapped proof atomically: a concurrent claim could map
+  -- the row between the check above and this write.
   DELETE FROM public.vtu_transactions AS t
   WHERE t.id = p_transaction_id
-    AND t.status = 'pending';
+    AND t.status = 'pending'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.vtu_idempotency_keys AS k
+      WHERE k.vtu_transaction_id = p_transaction_id
+    );
   IF FOUND THEN
     RETURN 'deleted';
   END IF;
@@ -83,6 +104,13 @@ BEGIN
     RETURN 'deleted';
   END IF;
   IF v_row.status IS DISTINCT FROM 'pending' THEN
+    RETURN 'owned_elsewhere';
+  END IF;
+  PERFORM 1
+  FROM public.vtu_idempotency_keys AS k
+  WHERE k.vtu_transaction_id = p_transaction_id;
+  IF FOUND THEN
+    -- Mapped concurrently: an active purchase now — leave it.
     RETURN 'owned_elsewhere';
   END IF;
 
@@ -104,7 +132,12 @@ BEGIN
         'Duplicate checkout request discarded; no charge was made.',
       metadata = v_merged
   WHERE t.id = p_transaction_id
-    AND t.status = 'pending';
+    AND t.status = 'pending'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.vtu_idempotency_keys AS k
+      WHERE k.vtu_transaction_id = p_transaction_id
+    );
   IF FOUND THEN
     RETURN 'marked_failed';
   END IF;

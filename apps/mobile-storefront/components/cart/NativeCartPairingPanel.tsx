@@ -261,10 +261,12 @@ export function NativeCartPairingPanel() {
                     await pairingRetryOperation(shared, items.length)?.();
                     // Only a newly committed canonical cart counts.
                     const after = useNativeSharedCartStore.getState().snapshot;
+                    // A cart created by prepare alone never redeemed the
+                    // handoff, so only a changed existing cart clears this.
                     if (
+                      before &&
                       after &&
-                      (!before ||
-                        after.cartId !== before.cartId ||
+                      (after.cartId !== before.cartId ||
                         after.version !== before.version)
                     )
                       setFailed(false);

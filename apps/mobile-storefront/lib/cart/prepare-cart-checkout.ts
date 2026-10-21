@@ -30,7 +30,11 @@ export async function prepareCartCheckout(
   getState: () => CheckoutCartState
 ): Promise<CheckoutPreparation> {
   const initial = getState();
-  if (sharedCartCheckoutReady(initial)) return { ready: true };
+  if (!initial.enabled) return { ready: true };
+  if (sharedCartCheckoutReady(initial) && !initial.refresh)
+    return { ready: true };
+  // Already-ready carts still verify through the refresh below so an
+  // in-flight poll cannot publish a different cart under checkout.
   if (
     initial.status === 'choice_required' ||
     (initial.mergeConflicts?.length ?? 0) > 0

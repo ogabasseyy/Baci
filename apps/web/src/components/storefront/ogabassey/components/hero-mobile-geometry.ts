@@ -42,6 +42,7 @@ export const HERO_MOBILE_CONTROL_TRACK_CLASSES = 'h-11 flex-1';
 export const HERO_MOBILE_PLAY_TOGGLE_SLOT_CLASSES =
   'h-11 min-w-11 rounded-full';
 
-/** Minimum rendered height of the mobile utility card: outer p-2, the 44px
- * callout + gap, and the 80px option grid. Shared with the PPR fallback. */
-export const HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS = 'min-h-[156px]';
+/** Minimum rendered border-box height of the mobile utility card: 2px border,
+ * outer p-2 (16px), the 44px callout + 16px gap, and the 80px option grid.
+ * Shared with the PPR fallback so streaming swap causes zero CLS. */
+export const HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS = 'min-h-[158px]';

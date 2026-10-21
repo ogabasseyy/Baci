@@ -1,6 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
-
 export interface CartReceiveAccess {
   topic: string;
   token: string;
@@ -47,13 +44,34 @@ export async function loadCartReceiveAccess(
   };
 }
 
+/**
+ * `@supabase/supabase-js` is loaded only when a receive connection opens, and
+ * public NEXT_PUBLIC_SUPABASE_* values are read directly so the cart provider
+ * never pulls `@/env` (zod) or `@supabase/supabase-js` into initial `<head>` JS.
+ */
+async function loadRealtimeClientDeps() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Cart receive connection unavailable');
+  }
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    return { createClient, supabaseAnonKey, supabaseUrl };
+  } catch {
+    throw new Error('Cart receive connection unavailable');
+  }
+}
+
 /** Isolated, nonpersistent client: shopper/account credentials are never replaced. */
 export async function openCartReceiveConnection(
   access: CartReceiveAccess,
   onEvent: (value: unknown) => void,
   onStatus: (joined: boolean) => void
 ): Promise<CartReceiveConnection> {
-  const client = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+  const { createClient, supabaseAnonKey, supabaseUrl } =
+    await loadRealtimeClientDeps();
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

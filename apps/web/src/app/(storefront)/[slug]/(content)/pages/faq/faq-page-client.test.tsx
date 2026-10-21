@@ -49,10 +49,12 @@ vi.mock('@/contexts/storefront-context', () => ({
   ),
 }));
 
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
+}));
+vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => mockUseMerchantSafe(),
 }));
 

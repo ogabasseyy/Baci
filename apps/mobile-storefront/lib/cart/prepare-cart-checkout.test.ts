@@ -57,6 +57,24 @@ it('keeps checkout blocked while merge conflicts are unresolved', async () => {
   expect(state.prepare).not.toHaveBeenCalled();
   expect(state.refresh).not.toHaveBeenCalled();
 });
+it('routes a rejected sync that published merge conflicts to the merge choice', async () => {
+  let state: CheckoutCartState = {
+    ...live,
+    snapshot: { state: 'active', lines: [{}] },
+  };
+  state.refresh = jest.fn(async () => {
+    state = {
+      ...state,
+      status: 'error',
+      mergeConflicts: [{ productId: 'product-1' }],
+    };
+    throw new Error('hydration failed');
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'choice_required',
+  });
+});
 it('does not choose a saved cart or discard device items implicitly', async () => {
   const state = { ...live, status: 'choice_required' };
   await expect(prepareCartCheckout(() => state)).resolves.toEqual({

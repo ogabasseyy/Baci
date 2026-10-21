@@ -32,7 +32,7 @@ it('falls back to whichever sync operation is bound', () => {
       { snapshot: { cartId: 'c1' }, prepare, refresh: null },
       2
     )
-  ).toBe(prepare);
+  ).toBeNull();
   expect(
     pairingRetryOperation({ snapshot: null, prepare: null, refresh }, 0)
   ).toBe(refresh);

@@ -52,11 +52,13 @@ export function SharedCartStatusPanel() {
   const conflicts = state.mergeConflicts;
   const allPicked =
     conflicts.length > 0 && conflicts.every((item) => picks[conflictKey(item)]);
-  // Mirror the pairing retry: fall back to whichever sync operation is
-  // bound rather than leaving a dead button in unbound states.
-  const retryPreferred =
-    state.snapshot || items.length === 0 ? state.refresh : state.prepare;
-  const retryOperation = retryPreferred ?? state.prepare ?? state.refresh;
+  // Mirror the pairing retry selection: exactly one useful operation
+  // per state, or none (disabled) when that operation is unbound.
+  const retryOperation = state.snapshot
+    ? state.refresh
+    : items.length === 0
+      ? state.refresh
+      : (state.prepare ?? state.refresh);
   return (
     <View
       style={[styles.panel, { backgroundColor: colors.background }]}

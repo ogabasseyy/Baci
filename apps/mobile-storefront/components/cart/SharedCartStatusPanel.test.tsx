@@ -249,7 +249,7 @@ it('does not promise a connect action for an empty device cart', () => {
     view.queryByText('Connect these items to your shared cart before checkout.')
   ).toBeNull();
 });
-it('falls back to prepare when refresh is unbound but a snapshot exists', () => {
+it('disables retry when refresh is unbound but a snapshot exists', () => {
   const prepare = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({
     status: 'error',
@@ -258,10 +258,8 @@ it('falls back to prepare when refresh is unbound but a snapshot exists', () => 
     prepare,
   });
   const view = render(<SharedCartStatusPanel />);
-  const button = view.getByRole('button', { name: 'Connect cart' });
+  const button = view.getByRole('button', { name: 'Retry sync' });
   expect(
     button.props.accessibilityState?.disabled ?? button.props.disabled
-  ).toBeFalsy();
-  fireEvent.press(button);
-  expect(prepare).toHaveBeenCalledTimes(1);
+  ).toBeTruthy();
 });

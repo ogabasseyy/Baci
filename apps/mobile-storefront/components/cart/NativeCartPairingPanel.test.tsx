@@ -307,7 +307,7 @@ it('offers pairing retry through prepare when refresh is not bound', async () =>
   await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
 });
 
-it('retries through prepare when refresh is unbound but a snapshot exists', async () => {
+it('offers no dead retry when refresh is unbound but a snapshot exists', async () => {
   mockPairingItems = [{ id: 'local-1' }];
   const pair = jest.fn().mockRejectedValue(new Error('sync failed'));
   const prepare = jest.fn().mockResolvedValue(undefined);
@@ -333,11 +333,15 @@ it('retries through prepare when refresh is unbound but a snapshot exists', asyn
     screen.getByRole('button', { name: 'Keep my current cart' })
   );
   fireEvent.press(keep);
-  const retry = await waitFor(() =>
-    screen.getByRole('button', { name: 'Retry sync' })
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'The cart has not finished syncing. Retry sync to check the saved attempt.'
+      )
+    ).toBeTruthy()
   );
-  fireEvent.press(retry);
-  await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+  expect(prepare).not.toHaveBeenCalled();
 });
 it('clears pairing-owned conflicts when the shopper dismisses the sheet', async () => {
   useNativeSharedCartStore.setState({
@@ -414,7 +418,11 @@ it('marks checkout intent when dismissing clears pairing conflicts', async () =>
 it('clears the pairing failure state after a successful retry sync', async () => {
   mockPairingItems = [{ id: 'local-1' }];
   const pair = jest.fn().mockRejectedValue(new Error('create failed'));
-  const refresh = jest.fn().mockResolvedValue(undefined);
+  const refresh = jest.fn(async () => {
+    useNativeSharedCartStore.setState({
+      snapshot: { cartId: 'cart-1', version: 1 } as never,
+    });
+  });
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'ready',
@@ -449,4 +457,42 @@ it('clears the pairing failure state after a successful retry sync', async () =>
       )
     ).toBeNull()
   );
+});
+
+it('keeps the pairing failure state when a retry resolves without a snapshot', async () => {
+  mockPairingItems = [{ id: 'local-1' }];
+  const pair = jest.fn().mockRejectedValue(new Error('create failed'));
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    refresh,
+    prepare: null,
+    snapshot: null,
+    mergeConflicts: [],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const keep = await waitFor(() =>
+    screen.getByRole('button', { name: 'Keep my current cart' })
+  );
+  fireEvent.press(keep);
+  const retry = await waitFor(() =>
+    screen.getByRole('button', { name: 'Retry sync' })
+  );
+  fireEvent.press(retry);
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  expect(
+    screen.getByText(
+      'The cart has not finished syncing. Retry sync to check the saved attempt.'
+    )
+  ).toBeTruthy();
 });

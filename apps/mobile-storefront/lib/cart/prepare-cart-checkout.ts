@@ -71,10 +71,12 @@ export async function prepareCartCheckout(
     if (replaced()) return { ready: false, reason: 'session_changed' };
     // serial() flips status to 'error' on any rejection, so a failed sync
     // is never checkout-ready here; the shopper retries explicitly.
+    const failed = getState();
     return {
       ready: false,
       reason:
-        getState().status === 'choice_required'
+        failed.status === 'choice_required' ||
+        (failed.mergeConflicts?.length ?? 0) > 0
           ? 'choice_required'
           : 'unavailable',
     };

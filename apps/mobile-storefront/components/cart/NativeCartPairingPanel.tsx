@@ -259,14 +259,16 @@ export function NativeCartPairingPanel() {
           ) : (
             button('Connect cart', () => pair('connect'), busy)
           )}
-          {failed && (shared.refresh || shared.prepare)
+          {failed && pairingRetryOperation(shared, items.length)
             ? button(
                 'Retry sync',
                 async () => {
                   markSharedCartIntent();
                   try {
                     await pairingRetryOperation(shared, items.length)?.();
-                    setFailed(false);
+                    // Only a published canonical cart counts as synced.
+                    if (useNativeSharedCartStore.getState().snapshot)
+                      setFailed(false);
                   } catch {
                     setFailed(true);
                   }

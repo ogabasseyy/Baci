@@ -8,7 +8,10 @@ import { fetchSharedCartSnapshot } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
 import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { isTerminalCart } from './shared-cart-queue';
-import { unimportedTerminalLines } from './terminal-cart-cache';
+import {
+  terminalCachePersisted,
+  unimportedTerminalLines,
+} from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 type FallbackContext = SharedCartRuntime & {
@@ -46,14 +49,10 @@ export async function adoptPreservedFallback(
     saveCartToStorage(preservedLines, merchantSlug);
     // Provisioning re-reads storage: if the filtered cache did not
     // persist, retrying would recreate already-consumed items.
-    const persisted = getCartFromStorage(merchantSlug);
-    const persistedOk =
-      persisted.length === preservedLines.length &&
-      persisted.every(
-        (line, index) =>
-          line.cartItemId === preservedLines[index].cartItemId &&
-          line.quantity === preservedLines[index].quantity
-      );
+    const persistedOk = terminalCachePersisted(
+      getCartFromStorage(merchantSlug),
+      preservedLines
+    );
     if (!persistedOk)
       return {
         ok: false,

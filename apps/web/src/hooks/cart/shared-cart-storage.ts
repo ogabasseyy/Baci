@@ -26,6 +26,22 @@ export interface SharedCartImportReceipt {
   consumedQuantities?: Record<string, number>;
 }
 
+/** Receipt identity fields for the device lines an import consumed, aggregating duplicate IDs. */
+export function consumedReceiptFields(
+  lines: Array<{ cartItemId: string; quantity: number }>
+): Pick<SharedCartImportReceipt, 'consumedCartItemIds' | 'consumedQuantities'> {
+  const quantities = new Map<string, number>();
+  for (const line of lines)
+    quantities.set(
+      line.cartItemId,
+      (quantities.get(line.cartItemId) ?? 0) + line.quantity
+    );
+  return {
+    consumedCartItemIds: [...quantities.keys()],
+    consumedQuantities: Object.fromEntries(quantities),
+  };
+}
+
 export function isSharedCartImportReceipt(
   value: unknown
 ): value is SharedCartImportReceipt {

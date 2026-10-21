@@ -26,7 +26,10 @@ import {
   retireDeEnrolledCartDeviceSession,
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
-import { unimportedTerminalLines } from './terminal-cart-cache';
+import {
+  terminalCachePersisted,
+  unimportedTerminalLines,
+} from './terminal-cart-cache';
 import { useCartLinkPolling } from './use-cart-link-polling';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -177,14 +180,10 @@ export function useCartLinkLifecycle(
           saveCartToStorage(cached, merchantSlug);
           // Provisioning re-reads storage: if the filtered cache did
           // not persist, it would recreate already-consumed items.
-          const persisted = getCartFromStorage(merchantSlug);
-          const persistedOk =
-            persisted.length === cached.length &&
-            persisted.every(
-              (line, index) =>
-                line.cartItemId === cached[index].cartItemId &&
-                line.quantity === cached[index].quantity
-            );
+          const persistedOk = terminalCachePersisted(
+            getCartFromStorage(merchantSlug),
+            cached
+          );
           if (!persistedOk) {
             retryAdopt(attempt, run);
             return;

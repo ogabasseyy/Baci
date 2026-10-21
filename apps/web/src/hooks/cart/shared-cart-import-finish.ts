@@ -1,5 +1,6 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { saveSharedCartImportReceipt } from './cart-storage';
+import { consumedReceiptFields } from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 /** Complete tracked import operations and record the consumed source lines on the receipt. */
@@ -36,17 +37,7 @@ export function createImportFinisher(context: SharedCartRuntime) {
       importedAt: new Date().toISOString(),
       lineCount: current.confirmed.lines.length,
       ...(context.importSourceIdsRef?.current.length
-        ? {
-            consumedCartItemIds: context.importSourceIdsRef.current.map(
-              (line) => line.cartItemId
-            ),
-            consumedQuantities: Object.fromEntries(
-              context.importSourceIdsRef.current.map((line) => [
-                line.cartItemId,
-                line.quantity,
-              ])
-            ),
-          }
+        ? consumedReceiptFields(context.importSourceIdsRef.current)
         : {}),
     });
   }

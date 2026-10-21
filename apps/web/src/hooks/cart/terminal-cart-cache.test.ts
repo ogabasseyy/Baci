@@ -38,6 +38,21 @@ it('keeps only the post-import quantity increase for a consumed line ID', () => 
     })
   ).toEqual([{ ...edited, quantity: 3 }]);
 });
+it('aggregates duplicate consumed IDs before computing the delta', () => {
+  const first = cartItem({ cartItemId: 'dup', quantity: 4 });
+  const second = cartItem({ cartItemId: 'dup', quantity: 3 });
+  // Source rows were 2 + 3 = 5 for the same deterministic ID; the
+  // cache now totals 7, so only 2 units are genuinely post-import.
+  expect(
+    unimportedTerminalLines([first, second], 'done', {
+      cartId: 'done',
+      importedAt: '2026-10-20T00:00:00Z',
+      lineCount: 2,
+      consumedCartItemIds: ['dup'],
+      consumedQuantities: { dup: 5 },
+    })
+  ).toEqual([{ ...first, quantity: 2 }]);
+});
 it('keeps fresh device lines written after a matching receipt', () => {
   const fresh = cartItem({ id: 'new', cartItemId: 'new' });
   expect(

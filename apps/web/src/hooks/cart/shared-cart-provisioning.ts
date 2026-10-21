@@ -11,7 +11,10 @@ import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
 import { planProvisioningImport } from './shared-cart-provisioning-plan';
 import { isTerminalCart } from './shared-cart-queue';
 import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
-import { getCartSessionGeneration } from './shared-cart-storage';
+import {
+  consumedReceiptFields,
+  getCartSessionGeneration,
+} from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartProvisioning(
@@ -247,17 +250,7 @@ export function createCartProvisioning(
         importedAt: new Date().toISOString(),
         lineCount: lines?.length ?? 0,
         ...(createSourceIdsRef.current.length
-          ? {
-              consumedCartItemIds: createSourceIdsRef.current.map(
-                (line) => line.cartItemId
-              ),
-              consumedQuantities: Object.fromEntries(
-                createSourceIdsRef.current.map((line) => [
-                  line.cartItemId,
-                  line.quantity,
-                ])
-              ),
-            }
+          ? consumedReceiptFields(createSourceIdsRef.current)
           : {}),
       });
     }

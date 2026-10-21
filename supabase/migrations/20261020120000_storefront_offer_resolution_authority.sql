@@ -109,7 +109,13 @@ BEGIN
          WHERE av.product_id = r.id AND av.merchant_id = r.merchant_id
            AND av.is_inventory_anchor IS TRUE
          ORDER BY av.id LIMIT 1),
-        r.inventory_tracking_policy, 'legacy') AS effective_policy,
+        -- Whitelisted (never raw): 'inherit' and any unrecognized row
+        -- policy fall through to 'legacy', matching the search
+        -- NULLIF normalization; emitting them verbatim would fork the
+        -- effective_policy contract across SQL surfaces.
+        CASE WHEN r.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
+          THEN r.inventory_tracking_policy END,
+        'legacy') AS effective_policy,
       -- M28 parent gate, defined once: the final SELECT emits it and
       -- the WHERE enforces it, so gated-out rows never leave the
       -- authority and no consumer can price or stock them.
@@ -143,6 +149,11 @@ BEGIN
         (row_number() OVER (PARTITION BY r2.merchant_id ORDER BY r2.id) - 1) / 200 AS slice_no
       FROM requested AS r2
       JOIN strict_merchants AS sm ON sm.merchant_id = r2.merchant_id
+      -- Only strict-effective products read the counts: non-strict ids
+      -- were discarded by the LEFT JOIN anyway, so carrying them only
+      -- multiplied 200-id calls on mixed merchants.
+      JOIN anchor_policy AS ap ON ap.product_id = r2.id
+        AND ap.effective_policy = 'serialized_strict'
     ) AS numbered
     GROUP BY merchant_id, slice_no
   ), serialized AS MATERIALIZED (
@@ -191,6 +202,14 @@ COMMENT ON FUNCTION public.get_storefront_offer_resolution(uuid, uuid[]) IS
 
 REVOKE ALL ON FUNCTION public.get_storefront_offer_resolution(uuid, uuid[])
   FROM PUBLIC, anon, authenticated, service_role;
+-- Accepted residual: anon may call merchant-scoped AND unscoped
+-- (NULL merchant spans published merchants, 200 ids/call). Returned
+-- rows are public-catalog-only (published/platform-admin gate,
+-- active offers); the unscoped mode exists for guest cart validation
+-- and single-merchant native clients that carry no merchant uuid.
+-- Restricting unscoped mode to authenticated/service_role needs cart
+-- request-shape changes (merchant threading for guest carts) and is
+-- tracked as follow-up #3746; revisit if the surface is abused.
 GRANT EXECUTE ON FUNCTION public.get_storefront_offer_resolution(uuid, uuid[])
   TO anon, authenticated, service_role;
 
@@ -233,7 +252,11 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
          WHERE av.product_id = p.id AND av.merchant_id = p.merchant_id
            AND av.is_inventory_anchor IS TRUE
          ORDER BY av.id LIMIT 1),
-        p.inventory_tracking_policy, 'legacy') AS effective_policy
+        -- Whitelisted like the authority CTE above: 'inherit' and
+        -- unrecognized row policies fall through to 'legacy'.
+        CASE WHEN p.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
+          THEN p.inventory_tracking_policy END,
+        'legacy') AS effective_policy
     FROM parent p
   ), serialized AS MATERIALIZED (
     SELECT s.variant_id, s.public_available_units FROM parent p
@@ -270,11 +293,16 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
           IS DISTINCT FROM storefront_search_private.normalize_condition_for_match(p.condition) AND
         -- Allocatable stock comes from the authority (effective minimum
         -- under strict, scalar otherwise); NULL is unbounded (unlimited
-        -- policy with no scalar). Unlike the base and variant branches,
-        -- an offer scalar of zero stays unadvertised even on unmanaged
-        -- parents: the PDP, the native cart, and order creation all honor
-        -- a finite offer quantity as the binding allocation there, so
-        -- emitting it would advertise an option checkout refuses.
+        -- policy with no scalar), matching the TS null-allocation
+        -- contract on PDP/cart/blog/MCP. product_offers.stock_quantity
+        -- is NOT NULL so live rows never take the NULL arm (no fixture
+        -- can construct it); the arm is defense-in-depth for schema
+        -- drift, deliberately advertising rather than hiding. Unlike
+        -- the base and variant branches, an offer scalar of zero stays
+        -- unadvertised even on unmanaged parents: the PDP, the native
+        -- cart, and order creation all honor a finite offer quantity as
+        -- the binding allocation there, so emitting it would advertise
+        -- an option checkout refuses.
         (o.allocatable_stock IS NULL OR o.allocatable_stock > 0)
   UNION ALL
   SELECT NULL::uuid, NULL::uuid, COALESCE(p.condition, 'new'), p.price FROM parent p JOIN anchor_policy a ON a.product_id = p.id

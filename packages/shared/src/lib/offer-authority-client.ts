@@ -161,20 +161,20 @@ export type OfferAuthorityRpcCall = (args: {
 }) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 /**
- * Largest authority batch: unscoped (NULL merchant) calls are capped
- * at 200 ids in SQL, merchant-scoped calls at 1000. Chunk to the
- * smaller cap so one client path serves both.
+ * Largest authority batch per scope: unscoped (NULL merchant) calls
+ * are capped at 200 ids in SQL, merchant-scoped calls at 1000. Chunk
+ * to the caller's cap so scoped batches stay single-RPC.
  */
-const AUTHORITY_BATCH_SIZE = 200;
+const AUTHORITY_BATCH_SIZE_UNSCOPED = 200;
+const AUTHORITY_BATCH_SIZE_SCOPED = 1000;
 
 /**
  * The one live-offer fetch: batched authority calls (chunked to the
- * SQL batch cap) merged into one map keyed by `productId::offerId`.
- * Chunks run serially by design — merge order stays deterministic
- * and a chunk failure fails the whole lookup closed with no partial
- * map — at most 5 sequential RPCs for a 1000-id merchant batch.
- * Throws OfferAuthorityInputError for malformed ids (adapters fail
- * closed) and Error for lookup failures.
+ * SQL batch cap for the caller's scope) merged into one map keyed by
+ * `productId::offerId`. Chunks run serially by design — merge order
+ * stays deterministic and a chunk failure fails the whole lookup
+ * closed with no partial map. Throws OfferAuthorityInputError for
+ * malformed ids (adapters fail closed) and Error for lookup failures.
  */
 export async function fetchOfferResolutions(
   callRpc: OfferAuthorityRpcCall,
@@ -197,10 +197,14 @@ export async function fetchOfferResolutions(
   const malformed = distinct.filter((id) => !isOfferAuthorityId(id));
   if (malformed.length > 0) throw new OfferAuthorityInputError(malformed);
   const merged = new Map<string, ResolvedOfferResolution>();
-  for (let index = 0; index < distinct.length; index += AUTHORITY_BATCH_SIZE) {
+  const batchSize =
+    args.merchantId != null
+      ? AUTHORITY_BATCH_SIZE_SCOPED
+      : AUTHORITY_BATCH_SIZE_UNSCOPED;
+  for (let index = 0; index < distinct.length; index += batchSize) {
     const { data, error } = await callRpc({
       p_merchant_id: args.merchantId ?? null,
-      p_product_ids: distinct.slice(index, index + AUTHORITY_BATCH_SIZE),
+      p_product_ids: distinct.slice(index, index + batchSize),
     });
     if (error) throw new Error(error.message);
     for (const [key, resolution] of buildOfferResolutionMap(data)) {

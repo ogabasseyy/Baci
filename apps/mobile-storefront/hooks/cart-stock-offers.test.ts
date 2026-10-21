@@ -1,9 +1,18 @@
 import { supabase } from '@/lib/supabase';
 import { resolveOfferStock } from './cart-stock-offers';
 
-jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ error: jest.fn(), warn: jest.fn() }),
-}));
+jest.mock('@/lib/logger', () => {
+  const error = jest.fn();
+  return {
+    createLogger: () => ({ error, warn: jest.fn() }),
+    __mockLogError: error,
+  };
+});
+
+// The hook module creates its logger at import; the factory exposes
+// the shared error spy for assertions.
+const mockLogError = jest.requireMock('@/lib/logger')
+  .__mockLogError as jest.Mock;
 
 jest.mock('@/lib/supabase', () => ({
   supabase: { rpc: jest.fn() },
@@ -100,6 +109,11 @@ describe('resolveOfferStock', () => {
       stock: 0,
       strictUnits: 0,
     });
+    // A projection outage, not a sell-out: distinguishable in logs.
+    expect(mockLogError).toHaveBeenCalledWith(
+      'Strict offer stock arrived with no unit count:',
+      { productId: 'p1', offerId: 'o1' }
+    );
   });
 
   it('treats unlimited null allocations as unbounded', async () => {

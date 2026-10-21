@@ -229,6 +229,31 @@ describe('resolveSelectionPricing', () => {
     ).toBe(true);
   });
 
+  it('caps an anchor-derived strict offer despite a divergent product policy', () => {
+    const anchorProduct = {
+      ...product,
+      // Product-level `off` with a serialized_strict anchor (SQL
+      // authority test product 008): the anchor policy wins.
+      inventory_tracking_policy: 'off',
+      effective_policy: 'serialized_strict',
+      stock: 2,
+    } as Product;
+    expect(
+      resolveSelectionPricing({
+        product: anchorProduct,
+        selectedOffer: { price: 80, stock_quantity: 5 },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 2,
+      isOutOfStock: false,
+    });
+  });
+
   it('prices an unlimited simple offer from its binding scalar', () => {
     // Unlimited folds manage_stock false, but the finite offer
     // allocation still binds the order — never infinity here.

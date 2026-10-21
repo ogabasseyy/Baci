@@ -77,6 +77,10 @@ export function resolveSelectionPricing({
   const offerStock =
     !effectiveVariant && selectedOffer
       ? resolveOfferAllocatableStock(selectedOffer.stock_quantity, {
+          // Anchor-derived policy wins (a product-level `off` with a
+          // serialized_strict anchor still caps by the strict pool):
+          // same precedence as the sibling snapshot callers.
+          effective_policy: product.effective_policy ?? null,
           inventory_tracking_policy: product.inventory_tracking_policy ?? null,
           availableUnits: parentStock,
           parentStock,

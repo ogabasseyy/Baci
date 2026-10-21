@@ -45,6 +45,18 @@ export async function resolveOfferStock(
     return { stock: 0, strictUnits: null };
   }
   if (resolution.effectivePolicy === 'serialized_strict') {
+    // A strict row with no unit count is a serialized-projection
+    // outage, not a genuine sell-out: log it at error level so the
+    // two are distinguishable, while still failing closed at zero.
+    if (
+      resolution.availableUnits === null ||
+      resolution.allocatableStock === null
+    ) {
+      log.error('Strict offer stock arrived with no unit count:', {
+        productId,
+        offerId,
+      });
+    }
     const units = resolution.availableUnits ?? 0;
     return {
       stock: resolution.allocatableStock ?? 0,

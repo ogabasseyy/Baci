@@ -961,6 +961,28 @@ describe('keyed tombstones (6rrMIj)', () => {
     expect(recallPendingVtuKey(scoped)).toBe('key-new');
   });
 
+  it('ignores a tombstoned persisted loser after a non-durable adoption', () => {
+    // CodeRabbit Minor: adoption rebound memory to the winner
+    // (keeping rememberedAt) but the flush failed, so the
+    // snapshot still holds the loser — explicitly tombstoned.
+    // The veto must not converge the loser back and veto the
+    // winner's terminal settlement (unmarked winner).
+    const scoped = scopePendingVtuSignature(
+      'user-tombveto',
+      'merchant-1',
+      '{"tombveto":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-loser');
+    persistPendingVtuPurchases();
+    const live = pendingVtuPurchases.get(scoped);
+    expect(live).toBeDefined();
+    pendingVtuPurchases.set(scoped, { ...live!, key: 'key-winner' });
+    noteForgottenVtuScope(scoped, Date.now(), 'key-loser');
+
+    expect(isCurrentVtuGeneration(scoped, 'key-winner')).toBe(true);
+    expect(recallPendingVtuKey(scoped)).toBe('key-winner');
+  });
+
   it('reports current when memory holds the expected key and storage agrees', () => {
     const scoped = scopePendingVtuSignature(
       'user-current',

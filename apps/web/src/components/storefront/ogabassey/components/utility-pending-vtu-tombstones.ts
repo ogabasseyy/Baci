@@ -58,6 +58,22 @@ export function noteForgottenVtuScope(
   forgottenScopedKeys.set(scoped, known);
 }
 
+/**
+ * Suppression predicate shared by merge and the settlement
+ * generation veto (CodeRabbit Minor): a tombstoned persisted
+ * entry must neither merge nor converge back into memory.
+ */
+export function isVtuEntryTombstoned(
+  scoped: string,
+  entry: { rememberedAt: number; key: string }
+): boolean {
+  return (forgottenScopedKeys.get(scoped) ?? []).some(
+    (tombstone) =>
+      entry.rememberedAt <= tombstone.forgottenAt &&
+      (tombstone.key === undefined || tombstone.key === entry.key)
+  );
+}
+
 /** Flattens every scope's records for snapshot serialization. */
 export function listForgottenVtuScopes(): PersistedVtuTombstone[] {
   return [...forgottenScopedKeys].flatMap(([scoped, records]) =>

@@ -19,7 +19,7 @@ import {
 } from './utility-pending-vtu-codec';
 import {
   clearForgottenVtuScopes,
-  forgottenScopedKeys,
+  isVtuEntryTombstoned,
   listForgottenVtuScopes,
   noteForgottenVtuScope,
 } from './utility-pending-vtu-tombstones';
@@ -138,13 +138,7 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
     // (pre-binding) keep timestamp arbitration.
     // Multi-key (CodeRabbit Major, mobile mirror): a scope can
     // carry several generation tombstones — any match suppresses.
-    const tombstones = forgottenScopedKeys.get(scoped) ?? [];
-    const suppressed = tombstones.some(
-      (tombstone) =>
-        entry.rememberedAt <= tombstone.forgottenAt &&
-        (tombstone.key === undefined || tombstone.key === entry.key)
-    );
-    if (suppressed) {
+    if (isVtuEntryTombstoned(scoped, entry)) {
       continue;
     }
     pendingVtuPurchases.set(scoped, {
@@ -271,7 +265,8 @@ export function isCurrentVtuGeneration(
   if (
     persisted &&
     persisted[1].key !== expectedKey &&
-    persisted[1].rememberedAt >= live.rememberedAt
+    persisted[1].rememberedAt >= live.rememberedAt &&
+    !isVtuEntryTombstoned(payloadSignature, persisted[1])
   ) {
     pendingVtuPurchases.set(payloadSignature, {
       ...persisted[1],

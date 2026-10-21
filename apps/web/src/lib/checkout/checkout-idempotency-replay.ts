@@ -13,11 +13,19 @@ type CheckoutIdempotencyReplayInput = {
   canonicalDeliveryMethod: OrderCreateInput['delivery_method'];
   merchantId: string;
   payload: OrderIdempotencyPayloadInput | null;
+  /**
+   * Evolving request fields (e.g. a provider backfilled after the original
+   * request) change the hash across retries of the same key. Each alternate
+   * is probed against the stored hash and the first stored match is adopted,
+   * so a retry replays instead of conflicting. Probe errors fail closed.
+   */
+  alternatePayloads?: OrderIdempotencyPayloadInput[];
   requestIdempotencyKey: string | null;
   supabase: SupabaseClient;
 };
 
 type CheckoutIdempotencyReplayResult = {
+  adoptedAlternateShippingProvider: string | null;
   checkoutRequestHash: string | null;
   isLegacyIdempotencyReplay: boolean;
 };
@@ -66,6 +74,7 @@ async function isStoredCheckoutRequestHash({
  * pre-metadata order, rebuild the legacy hash used by that original request.
  */
 export async function prepareCheckoutIdempotencyReplay({
+  alternatePayloads,
   canonicalAirportType,
   canonicalDeliveryMethod,
   merchantId,
@@ -75,6 +84,7 @@ export async function prepareCheckoutIdempotencyReplay({
 }: CheckoutIdempotencyReplayInput): Promise<CheckoutIdempotencyReplayResult> {
   if (!requestIdempotencyKey || !payload) {
     return {
+      adoptedAlternateShippingProvider: null,
       checkoutRequestHash: null,
       isLegacyIdempotencyReplay: false,
     };
@@ -83,6 +93,8 @@ export async function prepareCheckoutIdempotencyReplay({
   const checkoutRequestPayload = buildOrderIdempotencyPayload(payload);
   let checkoutRequestHash = hashOrderIdempotencyPayload(checkoutRequestPayload);
   let isLegacyIdempotencyReplay = false;
+  let hasStoredHashMatch = false;
+  let adoptedAlternateShippingProvider: string | null = null;
   const localeRequestHash = hashOrderIdempotencyPayload(
     buildOrderIdempotencyPayload(payload, { itemSort: 'locale' })
   );
@@ -97,6 +109,61 @@ export async function prepareCheckoutIdempotencyReplay({
     });
     if (localeHashStored) {
       checkoutRequestHash = localeRequestHash;
+      hasStoredHashMatch = true;
+    }
+  }
+
+  // Evolved fields (e.g. a provider backfilled from the validated quote after
+  // the original request) change the current hash. Probe each alternate and
+  // adopt the first one the database confirms, so a retry whose source row
+  // was cleaned up still replays the original order instead of conflicting.
+  for (const alternatePayload of alternatePayloads ?? []) {
+    if (hasStoredHashMatch) break;
+    const alternateHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload(alternatePayload)
+    );
+    if (alternateHash === checkoutRequestHash) continue;
+    const alternateStored = await isStoredCheckoutRequestHash({
+      failureMessage: 'Alternate checkout request hash probe failed',
+      merchantId,
+      requestHash: alternateHash,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (alternateStored) {
+      checkoutRequestHash = alternateHash;
+      hasStoredHashMatch = true;
+      adoptedAlternateShippingProvider =
+        alternatePayload.shipping_provider ?? null;
+      break;
+    }
+    // A retry can also add delivery metadata the original lacked: probe the
+    // legacy (metadata-stripped) form of each alternate so a
+    // derived-provider/no-metadata original still replays. Like the base
+    // legacy probe, adoption requires a stored match, so a new request can
+    // never opt itself into the pre-metadata form.
+    const legacyAlternateHash = hashOrderIdempotencyPayload(
+      buildLegacyOrderIdempotencyPayload(alternatePayload)
+    );
+    if (
+      legacyAlternateHash === alternateHash ||
+      legacyAlternateHash === checkoutRequestHash
+    )
+      continue;
+    const legacyAlternateStored = await isStoredCheckoutRequestHash({
+      failureMessage: 'Legacy alternate checkout request hash probe failed',
+      merchantId,
+      requestHash: legacyAlternateHash,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (legacyAlternateStored) {
+      checkoutRequestHash = legacyAlternateHash;
+      hasStoredHashMatch = true;
+      isLegacyIdempotencyReplay = true;
+      adoptedAlternateShippingProvider =
+        alternatePayload.shipping_provider ?? null;
+      break;
     }
   }
 
@@ -121,6 +188,15 @@ export async function prepareCheckoutIdempotencyReplay({
       });
     } else if (isLegacyOrder === true) {
       isLegacyIdempotencyReplay = true;
+      // Metadata detection controls post-replay metadata persistence. It must
+      // never replace a hash that the database has already confirmed stored.
+      if (hasStoredHashMatch) {
+        return {
+          adoptedAlternateShippingProvider,
+          checkoutRequestHash,
+          isLegacyIdempotencyReplay,
+        };
+      }
       let legacyHash = hashOrderIdempotencyPayload(
         buildLegacyOrderIdempotencyPayload(payload)
       );
@@ -145,5 +221,9 @@ export async function prepareCheckoutIdempotencyReplay({
     }
   }
 
-  return { checkoutRequestHash, isLegacyIdempotencyReplay };
+  return {
+    adoptedAlternateShippingProvider,
+    checkoutRequestHash,
+    isLegacyIdempotencyReplay,
+  };
 }

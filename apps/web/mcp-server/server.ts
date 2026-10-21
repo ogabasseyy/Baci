@@ -1,3 +1,4 @@
+import { getConfirmedStockLabel } from './confirmed-stock-label';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
@@ -25,7 +26,7 @@ import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
 import { registerCartLinkTools } from './cart-link-tool';
-import { registerGuestCartTool } from './guest-cart-tool';
+import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
@@ -1082,6 +1083,7 @@ const widgetHtml = `<!DOCTYPE html>
       String(value ?? '').replace(/[&<>"']/g, (char) => ESCAPE_HTML_MAP[char]);
 
     const openLink = (url) => window.openai?.openExternal?.({ href: url }) || window.open(url, '_blank');
+    const getConfirmedStockLabel = ${getConfirmedStockLabel.toString()};
     const productUrl = (slug) => 'https://ogabassey.com/products/' + encodeURIComponent(slug);
     const cartUrl = (productId) => 'https://ogabassey.com/cart?item_id=' + encodeURIComponent(productId);
     const hasOptionParams = (url) => {
@@ -1103,6 +1105,7 @@ const widgetHtml = `<!DOCTYPE html>
       const grid = products.slice(0, 4).map(p => {
         const card = document.createElement('div');
         card.className = 'product-card';
+        const stockLabel = getConfirmedStockLabel(p.in_stock, p.stock_level);
         const hasDiscount = p.compare_at_price && p.compare_at_price > p.price;
         const discountPct = hasDiscount ? Math.round((1 - p.price / p.compare_at_price) * 100) : 0;
         const condition = p.condition && p.condition !== 'new' ? p.condition : null;
@@ -1122,7 +1125,7 @@ const widgetHtml = `<!DOCTYPE html>
             '<p class="product-name">' + escapeHtml(p.name) + '</p>' +
             '<div class="product-meta">' +
               (p.brand ? '<span class="product-brand">' + escapeHtml(p.brand) + '</span>' : '') +
-              '<span class="in-stock">' + (p.in_stock === true ? 'In Stock' : p.in_stock === false ? 'Out of Stock' : 'Confirm availability') + '</span>' +
+              (stockLabel ? '<span class="in-stock">' + escapeHtml(stockLabel) + '</span>' : '') +
             '</div>' +
             '<div class="price-row">' +
               '<span class="product-price">' + formatPrice(p.price) + '</span>' +
@@ -1352,7 +1355,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     }
   );
 
-  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
+  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
   registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
@@ -1720,7 +1723,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         };
       }
 
-      return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl });
+      return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl, merchantId });
     };
   // Tool: Get product details
 

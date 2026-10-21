@@ -118,9 +118,9 @@ export function UtilityPanel({
 
   // Auto-rotate effect
   useEffect(() => {
-    // 2026 Best Practice: Auto-rotation should run if NOT manual AND
-    // the parent selection is either null or the current auto index item
-    if (isManualUtility) return;
+    // Home stays mounted under native-stack routes. Pause its timer while
+    // covered so hidden promo animations do not keep updating Fabric.
+    if (isManualUtility || !isFocused) return;
 
     const interval = setInterval(() => {
       const currentVal = Math.round(activeIndexVal.get());
@@ -133,7 +133,7 @@ export function UtilityPanel({
     }, 2800); // Slightly slower for better readability
 
     return () => clearInterval(interval);
-  }, [isManualUtility, activeIndexVal]);
+  }, [isManualUtility, activeIndexVal, isFocused]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeUtilityIndex intentionally restarts the promo text transition when the selected utility changes.
   useEffect(() => {

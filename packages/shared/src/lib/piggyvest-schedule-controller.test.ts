@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { scheduleJourneyFixture } from './piggyvest-schedule.test-support';
+import { scheduleJourneyFixture } from '../test-fixtures/piggyvest-schedule';
 
 it('temporary sibling busy blocks resume but does not invalidate the schedule view', async () => {
   const fixture = scheduleJourneyFixture();

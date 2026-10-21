@@ -27,6 +27,13 @@ export interface PaymentSettings {
   vat_registration_status: string;
   /** VAT rate as a percentage, for example 7.5 for 7.5%. */
   vat_rate: number;
+  /**
+   * Live merchant shipping-insurance toggle. The cart assurance default
+   * reads this from the query cache: only an affirmative true defaults
+   * Ogabassey lines on, so fail-closed normalization (=== true) here
+   * keeps unknown/missing values opt-out.
+   */
+  shipping_insurance_enabled: boolean;
 }
 
 function safeNumber(value: unknown, fallback: number): number {
@@ -72,6 +79,7 @@ export function normalizePaymentSettings(
     wallet_paystack_dva_enabled: row?.wallet_paystack_dva_enabled === true,
     vat_registration_status: row?.vat_registration_status ?? 'unregistered',
     vat_rate: safeNonNegativeNumber(row?.vat_rate, fallbackVatRatePercent),
+    shipping_insurance_enabled: row?.shipping_insurance_enabled === true,
   };
 }
 
@@ -90,11 +98,21 @@ export async function fetchMerchantPaymentSettings(): Promise<PaymentSettings> {
   return normalizePaymentSettings(isPaymentSettingsRow(data) ? data : null);
 }
 
+/**
+ * Freshness window for the payment-settings cache. The persisted cache
+ * restores up to 24h-old successes across sessions; assurance reads
+ * (add-time default, pending reconciliation) treat data older than this
+ * as unknown so a merchant toggle change cannot charge a withdrawn
+ * service from a stale restore. Single source: the query staleTime
+ * below and the synchronous cache readers share it.
+ */
+export const MERCHANT_PAYMENT_SETTINGS_STALE_MS = 5 * 60 * 1000;
+
 export function useMerchantPaymentSettings() {
   return useQuery({
     queryKey: merchantPaymentSettingsQueryKey,
     queryFn: fetchMerchantPaymentSettings,
-    staleTime: 5 * 60 * 1000,
+    staleTime: MERCHANT_PAYMENT_SETTINGS_STALE_MS,
   });
 }
 

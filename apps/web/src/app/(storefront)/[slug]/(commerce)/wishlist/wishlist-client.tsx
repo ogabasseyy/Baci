@@ -272,7 +272,17 @@ export function WishListPageClient({
   const handleMoveToCart = (item: WishListItem) => {
     setMovingToCartId(item.id);
     try {
-      addToCart(buildCartProduct(item), 1);
+      // A rejection must not remove the item from the wishlist: it
+      // never reached the cart.
+      if (addToCart(buildCartProduct(item), 1) === 'rejected') {
+        toast({
+          title: 'Unable to add to cart',
+          description: 'There is no available stock left for this selection.',
+          variant: 'destructive',
+        });
+        setMovingToCartId(null);
+        return;
+      }
     } catch {
       toast({
         title: 'Error',

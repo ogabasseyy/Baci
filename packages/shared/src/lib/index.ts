@@ -1,15 +1,26 @@
+export * from './assurance-policy';
+export * from './available-search-facets';
+export * from './build-offer-resolution-map';
+export * from './build-refined-search-href';
 export * from './cac-registration';
+export * from './coerce-offer-authority-row';
 export * from './commerce-variant-axis';
+export * from './compare-condition-offer-identity';
 export * from './customer-savings-earnings';
 export * from './dedupe-by-id';
+export * from './deduplicate-facet-choices';
 export * from './delivery-metadata';
 export * from './derive-category-slug';
 export * from './eligible-condition-offers';
+export * from './empty-search-refinements';
+export * from './fetch-offer-resolutions';
 export * from './fetch-with-timeout';
 export * from './filter-by-location-phrase';
 export * from './get-paystack-dva-account-number';
 export * from './gigl-tracking-status';
+export * from './has-active-search-refinements';
 export * from './is-finite-number';
+export * from './is-same-facet-choice';
 export * from './kuda-data-plan-bill-items';
 export * from './kuda-electricity-bill-items';
 export * from './location-state-aliases';
@@ -18,10 +29,14 @@ export * from './negotiation-contact';
 export * from './negotiation-email';
 export * from './negotiation-item-info';
 export * from './negotiation-policy';
+export * from './offer-authority-id';
+export * from './offer-authority-input-error';
+export * from './offer-line-key';
 export * from './order-item-analytics-profit';
 export * from './order-item-display';
 export * from './parse-merchant-rate-quote-id';
 export * from './parse-santa-action';
+export * from './parse-search-refinements';
 export * from './piggyvest-cancellation-client';
 export * from './piggyvest-cancellation-client-binding';
 export * from './piggyvest-cancellation-controller';
@@ -40,10 +55,22 @@ export { formatPiggyvestPurchaseMoney } from './piggyvest-purchase-money';
 export { createPiggyvestScheduleClient } from './piggyvest-schedule-client';
 export { createPiggyvestScheduleClientBinding } from './piggyvest-schedule-client-binding';
 export { createPiggyvestScheduleController } from './piggyvest-schedule-controller';
+export {
+  buildComparisonRows,
+  type ComparisonFacts,
+} from './product-comparison';
 export * from './product-condition';
 export * from './product-default-variant';
 export * from './product-image-alt';
 export * from './product-inventory';
+export {
+  type ProductRequest,
+  productRequestSchema,
+} from './product-request';
+export {
+  ProductRequestSubmitError,
+  submitProductRequest,
+} from './product-request-client';
 export * from './product-search';
 export * from './product-selection-param-resolution';
 export * from './product-selection-params';
@@ -55,13 +82,49 @@ export * from './receipt-claim-url';
 export * from './redvault-eligibility';
 export * from './redvault-pricing';
 export * from './redvault-refund-allocations';
+export * from './refined-search-rpc';
+export * from './reset-refinements-for-query';
+export * from './resolve-offer-allocatable-stock';
+export * from './resolve-offer-price-basis';
 export * from './resumable-wallet-return-to';
 export * from './sanitize-html-text';
 export * from './sanitize-wallet-return-to';
 export * from './santa-granted-price';
+export { getSearchQuickFilterGroups } from './search-quick-filter-groups';
+export {
+  getSearchRefinementChips,
+  type SearchRefinementChip,
+} from './search-refinement-chips';
+export * from './search-refinement-criteria-schema';
+export * from './search-refinement-types';
+export * from './search-sort-options';
+export {
+  buildCatalogSearchSuggestions,
+  type SearchSuggestion,
+  type SearchSuggestionProduct,
+} from './search-suggestions';
+export * from './select-condition-offer';
 export * from './select-preferred-order-payment-account';
+export {
+  mergeAssistedRefinements,
+  parseSearchAssistanceProposal,
+  type SearchAssistanceProposal,
+  searchAssistanceProposalSchema,
+  searchAssistanceQuerySchema,
+} from './shopping-assistance';
+export {
+  createAssistanceDecoder,
+  describeAssistedFilters,
+  encodeAssistanceFrame,
+  readAssistanceStream,
+  type SearchAssistanceFrame,
+} from './shopping-assistance-stream';
 export * from './string-values';
 export * from './supabase-error-log';
 export * from './to-ascii-lower-case';
+export * from './to-finite-number';
+export * from './to-finite-offer-price';
+export * from './to-finite-stock-quantity';
+export * from './vtu-canonical-key-header';
 export * from './vtu-loyalty-points';
 export * from './with-timeout';

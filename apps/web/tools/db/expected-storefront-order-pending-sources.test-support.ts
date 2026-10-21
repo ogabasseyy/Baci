@@ -146,4 +146,14 @@ export const EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES = [
       'supabase/migrations/20260927150000_order_unit_cursors_by_product_variant.sql',
     sha256: 'f3c32ea83a9cd520286dc5328581f3a5b1b3656206f69f4533c585c17bd6f20c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261011220000_storefront_order_replay_economics_probe.sql',
+    sha256: 'd9a4090026d4501b5bebeaaa05837b900483bfee243c254810ce4e150c203ed5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261011240000_storefront_order_replay_economics_discount_fees.sql',
+    sha256: '4e191da98bdfea440e6201dfb9708ab0d445d0abc26c415cc7d41b183e3649dd',
+  },
 ];

@@ -22,7 +22,11 @@ describe('findPaystackRefundRowsByProviderId', () => {
     const genuine = { gateway: ' Paystack ', id: 'row-genuine' };
     const first = page(corrupt);
     const second = page([genuine]);
-    const from = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second)
+      .mockReturnValue(page([]));
     const supabase = { from } as unknown as SupabaseClient;
 
     const matches = await findPaystackRefundRowsByProviderId(
@@ -33,8 +37,9 @@ describe('findPaystackRefundRowsByProviderId', () => {
 
     // A limit(2)-style single read returns only corrupt rows and
     // misses the genuine one entirely; the keyset scan advances
-    // over the unfiltered page.
-    expect(from).toHaveBeenCalledTimes(2);
+    // over the unfiltered page. The trailing call is the stamped-
+    // manual scan, which finds nothing here.
+    expect(from).toHaveBeenCalledTimes(3);
     expect(second.gt).toHaveBeenCalledWith('id', 'row-corrupt-9');
     expect(matches).toEqual([genuine]);
   });
@@ -65,5 +70,92 @@ describe('findPaystackRefundRowsByProviderId', () => {
     await expect(
       findPaystackRefundRowsByProviderId(supabase, 42, 'id, gateway')
     ).rejects.toThrow('refund_event_lookup_failed');
+  });
+
+  it('matches stamped manuals by stored provider id without double-counting', async () => {
+    const native = { gateway: 'paystack', id: 'row-native' };
+    const manual = {
+      gateway: 'manual',
+      id: 'row-manual',
+      metadata: { provider_refund_id: 43 },
+    };
+    const nativeScan = page([native]);
+    // A native row can carry a stored provider id too: the manual
+    // scan still reads it, but the code-side gate keeps it out so
+    // the same row never counts twice toward ambiguity.
+    const manualScan = page([native, manual]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(nativeScan)
+      .mockReturnValueOnce(manualScan);
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const matches = await findPaystackRefundRowsByProviderId(
+      supabase,
+      42,
+      'id, gateway'
+    );
+
+    expect(manualScan.eq).toHaveBeenCalledWith(
+      'metadata->>provider_refund_id',
+      '42'
+    );
+    expect(matches).toEqual([native, manual]);
+  });
+
+  it('finds a lone stamped manual when no native row matches', async () => {
+    const manual = { gateway: 'manual', id: 'row-manual' };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(page([]))
+      .mockReturnValueOnce(page([manual]));
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const matches = await findPaystackRefundRowsByProviderId(
+      supabase,
+      42,
+      'id, gateway'
+    );
+
+    expect(matches).toEqual([manual]);
+  });
+
+  it('preserves decimal-text ids past the safe-integer range', async () => {
+    const huge = '9007199254740993';
+    const nativeScan = page([]);
+    const manual = { gateway: 'manual', id: 'row-manual' };
+    const manualScan = page([manual]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(nativeScan)
+      .mockReturnValueOnce(manualScan);
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const matches = await findPaystackRefundRowsByProviderId(
+      supabase,
+      huge,
+      'id, gateway'
+    );
+
+    // The exact decimal text reaches both predicates: a Number()
+    // round-trip would collapse the id to 9007199254740992.
+    expect(nativeScan.eq).toHaveBeenCalledWith('gateway_reference', huge);
+    expect(manualScan.eq).toHaveBeenCalledWith(
+      'metadata->>provider_refund_id',
+      huge
+    );
+    expect(matches).toEqual([manual]);
+  });
+
+  it('rejects malformed ids without querying', async () => {
+    const from = vi.fn().mockReturnValue(page([]));
+    const supabase = { from } as unknown as SupabaseClient;
+
+    for (const bad of ['0', '-7', '12x', '', 0, -3, 1.5]) {
+      await expect(
+        findPaystackRefundRowsByProviderId(supabase, bad, 'id, gateway')
+      ).rejects.toThrow('refund_event_lookup_failed');
+    }
+    expect(from).not.toHaveBeenCalled();
   });
 });

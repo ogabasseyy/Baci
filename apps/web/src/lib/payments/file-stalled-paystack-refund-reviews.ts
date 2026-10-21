@@ -45,7 +45,7 @@ export async function fileStalledPaystackRefundReviews(
     evidence: RefundRecoveryEvidence;
     gatewayReference: string;
     refund: { amount: number; currency: string; status: string };
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<number> {
   const stalled: StalledPayment[] = [];

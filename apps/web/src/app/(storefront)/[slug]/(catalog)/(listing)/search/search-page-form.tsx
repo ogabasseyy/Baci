@@ -1,26 +1,50 @@
 'use client';
+import {
+  buildRefinedSearchHref,
+  resetRefinementsForQuery,
+  type SearchRefinements,
+  type SearchSuggestionProduct,
+} from '@baci/shared/lib';
 
 // Client boundary justified: the submit handler must intercept
 // sanitized-empty queries before the GET navigation fires.
 import { type FormEvent, useState } from 'react';
+import { AssistedSearchSuggestions } from '@/components/storefront/search-refinements/assisted-search-suggestions';
+import { useSearchQueryDraft } from '@/components/storefront/search-refinements/search-query-draft';
 import { recordSearchSubmission } from '@/lib/search-submission';
 import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
 } from '@/lib/storefront-search-params';
+import { SearchAssistance } from './search-assistance';
 
 interface SearchPageFormProps {
   action: string;
   defaultQuery: string;
   pathPrefix: string;
+  currency: string;
+  refinements?: SearchRefinements;
+  suggestionProducts?: SearchSuggestionProduct[];
+  assistEnabled?: boolean;
 }
 
 export function SearchPageForm({
   action,
   defaultQuery,
   pathPrefix,
+  currency,
+  refinements,
+  suggestionProducts = [],
+  assistEnabled = false,
 }: SearchPageFormProps) {
-  const [error, setError] = useState<string | null>(null);
+  const draft = useSearchQueryDraft();
+  const [localQuery, setLocalQuery] = useState(defaultQuery);
+  const query = draft?.query ?? localQuery;
+  const setQuery = draft?.setQuery ?? setLocalQuery;
+  const [focused, setFocused] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const error = draft ? draft.error : localError;
+  const setError = draft?.setError ?? setLocalError;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const raw = new FormData(event.currentTarget).get('q');
@@ -33,10 +57,20 @@ export function SearchPageForm({
       setError('Enter a searchable term to update the results.');
       return;
     }
-    // An explicit re-search: record it while the native GET navigation
-    // proceeds. Never blocks or alters the navigation.
+    // Record explicit submission before navigating; refinements are retained
+    // only when the normalized query is unchanged.
     if (typeof raw === 'string') {
       recordSearchSubmission(raw, pathPrefix, 'results-form');
+      if (refinements) {
+        event.preventDefault();
+        window.location.assign(
+          buildRefinedSearchHref(
+            action,
+            parseStorefrontSearchQueryParam(raw),
+            resetRefinementsForQuery(defaultQuery, raw, refinements)
+          )
+        );
+      }
     }
   };
 
@@ -46,7 +80,14 @@ export function SearchPageForm({
   // showing the previous query) and any validation error. A key here
   // would NOT reset this component's own state.
   return (
-    <div className="mt-6 max-w-xl">
+    <div
+      className="mt-6 max-w-xl"
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setFocused(false);
+      }}
+    >
       <form
         method="get"
         action={action}
@@ -61,14 +102,17 @@ export function SearchPageForm({
           id="search-page-input"
           name="q"
           type="search"
-          defaultValue={defaultQuery}
-          placeholder="Search products…"
+          value={query}
+          placeholder="Search or ask a question…"
           maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
           autoComplete="off"
           aria-invalid={error !== null}
           aria-describedby={error === null ? undefined : 'search-page-error'}
-          onChange={() => setError(null)}
-          className="min-w-0 flex-1 rounded-xl border border-store-background-text/15 bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setError(null);
+          }}
+          className="min-w-0 flex-1 rounded-xl border-2 border-store-primary bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
         />
         <button
           type="submit"
@@ -77,6 +121,25 @@ export function SearchPageForm({
           Search
         </button>
       </form>
+      {focused && refinements && (
+        <>
+          <SearchAssistance
+            query={query}
+            resultQuery={defaultQuery}
+            products={suggestionProducts}
+            criteria={refinements}
+            basePath={action}
+            currency={currency}
+          />
+          <AssistedSearchSuggestions
+            query={query}
+            resultQuery={defaultQuery}
+            enabled={assistEnabled}
+            criteria={refinements}
+            basePath={action}
+          />
+        </>
+      )}
       {error === null ? null : (
         <p
           id="search-page-error"

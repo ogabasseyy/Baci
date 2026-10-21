@@ -63,6 +63,11 @@ interface SearchStorefrontProductsArgs {
 
 export interface StorefrontSearchResult {
   count: number;
+  // Unadjusted RPC total for page arithmetic. Refined search reports count
+  // minus rows that vanished mid-read (honest for display), but skipped
+  // rows stay ranked, so last-page/total-pages math must use this total.
+  // Producers whose count is already exact omit it; readers fall back.
+  totalCount?: number;
   didYouMean: string | null;
   productIds: string[];
   query: string;

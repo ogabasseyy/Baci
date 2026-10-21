@@ -44,6 +44,7 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
+import { orderWalletFundingIntentPollResponseFixture } from '@baci/shared/test-fixtures/order-wallet-funding-intent';
 import { GET } from './route';
 
 const merchant = {
@@ -148,6 +149,33 @@ describe('/api/storefront/customer/wallet/order-funding-intents/[id]', () => {
     expect(mockResolveWalletTopUpMerchant).not.toHaveBeenCalled();
     expect(mockExpireStaleWalletFundingIntents).not.toHaveBeenCalled();
     expect(mockGetOrderWalletFundingIntent).not.toHaveBeenCalled();
+  });
+
+  it('characterizes the poll response shape (offset-form expiresAt)', async () => {
+    mockGetOrderWalletFundingIntent.mockResolvedValue({
+      currency: 'NGN',
+      debitedAmount: 0,
+      excessAmount: 0,
+      expectedAmount: 5000,
+      expiresAt: '2026-05-21T11:00:00+00:00',
+      fundedAmount: 0,
+      id: intentId,
+      orderId,
+      status: 'pending',
+      targetOrderAmount: 5000,
+    });
+
+    const response = await GET(
+      getRequest(
+        `http://localhost:3000/api/storefront/customer/wallet/order-funding-intents/${intentId}?merchantSlug=ogabassey`
+      ),
+      { params: Promise.resolve({ id: intentId }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      orderWalletFundingIntentPollResponseFixture
+    );
   });
 
   it('returns the scoped intent for the authenticated customer', async () => {

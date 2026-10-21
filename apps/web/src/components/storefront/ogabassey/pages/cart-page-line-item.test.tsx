@@ -64,7 +64,12 @@ const cartItem = {
   hasAssurance: true,
 } satisfies CartItem;
 
-function renderLineItem(overrides: Partial<CartItem> = {}) {
+function renderLineItem(
+  overrides: Partial<CartItem> = {},
+  propOverrides: Partial<
+    Pick<React.ComponentProps<typeof CartPageLineItem>, 'shippingInsuranceEnabled'>
+  > = {}
+) {
   const props = {
     hasPriceNegotiation: true,
     item: { ...cartItem, ...overrides },
@@ -75,6 +80,7 @@ function renderLineItem(overrides: Partial<CartItem> = {}) {
     onUpdateQuantity: vi.fn(),
     productHref: '/test-store/electronics/test-gadget',
     shippingInsuranceEnabled: true,
+    ...propOverrides,
   };
 
   render(<CartPageLineItem {...props} />);
@@ -118,5 +124,24 @@ describe('CartPageLineItem', () => {
     fireEvent.click(screen.getByRole('button', { name: /increase quantity/i }));
 
     expect(props.onUpdateQuantity).toHaveBeenCalledWith('ci-1', 1);
+  });
+
+  it('keeps the removal control for an assured line when insurance is off', () => {
+    const props = renderLineItem(
+      { hasAssurance: true },
+      { shippingInsuranceEnabled: false }
+    );
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(props.onToggleAssurance).toHaveBeenCalledWith('ci-1');
+  });
+
+  it('hides assurance for an unassured line when insurance is off', () => {
+    renderLineItem(
+      { hasAssurance: false },
+      { shippingInsuranceEnabled: false }
+    );
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 });

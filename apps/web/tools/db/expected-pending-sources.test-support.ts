@@ -18,6 +18,7 @@ import { EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES } from './expected-order-ca
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
+import { EXPECTED_PENDING_ORDER_REFUND_SOURCES } from './expected-pending-order-refund-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
@@ -25,6 +26,7 @@ import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-repl
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
+import { REDVAULT_PENDING_SOURCES } from './expected-redvault-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
 import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
@@ -32,22 +34,12 @@ import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sourc
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
-import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
-
-const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
-  '\n'
-).map((row) => {
-  const [sha256, filename] = row.split(' ');
-  return {
-    repositoryPath: `supabase/migrations/${filename}`,
-    sha256,
-  };
-});
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {
     repositoryPath:
@@ -265,6 +257,71 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090046_storefront_search_refinements.sql',
+    sha256: 'f2a1e439271d32eeb9e83dbde9f79782f00aedfdf318f28020c5edaef8a58372',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015090001_storefront_payment_settings_shipping_insurance.sql',
+    sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016090000_search_condition_match_hyphen.sql',
+    sha256: '82e8ab798c5444cfcc1037f21bfb376940d15ae7801f0462efa12f32bde0b274',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016100000_storefront_order_replay_key_floor.sql',
+    sha256: '35bb3fc0bca3a6e133e1909c7dc53179709819abf734ae6ae573f8a505709039',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016110000_storefront_order_item_offer_id_snapshot.sql',
+    sha256: '35e6dc838033f09f69ed12d479988833a9d6dbfe0b41905093998584eac0ae18',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016115000_storefront_order_item_offer_identity_hardening.sql',
+    sha256: 'efb4ed9615d183d01155ab7ceedf1509228afb85a4d15e6adc8da80ff3e75e26',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016125000_storefront_order_replay_economics_offer_snapshot.sql',
+    sha256: '3e4ef56adae86434136c65c4c19e63c1ab04c2a62e4316ad0cbec1f77222b4e7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016140000_storefront_order_item_offer_identity_freeze.sql',
+    sha256: 'bff7b2dbb638298f1a0c464506bc23a5de3af1c5a0ab0ea9b9cf7e88f99f4bb0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016150000_storefront_order_idempotency_key_entropy.sql',
+    sha256: 'fb28c5d4994866dae1e83003b49d3ecfcd4d332b6f0d7a26b8b418c3f130fd21',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016160000_storefront_order_item_offer_tenant_bind.sql',
+    sha256: '8b78693d6a9d1a9ab76c23d667795f435d2f6eaf1fda34fecd2620d05014262d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019090000_storefront_order_offer_final_state.sql',
+    sha256: 'b804e2f56ee988be072063735e81ca669c5af5c0fb6e12c2b62900aca8fcc582',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019100000_storefront_order_item_offer_line_condition_identity.sql',
+    sha256: 'e2a9e1c01d2e137e3b198752c4310999b88ffd5cde4ac96714f2218a600f649d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090000_storefront_order_entrypoint_body_squash.sql',
+    sha256: '491280c5ab0d9bf01b60052893ed3909c4963384169b5965031c50fad871ed75',
+  },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]

@@ -28,12 +28,21 @@
     "./schemas": "./src/schemas/index.ts",
     "./schemas/merchant-settings": "./src/schemas/merchant-settings.ts",
     "./receipt": "./src/receipt/index.ts",
+    "./money": "./src/money/index.ts",
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
     "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",
     "./storefront/prioritize-smartphone-products": "./src/storefront/prioritize-smartphone-products.ts",
     "./gmc-feed": "./src/gmc-feed/index.ts",
-    "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts"
+    "./test-fixtures/builder-ai-edit": "./src/test-fixtures/builder-ai-edit.ts",
+    "./vtu": "./src/vtu/index.ts",
+    "./test-fixtures/piggyvest-device-change": "./src/test-fixtures/piggyvest-device-change.ts",
+    "./test-fixtures/piggyvest-purchase": "./src/test-fixtures/piggyvest-purchase.ts",
+    "./test-fixtures/piggyvest-protected-offer": "./src/test-fixtures/piggyvest-protected-offer.ts",
+    "./test-fixtures/piggyvest-draft-closure": "./src/test-fixtures/piggyvest-draft-closure.ts",
+    "./test-fixtures/piggyvest-schedule": "./src/test-fixtures/piggyvest-schedule.ts",
+    "./test-fixtures/fixture-mock": "./src/test-fixtures/fixture-mock.ts",
+    "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

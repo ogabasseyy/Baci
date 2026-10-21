@@ -79,6 +79,7 @@ const defaultMockPaymentSettings = {
   korapay_enabled: false,
   pay_on_delivery_enabled: false,
   paystack_enabled: true,
+  shipping_insurance_enabled: false,
   vat_rate: 7.5,
   vat_registration_status: 'unregistered',
   wallet_order_auto_debit_enabled: false,
@@ -108,6 +109,9 @@ export function getPaymentInitializeCalls() {
 }
 
 let originalFetch: typeof global.fetch = global.fetch;
+
+// These isolated screen fixtures represent a focused navigation route.
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
 
 jest.mock('expo-router', () => ({
   Stack: {
@@ -295,7 +299,15 @@ jest.mock('@/services/cart-reprice', () => {
   );
   return {
     ...actual,
-    repriceCartItems: jest.fn(async () => ({ priceById: {}, changes: [] })),
+    repriceCartItems: jest.fn(async () => ({
+      priceById: {},
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+      unavailable: [],
+      offerIdById: {},
+      adoptions: [],
+    })),
   };
 });
 

@@ -1,6 +1,6 @@
 import { piggyvestPurchaseSchemas } from '@baci/shared/contracts';
+import { purchaseFixture } from '@baci/shared/test-fixtures/piggyvest-purchase';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { purchaseFixture } from '../../../../../packages/shared/src/test-fixtures/piggyvest-purchase';
 import { PiggyvestPurchaseReview } from './PiggyvestPurchaseReview';
 
 jest.mock('@/components/useColorScheme', () => ({

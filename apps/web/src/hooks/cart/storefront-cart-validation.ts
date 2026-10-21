@@ -1,19 +1,34 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import type { CartItem } from './cart-types';
+import {
+  getBaseLineValidationKey,
+  isQuizVoucherLine,
+} from './cart-validation-keys';
 
 interface CartValidationResponse {
   invalidProductIds?: string[];
   priceChanges?: {
     id: string;
     variantId?: string;
+    offerId?: string;
     oldPrice: number;
     newPrice: number;
   }[];
 }
 
-const createCartValidationKey = (id: string, variantId?: string | null) =>
-  variantId ? `${id}::${variantId}` : id;
+// Mirrors the validate route's getCartValidationKey exactly: variant first,
+// then the offer segment. Two offers that canonicalize to the same
+// condition share product + condition, so the offer segment is what keeps
+// their validation results on separate lines.
+const createCartValidationKey = (
+  id: string,
+  variantId?: string | null,
+  offerId?: string | null
+) => {
+  const variantKey = variantId ? `${id}::${variantId}` : id;
+  return offerId ? `${variantKey}::offer=${offerId}` : variantKey;
+};
 
 const serializeVariantAttributes = (
   variantAttributes: CartItem['variantAttributes']
@@ -28,11 +43,18 @@ const serializeVariantAttributes = (
 export const createCartHash = (cart: CartItem[]) => {
   return cart
     .map((item) => {
-      const itemKey = createCartValidationKey(item.id, item.variantId);
+      const itemKey = createCartValidationKey(
+        item.id,
+        item.variantId,
+        item.offerId
+      );
       const serializedAttributes = serializeVariantAttributes(
         item.variantAttributes
       );
-      return `${itemKey}:${item.condition ?? ''}:${serializedAttributes}:${item.price}`;
+      // Quantity is part of the hash: the validate route enforces line
+      // quantity against live offer allocation, so a quantity-only edit
+      // must revalidate instead of skipping on an identical hash.
+      return `${itemKey}:${item.condition ?? ''}:${serializedAttributes}:${item.price}:${item.quantity}`;
     })
     .sort()
     .join('|');
@@ -46,8 +68,14 @@ export const validateStorefrontCart = async (
     condition: item.condition,
     id: item.id,
     price: item.price,
+    quantity: item.quantity,
     variantAttributes: item.variantAttributes,
     variantId: item.variantId,
+    offerId: item.offerId,
+    // Pool-exempt pre-reserved units: the validate route excludes
+    // voucher lines from the strict serialized aggregate so a prize
+    // line is never invalidated for pool headroom it does not consume.
+    isQuizVoucherLine: Boolean(item.quizAwardId || item.quizVoucherToken),
   }));
 
   const response = await fetchWithCsrf('/api/cart/validate', {
@@ -75,7 +103,11 @@ export const applyValidationResults = (
   const invalidIds = new Set(validation.invalidProductIds || []);
   const priceChanges = new Map(
     (validation.priceChanges || []).map((priceChange) => [
-      createCartValidationKey(priceChange.id, priceChange.variantId),
+      createCartValidationKey(
+        priceChange.id,
+        priceChange.variantId,
+        priceChange.offerId
+      ),
       priceChange,
     ])
   );
@@ -86,12 +118,41 @@ export const applyValidationResults = (
 
   return cart
     .filter((item) => {
-      const itemKey = createCartValidationKey(item.id, item.variantId);
-      return !invalidIds.has(item.id) && !invalidIds.has(itemKey);
+      const itemKey = createCartValidationKey(
+        item.id,
+        item.variantId,
+        item.offerId
+      );
+      // An exact line-key match always removes — including voucher
+      // lines, whose key without an offer segment is the bare product
+      // id, so dead-product bare ids still clear them.
+      if (invalidIds.has(itemKey)) {
+        return false;
+      }
+      // Voucher lines redeem pre-reserved units outside every shared
+      // pool: exempt them from product-wide and sibling-line signals.
+      if (isQuizVoucherLine(item)) {
+        return true;
+      }
+      // A bare product id means the product itself is dead: remove
+      // every remaining line for it.
+      if (invalidIds.has(item.id)) {
+        return false;
+      }
+      // A base-line-scoped pool key removes only plain base lines —
+      // never variant, offer, or (above) voucher siblings.
+      if (
+        !item.variantId &&
+        !item.offerId &&
+        invalidIds.has(getBaseLineValidationKey(item.id))
+      ) {
+        return false;
+      }
+      return true;
     })
     .map((item) => {
       const priceChange = priceChanges.get(
-        createCartValidationKey(item.id, item.variantId)
+        createCartValidationKey(item.id, item.variantId, item.offerId)
       );
       if (!priceChange) {
         return item;

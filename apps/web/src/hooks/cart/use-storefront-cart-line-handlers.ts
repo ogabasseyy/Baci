@@ -1,10 +1,20 @@
 'use client';
 
+import { resolveAssuranceMerchantSetting } from '@baci/shared/lib';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { MerchantContextType } from '@/hooks/merchant/types';
 import type { Product } from '@/lib/products';
-import { DEFAULT_ASSURANCE_RATE, generateCartItemId } from './cart-storage';
-import type { AddToCartOptions, CartItem } from './cart-types';
-import { findMergingCartLineIndex } from './find-merging-cart-line';
+import { applyStorefrontCartLineAdd } from './cart-line-add';
+import {
+  applyStorefrontCartQuantityEdit,
+  probeQuantityEditApplied,
+} from './cart-quantity-edit';
+import { resolveSimpleLineAddCaps } from './cart-stock-caps';
+import type {
+  AddToCartOptions,
+  AddToCartOutcome,
+  CartItem,
+} from './cart-types';
 import { gateAddToCart } from './gate-add-to-cart';
 import type { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
@@ -14,20 +24,26 @@ type DelegatedActions = ReturnType<
 
 /** Legacy/delegated line mutations and merchant binding for the provider. */
 export function useStorefrontCartLineHandlers({
+  cartRef,
   cartWideNegotiationActiveRef,
   delegated,
   delegatedActions,
   enableSmartCartPro,
+  merchantContext,
+  merchantSlugRef,
   setCart,
   setCartWideNegotiationActive,
   setLastAddedProduct,
   setShowUpsell,
   upsellTimerRef,
 }: {
+  cartRef: RefObject<CartItem[]>;
   cartWideNegotiationActiveRef: RefObject<boolean>;
   delegated: boolean;
   delegatedActions: DelegatedActions;
   enableSmartCartPro: boolean;
+  merchantContext: MerchantContextType | null;
+  merchantSlugRef: RefObject<string | null>;
   setCart: Dispatch<SetStateAction<CartItem[]>>;
   setCartWideNegotiationActive: (active: boolean) => void;
   setLastAddedProduct: Dispatch<SetStateAction<Product | null>>;
@@ -47,9 +63,9 @@ export function useStorefrontCartLineHandlers({
     product: Product,
     quantity = 1,
     options?: AddToCartOptions
-  ) => {
+  ): AddToCartOutcome => {
     const gated = gateAddToCart(product, options);
-    if (!gated) return;
+    if (!gated) return 'rejected';
     const productForCart = gated.product;
     const normalizedOptions = gated.options;
 
@@ -60,58 +76,76 @@ export function useStorefrontCartLineHandlers({
         normalizedOptions
       );
       if (accepted) noteAddedProduct(productForCart);
-      return;
+      return accepted ? 'applied' : 'rejected';
+    }
+
+    const isQuizPrizeVoucherLine = Boolean(
+      normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
+    );
+    // Add-path caps (offer allocation + shared strict pool) live in
+    // cart-stock-caps; the same caps cover fresh and merged adds.
+    const addCaps = resolveSimpleLineAddCaps({
+      product: productForCart,
+      isVoucherLine: isQuizPrizeVoucherLine,
+      variantId: normalizedOptions?.variantId,
+      offerId: normalizedOptions?.offerId,
+      stock: productForCart.stock,
+    });
+
+    // The add-time assurance default must match the toggle the line
+    // items render (see the shared setting resolver): a definite slug
+    // mismatch forces the default off rather than charging a fee with
+    // no removal control.
+    const contextMerchant = merchantContext?.merchant;
+    const shippingInsuranceEnabled = resolveAssuranceMerchantSetting({
+      contextSlug: contextMerchant?.slug,
+      contextSetting:
+        contextMerchant?.feature_settings?.shipping_insurance_enabled,
+      cartSlug: merchantSlugRef.current,
+    });
+
+    const lineAddInput = {
+      product,
+      productForCart,
+      normalizedOptions,
+      quantity,
+      caps: addCaps,
+      assurance: {
+        smartCartProEnabled: enableSmartCartPro,
+        merchantSlug: merchantSlugRef.current,
+        hasQuizVoucher: isQuizPrizeVoucherLine,
+        shippingInsuranceEnabled,
+      },
+    };
+    // Probe the outcome against the serialized cart ref so callers can
+    // gate success effects (upsell, toasts, analytics) on it, and advance
+    // the ref on applied adds so batched same-tick adds observe each
+    // other. The write below still runs through the updater against
+    // committed state (preserving multi-writer safety with the
+    // updater-based remove/edit paths); only a same-tick removal or
+    // edit racing this add can skew the probe. That edge skips one
+    // success toast while the cart badge still updates, and can leave
+    // the group flag set after the updater stripped the lines — the
+    // money paths key off per-line negotiatedPrice so no charged total
+    // changes, and the next validation drift self-heals the flag.
+    const probeResult = applyStorefrontCartLineAdd({
+      previousCart: cartRef.current,
+      ...lineAddInput,
+    });
+    const outcome: AddToCartOutcome =
+      probeResult === cartRef.current ? 'rejected' : 'applied';
+    if (outcome === 'applied') {
+      cartRef.current = probeResult;
     }
 
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
-      const cartItemId = generateCartItemId(
-        productForCart.id,
-        normalizedOptions
-      );
-      const existingIndex = findMergingCartLineIndex(
+      const result = applyStorefrontCartLineAdd({
         previousCart,
-        product,
-        normalizedOptions
-      );
-
-      let result: CartItem[];
-      if (existingIndex >= 0) {
-        const nextCart = [...previousCart];
-        const existingItem = nextCart[existingIndex];
-        nextCart[existingIndex] = {
-          ...existingItem,
-          quantity: existingItem.quantity + quantity,
-          cartItemId: existingItem.cartItemId || cartItemId,
-        };
-        result = nextCart;
-      } else {
-        result = [
-          ...previousCart,
-          {
-            ...productForCart,
-            cartItemId,
-            quantity,
-            variantId: normalizedOptions?.variantId,
-            variantAttributes: normalizedOptions?.variantAttributes,
-            selectedColor: normalizedOptions?.color,
-            selectedColorValue: normalizedOptions?.colorValue,
-            secondaryColor: normalizedOptions?.secondaryColor,
-            secondaryColorValue: normalizedOptions?.secondaryColorValue,
-            selectedStorage: normalizedOptions?.storage,
-            condition: normalizedOptions?.condition as
-              | 'new'
-              | 'used'
-              | 'open_box'
-              | 'refurbished'
-              | undefined,
-            quizAwardId: normalizedOptions?.quizAwardId,
-            quizVoucherToken: normalizedOptions?.quizVoucherToken,
-            negotiationStatus: 'none',
-            hasAssurance: false,
-            assuranceRate: DEFAULT_ASSURANCE_RATE,
-          },
-        ];
+        ...lineAddInput,
+      });
+      if (result === previousCart) {
+        return previousCart;
       }
 
       // Adding/merging a line changes the cart composition, so an active
@@ -131,11 +165,17 @@ export function useStorefrontCartLineHandlers({
       return result;
     });
 
-    if (wasGroupActive) {
+    // A rejected add changes nothing, so the group deal survives it;
+    // clearing the flag here would persist discounted lines under a
+    // false inactive flag.
+    if (wasGroupActive && outcome === 'applied') {
       setCartWideNegotiationActive(false);
     }
 
-    noteAddedProduct(productForCart);
+    if (outcome === 'applied') {
+      noteAddedProduct(productForCart);
+    }
+    return outcome;
   };
 
   const removeFromCart = (
@@ -194,56 +234,24 @@ export function useStorefrontCartLineHandlers({
       return;
     }
     const wasGroupActive = cartWideNegotiationActiveRef.current;
-    setCart((previousCart) => {
-      const targetIndex = previousCart.findIndex((item) => {
-        if (variantId) {
-          return (
-            item.id === cartItemIdOrProductId && item.variantId === variantId
-          );
-        }
-
-        return (
-          item.cartItemId === cartItemIdOrProductId ||
-          (item.id === cartItemIdOrProductId && !item.variantId)
-        );
-      });
-
-      if (targetIndex === -1) return previousCart;
-      if (quantity <= 0) {
-        const filtered = previousCart.filter(
-          (_, index) => index !== targetIndex
-        );
-        if (wasGroupActive) {
-          return filtered.map((item) => ({
-            ...item,
-            negotiatedPrice: undefined,
-            negotiationStatus: undefined,
-          }));
-        }
-        return filtered;
-      }
-
-      const nextCart = [...previousCart];
-      const item = nextCart[targetIndex];
-      const minimumOrderQuantity = item.minimum_order_quantity || 1;
-      nextCart[targetIndex] = {
-        ...item,
-        quantity:
-          quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity,
-      };
-      // A quantity change alters the cart total, so an active cart-wide
-      // negotiation no longer represents the agreed total — clear the group
-      // deal on every line (not only when the line is removed).
-      if (wasGroupActive) {
-        return nextCart.map((line) => ({
-          ...line,
-          negotiatedPrice: undefined,
-          negotiationStatus: undefined,
-        }));
-      }
-      return nextCart;
+    // Probe applied-ness synchronously (see cart-quantity-edit): a
+    // missing target or a keepPrevious cap leaves the group deal intact.
+    const editApplied = probeQuantityEditApplied({
+      cart: cartRef.current,
+      cartItemIdOrProductId,
+      variantId,
+      quantity,
     });
-    if (wasGroupActive) {
+    setCart((previousCart) =>
+      applyStorefrontCartQuantityEdit({
+        previousCart,
+        cartItemIdOrProductId,
+        variantId,
+        quantity,
+        wasGroupActive,
+      })
+    );
+    if (wasGroupActive && editApplied) {
       setCartWideNegotiationActive(false);
     }
   };

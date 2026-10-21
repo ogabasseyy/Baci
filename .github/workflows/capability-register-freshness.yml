@@ -1,0 +1,77 @@
+name: Capability Register Freshness
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: capability-register-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  register-freshness:
+    name: Capability Register Freshness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Probe register evidence window
+        id: window
+        run: |
+          # Inner fallback: if the probe itself errors, report broken rather
+          # than an empty status that files no issue at all. The value is
+          # sanitized before writing: a multi-line capture would otherwise
+          # write a bare second line that matches no routing step.
+          status=$(python3 vps-workers/baci-editorial-context/register_status.py || echo broken)
+          if [ "$status" != fresh ] && [ "$status" != stale ] && [ "$status" != broken ]; then status=broken; fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Assert capability register is inside its evidence window
+        env:
+          BACI_REGISTER_REQUIRE_FRESH: '1'
+        # Register-scoped only (register plus access-map provenance): running
+        # the whole capability suite here would present contract/gate
+        # breakage as a freshness failure.
+        run: >-
+          python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_capability_register_*.py' &&
+          python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_capability_agent_access_map.py'
+      - name: Open an issue when the register goes stale
+        if: failure() && steps.window.outputs.status == 'stale' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Capability register outside its 14-day evidence window"
+          existing=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, re-observe any stale production_evidence (verified_at/observation), and confirm this check passes again."
+          fi
+      - name: Open an issue when the register is invalid
+        if: failure() && steps.window.outputs.status == 'broken' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Capability register missing or invalid (not ordinary staleness)"
+          existing=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "The scheduled capability-register check failed and docs/product/baci-capabilities.json is missing, malformed, or carries an invalid reviewed_at (naive or future-dated): do not just refresh reviewed_at/digests, which would re-bind unreviewed claims. Restore and validate the file, re-review the claims against the cited sources per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
+          fi
+      - name: Open an issue when the binding suite fails for another reason
+        if: failure() && steps.window.outputs.status == 'fresh' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Capability binding suite failed (register still inside its evidence window)"
+          existing=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "The scheduled capability-register check failed while docs/product/baci-capabilities.json is still inside its 14-day evidence window, so this is NOT a staleness re-review: do not just refresh reviewed_at/digests. Triage the failing suite test (digest binding mismatch, agent-access-map path drift, or connector-manifest mismatch) and fix the underlying breakage, then confirm the check passes again."
+          fi

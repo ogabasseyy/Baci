@@ -4,11 +4,18 @@ const variantIdSchema = z.uuid({
   error: 'variantId/variant_id must be a UUID',
 });
 
+const offerIdSchema = z.uuid({
+  error: 'offerId must be a UUID',
+});
+
 const cartItemSchema = z
   .object({
     condition: z.string().optional(),
     id: z.string(),
+    isQuizVoucherLine: z.boolean().optional(),
+    offerId: offerIdSchema.optional(),
     price: z.number(),
+    quantity: z.number().int().positive().optional(),
     variant_attributes: z.record(z.string(), z.string()).optional(),
     variant_id: variantIdSchema.optional(),
     variantAttributes: z.record(z.string(), z.string()).optional(),
@@ -144,7 +151,9 @@ export const cartHandoffPairingTokenSchema = z
   .string()
   .trim()
   .min(4)
-  .max(512)
+  // Signed payloads include tenant, principal, operation and environment
+  // identities; valid native/MCP tokens exceed 512 characters.
+  .max(2048)
   .regex(/^ch1\./);
 
 const handoffResolutionSchema = z.strictObject({

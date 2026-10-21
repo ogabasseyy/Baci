@@ -4,7 +4,10 @@ import {
   getProductSearchTotalCount,
   orderRecordsByIds,
 } from '@baci/shared';
-import { hydrateRowsNeedingStorefrontVariants } from '@/hooks/product-hydration';
+import {
+  hydrateRowsNeedingBaseInventory,
+  hydrateRowsNeedingStorefrontVariants,
+} from '@/hooks/product-hydration';
 import { withSupabaseRetry } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
@@ -13,6 +16,7 @@ import type { Product } from '@/types/product';
 import { PRODUCT_SELECT } from './product-select';
 import { transformProduct } from './product-transform';
 import type { ProductsPage, UseProductsOptions } from './product-utils.types';
+import { fetchRefinedProductsPage } from './refined-product-pages';
 
 const log = createLogger('Products');
 
@@ -34,6 +38,16 @@ export async function fetchProductsPage(
   // the entire catalog as matches for the query.
   if (options.search && !normalizedSearch) {
     return { nextOffset: null, products: [], total: 0 };
+  }
+
+  if (normalizedSearch && options.refinements) {
+    return fetchRefinedProductsPage(
+      merchantId,
+      normalizedSearch,
+      options.refinements,
+      limit,
+      offset
+    );
   }
 
   if (normalizedSearch) {
@@ -87,8 +101,10 @@ export async function fetchProductsPage(
     );
     if (error) throw error;
 
-    const hydratedRows = await hydrateRowsNeedingStorefrontVariants(
-      (data ?? []) as Record<string, unknown>[]
+    const hydratedRows = await hydrateRowsNeedingBaseInventory(
+      await hydrateRowsNeedingStorefrontVariants(
+        (data ?? []) as Record<string, unknown>[]
+      )
     );
     const products = orderRecordsByIds(
       hydratedRows as { id: string }[],
@@ -147,8 +163,10 @@ export async function fetchProductsPage(
   });
   if (result.error) throw result.error;
 
-  const hydratedRows = await hydrateRowsNeedingStorefrontVariants(
-    (result.data || []) as Record<string, unknown>[]
+  const hydratedRows = await hydrateRowsNeedingBaseInventory(
+    await hydrateRowsNeedingStorefrontVariants(
+      (result.data || []) as Record<string, unknown>[]
+    )
   );
   const products = hydratedRows
     .map(transformProduct)

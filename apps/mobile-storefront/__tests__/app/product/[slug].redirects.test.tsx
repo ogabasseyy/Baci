@@ -41,7 +41,10 @@ describe('ProductDetailScreen routing and selection sync', () => {
     render(<ProductDetailScreen />);
 
     await waitFor(() => {
-      expect(mockRouterReplace).toHaveBeenCalledWith('/product/iphone-13-pro');
+      expect(mockRouterReplace).toHaveBeenCalledWith({
+        pathname: '/product/[slug]',
+        params: { slug: 'iphone-13-pro' },
+      });
     });
   });
 

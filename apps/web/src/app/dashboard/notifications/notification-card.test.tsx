@@ -47,4 +47,33 @@ describe('NotificationCard', () => {
     expect(markAsRead).toHaveBeenCalledTimes(1);
     expect(openAction).toHaveBeenCalledWith('/dashboard/orders');
   });
+
+  it('renders attacker-controlled title and message as inert text', () => {
+    const payload = '<img src=x onerror=alert(1)>emi';
+    const { container } = render(
+      <NotificationCard
+        notification={
+          {
+            ...notification,
+            notification: {
+              ...notification.notification,
+              title: `<b>${payload}</b>`,
+              message: `<script>alert(1)</script>${payload}`,
+            },
+          } as MerchantNotificationWithDetails
+        }
+        onDismiss={vi.fn()}
+        onMarkAsRead={vi.fn()}
+      />
+    );
+
+    // Product-request intake concatenates the raw shopper query and
+    // contact into these fields: they must never parse as markup.
+    expect(screen.getByRole('heading', { level: 4 })).toHaveTextContent(
+      `<b>${payload}</b>`
+    );
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
+  });
 });

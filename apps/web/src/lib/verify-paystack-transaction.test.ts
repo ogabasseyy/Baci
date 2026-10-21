@@ -69,4 +69,79 @@ describe('verifyTransaction', () => {
       code: 'VALIDATION_ERROR',
     });
   });
+
+  it('keeps numeric ids by default', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const raw = JSON.stringify({
+      data: {
+        amount: 10000,
+        channel: 'card',
+        created_at: '2026-08-05T08:29:00Z',
+        currency: 'NGN',
+        customer: {
+          customer_code: 'CUS-1',
+          email: 'customer@example.com',
+          first_name: null,
+          id: 7,
+          last_name: null,
+          phone: null,
+        },
+        fees: 100,
+        fees_split: null,
+        id: 555,
+        metadata: null,
+        paid_at: '2026-08-05T08:30:00Z',
+        reference: 'PSK-1',
+        status: 'success',
+      },
+      message: 'ok',
+      status: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => JSON.parse(raw),
+        text: async () => raw,
+      })
+    );
+
+    const result = await verifyTransaction('PSK-1');
+
+    expect(result).toMatchObject({ success: true });
+    if (result.success) expect(result.data.id).toBe(555);
+  });
+
+  it('returns decimal-text ids with textIds without numeric rounding', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const big = '9007199254740993';
+    const raw =
+      `{"status":true,"message":"ok","data":{"id":${big},` +
+      `"reference":"PSK-1","amount":10000,"currency":"NGN",` +
+      `"channel":"card","status":"success","paid_at":null,` +
+      `"created_at":"2026-08-05T08:29:00Z",` +
+      `"customer":{"id":7,"email":"c@example.com",` +
+      `"customer_code":"CUS-1","first_name":null,` +
+      `"last_name":null,"phone":null},` +
+      `"metadata":null,"fees":100,"fees_split":null}}`;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => JSON.parse(raw),
+        text: async () => raw,
+      })
+    );
+
+    const result = await verifyTransaction('PSK-1', undefined, {
+      textIds: true,
+    });
+
+    expect(result).toMatchObject({ success: true });
+    if (result.success) expect(result.data.id).toBe(big);
+  });
 });

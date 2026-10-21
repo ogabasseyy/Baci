@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import SearchResultsHeader from './SearchResultsHeader';
 
 function renderHeader(
@@ -34,7 +34,7 @@ describe('SearchResultsHeader', () => {
     fireEvent.press(screen.getByLabelText('Go back'));
     fireEvent.press(screen.getByLabelText('Clear search'));
 
-    const input = screen.getByPlaceholderText('Search products...');
+    const input = screen.getByPlaceholderText('Search or ask a question…');
     fireEvent.changeText(input, 'phone case');
     fireEvent(input, 'submitEditing');
 
@@ -75,5 +75,35 @@ describe('SearchResultsHeader', () => {
     expect(
       screen.queryByLabelText('Type at least 2 characters to search')
     ).toBeNull();
+  });
+});
+it('keeps a single controlled input while the keyboard dock changes size', () => {
+  const props = {
+    colors: Colors.light,
+    query: 'iphone',
+    onBack: jest.fn(),
+    onClearQuery: jest.fn(),
+    onQueryChange: jest.fn(),
+    onSubmitQuery: jest.fn(),
+  };
+  const { rerender } = render(
+    <SearchResultsHeader {...props} availableHeight={844} />
+  );
+  fireEvent.changeText(screen.getByLabelText('Search products'), 'iphone 15');
+  rerender(
+    <SearchResultsHeader {...props} query="iphone 15" availableHeight={390} />
+  );
+  expect(screen.getAllByLabelText('Search products')).toHaveLength(1);
+  expect(screen.getByDisplayValue('iphone 15')).toBeTruthy();
+  fireEvent(screen.getByLabelText('Search products'), 'submitEditing');
+  expect(props.onSubmitQuery).toHaveBeenCalledTimes(1);
+});
+
+it('uses a red outline and the search-or-question prompt', () => {
+  renderHeader();
+  expect(screen.getByPlaceholderText('Search or ask a question…')).toBeTruthy();
+  expect(screen.getByTestId('search-input-outline')).toHaveStyle({
+    borderColor: BRAND.primary,
+    borderWidth: 2,
   });
 });

@@ -22,6 +22,9 @@ import {
   setupCartMocks,
 } from './cart.test-utils';
 
+// These isolated screen fixtures represent a focused navigation route.
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
+
 jest.mock('expo-router', () => mockExpoRouterModule());
 jest.mock('@tanstack/react-query', () => mockReactQueryModule());
 jest.mock('@/components/checkout/checkout-entry-prefetch', () =>
@@ -38,6 +41,15 @@ jest.mock('@/components/checkout/checkout-identity', () =>
 );
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  useMerchantPaymentSettings: () => ({
+    data: { shipping_insurance_enabled: true },
+  }),
+}));
+jest.mock('@/hooks/use-warm-merchant-payment-settings', () => ({
+  useWarmMerchantPaymentSettings: jest.fn(),
+}));
 jest.mock('@/hooks/use-auth-guard', () => mockAuthGuardModule());
 jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
 jest.mock('@/stores/ui-store', () => mockUIStoreModule());
@@ -59,6 +71,8 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -66,6 +80,23 @@ describe('CartScreen price-change modal', () => {
 
     expect(screen.getByText('Prices updated')).toBeTruthy();
     expect(screen.getByLabelText('Continue with updated prices')).toBeTruthy();
+  });
+
+  it('surfaces unavailable lines in the cart without price drift', () => {
+    mockRepriceHolder.current = {
+      priceChanges: [],
+      conditionChanges: [],
+      unavailableLines: [{ id: 'cart-9', name: 'Vanished Phone' }],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    render(<CartScreen />);
+
+    expect(screen.getByText('Items unavailable')).toBeTruthy();
+    expect(screen.getByText('Vanished Phone')).toBeTruthy();
+    expect(
+      screen.getByLabelText('Continue after reviewing unavailable items')
+    ).toBeTruthy();
   });
 
   it('dismisses the price-change modal when the shopper continues', () => {
@@ -78,6 +109,8 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -100,6 +133,8 @@ describe('CartScreen price-change modal', () => {
           newPrice: 1500000,
         },
       ],
+      conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -108,6 +143,8 @@ describe('CartScreen price-change modal', () => {
 
     mockRepriceHolder.current = {
       priceChanges: [],
+      conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
     rerender(<CartScreen />);

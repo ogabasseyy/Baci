@@ -88,18 +88,52 @@ runs:
 
         "$PNPM_CMD" config set store-dir "$STORE_DIR"
         "$PNPM_CMD" --version
-        echo "PNPM_STORE_DIR=$STORE_DIR" >> "$GITHUB_ENV"
+        delimiter="EOF-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        {
+          echo "PNPM_STORE_DIR<<${delimiter}"
+          echo "$STORE_DIR"
+          echo "${delimiter}"
+        } >> "$GITHUB_ENV"
 
     - name: Install Dependencies
       shell: bash
       env:
+        INSTALL_COMMAND: ${{ inputs.install-command }}
         # CI jobs use system/tool-provided browsers when needed; avoid
         # Puppeteer's install-time Chrome downloads on shared runners.
         PUPPETEER_SKIP_DOWNLOAD: 'true'
         PUPPETEER_CHROME_SKIP_DOWNLOAD: 'true'
         PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
         PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
-      run: ${{ inputs.install-command }}
+      run: |
+        set -euo pipefail
+        case "$INSTALL_COMMAND" in
+          './.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline' | \
+          '.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline')
+            ./.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline
+            ;;
+          './.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile' | \
+          '.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile')
+            ./.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile
+            ;;
+          './trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline' | \
+          'trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline')
+            ./trusted-ops/.github/scripts/pnpm-install-with-retry.sh --frozen-lockfile --prefer-offline
+            ;;
+          'pnpm install --frozen-lockfile --prefer-offline')
+            pnpm install --frozen-lockfile --prefer-offline
+            ;;
+          'pnpm install --frozen-lockfile')
+            pnpm install --frozen-lockfile
+            ;;
+          'pnpm install')
+            pnpm install
+            ;;
+          *)
+            echo "::error::Unsupported install-command: $INSTALL_COMMAND" >&2
+            exit 1
+            ;;
+        esac
 
     # Cache Save Engine: PR branches are strictly RESTORE-ONLY to prevent cache poisoning & save storage limit (10GB)
     - name: Save pnpm store cache (main branch only)

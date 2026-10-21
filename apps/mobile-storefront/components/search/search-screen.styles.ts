@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   resultsCountHeader: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingTop: 8,
     paddingBottom: 4,
   },

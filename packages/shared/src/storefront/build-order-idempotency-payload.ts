@@ -4,6 +4,8 @@ type IdempotencyItem = {
   assurance_fee?: number;
   condition?: string;
   has_assurance?: boolean;
+  offer_id?: string;
+  offerId?: string;
   price: number;
   product_id?: string;
   productId?: string;
@@ -34,6 +36,8 @@ export type OrderIdempotencyPayloadInput = {
   shipping_address?: {
     address?: string | null;
     city?: string | null;
+    latitude?: number;
+    longitude?: number;
     state?: string | null;
   } | null;
   shared_cart?: {
@@ -116,6 +120,11 @@ function normalizeItems(
       assurance_fee: normalizeNumber(item.assurance_fee),
       condition: normalizeText(item.condition),
       has_assurance: Boolean(item.has_assurance),
+      // Two offers can share one condition, so the offer id must join the
+      // hash or an Idempotency-Key reuse across offers replays the original
+      // order. Omit when empty (undefined, so JSON.stringify drops the key)
+      // to keep the hash byte-identical for pre-offer orders.
+      offer_id: normalizeText(item.offer_id ?? item.offerId) || undefined,
       price: normalizeNumber(item.price),
       product_id: normalizeText(item.product_id ?? item.productId),
       quantity: normalizeNumber(item.quantity),
@@ -135,6 +144,14 @@ function normalizeItems(
       const variantComparison = compareText(left.variant_id, right.variant_id);
       if (variantComparison !== 0) {
         return variantComparison;
+      }
+
+      const offerComparison = compareText(
+        left.offer_id ?? '',
+        right.offer_id ?? ''
+      );
+      if (offerComparison !== 0) {
+        return offerComparison;
       }
 
       const variantNameComparison = compareText(
@@ -177,6 +194,15 @@ export function buildOrderIdempotencyPayload(
   input: OrderIdempotencyPayloadInput,
   options?: BuildOrderIdempotencyPayloadOptions
 ) {
+  const { latitude, longitude } = input.shipping_address ?? {};
+  const hasQuoteLessPin =
+    !normalizeText(input.selected_quote_id) &&
+    typeof latitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Math.abs(latitude) <= 90 &&
+    typeof longitude === 'number' &&
+    Number.isFinite(longitude) &&
+    Math.abs(longitude) <= 180;
   return {
     // JSON.stringify preserves insertion order, so keep hash-significant keys
     // alphabetical to prevent accidental changes during maintenance.
@@ -215,6 +241,10 @@ export function buildOrderIdempotencyPayload(
     shipping_address: {
       address: normalizeText(input.shipping_address?.address),
       city: normalizeText(input.shipping_address?.city),
+      // A selected quote already binds its destination. Quote-less orders
+      // must bind their own pin; omit absent pins to preserve old hash bytes.
+      latitude: hasQuoteLessPin ? latitude : undefined,
+      longitude: hasQuoteLessPin ? longitude : undefined,
       state: normalizeText(input.shipping_address?.state),
     },
     shipping_fee: normalizeNumber(input.shipping_fee),

@@ -3,14 +3,15 @@
  * Side-by-side comparison of up to 3 products
  */
 
-import { requiresProductSelection } from '@baci/shared/lib';
 import { router } from 'expo-router';
+import { Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { CompareView } from '@/components/compare/CompareView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useCartStore } from '@/stores/cart-store';
+import { useComparisonProducts } from '@/hooks/use-comparison-products';
+import { buildSearchMatchRouteParams } from '@/lib/product-match-route-params';
 import { useComparisonStore } from '@/stores/comparison-store';
 import type { Product } from '@/types/product';
 
@@ -26,12 +27,21 @@ export default function CompareScreen() {
       clearComparison: state.clearComparison,
     }))
   );
-  const addToCart = useCartStore((state) => state.addItem);
+  const fresh = useComparisonProducts(products);
+  const openProduct = (product: Product) => {
+    router.push({
+      pathname: '/product/[slug]',
+      params: {
+        slug: product.slug,
+        ...buildSearchMatchRouteParams(product.searchMatch),
+      },
+    });
+  };
 
   // Collect all unique spec keys across all products
   const allSpecKeys = (() => {
     const keys = new Set<string>();
-    for (const product of products) {
+    for (const product of fresh.products) {
       if (product.specifications) {
         for (const key of Object.keys(product.specifications)) {
           keys.add(key);
@@ -41,37 +51,30 @@ export default function CompareScreen() {
     return Array.from(keys);
   })();
 
-  const handleAddToCart = (product: Product) => {
-    if (requiresProductSelection(product)) {
-      if (product.slug) {
-        router.push(`/product/${product.slug}`);
-      }
-      return;
-    }
-
-    addToCart({
-      product_id: product.id,
-      slug: product.slug,
-      name: product.name,
-      price: product.price,
-      compare_at_price: product.compare_at_price,
-      quantity: 1,
-      image_url: product.image,
-      condition: product.condition,
-    });
-  };
-
   return (
-    <CompareView
-      allSpecKeys={allSpecKeys}
-      bottomInset={insets.bottom}
-      colors={colors}
-      onAddToCart={handleAddToCart}
-      onBrowseProducts={() => router.push('/')}
-      onClearComparison={clearComparison}
-      onOpenProduct={(product) => router.push(`/product/${product.slug}`)}
-      onRemoveProduct={removeProduct}
-      products={products}
-    />
+    <>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={{
+          color: colors.textSecondary,
+          paddingHorizontal: 16,
+          paddingTop: 12,
+        }}
+      >
+        {fresh.status}
+      </Text>
+      <CompareView
+        allSpecKeys={allSpecKeys}
+        bottomInset={insets.bottom}
+        colors={colors}
+        onAddToCart={openProduct}
+        onBrowseProducts={() => router.push('/')}
+        onClearComparison={clearComparison}
+        onOpenProduct={openProduct}
+        onRemoveProduct={removeProduct}
+        products={fresh.products}
+        unavailableIds={fresh.unavailableIds}
+      />
+    </>
   );
 }

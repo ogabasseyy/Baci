@@ -28,10 +28,11 @@ export function buildPendingCheckoutFingerprint(
       variantAttributes: normalizeVariantAttributes(item.variantAttributes),
       has_assurance: Boolean(item.has_assurance),
       assurance_fee: item.assurance_fee || 0,
+      offer_id: item.offer_id || undefined,
     }))
     .sort((left, right) =>
-      `${left.product_id}:${left.variantId || ''}:${left.name}`.localeCompare(
-        `${right.product_id}:${right.variantId || ''}:${right.name}`
+      `${left.product_id}:${left.variantId || ''}:${left.offer_id || ''}:${left.name}`.localeCompare(
+        `${right.product_id}:${right.variantId || ''}:${right.offer_id || ''}:${right.name}`
       )
     );
 

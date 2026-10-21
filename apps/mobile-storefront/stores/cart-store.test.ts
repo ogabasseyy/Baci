@@ -1,5 +1,19 @@
 import { jest } from '@jest/globals';
 
+const mockMerchantSlug: { current: string } = {
+  current: 'ogabassey',
+};
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    get MERCHANT_SLUG() {
+      return mockMerchantSlug.current;
+    },
+    get ENABLE_SMART_CART_PRO() {
+      return true;
+    },
+  },
+}));
+
 jest.mock('../lib/storage', () => ({
   syncStorage: {
     getItem: jest.fn(() => null),

@@ -10,7 +10,11 @@ jest.mock('../lib/storage', () => ({
 
 import { useCartStore } from './cart-store';
 import type { CartItem } from './cart-store.types';
-import { formatPrice, selectCartQuantities } from './cart-store-selectors';
+import {
+  applyReprice,
+  formatPrice,
+  selectCartQuantities,
+} from './cart-store-selectors';
 
 function cartItem(id: string, productId: string, quantity: number): CartItem {
   return {
@@ -67,5 +71,92 @@ describe('selectCartQuantities', () => {
     });
 
     expect(selectCartQuantities(useCartStore.getState())).not.toBe(first);
+  });
+});
+
+describe('applyReprice', () => {
+  function offerLine(overrides: Partial<CartItem> = {}): CartItem {
+    return {
+      id: 'line-1',
+      product_id: 'p1',
+      slug: 'p1',
+      name: 'p1',
+      price: 1000,
+      quantity: 1,
+      condition: 'Used',
+      variant_attributes: { condition: 'Used', storage: '256GB' },
+      ...overrides,
+    };
+  }
+
+  it('stores the raw live condition code, matching the add path', () => {
+    const { items } = applyReprice(
+      {
+        items: [offerLine()],
+        cartWideNegotiationActive: false,
+      },
+      {},
+      { 'line-1': 'open_box' }
+    );
+    // Raw code in, raw code out (display formatting happens at render);
+    // formatting here would corrupt the code basis and contradict the
+    // pinned cart-store reprice contract.
+    expect(items[0].condition).toBe('open_box');
+    expect(items[0].variant_attributes).toEqual({
+      condition: 'Used',
+      storage: '256GB',
+    });
+  });
+
+  it('leaves variant attributes alone on a condition refresh', () => {
+    const { items } = applyReprice(
+      {
+        items: [offerLine({ variant_attributes: { storage: '256GB' } })],
+        cartWideNegotiationActive: false,
+      },
+      {},
+      { 'line-1': 'open_box' }
+    );
+    expect(items[0].condition).toBe('open_box');
+    expect(items[0].variant_attributes).toEqual({ storage: '256GB' });
+  });
+
+  it('returns the same item when nothing drifted', () => {
+    const line = offerLine();
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      {},
+      {}
+    );
+    expect(items[0]).toBe(line);
+  });
+
+  it('adopts an exact offer id and clears the negotiation even without a price drift', () => {
+    const line = offerLine({
+      offer_id: undefined,
+      price: 310000,
+      negotiatedPrice: 300000,
+      negotiationStatus: 'accepted',
+    });
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      { 'line-1': 310000 },
+      {},
+      { 'line-1': 'offer-1' }
+    );
+    expect(items[0].offer_id).toBe('offer-1');
+    expect(items[0].negotiatedPrice).toBeUndefined();
+    expect(items[0].negotiationStatus).toBeUndefined();
+  });
+
+  it('ignores an adopted id identical to the stored one', () => {
+    const line = offerLine({ offer_id: 'offer-1' });
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      {},
+      {},
+      { 'line-1': 'offer-1' }
+    );
+    expect(items[0]).toBe(line);
   });
 });

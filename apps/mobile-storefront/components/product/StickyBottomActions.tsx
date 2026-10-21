@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { RADIUS, SHADOWS, SPACING } from '@/constants/Colors';
+import { StickyAssuranceDefaultNote } from './StickyAssuranceDefaultNote';
 
 type ColorsScheme = (typeof Colors)['light'];
 const ACTION_ROW_GAP = SPACING.md - SPACING.xs;
@@ -128,46 +129,52 @@ export function StickyBottomActions({
         </Pressable>
       </View>
     ) : (
-      <Pressable
-        key="cart-empty"
-        style={[
-          styles.addToCartBtn,
-          canPurchase
-            ? {
-                backgroundColor: colors.primary,
-                borderColor: 'transparent',
-              }
-            : {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              },
-          canPurchase ? SHADOWS.md : null,
-        ]}
-        disabled={!canPurchase}
-        onPress={onAddToCart}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !canPurchase }}
-        accessibilityLabel={
-          canPurchase ? 'Add to Cart' : 'Product out of stock'
-        }
-      >
-        <View style={styles.addToCartContent}>
-          {canPurchase ? (
-            <Ionicons name="cart-outline" size={22} color={colors.white} />
-          ) : null}
-          <Text
-            style={[
-              styles.addToCartBtnText,
-              {
-                color: canPurchase ? colors.white : colors.textSecondary,
-                textAlign: 'center',
-              },
-            ]}
-          >
-            {canPurchase ? 'Add to Cart' : 'Out of Stock'}
-          </Text>
-        </View>
-      </Pressable>
+      <View key="cart-empty" style={{ flex: 1 }}>
+        <Pressable
+          style={[
+            styles.addToCartBtn,
+            canPurchase
+              ? {
+                  backgroundColor: colors.primary,
+                  borderColor: 'transparent',
+                }
+              : {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                },
+            canPurchase ? SHADOWS.md : null,
+          ]}
+          disabled={!canPurchase}
+          onPress={onAddToCart}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canPurchase }}
+          accessibilityLabel={
+            canPurchase ? 'Add to Cart' : 'Product out of stock'
+          }
+        >
+          <View style={styles.addToCartContent}>
+            {canPurchase ? (
+              <Ionicons name="cart-outline" size={22} color={colors.white} />
+            ) : null}
+            <Text
+              style={[
+                styles.addToCartBtnText,
+                {
+                  color: canPurchase ? colors.white : colors.textSecondary,
+                  textAlign: 'center',
+                },
+              ]}
+            >
+              {canPurchase ? 'Add to Cart' : 'Out of Stock'}
+            </Text>
+          </View>
+        </Pressable>
+        <StickyAssuranceDefaultNote
+          canPurchase={canPurchase}
+          quantityInCart={quantityInCart}
+          colors={colors}
+        />
+      </View>
     );
 
   if (floating) {

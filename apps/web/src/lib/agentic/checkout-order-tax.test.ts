@@ -278,6 +278,64 @@ describe('computeAgenticOrderTax', () => {
     expect(result).toBe(375); // ROUND(5000 * 7.5 / 100, 2)
   });
 
+  it('taxes offer lines from the live offer price (RPC parity)', async () => {
+    // Mirrors RPC: COALESCE(t.price_override, t.offer_price, t.base_price).
+    // The live offer (4000) wins over the parent price (10000) for the
+    // offer line; without it the route/RPC disagree and the order trips
+    // tax_amount_mismatch.
+    const supabase = buildSupabaseMock({
+      merchant: { vat_registration_status: 'registered' },
+      products: [
+        {
+          id: 'prod-1',
+          price: 10000,
+          vat_category_code: 'S',
+          vat_rate: 7.5,
+        },
+      ],
+    });
+
+    const result = await computeAgenticOrderTax({
+      items: [{ product_id: 'prod-1', offer_id: 'offer-1', quantity: 1 }],
+      merchantId: 'm-1',
+      offerPrices: new Map([['prod-1::offer-1', 4000]]),
+      supabase,
+    });
+
+    expect(result).toBe(300); // ROUND(4000 * 7.5 / 100, 2)
+  });
+
+  it('prefers the variant override over the live offer price', async () => {
+    const supabase = buildSupabaseMock({
+      merchant: { vat_registration_status: 'registered' },
+      products: [
+        {
+          id: 'prod-1',
+          price: 10000,
+          vat_category_code: 'S',
+          vat_rate: 10,
+        },
+      ],
+      variants: [{ id: 'var-1', product_id: 'prod-1', price_override: 5000 }],
+    });
+
+    const result = await computeAgenticOrderTax({
+      items: [
+        {
+          product_id: 'prod-1',
+          variant_id: 'var-1',
+          offer_id: 'offer-1',
+          quantity: 1,
+        },
+      ],
+      merchantId: 'm-1',
+      offerPrices: new Map([['prod-1::offer-1', 4000]]),
+      supabase,
+    });
+
+    expect(result).toBe(500); // ROUND(5000 * 10 / 100, 2)
+  });
+
   it('skips items whose product cannot be resolved', async () => {
     // Defensive: a stale product_id in the payload doesn't blow up
     // — the RPC will reject with `invalid_items` separately. The

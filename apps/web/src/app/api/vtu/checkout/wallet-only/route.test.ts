@@ -66,11 +66,42 @@ vi.mock('@/lib/supabase/admin', () => ({
 // rebuild the supabase mock and have the route handler pick it up.
 async function callRoute(
   request: NextRequest
-): Promise<{ status: number; body: unknown }> {
+): Promise<{ status: number; body: unknown; headers: Headers }> {
   const { POST } = await import('./route');
   const response = await POST(request);
   const body = await response.json().catch(() => null);
-  return { status: response.status, body };
+  return { status: response.status, body, headers: response.headers };
+}
+
+/** Delete-chain starters issued against vtu_transactions (orphan-cleanup observation). */
+function vtuTransactionDeletes(): ReturnType<typeof vi.fn>[] {
+  const fromMock = supabaseMockRef.current?.from;
+  return (fromMock?.mock.results ?? [])
+    .map(
+      (result) =>
+        (result.value as { delete?: ReturnType<typeof vi.fn> } | undefined)
+          ?.delete
+    )
+    .filter(
+      (del): del is ReturnType<typeof vi.fn> => typeof del === 'function'
+    );
+}
+
+interface ClaimMapping {
+  key: string;
+  vtu_transaction_id: string;
+  customer_id: string;
+  merchant_id: string;
+  request_fingerprint: string;
+}
+
+interface ClaimResult {
+  data: Array<{
+    transaction_id: string;
+    idempotency_key: string;
+    created: boolean;
+  }> | null;
+  error: { message: string } | null;
 }
 
 interface IdempotencyRowState {
@@ -83,6 +114,140 @@ interface IdempotencyRowState {
   } | null;
   insertCalls: number;
   rpcCalls?: Array<{ fn: string; args: Record<string, unknown> }>;
+  /** claim_vtu_intent calls (the RPC replaced the direct insert). */
+  claimCalls?: number;
+  /** Per-test claim override; default below mirrors RPC semantics. */
+  claimImpl?: (
+    args: Record<string, string>
+  ) => ClaimResult | Promise<ClaimResult>;
+  /** In-memory mappings + txn statuses for the default claim impl. */
+  claimStore?: {
+    rows: ClaimMapping[];
+    txnStatus: Record<string, string>;
+    /** Terminal settle times (ISO) for the overlap fence; absent = legacy-stale. */
+    txnTerminalAt?: Record<string, string>;
+  };
+  /** Admission-proof overrides (null data / error fails admission). */
+  admissionTimestamp?: string | null;
+  admissionLive?: string[];
+  admissionError?: { message: string } | null;
+}
+
+/**
+ * Faithful sequential mirror of the claim_vtu_intent RPC: same key
+ * first (immutable mapping, scope/fingerprint asserted), then the
+ * earliest live-or-overlapping scope winner (terminals join only
+ * when settled at/after admission; legacy terminals without a
+ * stamp never join), else record. Joins persist the loser-key
+ * mapping. True two-backend race serialization is proven against
+ * live Postgres during development, not here — this mock
+ * interleaves deterministically.
+ */
+function defaultClaim(
+  state: IdempotencyRowState,
+  args: Record<string, string>
+): ClaimResult {
+  if (!state.claimStore) {
+    state.claimStore = { rows: [], txnStatus: {} };
+  }
+  const store = state.claimStore;
+  const key = args.p_key;
+  const fingerprint = args.p_fingerprint;
+  const transactionId = args.p_transaction_id;
+  const merchantId = args.p_merchant_id;
+  const customerId = args.p_customer_id;
+  const admittedAt = args.p_admitted_at ?? '';
+  const liveRaw: unknown = (args as Record<string, unknown>).p_admission_live;
+  const admissionLive = new Set(
+    Array.isArray(liveRaw)
+      ? liveRaw.filter((v): v is string => typeof v === 'string')
+      : []
+  );
+  const statusOf = (id: string) => store.txnStatus[id] ?? 'processing';
+  // Overlap fence mirror (Codex R3, R4): in-flight always joins;
+  // terminals join when live at admission (terminalized inside our
+  // window — the xact-start stamp may predate admission while the
+  // writer commits after it) or with a stamp at/after admission.
+  const joins = (id: string) => {
+    const status = statusOf(id);
+    if (status !== 'successful' && status !== 'failed') return true;
+    if (admissionLive.has(id)) return true;
+    const settledAt = store.txnTerminalAt?.[id];
+    return settledAt !== undefined && settledAt >= admittedAt;
+  };
+  const sameKey = store.rows.find((r) => r.key === key);
+  if (sameKey) {
+    if (
+      sameKey.merchant_id !== merchantId ||
+      sameKey.customer_id !== customerId
+    ) {
+      return {
+        data: null,
+        error: { message: 'claim_scope_mismatch: test collision' },
+      };
+    }
+    if (sameKey.request_fingerprint !== fingerprint) {
+      return {
+        data: null,
+        error: { message: 'claim_fingerprint_mismatch: test collision' },
+      };
+    }
+    state.row = { ...sameKey };
+    return {
+      data: [
+        {
+          transaction_id: sameKey.vtu_transaction_id,
+          idempotency_key: sameKey.key,
+          created: false,
+        },
+      ],
+      error: null,
+    };
+  }
+  const winner = store.rows.find(
+    (r) =>
+      r.merchant_id === merchantId &&
+      r.customer_id === customerId &&
+      r.request_fingerprint === fingerprint &&
+      joins(r.vtu_transaction_id)
+  );
+  if (winner) {
+    // Loser-key mapping mirror: the join records (loser key →
+    // winner transaction) so loser-key retries replay.
+    store.rows.push({
+      key,
+      vtu_transaction_id: winner.vtu_transaction_id,
+      customer_id: customerId,
+      merchant_id: merchantId,
+      request_fingerprint: fingerprint,
+    });
+    state.row = { ...winner };
+    return {
+      data: [
+        {
+          transaction_id: winner.vtu_transaction_id,
+          idempotency_key: winner.key,
+          created: false,
+        },
+      ],
+      error: null,
+    };
+  }
+  const row = {
+    key,
+    vtu_transaction_id: transactionId,
+    customer_id: customerId,
+    merchant_id: merchantId,
+    request_fingerprint: fingerprint,
+  };
+  store.rows.push(row);
+  state.row = { ...row };
+  return {
+    data: [
+      { transaction_id: transactionId, idempotency_key: key, created: true },
+    ],
+    error: null,
+  };
 }
 
 function buildSupabase(
@@ -181,6 +346,32 @@ function buildSupabase(
       }
       if (table === 'vtu_transactions') {
         return {
+          delete: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  select: vi.fn(() => ({
+                    maybeSingle: vi.fn().mockResolvedValue({
+                      data: { id: 'vtu-tx-new' },
+                      error: null,
+                    }),
+                  })),
+                })),
+              })),
+            })),
+          })),
+          update: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                select: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'vtu-tx-new' },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          })),
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               maybeSingle: vi.fn().mockImplementation(() => {
@@ -216,9 +407,34 @@ function buildSupabase(
         })),
       };
     }),
-    rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+    rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
-      return Promise.resolve({ data: null, error: null });
+      if (fn === 'vtu_admission_proof') {
+        const stamp =
+          state.admissionTimestamp === undefined
+            ? ADMISSION_TS
+            : state.admissionTimestamp;
+        return Promise.resolve({
+          data:
+            stamp === null
+              ? null
+              : [
+                  {
+                    admitted_at: stamp,
+                    live_transaction_ids: state.admissionLive ?? [],
+                  },
+                ],
+          error: state.admissionError ?? null,
+        });
+      }
+      if (fn !== 'claim_vtu_intent') {
+        return Promise.resolve({ data: null, error: null });
+      }
+      state.claimCalls = (state.claimCalls ?? 0) + 1;
+      if (state.claimImpl) {
+        return Promise.resolve(state.claimImpl(args));
+      }
+      return Promise.resolve(defaultClaim(state, args));
     }),
   };
 }
@@ -245,6 +461,9 @@ const VALID_BODY_FINGERPRINT = computeVtuWalletRequestFingerprint({
 } as Parameters<typeof computeVtuWalletRequestFingerprint>[0]);
 
 const VALID_KEY = '11111111-2222-3333-4444-555555555555';
+
+/** Fixed DB-clock admission stamp returned by the proof mock. */
+const ADMISSION_TS = '2026-10-20T05:00:00.000Z';
 
 function makeRequest({
   body = VALID_BODY,
@@ -475,7 +694,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       supabase: expect.anything(),
       transactionId: 'vtu-tx-new',
     });
-    expect(state.insertCalls).toBe(1);
+    expect(state.claimCalls).toBe(1);
+    // The claim RPC replaced the direct insert: no table write.
+    expect(state.insertCalls).toBe(0);
     // No `from('transactions')` write.
     const fromCalls = (
       supabaseMockRef.current?.from as ReturnType<typeof vi.fn>
@@ -583,6 +804,41 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
   });
 
+  it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {
+    // Codex P2: the replay path never uses the stamp or the live
+    // set, so a proof-RPC outage must not 500 an already-debited
+    // result — the existing row short-circuits admission.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      admissionError: { message: 'proof rpc down' },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockFulfill).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      transactionId: 'vtu-tx-existing',
+    });
+  });
+
   it('idempotent replay: overlays the current-attempt phone and reference before re-driving', async () => {
     // Attempt 1 stored no phone (profile not yet hydrated) and its
     // validation reference has since expired; the retry carries
@@ -642,7 +898,17 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         },
       },
     ]);
-    expect(state.rpcCalls).toEqual([]);
+    // Admission proof fires on the replay path too (concurrent
+    // with the key lookup; unused when a mapping exists).
+    expect(state.rpcCalls).toEqual([
+      {
+        fn: 'vtu_admission_proof',
+        args: {
+          p_merchant_slug: 'ogabassey',
+          p_fingerprint: VALID_BODY_FINGERPRINT,
+        },
+      },
+    ]);
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: expect.anything(),
       transactionId: 'vtu-tx-existing',
@@ -706,7 +972,17 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           },
         },
       ]);
-      expect(state.rpcCalls).toEqual([]);
+      // Admission proof fires on the replay path too (concurrent
+      // with the key lookup; unused when a mapping exists).
+      expect(state.rpcCalls).toEqual([
+        {
+          fn: 'vtu_admission_proof',
+          args: {
+            p_merchant_slug: 'ogabassey',
+            p_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        },
+      ]);
       expect(mockFulfill).toHaveBeenCalledWith({
         supabase: expect.anything(),
         transactionId: 'vtu-tx-existing',
@@ -759,10 +1035,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
   });
 
-  it('records the request fingerprint on the fresh-key insert path', async () => {
-    // Pin that the insert payload includes request_fingerprint so a
-    // future regression that drops the column from the insert is
-    // caught — without it, every replay would 409.
+  it('records the request fingerprint on the fresh-key claim path', async () => {
+    // Pin that the claim payload includes the fingerprint so a
+    // future regression that drops it from the RPC args is caught —
+    // without it, every replay would 409.
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     supabaseMockRef.current = buildSupabase(state);
     mockPrepare.mockResolvedValue({
@@ -781,144 +1057,73 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     );
 
     expect(status).toBe(200);
-    expect(state.insertCalls).toBe(1);
+    expect(state.claimCalls).toBe(1);
+    expect(state.insertCalls).toBe(0);
     expect(state.row?.request_fingerprint).toBe(VALID_BODY_FINGERPRINT);
+    const claimCall = (
+      supabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>
+    ).mock.calls
+      .map((call) => call as [string, Record<string, string>])
+      .find(([fn]) => fn === 'claim_vtu_intent');
+    expect(claimCall?.[1]).toMatchObject({
+      p_key: VALID_KEY,
+      p_fingerprint: VALID_BODY_FINGERPRINT,
+      p_transaction_id: 'vtu-tx-new',
+      p_merchant_id: 'merchant-1',
+      p_customer_id: 'customer-1',
+    });
   });
 
-  it('PK-race recovery: refuses to fulfill when the racing winner row is owned by another customer', async () => {
-    // Scenario: two customers happen to submit with the same
-    // Idempotency-Key. Customer-1's preparePendingVtuTransaction
-    // creates vtu-tx-mine; the parallel Customer-2 wins the PK race
-    // on `vtu_idempotency_keys.key`. Customer-1's insert fails;
-    // Customer-1's recovery branch re-reads the table and finds the
-    // row owned by Customer-2. Without an ownership check there,
-    // Customer-1's HTTP response would carry Customer-2's
-    // fulfillment payload — privilege-escalation-shaped.
-    let lookupCallCount = 0;
-    let insertCallCount = 0;
-    const otherRow = {
-      key: VALID_KEY,
-      vtu_transaction_id: 'vtu-tx-other-customer',
-      customer_id: 'OTHER-CUSTOMER',
-      merchant_id: 'merchant-1',
-    };
-    supabaseMockRef.current = {
-      from: vi.fn((table: string) => {
-        if (table === 'vtu_idempotency_keys') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn(() => {
-                  lookupCallCount += 1;
-                  // First lookup: empty (Customer-1 enters the
-                  // "fresh-key" branch). Second lookup (post-PK
-                  // failure recovery): the racing winner's row.
-                  return Promise.resolve({
-                    data: lookupCallCount === 1 ? null : otherRow,
-                    error: null,
-                  });
-                }),
-              })),
-            })),
-            insert: vi.fn(() => {
-              insertCallCount += 1;
-              return Promise.resolve({
-                data: null,
-                error: {
-                  message: 'duplicate key value violates unique constraint',
-                },
-              });
-            }),
-          };
-        }
-        if (table === 'merchants') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: { id: 'merchant-1' },
-                  error: null,
-                }),
-              })),
-            })),
-          };
-        }
-        if (table === 'customers') {
-          // R128 replay-owner claim: single-eq read for a linked row.
-          const customerMaybeSingle = vi.fn().mockResolvedValue({
-            data: {
-              id: 'customer-1',
-              email: 'c@example.com',
-              user_id: AUTH_USER_ID,
-            },
-            error: null,
-          });
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  maybeSingle: customerMaybeSingle,
-                })),
-                maybeSingle: customerMaybeSingle,
-              })),
-            })),
-          };
-        }
-        if (table === 'vtu_transactions') {
-          return {
-            delete: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  eq: vi.fn(() => ({
-                    select: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: 'vtu-orphan' },
-                        error: null,
-                      }),
-                    })),
-                  })),
-                })),
-              })),
-            })),
-          };
-        }
-        return {
-          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
-        };
+  it('claim race: refuses when the key is mapped under another scope (400)', async () => {
+    // Same-key collision across scopes (key-UUID collision in
+    // practice — the route's ownership checks already reject
+    // cross-tenant keys before the claim). The RPC asserts BOTH
+    // scope parts (merchant + customer) in one condition, so one
+    // route-level test pins the mapping; the DB contract pins
+    // merchant isolation separately. claim_scope_mismatch maps to
+    // the same cross-customer 400 the replay path returns — never
+    // the winner's fulfillment payload (privilege-escalation-shaped).
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimImpl: () => ({
+        data: null,
+        error: { message: 'claim_scope_mismatch: test collision' },
       }),
-      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
     };
+    supabaseMockRef.current = buildSupabase(state);
 
     const { status, body } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
-    expect(insertCallCount).toBe(1);
-    expect(lookupCallCount).toBe(2);
-    // The recovery branch MUST refuse to fulfill the winning row,
-    // returning the same cross-customer-collision 400 the replay
-    // path returns.
+    expect(state.claimCalls).toBe(1);
     expect(status).toBe(400);
     expect(body).toMatchObject({
       error: expect.stringMatching(/idempotency/i),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
+    // Rejection cleanup (Codex R1 P2): the certain-abort claim
+    // orphaned our prepared row — the guarded delete targeted it.
+    const deletes = vtuTransactionDeletes();
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toHaveBeenCalledTimes(1);
+    const firstEq = deletes[0]?.mock.results[0]?.value as {
+      eq?: ReturnType<typeof vi.fn>;
+    };
+    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
   });
 
-  it('PK-race recovery: marks the orphan failed when its delete fails, then replays the winner', async () => {
-    // Muse R55 HIGH: log-and-continue on a failed orphan delete
-    // would leave a pending orphan the client never references. The
-    // terminal failed mark closes it, and the cleanup outcome never
-    // masks the winner's replay.
-    let lookupCallCount = 0;
-    const winnerRow = {
-      key: VALID_KEY,
-      vtu_transaction_id: 'vtu-tx-winner',
-      customer_id: 'customer-1',
-      merchant_id: 'merchant-1',
-      request_fingerprint: VALID_BODY_FINGERPRINT,
-    };
+  it('claim join: marks the orphan failed when its delete fails, then replays the winner', async () => {
+    // Loser path: our key joins another key's in-flight transaction.
+    // Our prepared row is discarded via the existing orphan cleanup
+    // (Muse R55 HIGH: a failed delete falls back to the terminal
+    // failed mark — never log-and-continue), the winner is replayed,
+    // and the joined response carries the winner key for client
+    // adoption. The cleanup outcome never masks the replay.
+    const WINNER_KEY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const markPayloads: Record<string, unknown>[] = [];
+    const claimArgs: Record<string, unknown>[] = [];
     mockPrepare.mockResolvedValue({
       transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
       customer: { id: 'customer-1', email: 'c@example.com' },
@@ -932,26 +1137,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     supabaseMockRef.current = {
       from: vi.fn((table: string) => {
         if (table === 'vtu_idempotency_keys') {
+          // Fresh key: the PK lookup misses; the claim joins.
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                maybeSingle: vi.fn(() => {
-                  lookupCallCount += 1;
-                  return Promise.resolve({
-                    data: lookupCallCount === 1 ? null : winnerRow,
-                    error: null,
-                  });
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
                 }),
               })),
             })),
-            insert: vi.fn(() =>
-              Promise.resolve({
-                data: null,
-                error: {
-                  message: 'duplicate key value violates unique constraint',
-                },
-              })
-            ),
           };
         }
         if (table === 'merchants') {
@@ -1050,14 +1245,45 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      rpc: vi.fn((fn: string, args: Record<string, unknown>) => {
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
+        }
+        if (fn === 'claim_vtu_intent') {
+          claimArgs.push(args);
+          return Promise.resolve({
+            data: [
+              {
+                transaction_id: 'vtu-tx-winner',
+                idempotency_key: WINNER_KEY,
+                created: false,
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }),
     };
 
-    const { status } = await callRoute(
+    const consoleInfoSpy = vi
+      .spyOn(console, 'info')
+      .mockImplementation(() => {});
+
+    const { status, body, headers } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
     expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-WINNER' });
     expect(markPayloads).toHaveLength(1);
     expect(markPayloads[0]).toMatchObject({
       error_message: expect.stringContaining('no charge was made'),
@@ -1066,26 +1292,33 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-winner' })
     );
+    // Winner-key wire: the joined response carries the winner
+    // key so client retries converge on one key.
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(WINNER_KEY);
+    // Admission wire (Codex R3 P1, R4 P1): the claim carries
+    // the DB-clock admission stamp plus the admission-liveness
+    // snapshot for the overlap fence.
+    expect(claimArgs).toHaveLength(1);
+    expect(claimArgs[0]).toMatchObject({
+      p_admitted_at: ADMISSION_TS,
+      p_admission_live: [],
+    });
+    // Join telemetry carries transaction IDs only: the winner key
+    // is an unguessable replay credential (Codex R2 P2, R108).
+    expect(consoleInfoSpy).toHaveBeenCalled();
+    for (const call of consoleInfoSpy.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(WINNER_KEY);
+    }
+    consoleInfoSpy.mockRestore();
   });
 
-  it('PK-race recovery: skips orphan cleanup when the re-read winner is our own row', async () => {
-    // Codex R124 P2: an idempotency-key INSERT whose response was
-    // lost commits anyway — the "loser" is the mapped winner.
-    // Cleaning up our own row would delete it (spurious terminal
-    // 400 on replay) or, when the delete fails and the failed-mark
-    // lands, strand the key on a failed row whose
-    // no_collection_evidence marker misses the refund
-    // dispatcher's no_charge shortcut (500 stuck-loop: both
-    // clients retain on 5xx). The branch must re-read first and
-    // replay our own row untouched.
-    let lookupCallCount = 0;
-    const ownRow = {
-      key: VALID_KEY,
-      vtu_transaction_id: 'vtu-tx-mine',
-      customer_id: 'customer-1',
-      merchant_id: 'merchant-1',
-      request_fingerprint: VALID_BODY_FINGERPRINT,
-    };
+  it('claim twin: same-transaction mapping fulfills directly without cleanup', async () => {
+    // Same key re-claimed (lost-response re-entry) or a PK-race
+    // twin: the claim returns our own prepared transaction
+    // (created=false, same txn id). No orphan exists, so cleanup
+    // must NOT run (deleting our own row would strand the key),
+    // and our row is fulfilled directly. No winner-key wire
+    // either: the client's key is already the mapped key.
     const deleteSpy = vi.fn(() => ({
       eq: vi.fn(() => ({
         eq: vi.fn(() => ({
@@ -1124,25 +1357,16 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     supabaseMockRef.current = {
       from: vi.fn((table: string) => {
         if (table === 'vtu_idempotency_keys') {
+          // Fresh key: the PK lookup misses; the claim adopts.
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
-                maybeSingle: vi.fn(() => {
-                  lookupCallCount += 1;
-                  return Promise.resolve({
-                    data: lookupCallCount === 1 ? null : ownRow,
-                    error: null,
-                  });
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
                 }),
               })),
             })),
-            // The insert committed; only its response was lost.
-            insert: vi.fn(() =>
-              Promise.resolve({
-                data: null,
-                error: { message: 'connection reset' },
-              })
-            ),
           };
         }
         if (table === 'vtu_transactions') {
@@ -1186,27 +1410,312 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      rpc: vi.fn((fn: string) => {
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
+        }
+        if (fn === 'claim_vtu_intent') {
+          return Promise.resolve({
+            data: [
+              {
+                transaction_id: 'vtu-tx-mine',
+                idempotency_key: VALID_KEY,
+                created: false,
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }),
     };
 
-    const { status } = await callRoute(
+    const { status, headers } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
-    expect(lookupCallCount).toBe(2);
     expect(status).toBe(200);
-    // Our own row is replayed, never cleaned up.
+    // Our own row is fulfilled, never cleaned up.
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(updateSpy).not.toHaveBeenCalled();
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-mine' })
     );
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBeNull();
   });
 
-  it('non-race insert failure: 500s without logging the raw idempotency key', async () => {
+  it('claim race: concurrent checkouts with distinct keys join a single transaction', async () => {
+    // The double-debit window, closed: two submits with distinct
+    // keys + the same fingerprint (second tab/device, registry
+    // loss) interleave. Exactly one mapping row is recorded; both
+    // responses resolve the SAME transaction (the loser replays
+    // the winner after discarding its prepared row), so
+    // fulfillment — idempotent per transaction id — debits once.
+    const KEY_A = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
+    const KEY_B = 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb';
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    supabaseMockRef.current = buildSupabase(state);
+    mockPrepare
+      .mockResolvedValueOnce({
+        transaction: { id: 'vtu-tx-a', merchant_id: 'merchant-1' },
+        customer: { id: 'customer-1', email: 'c@example.com' },
+        merchant: { id: 'merchant-1' },
+      })
+      .mockResolvedValueOnce({
+        transaction: { id: 'vtu-tx-b', merchant_id: 'merchant-1' },
+        customer: { id: 'customer-1', email: 'c@example.com' },
+        merchant: { id: 'merchant-1' },
+      });
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-RACE',
+      status: 'successful',
+    });
+
+    const [resA, resB] = await Promise.all([
+      callRoute(makeRequest({ idempotencyKey: KEY_A })),
+      callRoute(makeRequest({ idempotencyKey: KEY_B })),
+    ]);
+
+    expect(resA.status).toBe(200);
+    expect(resB.status).toBe(200);
+    expect(state.claimCalls).toBe(2);
+    // Winner row + loser-key mapping: the second claim joined (and
+    // recorded its loser key) instead of starting a new purchase.
+    expect(state.claimStore?.rows).toHaveLength(2);
+    const winnerTxn = state.claimStore?.rows[0]?.vtu_transaction_id;
+    // Both checkouts drove the SAME transaction (the winner
+    // fulfills; the loser re-drives idempotently via replay).
+    expect(mockFulfill).toHaveBeenCalledTimes(2);
+    for (const call of mockFulfill.mock.calls) {
+      expect(call[0]).toMatchObject({ transactionId: winnerTxn });
+    }
+    // Exactly one response carries the wire (the loser's).
+    const wires = [resA, resB].map((r) =>
+      r.headers.get('X-Vtu-Canonical-Idempotency-Key')
+    );
+    expect(wires.filter(Boolean)).toHaveLength(1);
+    expect(wires).toContain(state.claimStore?.rows[0]?.key);
+  });
+
+  it.each([
+    'successful',
+    'failed',
+  ])('claim after terminal %s: starts a new purchase instead of joining', async (terminalStatus) => {
+    // Repeat purchases share fingerprints: once the prior
+    // occurrence terminalized, a new key MUST create (joining a
+    // success would under-deliver; joining a failure would loop
+    // — failures rotate keys).
+    const OLD_KEY = 'cccccccc-3333-4333-8333-cccccccccccc';
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimStore: {
+        rows: [
+          {
+            key: OLD_KEY,
+            vtu_transaction_id: 'vtu-tx-old',
+            customer_id: 'customer-1',
+            merchant_id: 'merchant-1',
+            request_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        ],
+        txnStatus: { 'vtu-tx-old': terminalStatus },
+      },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-NEW',
+      status: 'successful',
+    });
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-new' })
+    );
+    expect(state.claimStore?.rows).toHaveLength(2);
+  });
+
+  it('claim overlapping terminal: joins instead of starting a new purchase', async () => {
+    // Overlap fence (Codex R3 P1): the prior occurrence settled
+    // AFTER this operation was admitted (a concurrent duplicate
+    // delayed in preparation) — the claim joins it instead of
+    // debiting twice. Settle stamp >= admission stamp.
+    const OLD_KEY = 'dddddddd-4444-5444-8444-dddddddddddd';
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimStore: {
+        rows: [
+          {
+            key: OLD_KEY,
+            vtu_transaction_id: 'vtu-tx-old',
+            customer_id: 'customer-1',
+            merchant_id: 'merchant-1',
+            request_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        ],
+        txnStatus: { 'vtu-tx-old': 'successful' },
+        txnTerminalAt: { 'vtu-tx-old': ADMISSION_TS },
+      },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body, headers } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    // Joined the overlapping terminal (settled at admission):
+    // winner replayed, loser key mapped, wire carried.
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-old' })
+    );
+    expect(state.claimStore?.rows).toHaveLength(2);
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(OLD_KEY);
+  });
+
+  it('claim terminal live at admission: joins despite a pre-admission settle stamp', async () => {
+    // Commit-safe fence (Codex R4 P1): the winner's settle stamp
+    // predates our admission (writer xact started first) but its
+    // commit landed inside our window — it was live in our
+    // admission snapshot, so the claim joins instead of debiting
+    // twice. The stamp alone would misread it as stale.
+    const OLD_KEY = 'eeeeeeee-5555-6555-8555-eeeeeeeeeeee';
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      admissionLive: ['vtu-tx-old'],
+      claimStore: {
+        rows: [
+          {
+            key: OLD_KEY,
+            vtu_transaction_id: 'vtu-tx-old',
+            customer_id: 'customer-1',
+            merchant_id: 'merchant-1',
+            request_fingerprint: VALID_BODY_FINGERPRINT,
+          },
+        ],
+        txnStatus: { 'vtu-tx-old': 'successful' },
+        txnTerminalAt: { 'vtu-tx-old': '2026-10-20T04:00:00.000Z' },
+      },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body, headers } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-old' })
+    );
+    expect(state.claimStore?.rows).toHaveLength(2);
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBe(OLD_KEY);
+  });
+
+  it('claim race: same key mapped with another fingerprint returns 409', async () => {
+    // Same-key changed-payload race (form edited between submits):
+    // the RPC raises claim_fingerprint_mismatch; the route maps it
+    // to the same rotation-instructing 409 the replay path returns.
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimImpl: () => ({
+        data: null,
+        error: { message: 'claim_fingerprint_mismatch: test collision' },
+      }),
+    };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(409);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/different request payload/),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+    // Rejection cleanup (Codex R1 P2): the certain-abort claim
+    // orphaned our prepared row — the guarded delete targeted it.
+    const deletes = vtuTransactionDeletes();
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toHaveBeenCalledTimes(1);
+    const firstEq = deletes[0]?.mock.results[0]?.value as {
+      eq?: ReturnType<typeof vi.fn>;
+    };
+    expect(firstEq?.eq?.mock.calls[0]).toEqual(['id', 'vtu-tx-new']);
+  });
+
+  it('fresh claim: success response carries no canonical-key wire', async () => {
+    // The client knows its own key on the fresh path; the wire
+    // exists only for joins (clients converge retries on it).
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status, headers } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(headers.get('X-Vtu-Canonical-Idempotency-Key')).toBeNull();
+  });
+
+  it('claim with no mapping row 500s (defensive: RPC returns exactly one row)', async () => {
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      claimImpl: () => ({ data: [], error: null }),
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(mockFulfill).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('claim transport failure: 500s without logging the raw idempotency key, no blind cleanup', async () => {
     // Muse R108 MEDIUM: the key is the unguessable replay
     // credential — error logs and responses must carry the
-    // prepared transaction id, never the key.
+    // prepared transaction id, never the key. Deliberate change
+    // from the old R131 orphan-delete: a failed claim response may
+    // still have committed, so blind cleanup could delete a
+    // REFERENCED row (CASCADE kills the mapping) — the route does
+    // nothing but 500, and the retained-key retry is safe via the
+    // RPC's same-key-first contract.
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -1236,12 +1745,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
                 }),
               })),
             })),
-            insert: vi.fn(() =>
-              Promise.resolve({
-                data: null,
-                error: { message: 'connection reset' },
-              })
-            ),
           };
         }
         if (table === 'merchants') {
@@ -1286,7 +1789,26 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
       }),
-      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      rpc: vi.fn((fn: string) => {
+        if (fn === 'vtu_admission_proof') {
+          return Promise.resolve({
+            data: [
+              {
+                admitted_at: ADMISSION_TS,
+                live_transaction_ids: [],
+              },
+            ],
+            error: null,
+          });
+        }
+        if (fn === 'claim_vtu_intent') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'connection reset' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }),
     };
 
     const { status, body } = await callRoute(
@@ -1299,12 +1821,38 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       expect(JSON.stringify(call)).not.toContain(VALID_KEY);
     }
     expect(JSON.stringify(body)).not.toContain(VALID_KEY);
-    // Muse R131 MEDIUM (orphan on non-race failure): the re-read
-    // returned null (no winner), so the prepared row is a genuine
-    // orphan — the branch verified-deletes it before the 500 (the
-    // `!==` condition covers null; the comment above the branch
-    // documents the genuine-orphan case).
-    expect(deleteSpy).toHaveBeenCalled();
+    // No blind cleanup: the claim may have committed.
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('admission proof failure: 500s before preparing (nothing to orphan)', async () => {
+    // Without the admission proof the RPC cannot fence the
+    // overlap, so the route fails closed BEFORE prepare — no
+    // prepared row exists to orphan, and the client retries with
+    // the same key (Codex R3 P1).
+    const state: IdempotencyRowState = {
+      row: null,
+      insertCalls: 0,
+      admissionError: { message: 'connection reset' },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/admit/i),
+    });
+    expect(JSON.stringify(body)).not.toContain(VALID_KEY);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(state.claimCalls).toBeFalsy();
     expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
@@ -1534,77 +2082,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(status).toBe(400);
     expect(body).toMatchObject({
       error: expect.stringMatching(/no longer exists/i),
-    });
-    expect(mockFulfill).not.toHaveBeenCalled();
-  });
-
-  it('PK-race recovery: refuses to fulfill when the racing winner row belongs to another storefront', async () => {
-    let lookupCallCount = 0;
-    const otherRow = {
-      key: VALID_KEY,
-      vtu_transaction_id: 'vtu-tx-other-merchant',
-      customer_id: 'customer-1',
-      merchant_id: 'merchant-OTHER',
-      request_fingerprint: VALID_BODY_FINGERPRINT,
-    };
-    supabaseMockRef.current = {
-      from: vi.fn((table: string) => {
-        if (table === 'vtu_idempotency_keys') {
-          return {
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn(() => {
-                  lookupCallCount += 1;
-                  return Promise.resolve({
-                    data: lookupCallCount === 1 ? null : otherRow,
-                    error: null,
-                  });
-                }),
-              })),
-            })),
-            insert: vi.fn(() =>
-              Promise.resolve({
-                data: null,
-                error: {
-                  message: 'duplicate key value violates unique constraint',
-                },
-              })
-            ),
-          };
-        }
-        if (table === 'vtu_transactions') {
-          return {
-            delete: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  eq: vi.fn(() => ({
-                    select: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: 'vtu-orphan' },
-                        error: null,
-                      }),
-                    })),
-                  })),
-                })),
-              })),
-            })),
-          };
-        }
-        return {
-          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
-        };
-      }),
-      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
-    };
-
-    const { status, body } = await callRoute(
-      makeRequest({ idempotencyKey: VALID_KEY })
-    );
-
-    expect(lookupCallCount).toBe(2);
-    expect(status).toBe(400);
-    expect(body).toMatchObject({
-      error: expect.stringMatching(/storefront/i),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
   });

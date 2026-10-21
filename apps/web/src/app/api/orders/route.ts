@@ -16,7 +16,6 @@ import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding'
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
-  CanonicalOrderSubtotalLoadError,
   computeCanonicalOrderSubtotal,
   isCanonicalOrderSubtotalUuidError,
 } from '@/lib/checkout/canonical-order-subtotal';
@@ -34,12 +33,17 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { conditionOfferUnavailableResponse } from '@/lib/checkout/order-condition-response';
+import type { OrderIdempotencyPayloadInput } from '@/lib/checkout/order-idempotency';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { prepareCheckoutQuoteDestination } from '@/lib/checkout/prepare-checkout-quote-destination';
 import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
+import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { resolveEffectiveCheckoutShippingProvider } from '@/lib/checkout/resolve-effective-checkout-shipping-provider';
+import { resolveOfferReplayForOrderRoute } from '@/lib/checkout/resolve-idempotent-offer-replay-route';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -81,7 +85,6 @@ import { getClientIdentifier } from '@/lib/rate-limit';
 import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
-import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
   getMerchantShippingRates,
   MerchantShippingRatesLoadError,
@@ -92,10 +95,6 @@ import type {
 } from '@/lib/shipping/merchant-rates/types';
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
-import {
-  enrichShippingAddressWithQuoteDestination,
-  OrderQuoteDestinationMismatchError,
-} from '@/lib/shipping/order-quote-destination';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
@@ -104,9 +103,40 @@ function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
 }
 
+// Both storefront clients mint high-entropy keys (web: UUID, native: 16
+// random bytes encoded), but the header is attacker-controlled: a short or
+// colliding key lets one shopper replay another's pending order. Reject a
+// PRESENT-but-degenerate key fail-closed instead of downgrading it to an
+// anonymous retry. Bounds mirror the orders INSERT trigger and the replay
+// probe so route, RPC, and probe agree on what a key is.
+export const CHECKOUT_IDEMPOTENCY_KEY_MIN_BYTES = 16;
+export const CHECKOUT_IDEMPOTENCY_KEY_MAX_BYTES = 128;
+
 function getRequestIdempotencyKey(request: NextRequest) {
   const headerValue = request.headers.get('idempotency-key')?.trim();
   return headerValue ? headerValue : null;
+}
+
+function validateRequestIdempotencyKey(
+  requestIdempotencyKey: string | null
+): NextResponse | null {
+  if (requestIdempotencyKey === null) {
+    return null;
+  }
+  const keyBytes = Buffer.byteLength(requestIdempotencyKey, 'utf8');
+  if (
+    keyBytes < CHECKOUT_IDEMPOTENCY_KEY_MIN_BYTES ||
+    keyBytes > CHECKOUT_IDEMPOTENCY_KEY_MAX_BYTES
+  ) {
+    return NextResponse.json(
+      {
+        code: 'CHECKOUT_IDEMPOTENCY_KEY_INVALID',
+        error: 'The checkout idempotency key is malformed',
+      },
+      { status: 400 }
+    );
+  }
+  return null;
 }
 
 function getSavingsRedemptionIdempotencyKey({
@@ -122,6 +152,7 @@ function getSavingsRedemptionIdempotencyKey({
     product_id: string;
     quantity: number;
     variant_id?: string | null;
+    offer_id?: string | null;
   }>;
   merchantId: string;
   requestIdempotencyKey: string | null;
@@ -132,9 +163,15 @@ function getSavingsRedemptionIdempotencyKey({
     return `order:${requestIdempotencyKey}:savings`;
   }
 
+  // The offer id distinguishes two savings orders for different offers of
+  // the same product (same quantity/goal/amount): without it both
+  // requests generate the same redemption key and the second fails on the
+  // unique (merchant_id, idempotency_key) constraint. Mirrors the main
+  // checkout idempotency payload, which carries the raw body offer ids.
   const itemFingerprint = items
     .map(
-      (item) => `${item.product_id}:${item.variant_id ?? ''}:${item.quantity}`
+      (item) =>
+        `${item.product_id}:${item.variant_id ?? ''}:${item.offer_id ?? ''}:${item.quantity}`
     )
     .join('|');
   return [
@@ -166,19 +203,6 @@ type QuizVoucherItemCandidate = {
   voucher_token?: unknown;
 };
 type OrderCreateItem = OrderCreateInput['items'][number];
-type OrderQuoteValidationPayloadItem = {
-  price?: number | string | null;
-  product_id?: string | null;
-  quantity: number;
-};
-type OrderQuoteValidationProductRow = {
-  commodity_code?: string | null;
-  dimensions?: unknown;
-  id: string;
-  name: string | null;
-  weight_unit?: string | null;
-  weight_value?: number | string | null;
-};
 type VoucherPaymentStatusItem = {
   assurance_fee?: number | string | null;
   price: number | string;
@@ -248,59 +272,6 @@ function getVoucherOrderAmountDueBeforeGateway({
       itemsTotal + shippingFee + taxAmount + giftWrappingFee - discountAmount
     ),
     0
-  );
-}
-
-async function buildOrderQuoteValidationItems({
-  items,
-  merchantId,
-  supabase,
-}: {
-  items: OrderQuoteValidationPayloadItem[];
-  merchantId: string;
-  supabase: ReturnType<typeof createClient>;
-}) {
-  const productIds = Array.from(
-    new Set(
-      items
-        .map((item) => item.product_id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0)
-    )
-  );
-
-  if (productIds.length === 0) {
-    return items.map((item) => ({ name: null, quantity: item.quantity }));
-  }
-
-  const { data: products, error } = await supabase
-    .from('products')
-    .select('id, name, weight_value, weight_unit, dimensions, commodity_code')
-    .eq('merchant_id', merchantId)
-    .in('id', productIds)
-    .returns<OrderQuoteValidationProductRow[]>();
-
-  if (error || !products) {
-    throw new CanonicalOrderSubtotalLoadError(
-      'Unable to load products for international quote validation',
-      { cause: error ?? undefined },
-      (error as { code?: string } | null | undefined)?.code
-    );
-  }
-
-  const productMap = new Map(products.map((product) => [product.id, product]));
-  return toInternationalQuoteValidationItemsFromOrder(
-    items.map((item) => {
-      const product = item.product_id
-        ? (productMap.get(item.product_id) ?? null)
-        : null;
-      return {
-        name: product?.name ?? null,
-        price: item.price ?? null,
-        quantity: item.quantity,
-        product,
-      };
-    }),
-    { includeValue: true }
   );
 }
 
@@ -560,6 +531,14 @@ export async function POST(request: NextRequest) {
     const requestIdempotencyKey = hasVoucherItem
       ? null
       : getRequestIdempotencyKey(request);
+    // Voucher orders drop the header key entirely, so a degenerate key is
+    // only dangerous on the path that uses it.
+    if (!hasVoucherItem) {
+      const invalidKeyResponse = validateRequestIdempotencyKey(
+        requestIdempotencyKey
+      );
+      if (invalidKeyResponse) return invalidKeyResponse;
+    }
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
     if (payment_method === 'uba_redvault') {
       const availability = getRedvaultPaymentAvailability();
@@ -1022,6 +1001,7 @@ export async function POST(request: NextRequest) {
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
+        offer_id: item.offerId || item.offer_id,
         variant_name: variantName ?? undefined,
         variant_attributes:
           item.variantAttributes || item.variant_attributes || {},
@@ -1039,6 +1019,27 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const offerReplayResult = await resolveOfferReplayForOrderRoute({
+      merchantId: merchant_id,
+      orderItemsPayload,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (!offerReplayResult.ok) {
+      return offerReplayResult.response;
+    }
+    const {
+      isIdempotentOfferOrderReplay,
+      liveOfferConditions,
+      liveOfferPrices,
+      storedReplayDiscountAmount,
+      storedReplayTaxAmount,
+    } = offerReplayResult.value;
+
+    // Offer assurance fees recompute below, after the negotiation preflight
+    // validates (and possibly prices) the client basis: the fee follows the
+    // server-validated charged unit price, never the raw client price.
 
     let quizVoucherRouteProof: ReturnType<
       typeof createQuizRpcServerProof
@@ -1223,54 +1224,64 @@ export async function POST(request: NextRequest) {
     const isConditionReplay = replaySnapshot !== null;
     const conditionPriceOverrides = replaySnapshot?.conditionPriceOverrides;
     let serverComputedTaxAmount: number;
-    try {
-      serverComputedTaxAmount = await computeAgenticOrderTax({
-        allowUnavailableConditionPrices: isConditionReplay,
-        conditionPriceOverrides,
-        items: items.map((item) => ({
-          product_id: item.product_id || item.productId || item.id,
-          quantity: item.quantity,
-          variant_id: item.variantId || item.variant_id,
-        })),
-        merchantId: merchant_id,
-        supabase,
-      });
-    } catch (taxError) {
-      if (taxError instanceof OrderConditionUnavailableError)
-        return conditionOfferUnavailableResponse();
-      // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
-      // validates as `string`) cascade into Postgres's UUID parser
-      // as code 22P02. Pre-route-side-recompute, the RPC's own
-      // 22P02 path got mapped via `clientErrorCodes` to a 400. We
-      // must preserve that semantic so bad client payloads don't
-      // look like server outages.
-      if (isTaxComputeUuidError(taxError)) {
-        logger.warn({
+    if (storedReplayTaxAmount != null) {
+      // F1 replay: the stored order's VAT was computed from the offer
+      // price live at first validation. Recomputing now would fall back
+      // to parent prices (empty liveOfferPrices), drift tax_amount, and
+      // turn the retry into an idempotency conflict instead of replay.
+      serverComputedTaxAmount = storedReplayTaxAmount;
+    } else {
+      try {
+        serverComputedTaxAmount = await computeAgenticOrderTax({
+          allowUnavailableConditionPrices: isConditionReplay,
+          conditionPriceOverrides,
+          items: items.map((item) => ({
+            product_id: item.product_id || item.productId || item.id,
+            quantity: item.quantity,
+            variant_id: item.variantId || item.variant_id,
+            offer_id: item.offerId || item.offer_id,
+          })),
+          merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
+          supabase,
+        });
+      } catch (taxError) {
+        if (taxError instanceof OrderConditionUnavailableError)
+          return conditionOfferUnavailableResponse();
+        // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
+        // validates as `string`) cascade into Postgres's UUID parser
+        // as code 22P02. Pre-route-side-recompute, the RPC's own
+        // 22P02 path got mapped via `clientErrorCodes` to a 400. We
+        // must preserve that semantic so bad client payloads don't
+        // look like server outages.
+        if (isTaxComputeUuidError(taxError)) {
+          logger.warn({
+            error: taxError,
+            merchantId: merchant_id,
+            message: 'Storefront order received malformed item identifier',
+          });
+          // Match the RPC error mapping below (`{ error: 'Failed to
+          // create order', details: <stable code> }`) AND share the
+          // `invalid_items` identifier with the agentic dispatch's
+          // 22P02 path — review findings on PR #1622 round 7.
+          return NextResponse.json(
+            {
+              error: 'Failed to create order',
+              details: 'invalid_items',
+            },
+            { status: 400 }
+          );
+        }
+        logger.error({
           error: taxError,
           merchantId: merchant_id,
-          message: 'Storefront order received malformed item identifier',
+          message: 'Storefront order VAT recompute failed',
         });
-        // Match the RPC error mapping below (`{ error: 'Failed to
-        // create order', details: <stable code> }`) AND share the
-        // `invalid_items` identifier with the agentic dispatch's
-        // 22P02 path — review findings on PR #1622 round 7.
         return NextResponse.json(
-          {
-            error: 'Failed to create order',
-            details: 'invalid_items',
-          },
-          { status: 400 }
+          { code: 'TAX_COMPUTE_FAILED', error: 'Unable to compute order tax' },
+          { status: 500 }
         );
       }
-      logger.error({
-        error: taxError,
-        merchantId: merchant_id,
-        message: 'Storefront order VAT recompute failed',
-      });
-      return NextResponse.json(
-        { code: 'TAX_COMPUTE_FAILED', error: 'Unable to compute order tax' },
-        { status: 500 }
-      );
     }
     // Record the REAL recomputed VAT on every order, including quiz-voucher
     // prizes. For a VAT-registered merchant the voucher RPC delegates to
@@ -1288,47 +1299,54 @@ export async function POST(request: NextRequest) {
     const redvaultRequested = payment_method === 'uba_redvault';
 
     // ALWAYS validate per-line client prices — even for non-entitled merchants
-    // and callers that omit expected_total. The RPC charges the catalog line
-    // price, but it adds the route-recomputed `assurance_fee` (derived from the
-    // client line price) into the subtotal, so an unvalidated below-catalog
-    // price would leak an uncapped assurance discount. The derived discount is
-    // only APPLIED below.
-    let negotiationDiscount: Awaited<
-      ReturnType<typeof computeOrderNegotiationDiscount>
-    >;
-    try {
-      negotiationDiscount = await computeOrderNegotiationDiscount({
-        allowUnavailableConditionPrices: isConditionReplay,
-        conditionPriceOverrides,
-        items: orderItemsPayload,
-        merchantId: merchant_id,
-        supabase,
-        vatRegistered,
-      });
-    } catch (negotiationDiscountError) {
-      if (negotiationDiscountError instanceof OrderConditionUnavailableError)
-        return conditionOfferUnavailableResponse();
-      if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
-        logger.warn({
+    // and callers that omit expected_total. The RPC charges the catalog (or
+    // live offer) line price, but it adds the route-recomputed `assurance_fee`
+    // into the subtotal, so an unvalidated below-catalog price would leak an
+    // uncapped assurance discount. The derived discount is only APPLIED below.
+    // Exception: a confirmed idempotent retry (F1 offer bypass above) skips
+    // this preflight — with unverified offer economics the catalog basis
+    // falls back to parent prices and a legitimately offer-priced line
+    // would false-positive as below-catalog. The RPC replays the stored
+    // order (or rejects conflicts by hash) without these recomputes.
+    let negotiationDiscount:
+      | Awaited<ReturnType<typeof computeOrderNegotiationDiscount>>
+      | undefined;
+    if (!isIdempotentOfferOrderReplay) {
+      try {
+        negotiationDiscount = await computeOrderNegotiationDiscount({
+          allowUnavailableConditionPrices: isConditionReplay,
+          conditionPriceOverrides,
+          items: orderItemsPayload,
+          merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
+          supabase,
+          vatRegistered,
+        });
+      } catch (negotiationDiscountError) {
+        if (negotiationDiscountError instanceof OrderConditionUnavailableError)
+          return conditionOfferUnavailableResponse();
+        if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
+          logger.warn({
+            error: negotiationDiscountError,
+            merchantId: merchant_id,
+            message:
+              'Storefront order received malformed identifier during negotiation discount lookup',
+          });
+          return NextResponse.json(
+            { error: 'Failed to create order', details: 'invalid_items' },
+            { status: 400 }
+          );
+        }
+        logger.error({
           error: negotiationDiscountError,
           merchantId: merchant_id,
-          message:
-            'Storefront order received malformed identifier during negotiation discount lookup',
+          message: 'Storefront order negotiation discount recompute failed',
         });
         return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
+          { error: 'Internal server error' },
+          { status: 500 }
         );
       }
-      logger.error({
-        error: negotiationDiscountError,
-        merchantId: merchant_id,
-        message: 'Storefront order negotiation discount recompute failed',
-      });
-      return NextResponse.json(
-        { error: 'Internal server error' },
-        { status: 500 }
-      );
     }
 
     // Reject tampered lines before any side effects (non-negotiable below
@@ -1355,9 +1373,25 @@ export async function POST(request: NextRequest) {
       merchantCanAutoNegotiate &&
       !requestedDiscountCode &&
       (typeof body.expected_total === 'number' || source === 'mobile_app');
-    const serverDerivedDiscountAmount = shouldApplyServerDerivedDiscount
-      ? (negotiationDiscount?.totalDiscount ?? 0)
-      : 0;
+    // F1 replay: the bypass skipped the negotiation recompute, so the
+    // stored discount restores unconditionally (like the stored tax
+    // above) — hashing a recomputed zero against the first attempt's
+    // nonzero discount would conflict instead of replaying. REDVAULT
+    // replays skip the restore: the first attempt hashed a zero
+    // negotiation discount while the draft persisted the quote
+    // discount, so restoring it would hash nonzero and conflict
+    // instead of replaying.
+    const serverDerivedDiscountAmount =
+      !redvaultRequested && storedReplayDiscountAmount != null
+        ? storedReplayDiscountAmount
+        : shouldApplyServerDerivedDiscount
+          ? (negotiationDiscount?.totalDiscount ?? 0)
+          : 0;
+
+    recomputeOfferAssuranceFees(orderItemsPayload, liveOfferPrices, {
+      applied: shouldApplyServerDerivedDiscount,
+      negotiation: negotiationDiscount ?? null,
+    });
 
     let redvaultQuote: Awaited<
       ReturnType<typeof computeRedvaultOrderQuote>
@@ -1433,75 +1467,39 @@ export async function POST(request: NextRequest) {
       ? null
       : (body.selected_quote_id ?? null);
     const resolvedTrackingNumber = body.tracking_number ?? null;
-    let quoteValidationItems:
-      | Awaited<ReturnType<typeof buildOrderQuoteValidationItems>>
-      | undefined;
-    if (resolvedSelectedQuoteId) {
-      try {
-        quoteValidationItems = await buildOrderQuoteValidationItems({
-          items: orderItemsPayload,
-          merchantId: body.merchant_id,
-          supabase,
-        });
-      } catch (quoteValidationItemsError) {
-        if (isCanonicalOrderSubtotalUuidError(quoteValidationItemsError)) {
-          logger.warn({
-            error: quoteValidationItemsError,
-            merchantId: body.merchant_id,
-            message:
-              'Storefront order received malformed identifier during quote validation',
-          });
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        logger.error({
-          error: quoteValidationItemsError,
-          merchantId: body.merchant_id,
-          message: 'Storefront order quote validation item lookup failed',
-        });
-        return NextResponse.json(
-          {
-            code: 'QUOTE_VALIDATION_FAILED',
-            error: 'Unable to validate quote',
-          },
-          { status: 500 }
-        );
-      }
+    // Quoted checkouts: body pins are untrusted (main #3704), so strip them
+    // and let the validated quote's pin attach at enrichment. Quote-less
+    // (merchant-rate) orders keep their validated body pin — it is the only
+    // destination pin and stays bound into the idempotency hash.
+    const quoteDestinationAddress =
+      resolvedSelectedQuoteId && shipping_address
+        ? (() => {
+            const stripped = { ...shipping_address };
+            delete stripped.latitude;
+            delete stripped.longitude;
+            return stripped;
+          })()
+        : shipping_address;
+    const quotePreparation = await prepareCheckoutQuoteDestination({
+      isIdempotentLocalAirportReplay,
+      isIdempotentOrderReplay,
+      items: orderItemsPayload,
+      merchantId: body.merchant_id,
+      offerPrices: liveOfferPrices,
+      requestIdempotencyKey,
+      selectedQuoteId: resolvedSelectedQuoteId,
+      shippingAddress: quoteDestinationAddress,
+      shippingFee: shippingFeeValue,
+      shippingProvider: resolvedShippingProvider,
+      supabase,
+    });
+    if (!quotePreparation.ok) {
+      return NextResponse.json(quotePreparation.body, {
+        status: quotePreparation.status,
+      });
     }
-    let shippingAddressForOrder: OrderCreateInput['shipping_address'];
-    try {
-      shippingAddressForOrder = await enrichShippingAddressWithQuoteDestination(
-        supabase,
-        resolvedSelectedQuoteId,
-        shipping_address,
-        {
-          items: quoteValidationItems,
-          merchantId: body.merchant_id,
-          shippingFee:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
-              ? undefined
-              : shippingFeeValue,
-          shippingProvider:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
-              ? null
-              : resolvedShippingProvider,
-        },
-        {
-          persistAttestedCoordinates:
-            !isIdempotentLocalAirportReplay && !isIdempotentOrderReplay,
-        }
-      );
-    } catch (error) {
-      if (error instanceof OrderQuoteDestinationMismatchError) {
-        return NextResponse.json(
-          { error: error.message, code: error.code },
-          { status: error.status }
-        );
-      }
-      throw error;
-    }
+    let { shippingAddress: shippingAddressForOrder } = quotePreparation;
+    const { validatedQuoteProvider } = quotePreparation;
     // Capture the post-enrichment destination before Nigerian state repair so
     // the idempotency hash below stays byte-compatible with orders created
     // before this deploy (postal-code states like "100001"). Persistence and
@@ -1657,6 +1655,8 @@ export async function POST(request: NextRequest) {
             : await computeRedvaultOrderQuote({
                 items: orderItemsPayload,
                 merchantId: merchant_id,
+                offerConditions: liveOfferConditions,
+                offerPrices: liveOfferPrices,
                 supabase: redvaultOrderRpcClient,
               });
       } catch (error) {
@@ -1703,6 +1703,8 @@ export async function POST(request: NextRequest) {
         hasVoucherItem,
         requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
         items: orderItemsPayload,
+        offerPrices: liveOfferPrices,
+        isIdempotentOfferOrderReplay,
       });
       if (!preparedCheckout.ok) {
         return preparedCheckout.response;
@@ -1777,7 +1779,15 @@ export async function POST(request: NextRequest) {
             shippingRateId: body.shipping_rate_id,
           })
         : false;
-    if (body.shipping_rate_id && !isIdempotentMerchantRateReplay) {
+    // isIdempotentOfferOrderReplay joins the F1 bypass: with unverified
+    // (empty) offer economics the subtotal recompute below would throw and
+    // 500 a retry the RPC would otherwise replay. The RPC's request-hash
+    // check rejects true conflicts first.
+    if (
+      body.shipping_rate_id &&
+      !isIdempotentMerchantRateReplay &&
+      !isIdempotentOfferOrderReplay
+    ) {
       if (canonicalOrderSubtotal == null) {
         try {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
@@ -1785,6 +1795,7 @@ export async function POST(request: NextRequest) {
             conditionPriceOverrides,
             items: orderItemsPayload,
             merchantId: merchant_id,
+            offerPrices: liveOfferPrices,
             supabase,
           });
         } catch (subtotalError) {
@@ -1984,44 +1995,84 @@ export async function POST(request: NextRequest) {
       return pilotOrderRejection;
     }
 
-    const { checkoutRequestHash, isLegacyIdempotencyReplay } =
-      await prepareCheckoutIdempotencyReplay({
-        canonicalAirportType,
-        canonicalDeliveryMethod,
-        merchantId: merchant_id,
-        payload: requestIdempotencyKey
-          ? {
-              ...body,
-              shipping_address: selectIdempotencyShippingAddress({
-                addressBeforeMerchantRateNormalization:
-                  shippingAddressBeforeMerchantRateNormalization,
-                normalizedAddress: shippingAddressForOrder,
-              }),
-              // STABLE code identity, NOT the recomputed amount, so a merchant
-              // editing the code between a checkout and its retry can't trip
-              // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount:
-                discountCodeId || loyaltyRedemptionId
-                  ? 0
-                  : serverDerivedDiscountAmount,
-              discount_code: requestedDiscountCode,
-              delivery_method: canonicalDeliveryMethod,
-              gift_wrapping_fee: giftWrappingFeeValue,
-              airport_type: canonicalAirportType,
-              items: orderItemsPayload,
-              shipping_fee: shippingFeeValue,
-              // Merchant-rate orders null shipping_provider + selected_quote_id, so
-              // the rate id is the only field that distinguishes two same-priced
-              // merchant rates (same fee + address) on an Idempotency-Key reuse.
-              // Without it the RPC would replay the ORIGINAL order instead of
-              // returning checkout_idempotency_conflict.
-              shipping_rate_id: body.shipping_rate_id,
-              tax_amount: orderTaxAmount,
-            }
-          : null,
-        requestIdempotencyKey,
-        supabase,
+    const idempotencyPayload: OrderIdempotencyPayloadInput | null =
+      requestIdempotencyKey
+        ? {
+            ...body,
+            shipping_address: selectIdempotencyShippingAddress({
+              addressBeforeMerchantRateNormalization:
+                shippingAddressBeforeMerchantRateNormalization,
+              normalizedAddress: shippingAddressForOrder,
+            }),
+            // STABLE code identity, NOT the recomputed amount, so a merchant
+            // editing the code between a checkout and its retry can't trip
+            // checkout_idempotency_conflict before the wrapper's replay path.
+            discount_amount:
+              discountCodeId || loyaltyRedemptionId
+                ? 0
+                : serverDerivedDiscountAmount,
+            discount_code: requestedDiscountCode,
+            delivery_method: canonicalDeliveryMethod,
+            gift_wrapping_fee: giftWrappingFeeValue,
+            airport_type: canonicalAirportType,
+            items: orderItemsPayload,
+            shipping_fee: shippingFeeValue,
+            // Merchant-rate orders null shipping_provider + selected_quote_id, so
+            // the rate id is the only field that distinguishes two same-priced
+            // merchant rates (same fee + address) on an Idempotency-Key reuse.
+            // Without it the RPC would replay the ORIGINAL order instead of
+            // returning checkout_idempotency_conflict.
+            // Hash the EFFECTIVE quote selection, not the raw body: a stray
+            // selected_quote_id alongside shipping_rate_id would otherwise
+            // classify this quote-less order as quoted and drop its pin
+            // from the hash, replaying the first destination on retry.
+            selected_quote_id: resolvedSelectedQuoteId,
+            // Patched to the effective provider below: a quoted checkout
+            // may omit the redundant provider, in which case the validated
+            // carrier captured during enrichment is authoritative. Without
+            // it the stored order has a quote but no carrier and
+            // fulfillment rejects it.
+            shipping_provider: null,
+            shipping_rate_id: body.shipping_rate_id,
+            tax_amount: orderTaxAmount,
+          }
+        : null;
+    // When the quote row was cleaned up before a confirmed retry, the
+    // provider is unresolvable here; per-provider alternates let the
+    // replay probe the original hash instead of conflicting.
+    const { alternatePayloads, effectiveShippingProvider } =
+      resolveEffectiveCheckoutShippingProvider({
+        idempotencyPayload,
+        isMerchantRateOrder,
+        requestedShippingProvider: body.shipping_provider,
+        resolvedSelectedQuoteId,
+        resolvedShippingProvider,
+        validatedQuoteProvider,
       });
+    if (idempotencyPayload) {
+      idempotencyPayload.shipping_provider = effectiveShippingProvider;
+    }
+    const {
+      adoptedAlternateShippingProvider,
+      checkoutRequestHash,
+      isLegacyIdempotencyReplay,
+    } = await prepareCheckoutIdempotencyReplay({
+      alternatePayloads,
+      canonicalAirportType,
+      canonicalDeliveryMethod,
+      merchantId: merchant_id,
+      payload: idempotencyPayload,
+      requestIdempotencyKey,
+      supabase,
+    });
+    // When the replay probe adopts a per-provider alternate, that matched
+    // carrier is the original order's provider: the RPC must receive the
+    // same carrier the adopted hash encodes, never a leftover null.
+    const rpcShippingProvider =
+      adoptedAlternateShippingProvider ?? effectiveShippingProvider;
+    if (idempotencyPayload && adoptedAlternateShippingProvider) {
+      idempotencyPayload.shipping_provider = adoptedAlternateShippingProvider;
+    }
 
     const savingsRedemptionIdempotencyKey = requestedSavingsRedemption
       ? getSavingsRedemptionIdempotencyKey({
@@ -2030,6 +2081,7 @@ export async function POST(request: NextRequest) {
             product_id: item.product_id ?? '',
             quantity: item.quantity,
             variant_id: item.variant_id ?? null,
+            offer_id: item.offer_id ?? null,
           })),
           merchantId: merchant_id,
           requestIdempotencyKey,
@@ -2071,7 +2123,7 @@ export async function POST(request: NextRequest) {
       p_notes: notes || null,
       p_ad_tracking: orderAdTrackingPayload,
       p_selected_quote_id: resolvedSelectedQuoteId,
-      p_shipping_provider: resolvedShippingProvider,
+      p_shipping_provider: rpcShippingProvider,
       p_tracking_number: resolvedTrackingNumber || null,
       p_user_id: resolvedUserId,
       // Server-computed tax — replaces the client-supplied value
@@ -2344,11 +2396,13 @@ export async function POST(request: NextRequest) {
         'invalid_items',
         'invalid_quantity',
         'invalid_variant',
+        'invalid_offer',
         'invalid_condition_offer',
         'condition_offer_price_changed',
         'insufficient_condition_offer_stock',
         'insufficient_stock',
         'insufficient_variant_stock',
+        'insufficient_offer_stock',
         'merchant_not_found',
         'customer_email_required',
         'customer_name_required',

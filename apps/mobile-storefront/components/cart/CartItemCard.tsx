@@ -6,6 +6,7 @@ import { DEFAULT_ASSURANCE_RATE } from '@/constants/assurance';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { PLACEHOLDER_IMAGE_URL } from '@/constants/Images';
+import { useMerchantPaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { isQuizVoucherLine } from '@/lib/cart/quiz-voucher-line';
 import { resolveColorSwatchValue } from '@/lib/cart-display';
 import {
@@ -48,6 +49,16 @@ export default function CartItemCard({
   negotiateSurface,
   negotiateBorder,
 }: CartItemCardProps) {
+  // Gate opt-in on the live merchant setting (mirrors web's
+  // `(shippingInsuranceEnabled || item.hasAssurance)` line-item gate):
+  // checkout prices the fee purely from `hasAssurance` with no
+  // server-side setting check, so an ungated toggle would sell
+  // insurance the merchant disabled. Assured lines keep the control
+  // as an opt-out; unknown fails closed like the add-time default.
+  const { data: paymentSettings } = useMerchantPaymentSettings();
+  const showAssuranceToggle =
+    paymentSettings?.shipping_insurance_enabled === true ||
+    item.hasAssurance === true;
   // Voucher-backed lines are pinned to one by the server; their
   // quantity controls are display-only.
   const isVoucherLine = isQuizVoucherLine(item);
@@ -236,13 +247,15 @@ export default function CartItemCard({
       />
 
       <View style={styles.bottomRow}>
-        <AssuranceToggle
-          item={item}
-          assuranceCost={assuranceCost}
-          toggleAssurance={toggleAssurance}
-          formatPrice={formatPrice}
-          colors={colors}
-        />
+        {showAssuranceToggle ? (
+          <AssuranceToggle
+            item={item}
+            assuranceCost={assuranceCost}
+            toggleAssurance={toggleAssurance}
+            formatPrice={formatPrice}
+            colors={colors}
+          />
+        ) : null}
         <NegotiationButton
           item={item}
           openItemNegotiation={openItemNegotiation}

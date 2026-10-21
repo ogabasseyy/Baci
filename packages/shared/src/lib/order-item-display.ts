@@ -52,7 +52,7 @@ function hasExplicitConditionSegment(value: string, optionKey: string) {
     return true;
   }
 
-  const bracketSegments = value.matchAll(/[\[(]([^\])]+)[\])]/g);
+  const bracketSegments = value.matchAll(/[[(]([^\])]+)[\])]/g);
   for (const segment of bracketSegments) {
     if (segment[1] && normalizedTextContainsOption(segment[1], optionKey)) {
       return true;
@@ -60,7 +60,7 @@ function hasExplicitConditionSegment(value: string, optionKey: string) {
   }
 
   const splitSegments = value
-    .split(/\s+-\s+|[\/|,]/)
+    .split(/\s+-\s+|[/|,]/)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
   if (splitSegments.length < 2) {
@@ -72,7 +72,10 @@ function hasExplicitConditionSegment(value: string, optionKey: string) {
   );
 }
 
-function stripConditionCommaSegments(value: string, conditionKey: string | null) {
+function stripConditionCommaSegments(
+  value: string,
+  conditionKey: string | null
+) {
   if (!conditionKey) {
     return value.trim();
   }
@@ -150,10 +153,7 @@ function splitVariantName(
 }
 
 function buildOrderItemOptionLabel(
-  {
-    condition,
-    variantName,
-  }: OrderItemOptionInput,
+  { condition, variantName }: OrderItemOptionInput,
   includeConditionLabel: boolean
 ) {
   const conditionLabel = getConditionDisplayLabel(condition);
@@ -170,10 +170,7 @@ function buildOrderItemOptionLabel(
     }
   );
 
-  return [
-    includeConditionLabel ? conditionLabel : null,
-    ...variantParts,
-  ]
+  return [includeConditionLabel ? conditionLabel : null, ...variantParts]
     .filter(Boolean)
     .join(' / ');
 }

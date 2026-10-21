@@ -8,10 +8,20 @@ import type { CartItem } from '@/stores/cart-store';
 import { useUIStore } from '@/stores/ui-store';
 import CartLoadedView from './CartLoadedView';
 
+// These isolated screen fixtures represent a focused navigation route.
+jest.mock('expo-router/react-navigation', () => ({ useIsFocused: () => true }));
+
 jest.mock('@/components/ui/SafeImage', () => ({
   SafeImage: function MockSafeImage() {
     return null;
   },
+}));
+
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  useMerchantPaymentSettings: () => ({
+    data: { shipping_insurance_enabled: true },
+  }),
 }));
 
 jest.mock('@/components/storefront/GadgetPattern', () => {

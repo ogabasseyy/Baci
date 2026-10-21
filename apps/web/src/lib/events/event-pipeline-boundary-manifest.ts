@@ -166,6 +166,7 @@ const serviceSentinels: Readonly<Record<string, string>> = {
     'shipping-quote-booking-economics',
   'apps/web/src/lib/piggyvest/server-intake-client.ts': 'piggyvest-intake',
   'apps/web/src/lib/search/server-analytics-client.ts': 'search-analytics',
+  'apps/web/src/lib/loyalty/server-resolver-client.ts': 'loyalty-resolver',
 };
 // biome-ignore format: exact construction allowlist preserves the 300-line verifier gate.
 const privilegedRouteAdminConstructors = [] as const;

@@ -4,94 +4,32 @@ import {
   sanitizeEmail,
   sanitizePhone,
   sanitizeText,
-  sanitizeUrl,
 } from '@/lib/sanitize-core';
 import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
+import { optionalVariantNameSchema } from './optional-variant-name-schema';
+import { optionalVoucherTokenSchema } from './optional-voucher-token-schema';
+import {
+  aliasFieldsMismatchMessage,
+  matchingAliasFields,
+} from './order-alias-fields';
+import { optionalHttpUrlSchema } from './order-create-fields';
+import {
+  OFFER_VARIANT_EXCLUSION_ERROR,
+  OFFER_VOUCHER_EXCLUSION_ERROR,
+  offerVariantExclusionHolds,
+  offerVoucherExclusionHolds,
+  orderItemOfferAliasFields,
+} from './order-item-offer-aliases';
+import { orderShippingAddressSchema } from './order-shipping-address';
 
-const optionalHttpUrlSchema = z.preprocess(
-  (value) => {
-    // Normalize null → undefined so clients that serialize optional fields
-    // as `null` don't hit the URL validator (which would reject them).
-    if (value === null) {
-      return undefined;
-    }
-
-    if (typeof value !== 'string') {
-      return value;
-    }
-
-    const trimmedValue = value.trim();
-
-    return trimmedValue === '' ? undefined : trimmedValue;
-  },
-  z
-    .url({
-      error: 'Invalid URL',
-    })
-    .max(2048)
-    .refine(
-      (value) => {
-        const protocol = new URL(value).protocol;
-
-        return protocol === 'http:' || protocol === 'https:';
-      },
-      {
-        error: 'URL must use http or https',
-      }
-    )
-    .transform((value) => sanitizeUrl(value))
-    .refine((value) => value.length > 0, {
-      error: 'Invalid URL',
-    })
-    .optional()
-);
-
-const optionalVariantNameSchema = z.preprocess(
-  (value) => (value === null ? undefined : value),
-  z
-    .string()
-    .optional()
-    .transform((val) => {
-      if (!val) {
-        return val;
-      }
-
-      const sanitized = sanitizeText(val).trim();
-      return sanitized.length > 0 ? sanitized : undefined;
-    })
-);
-
-const VOUCHER_TOKEN_MAX_LENGTH = 512;
-
-const optionalVoucherTokenSchema = z.preprocess((value) => {
-  if (value === null) {
-    return undefined;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  const sanitized = sanitizeText(value.trim());
-
-  return sanitized.length > 0 ? sanitized : undefined;
-}, z.string().max(VOUCHER_TOKEN_MAX_LENGTH).optional());
-
-function matchingAliasFields<Left extends string, Right extends string>(
-  left: Left,
-  right: Right
-) {
-  return (data: { [Key in Left | Right]?: unknown }) => {
-    const leftValue = data[left];
-    const rightValue = data[right];
-
-    return !leftValue || !rightValue || leftValue === rightValue;
-  };
-}
-
-function aliasFieldsMismatchMessage(left: string, right: string) {
-  return `${left} and ${right} must match when both are provided`;
-}
+export { merchantOrderCancellationSchema } from './merchant-order-cancellation';
+export { orderIdParamsSchema } from './order-id-params';
+export type { RecordPaymentInput } from './order-record-payment';
+export { type OrderUpdateInput, orderUpdateSchema } from './order-update';
+export {
+  type ReuseCheckoutOrderInput,
+  reuseCheckoutOrderSchema,
+} from './reuse-checkout-order';
 
 const orderCreateSchemaBase = z
   .object({
@@ -141,6 +79,7 @@ const orderCreateSchemaBase = z
               ),
             variantId: z.string().optional(),
             variant_id: z.string().optional(),
+            ...orderItemOfferAliasFields,
             variantName: optionalVariantNameSchema,
             variant_name: optionalVariantNameSchema,
             variantAttributes: z
@@ -174,6 +113,12 @@ const orderCreateSchemaBase = z
           .refine(matchingAliasFields('variantName', 'variant_name'), {
             error: aliasFieldsMismatchMessage('variantName', 'variant_name'),
           })
+          .refine(matchingAliasFields('offerId', 'offer_id'), {
+            error: aliasFieldsMismatchMessage('offerId', 'offer_id'),
+          })
+          .refine(offerVariantExclusionHolds, {
+            error: OFFER_VARIANT_EXCLUSION_ERROR,
+          })
           .refine(matchingAliasFields('voucherToken', 'voucher_token'), {
             error: aliasFieldsMismatchMessage('voucherToken', 'voucher_token'),
           })
@@ -183,8 +128,18 @@ const orderCreateSchemaBase = z
               'voucher_award_id'
             ),
           })
+          .refine(offerVoucherExclusionHolds, {
+            // The voucher RPC's reserved-order branch ignores submitted
+            // item economics while the route recomputes VAT from the
+            // offer's live price: a cheaper same-product offer would
+            // understate the recorded tax on the prize order.
+            error: OFFER_VOUCHER_EXCLUSION_ERROR,
+          })
       )
-      .min(1),
+      // Matches admin-order-edit's order-items cap: bounds per-line offer
+      // verification fan-out (fetchLiveOrderOffers) on public requests.
+      .min(1)
+      .max(200),
     subtotal: z.coerce.number().nonnegative(),
     shipping_fee: z.coerce.number().nonnegative().prefault(0),
     discount_amount: z.coerce.number().nonnegative().prefault(0),
@@ -218,34 +173,7 @@ const orderCreateSchemaBase = z
       .transform((val) => sanitizeText(val)),
     payment_status: z.string().default('unpaid'),
     shipping_status: z.string().default('pending'),
-    shipping_address: z
-      .object({
-        address: z
-          .string()
-          .min(1)
-          .transform((val) => sanitizeText(val)),
-        city: z
-          .string()
-          .optional()
-          .transform((val) => (val ? sanitizeText(val) : val)),
-        state: z
-          .string()
-          .optional()
-          .transform((val) => (val ? sanitizeText(val) : val)),
-        country: z
-          .string()
-          .optional()
-          .transform((val) => (val ? sanitizeText(val) : val)),
-        countryCode: z
-          .string()
-          .optional()
-          .transform((val) => (val ? sanitizeText(val) : val)),
-        postalCode: z
-          .string()
-          .optional()
-          .transform((val) => (val ? sanitizeText(val) : val)),
-      })
-      .optional(),
+    shipping_address: orderShippingAddressSchema.optional(),
     source: z
       .string()
       .default('online_store')
@@ -344,109 +272,3 @@ export const orderCreateSchema = z.preprocess((input) => {
 }, orderCreateSchemaBase);
 
 export type OrderCreateInput = z.infer<typeof orderCreateSchema>;
-
-export const reuseCheckoutOrderSchema = z.object({
-  order_id: z.uuid(),
-  merchant_id: z.uuid(),
-  tracking_token: z.preprocess(
-    (value) => (typeof value === 'string' ? sanitizeText(value, 128) : value),
-    z.string().min(1)
-  ),
-  customer_email: z.preprocess(
-    (value) => (typeof value === 'string' ? sanitizeEmail(value) : value),
-    z.email()
-  ),
-  payment_method: z.preprocess(
-    (value) => (typeof value === 'string' ? sanitizeText(value) : value),
-    z.string().min(1)
-  ),
-  // B3 (plan §5 B3): accept null so pickup/airport reuse flows can
-  // signal "no third-party shipping provider" cleanly.
-  selected_quote_id: z.uuid().nullable().optional(),
-  // Merchant-configured shipping rate (merchant_shipping_rates.id). Forwarded
-  // when reopening a merchant-rate pending order whose original post-create
-  // provider stamp failed, so the reuse route can re-stamp the fulfillment
-  // provider + rate name (R14-3 — the reuse-path analogue of the orders POST
-  // R9-5 re-stamp). This is the BARE rate uuid; the synthetic `mrate_`-prefixed
-  // selected_quote_id stays nulled for merchant rates. Nullable like
-  // selected_quote_id so clients can send an explicit null.
-  shipping_rate_id: z.uuid().nullable().optional(),
-  shipping_provider: z
-    .string()
-    .nullable()
-    .optional()
-    .transform((val) => (val ? sanitizeText(val) : val)),
-});
-
-export type ReuseCheckoutOrderInput = z.infer<typeof reuseCheckoutOrderSchema>;
-
-export const orderIdParamsSchema = z.object({
-  id: z.uuid(),
-});
-
-export const orderUpdateSchema = z
-  .strictObject({
-    // Transitional compatibility for deployed mobile clients. Authorization
-    // remains derived from the authenticated user; this value is ignored.
-    merchant_id: z.uuid(),
-    payment_status: z.enum([
-      'paid',
-      'unpaid',
-      'pending',
-      'failed',
-      'refunded',
-      'partially_paid',
-      'bnpl_approved',
-      'bnpl_pending',
-    ]),
-    shipping_status: z.enum([
-      'pending',
-      'processing',
-      'shipped',
-      'out_for_delivery',
-      'delivered',
-      'completed',
-      'cancelled',
-      'canceled',
-      'returned',
-      'failed',
-    ]),
-    notes: z.string().nullable(),
-    shipping_address: z.record(z.string(), z.unknown()).nullable(),
-  })
-  .partial();
-
-export type OrderUpdateInput = z.infer<typeof orderUpdateSchema>;
-
-export const merchantOrderCancellationSchema = z.strictObject({
-  cancelled_by: z.literal('merchant').optional(),
-  confirm_cancellation: z.literal(true),
-  reason: z
-    .string()
-    .trim()
-    .max(500)
-    .optional()
-    .transform((value) =>
-      value ? sanitizeText(value, 500).trim() || undefined : undefined
-    ),
-});
-
-const recordPaymentSchema = z.object({
-  amount: z.coerce.number().positive(),
-  payment_method: z
-    .string()
-    .trim()
-    .min(1)
-    .optional()
-    .transform((val) => sanitizeText(val ?? 'manual', 50)),
-  reference: z
-    .string()
-    .optional()
-    .transform((val) => (val ? sanitizeText(val, 100) : val)),
-  notes: z
-    .string()
-    .optional()
-    .transform((val) => (val ? sanitizeText(val, 500) : val)),
-});
-
-export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

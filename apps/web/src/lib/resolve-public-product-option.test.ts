@@ -78,4 +78,68 @@ describe('public option resolution', () => {
       }).purchasable
     ).toBe(false);
   });
+  it('reports exact serialized units ahead of a stale scalar', () => {
+    const option = resolvePublicProductOption(parent, {
+      variant: {
+        effective_policy: 'serialized_strict',
+        available_units: 3,
+        stock_quantity: 0,
+      },
+    });
+    expect(option.stockQuantity).toBe(3);
+    expect(option.purchasable).toBe(true);
+  });
+  it('keeps unlimited tracking enabled without a finite count', () => {
+    const option = resolvePublicProductOption(parent, {
+      variant: {
+        effective_policy: 'serialized_then_unlimited',
+        stock_quantity: 0,
+      },
+    });
+    expect(option.stockQuantity).toBe(Number.POSITIVE_INFINITY);
+    expect(option.purchasable).toBe(true);
+  });
+  it('caps offer stock by strict serialized base units', () => {
+    const strictParent = {
+      ...parent,
+      inventory_tracking_policy: 'serialized_strict',
+      stock: 0,
+      stock_quantity: 1,
+    };
+    const option = resolvePublicProductOption(strictParent, {
+      offer: { price: 80000, stock_quantity: 5 },
+      condition: 'used',
+    });
+    expect(option.stockQuantity).toBe(1);
+    expect(option.purchasable).toBe(true);
+    const depleted = resolvePublicProductOption(
+      { ...strictParent, stock_quantity: 0 },
+      { offer: { price: 80000, stock_quantity: 5 }, condition: 'used' }
+    );
+    expect(depleted.stockQuantity).toBe(0);
+    expect(depleted.purchasable).toBe(false);
+  });
+  it('binds a zero offer allocation even on unmanaged parents', () => {
+    const unmanagedParent = { ...parent, manage_stock: false };
+    const option = resolvePublicProductOption(unmanagedParent, {
+      offer: { price: 80000, stock_quantity: 0 },
+      condition: 'used',
+    });
+    expect(option.stockQuantity).toBe(0);
+    expect(option.purchasable).toBe(false);
+  });
+  it('keeps an unbounded offer allocation purchasable on a zero-stock parent', () => {
+    const unlimitedParent = {
+      ...parent,
+      inventory_tracking_policy: 'serialized_then_unlimited',
+      stock: 0,
+      stock_quantity: 0,
+    };
+    const option = resolvePublicProductOption(unlimitedParent, {
+      offer: { price: 80000, stock_quantity: null },
+      condition: 'used',
+    });
+    expect(option.stockQuantity).toBe(Number.POSITIVE_INFINITY);
+    expect(option.purchasable).toBe(true);
+  });
 });

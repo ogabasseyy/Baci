@@ -4,10 +4,20 @@ import { eventPipelineAuthorityServicePaths } from './event-pipeline-authority-s
 import { eventPipelineJumiaServicePaths } from './event-pipeline-jumia-service-paths';
 
 describe('eventPipelineAuthorityServicePaths', () => {
-  it('extends ads service paths with Jumia, wallet HMAC, and booking-economics edges', () => {
+  it('extends ads service paths with Jumia, wallet HMAC, booking-economics, and intake edges', () => {
     expect(eventPipelineAuthorityServicePaths).toEqual([
       ...eventPipelineAdsServicePaths,
       ...eventPipelineJumiaServicePaths,
+      [
+        'apps/web/src/app/api/storefront/discount/validate/route.ts',
+        'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/orders/route.ts',
+        'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',
+        'apps/web/src/lib/checkout/resolve-loyalty-checkout-code.ts',
+        'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      ],
       [
         'apps/web/src/app/api/webhooks/piggyvest/route.ts',
         'apps/web/src/lib/piggyvest/server-intake-client.ts',
@@ -56,6 +66,10 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/app/api/shipping/book/load-direct-booking-context.ts',
         'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
         'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/storefront/product-requests/route.ts',
+        'apps/web/src/lib/storefront/server-intake-client.ts',
       ],
       [
         'apps/web/src/app/api/search/submissions/route.ts',

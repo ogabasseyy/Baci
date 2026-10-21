@@ -192,6 +192,19 @@ describe('product-utils', () => {
       if (fn === 'get_storefront_product_variants') {
         return Promise.resolve({ data: [], error: null });
       }
+      if (fn === 'get_storefront_offer_resolution') {
+        return Promise.resolve({
+          data: validProductRow.offers.map((offer) => ({
+            ...offer,
+            product_id: validProductRow.id,
+            offer_id: offer.id,
+            price_basis: offer.price,
+            allocatable_stock: offer.stock_quantity,
+            parent_eligible: true,
+          })),
+          error: null,
+        });
+      }
 
       return Promise.resolve({ data: null, error: null });
     });
@@ -239,7 +252,11 @@ describe('product-utils', () => {
     );
 
     expect(result).toEqual(validProductRow);
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
+    });
   });
 
   it('resolveProductRow hydrates a variant product through exactly one storefront rpc', async () => {
@@ -288,6 +305,9 @@ describe('product-utils', () => {
           error: null,
         });
       }
+      if (fn === 'get_storefront_offer_resolution') {
+        return Promise.resolve({ data: [], error: null });
+      }
 
       return Promise.resolve({ data: null, error: null });
     });
@@ -295,12 +315,16 @@ describe('product-utils', () => {
     const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
 
     expect(mockFrom).toHaveBeenCalledTimes(1);
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
     expect(mockRpc).toHaveBeenCalledWith(
       'get_storefront_product_variants',
       { p_product_ids: [validProductRow.id] },
       { count: 'exact' }
     );
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
+    });
     expect(
       (result as { variants: Array<{ id: string }> }).variants.map(
         (variant) => variant.id
@@ -319,7 +343,7 @@ describe('product-utils', () => {
     });
   });
 
-  it('resolveProductRow skips the variant rpc for a simple product', async () => {
+  it('resolveProductRow fetches base inventory instead of variants for a simple product', async () => {
     const simpleProduct = {
       ...validProductRow,
       has_variants: false,
@@ -333,7 +357,17 @@ describe('product-utils', () => {
       resolveProductRow('merchant-1', 'iphone-13-pro')
     ).resolves.toEqual(simpleProduct);
 
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_base_inventory',
+      {
+        p_product_ids: [validProductRow.id],
+      }
+    );
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
+    });
   });
 
   it('resolveProductRow hydrates sku_matrix rows when has_variants has drifted false', async () => {
@@ -358,7 +392,7 @@ describe('product-utils', () => {
 
     const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
 
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
       variants: [expect.objectContaining({ id: 'variant-drifted' })],
     });
@@ -380,9 +414,61 @@ describe('product-utils', () => {
 
     await expect(
       resolveProductRow('merchant-1', 'iphone-13-pro')
-    ).resolves.toEqual(productWithoutEmbeddedVariants);
+    ).resolves.toEqual({
+      ...productWithoutEmbeddedVariants,
+      variants_hydration_failed: true,
+    });
 
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolveProductRow hydrates staff-invisible nested offers through the public offers rpc', async () => {
+    const shopperRow = {
+      ...validProductRow,
+      has_variants: false,
+      variant_model: 'legacy',
+      variants: undefined,
+      // Shoppers read an empty nested select (staff-only SELECT policy).
+      offers: [],
+    };
+    const query = createQueryChain({ data: shopperRow, error: null });
+    mockFrom.mockReturnValue(query);
+    mockRpc.mockImplementation((...args: unknown[]) => {
+      if (args[0] === 'get_storefront_offer_resolution') {
+        return Promise.resolve({
+          data: [
+            {
+              product_id: validProductRow.id,
+              offer_id: 'offer-rpc',
+              condition: 'used',
+              price_basis: 510000,
+              allocatable_stock: 2,
+              parent_eligible: true,
+            },
+          ],
+          error: null,
+        });
+      }
+
+      return Promise.resolve({ data: null, error: null });
+    });
+
+    const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
+
+    expect(result).toMatchObject({
+      offers: [
+        {
+          id: 'offer-rpc',
+          condition: 'used',
+          price: 510000,
+          stock_quantity: 2,
+        },
+      ],
+    });
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
+    });
   });
 
   it('resolveAndEvictProduct clears stale product caches when a product is gone', async () => {

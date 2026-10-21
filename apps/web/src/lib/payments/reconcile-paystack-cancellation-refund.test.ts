@@ -56,8 +56,8 @@ describe('Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValue({
       success: true,
       data: {
-        id: 42,
-        transaction: 123,
+        id: '42',
+        transaction: '123',
         amount: 10000,
         currency: 'NGN',
         status: 'processed',
@@ -65,7 +65,7 @@ describe('Paystack cancellation refund reconciliation', () => {
     });
     provider.verifyTransaction.mockResolvedValue({
       success: true,
-      data: { id: 123, reference: 'PSK-1', amount: 10000, currency: 'NGN' },
+      data: { id: '123', reference: 'PSK-1', amount: 10000, currency: 'NGN' },
     });
   });
 
@@ -79,9 +79,16 @@ describe('Paystack cancellation refund reconciliation', () => {
       expect.objectContaining({
         p_refund_id: 'refund-1',
         p_provider_status: 'processed',
-        p_provider_transaction_id: 123,
+        p_provider_transaction_id: '123',
         p_amount_kobo: 10000,
       })
+    );
+    // The verify side must return decimal-text IDs: a numeric parse
+    // would round adjacent large IDs equal before the comparison.
+    expect(provider.verifyTransaction).toHaveBeenCalledWith(
+      'PSK-1',
+      expect.any(AbortSignal),
+      { textIds: true }
     );
   });
 
@@ -107,8 +114,8 @@ describe('Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
-        id: 42,
-        transaction: 123,
+        id: '42',
+        transaction: '123',
         amount: 10000,
         currency: 'NGN',
         status,
@@ -183,8 +190,8 @@ describe('Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
-        id: 42,
-        transaction: 123,
+        id: '42',
+        transaction: '123',
         amount: 4000,
         currency: 'NGN',
         status: 'processed',
@@ -243,8 +250,8 @@ describe('Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
-        id: 42,
-        transaction: 999,
+        id: '42',
+        transaction: '999',
         amount: 10000,
         currency: 'NGN',
         status: 'processed',
@@ -261,8 +268,8 @@ describe('Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValueOnce({
       success: true,
       data: {
-        id: 42,
-        transaction: 123,
+        id: '42',
+        transaction: '123',
         amount: 9000,
         currency: 'NGN',
         status: 'processed',
@@ -278,7 +285,7 @@ describe('Paystack cancellation refund reconciliation', () => {
     const db = database();
     provider.verifyTransaction.mockResolvedValueOnce({
       success: true,
-      data: { id: 123, reference: 'PSK-1', amount: 9000, currency: 'NGN' },
+      data: { id: '123', reference: 'PSK-1', amount: 9000, currency: 'NGN' },
     });
 
     await expect(

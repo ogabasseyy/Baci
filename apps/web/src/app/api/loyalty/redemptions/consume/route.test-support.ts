@@ -3,13 +3,18 @@
 // route.test-support.ts in the discount-validate suites).
 import { NextRequest } from 'next/server';
 import { vi } from 'vitest';
+import { getBearerTokenFromRequest as extractBearerToken } from '@/lib/api-auth';
 
 export const MOBILE_AUTH_TOKEN = ['mobile', 'test', 'token'].join('-');
 
 const checkCsrfProtection = vi.fn();
-const authenticateApiRequest = vi.fn();
-const hasBearerAuthScheme = vi.fn();
-const hasPermission = vi.fn();
+// Hoisted: the api-auth mock factory below evaluates during this file's
+// own import (it statically imports the real extractor), before plain
+// consts initialize.
+const { authenticateApiRequest, hasPermission } = vi.hoisted(() => ({
+  authenticateApiRequest: vi.fn(),
+  hasPermission: vi.fn(),
+}));
 const getMerchantForApiRequest = vi.fn();
 const toUserAccess = vi.fn((context: { role?: string }) => ({
   role: context.role ?? 'owner',
@@ -26,11 +31,20 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection,
 }));
 
-vi.mock('@/lib/api-auth', () => ({
-  authenticateApiRequest,
-  hasBearerAuthScheme,
-  hasPermission,
-}));
+vi.mock('@/lib/api-auth', async () => {
+  // vi.importActual — not importOriginal<typeof import(...)>: the
+  // generic typeof-import call syntax trips the Semgrep parser
+  // (PartialParsing analysis error) and fails the SAST gate.
+  const actual = (await vi.importActual('@/lib/api-auth')) as Record<
+    string,
+    unknown
+  >;
+  return {
+    ...actual,
+    authenticateApiRequest,
+    hasPermission,
+  };
+});
 
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest,
@@ -122,16 +136,18 @@ export function setupConsumeMocks() {
   rpcError = null;
   hasPermission.mockReturnValue(true);
   getMerchantForApiRequest.mockResolvedValue(merchantContext);
-  hasBearerAuthScheme.mockImplementation((request: Request) =>
-    (request.headers.get('authorization') ?? '')
-      .toLowerCase()
-      .startsWith('bearer ')
-  );
+  // Exercise the real token extractor (passed through the module
+  // mock above) so a regression in production extraction breaks this
+  // suite: a bare `Bearer` scheme word without a token extracts
+  // nothing, so authentication falls back to cookies.
   authenticateApiRequest.mockImplementation((request: Request) => {
-    const authorization = request.headers.get('authorization') ?? '';
-    if (authorization.toLowerCase().startsWith('bearer ')) {
+    // Branch on token extraction exactly like production: a tokenless
+    // scheme word (bare `Bearer`, trailing space, tab) extracts null
+    // and falls back to cookie auth instead of failing as Bearer [REDACTED]
+    const token = extractBearerToken(request);
+    if (token !== null) {
       return Promise.resolve(
-        authorization === `Bearer ${MOBILE_AUTH_TOKEN}`
+        token === MOBILE_AUTH_TOKEN
           ? { user: { id: 'mobile-user' }, supabase: createMockSupabase() }
           : { user: null, supabase: null }
       );

@@ -10,6 +10,10 @@ const interleaveMigrationPath = resolve(
   __dirname,
   '../../../../../supabase/migrations/20260928185200_interleave_abandoned_attempt_candidates.sql'
 );
+const stampedManualMigrationPath = resolve(
+  __dirname,
+  '../../../../../supabase/migrations/20261016030000_sweep_stamped_manual_paystack_refunds.sql'
+);
 
 function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -81,5 +85,29 @@ describe('candidate selection RPC migration', () => {
     // Batch shape unchanged: same per-branch limits, same columns.
     expect(migrationSql).toContain('LIMIT greatest(1, coalesce(p_limit, 25))');
     expect(migrationSql).toContain('LIMIT 5');
+  });
+
+  it('selects stamped manuals in the finalized contradiction branch', () => {
+    expect(existsSync(stampedManualMigrationPath)).toBe(true);
+    if (!existsSync(stampedManualMigrationPath)) return;
+
+    const migrationSql = normalizeSql(
+      readFileSync(stampedManualMigrationPath, 'utf8')
+    );
+
+    // Same signature: OR REPLACE keeps every existing call on the
+    // new body.
+    expect(migrationSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.select_completed_paystack_cancellation_refund_candidates_v1('
+    );
+    // Finalized branch admits processed-stamped manuals with a
+    // numeric stored provider id (what the recheck reads); the
+    // pre-finalization branch stays provider-only.
+    expect(migrationSql).toContain(
+      "t.metadata->>'provider_refund_status' = 'processed'"
+    );
+    expect(migrationSql).toContain(
+      "t.metadata->>'provider_refund_id' ~ '^[0-9]+$'"
+    );
   });
 });

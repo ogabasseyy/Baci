@@ -39,6 +39,7 @@ function replacement(overrides: Record<string, unknown> = {}) {
     currency: 'NGN',
     gateway: 'paystack',
     id: 'refund-2',
+    status: 'completed',
     metadata: {
       payment_transaction_id: 'payment-1',
       provider_refund_status: 'processed',
@@ -110,6 +111,7 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
             data: [
               replacement({
                 id: 'refund-2',
+                status: 'completed',
                 metadata: {
                   payment_transaction_id: 'payment-9',
                   provider_refund_status: 'processed',
@@ -174,6 +176,7 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
                 amount: 100,
                 created_at: '2026-09-27T14:30:00Z',
                 id: 'refund-4',
+                status: 'completed',
                 metadata: {
                   payment_transaction_id: 'payment-3',
                   provider_refund_status: 'processed',
@@ -300,6 +303,31 @@ describe('resolveContradictoryRefundFailure aggregate coverage', () => {
                 created_at: '2026-09-27T13:00:00Z',
                 id: 'refund-2',
               }),
+            ],
+            error: null,
+          },
+          'limit'
+        )
+      );
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
+  it('suppresses on a legacy refunded replacement, not only completed', async () => {
+    // The replacement scan covers both terminal statuses in code: a
+    // valid later replacement stored with the legacy refunded label
+    // is completed money and must suppress like a completed row.
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [failedRow()], error: null }, 'limit'))
+      .mockReturnValueOnce(
+        chain(
+          {
+            data: [
+              replacement({ amount: 100, id: 'refund-2', status: 'refunded' }),
             ],
             error: null,
           },

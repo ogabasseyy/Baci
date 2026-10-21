@@ -1,3 +1,7 @@
+import {
+  MONEY_CURRENCY_LOCALES,
+  normalizeMoneyCurrency,
+} from '../money/currency-locales';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -17,46 +21,18 @@ export type VatBreakdownMerchant = Pick<
   'vat_rate' | 'vat_registration_status'
 >;
 
-const CURRENCY_LOCALE_MAP: Record<string, string> = {
-  NGN: 'en-NG',
-  GHS: 'en-GH',
-  KES: 'en-KE',
-  USD: 'en-US',
-  GBP: 'en-GB',
-  EUR: 'de-DE',
-  ZAR: 'en-ZA',
-  XAF: 'fr-CM',
-  XOF: 'fr-SN',
-};
-
 const MONEY_TOLERANCE = 0.01;
 export const DEFAULT_NG_VAT_RATE = 7.5;
 
-export type MoneyFormatter = (amount: number) => string;
-
-const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
-
-function getMoneyFormatter(currencyCode: string): Intl.NumberFormat {
-  const cached = moneyFormatterCache.get(currencyCode);
-  if (cached) {
-    return cached;
-  }
-
-  const locale = CURRENCY_LOCALE_MAP[currencyCode] || 'en-NG';
-  const formatter = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currencyCode,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  moneyFormatterCache.set(currencyCode, formatter);
-  return formatter;
-}
-
-export function createMoneyFormatter(currencyCode: string): MoneyFormatter {
-  const formatter = getMoneyFormatter(currencyCode);
-  return (amount) => formatter.format(amount);
-}
+// The money formatter now lives in ../money (formatting wave
+// extraction); re-exported here so receipt callers keep their
+// existing imports and there is one formatter/cache in the package.
+// This path is exempt from the mobile on-device verification gate for
+// new @baci/shared/money call sites: receipts already ran this Intl
+// formatter on-device with the same locale map; only the
+// fraction-digit options changed (see README, Money formatting).
+export { createMoneyFormatter } from '../money/create-money-formatter';
+export type { MoneyFormatter } from '../money/money-formatter';
 
 export function hexToRgba(hex: string, alpha: number): string {
   const cleaned = hex.replace('#', '');
@@ -103,7 +79,16 @@ function getIncludedTaxAmount(total: number, taxRate: number): number {
 }
 
 function getDefaultVatRateForCurrency(currencyCode: string): number | null {
-  const locale = CURRENCY_LOCALE_MAP[currencyCode.toUpperCase()];
+  // Share the money module's normalization (trim + uppercase) so VAT
+  // detection accepts exactly the codes the formatter accepts; blank
+  // codes have no default rate.
+  let normalized: string;
+  try {
+    normalized = normalizeMoneyCurrency(currencyCode);
+  } catch {
+    return null;
+  }
+  const locale = MONEY_CURRENCY_LOCALES[normalized];
   return locale === 'en-NG' ? DEFAULT_NG_VAT_RATE : null;
 }
 

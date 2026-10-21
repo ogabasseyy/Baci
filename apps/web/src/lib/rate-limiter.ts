@@ -22,6 +22,9 @@ interface RateLimitRpcClient {
  * @param endpoint Endpoint or action name (e.g. 'dns_update', 'domain_register')
  * @param maxRequests Maximum requests allowed in the window
  * @param windowMinutes Window size in minutes
+ * @param options.failClosed Throw on RPC failure instead of failing open.
+ * Expensive or abuse-sensitive budgets (e.g. AI-call tenant caps) must opt
+ * in so an outage cannot silently disable the limit.
  * @returns true if allowed, false if limit exceeded
  */
 export async function checkRateLimit(
@@ -29,9 +32,10 @@ export async function checkRateLimit(
   identifier: string,
   endpoint: string,
   maxRequests: number = 100,
-  windowMinutes: number = 1
+  windowMinutes: number = 1,
+  options?: { failClosed?: boolean }
 ): Promise<boolean> {
-  const failClosed = endpoint.startsWith('verify-');
+  const failClosed = options?.failClosed ?? endpoint.startsWith('verify-');
   let response: RateLimitRpcResponse;
 
   try {

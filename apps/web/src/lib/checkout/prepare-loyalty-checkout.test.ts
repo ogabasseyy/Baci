@@ -16,6 +16,7 @@ vi.mock('@/lib/checkout/resolve-loyalty-checkout-code', () => ({
     mockResolveLoyalty(...args),
 }));
 
+import { computeCanonicalOrderSubtotal } from '@/lib/checkout/canonical-order-subtotal';
 import { prepareLoyaltyCheckout } from './prepare-loyalty-checkout';
 
 const ITEMS = [{ product_id: 'p-1', quantity: 1, assurance_fee: 0 }];
@@ -176,5 +177,82 @@ describe('prepareLoyaltyCheckout', () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.response.status).toBe(500);
+  });
+
+  it('passes live offer prices into the canonical subtotal', async () => {
+    const offerPrices = new Map([['p-1:offer-1', 7500]]);
+    const result = await prepareLoyaltyCheckout({
+      ...BASE,
+      offerPrices,
+      supabase: clientWithRpc({
+        data: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            code: 'CODE10',
+            discount_type: 'fixed_amount',
+            discount_value: 500,
+            starts_at: null,
+            expires_at: null,
+            usage_limit: null,
+            usage_count: 0,
+            minimum_purchase_amount: null,
+            maximum_discount_amount: null,
+            description: null,
+            applies_to: 'all',
+            product_ids: [],
+            category_ids: [],
+            usage_limit_per_customer: null,
+            is_active: true,
+          },
+        ],
+        error: null,
+      }),
+    });
+    expect(result.ok).toBe(true);
+    expect(computeCanonicalOrderSubtotal).toHaveBeenCalledWith(
+      expect.objectContaining({ offerPrices })
+    );
+  });
+
+  it('skips the subtotal recompute on a confirmed idempotent offer replay', async () => {
+    vi.mocked(computeCanonicalOrderSubtotal).mockClear();
+    const result = await prepareLoyaltyCheckout({
+      ...BASE,
+      isIdempotentOfferOrderReplay: true,
+      supabase: clientWithRpc({
+        data: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            code: 'CODE10',
+            discount_type: 'fixed_amount',
+            discount_value: 500,
+            starts_at: null,
+            expires_at: null,
+            usage_limit: null,
+            usage_count: 0,
+            minimum_purchase_amount: null,
+            maximum_discount_amount: null,
+            description: null,
+            applies_to: 'all',
+            product_ids: [],
+            category_ids: [],
+            usage_limit_per_customer: null,
+            is_active: true,
+          },
+        ],
+        error: null,
+      }),
+    });
+    // Code identity still resolves (the wrapper RPC replays on it) but
+    // the live-offer-dependent recompute is bypassed: the helper throws
+    // without verified offer economics, which would 500 the retry.
+    expect(result).toEqual({
+      ok: true,
+      canonicalOrderSubtotal: null,
+      discountCodeId: '11111111-1111-4111-8111-111111111111',
+      loyaltyRedemptionId: null,
+      discountCodeAmount: 0,
+    });
+    expect(computeCanonicalOrderSubtotal).not.toHaveBeenCalled();
   });
 });

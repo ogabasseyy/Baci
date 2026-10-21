@@ -25,6 +25,7 @@ function setup(overrides: Record<string, unknown> = {}) {
   const { result } = renderHook(() =>
     useStorefrontCartSessionHandlers({
       bumpSessionGeneration: vi.fn(),
+      cartRef: { current: [] },
       delegated: false,
       delegatedActions,
       initialMerchantSlug: 'shop',

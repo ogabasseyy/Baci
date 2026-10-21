@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
 import type { AddToCartOptions } from './cart-types';
 
@@ -40,7 +41,9 @@ export function gateAddToCart(
           compare_at_price:
             defaultVariantSelection.compareAtPrice ?? product.compare_at_price,
           stock:
-            defaultVariantSelection.variant.stock_quantity ?? product.stock,
+            resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+            defaultVariantSelection.variant.stock_quantity ??
+            product.stock,
         }
       : product;
 
@@ -52,10 +55,16 @@ export function gateAddToCart(
   const isQuizPrizeVoucherLine = Boolean(
     normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
   );
+  // Scalar out-of-stock guard: NULL manage_stock means managed (legacy
+  // rows, mirroring search/PDP/native), but an UNKNOWN stock value must
+  // not reject — template-local display products omit both fields, and
+  // legacy NULL/NULL rows resolve through live data downstream. Only a
+  // known depleted value rejects here.
   if (
     !isQuizPrizeVoucherLine &&
-    productForCart.manage_stock &&
-    (productForCart.stock ?? 0) <= 0
+    (productForCart.manage_stock ?? true) &&
+    productForCart.stock != null &&
+    productForCart.stock <= 0
   ) {
     logger.warn({
       message: 'Attempted to add out-of-stock product to cart',

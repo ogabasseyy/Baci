@@ -2,7 +2,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { it, vi } from 'vitest';
-import { startRuntimeJourneyLocal } from './runtime-journey-local';
+import { startRuntimeJourneyLocal } from './runtime-journey-local.test-support';
 import { resolveRuntimeJourneyBrowserConfiguration } from './runtime-journey-local-browser-config';
 import { applyRuntimeJourneyFixture } from './runtime-journey-local-fixture';
 

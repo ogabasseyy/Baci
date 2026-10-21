@@ -181,3 +181,23 @@ describe('useHomeSearchControls', () => {
     expect(mockRouterPush).toHaveBeenCalledTimes(2);
   });
 });
+it('opens the experimental composer once directly from the home search tap', () => {
+  mockRouterPush.mockClear();
+  const { result } = renderHook(() =>
+    useHomeSearchControls({
+      isFocused: true,
+      onSearchOpen: jest.fn(),
+      useSearchComposer: true,
+    })
+  );
+  act(() => {
+    result.current.handleSearch();
+    result.current.handleSearch();
+  });
+  expect(mockRouterPush).toHaveBeenCalledTimes(1);
+  expect(mockRouterPush).toHaveBeenCalledWith({
+    pathname: '/search',
+    params: { focus: '1' },
+  });
+  expect(result.current.searchVisible).toBe(false);
+});

@@ -1,0 +1,227 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/api-client', () => ({ apiPost: vi.fn() }));
+
+import { apiPost } from '@/lib/api-client';
+import { OrderRefundPanel } from './order-refund-panel';
+
+const summary = {
+  currency: 'NGN',
+  amountPaid: 27574.83,
+  refunded: 0,
+  remaining: 27574.83,
+  pending: 0,
+  status: 'failed',
+  error: 'The refund ran into a problem. Support has the details.',
+  attempts: 5,
+  retryRequests: 0,
+  canRetry: true,
+  canRecordManual: true,
+  canManageRefunds: true,
+  history: [],
+};
+describe('OrderRefundPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => summary })
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  it('shows the failed refund and queues a retry', async () => {
+    vi.mocked(apiPost).mockResolvedValue({
+      ...summary,
+      status: 'queued',
+      canRetry: false,
+      error: null,
+    });
+    render(<OrderRefundPanel orderId="order-1" />);
+    const button = await screen.findByRole('button', { name: 'Retry refund' });
+    // The API pre-maps worker errors to fixed labels; the panel
+    // renders the payload label directly with no raw-text tooltip.
+    const label = screen.getByText(
+      'The refund ran into a problem. Support has the details.'
+    );
+    expect(label).toBeInTheDocument();
+    expect(label).not.toHaveAttribute('title');
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
+        action: 'retry',
+      })
+    );
+    expect(await screen.findByText('Queued')).toBeInTheDocument();
+  });
+  it('shows load errors without enabling refund actions', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'Forbidden' }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Forbidden');
+    expect(
+      screen.queryByRole('button', { name: 'Retry refund' })
+    ).not.toBeInTheDocument();
+  });
+  it('explains a busy step instead of claiming missing permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          canManageRefunds: false,
+          status: 'processing',
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(
+      await screen.findByText(
+        'Refund is being processed. Retry and manual recording unlock when it settles.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'You need refund permission to retry or record refunds.'
+      )
+    ).not.toBeInTheDocument();
+  });
+  it('hides refund actions when the caller lacks refund permission', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, canManageRefunds: false }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(
+      await screen.findByText(
+        'You need refund permission to retry or record refunds.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Retry refund' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Record manual refund' })
+    ).not.toBeInTheDocument();
+  });
+  it('falls back to a generic message when the error body is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => {
+          throw new SyntaxError("Unexpected token '<'");
+        },
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to load refund'
+    );
+  });
+  it('encodes the order id in refund requests', async () => {
+    render(<OrderRefundPanel orderId="order/1?x" />);
+    await screen.findByRole('button', { name: 'Retry refund' });
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/orders/order%2F1%3Fx/refund',
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+  it('fires the refunded callback once per order', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, status: 'refunded' }),
+      })
+    );
+    const first = vi.fn();
+    const { rerender } = render(
+      <OrderRefundPanel orderId="order-1" onRefunded={first} />
+    );
+    await waitFor(() => expect(first).toHaveBeenCalledTimes(1));
+    // A parent re-render with a fresh inline closure must not refire.
+    rerender(<OrderRefundPanel orderId="order-1" onRefunded={() => {}} />);
+    rerender(<OrderRefundPanel orderId="order-1" onRefunded={() => {}} />);
+    expect(first).toHaveBeenCalledTimes(1);
+    // One mounted panel viewing successive orders notifies once per order.
+    const second = vi.fn();
+    rerender(<OrderRefundPanel orderId="order-2" onRefunded={second} />);
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
+  });
+  it('renders the pre-mapped activity labels without tooltips', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          error: null,
+          events: [
+            {
+              id: 'event-1',
+              action: 'retry_requested',
+              date: '2026-10-01T12:00:00Z',
+              details: {
+                error:
+                  'The refund ran into a problem. Support has the details.',
+              },
+            },
+          ],
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    const label = await screen.findByText(
+      'The refund ran into a problem. Support has the details.'
+    );
+    expect(label).not.toHaveAttribute('title');
+  });
+  it('clears transfer fields after recording a partial manual refund', async () => {
+    vi.mocked(apiPost).mockResolvedValue({
+      ...summary,
+      refunded: 7574.83,
+      remaining: 20000,
+    });
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    fireEvent.change(screen.getByLabelText(/Refund date and time/), {
+      target: { value: '2026-09-28T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: 'bank-1' },
+    });
+    fireEvent.change(screen.getByLabelText('Note (optional)'), {
+      target: { value: 'first transfer' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save manual refund' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Save manual refund' })
+      ).not.toBeInTheDocument()
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Record manual refund' })
+    );
+    expect(screen.getByLabelText('Reference')).toHaveValue('');
+    expect(screen.getByLabelText(/Refund date and time/)).toHaveValue('');
+    expect(screen.getByLabelText('Note (optional)')).toHaveValue('');
+    expect(screen.getByLabelText(/Amount/)).toHaveValue(20000);
+  });
+});

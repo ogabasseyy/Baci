@@ -10,24 +10,27 @@ export type MerchantFeatureSource = {
   plan_expires_at?: string | null;
   plan_tier?: string | null;
   premium_features?: unknown;
+  shared_cart_enabled?: boolean;
+  shared_cart_accounts_enabled?: boolean;
+  shared_cart_realtime_enabled?: boolean;
 };
 
 export function merchantHasFeature(
   merchant: MerchantFeatureSource | null | undefined,
   feature: MerchantFeatureGate,
-  now = new Date()
+  now?: Date
 ): boolean {
   if (
     feature === 'shared_cart' ||
     feature === 'shared_cart_accounts' ||
     feature === 'shared_cart_realtime'
   ) {
-    return (
-      Array.isArray(merchant?.premium_features) &&
-      merchant.premium_features.some(
-        (value) => typeof value === 'string' && value === feature
-      )
-    );
+    // Server callers with raw enrollment stay authoritative. The public
+    // snapshot intentionally exposes only derived presentation hints.
+    if (Array.isArray(merchant?.premium_features)) {
+      return merchant.premium_features.some((value) => value === feature);
+    }
+    return merchant?.[`${feature}_enabled`] === true;
   }
   const features = new Set(
     Array.isArray(merchant?.premium_features)
@@ -55,5 +58,7 @@ export function merchantHasFeature(
   }
   if (!merchant.plan_expires_at) return true;
   const expiryTime = Date.parse(merchant.plan_expires_at);
-  return Number.isFinite(expiryTime) && expiryTime > now.getTime();
+  return (
+    Number.isFinite(expiryTime) && expiryTime > (now ?? new Date()).getTime()
+  );
 }

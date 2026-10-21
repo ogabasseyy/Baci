@@ -15,16 +15,24 @@ import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-p
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
+import {
+  getCreatedOrderId,
+  isFiniteAmountLike,
+  toFiniteAmount,
+} from './checkout-order-result-amounts';
+import { resolveAgenticOfferPrices } from './resolve-agentic-offer-prices';
 
 const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
   'invalid_quantity',
   'invalid_variant',
+  'invalid_offer',
   'invalid_condition_offer',
   'condition_offer_price_changed',
   'insufficient_condition_offer_stock',
   'insufficient_stock',
   'insufficient_variant_stock',
+  'insufficient_offer_stock',
   'merchant_not_found',
   'customer_email_required',
   'customer_name_required',
@@ -95,6 +103,20 @@ export async function createAgenticCheckoutOrder(
     };
   }
 
+  const sharedCartBinding = body.shared_cart ?? null;
+  // Offer lines name a live offer of their own product: verify and
+  // reconcile exactly like /api/orders before computing economics, or
+  // the order would price and reserve the parent instead of the
+  // selected offer.
+  const resolvedOffers = await resolveAgenticOfferPrices(
+    supabase,
+    orderItemsPayload,
+    sharedCartBinding,
+    body.merchant_id
+  );
+  if (!resolvedOffers.ok) return resolvedOffers.result;
+  const liveOfferPrices = resolvedOffers.liveOfferPrices;
+
   // B3.5 round 5 (Codex P1, PR #1622): agentic
   // `calculateCheckoutSession` produces `tax: 0` for every line item,
   // so `body.tax_amount` is always 0 here. The RPC's
@@ -113,7 +135,6 @@ export async function createAgenticCheckoutOrder(
   // Wrap the call so a failure surfaces as a 500 the GPT-agent
   // caller can retry — distinct from the validation-shaped 400s
   // the RPC itself produces.
-  const sharedCartBinding = body.shared_cart ?? null;
   let computedTaxAmount: number;
   try {
     // CodeRabbit High (PR #1622 round 7): use the caller-supplied
@@ -124,6 +145,7 @@ export async function createAgenticCheckoutOrder(
     computedTaxAmount = await computeAgenticOrderTax({
       items: orderItemsPayload,
       merchantId: body.merchant_id,
+      offerPrices: liveOfferPrices,
       supabase,
     });
   } catch (taxError) {
@@ -265,24 +287,3 @@ export {
   markAgenticCheckoutOrderCanceled,
   sendAgenticOrderCreatedWebhook,
 } from '@/lib/agentic/checkout-order-lifecycle';
-
-function isFiniteAmountLike(value: unknown) {
-  return (
-    value !== null && value !== undefined && Number.isFinite(Number(value))
-  );
-}
-
-function toFiniteAmount(value: unknown) {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? amount : 0;
-}
-
-function getCreatedOrderId(data: Record<string, unknown>) {
-  const order = data.order;
-  if (order && typeof order === 'object' && 'id' in order) {
-    const id = (order as { id?: unknown }).id;
-    return typeof id === 'string' ? id : undefined;
-  }
-
-  return typeof data.id === 'string' ? data.id : undefined;
-}

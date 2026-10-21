@@ -22,6 +22,14 @@ it('rejects malformed input instead of guessing', () => {
     'Invalid base64url value'
   );
   expect(() => decodeBase64UrlToUtf8('%E0%A4%A')).toThrow();
+  // The gate character class ends with a literal `-` (no `+`/`/` range):
+  // `,` and `.` must stay rejected.
+  expect(() => decodeBase64UrlToUtf8('ab,c=')).toThrow(
+    'Invalid base64url value'
+  );
+  expect(() => decodeBase64UrlToUtf8('ab.c=')).toThrow(
+    'Invalid base64url value'
+  );
 });
 
 it('rejects trailing data after padding and non-canonical trailing bits', () => {

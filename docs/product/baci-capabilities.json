@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-21T05:39:56.004892+00:00",
-  "source_revision": "b24e8336a75267e7c4f0161162d10d15b9c0a1fc",
-  "evidence_digest": "d7443fb6b23d7684b3b06b0e449e66f063a1ccd50dd3c18d544542dae7f83229",
-  "claims_digest": "c4a16fd1baac7cc20c3ce7fc5f2d638a4b687bb152cf10c41ce7cf05504198cd",
-  "review_scope": "Web and mobile-admin source audit; no production workflow verification claimed. Source refs are reviewer evidence, not public URLs. Shopping MCP: Ogabassey buyer tools merchant-fixed; private text continuation server-configured, defaults off. Live ChatGPT privacy/retention and production activation not established. Agentic checkout offers resolve via merchant-scoped get_storefront_offer_resolution (published/admin gate in SQL), not fan-outs; scoping and shared-cart fall-through preserved. Authority RPC: three server sites share one awaited factory; shape, scoping, fall-through unchanged. PDP snapshot emits anchor-derived effective_policy so v2 offer pricing caps by the strict pool; merchant-aware chunking (1000 scoped/200 unscoped); strict-null error logging. Shape, scoping, fail-closed unchanged.",
+  "reviewed_at": "2026-10-21T06:00:32.417542+00:00",
+  "source_revision": "56dbbce75b277e5c9d4100458c0673266c65a84d",
+  "evidence_digest": "b9b4f7c70a2014654f40d8f4bbb0d457f6773a049999285c6e489b0a5b5c494b",
+  "claims_digest": "df8e4ef4b044379011a47341d41c6f79ad5775fb8300d6dd86dc346263dcd455",
+  "review_scope": "Web and mobile-admin source audit; no production workflow verification claimed. Source refs are reviewer evidence, not public URLs. Shopping MCP: Ogabassey buyer tools merchant-fixed; private text continuation server-configured, defaults off. Live ChatGPT privacy/retention and production activation not established. Agentic checkout offers resolve via merchant-scoped get_storefront_offer_resolution (published/admin gate in SQL), not fan-outs; scoping and shared-cart fall-through preserved. Authority RPC: three server sites share one awaited factory; shape, scoping, fall-through unchanged. PDP snapshot emits anchor-derived effective_policy so v2 offer pricing caps by the strict pool; merchant-aware chunking (1000 scoped/200 unscoped); strict-null error logging. Shape, scoping, fail-closed unchanged. Follow-up: anchor pick aligned to lowest id on all three surfaces; strict zero-unit emits 0 units; explicit-pick exception pinned by test.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

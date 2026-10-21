@@ -185,7 +185,7 @@ const buildStorefrontConfig = ({ config }) => ({
   ...config,
   name: 'Ogabassey',
   slug: 'ogabassey-store',
-  owner: 'ogabassey',
+  owner: 'ogabassey-services-limited',
   version: runtimeVersion,
   orientation: 'default',
   icon: './assets/images/icon.png',

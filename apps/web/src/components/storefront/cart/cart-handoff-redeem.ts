@@ -4,6 +4,14 @@ import { isCartDeviceRevocationPending } from '@/hooks/cart/shared-cart-session-
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { MergeConflictView } from './cart-handoff-support';
 
+/** Bound the post-outcome preview refresh so a stalled refresh cannot strand the redeeming state. */
+function refreshPreviewBounded(deps: HandoffRedeemDeps): Promise<unknown> {
+  return withCartRequestDeadline(null, async () => {
+    await deps.refreshPreview();
+    return null;
+  });
+}
+
 export interface HandoffRedeemDeps {
   handoffId: string;
   merchantSlug: string | null | undefined;
@@ -88,7 +96,7 @@ export async function postHandoffRedeem(
       deps.setRedeemError(
         'Your cart session expired. Review your cart and try again.'
       );
-      await deps.refreshPreview();
+      await refreshPreviewBounded(deps);
       return false;
     }
     if (response.status === 409 && payload.code === 'version_conflict') {
@@ -104,7 +112,7 @@ export async function postHandoffRedeem(
       // instead of applying a stale incoming/existing choice.
       deps.setConflicts([]);
       deps.setResolutions({});
-      await deps.refreshPreview();
+      await refreshPreviewBounded(deps);
       return false;
     }
     if (payload.code === 'handoff_consumed') {

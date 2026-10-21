@@ -19,6 +19,7 @@ import {
   identityKeyOfDisplay,
 } from '@/hooks/cart/shared-cart-display-identity';
 import { removeCapacityLineFromLiveCart } from '@/hooks/cart/shared-cart-live-removal';
+import { subscribeCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 
 /** Edit only the parked merchant-scoped device cache, before any create exists. */
 export function DeviceCartCapacityItems({
@@ -31,6 +32,15 @@ export function DeviceCartCapacityItems({
   useEffect(() => {
     setItems(getCartFromStorage(merchantSlug));
   }, [merchantSlug]);
+  // Keep the panel in sync with parked-cache writes from this tab's
+  // provider or other tabs while it stays open.
+  useEffect(
+    () =>
+      subscribeCartSessionGeneration(() =>
+        setItems(getCartFromStorage(merchantSlug))
+      ),
+    [merchantSlug]
+  );
   function remove(index: number) {
     const selected = items[index];
     if (!selected) return;

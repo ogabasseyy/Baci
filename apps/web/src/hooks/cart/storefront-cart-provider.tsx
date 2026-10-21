@@ -275,7 +275,7 @@ export function StorefrontCartProvider({
           discardLegacyImport: shared.discardLegacyImport,
           resolveImportConflicts: shared.resolveImportConflicts,
           sharedCartRef:
-            shared.cartId && shared.version !== null
+            shared.cartId && shared.version !== null && !shared.isTerminal
               ? { cartId: shared.cartId, version: shared.version }
               : null,
           refreshSharedCart: shared.refreshSharedCart,

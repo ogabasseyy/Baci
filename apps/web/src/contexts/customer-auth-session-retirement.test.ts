@@ -12,6 +12,8 @@ import {
 } from './customer-auth-session';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
+  clearCartDeviceRevocationPending: vi.fn(),
+  clearCartDeviceSessionActive: vi.fn(),
   markCartDeviceRevocationPending: vi.fn(),
   revokeCartDeviceSession: vi.fn(),
 }));

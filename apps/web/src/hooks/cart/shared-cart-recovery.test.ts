@@ -38,6 +38,38 @@ it('retries the original failed operation in the live generation', () => {
   });
 });
 
+it('erases preserved lines when discarding after a terminal adoption', async () => {
+  const { saveCartToStorage, getCartFromStorage } = await import(
+    './cart-storage'
+  );
+  const { cartItem, snapshot } = await import(
+    './shared-cart-provisioning.test-support'
+  );
+  saveCartToStorage([cartItem({ id: 'prod-9', cartItemId: 'prod-9' })], 'shop');
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const runtime = result.current;
+  runtime.stateRef.current = {
+    ...runtime.stateRef.current,
+    confirmed: snapshot({ state: 'completed', lines: [], version: 2 }),
+    importStatus: 'failed',
+    importWarnings: ['import_capacity_exceeded'],
+  };
+  createCartRecovery({
+    ...runtime,
+    dispatch: vi.fn(),
+    setLinkPhase: vi.fn(),
+    refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
+  }).discardLegacyImport();
+  expect(getCartFromStorage('shop')).toEqual([]);
+});
+
 it('discards a capacity-blocked device cart even when a create is retained', () => {
   const { result } = renderHook(() =>
     useSharedCartRuntime({

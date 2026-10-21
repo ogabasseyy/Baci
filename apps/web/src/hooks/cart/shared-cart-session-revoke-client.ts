@@ -162,6 +162,7 @@ export async function revokeCartDeviceSession(
     signal?: AbortSignal;
     drainActiveWrites?: boolean;
     deferCacheErasure?: boolean;
+    retiringUserId?: string | null;
   }
 ): Promise<{ ok: boolean }> {
   const request = () =>
@@ -171,7 +172,8 @@ export async function revokeCartDeviceSession(
         requestDeviceRevocation(
           merchantSlug,
           signal,
-          options?.deferCacheErasure
+          options?.deferCacheErasure,
+          options?.retiringUserId
         ),
       options?.signal
     );
@@ -200,7 +202,8 @@ export async function revokeCartDeviceSession(
 async function requestDeviceRevocation(
   merchantSlug: string | null | undefined,
   signal: AbortSignal,
-  deferCacheErasure?: boolean
+  deferCacheErasure?: boolean,
+  retiringUserId?: string | null
 ): Promise<{ ok: boolean }> {
   try {
     const response = await fetchWithCsrf(revokeRoute(merchantSlug), {
@@ -227,18 +230,20 @@ async function requestDeviceRevocation(
       // A pending retirement parks the previous account's cache. Erase it
       // before releasing access: provisioning and preserved-session adoption
       // read this key directly after passive revocation succeeds. Logout
-      // defers this until the auth logout commits, so a failed logout
-      // keeps the saved device cart for the still-signed-in customer.
-      if (
-        !deferCacheErasure &&
-        isCartDeviceRevocationPending(merchantSlug) &&
-        typeof window !== 'undefined'
-      ) {
-        eraseRetiredCartCache(merchantSlug);
-        clearSharedCartImportReceipt(merchantSlug);
+      // defers this (and the fence itself) until the auth logout commits,
+      // so a failed logout keeps both the saved device cart and the
+      // revocation fence for the still-signed-in customer.
+      if (!deferCacheErasure) {
+        if (
+          isCartDeviceRevocationPending(merchantSlug) &&
+          typeof window !== 'undefined'
+        ) {
+          eraseRetiredCartCache(merchantSlug, retiringUserId);
+          clearSharedCartImportReceipt(merchantSlug);
+        }
+        clearCartDeviceRevocationPending(merchantSlug);
+        clearCartDeviceSessionActive(merchantSlug);
       }
-      clearCartDeviceRevocationPending(merchantSlug);
-      clearCartDeviceSessionActive(merchantSlug);
     }
     return { ok };
   } catch {

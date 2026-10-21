@@ -103,17 +103,31 @@ export interface CartTransitionChange {
   merchantSlug?: string | null;
   operationId?: string;
 }
-let generationChange: {
+type GenerationChange = {
   from: number;
   generation: number;
   transition?: CartTransitionChange;
-} | null = null;
-export const getCartSessionGenerationChange = () => generationChange;
+};
+let generationChange: GenerationChange | null = null;
+const generationChangesByMerchant = new Map<string, GenerationChange>();
+const GLOBAL_CHANGE_KEY = '__global__';
+export const getCartSessionGenerationChange = (
+  merchantSlug?: string | null
+) => {
+  if (merchantSlug !== undefined) {
+    return (
+      generationChangesByMerchant.get(merchantSlug ?? GLOBAL_CHANGE_KEY) ??
+      generationChange
+    );
+  }
+  return generationChange;
+};
 
 export const bumpCartSessionGeneration = (
   transition?: CartTransitionChange
 ): number => {
   const from = getCartSessionGeneration(transition?.merchantSlug);
+  const knownMerchants = [...merchantGenerations.keys()];
   cartSessionGeneration += 1;
   if (transition?.merchantSlug)
     merchantGenerations.set(transition.merchantSlug, cartSessionGeneration);
@@ -122,6 +136,16 @@ export const bumpCartSessionGeneration = (
     merchantGenerations.clear();
   }
   generationChange = { from, generation: cartSessionGeneration, transition };
+  generationChangesByMerchant.set(
+    transition?.merchantSlug ?? GLOBAL_CHANGE_KEY,
+    generationChange
+  );
+  // A global bump fences every merchant, so record it for each known
+  // merchant as well as the global slot.
+  if (!transition?.merchantSlug) {
+    for (const slug of knownMerchants)
+      generationChangesByMerchant.set(slug, generationChange);
+  }
   for (const listener of [...cartSessionGenerationListeners]) {
     listener();
   }

@@ -2,7 +2,7 @@
 
 import { buildImportEntries } from './build-import-entries';
 
-import { getCartFromStorage } from './cart-storage';
+import { getCartFromStorage, saveCartToStorage } from './cart-storage';
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { planLegacyImport } from './shared-cart-reducer';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
@@ -174,6 +174,10 @@ export function createCartRecovery(
       createAttemptedRef.current = false;
       createRequestRef.current = null;
     }
+    // Discarding explicitly abandons the device lines: erase the parked
+    // cache so a later terminal guard or re-plan cannot resurrect them.
+    // The display cache re-persists the kept server cart afterwards.
+    saveCartToStorage([], optionsRef.current.merchantSlug);
     dispatch({
       generation: generationRef.current,
       status: 'skipped',

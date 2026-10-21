@@ -3,23 +3,14 @@
 import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
-import {
-  getCartFromStorage,
-  getSharedCartImportReceipt,
-  saveSharedCartImportReceipt,
-} from './cart-storage';
-import {
-  bootstrapSharedCart,
-  createSharedCart,
-  fetchSharedCartSnapshot,
-} from './shared-cart-client';
+import { saveSharedCartImportReceipt } from './cart-storage';
+import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
-import { adoptPreservedCart } from './shared-cart-preserved-session';
+import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
+import { planProvisioningImport } from './shared-cart-provisioning-plan';
 import { isTerminalCart } from './shared-cart-queue';
-import { planLegacyImport } from './shared-cart-reducer';
 import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
 import { getCartSessionGeneration } from './shared-cart-storage';
-import { unimportedTerminalLines } from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartProvisioning(
@@ -144,27 +135,10 @@ export function createCartProvisioning(
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
       const status = stateRef.current.importStatus;
-      const terminal = stateRef.current.confirmed;
-      const isTerminalReset = terminal !== null && isTerminalCart(terminal);
-      const stored = getCartFromStorage(optionsRef.current.merchantSlug);
-      // After a mid-session terminal adoption the preserved device lines
-      // are still in storage; drop consumed mirrors before re-planning.
-      const cached =
-        isTerminalReset && terminal
-          ? unimportedTerminalLines(
-              stored,
-              terminal.cartId,
-              getSharedCartImportReceipt(optionsRef.current.merchantSlug)
-            )
-          : stored;
-      const replannable =
-        status === 'none' ||
-        status === 'failed' ||
-        (status === 'skipped' && isTerminalReset);
-      const planned =
-        replannable && cached.length > 0
-          ? planLegacyImport(cached, null, null)
-          : null;
+      const { planned } = planProvisioningImport(
+        optionsRef.current.merchantSlug,
+        stateRef.current
+      );
       if (planned?.kind === 'blocked') {
         // Over-capacity first import: surface the same actionable
         // capacity outcome as the server-cart path instead of hiding
@@ -210,22 +184,14 @@ export function createCartProvisioning(
       // A definitive bootstrap-scope rejection can mean another tab installed
       // a live session. Never substitute a GET for an indeterminate replay.
       if (canAdoptPreserved && created.code === 'unauthorized') {
-        const preserved = await fetchSharedCartSnapshot(
-          undefined,
-          merchantSlug
+        const adopted = await adoptPreservedFallback(
+          context,
+          merchantSlug,
+          fenced,
+          () => ensureCart(canProceed)
         );
+        if (adopted) return adopted;
         if (!fenced()) return null;
-        if (preserved.ok && !isTerminalCart(preserved.snapshot)) {
-          if (!adoptPreservedCart(context, preserved.snapshot))
-            return {
-              ok: false,
-              code: 'temporarily_unavailable',
-              retryable: true,
-            };
-          createRequestRef.current = null;
-          void context.hydrateMissing?.(preserved.snapshot);
-          return { ok: true };
-        }
       }
       if (lines) {
         if (created.retryable) {

@@ -1,14 +1,21 @@
-/** Erase only this merchant's parked guest and Supabase-user cart payloads. */
-export function eraseRetiredCartCache(slug?: string | null): void {
+/** Erase only this merchant's parked guest and retiring-user cart payloads. */
+export function eraseRetiredCartCache(
+  slug?: string | null,
+  retiringUserId?: string | null
+): void {
   const storage = window.localStorage;
   const prefix = slug ? `baci-cart-${slug}-` : 'baci-cart-';
-  const userId =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i));
   for (const key of keys) {
     if (!key?.startsWith(prefix)) continue;
     const suffix = key.slice(prefix.length);
-    if (suffix === 'guest' || userId.test(suffix)) storage.removeItem(key);
+    if (
+      suffix === 'guest' ||
+      suffix === 'group-negotiation' ||
+      suffix === 'shared-import' ||
+      (retiringUserId != null && suffix === retiringUserId)
+    )
+      storage.removeItem(key);
   }
   // Historical unscoped payloads belong to the merchant-less fallback;
   // only a merchant-less retirement may erase them.

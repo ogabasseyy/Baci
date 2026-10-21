@@ -11,6 +11,16 @@ it('does not recreate lines already consumed by the terminal cart receipt', () =
     })
   ).toEqual([]);
 });
+it('keeps fresh device lines written after a matching receipt', () => {
+  const fresh = cartItem({ id: 'new', cartItemId: 'new' });
+  expect(
+    unimportedTerminalLines(
+      [{ ...cartItem(), serverLineId: 'consumed' }, fresh],
+      'done',
+      { cartId: 'done', importedAt: '2026-10-20T00:00:00Z', lineCount: 1 }
+    )
+  ).toEqual([fresh]);
+});
 it('keeps only genuinely unimported lines when a receipt belongs to another cart', () => {
   const fresh = cartItem({ id: 'new', cartItemId: 'new' });
   expect(

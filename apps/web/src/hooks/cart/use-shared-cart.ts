@@ -8,6 +8,7 @@ import {
   type UseSharedCartResult,
 } from './shared-cart-hook-support';
 import { createCartProvisioning } from './shared-cart-provisioning';
+import { isTerminalCart } from './shared-cart-queue';
 import { createCartRecovery } from './shared-cart-recovery';
 import { deriveSyncStatus } from './shared-cart-reducer';
 import { createCartSnapshotActions } from './shared-cart-snapshots';
@@ -108,6 +109,7 @@ export function useSharedCart(
       importStatus: 'none',
       importWarnings: [],
       isHydrated: true,
+      isTerminal: false,
       removeFromCart: noop,
       repriceLine: noop,
       refreshSharedCart: async () => {
@@ -136,6 +138,7 @@ export function useSharedCart(
     importStatus: state.importStatus,
     importWarnings: state.importWarnings,
     isHydrated: hydrated,
+    isTerminal: state.confirmed ? isTerminalCart(state.confirmed) : false,
     removeFromCart,
     repriceLine,
     refreshSharedCart,

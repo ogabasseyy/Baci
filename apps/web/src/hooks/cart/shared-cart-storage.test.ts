@@ -2,6 +2,7 @@ import { beforeEach, expect, it } from 'vitest';
 import {
   bumpCartSessionGeneration,
   getCartSessionGeneration,
+  getCartSessionGenerationChange,
   getSharedCartImportReceipt,
   saveSharedCartImportReceipt,
   subscribeCartSessionGeneration,
@@ -26,6 +27,22 @@ it('notifies only subscribed generation observers', () => {
   unsubscribe();
   bumpCartSessionGeneration();
   expect(count).toBe(1);
+});
+it('keeps transition metadata per merchant', () => {
+  bumpCartSessionGeneration({
+    merchantSlug: 'merchant-a',
+    operationId: 'selection-a',
+  });
+  bumpCartSessionGeneration({
+    merchantSlug: 'merchant-b',
+    operationId: 'selection-b',
+  });
+  expect(
+    getCartSessionGenerationChange('merchant-a')?.transition?.operationId
+  ).toBe('selection-a');
+  expect(
+    getCartSessionGenerationChange('merchant-b')?.transition?.operationId
+  ).toBe('selection-b');
 });
 it('scopes a merchant generation bump to that merchant only', () => {
   const otherBefore = getCartSessionGeneration('other-shop');

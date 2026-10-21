@@ -103,7 +103,9 @@ it('defers cache erasure when the caller must commit first', async () => {
     real.revokeCartDeviceSession(SLUG, { deferCacheErasure: true })
   ).resolves.toEqual({ ok: true });
   expect(getCartFromStorage(SLUG)).toHaveLength(1);
-  expect(real.isCartDeviceRevocationPending(SLUG)).toBe(false);
+  // The fence itself is deferred too: it lifts only when the caller
+  // commits (auth logout ok) and completes the cleanup.
+  expect(real.isCartDeviceRevocationPending(SLUG)).toBe(true);
 });
 
 it('keeps the fence when restricted storage prevents removing the retired cache', async () => {

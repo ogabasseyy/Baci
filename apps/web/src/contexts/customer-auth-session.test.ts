@@ -15,6 +15,7 @@ import { clearCartStorage } from '@/hooks/use-cart';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
   clearCartDeviceRevocationPending: vi.fn(),
+  clearCartDeviceSessionActive: vi.fn(),
   markCartDeviceRevocationPending: vi.fn(),
   resetPendingCartDeviceRevocationsForTests: vi.fn(),
   revokeCartDeviceSession: vi.fn(),
@@ -73,7 +74,10 @@ describe('customer-auth-session passive identity revocation', () => {
     });
 
     expect(markCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
-    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(revokeCartDeviceSession).toHaveBeenCalledWith(
+      'ogabassey',
+      expect.objectContaining({ retiringUserId: 'user-1' })
+    );
     expect(clearCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenLastCalledWith(null);
@@ -210,7 +214,10 @@ describe('customer-auth-session passive identity revocation', () => {
       setUser,
     });
 
-    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(revokeCartDeviceSession).toHaveBeenCalledWith(
+      'ogabassey',
+      expect.objectContaining({ retiringUserId: 'user-1' })
+    );
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 'user-2' })
@@ -275,7 +282,10 @@ describe('customer-auth-session passive identity revocation', () => {
       setUser,
     });
 
-    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(revokeCartDeviceSession).toHaveBeenCalledWith(
+      'ogabassey',
+      expect.objectContaining({ retiringUserId: 'user-1' })
+    );
     expect(clearCartStorage).not.toHaveBeenCalled();
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
@@ -352,7 +362,10 @@ describe('customer-auth-session passive identity revocation', () => {
     );
 
     expect(committed).toBe(true);
-    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(revokeCartDeviceSession).toHaveBeenCalledWith(
+      'ogabassey',
+      expect.objectContaining({ retiringUserId: 'user-1' })
+    );
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'user-2' })

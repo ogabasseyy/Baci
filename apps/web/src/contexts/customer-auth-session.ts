@@ -9,8 +9,10 @@ import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fenc
 //
 // The type imports below are type-only (erased at compile time); there is no
 // runtime cycle back into the context module.
+import { eraseRetiredCartCache } from '@/hooks/cart/retired-cart-cache';
 import {
   clearCartDeviceRevocationPending,
+  clearCartDeviceSessionActive,
   markCartDeviceRevocationPending,
   revokeCartDeviceSession,
 } from '@/hooks/cart/shared-cart-session-revoke-client';
@@ -43,7 +45,9 @@ async function retirePreviousAccountCartAuthority(
   bumpCartSessionGeneration({ merchantSlug });
   try {
     await retirement.drained;
-    const revoked = await revokeCartDeviceSession(merchantSlug);
+    const revoked = await revokeCartDeviceSession(merchantSlug, {
+      retiringUserId: previousUserId,
+    });
     if (!revoked.ok) {
       setRememberedCustomerUserId(merchantSlug, previousUserId);
       return false;
@@ -237,7 +241,10 @@ export async function performCustomerLogout(
   try {
     const revoked = await retirement.drained
       .then(() =>
-        revokeCartDeviceSession(merchantSlug, { deferCacheErasure: true })
+        revokeCartDeviceSession(merchantSlug, {
+          deferCacheErasure: true,
+          retiringUserId: previousUserId ?? userId,
+        })
       )
       .catch(() => ({ ok: false }));
     if (!revoked.ok)
@@ -265,6 +272,10 @@ export async function performCustomerLogout(
       );
     }
     clearCustomerAuthRollbackPending(merchantSlug);
+    // Complete the deferred revocation cleanup now that logout committed.
+    eraseRetiredCartCache(merchantSlug, previousUserId ?? userId);
+    clearCartDeviceRevocationPending?.(merchantSlug);
+    clearCartDeviceSessionActive?.(merchantSlug);
     setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);

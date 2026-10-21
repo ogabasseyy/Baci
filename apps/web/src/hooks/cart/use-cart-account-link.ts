@@ -166,7 +166,7 @@ export function useCartAccountLink(options: Options) {
     state.current.options = options;
   });
   useEffect(() => {
-    const change = getCartSessionGenerationChange();
+    const change = getCartSessionGenerationChange(options.merchantSlug);
     // A failed selection relinks the ordinary cart, but its unknown outcome
     // must retain the exact replay body for this same account and operation.
     const keepPending = Boolean(

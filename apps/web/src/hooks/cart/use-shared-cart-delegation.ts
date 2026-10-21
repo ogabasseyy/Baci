@@ -27,7 +27,7 @@ export function useSharedCartDelegation(input: {
   useEffect(
     () =>
       subscribeCartSessionGeneration(() => {
-        const change = getCartSessionGenerationChange();
+        const change = getCartSessionGenerationChange(input.merchantSlug);
         if (
           !change?.transition?.merchantSlug ||
           change.transition.merchantSlug === input.merchantSlug

@@ -35,7 +35,7 @@ describe('markCorrectiveRetry', () => {
   });
 
   it('reserves a fresh pending attempt past the failure ceiling', async () => {
-    const summary = { retried: 0 };
+    const summary = { retried: 0, skipped: 0 };
 
     await markCorrectiveRetry(
       {} as never,
@@ -49,9 +49,40 @@ describe('markCorrectiveRetry', () => {
       expect.objectContaining({
         attempt_count: 0,
         last_error: 'document_changed_during_send',
+        metadata: { corrective_attempts: 1 },
         status: 'pending',
       })
     );
-    expect(summary.retried).toBe(1);
+    expect(summary).toMatchObject({ retried: 1, skipped: 0 });
+  });
+
+  it('terminalizes a poison row past the corrective budget', async () => {
+    const summary = { retried: 0, skipped: 0 };
+
+    await markCorrectiveRetry(
+      {} as never,
+      {
+        id: 'row-1',
+        claim_owner: 'worker-1',
+        metadata: { corrective_attempts: 3 },
+      },
+      summary
+    );
+
+    expect(updateOutboxStatus).toHaveBeenCalledWith(
+      {},
+      {
+        id: 'row-1',
+        claim_owner: 'worker-1',
+        metadata: { corrective_attempts: 3 },
+      },
+      expect.objectContaining({
+        last_error: 'corrective_attempt_budget_exhausted',
+        next_attempt_at: null,
+        skip_reason: 'delivery_outcome_unknown',
+        status: 'skipped',
+      })
+    );
+    expect(summary).toMatchObject({ retried: 0, skipped: 1 });
   });
 });

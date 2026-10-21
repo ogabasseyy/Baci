@@ -31,10 +31,28 @@ describe('getReceiptClaimTokenFromLoginRedirect', () => {
     ).toBe('token_123');
   });
 
+  it('extracts tokens beneath a storefront base path', () => {
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/ogabassey/receipts/claim/token_123'
+      )
+    ).toBe('token_123');
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/ogabassey/receipts/claim/token_123?from=email'
+      )
+    ).toBe('token_123');
+  });
+
   it('ignores non-claim redirects', () => {
     expect(getReceiptClaimTokenFromLoginRedirect('/receipts')).toBeNull();
     expect(
       getReceiptClaimTokenFromLoginRedirect('/account?redirect=/receipts')
+    ).toBeNull();
+    expect(
+      getReceiptClaimTokenFromLoginRedirect(
+        '/account?redirect=/receipts/claim/token_123'
+      )
     ).toBeNull();
   });
 });

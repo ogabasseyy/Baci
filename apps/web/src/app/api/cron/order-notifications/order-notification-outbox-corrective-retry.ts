@@ -37,17 +37,53 @@ export function isPostAcceptanceLeaseReset(result: {
 // caused the reset already fired, so no further event requeues the
 // correction. Reserve a fresh corrective attempt instead of applying
 // the provider-failure ceiling — failing here would silently drop a
-// correction the customer never receives. The loop is self-limiting:
-// without another concurrent edit the retry sends and terminalizes.
+// correction the customer never receives.
+export const MAX_CORRECTIVE_ATTEMPTS = 3;
+
+const CORRECTIVE_ATTEMPTS_METADATA_KEY = 'corrective_attempts';
+
+function readCorrectiveAttempts(row: {
+  metadata?: Record<string, unknown>;
+}): number {
+  const raw = row.metadata?.[CORRECTIVE_ATTEMPTS_METADATA_KEY];
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : 0;
+}
+
 export async function markCorrectiveRetry(
   supabase: SupabaseClientLike,
-  row: OutboxStatusRow,
-  summary: { retried: number },
+  row: OutboxStatusRow & { metadata?: Record<string, unknown> },
+  summary: { retried: number; skipped: number },
   error = 'document_changed_during_send'
 ): Promise<void> {
+  const correctiveAttempts = readCorrectiveAttempts(row) + 1;
+
+  // Poison-row fence: a recurring marker reset (a repeatedly touched
+  // rendered field or a staff integration that keeps updating the order)
+  // would otherwise re-send a fresh corrective email every cycle with the
+  // attempt budget perpetually reset. Past the budget the row terminalizes
+  // as delivery_outcome_unknown — the established indeterminate terminal —
+  // instead of duplicating forever.
+  if (correctiveAttempts > MAX_CORRECTIVE_ATTEMPTS) {
+    await updateOutboxStatus(supabase, row, {
+      last_error: 'corrective_attempt_budget_exhausted',
+      next_attempt_at: null,
+      skip_reason: 'delivery_outcome_unknown',
+      skipped_at: new Date().toISOString(),
+      status: 'skipped' satisfies OrderNotificationOutboxStatus,
+    });
+    summary.skipped += 1;
+    return;
+  }
+
   await updateOutboxStatus(supabase, row, {
     attempt_count: 0,
     last_error: error,
+    // Merge over the claimed snapshot: the claim holder is the only writer,
+    // so no concurrent metadata edit from another worker is possible here.
+    metadata: {
+      ...(row.metadata ?? {}),
+      [CORRECTIVE_ATTEMPTS_METADATA_KEY]: correctiveAttempts,
+    },
     next_attempt_at: new Date(Date.now() + retryDelayMs(0)).toISOString(),
     status: 'pending' satisfies OrderNotificationOutboxStatus,
   });

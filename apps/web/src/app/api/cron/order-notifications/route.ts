@@ -111,7 +111,10 @@ async function deadLetterCorruptOutboxRow(
 const DEFAULT_BATCH_SIZE = 1;
 // Manual PDF sends fully buffer the PDF plus a ~33% larger base64 copy in
 // memory per row (see send-manual-order-document.ts), inside a 60s tick:
-// keep the manual batch ceiling conservative and the default at 1.
+// keep the manual batch ceiling conservative and the default at 1. Peak
+// render memory is the per-row buffer times PROCESS_CONCURRENCY (5 order
+// groups render at once), not times the batch size — size function memory
+// for 5 concurrent renders before raising either ceiling.
 const MAX_BATCH_SIZE = 10;
 const batchSizeSchema = createCronBatchSizeSchema({
   defaultSize: DEFAULT_BATCH_SIZE,

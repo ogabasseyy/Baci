@@ -195,11 +195,12 @@ vi.mock('@/lib/utils', () => ({
 
 function createJsonResponse(
   body: Record<string, unknown>,
-  init: { ok?: boolean; status?: number } = {}
+  init: { ok?: boolean; status?: number; headers?: Record<string, string> } = {}
 ) {
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
+    headers: new Headers(init.headers ?? {}),
     text: () => Promise.resolve(JSON.stringify(body)),
   } as Response;
 }

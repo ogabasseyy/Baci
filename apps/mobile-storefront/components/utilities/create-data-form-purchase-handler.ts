@@ -2,11 +2,11 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  forgetPendingVtuPurchaseDurable,
-  isStalePendingVtuSuccess,
-  markPendingVtuCompleted,
-  notePendingVtuReference,
-} from '@/lib/pending-vtu-idempotency';
+  forgetOwnPendingVtuPurchaseDurable,
+  isOwnPendingVtuStaleSuccess,
+  markOwnPendingVtuCompleted,
+  noteOwnPendingVtuReference,
+} from '@/lib/pending-vtu-generation-guards';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import {
   acquireUtilityCheckoutOrAlert,
@@ -160,7 +160,11 @@ export function createDataFormPurchaseHandler({
           ...request,
           expectedUserId: submittingUserId,
           idempotencyKey,
+          pendingDescriptor: descriptor,
         });
+        // Generation-guarded settlement (Codex R6 P1): the
+        // mutations below run only while live holds ownKey.
+        const ownKey = result.canonicalIdempotencyKey ?? idempotencyKey;
         if (
           shouldDiscardVtuResultForAccountSwitch(
             payment,
@@ -174,9 +178,9 @@ export function createDataFormPurchaseHandler({
           // not mint fresh and debit twice. Terminal observations also
           // record completion (processing notes must NOT): the stale
           // guard keys off completion time.
-          notePendingVtuReference(descriptor, result.reference);
+          noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
           if (result.status !== 'processing') {
-            markPendingVtuCompleted(descriptor);
+            markOwnPendingVtuCompleted(descriptor, ownKey);
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
@@ -191,9 +195,9 @@ export function createDataFormPurchaseHandler({
           // completion) so a reopen retries with the SAME key and replays
           // this outcome instead of minting fresh and debiting twice.
           // Suppress onSuccess/Alert: the screen is gone.
-          notePendingVtuReference(descriptor, result.reference);
+          noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
           if (result.status !== 'processing') {
-            markPendingVtuCompleted(descriptor);
+            markOwnPendingVtuCompleted(descriptor, ownKey);
           }
           // The charge committed but the suppressed onSuccess will never
           // fire the parent's wallet invalidation: refresh here so the
@@ -203,20 +207,18 @@ export function createDataFormPurchaseHandler({
           await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
-        // Only rotate on terminal success. 'processing' means the
-        // vend is still in flight server-side; rotating now would let
-        // a user-initiated retry bypass the route's dedupe row and
-        // create a duplicate VTU transaction.
+        // Never rotate while processing: the vend is still in flight
+        // server-side; rotating would bypass the claim and double-debit.
         if (result.status === 'processing') {
-          notePendingVtuReference(descriptor, result.reference);
+          noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
         }
         if (
           result.status === 'successful' &&
-          isStalePendingVtuSuccess(descriptor, result.reference)
+          isOwnPendingVtuStaleSuccess(descriptor, result.reference, ownKey)
         ) {
           // Old replay answering a NEW intent: forget so the next tap
           // mints fresh, and say so instead of presenting it as new.
-          await forgetPendingVtuPurchaseDurable(descriptor);
+          await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
           Alert.alert(
             'Purchase Already Completed',
             `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
@@ -225,7 +227,7 @@ export function createDataFormPurchaseHandler({
         }
         if (result.status === 'successful') {
           // Durable (Codex R153 P2): lands before onSuccess finalizes.
-          await forgetPendingVtuPurchaseDurable(descriptor);
+          await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
         }
         const cashback = creditedVtuCashback(result.cashback);
         onSuccess({
@@ -250,19 +252,13 @@ export function createDataFormPurchaseHandler({
             getIsActive
           )
         ) {
-          // Still finalize status-bearing terminal errors for the
-          // SUBMITTER (descriptor captured at submit): otherwise the
-          // retained key replays the dead transaction when they retry.
-          if (shouldRotateWalletIdempotencyKeyForError(error)) {
-            payment.resetWalletIdempotencyKey(descriptor);
-          }
+          // Definitive rejections rotated inside charge; suppress only.
           return;
         }
         // Keep the key for ambiguous failures (network, timeout, 5xx,
         // pre-route 401/403/413/415/429, unknown) so the route's dedupe
         // table protects retries. Rotate only on definitive route 4xx.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey(descriptor);
           // The rejection may prove a stale balance (e.g. 400 after
           // another spend): AWAIT the refetch (never rejects), else a
           // quick retry re-passes on it. On-screen only — off-screen

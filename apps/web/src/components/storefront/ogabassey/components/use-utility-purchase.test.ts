@@ -8,6 +8,7 @@ import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import {
   clearPendingVtuKeys,
   markPendingVtuCompleted,
+  recallPendingVtuKey,
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import type { UtilityCheckoutPayload } from './utility-checkout';
@@ -1441,5 +1442,47 @@ describe('useUtilityPurchase', () => {
     });
     expect(seenKeys).toHaveLength(2);
     expect(seenKeys[1]).not.toBe(seenKeys[0]);
+  });
+
+  it('adopts the canonical key after an intent-claim join', async () => {
+    // The mocked submit signs for real, then answers processing
+    // WITH the winner-key wire (a server-side join). The minted
+    // entry must rebind to the canonical key so the retry replays
+    // the winner instead of re-preparing + orphaning.
+    let seenSignature = '';
+    mockSubmit.mockImplementation(
+      async (request: RealSignatureSubmitRequest) => {
+        const signature = buildVtuWalletPayloadSignature(
+          buildUtilityCheckoutWalletPayload({
+            merchantSlug: request.merchantSlug,
+            customerName: request.customerName,
+            customerPhone: request.customerPhone,
+            expectedUserId: request.expectedUserId,
+            payload: request.payload,
+          })
+        );
+        seenSignature = signature;
+        await request.getWalletIdempotencyKey(signature);
+        return {
+          kind: 'wallet-success',
+          reference: 'REF-JOIN',
+          amount: 1000,
+          processing: true,
+          canonicalIdempotencyKey: 'key-winner',
+        };
+      }
+    );
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    await act(async () => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+
+    const scoped = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      seenSignature
+    );
+    expect(recallPendingVtuKey(scoped)).toBe('key-winner');
   });
 });

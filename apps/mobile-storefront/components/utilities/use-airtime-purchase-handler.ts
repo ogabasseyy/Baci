@@ -3,10 +3,10 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  forgetPendingVtuPurchaseDurable,
-  isStalePendingVtuSuccess,
-  notePendingVtuReference,
-} from '@/lib/pending-vtu-idempotency';
+  forgetOwnPendingVtuPurchaseDurable,
+  isOwnPendingVtuStaleSuccess,
+  noteOwnPendingVtuReference,
+} from '@/lib/pending-vtu-generation-guards';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import {
   acquireUtilityCheckoutOrAlert,
@@ -94,7 +94,11 @@ async function executeAirtimePurchase({
         ...request,
         expectedUserId: submittingUserId,
         idempotencyKey,
+        pendingDescriptor: descriptor,
       });
+      // Generation-guarded settlement (Codex R6 P1): the
+      // mutations below run only while live holds ownKey.
+      const ownKey = result.canonicalIdempotencyKey ?? idempotencyKey;
       if (
         shouldDiscardVtuResultForAccountSwitch(
           payment,
@@ -104,17 +108,17 @@ async function executeAirtimePurchase({
       ) {
         // Finalize the SUBMITTER's entry so switch-back repeats replay
         // the original outcome instead of minting fresh.
-        await preserveSuppressedVtuSuccess(payment, descriptor, result);
+        await preserveSuppressedVtuSuccess(payment, descriptor, result, ownKey);
         return;
       }
       if (getIsActive && !getIsActive()) {
         // Back-navigated mid-flight: preserve for SAME-key replay on
         // reopen; suppress onSuccess/Alert (screen gone).
-        await preserveSuppressedVtuSuccess(payment, descriptor, result);
+        await preserveSuppressedVtuSuccess(payment, descriptor, result, ownKey);
         return;
       }
       if (result.status === 'processing') {
-        notePendingVtuReference(descriptor, result.reference);
+        noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
         onSuccess({
           amount: result.amount ?? numericAmount,
           customerIdentifier: phoneNumber,
@@ -123,10 +127,10 @@ async function executeAirtimePurchase({
         });
         return;
       }
-      if (isStalePendingVtuSuccess(descriptor, result.reference)) {
+      if (isOwnPendingVtuStaleSuccess(descriptor, result.reference, ownKey)) {
         // Old replay answering a NEW intent: forget so the next tap
         // mints fresh, and say so instead of presenting it as new.
-        await forgetPendingVtuPurchaseDurable(descriptor);
+        await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
         Alert.alert(
           'Purchase Already Completed',
           `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
@@ -134,7 +138,7 @@ async function executeAirtimePurchase({
         return;
       }
       // Durable (Codex R153 P2): lands before onSuccess finalizes.
-      await forgetPendingVtuPurchaseDurable(descriptor);
+      await forgetOwnPendingVtuPurchaseDurable(descriptor, ownKey);
       onSuccess({
         amount: result.amount ?? numericAmount,
         cashback: creditedVtuCashback(result.cashback),
@@ -152,20 +156,17 @@ async function executeAirtimePurchase({
           getIsActive
         )
       ) {
-        // Still finalize status-bearing terminal errors for the
-        // SUBMITTER (descriptor captured at submit): otherwise the
-        // retained key replays the dead transaction when they retry.
-        if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey(descriptor);
-        }
+        // Rotation already ran generation-guarded inside the
+        // charge — nothing left to finalize for the submitter.
         return;
       }
       if (shouldRotateWalletIdempotencyKeyForError(error)) {
-        payment.resetWalletIdempotencyKey(descriptor);
-        // The rejection may prove a stale balance (e.g. 400 after
-        // another spend): AWAIT the refetch (never rejects), else a
-        // quick retry re-passes on it. On-screen only — off-screen
-        // uses the never-fails refresh below, never the Alert.
+        // Rotation already ran generation-guarded inside the
+        // charge; the rejection may still prove a stale balance
+        // (e.g. 400 after another spend): AWAIT the refetch
+        // (never rejects), else a quick retry re-passes on it.
+        // On-screen only — off-screen uses the never-fails
+        // refresh below, never the Alert.
         if (!getIsActive || getIsActive()) {
           await payment.refetchWallet();
         }
@@ -242,11 +243,8 @@ export function useAirtimePurchaseHandler({
     };
     // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
     // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Sync ref guard admits no second submit.
-    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
-    // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Shared helper also re-checks the owner
-    // after the await (Codex R103 P2).
+    // then proves terminal. Sync ref guard admits no second submit;
+    // shared helper re-checks the owner after the await (R103).
     if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
       isSubmittingRef.current = false;
       return;

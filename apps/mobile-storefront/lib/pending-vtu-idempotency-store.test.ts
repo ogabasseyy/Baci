@@ -3,13 +3,15 @@ import { jest } from '@jest/globals';
 import { Platform } from 'react-native';
 import { parsePendingVtuSnapshot } from './pending-vtu-idempotency-codec';
 import {
-  clearForgottenVtuScopes,
-  forgottenVtuScopes,
   loadPendingVtuSnapshot,
-  noteForgottenVtuScopes,
   persistPendingVtuEntries,
   savePendingVtuSnapshot,
 } from './pending-vtu-idempotency-store';
+import {
+  clearForgottenVtuScopes,
+  forgottenVtuScopes,
+  noteForgottenVtuScopes,
+} from './pending-vtu-tombstones';
 
 const mockMmkvStore = new Map<string, string>();
 let mockMmkvSetThrows = false;

@@ -4,6 +4,7 @@ import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useEffect, useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
+  adoptCanonicalVtuKey,
   forgetPendingVtuPurchase,
   forgetPendingVtuPurchaseGeneration,
   getPendingVtuKey,
@@ -14,6 +15,7 @@ import {
   recallPendingVtuKey,
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
+import { isCurrentVtuGeneration } from './utility-pending-vtu-sync';
 
 interface UseUtilityIdempotencyKeyInput {
   customerId?: string;
@@ -35,6 +37,11 @@ export interface UtilityIdempotencyAttempt {
 }
 
 interface UseUtilityIdempotencyKeyResult {
+  adoptCanonicalKey: (
+    scoped: string,
+    expectedKey: string,
+    key: string
+  ) => Promise<boolean>;
   captureAttemptKey: (
     payloadSignature: string
   ) => Promise<UtilityIdempotencyAttempt>;
@@ -102,6 +109,15 @@ export function finalizeSuppressedAttempt(
     return;
   }
   if (result.kind === 'wallet-success') {
+    // Generation veto (Codex P1): a sibling tab may have persisted
+    // a newer generation after this tab adopted — noting on the
+    // stale entry would flush it back over the newer key. The veto
+    // adopts the newer generation and skips the stale note/mark.
+    if (
+      !isCurrentVtuGeneration(attempt.scoped, attempt.key)
+    ) {
+      return;
+    }
     notePendingVtuReference(attempt.scoped, result.reference);
     // Terminal observations also record completion (processing notes
     // must NOT): the stale predicate keys off completion time, so a
@@ -201,6 +217,16 @@ export function useUtilityIdempotencyKey({
     forgetPendingVtuPurchase(scoped);
   };
 
+  // Durable (Codex R1 P1): callers await so the winner key lands
+  // before the submit resolves. Generation-bound (Codex R2 P1).
+  const adoptCanonicalKey = (
+    scoped: string,
+    expectedKey: string,
+    key: string
+  ) => {
+    return adoptCanonicalVtuKey(scoped, expectedKey, key);
+  };
+
   const noteScopedReference = (scoped: string, reference: string) => {
     notePendingVtuReference(scoped, reference);
   };
@@ -239,6 +265,7 @@ export function useUtilityIdempotencyKey({
   };
 
   return {
+    adoptCanonicalKey,
     captureAttemptKey,
     forgetScopedKey,
     isAttemptRetained,

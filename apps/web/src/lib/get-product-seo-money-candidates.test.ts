@@ -1,7 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getProductSeoMoneyCandidates } from './get-product-seo-money-candidates';
 
 describe('getProductSeoMoneyCandidates', () => {
+  it.each([
+    'missing',
+    'throws',
+  ] as const)('falls back to known currency codes when Intl.supportedValuesOf %s', async (mode) => {
+    vi.resetModules();
+    vi.stubGlobal('Intl', {
+      supportedValuesOf:
+        mode === 'missing'
+          ? undefined
+          : () => {
+              throw new Error('unsupported currency key');
+            },
+    });
+    try {
+      const { getProductSeoMoneyCandidates: tokenize } = await import(
+        './get-product-seo-money-candidates'
+      );
+      expect(tokenize('USD 50')).toMatchObject([
+        { amount: 50, currencies: ['USD'] },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
   it.each([
     ['NGN350k', 350_000, ['NGN']],
     ['350k NGN', 350_000, ['NGN']],

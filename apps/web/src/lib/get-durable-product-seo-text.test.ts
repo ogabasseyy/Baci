@@ -89,6 +89,15 @@ describe('getDurableProductSeoText', () => {
     ).toBe('');
   });
 
+  it('strips a separator-only price when the product identity casing differs', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'iphone 13 – 350,000',
+        product: { name: 'iPhone 13' },
+      })
+    ).toBe('');
+  });
+
   it('rejects a foreign naira amount without confusing a compact model prefix', () => {
     expect(
       getDurableProductSeoText({
@@ -207,6 +216,9 @@ describe('getDurableProductSeoText', () => {
     '€50 trade-in credit available.',
     '$50 cashback is available on selected plans.',
     'Weighs 5 pounds with packaging.',
+    'Buy this item; it weighs 5 pounds.',
+    'The display is 1,000 nits.',
+    'The camera is 1,000 pixels.',
   ])('preserves specifications and non-price numeric context: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -220,6 +232,12 @@ describe('getDurableProductSeoText', () => {
     expect(
       getDurableProductSeoText({
         text: 'Weighs 5 pounds and costs 900 pounds.',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+    expect(
+      getDurableProductSeoText({
+        text: 'Weighs 5 pounds and sells for 900 pounds.',
         product: { name: 'Device' },
       })
     ).toBe('');

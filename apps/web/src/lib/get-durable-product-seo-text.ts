@@ -13,7 +13,8 @@ import {
 const MAX_SOURCE_LENGTH = 20_000;
 const MAX_NAME_LENGTH = 1_000;
 const QUANTITY_UNIT =
-  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|hours?|cycles?|washes|uses|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+const PIXEL_DIMENSION_PAIR = /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px)\b/i;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
 const MODIFIED_COUNT_UNIT =
@@ -51,9 +52,11 @@ function retailRelation(text: string, start: number) {
     /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){1,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
       clause
     );
+  const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);
   return {
     cue,
     predicate,
+    copula,
     separator: /^\s*[:–—-]?\s*$/.test(clause),
     strong: /^(?:price|cost|priced|start|pay|only)/i.test(cue),
     purchase:
@@ -80,15 +83,19 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       lastCueIndex(
         /\b(?:cost|costs|price|prices|priced|buy|purchase|pay|sell)\b/gi
       );
-  if (physicalPounds) return false;
+  if (physicalPounds && !relation.cue && !relation.predicate) return false;
   const quantity =
     QUANTITY_UNIT.test(tail) ||
+    PIXEL_DIMENSION_PAIR.test(tail) ||
     (LIFESPAN_QUANTITY_UNIT.test(tail) &&
       !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
   if (!candidate.marker) {
     if (
-      (!relation.cue && !relation.predicate && !relation.separator) ||
+      (!relation.cue &&
+        !relation.predicate &&
+        !relation.separator &&
+        !relation.copula) ||
       quantity
     )
       return false;
@@ -101,6 +108,9 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       relation.predicate ||
       relation.strong ||
       relation.purchase ||
+      (relation.copula &&
+        (/[,. '\u2019\u00a0\u202f]/.test(rawAmount) ||
+          rawAmount.replace(/\D/g, '').length >= 5)) ||
       /[,km]/i.test(rawAmount) ||
       rawAmount.replace(/\D/g, '').length >= 5
     );
@@ -145,6 +155,47 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       return false;
   }
   return true;
+}
+
+function removeIdentityIgnoringCase(text: string, identity: string): string {
+  if (!identity) return text;
+  const foldedIdentity = identity.toLowerCase();
+  const foldedText = text.toLowerCase();
+  const foldedOffsets: number[] = [];
+  let sourceOffset = 0;
+  for (const character of text) {
+    const foldedCharacterLength = character.toLowerCase().length;
+    for (let index = 0; index < foldedCharacterLength; index += 1)
+      foldedOffsets.push(sourceOffset);
+    sourceOffset += character.length;
+  }
+  let foldedCursor = 0;
+  let sourceCursor = 0;
+  let result = '';
+  let matchIndex = foldedText.indexOf(foldedIdentity, foldedCursor);
+  while (matchIndex >= 0) {
+    const foldedEnd = matchIndex + foldedIdentity.length;
+    const startsAtCharacterBoundary =
+      matchIndex === 0 ||
+      foldedOffsets[matchIndex] !== foldedOffsets[matchIndex - 1];
+    const endsAtCharacterBoundary =
+      foldedEnd === foldedText.length ||
+      foldedOffsets[foldedEnd] !== foldedOffsets[foldedEnd - 1];
+    if (startsAtCharacterBoundary && endsAtCharacterBoundary) {
+      const sourceStart = foldedOffsets[matchIndex];
+      const sourceEnd =
+        foldedEnd === foldedText.length
+          ? text.length
+          : foldedOffsets[foldedEnd];
+      result += text.slice(sourceCursor, sourceStart);
+      sourceCursor = sourceEnd;
+      foldedCursor = foldedEnd;
+    } else {
+      foldedCursor = matchIndex + 1;
+    }
+    matchIndex = foldedText.indexOf(foldedIdentity, foldedCursor);
+  }
+  return result + text.slice(sourceCursor);
 }
 
 function isDenomination(
@@ -222,11 +273,7 @@ export function getDurableProductSeoText({
         productName,
         stripHtmlTags(decodeHTML(getSeoProductName({ name: product.name }))),
       ].reduce((result, identity) => {
-        if (!identity) return result;
-        return result.replace(
-          new RegExp(identity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-          ''
-        );
+        return removeIdentityIgnoringCase(result, identity);
       }, plainText)
     : plainText;
   const denominations = /\bgift[- ]card\b/i.test(productName)

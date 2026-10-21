@@ -56,9 +56,6 @@ for migration in \
   20261003194500_storefront_category_facets.sql; do
   cp "$script_dir/../../supabase/migrations/$migration" "$version_alias_dir/$migration"
 done
-facets_sha="$(sha256sum "$version_alias_dir/20261003180000_storefront_available_search_facets.sql" | awk '{print $1}')"
-processor_sha="$(sha256sum "$version_alias_dir/20261003193000_storefront_processor_filters.sql" | awk '{print $1}')"
-category_sha="$(sha256sum "$version_alias_dir/20261003194500_storefront_category_facets.sql" | awk '{print $1}')"
 facets_stored_sha='f9c57f6e4670efab9295f83a3cb2db50f06196d244131104c42af04db7f301fd'
 processor_stored_sha='cbb407f313bc113344c694eadea4564d10026be75067d5c82d93ed69f0cc0c80'
 category_stored_sha='d4fcaf725c66fd10748159bedc1df5f5d3eeba13b2b49b395de8c99eb2c2c1a2'

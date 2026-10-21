@@ -123,17 +123,6 @@ handle_historical_migration_version_alias() {
   skipped_count=$((skipped_count + 1))
 }
 
-skip_verified_historical_migration_version_alias() {
-  local version="$1" name="$2" file="$3" alias_spec="$4"
-  local alias_version
-
-  IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
-  if verify_historical_migration_version_alias "$file" "$alias_spec"; then :; else return $?; fi
-
-  echo "✓ already applied under version $alias_version: $version  $name"
-  skipped_count=$((skipped_count + 1))
-}
-
 apply_historical_migration_repair() {
   local version="$1"
   local name="$2"

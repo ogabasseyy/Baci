@@ -61,12 +61,7 @@ export async function prepareCartCheckout(
     };
   }
   const current = getState();
-  if (
-    current.enabled !== initial.enabled ||
-    current.prepare !== initial.prepare ||
-    current.refresh !== initial.refresh
-  )
-    return { ready: false, reason: 'session_changed' };
+  if (replaced()) return { ready: false, reason: 'session_changed' };
   if (sharedCartCheckoutReady(current)) return { ready: true };
   return {
     ready: false,

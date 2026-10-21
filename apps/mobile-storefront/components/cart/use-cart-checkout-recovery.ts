@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 
 /** One shopper checkout intent at a time, including recovery and navigation. */
 export function useCartCheckoutRecovery(onReady: () => void) {
@@ -22,11 +23,19 @@ export function useCartCheckoutRecovery(onReady: () => void) {
     if (pending.current) return;
     pending.current = true;
     setIsPreparing(true);
+    const writeRevision = sharedCartWriteRevision();
     try {
       const result = await prepareCartCheckout(
         useNativeSharedCartStore.getState
       );
       if (!mounted.current) return;
+      if (writeRevision !== sharedCartWriteRevision()) {
+        Alert.alert(
+          'Cart changed',
+          'Your cart was updated during sync. Review your items and tap Checkout again.'
+        );
+        return;
+      }
       if (result.ready) onReadyRef.current();
       else if (result.reason === 'choice_required')
         Alert.alert(

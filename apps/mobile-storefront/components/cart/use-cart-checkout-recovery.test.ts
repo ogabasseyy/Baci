@@ -222,3 +222,63 @@ it('fences an unmounted screen before passive cleanups run', async () => {
     mockDeferPassive = false;
   }
 });
+it.each([
+  'quantity',
+  'remove',
+  'clear',
+] as const)('does not navigate ahead of a queued %s intent', async (type) => {
+  const { installSharedCartWriter, forwardSharedCartWrite } = await import(
+    '@/stores/shared-cart-writer'
+  );
+  let finish!: () => void;
+  mockState.prepare = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = () => {
+          mockState = {
+            ...mockState,
+            metadataReady: true,
+            snapshot: { state: 'active', lines: [{}] },
+          };
+          resolve();
+        };
+      })
+  );
+  // The controller is still preparing, so the requested edit has not run yet.
+  let finishWrite!: () => void;
+  const write = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finishWrite = resolve;
+      })
+  );
+  const release = installSharedCartWriter({ write, onError: jest.fn() });
+  const next = jest.fn();
+  const { result } = renderHook(() => useCartCheckoutRecovery(next));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.recoverCheckout();
+  });
+  const edited = forwardSharedCartWrite(
+    type === 'clear'
+      ? { type }
+      : type === 'remove'
+        ? { type, id: 'line-1' }
+        : { type, id: 'line-1', quantity: 2 }
+  );
+  try {
+    await act(async () => {
+      finish();
+      await pending;
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith(
+      'Cart changed',
+      expect.stringContaining('Checkout again')
+    );
+  } finally {
+    finishWrite();
+    await edited;
+    release();
+  }
+});

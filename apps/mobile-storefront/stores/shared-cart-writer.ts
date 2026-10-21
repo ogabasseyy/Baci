@@ -17,6 +17,9 @@ interface Owner {
 }
 let owner: Owner | null = null;
 let generation = 0;
+let writeRevision = 0;
+/** Changes at intent time, before controller serialization can defer an edit. */
+export const sharedCartWriteRevision = () => writeRevision;
 let suspended = false;
 const listeners = new Set<() => void>();
 function notifyWriterPresence(): void {
@@ -72,6 +75,7 @@ export function forwardSharedCartWrite(
 ): Promise<void> | null {
   const current = owner;
   if (!current) return null;
+  if (!action.type.startsWith('legacy_')) writeRevision += 1;
   const pending = Promise.resolve().then(() => {
     if (current !== owner || suspended) throw new Error('Cart session changed');
     return current.write(action);

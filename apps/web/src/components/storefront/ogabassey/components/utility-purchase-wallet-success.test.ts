@@ -59,6 +59,8 @@ describe('applyUtilityWalletSuccessOutcome', () => {
   });
 
   it('settles + presents a terminal success', async () => {
+    // The submit always remembers before settling.
+    rememberPendingVtuPurchase('scoped-1', 'k');
     const input = baseInput();
 
     await expect(applyUtilityWalletSuccessOutcome(input)).resolves.toBe(false);
@@ -145,6 +147,7 @@ describe('applyUtilityWalletSuccessOutcome', () => {
   });
 
   it('stops on a stale replay after forgetting + explaining', async () => {
+    rememberPendingVtuPurchase('scoped-1', 'k');
     const input = baseInput();
     vi.mocked(input.isScopedStale).mockReturnValue(true);
 
@@ -157,5 +160,45 @@ describe('applyUtilityWalletSuccessOutcome', () => {
     );
     expect(input.setStep).not.toHaveBeenCalled();
     expect(applyUtilityPurchaseBalanceEffect).not.toHaveBeenCalled();
+  });
+
+  it('skips the terminal forget when a sibling persisted a newer generation', async () => {
+    // Codex P1: a delayed K1 terminal response must not delete the
+    // live K2 — K2's lost-response retry would mint K3 and debit
+    // again. Presentation still shows this submit's real result.
+    const scoped = scopePendingVtuSignature(
+      'user-forget-veto',
+      'merchant-1',
+      '{"forget-veto":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-old');
+    const live = pendingVtuPurchases.get(scoped);
+    expect(
+      savePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [
+            [
+              scoped,
+              {
+                key: 'key-new',
+                reference: null,
+                rememberedAt: (live?.rememberedAt ?? 0) + 1000,
+                completedAt: null,
+              },
+            ],
+          ],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+    const input = baseInput({
+      attempt: { key: 'key-old', scoped, recalled: false },
+    });
+
+    await expect(applyUtilityWalletSuccessOutcome(input)).resolves.toBe(false);
+
+    expect(forgetPendingVtuPurchaseDurable).not.toHaveBeenCalled();
+    expect(pendingVtuPurchases.get(scoped)?.key).toBe('key-new');
+    expect(input.setStep).toHaveBeenCalledWith('success');
   });
 });

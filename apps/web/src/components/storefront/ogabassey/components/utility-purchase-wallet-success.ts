@@ -38,6 +38,23 @@ interface UtilityWalletSuccessOutcomeInput {
 }
 
 /**
+ * Generation-bound terminal forget (Codex P1, mobile
+ * forgetOwnPendingVtuPurchaseDurable mirror): a delayed K1
+ * terminal response must not delete a newer K2 minted after
+ * this submit — K2's lost-response retry would mint K3 and
+ * debit again. Skips the mutation when this attempt is no
+ * longer current; presentation still shows the real result.
+ */
+async function forgetCurrentVtuGeneration(
+  scoped: string,
+  key: string | undefined
+): Promise<void> {
+  if (key !== undefined && isCurrentVtuGeneration(scoped, key)) {
+    await forgetPendingVtuPurchaseDurable(scoped);
+  }
+}
+
+/**
  * Settles + presents a wallet-success checkout result. Extracted from
  * `use-utility-purchase` per the 300-line boundary (Codex R62 6rtokP).
  *
@@ -82,7 +99,7 @@ export async function applyUtilityWalletSuccessOutcome({
     if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
       // Stale replay answers a NEW intent with the old vend: forget so
       // the next tap mints fresh, and say so.
-      await forgetPendingVtuPurchaseDurable(scoped);
+      await forgetCurrentVtuGeneration(scoped, attempt?.key);
       toast({
         title: 'Purchase Already Completed',
         description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
@@ -92,7 +109,7 @@ export async function applyUtilityWalletSuccessOutcome({
       return true;
     }
     if (scoped !== undefined) {
-      await forgetPendingVtuPurchaseDurable(scoped);
+      await forgetCurrentVtuGeneration(scoped, attempt?.key);
     }
   } else {
     // Generation veto (Codex P1): skip the note when a sibling tab

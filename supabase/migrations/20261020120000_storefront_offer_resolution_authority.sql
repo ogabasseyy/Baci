@@ -110,10 +110,12 @@ BEGIN
          WHERE av.product_id = r.id AND av.merchant_id = r.merchant_id
            AND av.is_inventory_anchor IS TRUE
          ORDER BY av.id LIMIT 1),
-        -- Whitelisted (never raw): 'inherit' and any unrecognized row
-        -- policy fall through to 'legacy', matching the search
-        -- NULLIF normalization; emitting them verbatim would fork the
-        -- effective_policy contract across SQL surfaces.
+        -- Whitelisted (never raw), mirroring
+        -- products_inventory_tracking_policy_check: the schema closes
+        -- products to off/strict/unlimited, so the 'legacy'
+        -- fallthrough is unreachable defense-in-depth (no fixture
+        -- can construct it; only 'inherit' anchors fall through,
+        -- and they land on the row policy above).
         CASE WHEN r.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
           THEN r.inventory_tracking_policy END,
         'legacy') AS effective_policy,
@@ -255,8 +257,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
          WHERE av.product_id = p.id AND av.merchant_id = p.merchant_id
            AND av.is_inventory_anchor IS TRUE
          ORDER BY av.id LIMIT 1),
-        -- Whitelisted like the authority CTE above: 'inherit' and
-        -- unrecognized row policies fall through to 'legacy'.
+        -- Whitelisted like the authority CTE above (the products
+        -- CHECK closes the set; 'legacy' is unreachable).
         CASE WHEN p.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
           THEN p.inventory_tracking_policy END,
         'legacy') AS effective_policy

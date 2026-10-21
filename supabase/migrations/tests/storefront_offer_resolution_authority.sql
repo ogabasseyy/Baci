@@ -32,11 +32,12 @@ VALUES ('31000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-00000000
 -- deterministic guard, not a live branch.
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
 VALUES ('31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','authority strict zero','active',100,5,5,true,false,true,'serialized_strict');
--- 'inherit'/unrecognized policies (035/036): the effective policy must
--- normalize to 'legacy', never emit the raw token.
+-- 'inherit' anchor on an 'off' parent (036): the anchor falls through
+-- to the row policy. No 'inherit'-product fixture can exist:
+-- products_inventory_tracking_policy_check forbids it (variants
+-- alone allow 'inherit').
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
-VALUES ('31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-000000000001','authority inherit','active',100,5,5,true,false,true,'inherit'),
-('31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','authority inherit anchor','active',100,5,5,true,false,true,'off');
+VALUES ('31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','authority inherit anchor','active',100,5,5,true,false,true,'off');
 -- Chunk page: 201 live STRICT products of one merchant, so the scoped
 -- call must form the merchant slices and call the serialized-count
 -- page twice (200 + 1 ids) instead of tripping its
@@ -44,11 +45,11 @@ VALUES ('31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-00000000
 -- prove both slices merge.
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
 SELECT ('31000001-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid, '00000000-0000-4000-8000-000000000001', 'chunk-' || g, 'active', 100, 5, 5, true, false, true, 'serialized_strict' FROM generate_series(1, 201) g;
--- Mixed page: 50 legacy products of the same strict merchant, so the
--- serialized slices must carry strict ids only while the merged call
--- still resolves both policies.
+-- Mixed page: 50 'off' (non-strict) products of the same strict
+-- merchant, so the serialized slices must carry strict ids only
+-- while the merged call still resolves both policies.
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
-SELECT ('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid, '00000000-0000-4000-8000-000000000001', 'mixed-' || g, 'active', 100, 5, 5, true, false, true, 'legacy' FROM generate_series(1, 50) g;
+SELECT ('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid, '00000000-0000-4000-8000-000000000001', 'mixed-' || g, 'active', 100, 5, 5, true, false, true, 'off' FROM generate_series(1, 50) g;
 ALTER TABLE public.products ENABLE TRIGGER USER;
 ALTER TABLE public.product_variants DISABLE TRIGGER USER;
 INSERT INTO public.product_variants(id,product_id,merchant_id,is_inventory_anchor)
@@ -60,8 +61,7 @@ VALUES ('41000000-0000-4000-8000-000000000012','31000000-0000-4000-8000-00000000
 ('41000000-0000-4000-8000-000000000014','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','inherit',true),
 ('41000000-0000-4000-8000-000000000015','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','inherit',true);
 INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor)
-VALUES ('41000000-0000-4000-8000-000000000018','31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-000000000001','inherit',true),
-('41000000-0000-4000-8000-000000000019','31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','inherit',true);
+VALUES ('41000000-0000-4000-8000-000000000019','31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','inherit',true);
 ALTER TABLE public.product_variants ENABLE TRIGGER USER;
 ALTER TABLE public.variant_inventory DISABLE TRIGGER USER;
 INSERT INTO public.variant_inventory(id,variant_id,merchant_id,identifier_type,identifier_value,status)
@@ -94,7 +94,6 @@ VALUES ('31000000-0000-4000-8000-000000000020','31000000-0000-4000-8000-00000000
 ('32000001-0001-4000-8000-000000000001','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
 ('32000001-0201-4000-8000-000000000201','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
 ('31000000-0000-4000-8000-000000000034','31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
-('31000000-0000-4000-8000-000000000037','31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
 ('31000000-0000-4000-8000-000000000038','31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
 ('32000002-0001-4000-8000-000000000001','31000002-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',90,7,'active');
 ALTER TABLE public.product_offers ENABLE TRIGGER USER;
@@ -183,20 +182,17 @@ BEGIN
  -- genuine sell-outs are distinguishable from projection outages.
  SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000033']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000034';
  IF r.allocatable_stock <> 0 OR r.available_units IS NULL OR r.available_units <> 0 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'strict zero-unit must emit zero units, not NULL'; END IF;
- -- 'inherit' and unrecognized policies normalize to 'legacy', never emit
- -- raw; an 'inherit' anchor still falls through to a valid row policy.
- SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000035']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000037';
- IF r.effective_policy <> 'legacy' OR r.allocatable_stock <> 5 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'inherit policies must normalize to legacy'; END IF;
+ -- An 'inherit' anchor falls through to the row policy ('off' here).
  SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000036']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000038';
  IF r.effective_policy <> 'off' OR r.allocatable_stock <> 5 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'inherit anchor must fall through to the row policy'; END IF;
- -- Mixed merchant: one strict plus fifty legacy ids resolve together;
- -- the strict offer stays capped by its units while the legacy offer
+ -- Mixed merchant: one strict plus fifty off ids resolve together;
+ -- the strict offer stays capped by its units while the off offer
  -- keeps its scalar (the slices carry strict ids only).
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g));
  IF n <> 2 THEN RAISE EXCEPTION 'mixed merchant call must resolve both policies'; END IF;
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g)) WHERE offer_id = '31000000-0000-4000-8000-000000000028';
  IF n <> 3 THEN RAISE EXCEPTION 'mixed merchant must keep the strict cap'; END IF;
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g)) WHERE offer_id = '32000002-0001-4000-8000-000000000001';
- IF n <> 7 THEN RAISE EXCEPTION 'mixed merchant must keep the legacy scalar'; END IF;
+ IF n <> 7 THEN RAISE EXCEPTION 'mixed merchant must keep the off scalar'; END IF;
 END $$;
 RESET ROLE;

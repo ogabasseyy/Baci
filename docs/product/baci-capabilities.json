@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-21T06:00:32.417542+00:00",
-  "source_revision": "56dbbce75b277e5c9d4100458c0673266c65a84d",
-  "evidence_digest": "b9b4f7c70a2014654f40d8f4bbb0d457f6773a049999285c6e489b0a5b5c494b",
-  "claims_digest": "df8e4ef4b044379011a47341d41c6f79ad5775fb8300d6dd86dc346263dcd455",
+  "reviewed_at": "2026-10-21T06:05:30.531104+00:00",
+  "source_revision": "a248243925ec94dd3649e2ce6cbf9c4b6f392021",
+  "evidence_digest": "1a571f24e813491c18887a9d28396c151961443e2a462b2533fc14fd5b65b2f3",
+  "claims_digest": "40daccd0e9d4450274fd5bc7bd4c0bf8b45a9fe2571759a4cc9e26d59aa7487f",
   "review_scope": "Web and mobile-admin source audit; no production workflow verification claimed. Source refs are reviewer evidence, not public URLs. Shopping MCP: Ogabassey buyer tools merchant-fixed; private text continuation server-configured, defaults off. Live ChatGPT privacy/retention and production activation not established. Agentic checkout offers resolve via merchant-scoped get_storefront_offer_resolution (published/admin gate in SQL), not fan-outs; scoping and shared-cart fall-through preserved. Authority RPC: three server sites share one awaited factory; shape, scoping, fall-through unchanged. PDP snapshot emits anchor-derived effective_policy so v2 offer pricing caps by the strict pool; merchant-aware chunking (1000 scoped/200 unscoped); strict-null error logging. Shape, scoping, fail-closed unchanged. Follow-up: anchor pick aligned to lowest id on all three surfaces; strict zero-unit emits 0 units; explicit-pick exception pinned by test.",
   "capabilities": [
     {

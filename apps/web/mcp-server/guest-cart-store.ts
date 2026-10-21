@@ -154,6 +154,39 @@ export class GuestCartStore {
     }
   }
 
+  /** Seed a server-generated, connection-bound capability before its first write.
+   * Exact token is durable in the OAuth grant, so response loss cannot create
+   * an unrecoverable replacement cart. Never exposed as a model argument.
+   */
+  async initializeConnectionCart(
+    token: string,
+    expiresAt: string,
+  ): Promise<void> {
+    if (
+      !TOKEN_PATTERN.test(token) ||
+      !Number.isFinite(Date.parse(expiresAt)) ||
+      Date.parse(expiresAt) <= Date.now() ||
+      Date.parse(expiresAt) > Date.now() + TTL
+    )
+      throw new Error('Invalid guest connection');
+    const rows = await this.rpc<UpsertRow[]>('upsert_mcp_guest_cart', {
+      p_token: token,
+      p_items: [],
+      p_expires_at: expiresAt,
+      p_expected_version: null,
+    });
+    const outcome = rows[0]?.outcome;
+    if (outcome === 'ok') return;
+    // A retry after response loss must preserve the existing contents.
+    if (outcome === 'conflict' && (await this.readCart(token))) return;
+    throw new GuestCartStorageUnavailableError('Connection cart unavailable');
+  }
+
+  async readConnectionCart(token: string) {
+    if (!TOKEN_PATTERN.test(token) || !this.canonical?.read) throw new GuestCartStorageUnavailableError('Connected cart unavailable');
+    return this.canonical.read(token);
+  }
+
   async update(
     token: string | undefined,
     line: GuestCartLineInput,

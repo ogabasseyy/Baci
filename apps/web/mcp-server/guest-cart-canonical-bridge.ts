@@ -48,6 +48,7 @@ export interface GuestCanonicalBridge {
     canonical_cart_id?: string;
     version?: number;
   }>;
+  read?(token: string): Promise<Awaited<ReturnType<GuestCanonicalBridge['update']>>>;
   hasToken(token: string): Promise<boolean>;
 }
 /** Explicit configuration only; never send a capability to an inferred API host. */
@@ -173,7 +174,14 @@ export function createGuestCanonicalBridge(
       'invalid_bridge_reply'
     );
   }
+  function cartReply(token: string, reply: z.infer<typeof replySchema>) {
+    if (!reply.state) throw new Error('Canonical cart unavailable');
+    return { cart_token: token, items: reply.state.lines.map((x) => ({ product_id: x.productId, quantity: x.quantity })),
+      expires_at: reply.state.expiresAt, cart_url: reply.continueUrl ?? undefined,
+      canonical_cart_id: reply.state.cartId, version: reply.state.version };
+  }
   return {
+    async read(token) { return cartReply(token, await send(token, { handoff: true })); },
     async update(token, input) {
       const reply = await send(token, {
         productId: input.product_id,
@@ -182,18 +190,7 @@ export function createGuestCanonicalBridge(
         operationId: input.operationId,
         handoff: true,
       });
-      if (!reply.state) throw new Error('Canonical cart unavailable');
-      return {
-        cart_token: token,
-        items: reply.state.lines.map((x) => ({
-          product_id: x.productId,
-          quantity: x.quantity,
-        })),
-        expires_at: reply.state.expiresAt,
-        cart_url: reply.continueUrl ?? undefined,
-        canonical_cart_id: reply.state.cartId,
-        version: reply.state.version,
-      };
+      return cartReply(token, reply);
     },
     async hasToken(token) {
       // Read-only probe: the legacy route resolves the owner context

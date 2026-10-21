@@ -272,13 +272,37 @@ describe('hydrateRelatedBlogProductAvailability', () => {
   });
 
   it('surfaces alternate lookup failures when the caller cannot cache degraded data', async () => {
-    const lookupError = { message: 'transient timeout' };
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: lookupError });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'transient timeout' },
+    });
 
     await expect(
       hydrateRelatedBlogProductAvailability({ rpc } as never, [product()], {
         throwOnError: true,
       })
-    ).rejects.toEqual(lookupError);
+    ).rejects.toThrow('transient timeout');
+  });
+
+  it('chunks past the 200-id unscoped cap instead of losing every pair', async () => {
+    const chunkSizes: number[] = [];
+    const rpc = vi.fn(async (...call: unknown[]) => {
+      const ids = (call[1] as { p_product_ids: string[] }).p_product_ids;
+      chunkSizes.push(ids.length);
+      return { data: [], error: null };
+    });
+
+    const ids = Array.from(
+      { length: 250 },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    );
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      ids.map((id) => product({ id }))
+    );
+
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(chunkSizes).toEqual([200, 50]);
+    expect(result).toHaveLength(250);
   });
 });

@@ -79,11 +79,17 @@ export function resolvePublicProductOption(
     : offerStock === null
       ? Number.POSITIVE_INFINITY
       : (offerStock ?? getEffectiveStock(parent));
+  // A selected offer's finite allocation binds even on unmanaged
+  // parents (checkout enforces the scalar there too): only an
+  // unbounded (null) allocation or no offer at all reaches the
+  // unmanaged short-circuit below.
   const purchasable = variant
     ? isPublicVariantPurchasable(parent, variant)
-    : parent.manage_stock === false ||
-      parent.manage_stock === undefined ||
-      stockQuantity > 0;
+    : typeof offerStock === 'number'
+      ? offerStock > 0
+      : parent.manage_stock === false ||
+        parent.manage_stock === undefined ||
+        stockQuantity > 0;
   return {
     price: displayPrice,
     compareAtPrice:

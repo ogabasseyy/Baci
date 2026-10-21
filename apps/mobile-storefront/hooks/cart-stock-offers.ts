@@ -1,4 +1,4 @@
-import { buildOfferResolutionMap } from '@baci/shared/lib';
+import { buildOfferResolutionMap, makeOfferLineKey } from '@baci/shared/lib';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
@@ -32,7 +32,7 @@ export async function resolveOfferStock(
     throw new Error('Cannot verify stock availability. Please try again.');
   }
   const resolution = buildOfferResolutionMap(data).get(
-    `${productId}::${offerId}`
+    makeOfferLineKey(productId, offerId)
   );
   if (!resolution) {
     log.error('Offer stock check found no such offer:', offerId);

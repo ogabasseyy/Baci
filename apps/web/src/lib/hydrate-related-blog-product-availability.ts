@@ -1,5 +1,5 @@
 import {
-  buildOfferResolutionMap,
+  fetchOfferResolutions,
   type ResolvedOfferResolution,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -15,6 +15,7 @@ import type {
   RelatedBlogProductVariant,
 } from '@/lib/related-blog-products';
 import { isValidUuid } from '@/lib/sanitize-core';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import { toFinitePrice } from '@/lib/to-finite-price';
 
 interface VariantStockRow {
@@ -122,33 +123,19 @@ export async function hydrateRelatedBlogProductAvailability(
     validOfferCandidates.length > 0
       ? (async () => {
           try {
-            const { data, error } = await supabase.rpc(
-              'get_storefront_offer_resolution',
+            // The shared chunking client (200 ids per call): one
+            // unbounded call would trip the SQL batch cap and lose
+            // every pair. Lookup failures throw into the shared
+            // catch below (warn + undefined pairs, or rethrow with
+            // throwOnError) exactly like the old error branch.
+            const resolutions = await fetchOfferResolutions(
+              createOfferAuthorityRpcCall(supabase),
               {
-                p_merchant_id:
+                merchantId:
                   merchantId && isValidUuid(merchantId) ? merchantId : null,
-                p_product_ids: validOfferCandidates.map(
-                  (product) => product.id
-                ),
+                productIds: validOfferCandidates.map((product) => product.id),
               }
             );
-
-            if (error) {
-              availabilityErrors.push(error);
-              console.warn(
-                'Related blog product offer availability unavailable',
-                {
-                  productIds: validOfferCandidates.map((product) => product.id),
-                  error,
-                }
-              );
-              return validOfferCandidates.map<AvailabilityPair>((product) => [
-                product.id,
-                undefined,
-              ]);
-            }
-
-            const resolutions = buildOfferResolutionMap(data);
             const byProduct = new Map<string, ResolvedOfferResolution[]>();
             for (const resolution of resolutions.values()) {
               const list = byProduct.get(resolution.productId) ?? [];

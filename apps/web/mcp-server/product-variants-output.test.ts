@@ -44,9 +44,9 @@ describe('variant output failure contracts', () => {
   it.each([
     { label: 'negative variant price', offer: false, row: { attributes: {}, price_override: -1, stock_quantity: 2, condition: 'new', images: [] } },
     { label: 'missing tracked stock', offer: false, row: { attributes: {}, price_override: null, condition: 'new', images: [] } },
-    { label: 'negative offer price', offer: true, row: { condition: 'new', price: -1, stock_quantity: 2, grade: null, condition_notes: null } },
+    { label: 'negative offer price', offer: true, row: { product_id: 'phone-1', offer_id: 'offer-1', condition: 'new', price_basis: -1, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null } },
     { label: 'negative variant stock', offer: false, row: { attributes: {}, price_override: null, stock_quantity: -3, condition: 'new', images: [] } },
-    { label: 'negative offer stock', offer: true, row: { condition: 'new', price: 100, stock_quantity: -3, grade: null, condition_notes: null } },
+    { label: 'negative offer stock', offer: true, row: { product_id: 'phone-1', offer_id: 'offer-1', condition: 'new', price_basis: 100, allocatable_stock: -3, parent_eligible: true, grade: null, condition_notes: null } },
   ])('returns truthful unavailable results for $label', async ({ offer, row }) => {
     const supabase = createSupabase();
     supabase.query.single.mockResolvedValue({ data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: !offer, has_condition_offers: offer, color: null, color_images: null }, error: null });

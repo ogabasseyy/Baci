@@ -515,13 +515,14 @@ jobs:
         # The intake route fails closed (503) without its dedicated HMAC key,
         # so the first deploy carrying the mandatory key must not land on a
         # deployment missing the value. Same create-once semantics as the
-        # wallet HMAC above; the generated 64-hex value satisfies the >=32
-        # floor and rotation only resets intake buckets. Never logs the value.
+        # wallet HMAC above; the generated 64-hex value is exactly the
+        # enforced shape, and rotation only resets intake buckets. Never
+        # logs the value.
         run: node .github/scripts/ensure-vercel-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.production.local
       - name: Verify intake network HMAC Production configuration is present
         # Presence-only, like the wallet HMAC: proves the Production key is
         # defined, not its runtime value. A pre-existing but invalid value
-        # (<32 chars, whitespace-only, or equal to the intake JWT) passes
+        # (anything but 64 lowercase hex, or equal to the intake JWT) passes
         # this gate and 503s intake at runtime — sensitive values cannot be
         # read back, so validity beyond presence is a pre-merge checklist
         # item (rotate any hand-provisioned value to a fresh 64-hex), not a

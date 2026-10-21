@@ -194,6 +194,7 @@ deploy_scripts:
   - '.github/scripts/ensure-vercel-sensitive-env.mjs'
   - '.github/scripts/ensure-vercel-sensitive-env.test.mjs'
   - '.github/scripts/ensure-vercel-sensitive-env.workflow.test.mjs'
+  - '.github/scripts/ensure-vercel-sensitive-env-harness.mjs'
   - '.github/scripts/inject-prebuilt-env-secret.mjs'
   - '.github/scripts/inject-prebuilt-env-secret.jwk.test.mjs'
   - '.github/scripts/inject-prebuilt-env-secret.test.mjs'

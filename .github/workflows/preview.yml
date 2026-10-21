@@ -81,8 +81,9 @@ jobs:
       - name: Ensure intake network HMAC Preview configuration exists
         # The intake route fails closed (503) without its dedicated HMAC key,
         # so Preview needs its own distinct key: create it once through the
-        # Vercel REST API when missing (generated 64-hex satisfies the >=32
-        # floor), then record the blank placeholder. Never logs the value.
+        # Vercel REST API when missing (generated 64-hex is exactly the
+        # enforced shape), then record the blank placeholder. Never logs
+        # the value.
         # Runs after pull (the script needs the pulled file) and before the
         # presence assert below.
         env:

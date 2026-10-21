@@ -10,21 +10,22 @@ import { createHmac } from 'node:crypto';
  * intake JWT: the JWT is a bearer credential transmitted on every RPC,
  * so reusing it as key material would let any exposure retroactively
  * reverse every stored hash by IPv4 enumeration. The dedicated secret is
- * never transmitted; rotation resets budgets only. Missing/empty fails
- * closed (the route serves 503, never a degraded unkeyed hash), as does
- * a key under 32 characters: the stored hashes stay irreversible only
- * while the key is unguessable, and a short/dictionary value would let a
- * ledger exposure dictionary-attack the key offline and then enumerate
- * the IPv4 space to recover raw IPs. Surrounding whitespace is stripped
- * (docker-secret style files append newlines); a whitespace-only value
- * fails closed. Reusing the bearer intake JWT as the key is rejected
- * outright: its every-RPC transmission would expose key material.
+ * never transmitted; rotation resets budgets only. The key must be exactly
+ * 64 lowercase hex characters — the shape both deploy workflows generate:
+ * the stored hashes stay irreversible only while the key is unguessable,
+ * and a length check alone would admit 32 repeated characters or a padded
+ * dictionary word, recoverable by offline dictionary attack plus IPv4
+ * enumeration after any ledger exposure. Anything else (missing, short,
+ * non-hex, surrounding-whitespace-only after stripping) fails closed: the
+ * route serves 503, never a degraded unkeyed hash. Reusing the bearer
+ * intake JWT as the key is rejected outright: its every-RPC transmission
+ * would expose key material.
  * 'unknown' identifiers hash like any other value, so callers without a
  * usable network signal share one tight bucket per merchant (fail-closed).
  */
 export function hashIntakeCallerNet(identifier: string): string {
   const key = process.env.SUPABASE_STOREFRONT_INTAKE_NET_KEY?.trim();
-  if (!key || key.length < 32)
+  if (!key || !/^[0-9a-f]{64}$/.test(key))
     throw new Error('Storefront intake network key is unavailable');
   if (key === process.env.SUPABASE_STOREFRONT_INTAKE_KEY?.trim())
     throw new Error('Storefront intake network key is unavailable');

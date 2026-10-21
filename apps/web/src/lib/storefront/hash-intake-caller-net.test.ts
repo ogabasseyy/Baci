@@ -36,10 +36,26 @@ describe('intake caller-network hash', () => {
     );
   });
   it('fails closed on a short network key', () => {
-    // A short/dictionary key would let a ledger exposure recover raw IPs
-    // by offline dictionary attack plus IPv4 enumeration, so anything
-    // under 32 characters is rejected like a missing key.
+    // Length alone would admit low-entropy values, so the provisioned
+    // shape (exactly 64 hex chars) is enforced, not a length floor.
     vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', 'short-key');
+
+    expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
+      'Storefront intake network key is unavailable'
+    );
+  });
+  it('fails closed on a non-hex 64-character network key', () => {
+    // 64 repeated characters pass a length check but fall to a dictionary
+    // attack; only the generated hex shape is accepted.
+    vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', 'z'.repeat(64));
+
+    expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
+      'Storefront intake network key is unavailable'
+    );
+    vi.stubEnv(
+      'SUPABASE_STOREFRONT_INTAKE_NET_KEY',
+      `password${'0'.repeat(56)}`
+    );
 
     expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
       'Storefront intake network key is unavailable'
@@ -55,7 +71,8 @@ describe('intake caller-network hash', () => {
   it('rejects reusing the bearer intake JWT as the key', () => {
     // The JWT is transmitted on every RPC; reusing it as key material
     // would expose the HMAC key with any credential leak.
-    const jwt = 'header.eyJyb2xlIjoic3RvcmVmcm9udF9pbnRha2UifQ.signature';
+    // Well-formed hex, so this exercises the equality branch.
+    const jwt = 'ab'.repeat(32);
     vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_KEY', jwt);
     vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', jwt);
 

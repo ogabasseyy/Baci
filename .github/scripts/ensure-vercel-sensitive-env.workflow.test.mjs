@@ -65,6 +65,7 @@ test('ensure-script edits trigger production deployment and the deployment-scrip
     '.github/scripts/ensure-vercel-sensitive-env.mjs',
     '.github/scripts/ensure-vercel-sensitive-env.test.mjs',
     '.github/scripts/ensure-vercel-sensitive-env.workflow.test.mjs',
+    '.github/scripts/ensure-vercel-sensitive-env-harness.mjs',
   ];
 
   for (const path of guardPaths) {

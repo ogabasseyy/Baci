@@ -4,8 +4,12 @@ import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
 import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
-import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
+import {
+  type OgabasseyHomeHeroShellResult,
+  resolveOgabasseyHomeHeroShell,
+} from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
+import { peekSettledCanonicalOgabasseyHomeState } from './ogabassey-home-settled-state';
 import { OgabasseyHomeStaticShellHead } from './ogabassey-home-static-shell-head';
 
 interface OgabasseyStaticHomePageContentProps {
@@ -26,16 +30,13 @@ interface OgabasseyStaticHomePageContentProps {
   omitCommittedHero?: boolean;
 }
 
-export async function OgabasseyStaticHomePageContent({
+function renderOgabasseyStaticHomePageContentFromShell({
+  heroShell,
   omitCommittedHero = false,
   pathPrefix,
-}: OgabasseyStaticHomePageContentProps) {
-  // Cached-only lookup (never request APIs — those stay in the dynamic
-  // subtree). Slides are inert data here: only the request-scoped subtree may
-  // turn them into shopping UI after it confirms the current publication
-  // state. The early shell supplies styles and an accessible heading only;
-  // the publication-checked Hero owns the single visible banner.
-  const heroShell = await resolveOgabasseyHomeHeroShell();
+}: OgabasseyStaticHomePageContentProps & {
+  heroShell: OgabasseyHomeHeroShellResult | null;
+}) {
   const shellSlides =
     heroShell?.status === 'published' ? heroShell.slides : null;
   const shellMerchantId =
@@ -112,4 +113,42 @@ export async function OgabasseyStaticHomePageContent({
       )}
     </>
   );
+}
+
+async function renderOgabasseyStaticHomePageContentAsync({
+  omitCommittedHero = false,
+  pathPrefix,
+}: OgabasseyStaticHomePageContentProps) {
+  // Cached-only lookup (never request APIs — those stay in the dynamic
+  // subtree). Slides are inert data here: only the request-scoped subtree may
+  // turn them into shopping UI after it confirms the current publication
+  // state. The early shell supplies styles and an accessible heading only;
+  // the publication-checked Hero owns the single visible banner.
+  const heroShell = await resolveOgabasseyHomeHeroShell();
+  return renderOgabasseyStaticHomePageContentFromShell({
+    heroShell,
+    omitCommittedHero,
+    pathPrefix,
+  });
+}
+
+export function OgabasseyStaticHomePageContent({
+  omitCommittedHero = false,
+  pathPrefix,
+}: OgabasseyStaticHomePageContentProps) {
+  if (omitCommittedHero && pathPrefix === '') {
+    const settled = peekSettledCanonicalOgabasseyHomeState();
+    if (settled?.heroShellSettled) {
+      return renderOgabasseyStaticHomePageContentFromShell({
+        heroShell: settled.heroShell,
+        omitCommittedHero,
+        pathPrefix,
+      });
+    }
+  }
+
+  return renderOgabasseyStaticHomePageContentAsync({
+    omitCommittedHero,
+    pathPrefix,
+  });
 }

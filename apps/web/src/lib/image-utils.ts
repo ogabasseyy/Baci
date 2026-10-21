@@ -39,10 +39,17 @@ function generateColorBlur(color: string = '#f4f4f5'): string {
   if (cached) return cached;
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect fill="${color}" width="1" height="1"/></svg>`;
+  const nodeBuffer = (
+    globalThis as {
+      Buffer?: {
+        from(input: string): { toString(encoding: string): string };
+      };
+    }
+  ).Buffer;
   const base64 =
     typeof globalThis.btoa === 'function'
       ? globalThis.btoa(svg)
-      : Buffer.from(svg).toString('base64');
+      : (nodeBuffer?.from(svg).toString('base64') ?? '');
 
   const result = `data:image/svg+xml;base64,${base64}`;
   colorBlurCache.set(color, result);

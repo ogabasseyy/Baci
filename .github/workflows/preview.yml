@@ -78,6 +78,22 @@ jobs:
       - name: Verify quiz RPC secret is marked sensitive in Preview
         # Proves the marking; the injector also refuses non-blank values.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.preview.local
+      - name: Ensure intake network HMAC Preview configuration exists
+        # The intake route fails closed (503) without its dedicated HMAC key,
+        # so Preview needs its own distinct key: create it once through the
+        # Vercel REST API when missing (generated 64-hex is exactly the
+        # enforced shape), then record the blank placeholder. Never logs
+        # the value.
+        # Runs after pull (the script needs the pulled file) and before the
+        # presence assert below.
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: node .github/scripts/ensure-vercel-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.preview.local --target preview
+      - name: Verify intake network HMAC Preview configuration is present
+        # Presence-only: proves the Preview key is defined, not its value.
+        run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.preview.local
       - name: Redact privileged Preview values from the build env
         # Runtime-only keys (see the pattern file): blanked before the
         # untrusted build; service-role gets a presence stand-in below.

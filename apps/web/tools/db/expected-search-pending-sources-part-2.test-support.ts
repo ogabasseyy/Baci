@@ -149,4 +149,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
       'supabase/migrations/20261020130000_pdp_core_snapshot_effective_policy.sql',
     sha256: '6051114c34b8810035d9ac8163e3edb97170c78cd9b6af0a6d5667938551eec0',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261021120000_storefront_product_request_net_budget.sql',
+    sha256: 'e11968d5fdaae841fa3b8c1c88ebdfaaf6332ffdfcfbcd917f94e7ff22adeba5',
+  },
 ];

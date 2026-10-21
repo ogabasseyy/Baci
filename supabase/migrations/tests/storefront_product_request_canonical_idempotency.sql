@@ -13,29 +13,36 @@ VALUES ('01c00000-0000-4000-8000-000000000001', '01c00000-0000-4000-8000-0000000
 ALTER TABLE public.merchants ENABLE TRIGGER USER;
 
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'Need an iPhone', 'Buyer@Example.COM', '01c00000-0000-4000-8000-000000000010');
+  'intake-canonical', 'Need an iPhone', 'Buyer@Example.COM', '01c00000-0000-4000-8000-000000000010',
+  'abababababababababababababababababababababababababababababababab');
 
 -- Same request id, different casing: canonical keys match, returns success.
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'NEED AN IPHONE', 'buyer@example.com', '01c00000-0000-4000-8000-000000000010');
+  'intake-canonical', 'NEED AN IPHONE', 'buyer@example.com', '01c00000-0000-4000-8000-000000000010',
+  'abababababababababababababababababababababababababababababababab');
 
 -- Phone punctuation variant: same request id, re-punctuated contact.
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'Need a charger', '+234 801 234 5678', '01c00000-0000-4000-8000-000000000011');
+  'intake-canonical', 'Need a charger', '+234 801 234 5678', '01c00000-0000-4000-8000-000000000011',
+  'abababababababababababababababababababababababababababababababab');
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'need a charger', '2348012345678', '01c00000-0000-4000-8000-000000000011');
+  'intake-canonical', 'need a charger', '2348012345678', '01c00000-0000-4000-8000-000000000011',
+  'abababababababababababababababababababababababababababababababab');
 
 -- Whitespace-only query variant: the query-key normalizer collapses runs.
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'Need an iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012');
+  'intake-canonical', 'Need an iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012',
+  'abababababababababababababababababababababababababababababababab');
 SELECT public.submit_storefront_product_request(
-  'intake-canonical', 'Need   an   iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012');
+  'intake-canonical', 'Need   an   iPad', 'buyer@example.com', '01c00000-0000-4000-8000-000000000012',
+  'abababababababababababababababababababababababababababababababab');
 
 -- A genuinely different query under the same id still conflicts.
 DO $$ BEGIN
   BEGIN
     PERFORM public.submit_storefront_product_request(
-      'intake-canonical', 'Need a laptop', 'buyer@example.com', '01c00000-0000-4000-8000-000000000010');
+      'intake-canonical', 'Need a laptop', 'buyer@example.com', '01c00000-0000-4000-8000-000000000010',
+  'abababababababababababababababababababababababababababababababab');
   EXCEPTION WHEN SQLSTATE '23505' THEN
     RETURN;
   END;

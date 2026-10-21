@@ -15,6 +15,8 @@ const args = {
   p_contact: 'shopper@example.com',
   p_merchant_slug: 'ogabassey',
   p_request_id: '11111111-1111-4111-8111-111111111111',
+  p_caller_net_hash:
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 };
 beforeEach(() => {
   mocks.rpc.mockReset().mockResolvedValue({ error: null });

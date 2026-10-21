@@ -14,6 +14,11 @@ import {
 } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import {
+  clearPendingVtuKeys,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import {
   chargeWalletForVtu,
   confirmVtuCheckout,
   listSavedVtuCards,
@@ -50,7 +55,11 @@ const mockFetchWithTimeout =
 
 type MockDeadlineResult = {
   data: Record<string, unknown>;
-  response: { ok: boolean; status?: number };
+  response: {
+    ok: boolean;
+    status?: number;
+    headers: { get: (name: string) => string | null };
+  };
 };
 
 const mockFetchJsonWithDeadline =
@@ -172,7 +181,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const result = await confirmVtuCheckout({
@@ -189,7 +198,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 123,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -206,7 +215,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'failed',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -223,7 +232,7 @@ describe('vtu-checkout service', () => {
         error: 'Payment is not yet successful',
         status: 'pending',
       },
-      response: { ok: false, status: 409 },
+      response: { ok: false, status: 409, headers: { get: () => null } },
     });
 
     const result = await confirmVtuCheckout({
@@ -243,7 +252,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'processing',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -263,7 +272,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'processing',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     try {
@@ -321,12 +330,14 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     // Caller-supplied UUID — the contract change. The form
     // controller holds this key in a ref so a network failure
-    // doesn't lose it; chargeWalletForVtu is a pure transport.
+    // doesn't lose it; chargeWalletForVtu also adopts the
+    // server's canonical key when the response carries the join
+    // wire (uniform across outcomes — never a per-path concern).
     const idempotencyKey = '11111111-2222-3333-4444-555555555555';
     const result = await chargeWalletForVtu({
       amount: 1000,
@@ -368,7 +379,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const before = Date.now();
@@ -395,7 +406,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const result = await chargeWalletForVtu({
@@ -522,5 +533,217 @@ describe('shouldRotateWalletIdempotencyKeyForError', () => {
     expect(shouldRotateWalletIdempotencyKeyForError('bare string')).toBe(false);
     expect(shouldRotateWalletIdempotencyKeyForError(undefined)).toBe(false);
     expect(shouldRotateWalletIdempotencyKeyForError(null)).toBe(false);
+  });
+
+  it('chargeWalletForVtu: adopts the canonical key after an intent-claim join', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-join-ok', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: {
+        ok: true,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: 'key-minted',
+      expectedUserId: 'user-1',
+      pendingDescriptor: 'desc-join-ok',
+    });
+
+    expect(recallPendingVtuKey('desc-join-ok')).toBe('key-winner');
+  });
+
+  it('chargeWalletForVtu: adopts the canonical key before throwing on error joins', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-join-err', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'boom' },
+      response: {
+        ok: false,
+        status: 500,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu({
+        amount: 1000,
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: 'key-minted',
+        expectedUserId: 'user-1',
+        pendingDescriptor: 'desc-join-err',
+      })
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-join-err')).toBe('key-winner');
+  });
+
+  it('chargeWalletForVtu: skips adoption without a descriptor', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-no-adopt', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: {
+        ok: true,
+        headers: { get: () => 'key-winner' },
+      },
+    });
+
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: 'key-minted',
+      expectedUserId: 'user-1',
+    });
+
+    expect(recallPendingVtuKey('desc-no-adopt')).toBe('key-minted');
+  });
+});
+
+describe('chargeWalletForVtu generation-guarded rotation (Codex R6 P1)', () => {
+  function chargeArgs(
+    idempotencyKey: string,
+    pendingDescriptor: string | undefined
+  ) {
+    return {
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime' as const,
+      walletAmount: 1000,
+      idempotencyKey,
+      expectedUserId: 'user-1',
+      pendingDescriptor,
+    };
+  }
+
+  it('rotates the submitted key on a definitive 4xx', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot', 'key-dead');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'Insufficient funds' },
+      response: { ok: false, status: 400, headers: { get: () => null } },
+    });
+
+    await expect(
+      chargeWalletForVtu(chargeArgs('key-dead', 'desc-rot'))
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-rot')).toBeNull();
+  });
+
+  it('rotates under the canonical key after an intent-claim join', async () => {
+    // Adoption rebinds live to the winner BEFORE the error branch,
+    // so rotation must target the canonical key — targeting the
+    // submitted key would skip and leave the dead winner replayable.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot-join', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'Bad Request' },
+      response: {
+        ok: false,
+        status: 400,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu(chargeArgs('key-minted', 'desc-rot-join'))
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-rot-join')).toBeNull();
+  });
+
+  it('preserves a newer generation when adoption is vetoed', async () => {
+    // Sibling tab rebound live to key-newer mid-flight: the stale
+    // response's adoption vetoes AND its rotation skips, so the
+    // newer generation survives the loser's 4xx.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot-veto', 'key-newer');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'Bad Request' },
+      response: {
+        ok: false,
+        status: 400,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu(chargeArgs('key-stale', 'desc-rot-veto'))
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-rot-veto')).toBe('key-newer');
+  });
+
+  it('keeps the key on a 5xx (server may have persisted state)', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot-5xx', 'key-ambiguous');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'boom' },
+      response: { ok: false, status: 500, headers: { get: () => null } },
+    });
+
+    await expect(
+      chargeWalletForVtu(chargeArgs('key-ambiguous', 'desc-rot-5xx'))
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-rot-5xx')).toBe('key-ambiguous');
+  });
+
+  it('surfaces the canonical key on success for guarded settlement', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot-surf', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: {
+        ok: true,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    const result = await chargeWalletForVtu(
+      chargeArgs('key-minted', 'desc-rot-surf')
+    );
+
+    expect(result.canonicalIdempotencyKey).toBe('key-winner');
+  });
+
+  it('surfaces undefined canonical key when the route sends no header', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-rot-nohdr', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: { ok: true, headers: { get: () => null } },
+    });
+
+    const result = await chargeWalletForVtu(
+      chargeArgs('key-minted', 'desc-rot-nohdr')
+    );
+
+    expect(result.canonicalIdempotencyKey).toBeUndefined();
   });
 });

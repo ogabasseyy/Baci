@@ -110,10 +110,15 @@ describe('preserveSuppressedVtuSuccess', () => {
     rememberPendingVtuPurchase('d', 'k');
     const refetchWallet = jest.fn(() => Promise.resolve('ok'));
 
-    await preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
-      reference: 'R',
-      status: 'successful',
-    });
+    await preserveSuppressedVtuSuccess(
+      paymentWithRefetch(refetchWallet),
+      'd',
+      {
+        reference: 'R',
+        status: 'successful',
+      },
+      'k'
+    );
 
     expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
     expect(refetchWallet).toHaveBeenCalledTimes(1);
@@ -127,10 +132,15 @@ describe('preserveSuppressedVtuSuccess', () => {
     rememberPendingVtuPurchase('d', 'k');
     const refetchWallet = jest.fn(() => Promise.resolve('ok'));
 
-    await preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
-      reference: 'R',
-      status: 'processing',
-    });
+    await preserveSuppressedVtuSuccess(
+      paymentWithRefetch(refetchWallet),
+      'd',
+      {
+        reference: 'R',
+        status: 'processing',
+      },
+      'k'
+    );
 
     expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
     jest
@@ -146,11 +156,37 @@ describe('preserveSuppressedVtuSuccess', () => {
     );
 
     await expect(
-      preserveSuppressedVtuSuccess(paymentWithRefetch(refetchWallet), 'd', {
-        reference: 'R',
-        status: 'successful',
-      })
+      preserveSuppressedVtuSuccess(
+        paymentWithRefetch(refetchWallet),
+        'd',
+        {
+          reference: 'R',
+          status: 'successful',
+        },
+        'k'
+      )
     ).resolves.toBeUndefined();
     expect(hasNotedPendingVtuReference('d', 'R')).toBe(true);
+  });
+
+  it('skips the preserve when the live entry moved to a newer generation', async () => {
+    // Vetoed adoption (Codex R6 P1): the loser's outcome must not
+    // finalize the winner's entry — but the wallet still refreshes
+    // since the suppressed onSuccess will never fire.
+    rememberPendingVtuPurchase('d', 'winner-key');
+    const refetchWallet = jest.fn(() => Promise.resolve('ok'));
+
+    await preserveSuppressedVtuSuccess(
+      paymentWithRefetch(refetchWallet),
+      'd',
+      {
+        reference: 'R',
+        status: 'successful',
+      },
+      'loser-key'
+    );
+
+    expect(hasNotedPendingVtuReference('d', 'R')).toBe(false);
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
   });
 });

@@ -35,3 +35,10 @@ it.each([
 ])('maps the supported transport code %s to %s', (input, expected) => {
   expect(failureOf({ code: input }, 400).code).toBe(expected);
 });
+
+it('normalizes quota bodies to the retryable canonical rate-limit code', () => {
+  expect(failureOf({ code: 'quota_exceeded' }, 429)).toMatchObject({
+    code: 'rate_limited',
+    retryable: true,
+  });
+});

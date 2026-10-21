@@ -92,36 +92,51 @@ export function runCartSessionTransition<T>(
     isSuccessful(result: T): boolean;
     operationId?: string;
     canRetry?(result: T): boolean;
+    signal?: AbortSignal;
   }
 ): Promise<T> {
-  if (isCartSessionRetiring(slug)) return Promise.resolve(blocked);
+  if (isCartSessionRetiring(slug) || outcome?.signal?.aborted)
+    return Promise.resolve(blocked);
+  const startedEpoch = getCartCookieEpoch();
   const retirement = beginCartSessionRetirement(slug ?? '', {
-    expectedEpoch: getCartCookieEpoch(),
+    expectedEpoch: startedEpoch,
   });
   let ran = false;
   let succeeded = false;
   let replayOperationId = outcome?.operationId;
-  const pending = retirement.drained
-    .then(
-      async () => {
-        ran = true;
-        const result = await operation();
-        succeeded = outcome?.isSuccessful(result) ?? true;
-        if (outcome?.canRetry?.(result) === false)
-          replayOperationId = undefined;
-        return result;
-      },
-      () => blocked
-    )
-    .finally(() => {
+  let abort!: () => void;
+  const canceled = new Promise<T>((resolve) => {
+    abort = () => {
       retirement.release();
-      flights.delete(pending);
-      if (ran && !succeeded)
-        bumpCartSessionGeneration({
-          merchantSlug: slug,
-          operationId: replayOperationId,
-        });
-    });
+      resolve(blocked);
+    };
+    outcome?.signal?.addEventListener('abort', abort, { once: true });
+    if (outcome?.signal?.aborted) abort();
+  });
+  const work = retirement.drained.then(
+    async () => {
+      if (outcome?.signal?.aborted) return blocked;
+      ran = true;
+      const result = await operation();
+      succeeded = outcome?.isSuccessful(result) ?? true;
+      if (outcome?.canRetry?.(result) === false) replayOperationId = undefined;
+      return result;
+    },
+    () => blocked
+  );
+  const pending = Promise.race([work, canceled]).finally(() => {
+    retirement.release();
+    outcome?.signal?.removeEventListener('abort', abort);
+    flights.delete(pending);
+    if (
+      (!succeeded || outcome?.signal?.aborted) &&
+      (ran || getCartCookieEpoch() !== startedEpoch)
+    )
+      bumpCartSessionGeneration({
+        merchantSlug: slug,
+        operationId: ran ? replayOperationId : undefined,
+      });
+  });
   flights.set(pending, slug ?? '');
   return pending;
 }

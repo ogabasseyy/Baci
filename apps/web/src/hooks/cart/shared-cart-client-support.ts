@@ -27,8 +27,7 @@ export type SharedCartMutationResult =
       retryable: boolean;
     };
 
-export const RETRYABLE_CODES: ReadonlySet<string> = new Set([
-  'quota_exceeded',
+export const RETRYABLE_CODES: ReadonlySet<CartErrorCode> = new Set([
   'rate_limited',
   'temporarily_unavailable',
 ]);

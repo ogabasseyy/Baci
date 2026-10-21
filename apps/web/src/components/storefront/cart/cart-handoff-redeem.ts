@@ -35,16 +35,18 @@ export async function postHandoffRedeem(
   deps.setRedeeming(true);
   deps.setRedeemError(null);
   try {
-    const result = await runCartSessionTransition<
-      Awaited<ReturnType<typeof requestHandoff>>
-    >(
-      deps.merchantSlug,
-      null,
-      () =>
-        withCartRequestDeadline(null, (signal) =>
-          requestHandoff(deps, body, signal)
-        ),
-      { isSuccessful: (result) => result?.response.ok === true }
+    const result = await withCartRequestDeadline(null, (signal) =>
+      runCartSessionTransition<Awaited<ReturnType<typeof requestHandoff>>>(
+        deps.merchantSlug,
+        null,
+        () =>
+          withCartRequestDeadline(
+            null,
+            (requestSignal) => requestHandoff(deps, body, requestSignal),
+            signal
+          ),
+        { isSuccessful: (reply) => reply?.response.ok === true, signal }
+      )
     );
     if (!result) {
       deps.setRedeemError(

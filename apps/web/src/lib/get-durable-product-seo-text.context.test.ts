@@ -49,6 +49,14 @@ describe('durable SEO monetary context', () => {
     'Shop Pixel 10 for 999',
     'Price: 1.299,99',
     'Price: 1,00,000',
+    'Device: 999',
+    'Phone selling at 999',
+    'MSRP: 999',
+    'RRP: 1,299',
+    'MSRP is 999',
+    'The price is 12,345.',
+    'The price for SKU is 999.',
+    'SAR 1,200 is the listed retail price.',
   ])('rejects explicit financial predicates and foreign aliases: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -67,6 +75,24 @@ describe('durable SEO monetary context', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'iPhone 13' },
+      })
+    ).toBe('');
+  });
+
+  it('rejects a short separator-only amount after the product identity', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'iPhone 13 – 999',
+        product: { name: 'iPhone 13' },
+      })
+    ).toBe('');
+  });
+
+  it('rejects a parenthesized short price after the product identity', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Phone (999)',
+        product: { name: 'Phone' },
       })
     ).toBe('');
   });
@@ -90,6 +116,11 @@ describe('durable SEO monetary context', () => {
     'Compare an N350 processor with an R16 processor.',
     'The display resolution is 1,920 × 1,080 pixels.',
     'The display resolution is 1,920 by 1,080 pixels.',
+    'The model number is 12,345.',
+    'The SKU is 12,345.',
+    'SKU is 999.',
+    'Model 999 with 5G.',
+    'SAR 1.2 W/kg with compliant exposure limits.',
   ])('preserves numeric specifications despite nearby price vocabulary: %s', (text) => {
     expect(
       getDurableProductSeoText({

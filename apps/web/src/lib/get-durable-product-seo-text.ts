@@ -45,7 +45,7 @@ function retailRelation(text: string, start: number) {
       .split(/[.!?;\n]/)
       .at(-1) ?? '';
   const cue =
-    /\b(prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
+    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
     )?.[1] ?? '';
   const predicate =
@@ -53,12 +53,22 @@ function retailRelation(text: string, start: number) {
       clause
     );
   const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);
+  const identifierPredicate =
+    /\b(?:model\s+(?:number|no\.?)|sku|part\s+(?:number|no\.?)|serial(?:\s+(?:number|no\.?))?|imei|item\s+(?:number|no\.?)|product\s+code)\s+(?:is|was|are|were|:)\s*$/i.test(
+      clause
+    );
+  const commercial =
+    /\b(?:sell(?:s|ing)?|sold|available|offered|retail(?:s|ed|ing)?)\b(?:\s+[^.!?;\n]{0,60})?\s+(?:at|for)\s*$/i.test(
+      clause
+    );
   return {
     cue,
     predicate,
     copula,
-    separator: /^\s*[:–—-]?\s*$/.test(clause),
-    strong: /^(?:price|cost|priced|start|pay|only)/i.test(cue),
+    identifierPredicate,
+    commercial,
+    separator: /^\s*[-:–—(]?\s*$/.test(clause),
+    strong: /^(?:msrp|rrp|price|cost|priced|start|pay|only)/i.test(cue),
     purchase:
       /\b(?:buy|purchase)\b/i.test(clause) ||
       /\b(?:get(?!\s+(?:ready|prepared|started)\b)|shop)(?:\s+[^.!?;\n]{1,80})?\s+for\s*$/i.test(
@@ -91,6 +101,7 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
   if (!candidate.marker) {
+    if (relation.identifierPredicate && !relation.predicate) return false;
     if (
       (!relation.cue &&
         !relation.predicate &&
@@ -108,6 +119,10 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       relation.predicate ||
       relation.strong ||
       relation.purchase ||
+      relation.commercial ||
+      (relation.separator &&
+        rawAmount.replace(/\D/g, '').length >= 3 &&
+        (/^\s*$/.test(tail) || /^\s*\)\s*[.!?]?\s*$/.test(tail))) ||
       (relation.copula &&
         (/[,. '\u2019\u00a0\u202f]/.test(rawAmount) ||
           rawAmount.replace(/\D/g, '').length >= 5)) ||
@@ -115,6 +130,11 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       rawAmount.replace(/\D/g, '').length >= 5
     );
   }
+  if (
+    candidate.marker.toUpperCase() === 'SAR' &&
+    /^\s*W\s*\/\s*kg\b/i.test(tail)
+  )
+    return false;
   // Casing alone does not disambiguate ordinary words from ISO homonyms.
   if (LEXICAL_CURRENCY_CODES.has(candidate.marker.toUpperCase())) {
     const isIsoCode = candidate.currencies.includes(

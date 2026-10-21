@@ -196,6 +196,44 @@ describe('fetch-storefront-product-offers', () => {
     });
   });
 
+  it('hydrates every spelling of a duplicate id, not just the first', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
+            condition: 'used',
+            price_basis: 80000,
+            allocatable_stock: 2,
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
+    );
+
+    const result = await getStorefrontProductOffersByProductIds([
+      PRODUCT_1,
+      PRODUCT_1.toUpperCase(),
+    ]);
+
+    const expected = [
+      {
+        compare_at_price: null,
+        condition: 'used',
+        condition_notes: null,
+        grade: null,
+        id: OFFER_7,
+        images: undefined,
+        price: 80000,
+        stock_quantity: 2,
+      },
+    ];
+    expect(result?.[PRODUCT_1]).toEqual(expected);
+    expect(result?.[PRODUCT_1.toUpperCase()]).toEqual(expected);
+  });
+
   it('returns null when the offer lookup fails', async () => {
     mockRpc.mockReturnValueOnce(
       Promise.resolve({ data: null, error: { message: 'boom' } })

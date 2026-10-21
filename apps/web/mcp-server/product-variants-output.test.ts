@@ -30,7 +30,7 @@ describe('variant output failure contracts', () => {
     const detail = await buildMcpProductDetail({
       product: { id: 'phone-1', name: 'Phone', slug: null, price: 100000, compare_at_price: null, images: [], description: null, stock_quantity: 0, manage_stock: true, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: true, has_condition_offers: false, schema_markup: null },
       supabase: supabase as unknown as SupabaseClient,
-      formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
     expect(variants.structuredContent).toMatchObject({ variants: [{ attributes: { ram: 8 } }] });
     expect(detail.structuredContent).toMatchObject({ variants: [{ option_id: 'variant-1', price: 100000, attributes: { ram: 8 } }] });
@@ -57,7 +57,7 @@ describe('variant output failure contracts', () => {
     });
     const detail = await buildMcpProductDetail({
       product: { id: 'phone-1', name: 'Phone', slug: null, price: 100000, compare_at_price: null, images: [], description: null, stock_quantity: 0, manage_stock: true, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: !offer, has_condition_offers: offer, schema_markup: null },
-      supabase: supabase as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase: supabase as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
     expect(variants.structuredContent).toMatchObject({ status: 'unavailable', variants: [], condition_offers: [] });
     expect(detail.structuredContent).toMatchObject({ status: 'unavailable', products: [] });
@@ -103,19 +103,19 @@ describe('variant output failure contracts', () => {
     expect(mcpToolOutputSchemas.get_product_variants.safeParse(result.structuredContent).success).toBe(true);
   });
   it.each([null, Number.NaN, Number.POSITIVE_INFINITY, -1])('rejects corrupt tracked base stock %s', async (stock) => {
-    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: 100, compare_at_price: null, images: [], description: null, stock_quantity: stock, manage_stock: true, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined });
+    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: 100, compare_at_price: null, images: [], description: null, stock_quantity: stock, manage_stock: true, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1' });
     expect(result.structuredContent).toMatchObject({ status: 'unavailable', products: [] });
     expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
   });
 
   it.each([{ stock: 0, tracked: true }, { stock: null, tracked: false }])('preserves base-stock boundary $stock with tracking=$tracked', async ({ stock, tracked }) => {
-    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: 100, compare_at_price: null, images: [], description: null, stock_quantity: stock, manage_stock: tracked, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined });
+    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: 100, compare_at_price: null, images: [], description: null, stock_quantity: stock, manage_stock: tracked, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1' });
     expect(result.structuredContent.products).toHaveLength(1);
     expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
   });
 
   it.each([null, 0, 100])('reports detail price %s without inventing a zero', async (price) => {
-    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: price as unknown as number, compare_at_price: 200, images: [], description: null, stock_quantity: null, manage_stock: false, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: (value) => `NGN ${Number(value)}`, getSafeCatalogImageUrl: () => undefined });
+    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: price as unknown as number, compare_at_price: 200, images: [], description: null, stock_quantity: null, manage_stock: false, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: (value) => `NGN ${Number(value)}`, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1' });
     expect(result.structuredContent.products).toMatchObject([{ price }]);
     expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
     if (price === null) {

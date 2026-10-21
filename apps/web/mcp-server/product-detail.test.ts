@@ -11,6 +11,16 @@ const product = {
 };
 
 describe('buildMcpProductDetail', () => {
+  it('scopes the offer-resolution call to the merchant like the variants surface', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    await buildMcpProductDetail({
+      product: { ...product, has_variants: false, has_condition_offers: true },
+      supabase: { rpc } as unknown as SupabaseClient,
+      formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
+    });
+    expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', { p_merchant_id: 'merchant-1', p_product_ids: [product.id] });
+  });
+
   it('keeps product details and stocked offers when the variant lookup fails', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const rpc = vi.fn(async (name: string) => name === 'get_storefront_product_variants'
@@ -20,9 +30,9 @@ describe('buildMcpProductDetail', () => {
       const result = await buildMcpProductDetail({
         product: { ...product, description: 'A useful phone', has_condition_offers: true },
         supabase: { rpc } as unknown as SupabaseClient,
-        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
       });
-      expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', { p_merchant_id: null, p_product_ids: [product.id] });
+      expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', { p_merchant_id: 'merchant-1', p_product_ids: [product.id] });
       expect(result.content[0].text).toContain('A useful phone');
       expect(result.content[0].text).toContain('• used: 70000 - In Stock');
       expect(result.structuredContent).toMatchObject({
@@ -43,7 +53,7 @@ describe('buildMcpProductDetail', () => {
       const result = await buildMcpProductDetail({
         product: { ...product, has_condition_offers: true },
         supabase: { rpc } as unknown as SupabaseClient,
-        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
       });
       expect(result.content[0].text).toContain('**Available Colors:** Red');
       expect(result.content[0].text).toContain('Condition offers are temporarily unavailable.');
@@ -66,7 +76,7 @@ describe('buildMcpProductDetail', () => {
     })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('**Available Conditions:**');
@@ -86,7 +96,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true, compare_at_price: 120000 },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.structuredContent).toMatchObject({
@@ -104,7 +114,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('• new: 100000 - In Stock');
@@ -123,7 +133,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('• new: 100000 - In Stock');
@@ -139,7 +149,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).not.toContain('• used: 70000 - In Stock');
@@ -154,7 +164,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('• used: 70000 - In Stock');
@@ -169,7 +179,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, id: 'OPTION-PHONE', has_variants: false, has_condition_offers: true },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('• used: 70000 - In Stock');
@@ -183,7 +193,7 @@ describe('buildMcpProductDetail', () => {
       { attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', images: [] },
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
-      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.structuredContent).toMatchObject({ products: [{ price: 90000, in_stock: true }] });
@@ -199,7 +209,7 @@ describe('buildMcpProductDetail', () => {
       error: null,
     })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
-      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
     expect(result.content[0].text).toContain('**Available Colors:** Red');
     expect(result.content[0].text).toContain('**Storage Options:** 128GB');
@@ -223,7 +233,7 @@ describe('buildMcpProductDetail', () => {
       error: null,
     })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
-      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain(`**Available Colors:** ${value}`);
@@ -249,7 +259,7 @@ describe('buildMcpProductDetail', () => {
       },
       supabase,
       formatPrice: String,
-      getSafeCatalogImageUrl: (url) => url ?? undefined,
+      getSafeCatalogImageUrl: (url) => url ?? undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain(
@@ -273,7 +283,7 @@ describe('buildMcpProductDetail', () => {
       },
       supabase: { rpc: vi.fn() } as unknown as SupabaseClient,
       formatPrice: String,
-      getSafeCatalogImageUrl: (url) => url?.startsWith('https://') ? url : undefined,
+      getSafeCatalogImageUrl: (url) => url?.startsWith('https://') ? url : undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('**Catalog Colors:** Graphite');
@@ -293,7 +303,7 @@ describe('buildMcpProductDetail', () => {
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, color_images: { Silver: ['https://cdn.example/silver.jpg'] } },
-      supabase, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+      supabase, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined, merchantId: 'merchant-1',
     });
 
     expect(result.content[0].text).toContain('**Catalog Colors:** Silver');
@@ -310,7 +320,7 @@ describe('buildMcpProductDetail', () => {
       const result = await buildMcpProductDetail({
         product: { ...product, has_variants: false, color_images },
         supabase: { rpc: vi.fn() } as unknown as SupabaseClient,
-        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
       });
       expect(result.structuredContent).toMatchObject({
         catalog_colors: { labels: [], source: null, images_by_color: {} },
@@ -325,7 +335,7 @@ describe('buildMcpProductDetail', () => {
     try {
       const result = await buildMcpProductDetail({
         product: { ...product, description: 'Useful phone', images: ['https://cdn.example/phone.jpg'] },
-        supabase, formatPrice: String, getSafeCatalogImageUrl: () => 'https://cdn.example/phone.jpg',
+        supabase, formatPrice: String, getSafeCatalogImageUrl: () => 'https://cdn.example/phone.jpg', merchantId: 'merchant-1',
       });
       expect(result.content[0].text).toContain('Useful phone');
       expect(result.content[0].text).toContain('Variant options are temporarily unavailable.');
@@ -345,7 +355,7 @@ describe('buildMcpProductDetail', () => {
     try {
       const result = await buildMcpProductDetail({
         product: { ...product, description: 'Useful phone', has_variants: false, has_condition_offers: true },
-        supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+        supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined, merchantId: 'merchant-1',
       });
       expect(result.content[0].text).toContain('Useful phone');
       expect(result.content[0].text).toContain('Condition offers are temporarily unavailable.');

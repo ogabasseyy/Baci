@@ -86,13 +86,15 @@ export async function getStorefrontProductOffersByProductIds(
   > = {};
   // Caller-case keys (callers look up by their own id spelling);
   // resolution ids are canonical lowercase, so push through a
-  // case-insensitive index instead of direct keying.
-  const keyByLowerId = new Map<string, string>();
+  // case-insensitive index instead of direct keying. Every spelling
+  // of a duplicate id gets the rows: a lowercase cached row and an
+  // uppercase cart row are the same product and must hydrate alike.
+  const keysByLowerId = new Map<string, string[]>();
   for (const productId of uniqueProductIds) {
     offersByProductId[productId] = [];
-    if (!keyByLowerId.has(productId.toLowerCase())) {
-      keyByLowerId.set(productId.toLowerCase(), productId);
-    }
+    const bucket = keysByLowerId.get(productId.toLowerCase()) ?? [];
+    bucket.push(productId);
+    keysByLowerId.set(productId.toLowerCase(), bucket);
   }
   for (const resolution of resolutions.values()) {
     // Live SQL withholds gated-out rows; a partial/stale projection
@@ -100,9 +102,9 @@ export async function getStorefrontProductOffersByProductIds(
     // ineligible parents). Same fail-closed guard as cart, order,
     // MCP, and native stock consumers.
     if (resolution.parentEligible !== true) continue;
-    const key = keyByLowerId.get(resolution.productId);
-    if (key === undefined) continue;
-    offersByProductId[key]?.push({
+    const keys = keysByLowerId.get(resolution.productId);
+    if (keys === undefined) continue;
+    const offerRow = {
       compare_at_price: resolution.compareAtPrice ?? null,
       condition: resolution.condition,
       condition_notes: resolution.conditionNotes ?? null,
@@ -111,7 +113,10 @@ export async function getStorefrontProductOffersByProductIds(
       images: resolution.images,
       price: resolution.priceBasis,
       stock_quantity: resolution.allocatableStock,
-    });
+    };
+    for (const key of keys) {
+      offersByProductId[key]?.push({ ...offerRow });
+    }
   }
 
   return offersByProductId;

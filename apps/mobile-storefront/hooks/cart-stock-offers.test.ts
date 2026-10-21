@@ -95,7 +95,7 @@ describe('resolveOfferStock', () => {
     });
   });
 
-  it('fails closed to zero when strict policy reports no unit count', async () => {
+  it('throws retryable when strict policy reports no unit count', async () => {
     mockAuthority({
       rows: [
         row({
@@ -105,15 +105,31 @@ describe('resolveOfferStock', () => {
         }),
       ],
     });
-    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
-      stock: 0,
-      strictUnits: 0,
-    });
+    await expect(resolveOfferStock('p1', 'o1')).rejects.toThrow(
+      'Cannot verify stock availability. Please try again.'
+    );
     // A projection outage, not a sell-out: distinguishable in logs.
     expect(mockLogError).toHaveBeenCalledWith(
       'Strict offer stock arrived with no unit count:',
       { productId: 'p1', offerId: 'o1' }
     );
+  });
+
+  it('reports zero without throwing for a genuine strict sell-out', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+        }),
+      ],
+    });
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
+      stock: 0,
+      strictUnits: 0,
+    });
+    expect(mockLogError).not.toHaveBeenCalled();
   });
 
   it('treats unlimited null allocations as unbounded', async () => {

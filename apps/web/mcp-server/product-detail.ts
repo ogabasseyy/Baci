@@ -43,11 +43,17 @@ export async function buildMcpProductDetail({
   supabase,
   formatPrice,
   getSafeCatalogImageUrl,
+  merchantId,
 }: {
   product: ProductDetailSource;
   supabase: SupabaseClient;
   formatPrice: (price: number) => string;
   getSafeCatalogImageUrl: (imageUrl: string | null | undefined) => string | undefined;
+  // Tenant scope for the offer-resolution RPC: the product was already
+  // resolved for this merchant, and the variants surface scopes the
+  // identical call — unscoped here would silently drop offers the
+  // sibling returns (or vice versa).
+  merchantId: string;
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
@@ -88,7 +94,7 @@ export async function buildMcpProductDetail({
     const { data: offerData, error: offerError } = await supabase.rpc(
       'get_storefront_offer_resolution',
       {
-        p_merchant_id: null,
+        p_merchant_id: merchantId,
         p_product_ids: [product.id],
       }
     );

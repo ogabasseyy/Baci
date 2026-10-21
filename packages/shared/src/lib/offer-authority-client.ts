@@ -83,6 +83,11 @@ function toUnclampedStockQuantity(value: unknown): number | null {
   return parsed === null ? null : Math.floor(parsed);
 }
 
+/** Eligibility flag: true only for boolean true or the string 'true'. */
+function toEligibilityFlag(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
 /**
  * Coerces one raw authority row (PostgREST decodes numerics as strings).
  * Returns null for rows without a product/offer identity. Identity ids
@@ -131,7 +136,11 @@ export function coerceOfferAuthorityRow(
     images: record.images,
     // A row without the flag fails closed: schema drift, partial
     // projections, or a future rename must never read as eligible.
-    parentEligible: Boolean(record.parent_eligible ?? record.parentEligible),
+    // Parsed explicitly (never Boolean()) because a stringly-typed
+    // 'false' from a proxy or partial projection is truthy.
+    parentEligible: toEligibilityFlag(
+      record.parent_eligible ?? record.parentEligible
+    ),
     effectivePolicy:
       typeof (record.effective_policy ?? record.effectivePolicy) === 'string'
         ? String(record.effective_policy ?? record.effectivePolicy)

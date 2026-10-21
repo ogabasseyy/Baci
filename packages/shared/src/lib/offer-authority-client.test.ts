@@ -84,6 +84,26 @@ describe('coerceOfferAuthorityRow', () => {
     expect(row?.offerId).toBe(OFFER_ID);
   });
 
+  it('parses stringly eligibility flags without Boolean() fail-open', () => {
+    const truthy = coerceOfferAuthorityRow({
+      product_id: PRODUCT_ID,
+      offer_id: OFFER_ID,
+      parent_eligible: 'true',
+    });
+    expect(truthy?.parentEligible).toBe(true);
+    const falsy = coerceOfferAuthorityRow({
+      product_id: PRODUCT_ID,
+      offer_id: OFFER_ID,
+      parent_eligible: 'false',
+    });
+    expect(falsy?.parentEligible).toBe(false);
+    const missing = coerceOfferAuthorityRow({
+      product_id: PRODUCT_ID,
+      offer_id: OFFER_ID,
+    });
+    expect(missing?.parentEligible).toBe(false);
+  });
+
   it('floors the allocatable stock without clamping negatives', () => {
     const fractional = coerceOfferAuthorityRow({
       product_id: PRODUCT_ID,

@@ -46,8 +46,9 @@ export async function resolveOfferStock(
   }
   if (resolution.effectivePolicy === 'serialized_strict') {
     // A strict row with no unit count is a serialized-projection
-    // outage, not a genuine sell-out: log it at error level so the
-    // two are distinguishable, while still failing closed at zero.
+    // outage, not a genuine sell-out (live SQL coalesces genuine
+    // sell-outs to 0): throw retryable like the RPC-error branch so
+    // the caller retries instead of reporting sold-out.
     if (
       resolution.availableUnits === null ||
       resolution.allocatableStock === null
@@ -56,10 +57,11 @@ export async function resolveOfferStock(
         productId,
         offerId,
       });
+      throw new Error('Cannot verify stock availability. Please try again.');
     }
-    const units = resolution.availableUnits ?? 0;
+    const units = resolution.availableUnits;
     return {
-      stock: resolution.allocatableStock ?? 0,
+      stock: resolution.allocatableStock,
       strictUnits: units,
     };
   }

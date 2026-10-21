@@ -5,6 +5,7 @@ import {
   hashReceiptClaimToken,
   type ReceiptClaimOrderForDeviceList,
 } from '@/lib/import-notifications/receipt-claim-links';
+import type { ReceiptLoginHintRpcClient } from '@/lib/receipts/server-login-hint-client';
 import { receiptClaimRouteParamsSchema } from '@/schemas/receipt-claim-route-params';
 import {
   type ReceiptClaimRecord,
@@ -146,7 +147,7 @@ export async function loadReceiptClaimLoginEmailHint({
   token,
 }: {
   supabase: SupabaseClient;
-  serviceSupabase?: Pick<SupabaseClient, 'rpc'>;
+  serviceSupabase?: ReceiptLoginHintRpcClient;
   token: string;
 }): Promise<ReceiptClaimLoginEmailHintResult> {
   const record = await loadReceiptClaimRecord({ supabase, token });
@@ -155,11 +156,11 @@ export async function loadReceiptClaimLoginEmailHint({
     return record;
   }
 
-  // The recipient address travels through the service-role-only hint
-  // function so the anon preview payload never carries it, and only a
-  // masked hint leaves the server: an anonymous token holder learns which
-  // inbox to open, never the full address. During the predeploy window
-  // the function does not exist yet: fall back to the legacy preview
+  // The recipient address travels through the branded single-RPC
+  // login-hint handle so the anon preview payload never carries it, and
+  // only a masked hint leaves the server: an anonymous token holder learns
+  // which inbox to open, never the full address. During the predeploy
+  // window the function does not exist yet: fall back to the legacy preview
   // email, which the schema still tolerates.
   let rawEmail: string | null = null;
   if (serviceSupabase) {

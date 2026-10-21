@@ -6,6 +6,7 @@ import {
   loadReceiptClaimPreview,
   parseReceiptClaimToken,
 } from '@/lib/import-notifications/receipt-claim-preview';
+import type { ReceiptLoginHintRpcClient } from '@/lib/receipts/server-login-hint-client';
 
 const baseClaim = {
   claimed_at: null,
@@ -161,10 +162,12 @@ describe('receipt claim preview', () => {
       data: trimmedClaim,
       error: null,
     });
-    const serviceSupabase = createSupabaseRpcMock({
-      data: '  BasseyBJohn@Yahoo.CO.UK  ',
-      error: null,
-    });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    };
 
     const result = await loadReceiptClaimLoginEmailHint({
       supabase,
@@ -193,13 +196,16 @@ describe('receipt claim preview', () => {
       },
       error: null,
     });
-    const serviceSupabase = createSupabaseRpcMock({
-      data: null,
-      error: {
-        code: 'PGRST202',
-        message: 'Could not find function public.get_receipt_claim_login_hint',
-      },
-    });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message:
+            'Could not find function public.get_receipt_claim_login_hint',
+        },
+      }),
+    };
 
     const result = await loadReceiptClaimLoginEmailHint({
       supabase,

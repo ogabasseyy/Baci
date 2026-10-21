@@ -4,7 +4,7 @@ import { hashReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-
 
 const mockCheckCsrfProtection = vi.fn();
 const mockCreateClient = vi.fn();
-const mockCreateAdminClient = vi.fn();
+const mockCreateReceiptLoginHintServiceClient = vi.fn();
 const mockConsoleError = vi
   .spyOn(console, 'error')
   .mockImplementation(() => undefined);
@@ -17,8 +17,9 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: () => mockCreateClient(),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => mockCreateAdminClient(),
+vi.mock('@/lib/receipts/server-login-hint-client', () => ({
+  createReceiptLoginHintServiceClient: (...args: unknown[]) =>
+    mockCreateReceiptLoginHintServiceClient(...args),
 }));
 
 import { GET, POST } from './route';
@@ -112,7 +113,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
   it('returns a sanitized email hint for a valid claim token', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
@@ -135,7 +136,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       error: null,
     });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
@@ -150,7 +151,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
   it('records app login-start activity from the mobile email hint request', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
@@ -172,7 +173,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       { data: null, error: { message: 'tracking write failed' } }
     );
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
@@ -258,7 +259,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       { data: 'not-an-email', error: null }
     );
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateAdminClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
 
     const response = await GET(getRequest(), params);
     const body = await response.json();

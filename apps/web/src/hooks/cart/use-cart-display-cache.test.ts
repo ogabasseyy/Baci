@@ -39,6 +39,38 @@ it('preserves the import source until confirmed and strips voucher credentials o
   expect(getCartFromStorage('shop')[0].quizVoucherToken).toBeUndefined();
   expect(getCartFromStorage('shop')[0].quizAwardId).toBeUndefined();
 });
+it('preserves the storage cache when a terminal cart is adopted via polling', () => {
+  saveCartToStorage([cartItem({ name: 'Unimported' })], 'shop');
+  renderHook(() => {
+    const runtime = useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 1,
+    });
+    useCartDisplayCache({
+      ...runtime,
+      state: {
+        ...runtime.state,
+        generation: 1,
+        importStatus: 'skipped',
+        confirmed: {
+          cartId: '22222222-2222-4222-8222-222222222222',
+          currency: 'NGN',
+          estimatedTotals: false,
+          expiresAt: '2026-10-19T04:00:00.000Z',
+          lines: [],
+          merchantId: 'merchant',
+          state: 'completed',
+          subtotalMinor: 0,
+          totalMinor: 0,
+          version: 2,
+        },
+        display: [],
+      },
+    });
+  });
+  expect(getCartFromStorage('shop')[0].name).toBe('Unimported');
+});
 it('does not persist the old generation into a newly selected merchant', () => {
   saveCartToStorage([cartItem({ name: 'Other merchant' })], 'other');
   renderHook(() => {

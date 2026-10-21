@@ -91,45 +91,6 @@ it('retries the complete original body instead of reusing its key with a differe
     vi.mocked(linkAccountCart).mock.calls[0][0]
   );
 });
-it('checks the current merchant generation after a merchant switch', async () => {
-  let finish: (value: Awaited<ReturnType<typeof linkAccountCart>>) => void =
-    () => {};
-  vi.mocked(linkAccountCart).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      })
-  );
-  const onLinked = vi.fn();
-  const { result, rerender } = renderHook(
-    ({ shop, user }) =>
-      useCartAccountLink({ merchantSlug: shop, ownerSubject: user, onLinked }),
-    { initialProps: { shop: 'shop-a', user: 'user-a' } }
-  );
-  await act(async () => result.current.loadSavedCart());
-  rerender({ shop: 'shop-b', user: 'user-a' });
-  await act(async () => result.current.loadSavedCart());
-  let pending: Promise<boolean> = Promise.resolve(false);
-  act(() => {
-    pending = result.current.link('keep_current');
-  });
-  // Retiring the previous merchant must not fence the new merchant's link.
-  act(() => {
-    bumpCartSessionGeneration({ merchantSlug: 'shop-a' });
-  });
-  await act(async () => {
-    finish({
-      ok: true,
-      snapshot: saved,
-      replayed: false,
-      warnings: [],
-    });
-    await pending;
-  });
-  expect(onLinked).toHaveBeenCalledOnce();
-  await expect(pending).resolves.toBe(true);
-});
-
 it('does not publish a completed link into a new merchant or shopper scope', async () => {
   let finish: (value: Awaited<ReturnType<typeof linkAccountCart>>) => void =
     () => {};

@@ -71,6 +71,23 @@ it('does not clear the local session when the server logout fails', async () => 
   expect(isCartSessionRetiring('ogabassey')).toBe(false);
 });
 
+it('bounds the auth logout fetch so it cannot hold the cart lock indefinitely', async () => {
+  vi.mocked(clearCartStorage).mockClear();
+  vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  await performCustomerLogout('ogabassey', vi.fn(), vi.fn(), vi.fn(), 'user-1');
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/storefront/auth/logout',
+    expect.objectContaining({
+      method: 'POST',
+      signal: expect.any(AbortSignal),
+    })
+  );
+});
+
 it('preserves saved device items when logout revocation fails', async () => {
   vi.mocked(clearCartStorage).mockClear();
   vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: false });

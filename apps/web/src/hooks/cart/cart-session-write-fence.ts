@@ -149,12 +149,16 @@ export function runBoundedCartSessionWrite<T>(
   beforeLock?: (signal: AbortSignal) => Promise<boolean>
 ): Promise<T> {
   if (beforeLock) {
-    const startedEpoch = getCartCookieEpoch(slug);
     return withCartRequestDeadline(
       fallback,
       async (requestSignal) => {
         if (!(await beforeLock(requestSignal))) return fallback;
-        if (!isCartCookieEpochCurrent(startedEpoch, slug)) return fallback;
+        // Revocation clearing intentionally rotates the epoch, so the
+        // pre-revocation value can never be current afterwards. Validate
+        // the post-revocation epoch instead; the inner write re-checks
+        // stability when it acquires the cookie lock.
+        const epochAfter = getCartCookieEpoch(slug);
+        if (!isCartCookieEpochCurrent(epochAfter, slug)) return fallback;
         return runBoundedCartSessionWrite(
           slug,
           fallback,

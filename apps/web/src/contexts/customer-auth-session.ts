@@ -1,3 +1,4 @@
+import { CART_REQUEST_TIMEOUT_MS } from '@/hooks/cart/cart-request-deadline';
 import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
 // Session load/logout orchestration for the storefront customer auth provider.
 //
@@ -245,6 +246,10 @@ export async function performCustomerLogout(
     try {
       response = await fetch('/api/storefront/auth/logout', {
         method: 'POST',
+        signal:
+          typeof AbortSignal.timeout === 'function'
+            ? AbortSignal.timeout(CART_REQUEST_TIMEOUT_MS)
+            : undefined,
       });
     } catch (error) {
       console.error('Logout error:', error);

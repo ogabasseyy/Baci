@@ -52,9 +52,9 @@ export function CartImportConflicts() {
           variant="outline"
           onClick={() => cart.discardLegacyImport?.()}
         >
-          {cart.sharedCartRef
-            ? 'Keep shared cart and discard saved device cart'
-            : 'Discard saved device cart'}
+          {!cart.sharedCartRef && cart.merchantSlug
+            ? 'Discard saved device cart'
+            : 'Keep shared cart and discard saved device cart'}
         </Button>
       </section>
     );

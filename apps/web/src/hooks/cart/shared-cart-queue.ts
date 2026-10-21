@@ -1,4 +1,5 @@
 import type { CartSnapshot } from '@baci/shared/cart';
+import type { SharedCartDisplayItem } from './cart-types';
 import { deriveDisplay } from './shared-cart-display';
 import type {
   SharedCartIntent,
@@ -39,7 +40,13 @@ export function adoptSnapshot(
       ...state,
       cartId: snapshot.cartId,
       confirmed: { ...snapshot, lines: [], subtotalMinor: 0, totalMinor: 0 },
-      unimportedCache: [],
+      // Lines without a server line id were never imported into the
+      // terminal cart; retain them for the next cart's provisioning
+      // instead of erasing the device cache on polling/send-queue
+      // adoption (the initial path filters consumed mirrors itself).
+      unimportedCache: state.unimportedCache.filter(
+        (line) => !(line as SharedCartDisplayItem).serverLineId
+      ),
       assuranceOverlays: {},
       queue: state.queue
         .filter(

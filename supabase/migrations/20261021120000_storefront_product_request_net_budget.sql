@@ -51,10 +51,17 @@ CREATE INDEX IF NOT EXISTS intake_net_windows_window_start_idx
 -- Expired-window cleanup, extracted so it is directly testable. Only the
 -- current window is ever read; expired rows are garbage from any merchant,
 -- including inactive ones no admission will ever prune merchant-scoped.
+-- Bounded to 200 rows per call (index-ordered): the prune runs inside the
+-- admission transaction, so an unbounded cross-merchant delete would couple
+-- unrelated merchants' latency and row locks at each hour rollover.
 CREATE OR REPLACE FUNCTION storefront_search_private.prune_intake_net_windows()
 RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
   DELETE FROM storefront_search_private.intake_net_windows
-  WHERE window_start < date_trunc('hour', now());
+  WHERE ctid IN (
+    SELECT ctid FROM storefront_search_private.intake_net_windows
+    WHERE window_start < date_trunc('hour', now())
+    ORDER BY window_start LIMIT 200
+  );
 $$;
 REVOKE ALL ON FUNCTION storefront_search_private.prune_intake_net_windows() FROM PUBLIC, anon, authenticated, service_role;
 
@@ -84,12 +91,13 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND storefront_search_private.normalize_request_query_key(query) = storefront_search_private.normalize_request_query_key(v_query) AND created_at > now() - interval '24 hours') THEN RETURN; END IF;
   -- Durable network-origin budget: fixed hourly window. Expired windows
-  -- are pruned probabilistically (~1% of admissions) rather than on every
-  -- call: the prune spans all merchants while serialization is only
-  -- per-merchant, so pruning every admission would serialize unrelated
-  -- merchants against each other at each hour rollover. Only the current
-  -- window is ever read, so deferred cleanup is pure garbage collection.
-  -- Retries and 24h dedup hits returned above consume no budget.
+  -- are pruned probabilistically (~1% of admissions, 200 rows max per
+  -- call) rather than on every call: the prune spans all merchants while
+  -- serialization is only per-merchant, so an unbounded every-admission
+  -- prune would serialize unrelated merchants against each other at each
+  -- hour rollover. Only the current window is ever read, so deferred
+  -- cleanup is pure garbage collection. Retries and 24h dedup hits
+  -- returned above consume no budget.
   v_window_start := date_trunc('hour', now());
   IF random() < 0.01 THEN
     PERFORM storefront_search_private.prune_intake_net_windows();

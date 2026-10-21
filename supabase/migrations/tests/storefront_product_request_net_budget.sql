@@ -147,6 +147,23 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- One prune call collects at most 200 rows, so a large expired backlog
+-- never couples one admission's latency to total expired volume.
+INSERT INTO storefront_search_private.intake_net_windows
+  (merchant_id, net_hash, window_start, request_count)
+SELECT '02d00000-0000-4000-8000-000000000011',
+  md5('prune-batch-a' || g) || md5('prune-batch-b' || g),
+  date_trunc('hour', now()) - interval '2 hours', 1
+FROM generate_series(1, 250) g;
+SELECT storefront_search_private.prune_intake_net_windows();
+DO $$ BEGIN
+  IF (SELECT count(*) FROM storefront_search_private.intake_net_windows
+      WHERE window_start < date_trunc('hour', now())) <> 50 THEN
+    RAISE EXCEPTION 'prune must collect exactly one 200-row batch';
+  END IF;
+END $$;
+SELECT storefront_search_private.prune_intake_net_windows();
+
 -- Exactly fourteen rows persisted (10 + origin-B + sibling merchant + 2 crossover).
 DO $$ BEGIN
   IF (SELECT count(*) FROM public.storefront_product_requests

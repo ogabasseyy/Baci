@@ -1,5 +1,4 @@
 import type { NextRequest } from 'next/server';
-import { isCloudflareEgressIp } from './cloudflare-egress';
 
 // ---------------------------------------------------------------------------
 // IP validation (Edge-compatible, no Node.js 'net' module)
@@ -13,35 +12,6 @@ const IPV6_REGEX =
 
 function isValidIP(ip: string): boolean {
   return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
-}
-
-// The shopper IP behind a verified Cloudflare boundary, or null. Trust
-// requires ALL of: Vercel runtime (so the peer headers below are
-// edge-set, not caller-supplied), a direct peer inside Cloudflare's
-// published egress ranges, and a single valid CF-Connecting-IP value
-// (Cloudflare sends one IP; a chain is malformed and ignored). Anything
-// else returns null and the caller falls through to the Vercel headers.
-// Residual: anyone able to emit traffic from Cloudflare's network with
-// an arbitrary CF-Connecting-IP can rotate identifiers; that takes a
-// Cloudflare account rather than one raw socket, and merchant/contact
-// budgets still bound the harm.
-function cloudflareClientIp(
-  request: NextRequest,
-  platformIp: string | null
-): string | null {
-  if (process.env.VERCEL !== '1') return null;
-  let peer: string | null = null;
-  if (platformIp && isValidIP(platformIp)) {
-    peer = platformIp;
-  } else {
-    const realIp = request.headers.get('x-real-ip');
-    if (realIp && isValidIP(realIp.trim())) peer = realIp.trim();
-  }
-  if (!peer || !isCloudflareEgressIp(peer)) return null;
-  const connecting = request.headers.get('cf-connecting-ip');
-  if (!connecting || connecting.includes(',')) return null;
-  const clientIp = connecting.trim();
-  return clientIp && isValidIP(clientIp) ? clientIp : null;
 }
 
 function finalChainIp(value: string | null): string | null {
@@ -65,18 +35,20 @@ function finalChainIp(value: string | null): string | null {
 // Client identifier (IP)
 // ---------------------------------------------------------------------------
 
+// NOTE (Cloudflare): behind Cloudflare, Vercel overwrites x-forwarded-for
+// with the peer address and does not forward external IPs, so every
+// Vercel-set header names the shared egress IP and shoppers behind one
+// egress share a bucket. CF-Connecting-IP is deliberately NOT trusted:
+// peer-in-egress-ranges proves only Cloudflare's network, not this
+// deployment's zone, and Worker subrequests to a non-CF zone carry
+// Worker-controlled CF-Connecting-IP — trusting it would let any free
+// Worker rotate every per-IP limit globally, strictly worse than egress
+// pooling. Zone-verified support is tracked in #3751.
 export function getClientIdentifier(request: NextRequest): string {
-  const requestWithIp = request as NextRequest & { ip?: string };
-  const requestIp =
-    requestWithIp.ip && isValidIP(requestWithIp.ip) ? requestWithIp.ip : null;
-
-  // Behind verified Cloudflare egress the Vercel headers all carry the
-  // shared egress IP, so the shopper IP comes from CF-Connecting-IP.
-  const cfClientIp = cloudflareClientIp(request, requestIp);
-  if (cfClientIp) return cfClientIp;
-
   // Prefer Next.js/Vercel trusted IP
-  if (requestIp) {
+  const requestWithIp = request as NextRequest & { ip?: string };
+  const requestIp = requestWithIp.ip;
+  if (requestIp && isValidIP(requestIp)) {
     return requestIp;
   }
 
@@ -86,8 +58,9 @@ export function getClientIdentifier(request: NextRequest): string {
   // holds ONLY behind such an overwriting edge: self-hosted or
   // direct-to-origin traffic can mint a fresh header value per request and
   // rotate buckets at will, so these signals are advisory there. Behind
-  // Cloudflare the peer is a shared egress IP, so CF-Connecting-IP (read
-  // above, only behind verified Cloudflare egress) names the shopper.
+  // Cloudflare the peer is a shared egress IP (see NOTE above), so
+  // egress-sharers pool one bucket — accepted, and identical for both
+  // identifiers.
   // x-vercel-forwarded-for is read first among the Vercel headers because
   // it survives a proxy stacked on top of Vercel, where x-forwarded-for
   // may be rewritten; on plain Vercel all three carry the same IP. It is
@@ -121,25 +94,18 @@ export function getClientIdentifier(request: NextRequest): string {
  * a caller to one bucket. Unlike getClientIdentifier this never trusts
  * x-forwarded-for: that header is client-suppliable on any deployment
  * whose edge does not overwrite it, so a caller could rotate it to reset
- * the budget. Only the platform address (NextRequest.ip), a
- * CF-Connecting-IP behind verified Cloudflare egress, the Vercel-gated
- * x-vercel-forwarded-for (same preference as the lenient identifier, so
- * both agree wherever the edge guarantee holds), or an x-real-ip whose
- * overwrite the platform/operator guarantees identifies the client;
- * anything else falls into the single shared 'unknown' bucket, failing
- * closed.
+ * the budget. Only the platform address (NextRequest.ip), the
+ * Vercel-gated x-vercel-forwarded-for (same preference as the lenient
+ * identifier, so both agree wherever the edge guarantee holds), or an
+ * x-real-ip whose overwrite the platform/operator guarantees identifies
+ * the client; anything else falls into the single shared 'unknown'
+ * bucket, failing closed. (Cloudflare egress pooling: see NOTE above;
+ * same accepted residual as the lenient path, tracked in #3751.)
  */
 export function getTrustedClientIdentifier(request: NextRequest): string {
   const requestWithIp = request as NextRequest & { ip?: string };
-  const requestIp =
-    requestWithIp.ip && isValidIP(requestWithIp.ip) ? requestWithIp.ip : null;
-
-  // Same verified-Cloudflare preference as the lenient identifier, so
-  // both agree behind Cloudflare instead of pooling one egress bucket.
-  const cfClientIp = cloudflareClientIp(request, requestIp);
-  if (cfClientIp) return cfClientIp;
-
-  if (requestIp) {
+  const requestIp = requestWithIp.ip;
+  if (requestIp && isValidIP(requestIp)) {
     return requestIp;
   }
 

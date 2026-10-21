@@ -121,173 +121,22 @@ describe('getClientIdentifier header trust', () => {
   });
 });
 
-describe('Cloudflare boundary', () => {
-  // 172.64.0.1 is inside 172.64.0.0/13 (published CF egress); 192.0.2.1
-  // (TEST-NET-1) is not. Behind Cloudflare, Vercel overwrites every
-  // Vercel-set header with the shared egress IP, so only a verified
-  // CF-Connecting-IP names the shopper.
-  const EGRESS = '172.64.0.1';
-  const SHOPPER = '198.51.100.9';
-
-  it('prefers CF-Connecting-IP behind verified Cloudflare egress', () => {
+describe('Cloudflare distrust', () => {
+  it('never trusts CF-Connecting-IP, even behind Cloudflare egress', () => {
+    // Peer-in-egress-ranges proves only Cloudflare's network, not this
+    // deployment's zone, and Worker subrequests carry Worker-controlled
+    // CF-Connecting-IP — trusting it would let any free Worker rotate
+    // every per-IP limit globally. Shoppers behind one egress share a
+    // bucket instead (accepted residual, tracked in #3751).
     vi.stubEnv('VERCEL', '1');
     const headers = {
-      'x-forwarded-for': EGRESS,
-      'x-real-ip': EGRESS,
-      'x-vercel-forwarded-for': EGRESS,
-      'cf-connecting-ip': SHOPPER,
+      'x-forwarded-for': '172.64.0.1',
+      'x-real-ip': '172.64.0.1',
+      'x-vercel-forwarded-for': '172.64.0.1',
+      'cf-connecting-ip': '198.51.100.9',
     };
 
-    expect(getClientIdentifier(requestWith(headers))).toBe(SHOPPER);
-    expect(getTrustedClientIdentifier(requestWith(headers))).toBe(SHOPPER);
-  });
-
-  it('prefers CF-Connecting-IP when the platform IP is the egress', () => {
-    // The CF check runs before the request.ip fast path, or an egress
-    // platform IP would shadow the shopper header.
-    vi.stubEnv('VERCEL', '1');
-    const req = requestWith({ 'cf-connecting-ip': SHOPPER });
-    Object.defineProperty(req, 'ip', { value: EGRESS });
-
-    expect(getClientIdentifier(req)).toBe(SHOPPER);
-    expect(getTrustedClientIdentifier(req)).toBe(SHOPPER);
-  });
-
-  it('ignores CF-Connecting-IP when the peer is not Cloudflare egress', () => {
-    // Direct-to-origin caller forging the header: the peer (x-real-ip)
-    // is outside CF ranges, so the header is untrusted.
-    vi.stubEnv('VERCEL', '1');
-    const headers = {
-      'x-real-ip': '192.0.2.1',
-      'x-vercel-forwarded-for': '203.0.113.7',
-      'cf-connecting-ip': SHOPPER,
-    };
-
-    expect(getClientIdentifier(requestWith(headers))).toBe('203.0.113.7');
-  });
-
-  it('ignores CF-Connecting-IP off Vercel', () => {
-    vi.stubEnv('VERCEL', '');
-    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
-    const headers = { 'x-real-ip': EGRESS, 'cf-connecting-ip': SHOPPER };
-
-    expect(getTrustedClientIdentifier(requestWith(headers))).toBe('unknown');
-  });
-
-  it('ignores chained or invalid CF-Connecting-IP values', () => {
-    // Cloudflare sends one IP; a chain is malformed and untrusted.
-    vi.stubEnv('VERCEL', '1');
-
-    expect(
-      getClientIdentifier(
-        requestWith({
-          'x-real-ip': EGRESS,
-          'x-vercel-forwarded-for': EGRESS,
-          'cf-connecting-ip': `${SHOPPER}, 203.0.113.5`,
-        })
-      )
-    ).toBe(EGRESS);
-    expect(
-      getTrustedClientIdentifier(
-        requestWith({
-          'x-real-ip': EGRESS,
-          'cf-connecting-ip': 'not-an-ip',
-        })
-      )
-    ).toBe(EGRESS);
-  });
-
-  it('verifies IPv6 Cloudflare egress ranges', () => {
-    vi.stubEnv('VERCEL', '1');
-    const headers = {
-      'x-real-ip': '2606:4700:0000:0000:0000:0000:0000:0001',
-      'cf-connecting-ip': '2001:0db8:0000:0000:0000:0000:0000:0001',
-    };
-
-    expect(getClientIdentifier(requestWith(headers))).toBe(
-      '2001:0db8:0000:0000:0000:0000:0000:0001'
-    );
-    expect(
-      getClientIdentifier(
-        requestWith({
-          'x-real-ip': '2001:0db8:0000:0000:0000:0000:0000:0002',
-          'cf-connecting-ip': '2001:0db8:0000:0000:0000:0000:0000:0001',
-        })
-      )
-    ).toBe('2001:0db8:0000:0000:0000:0000:0000:0002');
-  });
-});
-
-describe('getTrustedClientIdentifier', () => {
-  it('never trusts x-forwarded-for', () => {
-    expect(
-      getTrustedClientIdentifier(
-        requestWith({ 'x-forwarded-for': '203.0.113.1' })
-      )
-    ).toBe('unknown');
-  });
-
-  it('ignores a spoofable x-real-ip without a proxy guarantee', () => {
-    vi.stubEnv('VERCEL', '');
-    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
-    expect(
-      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
-    ).toBe('unknown');
-  });
-
-  it('does not trust a nonempty non-sentinel VERCEL value', () => {
-    vi.stubEnv('VERCEL', 'yes');
-    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
-    expect(
-      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
-    ).toBe('unknown');
-  });
-
-  it('uses x-real-ip when the platform guarantees it', () => {
-    vi.stubEnv('VERCEL', '1');
-    expect(
-      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
-    ).toBe('192.0.2.44');
-    vi.stubEnv('VERCEL', '');
-    vi.stubEnv('CART_TRUST_PROXY_HEADERS', 'true');
-    expect(
-      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
-    ).toBe('192.0.2.44');
-  });
-
-  it('prefers x-vercel-forwarded-for on Vercel, like the lenient identifier', () => {
-    // A proxy stacked on top of Vercel may rewrite x-forwarded-for while
-    // the Vercel header still carries the edge-verified client IP; both
-    // identifiers must agree there or the proxy and durable budget layers
-    // measure different callers.
-    vi.stubEnv('VERCEL', '1');
-    expect(
-      getTrustedClientIdentifier(
-        requestWith({
-          'x-forwarded-for': '198.51.100.9',
-          'x-real-ip': '192.0.2.1',
-          'x-vercel-forwarded-for': '203.0.113.7',
-        })
-      )
-    ).toBe('203.0.113.7');
-    expect(
-      getClientIdentifier(
-        requestWith({
-          'x-forwarded-for': '198.51.100.9',
-          'x-real-ip': '192.0.2.1',
-          'x-vercel-forwarded-for': '203.0.113.7',
-        })
-      )
-    ).toBe('203.0.113.7');
-  });
-
-  it('ignores x-vercel-forwarded-for off Vercel', () => {
-    vi.stubEnv('VERCEL', '');
-    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
-    expect(
-      getTrustedClientIdentifier(
-        requestWith({ 'x-vercel-forwarded-for': '203.0.113.7' })
-      )
-    ).toBe('unknown');
+    expect(getClientIdentifier(requestWith(headers))).toBe('172.64.0.1');
+    expect(getTrustedClientIdentifier(requestWith(headers))).toBe('172.64.0.1');
   });
 });

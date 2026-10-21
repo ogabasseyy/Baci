@@ -14,9 +14,13 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 // getTrustedClientIdentifier), never the lenient proxy one: header values
 // a caller can mint per request would mint a fresh DB bucket per request
 // too, leaving the durable layer with no binding power at all. Behind
-// Cloudflare the helper prefers CF-Connecting-IP verified against
-// Cloudflare egress ranges, so shoppers sharing an egress IP don't pool
-// one durable bucket (without that, every Vercel header names the egress).
+// Cloudflare every Vercel header names the shared egress IP, so
+// egress-sharers pool one durable bucket — accepted (same shape as the
+// proxy layer, and this endpoint is low-volume). CF-Connecting-IP would
+// name the shopper but cannot be verified in code: peer-in-egress-ranges
+// proves only Cloudflare's network, and Worker subrequests carry
+// Worker-controlled values, so trusting it would trade pooling for
+// global rotation. Zone-verified support is tracked in #3751.
 // Deliberately rejected controls, with bypass reasons:
 // - Host binding (Host merchant must equal body slug): an attacker POSTs
 //   directly to the victim host with the victim slug and passes; a native

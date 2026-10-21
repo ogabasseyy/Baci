@@ -13,7 +13,7 @@ import {
 const MAX_SOURCE_LENGTH = 20_000;
 const MAX_NAME_LENGTH = 1_000;
 const QUANTITY_UNIT =
-  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
 const PIXEL_DIMENSION_PAIR = /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px)\b/i;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
@@ -37,6 +37,8 @@ const NON_RETAIL_AMOUNT_LABEL =
   /^\s+(?:(?:gift[- ]card\s+)?bonus|cashback|cash\s+back|trade[- ]in\s+credit|credit|rebate|reward|discount)\b/i;
 const MAGNITUDE_SPECIFICATION_UNIT =
   /^\s+(?:display|screen|resolution|video|recording|camera|photos?|pixels?)\b/i;
+const SHORT_RESOLUTION_CONTEXT =
+  /\b(?:video|resolution|stream(?:ing)?|record(?:ing)?|shoot(?:ing)?|upscal\w*|frame\s+rate|fps)\b/i;
 
 function retailRelation(text: string, start: number) {
   const clause =
@@ -94,6 +96,22 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
         /\b(?:cost|costs|price|prices|priced|buy|purchase|pay|sell)\b/gi
       );
   if (physicalPounds && !relation.cue && !relation.predicate) return false;
+  const nearbyClause = nearbyPrefix.split(/[.!?;\n]/).at(-1) ?? '';
+  const followingClause = tail.split(/[.!?;\n]/)[0] ?? '';
+  const shortResolution =
+    !candidate.marker &&
+    /^\d{1,2}k$/i.test(rawAmount) &&
+    SHORT_RESOLUTION_CONTEXT.test(`${nearbyClause} ${followingClause}`) &&
+    !relation.strong &&
+    !relation.predicate &&
+    !relation.purchase &&
+    !relation.commercial;
+  if (shortResolution) return false;
+  const parenthesizedProductYear =
+    !candidate.marker &&
+    /^(?:19|20)\d{2}$/.test(rawAmount) &&
+    /^\s*\)\s*[.!?]?\s*$/.test(tail);
+  if (parenthesizedProductYear) return false;
   const quantity =
     QUANTITY_UNIT.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
@@ -133,6 +151,13 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
   if (
     candidate.marker.toUpperCase() === 'SAR' &&
     /^\s*W\s*\/\s*kg\b/i.test(tail)
+  )
+    return false;
+  // CAD software-release years are not Canadian-dollar amounts.
+  if (
+    candidate.marker.toUpperCase() === 'CAD' &&
+    /^(?:19|20)\d{2}$/.test(rawAmount) &&
+    /^\s+(?:software|version|design)\b/i.test(tail)
   )
     return false;
   // Casing alone does not disambiguate ordinary words from ISO homonyms.

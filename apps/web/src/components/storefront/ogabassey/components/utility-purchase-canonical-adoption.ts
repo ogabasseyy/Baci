@@ -1,5 +1,7 @@
 import type { UtilityIdempotencyAttempt } from './use-utility-idempotency-key';
 import { recallPendingVtuKey } from './utility-pending-idempotency';
+import { schedulePendingVtuFlush } from './utility-pending-vtu-sync';
+import { noteForgottenVtuScope } from './utility-pending-vtu-tombstones';
 
 /**
  * Adopts the server's canonical (winner) key after an intent-claim
@@ -23,10 +25,12 @@ import { recallPendingVtuKey } from './utility-pending-idempotency';
  * interleave between them; a rotation landing during the
  * adoption's own awaits fails safe toward null.
  * A non-durable adoption (false: memory rebound but the flush
- * failed) also returns null (Codex P2): retagging would let
- * terminal settlement tombstone only the winner while storage
- * still holds the loser, and the key-bound merge would resurrect
- * the loser. The scheduled retry persists the winner instead.
+ * failed) still retags (Codex P2): returning null would skip the
+ * terminal reference/completion settlement, leaving an
+ * uncompleted winner that the next tap replays misrecognized.
+ * The persisted loser is tombstoned explicitly instead —
+ * multi-key tombstones keep both records, so terminal settlement
+ * cannot resurrect it.
  */
 export async function adoptSubmittedCanonicalKey({
   adoptCanonicalKey,
@@ -48,7 +52,8 @@ export async function adoptSubmittedCanonicalKey({
     canonicalKey
   );
   if (!durable) {
-    return null;
+    noteForgottenVtuScope(attempt.scoped, Date.now(), attempt.key);
+    schedulePendingVtuFlush();
   }
   if (recallPendingVtuKey(attempt.scoped) !== canonicalKey) {
     return null;

@@ -61,8 +61,7 @@ describe('admitVtuClaim', () => {
 
     expect(admission).toEqual({
       existing: ROW,
-      admittedAt: STAMP,
-      admissionLive: ['txn-9'],
+      proof: { admittedAt: STAMP, admissionLive: ['txn-9'] },
     });
     expect(seen).toEqual([
       {
@@ -81,8 +80,7 @@ describe('admitVtuClaim', () => {
     );
 
     expect(admission.existing).toBeNull();
-    expect(admission.admittedAt).toBe(STAMP);
-    expect(admission.admissionLive).toEqual([]);
+    expect(admission.proof).toEqual({ admittedAt: STAMP, admissionLive: [] });
   });
 
   it('issues the lookup and the proof concurrently', async () => {
@@ -123,14 +121,14 @@ describe('admitVtuClaim', () => {
     const admission = await admitVtuClaim(client, 'key-1', 'store-1', 'fp-1');
 
     expect(issued.sort()).toEqual(['lookup', 'rpc']);
-    expect(admission.admittedAt).toBe(STAMP);
+    expect(admission.proof?.admittedAt).toBe(STAMP);
   });
 
   it('fails closed with VtuAdmissionError when the proof errors', async () => {
     await expect(
       admitVtuClaim(
-        fakeClient({ row: ROW, proofError: { message: 'db down' } }),
-        'key-1',
+        fakeClient({ proofError: { message: 'db down' } }),
+        'key-fresh',
         'store-1',
         'fp-1'
       )
@@ -139,13 +137,24 @@ describe('admitVtuClaim', () => {
 
   it('fails closed with VtuAdmissionError when no proof is returned', async () => {
     await expect(
-      admitVtuClaim(
-        fakeClient({ row: ROW, proof: null }),
-        'key-1',
-        'store-1',
-        'fp-1'
-      )
+      admitVtuClaim(fakeClient({ proof: null }), 'key-fresh', 'store-1', 'fp-1')
     ).rejects.toThrow('no admission proof returned');
+  });
+
+  it('replays an existing row without the admission proof', async () => {
+    // Codex P2: a proof-RPC outage must not lock customers out of
+    // retrieving an already-debited result — the replay path never
+    // uses the stamp or the live set, so an existing row short-
+    // circuits with null proof fields.
+    const admission = await admitVtuClaim(
+      fakeClient({ row: ROW, proofError: { message: 'db down' } }),
+      'key-1',
+      'store-1',
+      'fp-1'
+    );
+
+    expect(admission.existing).toEqual(ROW);
+    expect(admission.proof).toBeNull();
   });
 
   it('propagates key-lookup failures unchanged', async () => {

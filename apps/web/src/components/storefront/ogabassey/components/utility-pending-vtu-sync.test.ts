@@ -29,6 +29,7 @@ import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
   flushPendingVtuPurchases,
   hydratePendingVtuPurchases,
+  isCurrentVtuGeneration,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   serializePendingVtuPurchases,
@@ -921,5 +922,68 @@ describe('keyed tombstones (6rrMIj)', () => {
       syncPendingVtuPurchasesFromSnapshot();
       return !pendingVtuPurchases.has(descriptor);
     }
+  });
+
+  it('vetoes a superseded generation and adopts the persisted newer one', () => {
+    // Codex P1: a sibling tab settled and persisted a newer
+    // same-descriptor generation after this tab adopted. The
+    // caller must skip its stale note (noting would flush the
+    // stale entry back over the newer generation), and memory
+    // converges to the newer generation.
+    const scoped = scopePendingVtuSignature(
+      'user-veto',
+      'merchant-1',
+      '{"veto":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-old');
+    const live = pendingVtuPurchases.get(scoped);
+    expect(live).toBeDefined();
+    expect(
+      savePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [
+            [
+              scoped,
+              {
+                key: 'key-new',
+                reference: null,
+                rememberedAt: (live?.rememberedAt ?? 0) + 1000,
+                completedAt: null,
+              },
+            ],
+          ],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+
+    expect(isCurrentVtuGeneration(scoped, 'key-old')).toBe(false);
+    expect(recallPendingVtuKey(scoped)).toBe('key-new');
+  });
+
+  it('reports current when memory holds the expected key and storage agrees', () => {
+    const scoped = scopePendingVtuSignature(
+      'user-current',
+      'merchant-1',
+      '{"current":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-mine');
+    persistPendingVtuPurchases();
+
+    expect(isCurrentVtuGeneration(scoped, 'key-mine')).toBe(true);
+    expect(recallPendingVtuKey(scoped)).toBe('key-mine');
+  });
+
+  it('reports superseded when memory already rotated', () => {
+    const scoped = scopePendingVtuSignature(
+      'user-rotated',
+      'merchant-1',
+      '{"rotated":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-new');
+
+    expect(isCurrentVtuGeneration(scoped, 'key-old')).toBe(false);
+    // Nothing to reconcile — memory already moved on.
+    expect(recallPendingVtuKey(scoped)).toBe('key-new');
   });
 });

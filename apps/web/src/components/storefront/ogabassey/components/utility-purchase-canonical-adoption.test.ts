@@ -6,6 +6,7 @@ import {
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import { adoptSubmittedCanonicalKey } from './utility-purchase-canonical-adoption';
+import { forgottenScopedKeys } from './utility-pending-vtu-tombstones';
 
 const attempt: UtilityIdempotencyAttempt = {
   key: 'key-loser',
@@ -101,14 +102,15 @@ describe('adoptSubmittedCanonicalKey', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when the adoption was not durable', async () => {
-    // Codex P2: all persistence attempts failed AFTER the
-    // in-memory rebind — memory holds the winner but storage
-    // still holds the loser. Retagging would let terminal
-    // settlement tombstone only the winner, and the merge would
-    // then resurrect the persisted loser (key-bound tombstones do
-    // not suppress it). Null settles presentation-only; the
-    // scheduled retry persists the winner over the loser.
+  it('retags and tombstones the loser when the adoption was not durable', async () => {
+    // Codex P2 + follow-up: all persistence attempts failed AFTER
+    // the in-memory rebind — memory holds the winner but storage
+    // still holds the loser. Returning null would skip the
+    // terminal reference/completion settlement, leaving an
+    // uncompleted winner the next tap replays misrecognized — so
+    // retag AND tombstone the loser explicitly (multi-key
+    // tombstones keep both records, settlement cannot resurrect
+    // the loser).
     rememberPendingVtuPurchase('scoped-1', 'key-winner');
     const adoptCanonicalKey = vi.fn(async () => false);
 
@@ -119,7 +121,11 @@ describe('adoptSubmittedCanonicalKey', () => {
     });
 
     expect(adoptCanonicalKey).toHaveBeenCalled();
-    expect(result).toBeNull();
-    expect(recallPendingVtuKey('scoped-1')).toBe('key-winner');
+    expect(result).toEqual({ ...attempt, key: 'key-winner' });
+    expect(
+      forgottenScopedKeys
+        .get('scoped-1')
+        ?.some((record) => record.key === 'key-loser')
+    ).toBe(true);
   });
 });

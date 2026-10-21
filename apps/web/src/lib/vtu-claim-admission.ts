@@ -12,11 +12,21 @@ export class VtuAdmissionError extends Error {
   }
 }
 
-export interface VtuClaimAdmission {
-  existing: ExistingIdempotencyRow | null;
+export interface VtuAdmissionProof {
   admittedAt: string;
   /** Scope transactions live at admission (commit-safe fence input). */
   admissionLive: string[];
+}
+
+export interface VtuClaimAdmission {
+  existing: ExistingIdempotencyRow | null;
+  /**
+   * Null on the replay short-circuit (Codex P2): an existing row
+   * replays without the proof — the replay path never uses the
+   * stamp or the live set, so a proof-RPC outage must not lock
+   * customers out of retrieving an already-debited result.
+   */
+  proof: VtuAdmissionProof | null;
 }
 
 /**
@@ -29,8 +39,9 @@ export interface VtuClaimAdmission {
  * (comparing it against any post-commit timestamp is unsound).
  * Same-clock both sides (DB statement time): no app/DB skew
  * hazard. Throws VtuAdmissionError when the proof is unavailable
- * (fail closed before preparing); key-lookup failures propagate
- * unchanged.
+ * for a FRESH key (fail closed before preparing); an existing row
+ * short-circuits with null proof fields. Key-lookup failures
+ * propagate unchanged.
  */
 export async function admitVtuClaim(
   supabase: SupabaseClient,
@@ -45,19 +56,25 @@ export async function admitVtuClaim(
       p_fingerprint: fingerprint,
     }),
   ]);
-  const row = proof.data?.[0];
-  if (
-    proof.error ||
-    !row?.admitted_at ||
-    !Array.isArray(row.live_transaction_ids)
-  ) {
+  const row = proof.error ? undefined : proof.data?.[0];
+  const admittedAt =
+    row?.admitted_at && typeof row.admitted_at === 'string'
+      ? row.admitted_at
+      : null;
+  const admissionLive =
+    row && Array.isArray(row.live_transaction_ids)
+      ? (row.live_transaction_ids as string[])
+      : null;
+  if ((admittedAt === null || admissionLive === null) && !existing) {
     throw new VtuAdmissionError(
       `Failed to admit VTU claim: ${proof.error?.message ?? 'no admission proof returned'}`
     );
   }
   return {
     existing,
-    admittedAt: row.admitted_at,
-    admissionLive: row.live_transaction_ids,
+    proof:
+      admittedAt !== null && admissionLive !== null
+        ? { admittedAt, admissionLive }
+        : null,
   };
 }

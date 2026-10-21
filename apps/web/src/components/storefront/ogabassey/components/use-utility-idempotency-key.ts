@@ -15,6 +15,7 @@ import {
   recallPendingVtuKey,
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
+import { isCurrentVtuGeneration } from './utility-pending-vtu-sync';
 
 interface UseUtilityIdempotencyKeyInput {
   customerId?: string;
@@ -108,6 +109,15 @@ export function finalizeSuppressedAttempt(
     return;
   }
   if (result.kind === 'wallet-success') {
+    // Generation veto (Codex P1): a sibling tab may have persisted
+    // a newer generation after this tab adopted — noting on the
+    // stale entry would flush it back over the newer key. The veto
+    // adopts the newer generation and skips the stale note/mark.
+    if (
+      !isCurrentVtuGeneration(attempt.scoped, attempt.key)
+    ) {
+      return;
+    }
     notePendingVtuReference(attempt.scoped, result.reference);
     // Terminal observations also record completion (processing notes
     // must NOT): the stale predicate keys off completion time, so a

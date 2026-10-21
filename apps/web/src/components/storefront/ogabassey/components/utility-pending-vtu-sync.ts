@@ -249,6 +249,39 @@ export async function forgetPendingVtuPurchaseDurable(
   return false;
 }
 
+/**
+ * Generation veto for settlement mutations (Codex P1): when a
+ * sibling tab persisted a newer same-descriptor generation, adopt
+ * it into memory and report superseded so the caller skips its
+ * stale note — noting on the stale entry would flush it back over
+ * the newer generation (memory-wins), orphaning the newer key.
+ * Forgets need no veto (clearing memory self-heals via merge).
+ */
+export function isCurrentVtuGeneration(
+  payloadSignature: string,
+  expectedKey: string
+): boolean {
+  const live = pendingVtuPurchases.get(payloadSignature);
+  if (!live || live.key !== expectedKey) {
+    return false;
+  }
+  const persisted = parsePendingVtuSnapshot(
+    loadPendingVtuSnapshot()
+  ).entries.find(([entryScoped]) => entryScoped === payloadSignature);
+  if (
+    persisted &&
+    persisted[1].key !== expectedKey &&
+    persisted[1].rememberedAt >= live.rememberedAt
+  ) {
+    pendingVtuPurchases.set(payloadSignature, {
+      ...persisted[1],
+      completedAt: persisted[1].completedAt ?? null,
+    });
+    return false;
+  }
+  return true;
+}
+
 // Reload recovery: rehydrate before any submit runs in this browser.
 // One-time migration write-back: when the snapshot still holds raw
 // scope keys, persist the migrated digests now (through the syncing

@@ -804,6 +804,41 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(state.insertCalls).toBe(0);
   });
 
+  it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {
+    // Codex P2: the replay path never uses the stamp or the live
+    // set, so a proof-RPC outage must not 500 an already-debited
+    // result — the existing row short-circuits admission.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      admissionError: { message: 'proof rpc down' },
+    };
+    supabaseMockRef.current = buildSupabase(state);
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-OLD',
+      status: 'successful',
+    });
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ reference: 'VTU-REF-OLD' });
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockFulfill).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      transactionId: 'vtu-tx-existing',
+    });
+  });
+
   it('idempotent replay: overlays the current-attempt phone and reference before re-driving', async () => {
     // Attempt 1 stored no phone (profile not yet hydrated) and its
     // validation reference has since expired; the retry carries

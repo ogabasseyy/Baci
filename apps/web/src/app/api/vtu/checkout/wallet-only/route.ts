@@ -5,7 +5,11 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
-import { admitVtuClaim, VtuAdmissionError } from '@/lib/vtu-claim-admission';
+import {
+  admitVtuClaim,
+  VtuAdmissionError,
+  type VtuAdmissionProof,
+} from '@/lib/vtu-claim-admission';
 import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
 import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
@@ -96,10 +100,9 @@ export async function POST(request: NextRequest) {
     // overlap fence. No proof → fail closed BEFORE preparing
     // (nothing to orphan; the client retries the same key).
     let existing: ExistingIdempotencyRow | null;
-    let admittedAt: string;
-    let admissionLive: string[];
+    let proof: VtuAdmissionProof | null;
     try {
-      ({ existing, admittedAt, admissionLive } = await admitVtuClaim(
+      ({ existing, proof } = await admitVtuClaim(
         supabase,
         idempotencyKey,
         input.merchantSlug,
@@ -107,9 +110,7 @@ export async function POST(request: NextRequest) {
       ));
     } catch (error) {
       if (!(error instanceof VtuAdmissionError)) throw error;
-      console.error('VTU admission proof unavailable:', {
-        message: error.message,
-      });
+      console.error('VTU admission proof unavailable:', error.message);
       return createErrorResponse('Failed to admit VTU claim.', 500);
     }
 
@@ -190,6 +191,8 @@ export async function POST(request: NextRequest) {
     // admission-liveness snapshot — Codex R4 P1). The RPC returns
     // the authoritative mapping, subsuming the old insert +
     // PK-race re-read (Codex R124 P2).
+    // Fresh keys always carry proof (admit throws otherwise).
+    if (!proof) return createErrorResponse('Failed to admit VTU claim.', 500);
     const { data: claimRows, error: claimError } = await supabase.rpc(
       'claim_vtu_intent',
       {
@@ -198,8 +201,8 @@ export async function POST(request: NextRequest) {
         p_transaction_id: prepared.transaction.id,
         p_merchant_id: prepared.merchant.id,
         p_customer_id: prepared.customer.id,
-        p_admitted_at: admittedAt,
-        p_admission_live: admissionLive,
+        p_admitted_at: proof.admittedAt,
+        p_admission_live: proof.admissionLive,
       }
     );
     if (claimError) {

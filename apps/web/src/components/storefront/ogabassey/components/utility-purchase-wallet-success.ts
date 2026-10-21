@@ -8,6 +8,7 @@ import type { UtilityPurchaseStep } from './use-utility-purchase';
 import type { UtilityTabId } from './UtilityTabs';
 import { forgetPendingVtuPurchaseDurable } from './utility-pending-idempotency';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
+import { isCurrentVtuGeneration } from './utility-pending-vtu-sync';
 
 type WalletSuccess = Extract<
   UtilityCheckoutResult,
@@ -94,7 +95,15 @@ export async function applyUtilityWalletSuccessOutcome({
       await forgetPendingVtuPurchaseDurable(scoped);
     }
   } else {
-    if (scoped !== undefined) {
+    // Generation veto (Codex P1): skip the note when a sibling tab
+    // persisted a newer generation — noting on the stale entry
+    // would flush it back over the newer key. The veto adopts the
+    // newer generation into memory.
+    if (
+      scoped !== undefined &&
+      attempt?.key !== undefined &&
+      isCurrentVtuGeneration(scoped, attempt.key)
+    ) {
       noteScopedReference(scoped, result.reference);
     }
     refreshWallet();

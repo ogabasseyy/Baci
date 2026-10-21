@@ -43,6 +43,20 @@ it('rehydrates an existing snapshot before checkout', async () => {
   expect(state.refresh).toHaveBeenCalledTimes(1);
   expect(state.prepare).not.toHaveBeenCalled();
 });
+it('keeps checkout blocked while merge conflicts are unresolved', async () => {
+  const state: CheckoutCartState = {
+    ...live,
+    metadataReady: true,
+    mergeConflicts: [{ productId: 'product-1' }],
+    snapshot: { state: 'active', lines: [{}] },
+  };
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'choice_required',
+  });
+  expect(state.prepare).not.toHaveBeenCalled();
+  expect(state.refresh).not.toHaveBeenCalled();
+});
 it('does not choose a saved cart or discard device items implicitly', async () => {
   const state = { ...live, status: 'choice_required' };
   await expect(prepareCartCheckout(() => state)).resolves.toEqual({

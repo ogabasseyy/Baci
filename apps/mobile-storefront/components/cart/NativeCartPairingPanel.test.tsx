@@ -273,3 +273,36 @@ it('retries a failed pair with prepare when no canonical cart exists yet', async
   await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
   expect(refresh).not.toHaveBeenCalled();
 });
+
+it('offers pairing retry through prepare when refresh is not bound', async () => {
+  mockPairingItems = [{ id: 'local-1' }];
+  const pair = jest.fn().mockRejectedValue(new Error('create failed'));
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    refresh: null,
+    prepare,
+    snapshot: null,
+    mergeConflicts: [],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const keep = await waitFor(() =>
+    screen.getByRole('button', { name: 'Keep my current cart' })
+  );
+  fireEvent.press(keep);
+  const retry = await waitFor(() =>
+    screen.getByRole('button', { name: 'Retry sync' })
+  );
+  fireEvent.press(retry);
+  await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+});

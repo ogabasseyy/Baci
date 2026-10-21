@@ -259,7 +259,7 @@ export function NativeCartPairingPanel() {
           ) : (
             button('Connect cart', () => pair('connect'), busy)
           )}
-          {failed && shared.refresh
+          {failed && (shared.refresh || shared.prepare)
             ? button(
                 'Retry sync',
                 async () => {

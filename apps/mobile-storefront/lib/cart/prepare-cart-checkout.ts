@@ -4,6 +4,7 @@ export interface CheckoutCartState {
   enabled: boolean;
   status?: string;
   metadataReady?: boolean;
+  mergeConflicts?: readonly unknown[];
   snapshot?: {
     state: string;
     lines: readonly unknown[];
@@ -30,7 +31,10 @@ export async function prepareCartCheckout(
 ): Promise<CheckoutPreparation> {
   const initial = getState();
   if (sharedCartCheckoutReady(initial)) return { ready: true };
-  if (initial.status === 'choice_required')
+  if (
+    initial.status === 'choice_required' ||
+    (initial.mergeConflicts?.length ?? 0) > 0
+  )
     return { ready: false, reason: 'choice_required' };
   // A refresh alone cannot create a missing cart. Conversely, prepare can
   // return an existing snapshot without retrying its failed product hydration.
@@ -86,6 +90,8 @@ export async function prepareCartCheckout(
       current.snapshot.version !== baseline.version)
   )
     return { ready: false, reason: 'cart_changed' };
+  if ((current.mergeConflicts?.length ?? 0) > 0)
+    return { ready: false, reason: 'choice_required' };
   if (sharedCartCheckoutReady(current)) return { ready: true };
   return {
     ready: false,

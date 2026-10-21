@@ -1,4 +1,5 @@
 'use client';
+// Uses React state/effects and browser storage to edit saved cart lines.
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';

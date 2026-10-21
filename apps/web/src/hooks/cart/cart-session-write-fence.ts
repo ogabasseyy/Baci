@@ -14,9 +14,7 @@ const flights = new Map<Promise<unknown>, string>();
 const retirements = new Map<string, number>();
 const acquiredRetirements = new Map<string, number>();
 export function isCartSessionRetirementReady(slug?: string | null): boolean {
-  return [...acquiredRetirements.keys()].some((key) =>
-    overlaps(key, slug ?? '')
-  );
+  return acquiredRetirements.has(slug ?? '');
 }
 const overlaps = (a: string, b: string) => !a || !b || a === b;
 

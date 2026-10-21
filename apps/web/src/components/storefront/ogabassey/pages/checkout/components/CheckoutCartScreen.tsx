@@ -1,4 +1,5 @@
 'use client';
+// Uses checkout state, client cart context, and interactive handlers.
 import type { useCheckoutAttemptSession } from '../hooks/use-checkout-attempt-session';
 import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 import { CheckoutScreen, type CheckoutScreenProps } from './CheckoutScreen';

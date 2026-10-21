@@ -1,4 +1,5 @@
 'use client';
+// Uses browser document visibility events to resume client cart work.
 
 /** Own one foreground listener so link restarts and unmounts can cancel it. */
 export function createCartVisibilityWaiter() {

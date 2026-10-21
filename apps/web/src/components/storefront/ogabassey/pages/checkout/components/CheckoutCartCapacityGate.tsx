@@ -1,4 +1,5 @@
 'use client';
+// Reads the client cart context and handles recovery actions.
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';

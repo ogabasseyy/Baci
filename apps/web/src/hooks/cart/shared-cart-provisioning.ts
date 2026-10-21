@@ -1,6 +1,7 @@
 'use client';
 
 import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
+import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import {
   getCartFromStorage,
@@ -43,6 +44,8 @@ export function createCartProvisioning(
   async function ensureCart(
     canProceed: () => boolean = () => true
   ): Promise<EnsureCartResult> {
+    if (reportCartCookieStorageFailure(dispatch, generationRef.current))
+      return { ok: false, code: 'temporarily_unavailable', retryable: true };
     if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
       return null;
     const cookieEpoch = context.cookieEpochRef.current?.value;

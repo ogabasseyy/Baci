@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
+import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 
 import {
   saveCartToStorage,
   stripUnconfirmedDisplayLines,
 } from './cart-storage';
-
 import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
@@ -47,7 +47,6 @@ export function useCartSendQueue(
     ensureCart,
     finishImportOp,
   } = context;
-
   // One per-cart send queue: strict head-of-line order, one in flight.
   // biome-ignore lint/correctness/useExhaustiveDependencies: ensureCart and finishImportOp close over refs and stable dispatch only; the queue state drives re-runs.
   useEffect(() => {
@@ -75,10 +74,13 @@ export function useCartSendQueue(
     }
     const head = state.queue[0];
     if (head?.state !== 'queued' || head?.blockedOnTempId) return;
-
     const cookieEpoch = context.cookieEpochRef.current?.value;
     async function send(): Promise<void> {
       if (generationRef.current !== generation) return;
+      if (
+        reportCartCookieStorageFailure(dispatch, generation, head.operationId)
+      )
+        return;
       if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
         return;
       const current = stateRef.current;
@@ -239,7 +241,6 @@ export function useCartSendQueue(
       if (!result.retryable)
         finishImportOp(pending.operationId, { code: result.code, ok: false });
     }
-
     void send();
   }, [enabled, linkPhase, sessionGeneration, state]);
 

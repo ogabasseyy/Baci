@@ -182,3 +182,22 @@ it('does not write storage when a stale selected ID no longer exists', () => {
     write.mockRestore();
   }
 });
+
+it.each([
+  'voucher',
+  'negotiated',
+])('removes only the selected same-ID %s lane', (kind) => {
+  const plain = cartItem({ name: 'Plain' });
+  const offer = cartItem({
+    name: 'Offer',
+    ...(kind === 'voucher'
+      ? { quizVoucherToken: 'test-token', quizAwardId: 'test-award' }
+      : { negotiatedPrice: 50, negotiationStatus: 'accepted' }),
+  });
+  saveCartToStorage([plain, offer], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Offer' }));
+  expect(getCartFromStorage('shop').map((item) => item.name)).toEqual([
+    'Plain',
+  ]);
+});

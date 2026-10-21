@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscribeCartSessionGeneration } from './shared-cart-storage';
+import {
+  getCartSessionGenerationChange,
+  subscribeCartSessionGeneration,
+} from './shared-cart-storage';
 import { useSharedCart } from './use-shared-cart';
 
 /**
@@ -23,9 +26,14 @@ export function useSharedCartDelegation(input: {
   useEffect(
     () =>
       subscribeCartSessionGeneration(() => {
-        setSessionGeneration((generation) => generation + 1);
+        const change = getCartSessionGenerationChange();
+        if (
+          !change?.transition?.merchantSlug ||
+          change.transition.merchantSlug === input.merchantSlug
+        )
+          setSessionGeneration((generation) => generation + 1);
       }),
-    []
+    [input.merchantSlug]
   );
   function bumpSessionGeneration() {
     setSessionGeneration((generation) => generation + 1);

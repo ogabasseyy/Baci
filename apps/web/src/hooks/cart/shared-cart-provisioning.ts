@@ -46,16 +46,21 @@ export function createCartProvisioning(
   ): Promise<EnsureCartResult> {
     if (reportCartCookieStorageFailure(dispatch, generationRef.current))
       return { ok: false, code: 'temporarily_unavailable', retryable: true };
-    if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
+    if (
+      !isCartCookieEpochCurrent(
+        context.cookieEpochRef.current?.value,
+        context.merchantSlug
+      )
+    )
       return null;
     const cookieEpoch = context.cookieEpochRef.current?.value;
     const generation = generationRef.current;
     const linkRun = linkRunRef.current;
-    const storageGeneration = getCartSessionGeneration();
+    const storageGeneration = getCartSessionGeneration(context.merchantSlug);
     const merchantSlug = optionsRef.current.merchantSlug;
     const fenced = () =>
-      isCartCookieEpochCurrent(cookieEpoch) &&
-      getCartSessionGeneration() === storageGeneration &&
+      isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug) &&
+      getCartSessionGeneration(context.merchantSlug) === storageGeneration &&
       generationRef.current === generation &&
       linkRunRef.current === linkRun &&
       enabledRef.current;

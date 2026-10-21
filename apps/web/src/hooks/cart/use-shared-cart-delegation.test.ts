@@ -5,6 +5,7 @@ const mockUseSharedCart = vi.fn();
 let generationListener: (() => void) | null = null;
 
 vi.mock('./shared-cart-storage', () => ({
+  getCartSessionGenerationChange: () => undefined,
   subscribeCartSessionGeneration: (listener: () => void) => {
     generationListener = listener;
     return () => {

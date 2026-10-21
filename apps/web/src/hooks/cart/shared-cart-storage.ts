@@ -92,7 +92,12 @@ export let cartSessionGeneration = 0;
 
 export const cartSessionGenerationListeners = new Set<() => void>();
 
-export const getCartSessionGeneration = (): number => cartSessionGeneration;
+let globalGeneration = 0;
+const merchantGenerations = new Map<string, number>();
+export const getCartSessionGeneration = (slug?: string | null): number =>
+  slug
+    ? (merchantGenerations.get(slug) ?? globalGeneration)
+    : cartSessionGeneration;
 
 export interface CartTransitionChange {
   merchantSlug?: string | null;
@@ -108,8 +113,14 @@ export const getCartSessionGenerationChange = () => generationChange;
 export const bumpCartSessionGeneration = (
   transition?: CartTransitionChange
 ): number => {
-  const from = cartSessionGeneration;
+  const from = getCartSessionGeneration(transition?.merchantSlug);
   cartSessionGeneration += 1;
+  if (transition?.merchantSlug)
+    merchantGenerations.set(transition.merchantSlug, cartSessionGeneration);
+  else {
+    globalGeneration = cartSessionGeneration;
+    merchantGenerations.clear();
+  }
   generationChange = { from, generation: cartSessionGeneration, transition };
   for (const listener of [...cartSessionGenerationListeners]) {
     listener();

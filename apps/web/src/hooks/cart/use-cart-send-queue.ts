@@ -81,7 +81,12 @@ export function useCartSendQueue(
         reportCartCookieStorageFailure(dispatch, generation, head.operationId)
       )
         return;
-      if (!isCartCookieEpochCurrent(context.cookieEpochRef.current?.value))
+      if (
+        !isCartCookieEpochCurrent(
+          context.cookieEpochRef.current?.value,
+          context.merchantSlug
+        )
+      )
         return;
       const current = stateRef.current;
       const pending = current.queue.find(
@@ -153,7 +158,7 @@ export function useCartSendQueue(
       // the queue head so a completed cart adopts without mutating, while later
       // user actions remain queued behind this clear barrier.
       if (pending.intent.kind === 'clear' && (await adoptIfTerminal())) return;
-      if (!isCartCookieEpochCurrent(cookieEpoch)) return;
+      if (!isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug)) return;
       const result = await sendSharedCartCommand(
         {
           command,

@@ -6,10 +6,8 @@ import {
   isCartSessionRetirementReady,
   isCartSessionRetiring,
 } from './cart-session-write-fence';
-import {
-  clearSharedCartImportReceipt,
-  getStorefrontCartStorageKey,
-} from './cart-storage';
+import { clearSharedCartImportReceipt } from './cart-storage';
+import { eraseRetiredCartCache } from './retired-cart-cache';
 
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
 const ACTIVE_SESSION_KEY_PREFIX = 'baci-cart-device-session-active';
@@ -226,9 +224,7 @@ async function requestDeviceRevocation(
         isCartDeviceRevocationPending(merchantSlug) &&
         typeof window !== 'undefined'
       ) {
-        window.localStorage.removeItem(
-          getStorefrontCartStorageKey(merchantSlug)
-        );
+        eraseRetiredCartCache(merchantSlug);
         clearSharedCartImportReceipt(merchantSlug);
       }
       clearCartDeviceRevocationPending(merchantSlug);

@@ -34,7 +34,10 @@ it('keeps the old link epoch until the parent commits a new session generation',
     { initialProps: { generation: 1 } }
   );
   expect(result.current.cookieEpochRef.current?.value).toBe(null);
-  window.localStorage.setItem('baci-cart-authority-epoch', 'new-authority');
+  window.localStorage.setItem(
+    'baci-cart-authority-epoch:shop',
+    'new-authority'
+  );
   rerender({ generation: 1 });
   expect(result.current.cookieEpochRef.current?.value).toBe(null);
   rerender({ generation: 2 });

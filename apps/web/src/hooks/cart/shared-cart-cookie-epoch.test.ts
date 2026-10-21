@@ -71,7 +71,7 @@ it.each([
   // Deliberately do not dispatch StorageEvent: a background tab may observe
   // its asynchronous callbacks before that event reaches its JS realm.
   window.localStorage.setItem(
-    'baci-cart-authority-epoch',
+    `baci-cart-authority-epoch:${SLUG}`,
     'retired-in-another-tab'
   );
   saveCartToStorage([cartItem({ name: 'Previous customer cache' })], SLUG);
@@ -98,7 +98,10 @@ it('does not replay cached creation after retirement during bootstrap', async ()
     lines: [],
   };
   vi.mocked(bootstrapSharedCart).mockImplementationOnce(async () => {
-    window.localStorage.setItem('baci-cart-authority-epoch', 'new-customer');
+    window.localStorage.setItem(
+      `baci-cart-authority-epoch:${SLUG}`,
+      'new-customer'
+    );
     return { ok: true };
   });
   await act(async () => {

@@ -51,7 +51,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
       optionsRef.current.merchantId !== merchantId ||
       (!enabledRef.current && enabled)
     ) {
-      cookieEpochRef.current = { value: getCartCookieEpoch() };
+      cookieEpochRef.current = { value: getCartCookieEpoch(merchantSlug) };
     }
     stateRef.current = state;
     generationRef.current = sessionGeneration;

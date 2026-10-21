@@ -4,12 +4,21 @@ const LOCK_NAME = 'baci-cart-cookie-authority';
 const EPOCH_KEY = 'baci-cart-authority-epoch';
 let listening = false;
 let activeWrites = 0;
-let lastInvalidatedEpoch: string | null | undefined | symbol =
-  Symbol('initial');
-function invalidateEpoch(value: string | null | undefined) {
-  if (lastInvalidatedEpoch === value) return;
-  lastInvalidatedEpoch = value;
-  bumpCartSessionGeneration();
+const lastInvalidatedEpochs = new Map<string, string | null | undefined>();
+const epochKey = (slug?: string | null) =>
+  slug ? `${EPOCH_KEY}:${slug}` : EPOCH_KEY;
+function invalidateEpoch(
+  value: string | null | undefined,
+  slug?: string | null
+) {
+  const key = epochKey(slug);
+  if (
+    lastInvalidatedEpochs.has(key) &&
+    lastInvalidatedEpochs.get(key) === value
+  )
+    return;
+  lastInvalidatedEpochs.set(key, value);
+  bumpCartSessionGeneration(slug ? { merchantSlug: slug } : undefined);
 }
 export const hasActiveCartCookieWrite = () => activeWrites > 0;
 
@@ -22,32 +31,41 @@ function lockManager(): LockManager | undefined {
     throw new Error('Cross-tab cart coordination is unavailable');
   return undefined;
 }
-function epoch(): string | null {
+function epoch(slug?: string | null): string | null {
   if (typeof window === 'undefined') return null;
   if (!listening) {
     window.addEventListener('storage', (event) => {
-      if (event.key === EPOCH_KEY) invalidateEpoch(event.newValue);
+      if (event.key === EPOCH_KEY || event.key === null)
+        invalidateEpoch(event.newValue);
+      else if (
+        event.key?.startsWith(`${EPOCH_KEY}:`) &&
+        !event.key.endsWith(':writable')
+      )
+        invalidateEpoch(event.newValue, event.key.slice(EPOCH_KEY.length + 1));
     });
     listening = true;
   }
-  return window.localStorage.getItem(EPOCH_KEY);
+  return window.localStorage.getItem(epochKey(slug));
 }
 
-export function getCartCookieEpoch(): string | null | undefined {
+export function getCartCookieEpoch(
+  slug?: string | null
+): string | null | undefined {
   try {
-    return epoch();
+    return epoch(slug);
   } catch {
     return undefined;
   }
 }
 /** Fence old UI intents even before a delayed cross-tab storage event arrives. */
 export function isCartCookieEpochCurrent(
-  expected: string | null | undefined
+  expected: string | null | undefined,
+  slug?: string | null
 ): boolean {
-  const current = getCartCookieEpoch();
+  const current = getCartCookieEpoch(slug);
   if (current !== undefined && expected !== undefined && current === expected)
     return true;
-  invalidateEpoch(current);
+  invalidateEpoch(current, slug);
   return false;
 }
 
@@ -55,14 +73,18 @@ export function isCartCookieEpochCurrent(
 export function withCartCookieWrite<T>(
   fallback: T,
   signal: AbortSignal,
-  operation: () => Promise<T>
+  operation: () => Promise<T>,
+  slug?: string | null
 ): Promise<T> {
   const manager = lockManager();
   if (!manager) return operation();
-  const startedEpoch = epoch();
+  const startedEpoch = epoch(slug);
   return manager.request(LOCK_NAME, { mode: 'exclusive', signal }, () => {
     // A request queued before retirement must not mint authority afterward.
-    if (signal.aborted || epoch() !== startedEpoch) return fallback;
+    if (signal.aborted || epoch(slug) !== startedEpoch) return fallback;
+    // Every realm must prove coordination storage is writable before sending.
+    // A read-only tab must not reuse the old epoch after failed retirement.
+    window.localStorage.setItem(`${epochKey(slug)}:writable`, '1');
     activeWrites += 1;
     let cancel!: () => void;
     const aborted = new Promise<T>((resolve) => {
@@ -81,7 +103,8 @@ export function withCartCookieWrite<T>(
 /** Hold an origin-wide exclusive lock until the caller finishes revocation. */
 export function beginCartCookieRetirement(
   timeoutMs: number,
-  guard?: { expectedEpoch: string | null | undefined }
+  guard?: { expectedEpoch: string | null | undefined },
+  slug?: string | null
 ): {
   drained: Promise<void>;
   release(): void;
@@ -126,14 +149,14 @@ export function beginCartCookieRetirement(
         clearTimeout(timer);
         // Storage errors fail closed before revocation starts. This also fences
         // queued work in other tabs, even if a storage event is delivered late.
-        const currentEpoch = epoch();
+        const currentEpoch = epoch(slug);
         if (
           guard &&
           (guard.expectedEpoch === undefined ||
             currentEpoch !== guard.expectedEpoch)
         )
           throw new Error('Cart authority changed while waiting');
-        window.localStorage.setItem(EPOCH_KEY, crypto.randomUUID());
+        window.localStorage.setItem(epochKey(slug), crypto.randomUUID());
         ready();
         await held;
       }

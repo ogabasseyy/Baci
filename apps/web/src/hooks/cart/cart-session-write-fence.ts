@@ -57,7 +57,7 @@ export function beginCartSessionRetirement(
       .map(([pending]) => pending)
   ).then(async () => {
     if (released) return;
-    crossTab = beginCartCookieRetirement(CART_REQUEST_TIMEOUT_MS, guard);
+    crossTab = beginCartCookieRetirement(CART_REQUEST_TIMEOUT_MS, guard, slug);
     await crossTab.drained;
     if (!released) {
       acquiredRetirements.set(slug, (acquiredRetirements.get(slug) ?? 0) + 1);
@@ -97,7 +97,7 @@ export function runCartSessionTransition<T>(
 ): Promise<T> {
   if (isCartSessionRetiring(slug) || outcome?.signal?.aborted)
     return Promise.resolve(blocked);
-  const startedEpoch = getCartCookieEpoch();
+  const startedEpoch = getCartCookieEpoch(slug);
   const retirement = beginCartSessionRetirement(slug ?? '', {
     expectedEpoch: startedEpoch,
   });
@@ -130,7 +130,7 @@ export function runCartSessionTransition<T>(
     flights.delete(pending);
     if (
       (!succeeded || outcome?.signal?.aborted) &&
-      (ran || getCartCookieEpoch() !== startedEpoch)
+      (ran || getCartCookieEpoch(slug) !== startedEpoch)
     )
       bumpCartSessionGeneration({
         merchantSlug: slug,
@@ -149,12 +149,12 @@ export function runBoundedCartSessionWrite<T>(
   beforeLock?: (signal: AbortSignal) => Promise<boolean>
 ): Promise<T> {
   if (beforeLock) {
-    const startedEpoch = getCartCookieEpoch();
+    const startedEpoch = getCartCookieEpoch(slug);
     return withCartRequestDeadline(
       fallback,
       async (requestSignal) => {
         if (!(await beforeLock(requestSignal))) return fallback;
-        if (!isCartCookieEpochCurrent(startedEpoch)) return fallback;
+        if (!isCartCookieEpochCurrent(startedEpoch, slug)) return fallback;
         return runBoundedCartSessionWrite(
           slug,
           fallback,
@@ -169,8 +169,11 @@ export function runBoundedCartSessionWrite<T>(
     withCartRequestDeadline(
       fallback,
       (requestSignal) =>
-        withCartCookieWrite(fallback, requestSignal, () =>
-          operation(requestSignal)
+        withCartCookieWrite(
+          fallback,
+          requestSignal,
+          () => operation(requestSignal),
+          slug
         ),
       signal
     )

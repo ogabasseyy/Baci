@@ -45,8 +45,16 @@ export function DeviceCartCapacityItems({
     // A stable saved ID survives reordering and quantity edits. Without an
     // ID, remove one equivalent legacy occurrence, preserving siblings whose
     // quantity or assurance differs from the selected row.
+    const sameId = current.filter(
+      (item) => item.cartItemId === selected.cartItemId
+    );
     const target = selected.cartItemId
-      ? current.find((item) => item.cartItemId === selected.cartItemId)
+      ? (candidates.find((item) => item.cartItemId === selected.cartItemId) ??
+        (sameId.length === 1 &&
+        items.filter((item) => item.cartItemId === selected.cartItemId)
+          .length === 1
+          ? sameId[0]
+          : undefined))
       : candidates.length === 1 &&
           items.filter(matchesSelected).length === 1 &&
           !candidates[0].cartItemId
@@ -80,7 +88,8 @@ export function DeviceCartCapacityItems({
   return (
     <ul aria-label="Saved device cart items">
       {items.map((item, index) => (
-        <li key={item.cartItemId ?? `${item.id}-${index}`}>
+        // biome-ignore lint/suspicious/noArrayIndexKey: stateless rows may share product IDs; no offer credentials enter React keys.
+        <li key={`${item.cartItemId ?? item.id}-${index}`}>
           <span>
             {item.name} {item.selectedColor} {item.selectedStorage} ×{' '}
             {item.quantity}

@@ -32,8 +32,8 @@ type Merge = {
 export function useCartAccountLink(options: Options) {
   const generation = useSyncExternalStore(
     subscribeCartSessionGeneration,
-    getCartSessionGeneration,
-    getCartSessionGeneration
+    () => getCartSessionGeneration(options.merchantSlug),
+    () => getCartSessionGeneration(options.merchantSlug)
   );
   const [savedCart, setSavedCart] = useState<CartSnapshot | null>(null);
   const [status, setStatus] = useState<AccountLinkStatus>('idle');
@@ -72,7 +72,7 @@ export function useCartAccountLink(options: Options) {
         return;
       }
       const captured = state.current.scope;
-      const generation = getCartSessionGeneration();
+      const generation = getCartSessionGeneration(options.merchantSlug);
       const run = ++state.current.readRun;
       state.current.loadedScope = null;
       state.current.savedCart = null;
@@ -87,7 +87,7 @@ export function useCartAccountLink(options: Options) {
       );
       if (
         state.current.scope !== captured ||
-        getCartSessionGeneration() !== generation ||
+        getCartSessionGeneration(options.merchantSlug) !== generation ||
         state.current.readRun !== run
       )
         return;
@@ -102,14 +102,14 @@ export function useCartAccountLink(options: Options) {
     };
     const send = async (input: CartAccountLinkInput): Promise<boolean> => {
       const captured = state.current.scope;
-      const generation = getCartSessionGeneration();
+      const generation = getCartSessionGeneration(options.merchantSlug);
       const lifecycle = state.current.lifecycle;
       const merchant = state.current.options.merchantSlug;
       setStatus('linking');
       const result = await linkAccountCart(input, merchant);
       if (
         state.current.scope !== captured ||
-        getCartSessionGeneration() !== generation ||
+        getCartSessionGeneration(options.merchantSlug) !== generation ||
         state.current.lifecycle !== lifecycle
       )
         return false;
@@ -128,7 +128,7 @@ export function useCartAccountLink(options: Options) {
       await state.current.options.onLinked?.();
       if (
         state.current.scope === captured &&
-        getCartSessionGeneration() === generation
+        getCartSessionGeneration(options.merchantSlug) === generation
       )
         await loadSavedCart();
       return true;

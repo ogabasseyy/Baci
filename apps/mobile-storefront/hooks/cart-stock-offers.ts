@@ -51,8 +51,17 @@ export async function resolveOfferStock(
       strictUnits: units,
     };
   }
-  return {
-    stock: resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
-    strictUnits: null,
-  };
+  // Null is unbounded only for serialized_then_unlimited (the SQL
+  // legacy arm always coalesces to the parent stock): any other
+  // policy with a missing allocation fails closed at zero.
+  if (resolution.allocatableStock === null) {
+    return {
+      stock:
+        resolution.effectivePolicy === 'serialized_then_unlimited'
+          ? Number.MAX_SAFE_INTEGER
+          : 0,
+      strictUnits: null,
+    };
+  }
+  return { stock: resolution.allocatableStock, strictUnits: null };
 }

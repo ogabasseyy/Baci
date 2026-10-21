@@ -117,6 +117,21 @@ describe('resolveOfferStock', () => {
     });
   });
 
+  it('fails closed to zero when a non-unlimited policy has no allocation', async () => {
+    mockAuthority({
+      rows: [
+        row({
+          allocatable_stock: null,
+          effective_policy: 'legacy',
+        }),
+      ],
+    });
+    await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
+      stock: 0,
+      strictUnits: null,
+    });
+  });
+
   it('uses the finite allocation under unlimited tracking', async () => {
     mockAuthority({
       rows: [

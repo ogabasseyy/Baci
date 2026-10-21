@@ -159,11 +159,16 @@ export async function hydrateRelatedBlogProductAvailability(
                   price: resolution.priceBasis,
                   compare_at_price: resolution.compareAtPrice ?? null,
                   status: 'active',
-                  // Null is unbounded (unlimited policy with no
-                  // scalar): purchasable, per the shared contract —
-                  // never zero stock.
+                  // Null is unbounded only for
+                  // serialized_then_unlimited; any other policy with
+                  // a missing allocation fails closed at zero (the
+                  // SQL legacy arm always coalesces, so null there
+                  // means a partial projection).
                   stock_quantity:
-                    resolution.allocatableStock ?? Number.MAX_SAFE_INTEGER,
+                    resolution.allocatableStock ??
+                    (resolution.effectivePolicy === 'serialized_then_unlimited'
+                      ? Number.MAX_SAFE_INTEGER
+                      : 0),
                 })
               );
               return [

@@ -137,7 +137,12 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
   it('marks an unbounded offer allocation purchasable, never zero stock', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [authorityRow('offer-1', { allocatable_stock: null })],
+      data: [
+        authorityRow('offer-1', {
+          allocatable_stock: null,
+          effective_policy: 'serialized_then_unlimited',
+        }),
+      ],
       error: null,
     });
 
@@ -147,6 +152,25 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(true);
+  });
+
+  it('fails closed to zero when a non-unlimited policy has no allocation', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        authorityRow('offer-1', {
+          allocatable_stock: null,
+          effective_policy: 'legacy',
+        }),
+      ],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product()]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(false);
   });
 
   it('omits a gated row a partial projection still carries', async () => {

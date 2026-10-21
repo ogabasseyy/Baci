@@ -49,6 +49,10 @@ export function adoptSnapshot(
         )
         .map((entry) => ({ ...entry, state: 'queued' as const })),
       importStatus: 'skipped',
+      // The terminal cart's capacity outcome no longer applies; leaving
+      // it would strand the checkout capacity gate on dead recovery
+      // actions that require a failed import.
+      importWarnings: [],
       syncError: null,
     };
   }

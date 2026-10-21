@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isCartCrossTabLockSupported } from './cart-cross-tab-lock';
 import {
   getCartSessionGenerationChange,
   subscribeCartSessionGeneration,
@@ -41,9 +42,12 @@ export function useSharedCartDelegation(input: {
 
   // Delegation is per-merchant: enrollment binds merchantId to the slug
   // the frame served, so switching away falls back to that slug's legacy
-  // cart instead of showing another merchant's server cart.
+  // cart instead of showing another merchant's server cart. Browsers
+  // that cannot coordinate tabs (secure context without Web Locks)
+  // stay on the legacy device cart rather than failing every write.
   const delegated =
     input.sharedCartEnabled &&
+    isCartCrossTabLockSupported() &&
     input.merchantId !== null &&
     input.initialMerchantSlug !== null &&
     input.merchantSlug === input.initialMerchantSlug;

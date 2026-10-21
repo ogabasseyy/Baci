@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   getCartFromStorage,
+  getCartSessionGeneration,
   getCartWideNegotiationFromStorage,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
@@ -200,4 +201,18 @@ it.each([
   expect(getCartFromStorage('shop').map((item) => item.name)).toEqual([
     'Plain',
   ]);
+});
+
+it('fences the merchant session when removing a capacity line', () => {
+  saveCartToStorage(
+    [cartItem({ id: 'charger', cartItemId: 'charger', name: 'Charger' })],
+    'shop'
+  );
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  const shopBefore = getCartSessionGeneration('shop');
+  const otherBefore = getCartSessionGeneration('other-shop');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Charger' }));
+  expect(getCartFromStorage('shop')).toEqual([]);
+  expect(getCartSessionGeneration('shop')).toBeGreaterThan(shopBefore);
+  expect(getCartSessionGeneration('other-shop')).toBe(otherBefore);
 });

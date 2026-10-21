@@ -5,6 +5,34 @@ import {
   sharedCartReducer,
 } from './shared-cart-reducer';
 
+it('clears capacity warnings when polling adopts a terminal cart', () => {
+  const started = sharedCartReducer(initialSharedCartState, {
+    cached: [cartItem({ id: 'prod-9', cartItemId: 'prod-9' })],
+    generation: 1,
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    products: {},
+    type: 'link/start',
+  });
+  const linked = sharedCartReducer(started, {
+    generation: 1,
+    snapshot: snapshot({ lines: [], version: 1 }),
+    type: 'link/snapshot',
+  });
+  const blocked = sharedCartReducer(linked, {
+    generation: 1,
+    type: 'import/capacity_exceeded',
+  });
+  expect(blocked.importStatus).toBe('failed');
+  expect(blocked.importWarnings).toContain('import_capacity_exceeded');
+  const terminal = sharedCartReducer(blocked, {
+    generation: 1,
+    snapshot: snapshot({ state: 'completed', lines: [], version: 2 }),
+    type: 'snapshot/polled',
+  });
+  expect(terminal.importWarnings).toEqual([]);
+  expect(terminal.importStatus).toBe('skipped');
+});
+
 it('clears display lines when polling adopts a terminal cart', () => {
   const started = sharedCartReducer(initialSharedCartState, {
     cached: [

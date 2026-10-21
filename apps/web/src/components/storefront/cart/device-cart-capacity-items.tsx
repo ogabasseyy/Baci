@@ -14,6 +14,7 @@ import {
   displayLineMatchesAddLane,
   identityKeyOfDisplay,
 } from '@/hooks/cart/shared-cart-display-identity';
+import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 
 /** Edit only the parked merchant-scoped device cache, before any create exists. */
 export function DeviceCartCapacityItems({
@@ -82,6 +83,12 @@ export function DeviceCartCapacityItems({
       );
       saveCartWideNegotiationToStorage(false, merchantSlug);
     }
+    // Fence this tab's provisioning before rewriting the parked cache:
+    // a create cloned before the removal captures the old generation
+    // and is discarded instead of resurrecting the removed line. The
+    // editor only renders before a create exists in this tab, so the
+    // rewrite itself stays on the parked-cache path.
+    bumpCartSessionGeneration({ merchantSlug });
     saveCartToStorage(remaining, merchantSlug);
     setItems(remaining);
   }

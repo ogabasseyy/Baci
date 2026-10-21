@@ -22,6 +22,13 @@ function invalidateEpoch(
 }
 export const hasActiveCartCookieWrite = () => activeWrites > 0;
 
+/** Whether this browser can coordinate shared-cart writes across tabs. */
+export function isCartCrossTabLockSupported(): boolean {
+  if (typeof navigator !== 'undefined' && navigator.locks) return true;
+  // Insecure contexts already degrade without a lock; only a secure
+  // browser missing the Web Locks API cannot coordinate safely.
+  return !(typeof window !== 'undefined' && window.isSecureContext);
+}
 function lockManager(): LockManager | undefined {
   if (typeof navigator !== 'undefined' && navigator.locks)
     return navigator.locks;

@@ -29,7 +29,7 @@ export function gateStorefrontPreflightStatus(
   } else if (attempt) {
     storefrontInternalPreflight.warnRpcFailOpen(
       failOpenContext,
-      attempt,
+      { ...attempt, outcome: 'parse-error' },
       'has-error'
     );
   } else {

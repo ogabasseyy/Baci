@@ -234,15 +234,20 @@ async function requestDeviceRevocation(
       // so a failed logout keeps both the saved device cart and the
       // revocation fence for the still-signed-in customer.
       if (!deferCacheErasure) {
+        let erased = true;
         if (
           isCartDeviceRevocationPending(merchantSlug) &&
           typeof window !== 'undefined'
         ) {
-          eraseRetiredCartCache(merchantSlug, retiringUserId);
-          clearSharedCartImportReceipt(merchantSlug);
+          erased = eraseRetiredCartCache(merchantSlug, retiringUserId);
+          if (erased) clearSharedCartImportReceipt(merchantSlug);
         }
-        clearCartDeviceRevocationPending(merchantSlug);
-        clearCartDeviceSessionActive(merchantSlug);
+        // Keep the retirement fence until the cache is actually gone;
+        // a later ensure pass retries the erasure.
+        if (erased) {
+          clearCartDeviceRevocationPending(merchantSlug);
+          clearCartDeviceSessionActive(merchantSlug);
+        }
       }
     }
     return { ok };

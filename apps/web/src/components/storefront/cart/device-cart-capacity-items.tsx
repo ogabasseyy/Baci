@@ -3,7 +3,10 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { rotateCartCookieEpoch } from '@/hooks/cart/cart-cross-tab-lock';
+import {
+  rotateCartCookieEpoch,
+  withCartCookieWrite,
+} from '@/hooks/cart/cart-cross-tab-lock';
 import {
   getCartFromStorage,
   getCartWideNegotiationFromStorage,
@@ -29,6 +32,29 @@ export function DeviceCartCapacityItems({
   function remove(index: number) {
     const selected = items[index];
     if (!selected) return;
+    // Serialize the edit with in-flight creates in other tabs through
+    // the origin-wide cookie-writer lock: the cache is re-read and the
+    // epoch rotated only once any active creator has finished, so a
+    // cloned pre-removal request cannot resurrect the removed line.
+    const signal =
+      typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(5_000)
+        : new AbortController().signal;
+    let applied = false;
+    void withCartCookieWrite(
+      undefined,
+      signal,
+      () => {
+        applied = true;
+        applyRemoval(selected);
+        return Promise.resolve(undefined);
+      },
+      merchantSlug
+    ).then(() => {
+      if (!applied) setItems(getCartFromStorage(merchantSlug));
+    });
+  }
+  function applyRemoval(selected: CartItem) {
     const current = getCartFromStorage(merchantSlug);
     const matchesSelected = (item: CartItem) =>
       identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&

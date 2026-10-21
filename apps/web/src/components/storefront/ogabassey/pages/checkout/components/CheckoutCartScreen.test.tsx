@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { matchesValidatedResume } from './CheckoutCartScreen';
+import { matchesValidatedResume } from './checkout-resume-match';
 it('does not treat a query parameter as an authorized order', () => {
   expect(matchesValidatedResume(null, 'untrusted-order')).toBe(false);
 });

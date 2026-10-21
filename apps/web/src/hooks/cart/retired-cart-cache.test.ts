@@ -66,3 +66,16 @@ it('clears the guest cache during passive revocation before releasing pending au
 });
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
+it('reports failure instead of throwing when storage is unavailable', () => {
+  localStorage.setItem('baci-cart-shop-guest', 'saved');
+  const removeItem = vi
+    .spyOn(Storage.prototype, 'removeItem')
+    .mockImplementation(() => {
+      throw new Error('blocked');
+    });
+  try {
+    expect(eraseRetiredCartCache('shop', 'user-1')).toBe(false);
+  } finally {
+    removeItem.mockRestore();
+  }
+});

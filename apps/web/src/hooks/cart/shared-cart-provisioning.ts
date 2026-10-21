@@ -33,6 +33,9 @@ export function createCartProvisioning(
     bootstrappingRef,
     optionsRef,
   } = context;
+  const createSourceIdsRef = context.createSourceIdsRef ?? {
+    current: [] as string[],
+  };
 
   async function ensureCart(
     canProceed: () => boolean = () => true
@@ -135,10 +138,14 @@ export function createCartProvisioning(
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
       const status = stateRef.current.importStatus;
-      const { planned } = planProvisioningImport(
+      const { cached, planned } = planProvisioningImport(
         optionsRef.current.merchantSlug,
         stateRef.current
       );
+      createSourceIdsRef.current =
+        planned?.kind === 'create'
+          ? cached.map((item) => item.cartItemId).filter(Boolean)
+          : [];
       if (planned?.kind === 'blocked') {
         // Over-capacity first import: surface the same actionable
         // capacity outcome as the server-cart path instead of hiding
@@ -233,6 +240,9 @@ export function createCartProvisioning(
         cartId: created.snapshot.cartId,
         importedAt: new Date().toISOString(),
         lineCount: lines?.length ?? 0,
+        ...(createSourceIdsRef.current.length
+          ? { consumedCartItemIds: [...createSourceIdsRef.current] }
+          : {}),
       });
     }
     return { ok: true };

@@ -68,6 +68,10 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     Parameters<typeof createSharedCart>[0] | null
   >(null);
 
+  // Device line IDs the in-flight create consumes, recorded on the
+  // import receipt so terminal recovery can identify them exactly.
+  const createSourceIdsRef = useRef<string[]>([]);
+
   const createAttemptedRef = useRef(false);
   const retiredCartIdRef = useRef<string | null>(null);
 
@@ -111,6 +115,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     importOpIdsRef,
     createOpRef,
     createRequestRef,
+    createSourceIdsRef,
     createAttemptedRef,
     retiredCartIdRef,
     bootstrappingRef,

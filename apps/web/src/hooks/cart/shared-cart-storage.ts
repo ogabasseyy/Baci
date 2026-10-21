@@ -20,6 +20,8 @@ export interface SharedCartImportReceipt {
   cartId: string;
   importedAt: string;
   lineCount: number;
+  /** Device line IDs the import consumed, when known. */
+  consumedCartItemIds?: string[];
 }
 
 export function isSharedCartImportReceipt(
@@ -31,7 +33,10 @@ export function isSharedCartImportReceipt(
     typeof receipt.cartId === 'string' &&
     receipt.cartId.length > 0 &&
     typeof receipt.importedAt === 'string' &&
-    typeof receipt.lineCount === 'number'
+    typeof receipt.lineCount === 'number' &&
+    (receipt.consumedCartItemIds === undefined ||
+      (Array.isArray(receipt.consumedCartItemIds) &&
+        receipt.consumedCartItemIds.every((id) => typeof id === 'string')))
   );
 }
 

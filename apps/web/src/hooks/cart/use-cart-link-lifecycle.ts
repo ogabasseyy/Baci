@@ -11,10 +11,7 @@ import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
   ADOPT_RETRY_BASE_MS,
   backoffMs,
-  FALLBACK_POLL_MS,
-  jittered,
   MAX_AUTO_RETRIES,
-  RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
 import { importInitialDeviceCart } from './shared-cart-initial-import';
@@ -30,6 +27,7 @@ import {
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import { unimportedTerminalLines } from './terminal-cart-cache';
+import { useCartLinkPolling } from './use-cart-link-polling';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function useCartLinkLifecycle(
@@ -45,9 +43,6 @@ export function useCartLinkLifecycle(
     merchantSlug,
     sessionGeneration,
     enabled,
-    realtimeConnected,
-    surfaceActive,
-    state,
     dispatch,
     setHydrated,
     setLinkPhase,
@@ -57,6 +52,7 @@ export function useCartLinkLifecycle(
     importOpIdsRef,
     createOpRef,
     createRequestRef,
+    createSourceIdsRef,
     createAttemptedRef,
     bootstrappingRef,
     lastFetchRef,
@@ -92,6 +88,7 @@ export function useCartLinkLifecycle(
     importOpIdsRef.current = new Set();
     createOpRef.current = null;
     createRequestRef.current = null;
+    if (createSourceIdsRef) createSourceIdsRef.current = [];
     createAttemptedRef.current = false;
     bootstrappingRef.current = false;
     // Reset hydration ownership so a restart cannot inherit stale work.
@@ -238,59 +235,7 @@ export function useCartLinkLifecycle(
     };
   }, [enabled, merchantId, merchantSlug, sessionGeneration]);
 
-  // Poll for convergence only while linked, enabled and active.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would restart polling every render.
-  useEffect(() => {
-    if (!enabled || !state.cartId || surfaceActive === false) return;
-    const generation = sessionGeneration;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const baseMs = realtimeConnected ? RECONCILE_POLL_MS : FALLBACK_POLL_MS;
-    const schedule = () => {
-      timer = setTimeout(() => void tick(), jittered(baseMs));
-    };
-    const tick = async () => {
-      if (stopped || generationRef.current !== generation) return;
-      if (!document.hidden) {
-        const result = await fetchSharedCartSnapshot(
-          undefined,
-          optionsRef.current.merchantSlug
-        );
-        if (!stopped && generationRef.current === generation && result.ok) {
-          lastFetchRef.current = Date.now();
-          dispatch({
-            generation,
-            snapshot: result.snapshot,
-            type: 'snapshot/polled',
-          });
-          void hydrateMissing(result.snapshot);
-          // A polled terminal leaves preserved device lines only in
-          // storage; provision the replacement cart now instead of
-          // stranding them until the shopper's next mutation.
-          if (isTerminalCart(result.snapshot)) {
-            const preserved = unimportedTerminalLines(
-              getCartFromStorage(optionsRef.current.merchantSlug),
-              result.snapshot.cartId,
-              getSharedCartImportReceipt(optionsRef.current.merchantSlug)
-            );
-            if (preserved.length > 0) void context.ensureCart();
-          }
-        }
-      }
-      schedule();
-    };
-    schedule();
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [
-    enabled,
-    realtimeConnected,
-    sessionGeneration,
-    state.cartId,
-    surfaceActive,
-  ]);
+  useCartLinkPolling(context);
 
   // Foreground and focus refetch, coalesced with recent reads.
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshNow is ref-stable and reads the live generation; re-subscribing per generation is unnecessary.

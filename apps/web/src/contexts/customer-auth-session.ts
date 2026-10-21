@@ -273,9 +273,12 @@ export async function performCustomerLogout(
     }
     clearCustomerAuthRollbackPending(merchantSlug);
     // Complete the deferred revocation cleanup now that logout committed.
-    eraseRetiredCartCache(merchantSlug, previousUserId ?? userId);
-    clearCartDeviceRevocationPending?.(merchantSlug);
-    clearCartDeviceSessionActive?.(merchantSlug);
+    // A storage failure must not strand the committed logout: keep the
+    // retirement fence for a later retry, but finish local sign-out.
+    if (eraseRetiredCartCache(merchantSlug, previousUserId ?? userId)) {
+      clearCartDeviceRevocationPending?.(merchantSlug);
+      clearCartDeviceSessionActive?.(merchantSlug);
+    }
     setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);

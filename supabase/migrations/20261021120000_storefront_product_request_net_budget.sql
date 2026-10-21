@@ -6,17 +6,18 @@
 -- edge instances can pool the whole 50/hour merchant budget alone. This
 -- migration backstops that primary gate with a database-enforced fixed
 -- window (10/hour per merchant per caller-network hash) that holds
--- regardless of Redis health. The hash is an HMAC of the proxy's own
--- network signal (see getClientIdentifier): raw IPs never reach the
--- database, and 'unknown' callers share one tight bucket per merchant
--- (fail-closed). The limit matches the proxy's cross-merchant total, so
--- while Redis is healthy the proxy still binds first and this budget is
--- a pure backstop. Fixed hourly windows admit a boundary burst of up to
--- 20/hour per (merchant, origin) worst case — accepted, still below the
--- 50/hour merchant backstop. Rotating real network origins can still pool
--- the merchant budget (distributed residual); bounding that needs an
--- owner-gated scarce caller signal (CAPTCHA/proof-of-work), not a
--- header, cookie, or token check — see the intake route threat model.
+-- regardless of Redis health. The hash is an HMAC of the route's TRUSTED
+-- network signal (see getTrustedClientIdentifier) under a dedicated
+-- intake-net key: raw IPs never reach the database, and 'unknown'
+-- callers share one tight bucket per merchant (fail-closed). The limit
+-- matches the proxy's cross-merchant total, so while Redis is healthy
+-- the proxy still binds first and this budget is a pure backstop. Fixed
+-- hourly windows admit a boundary burst of up to 20/hour per (merchant,
+-- origin) worst case — accepted, still below the 50/hour merchant
+-- backstop. Rotating real network origins can still pool the merchant
+-- budget (distributed residual); bounding that needs an owner-gated
+-- scarce caller signal (CAPTCHA/proof-of-work), not a header, cookie, or
+-- token check — see the intake route threat model.
 --
 -- Signature change (expand-contract): the RPC gains p_caller_net_hash
 -- (HMAC hex). The old 4-argument overload is deliberately RETAINED: deploys
@@ -47,6 +48,16 @@ REVOKE ALL ON storefront_search_private.intake_net_windows FROM PUBLIC, anon, au
 CREATE INDEX IF NOT EXISTS intake_net_windows_window_start_idx
   ON storefront_search_private.intake_net_windows (window_start);
 
+-- Expired-window cleanup, extracted so it is directly testable. Only the
+-- current window is ever read; expired rows are garbage from any merchant,
+-- including inactive ones no admission will ever prune merchant-scoped.
+CREATE OR REPLACE FUNCTION storefront_search_private.prune_intake_net_windows()
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  DELETE FROM storefront_search_private.intake_net_windows
+  WHERE window_start < date_trunc('hour', now());
+$$;
+REVOKE ALL ON FUNCTION storefront_search_private.prune_intake_net_windows() FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid, p_caller_net_hash text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_merchant uuid; v_existing public.storefront_product_requests; v_query text := btrim(p_query); v_contact text := btrim(p_contact); v_contact_key text; v_window_start timestamptz; v_net_count integer;
@@ -72,13 +83,17 @@ BEGIN
     RAISE EXCEPTION 'Request conflict' USING ERRCODE = '23505';
   END IF;
   IF EXISTS (SELECT 1 FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND storefront_search_private.normalize_request_query_key(query) = storefront_search_private.normalize_request_query_key(v_query) AND created_at > now() - interval '24 hours') THEN RETURN; END IF;
-  -- Durable network-origin budget: fixed hourly window, ALL expired
-  -- windows pruned on each admission (only the current window is ever
-  -- read, so steady-state storage is one row per active origin per hour,
-  -- including merchants that went inactive). Retries and 24h dedup hits
-  -- returned above consume no budget.
+  -- Durable network-origin budget: fixed hourly window. Expired windows
+  -- are pruned probabilistically (~1% of admissions) rather than on every
+  -- call: the prune spans all merchants while serialization is only
+  -- per-merchant, so pruning every admission would serialize unrelated
+  -- merchants against each other at each hour rollover. Only the current
+  -- window is ever read, so deferred cleanup is pure garbage collection.
+  -- Retries and 24h dedup hits returned above consume no budget.
   v_window_start := date_trunc('hour', now());
-  DELETE FROM storefront_search_private.intake_net_windows WHERE window_start < v_window_start;
+  IF random() < 0.01 THEN
+    PERFORM storefront_search_private.prune_intake_net_windows();
+  END IF;
   SELECT request_count INTO v_net_count FROM storefront_search_private.intake_net_windows WHERE merchant_id = v_merchant AND net_hash = p_caller_net_hash AND window_start = v_window_start;
   IF (SELECT count(*) FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND created_at > now() - interval '1 hour') >= 50
     OR (SELECT count(*) FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND created_at > now() - interval '1 hour') >= 3

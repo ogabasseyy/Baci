@@ -35,6 +35,16 @@ describe('intake caller-network hash', () => {
       'Storefront intake network key is unavailable'
     );
   });
+  it('fails closed on a short network key', () => {
+    // A short/dictionary key would let a ledger exposure recover raw IPs
+    // by offline dictionary attack plus IPv4 enumeration, so anything
+    // under 32 characters is rejected like a missing key.
+    vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', 'short-key');
+
+    expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
+      'Storefront intake network key is unavailable'
+    );
+  });
   it('does not reuse the bearer intake JWT as key material', () => {
     // The JWT is transmitted on every RPC; keying the HMAC with it would
     // let any exposure retroactively reverse stored hashes. The network

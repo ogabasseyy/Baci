@@ -128,6 +128,25 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Prune collects expired windows across merchants but keeps the current one.
+INSERT INTO storefront_search_private.intake_net_windows
+  (merchant_id, net_hash, window_start, request_count)
+VALUES ('02d00000-0000-4000-8000-000000000011',
+  'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  date_trunc('hour', now()) - interval '2 hours', 10);
+SELECT storefront_search_private.prune_intake_net_windows();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM storefront_search_private.intake_net_windows
+      WHERE window_start < date_trunc('hour', now())) THEN
+    RAISE EXCEPTION 'prune must collect expired windows';
+  END IF;
+  IF (SELECT COALESCE(sum(request_count), 0)
+      FROM storefront_search_private.intake_net_windows
+      WHERE merchant_id = '02d00000-0000-4000-8000-000000000011') <> 10 THEN
+    RAISE EXCEPTION 'prune must keep the current window';
+  END IF;
+END $$;
+
 -- Exactly fourteen rows persisted (10 + origin-B + sibling merchant + 2 crossover).
 DO $$ BEGIN
   IF (SELECT count(*) FROM public.storefront_product_requests

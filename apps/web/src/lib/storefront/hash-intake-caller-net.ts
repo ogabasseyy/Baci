@@ -11,13 +11,18 @@ import { createHmac } from 'node:crypto';
  * so reusing it as key material would let any exposure retroactively
  * reverse every stored hash by IPv4 enumeration. The dedicated secret is
  * never transmitted; rotation resets budgets only. Missing/empty fails
- * closed (the route serves 503, never a degraded unkeyed hash).
+ * closed (the route serves 503, never a degraded unkeyed hash), as does
+ * a key under 32 characters: the stored hashes stay irreversible only
+ * while the key is unguessable, and a short/dictionary value would let a
+ * ledger exposure dictionary-attack the key offline and then enumerate
+ * the IPv4 space to recover raw IPs.
  * 'unknown' identifiers hash like any other value, so callers without a
  * usable network signal share one tight bucket per merchant (fail-closed).
  */
 export function hashIntakeCallerNet(identifier: string): string {
   const key = process.env.SUPABASE_STOREFRONT_INTAKE_NET_KEY;
-  if (!key) throw new Error('Storefront intake network key is unavailable');
+  if (!key || key.length < 32)
+    throw new Error('Storefront intake network key is unavailable');
   return createHmac('sha256', key)
     .update(`storefront-intake-net-v1:${identifier}`)
     .digest('hex');

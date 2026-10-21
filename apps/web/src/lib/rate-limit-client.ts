@@ -76,20 +76,35 @@ export function getClientIdentifier(request: NextRequest): string {
 }
 
 /**
- * Client identity for the unauthenticated cart budgets, which are the
- * only bound tying anonymous proofs to one client. Unlike
- * getClientIdentifier this never trusts x-forwarded-for: that header is
- * client-suppliable on any deployment whose edge does not overwrite it,
- * so a caller could rotate it to reset the budget. Only the platform
- * address (NextRequest.ip, or an x-real-ip whose overwrite the
- * platform/operator guarantees) identifies the client; anything else
- * falls into the single shared 'unknown' bucket, failing closed.
+ * Client identity for budgets bound to untrusted callers (anonymous cart
+ * proofs, durable intake), where the identifier is the only bound tying
+ * a caller to one bucket. Unlike getClientIdentifier this never trusts
+ * x-forwarded-for: that header is client-suppliable on any deployment
+ * whose edge does not overwrite it, so a caller could rotate it to reset
+ * the budget. Only the platform address (NextRequest.ip), the
+ * Vercel-gated x-vercel-forwarded-for (same preference as the lenient
+ * identifier, so both agree wherever the edge guarantee holds), or an
+ * x-real-ip whose overwrite the platform/operator guarantees identifies
+ * the client; anything else falls into the single shared 'unknown'
+ * bucket, failing closed.
  */
 export function getTrustedClientIdentifier(request: NextRequest): string {
   const requestWithIp = request as NextRequest & { ip?: string };
   const requestIp = requestWithIp.ip;
   if (requestIp && isValidIP(requestIp)) {
     return requestIp;
+  }
+
+  // x-vercel-forwarded-for first, exactly like getClientIdentifier: it
+  // survives a proxy stacked on top of Vercel where other headers may be
+  // rewritten, so reading it here keeps the durable budgets measuring the
+  // same caller as the proxy layer. Gated on VERCEL like the lenient
+  // path: off Vercel the header is client-mintable.
+  if (process.env.VERCEL === '1') {
+    const vercelForwarded = finalChainIp(
+      request.headers.get('x-vercel-forwarded-for')
+    );
+    if (vercelForwarded) return vercelForwarded;
   }
 
   // x-real-ip is only trustworthy when the platform guarantees the

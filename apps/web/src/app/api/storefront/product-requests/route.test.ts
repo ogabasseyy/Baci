@@ -97,6 +97,22 @@ describe('product request intake', () => {
       })
     );
   });
+  it('keys the budget on x-vercel-forwarded-for when it alone carries the client IP', async () => {
+    // Stacked proxy on Vercel: the Vercel header survives while other
+    // headers carry the intermediate proxy, and the durable key must
+    // measure the same caller as the proxy layer.
+    vi.stubEnv('VERCEL', '1');
+    const response = await POST(
+      request(input, {
+        'x-forwarded-for': '198.51.100.9',
+        'x-real-ip': '192.0.2.1',
+        'x-vercel-forwarded-for': '203.0.113.7',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.hashNet).toHaveBeenCalledWith('203.0.113.7');
+  });
   it('collapses mintable header signals into the unknown bucket off Vercel', async () => {
     // Without the edge guarantee x-real-ip is caller-supplied, so the
     // durable key must fail closed into the shared bucket, not rotate.

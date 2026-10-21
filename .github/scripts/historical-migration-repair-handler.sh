@@ -53,6 +53,76 @@ historical_migration_version_is_recorded() {
   awk -F '\t' -v version="$version" '$1 == version { found = 1; exit } END { exit !found }' <<<"$applied_migrations"
 }
 
+load_historical_migration_version_alias_history() {
+  local alias_version_sql='' file base version name alias_spec alias_version
+  local applied_versions_query applied_versions_body applied_versions_response
+
+  for file in "$@"; do
+    base="$(basename "$file" .sql)"
+    version="${base%%_*}"
+    name="${base#*_}"
+    if alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+      IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
+      if ! [[ "$alias_version" =~ ^[0-9]{14}$ ]]; then
+        echo "::error::Historical migration alias for $version $name has an invalid recorded version" >&2
+        return 1
+      fi
+      alias_version_sql="${alias_version_sql}${alias_version_sql:+, }'${alias_version}'"
+    fi
+  done
+  [ -n "$alias_version_sql" ] || alias_version_sql="''"
+
+  applied_versions_query="SELECT version, name, CASE WHEN version IN (${alias_version_sql}) THEN encode(sha256(convert_to(array_to_json(statements)::text, 'UTF8')), 'hex') END AS statements_sha256 FROM supabase_migrations.schema_migrations ORDER BY version"
+  applied_versions_body="$(jq -n --arg query "$applied_versions_query" '{query: $query}')"
+  applied_versions_response="$(api_query <<<"$applied_versions_body")" || return 1
+  applied_migrations="$(jq -r '.[] | [.version, .name, (.statements_sha256 // "")] | @tsv' <<<"$applied_versions_response")" || return 1
+}
+
+preflight_historical_migration_version_aliases() {
+  local file base version name alias_spec alias_version
+
+  for file in "$@"; do
+    base="$(basename "$file" .sql)"
+    version="${base%%_*}"
+    name="${base#*_}"
+    if ! alias_spec="$(historical_migration_version_alias_spec "$version" "$name")"; then
+      continue
+    fi
+    if [ "$migration_phase" = "predeploy" ] && is_postdeploy_migration "$base"; then
+      continue
+    fi
+    if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+      continue
+    fi
+    IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
+    if historical_migration_version_is_recorded "$alias_version"; then
+      verify_historical_migration_version_alias "$file" "$alias_spec" || return $?
+    fi
+  done
+}
+
+handle_historical_migration_version_alias() {
+  local version="$1" name="$2" base="$3" file="$4" alias_spec="$5"
+  local alias_version
+
+  if [ "$migration_phase" = "predeploy" ] && is_postdeploy_migration "$base"; then
+    echo "⏸ deferred until postdeploy: $version  ${name}"
+    deferred_count=$((deferred_count + 1))
+    return 0
+  fi
+  if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+    echo "⏸ deferred above MIGRATION_MAX_VERSION $migration_max_version: $version  ${name}"
+    deferred_count=$((deferred_count + 1))
+    return 0
+  fi
+
+  IFS=$'\t' read -r alias_version _ <<<"$alias_spec"
+  historical_migration_version_is_recorded "$alias_version" || return 1
+  verify_historical_migration_version_alias "$file" "$alias_spec" || return $?
+  echo "✓ already applied under version $alias_version: $version  ${name}"
+  skipped_count=$((skipped_count + 1))
+}
+
 skip_verified_historical_migration_version_alias() {
   local version="$1" name="$2" file="$3" alias_spec="$4"
   local alias_version

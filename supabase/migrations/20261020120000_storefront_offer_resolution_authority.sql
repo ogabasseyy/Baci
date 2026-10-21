@@ -17,13 +17,14 @@
 --     NULL (unbounded) under serialized_then_unlimited. Live rows
 --     always carry a finite scalar (NOT NULL DEFAULT 0); the NULL arm
 --     is defensive only.
---   parent_eligible  the order-RPC M28 parent gate verbatim
---     (has_condition_offers, sku_matrix-aware non-variant parent, no
---     live non-anchor variants). Gated-out rows are withheld, not
---     flagged: an ineligible parent reads exactly like a missing
---     offer at every consumer, so no per-consumer flag check can be
---     forgotten. The column stays TRUE on all live rows (contract
---     stability for the search branch and existing callers).
+--   parent_eligible  the M28 parent shape (has_condition_offers,
+--     sku_matrix-aware non-variant parent, no live non-anchor
+--     variants). Emitted, never enforced here: the order RPC is
+--     intentionally ungated (20261019090000 leaves the M18 gate
+--     out), so transaction surfaces accept every resolved row
+--     exactly like checkout. Discovery surfaces (the search
+--     branch below, blog hydration, native catalog fetch) keep
+--     the conservative ad-gate and skip unshaped parents.
 --   Display columns (compare_at_price, grade, condition_notes, images)
 --     ride along so detail surfaces need no second lookup.
 -- Advertising-only predicates stay with their callers: the
@@ -116,9 +117,9 @@ BEGIN
         CASE WHEN r.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
           THEN r.inventory_tracking_policy END,
         'legacy') AS effective_policy,
-      -- M28 parent gate, defined once: the final SELECT emits it and
-      -- the WHERE enforces it, so gated-out rows never leave the
-      -- authority and no consumer can price or stock them.
+      -- M28 parent shape, defined once: the final SELECT emits it
+      -- for discovery surfaces; transaction surfaces ignore it
+      -- and mirror the ungated order RPC.
       (r.has_condition_offers IS TRUE
         AND r.variant_bearing IS NOT TRUE
         AND NOT EXISTS (
@@ -186,11 +187,11 @@ BEGIN
     ON o.product_id = r.id AND o.merchant_id = r.merchant_id
   LEFT JOIN serialized AS s ON s.product_id = r.id
   WHERE o.status = 'active'
-    -- Gated-out rows are withheld, not flagged: every consumer (cart,
-    -- checkout, PDP, native, MCP, blog, search) then treats an
-    -- ineligible parent exactly like a missing offer, with no
-    -- per-consumer flag check to forget.
-    AND a.parent_eligible
+    -- No parent-shape withhold: the order RPC stages offers from
+    -- variant-bearing and flag-disabled parents alike, so
+    -- withholding here would make validation reject lines
+    -- checkout accepts. Discovery-side callers filter on
+    -- parent_eligible themselves.
   ORDER BY r.id, o.condition, o.id;
 END;
 $$;
@@ -216,9 +217,11 @@ GRANT EXECUTE ON FUNCTION public.get_storefront_offer_resolution(uuid, uuid[])
 -- The search price-options offer branch now reads the authority instead
 -- of restating its rules. Behavior is unchanged for live rows (the
 -- scalar is NOT NULL): strict keeps the effective minimum of scalar
--- and units, every other policy keeps the scalar gate, and the parent
--- gate is the same M28 predicate. The advertising-only predicates
--- (same-condition exclusion, 16-row window) stay in this branch.
+-- and units, every other policy keeps the scalar gate, and the
+-- offers CTE keeps the M28 ad-gate (discovery stays conservative
+-- even though checkout would stage the same rows). The other
+-- advertising-only predicates (same-condition exclusion, 16-row
+-- window) stay in this branch.
 CREATE OR REPLACE FUNCTION public.get_storefront_search_price_options(p_merchant_id uuid, p_product_id uuid)
 RETURNS TABLE(variant_id uuid, offer_id uuid, condition text, effective_price numeric)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
@@ -268,6 +271,8 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     SELECT r.offer_id AS id, r.condition, r.price_basis AS price, r.allocatable_stock
     FROM parent p
     CROSS JOIN LATERAL public.get_storefront_offer_resolution(p.merchant_id, ARRAY[p.id]) r
+    -- Conservative ad-gate: discovery does not advertise unshaped
+    -- parents even though transactions accept their rows.
     WHERE r.parent_eligible
     -- Mirror the PDP snapshot hydration window exactly (ORDER BY
     -- condition, id LIMIT 16): offers beyond it are unresolvable there,

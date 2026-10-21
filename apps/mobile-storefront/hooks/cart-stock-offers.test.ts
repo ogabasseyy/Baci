@@ -63,10 +63,10 @@ describe('resolveOfferStock', () => {
     });
   });
 
-  it('reports zero for a gated-out row a partial projection still carries', async () => {
+  it('reports the allocation for a parent-ineligible row (checkout is ungated)', async () => {
     mockAuthority({ rows: [row({ parent_eligible: false })] });
     await expect(resolveOfferStock('p1', 'o1')).resolves.toEqual({
-      stock: 0,
+      stock: 5,
       strictUnits: null,
     });
   });

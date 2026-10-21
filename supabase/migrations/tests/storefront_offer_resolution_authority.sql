@@ -25,13 +25,13 @@ INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_q
 VALUES ('31000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-000000000001','authority strict','active',100,5,5,true,false,true,'serialized_strict'),
 ('31000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','authority anchor strict','active',100,5,5,true,false,true,'off'),
 ('31000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000001','authority unlimited','active',100,0,0,true,false,true,'serialized_then_unlimited');
--- Multi-anchor conflict (031): two anchors whose id order disagrees with
--- creation order; lowest id must win (aligned with the PDP snapshot and
--- base-inventory anchors). Strict zero-unit parent (033): no inventory
--- rows at all; available_units must emit 0, never NULL.
+-- Strict zero-unit parent (033): no inventory rows at all;
+-- available_units must emit 0, never NULL. No multi-anchor
+-- fixture: idx_product_variants_one_inventory_anchor forbids two
+-- anchors per product, so the ORDER BY id tiebreak is a
+-- deterministic guard, not a live branch.
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
-VALUES ('31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','authority multi anchor','active',100,5,5,true,false,true,'off'),
-('31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','authority strict zero','active',100,5,5,true,false,true,'serialized_strict');
+VALUES ('31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','authority strict zero','active',100,5,5,true,false,true,'serialized_strict');
 -- 'inherit'/unrecognized policies (035/036): the effective policy must
 -- normalize to 'legacy', never emit the raw token.
 INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
@@ -59,9 +59,6 @@ VALUES ('41000000-0000-4000-8000-000000000012','31000000-0000-4000-8000-00000000
 ('41000000-0000-4000-8000-000000000013','31000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','serialized_strict',true),
 ('41000000-0000-4000-8000-000000000014','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','inherit',true),
 ('41000000-0000-4000-8000-000000000015','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','inherit',true);
-INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor,created_at)
-VALUES ('41000000-0000-4000-8000-000000000016','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','serialized_strict',true,'2026-02-01T00:00:00Z'),
-('41000000-0000-4000-8000-000000000017','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','off',true,'2026-01-01T00:00:00Z');
 INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor)
 VALUES ('41000000-0000-4000-8000-000000000018','31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-000000000001','inherit',true),
 ('41000000-0000-4000-8000-000000000019','31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','inherit',true);
@@ -79,9 +76,7 @@ VALUES ('51000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-00000000
 ('51000000-0000-4000-8000-000000000009','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111119','available'),
 ('51000000-0000-4000-8000-000000000010','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111120','available'),
 ('51000000-0000-4000-8000-000000000011','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111121','available'),
-('51000000-0000-4000-8000-000000000012','41000000-0000-4000-8000-000000000015','00000000-0000-4000-8000-000000000001','imei','611111111111122','available'),
-('51000000-0000-4000-8000-000000000013','41000000-0000-4000-8000-000000000016','00000000-0000-4000-8000-000000000001','imei','611111111111123','available'),
-('51000000-0000-4000-8000-000000000014','41000000-0000-4000-8000-000000000016','00000000-0000-4000-8000-000000000001','imei','611111111111124','available');
+('51000000-0000-4000-8000-000000000012','41000000-0000-4000-8000-000000000015','00000000-0000-4000-8000-000000000001','imei','611111111111122','available');
 ALTER TABLE public.variant_inventory ENABLE TRIGGER USER;
 ALTER TABLE public.product_offers DISABLE TRIGGER USER;
 INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
@@ -98,7 +93,6 @@ VALUES ('31000000-0000-4000-8000-000000000020','31000000-0000-4000-8000-00000000
 ('31000000-0000-4000-8000-000000000030','31000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000001','used',90,4,'active'),
 ('32000001-0001-4000-8000-000000000001','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
 ('32000001-0201-4000-8000-000000000201','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
-('31000000-0000-4000-8000-000000000032','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
 ('31000000-0000-4000-8000-000000000034','31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
 ('31000000-0000-4000-8000-000000000037','31000000-0000-4000-8000-000000000035','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
 ('31000000-0000-4000-8000-000000000038','31000000-0000-4000-8000-000000000036','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
@@ -115,14 +109,21 @@ BEGIN
  IF r.price_basis <> 80 OR r.allocatable_stock <> 3 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'live offer basis/allocation/eligibility wrong'; END IF;
  SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000021';
  IF r.allocatable_stock <> 0 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'zeroed offer stays eligible with zero allocation'; END IF;
- -- Variant-bearing, flag-disabled, and stray-variant parents resolve
- -- nothing: gated-out rows are withheld, not flagged.
+ -- Variant-bearing, flag-disabled, and stray-variant parents still
+ -- resolve their offers (the order RPC stages them), flagged
+ -- parent_eligible = false for discovery surfaces.
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000002']::uuid[]);
- IF n <> 0 THEN RAISE EXCEPTION 'variant parent must resolve nothing'; END IF;
+ IF n <> 1 THEN RAISE EXCEPTION 'variant parent must resolve its offer'; END IF;
+ SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000002']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000023';
+ IF r.parent_eligible IS NOT FALSE OR r.allocatable_stock <> 3 THEN RAISE EXCEPTION 'variant-parent offer must flag ineligible with its scalar'; END IF;
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000003']::uuid[]);
- IF n <> 0 THEN RAISE EXCEPTION 'flag-disabled parent must resolve nothing'; END IF;
+ IF n <> 1 THEN RAISE EXCEPTION 'flag-disabled parent must resolve its offer'; END IF;
+ SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000003']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000024';
+ IF r.parent_eligible IS NOT FALSE OR r.allocatable_stock <> 3 THEN RAISE EXCEPTION 'flag-disabled offer must flag ineligible with its scalar'; END IF;
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000005']::uuid[]);
- IF n <> 0 THEN RAISE EXCEPTION 'stray-variant parent must resolve nothing'; END IF;
+ IF n <> 1 THEN RAISE EXCEPTION 'stray-variant parent must resolve its offer'; END IF;
+ SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000005']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000026';
+ IF r.parent_eligible IS NOT FALSE OR r.allocatable_stock <> 3 THEN RAISE EXCEPTION 'stray-variant offer must flag ineligible with its scalar'; END IF;
  -- The finite scalar binds even on unmanaged parents.
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000004']::uuid[]);
  IF n <> 2 THEN RAISE EXCEPTION 'unmanaged parent must not lift the offer scalar'; END IF;
@@ -176,10 +177,8 @@ BEGIN
  IF n <> 0 THEN RAISE EXCEPTION 'search must not advertise variant-parent offers'; END IF;
  SELECT count(*) INTO n FROM public.get_storefront_search_price_options('00000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000005') WHERE offer_id IS NOT NULL;
  IF n <> 0 THEN RAISE EXCEPTION 'search must not advertise stray-variant offers'; END IF;
- -- Multi-anchor conflict resolves by lowest anchor id (aligned with the
- -- PDP snapshot and base-inventory anchors), not creation order.
- SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000031']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000032';
- IF r.effective_policy <> 'serialized_strict' OR r.allocatable_stock <> 2 OR r.available_units <> 2 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'multi-anchor conflict must resolve by lowest anchor id'; END IF;
+ SELECT count(*) INTO n FROM public.get_storefront_search_price_options('00000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000003') WHERE offer_id IS NOT NULL;
+ IF n <> 0 THEN RAISE EXCEPTION 'search must not advertise flag-disabled offers'; END IF;
  -- Strict zero-unit parents emit available_units = 0, never NULL, so
  -- genuine sell-outs are distinguishable from projection outages.
  SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000033']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000034';
@@ -195,7 +194,7 @@ BEGIN
  -- keeps its scalar (the slices carry strict ids only).
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g));
  IF n <> 2 THEN RAISE EXCEPTION 'mixed merchant call must resolve both policies'; END IF;
- SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g)) WHERE offer_id = '31000000-0000-4000-8000-000000000027';
+ SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g)) WHERE offer_id = '31000000-0000-4000-8000-000000000028';
  IF n <> 3 THEN RAISE EXCEPTION 'mixed merchant must keep the strict cap'; END IF;
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', (SELECT array_prepend('31000000-0000-4000-8000-000000000007', array_agg(('31000002-' || lpad(g::text, 4, '0') || '-4000-8000-' || lpad(g::text, 12, '0'))::uuid)) FROM generate_series(1, 50) g)) WHERE offer_id = '32000002-0001-4000-8000-000000000001';
  IF n <> 7 THEN RAISE EXCEPTION 'mixed merchant must keep the legacy scalar'; END IF;

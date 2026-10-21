@@ -162,10 +162,9 @@ export async function loadMcpProductVariants({
     } else {
       offers = ((data ?? []) as unknown[]).flatMap((row) => {
         const resolution = coerceOfferAuthorityRow(row);
-        // Live SQL withholds gated-out rows; a partial projection that
-        // still carries one must never be advertised (checkout rejects
-        // ineligible parents). Same fail-closed guard as cart, order,
-        // and native consumers.
+        // Discovery-side ad-gate: unshaped parents are not advertised
+        // even though checkout would stage their rows (transactions
+        // accept all rows; only discovery filters on the flag).
         // Case-insensitive: the resolution id is canonical
         // (lowercase) while the caller id may spell UUID hex
         // uppercase.

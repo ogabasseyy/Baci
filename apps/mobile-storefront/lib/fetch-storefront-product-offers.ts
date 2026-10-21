@@ -97,10 +97,9 @@ export async function getStorefrontProductOffersByProductIds(
     keysByLowerId.set(productId.toLowerCase(), bucket);
   }
   for (const resolution of resolutions.values()) {
-    // Live SQL withholds gated-out rows; a partial/stale projection
-    // that still carries one must never hydrate (checkout rejects
-    // ineligible parents). Same fail-closed guard as cart, order,
-    // MCP, and native stock consumers.
+    // Discovery-side ad-gate: unshaped parents never hydrate even
+    // though checkout would stage their rows (transactions accept
+    // all rows; only discovery filters on the flag).
     if (resolution.parentEligible !== true) continue;
     const keys = keysByLowerId.get(resolution.productId);
     if (keys === undefined) continue;

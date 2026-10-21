@@ -61,24 +61,24 @@ describe('getInvalidOfferLineKey', () => {
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
 
-  it('invalidates a live offer on an ineligible parent', () => {
+  it('accepts a live offer on an ineligible parent (checkout is ungated)', () => {
     expect(
       getInvalidOfferLineKey({
         strId: STR_ID,
         offerId: OFFER_ID,
         offer: { condition: 'used', parent_eligible: false },
       })
-    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    ).toBeNull();
   });
 
-  it('fails closed when the authority flag is missing', () => {
+  it('ignores a missing authority flag (transactions mirror checkout)', () => {
     expect(
       getInvalidOfferLineKey({
         strId: STR_ID,
         offerId: OFFER_ID,
         offer: { condition: 'used' },
       })
-    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    ).toBeNull();
   });
 
   it('invalidates a drifted submitted condition', () => {

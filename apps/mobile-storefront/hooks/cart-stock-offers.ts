@@ -38,12 +38,10 @@ export async function resolveOfferStock(
     log.error('Offer stock check found no such offer:', offerId);
     return { stock: 0, strictUnits: null };
   }
-  // The authority withholds gated-out rows; a partial projection that
-  // still carries one must never read as available (checkout rejects
-  // ineligible parents, so reporting stock here would oversell).
-  if (!resolution.parentEligible) {
-    return { stock: 0, strictUnits: null };
-  }
+  // No parent-shape gate: the order RPC stages offers from
+  // variant-bearing and flag-disabled parents alike, so a
+  // resolved row reads with its allocation whatever
+  // parentEligible says (discovery surfaces filter on it).
   if (resolution.effectivePolicy === 'serialized_strict') {
     // A strict row with no unit count is a serialized-projection
     // outage, not a genuine sell-out (live SQL coalesces genuine

@@ -3,7 +3,7 @@ import { makeOfferLineKey } from './offer-line-key';
 /**
  * TypeScript client for the SQL offer-resolution authority
  * (`get_storefront_offer_resolution`, which owns identity liveness,
- * the live price basis, allocatable stock, and the M28 parent gate).
+ * the live price basis, allocatable stock, and the M28 parent shape).
  * Every live layer reads offers through `fetchOfferResolutions`
  * instead of restating the rules.
  */
@@ -40,7 +40,7 @@ export interface ResolvedOfferResolution {
    * sentinel (Infinity / MAX_SAFE_INTEGER).
    */
   allocatableStock: number | null;
-  /** M28 parent gate computed in SQL (flag, variant, live variants). */
+  /** M28 parent shape computed in SQL (flag, variant, live variants). */
   parentEligible: boolean;
   effectivePolicy: string | null;
   /** Strict serialized base units (null unless strict). */

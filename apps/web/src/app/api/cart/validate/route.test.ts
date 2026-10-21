@@ -735,7 +735,7 @@ describe('POST /api/cart/validate', () => {
     expect(body.validProducts).toEqual([]);
   });
 
-  it('invalidates a live offer the authority flags as parent-ineligible', async () => {
+  it('accepts a live offer the authority flags as parent-ineligible', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);
     mocks.products = [
@@ -752,8 +752,8 @@ describe('POST /api/cart/validate', () => {
         variant_model: 'legacy',
       },
     ];
-    // The M28 parent gate lives in SQL: the route trusts the row flag
-    // instead of re-deriving it from product columns.
+    // Transactions mirror the ungated order RPC: a live row is valid
+    // whatever parent_eligible says (discovery surfaces filter on it).
     mocks.offers = [
       {
         product_id: PRODUCT_ID,
@@ -770,10 +770,12 @@ describe('POST /api/cart/validate', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.invalidProductIds).toEqual([
-      `${PRODUCT_ID}::offer=${OFFER_ID}`,
-    ]);
-    expect(body.validProducts).toEqual([]);
+    expect(body.invalidProductIds).toEqual([]);
+    expect(body.validProducts).toHaveLength(1);
+    expect(body.validProducts[0]).toMatchObject({
+      id: PRODUCT_ID,
+      price: 400_000,
+    });
   });
 
   it('skips the variants lookup for offer-only carts', async () => {

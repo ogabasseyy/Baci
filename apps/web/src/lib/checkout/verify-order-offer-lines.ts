@@ -67,15 +67,10 @@ export async function fetchLiveOrderOffers(
     productIds,
   });
 
-  // The authority withholds gated-out rows (an ineligible parent
-  // reads like a missing offer); the flag check stays as
-  // defense-in-depth so a partial projection can never bind or
-  // publish ineligible economics.
-  const live = new Map(
-    Array.from(resolutions.entries()).filter(
-      ([, resolution]) => resolution.parentEligible === true
-    )
-  );
+  // No parent-shape filter: the order RPC stages offers from
+  // variant-bearing and flag-disabled parents alike, so every
+  // resolved row is a live offer checkout would stage.
+  const live = resolutions;
   for (const resolution of live.values()) {
     const key = makeOfferLineKey(resolution.productId, resolution.offerId);
     if (resolution.priceBasis !== null) prices.set(key, resolution.priceBasis);

@@ -111,7 +111,7 @@ export type OfferLineResolutionInput = {
   offer?: {
     condition: string | null;
     stock_quantity?: number | string | null;
-    /** M28 parent gate from the SQL authority (never re-derived here). */
+    /** M28 parent shape from the SQL authority (unread here; discovery filters on it). */
     parent_eligible?: boolean;
   };
   /**
@@ -191,13 +191,10 @@ export function getInvalidOfferLineKey({
     return getCartValidationKey(strId, undefined, offerId);
   }
 
-  // A live offer row on a variant-bearing (or flag-disabled) parent is
-  // stale: order creation rejects it, so validation must not retain
-  // and reprice the line only to fail at checkout. The gate lives in
-  // SQL; a row without the flag fails closed.
-  if (!variantId && offerId && offer && offer.parent_eligible !== true) {
-    return getCartValidationKey(strId, undefined, offerId);
-  }
+  // No parent-shape gate: the order RPC stages offers from
+  // variant-bearing and flag-disabled parents alike, so a live row
+  // is valid here whatever parent_eligible says (discovery
+  // surfaces filter on it; transactions mirror checkout).
 
   // Staff can change an active offer's condition after it lands in a
   // cart. The orders route canonically compares and rejects a drifted

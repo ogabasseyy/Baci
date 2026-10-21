@@ -62,19 +62,19 @@ describe('findMismatchedOrderOffer', () => {
     expect(live.prices.size).toBe(1);
   });
 
-  it('flags live but parent-ineligible offers and hides their economics', async () => {
+  it('accepts live but parent-ineligible offers and publishes their economics', async () => {
     const callRpc = vi.fn(async () => ({
       data: [authorityRow(OFFER_ID, { parent_eligible: false })],
       error: null,
     }));
 
     const line = { product_id: PRODUCT_ID, offer_id: OFFER_ID };
-    expect(await findMismatchedOrderOffer(callRpc, [line])).toEqual(line);
+    expect(await findMismatchedOrderOffer(callRpc, [line])).toBeNull();
 
     const live = await fetchLiveOrderOffers(callRpc, [line]);
-    expect(live.mismatch).toEqual(line);
-    expect(live.prices.size).toBe(0);
-    expect(live.conditions.size).toBe(0);
+    expect(live.mismatch).toBeNull();
+    expect(live.prices.size).toBe(1);
+    expect(live.conditions.size).toBe(1);
   });
 
   it('flags offers that are gone or belong to another product', async () => {

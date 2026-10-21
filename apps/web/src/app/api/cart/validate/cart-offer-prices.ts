@@ -10,7 +10,7 @@ export type CartOfferRow = {
   price: number | string | null;
   condition: string | null;
   stock_quantity?: number | string | null;
-  /** M28 parent gate, computed by the SQL authority (never re-derived). */
+  /** M28 parent shape, computed by the SQL authority (never re-derived). */
   parent_eligible?: boolean;
 };
 

@@ -58,7 +58,7 @@ describe('coerceOfferAuthorityRow', () => {
     expect(row?.parentEligible).toBe(false);
   });
 
-  it('keeps gated-out rows with the flag off', () => {
+  it('keeps unshaped-parent rows with the flag off', () => {
     const row = coerceOfferAuthorityRow({
       product_id: PRODUCT_ID,
       offer_id: OFFER_ID,

@@ -1890,6 +1890,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         id: 'customer-1',
         user_id: null,
       },
+      // Faithful hiding: the binding RPC returns zero rows for an
+      // unlinked owner. Owner-presence must run FIRST and 425 —
+      // a binding-first order would 400 and rotate (Codex P1).
+      transactionBinding: null,
     });
 
     const { status, body } = await callRoute(

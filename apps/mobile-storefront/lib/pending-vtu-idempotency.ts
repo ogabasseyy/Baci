@@ -14,13 +14,11 @@
  */
 
 import * as Crypto from 'expo-crypto';
-import { isExpiredPendingVtuEntry } from './pending-vtu-idempotency-codec';
 import {
-  clearForgottenVtuScopes,
-  clearPendingVtuSnapshot,
-  forgottenVtuScopes,
-  noteForgottenVtuScopes,
-} from './pending-vtu-idempotency-store';
+  isExpiredPendingVtuEntry,
+  serializePendingVtuEntries,
+} from './pending-vtu-idempotency-codec';
+import { clearPendingVtuSnapshot } from './pending-vtu-idempotency-store';
 import {
   pendingPurchases,
   persistPendingVtuPurchases,
@@ -34,11 +32,17 @@ import {
   listNotedPendingVtuReferencesFrom,
   markPendingVtuCompletedIn,
 } from './pending-vtu-reference-queries';
+import {
+  clearForgottenVtuScopes,
+  forgottenVtuScopes,
+  listForgottenVtuTombstones,
+  noteForgottenVtuScopes,
+} from './pending-vtu-tombstones';
 
+export { adoptCanonicalVtuKey } from './pending-vtu-canonical-adoption';
 export {
   forgetPendingVtuPurchaseDurable,
   hydratePendingVtuPurchases,
-  serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 
@@ -93,10 +97,9 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 /**
  * Records the key (cap-enforced). New generations supersede the
  * scope tombstone only once durable (R94 P2, R99 P2); false when
- * memory-only — dropped AND the tombstone restored so a retry
- * re-mints AND re-persists (R96 P1, web mirror).
+ * memory-only — dropped AND the tombstone restored (R96 P1).
  */
-/** Memory admission for a minted key (sync; durability is a scheduled locked flush — R152 P1, web mirror). */
+/** Memory admission for a minted key, cap-enforced (sync; scheduled locked flush — R152 P1, web mirror). */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string,
@@ -124,13 +127,9 @@ const PENDING_VTU_STORAGE_ERROR =
   'Could not save this purchase for retry. Please try again.';
 
 /**
- * Recall-or-mint choke point (R148, real mutex R149, web mirror):
- * async — the triple runs under the navigator.locks mint mutex on
- * Expo web, so two tabs racing recall → mint serialize and the
- * loser adopts the winner's key instead of double-debiting. Throws
- * the storage error when the lock is unacquired or the mint is
- * undurable — the throw aborts before the POST and the handler's
- * finally releases the checkout guard.
+ * Recall-or-mint choke point (R148, mutex R149, web mirror) under
+ * the navigator.locks mint mutex on Expo web. Throws the storage
+ * error when the lock is unacquired or the mint is undurable.
  */
 export function getPendingVtuKey(
   descriptor: string,
@@ -281,4 +280,18 @@ export function clearPendingVtuKeys(): void {
   pendingPurchases.clear();
   clearForgottenVtuScopes();
   clearPendingVtuSnapshot();
+}
+
+/**
+ * Serializes live entries + tombstones for MMKV (prunes
+ * TTL-expired). Lives here (not sync) per the 300-line
+ * module-size gate: sync owns merge discipline, this barrel owns
+ * registry ops.
+ */
+export function serializePendingVtuPurchases(now: number = Date.now()): string {
+  return serializePendingVtuEntries(
+    pendingPurchases,
+    listForgottenVtuTombstones(),
+    now
+  );
 }

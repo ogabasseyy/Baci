@@ -2,9 +2,9 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { getPendingVtuSettlementPass } from '@/hooks/use-vtu-retained-settlement';
 import {
-  markPendingVtuCompleted,
-  notePendingVtuReference,
-} from '@/lib/pending-vtu-idempotency';
+  markOwnPendingVtuCompleted,
+  noteOwnPendingVtuReference,
+} from '@/lib/pending-vtu-generation-guards';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
 
@@ -117,16 +117,20 @@ export async function refreshWalletAfterSuppressedVtuResult(payment: {
  * notes must NOT — the stale guard keys off completion time); and
  * refreshes the wallet (never-fails) since the suppressed onSuccess
  * will never fire the parent's invalidation. Shared by the airtime
- * and bill handlers (Codex R62 6rtokS/6rtokY).
+ * and bill handlers (Codex R62 6rtokS/6rtokY). Generation-guarded
+ * (Codex R6 P1): the preserve runs only while the live entry still
+ * holds the submitting generation's key, so a vetoed adoption cannot
+ * finalize the winner's entry with the loser's outcome.
  */
 export async function preserveSuppressedVtuSuccess(
   payment: PaymentState,
   descriptor: string,
-  result: { reference: string; status: string }
+  result: { reference: string; status: string },
+  ownKey: string
 ): Promise<void> {
-  notePendingVtuReference(descriptor, result.reference);
+  noteOwnPendingVtuReference(descriptor, result.reference, ownKey);
   if (result.status !== 'processing') {
-    markPendingVtuCompleted(descriptor);
+    markOwnPendingVtuCompleted(descriptor, ownKey);
   }
   await refreshWalletAfterSuppressedVtuResult(payment);
 }

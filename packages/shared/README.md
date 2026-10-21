@@ -110,6 +110,67 @@ env-allowlist changes only) does not run them. Enforcement therefore
 does not depend on changed-file test selection in the modes that can
 change fixture imports.
 
+## Money formatting (`@baci/shared/money`)
+
+Public API: `formatMoney` (major units), `formatMoneyMinor` (minor
+units scaled by ISO exponent), `formatMoneyCompact` (compact/standard
+notation only), and `createMoneyFormatter` (bound formatter from
+`create-money-formatter.ts`, backed by the cached Intl factory in
+`money-formatter.ts`). Whole-amount rendering is an explicit
+`minimumFractionDigits: 0, maximumFractionDigits: 0` override.
+
+The canonical money formatter lives in `src/money/format-money.ts`,
+extracted from the receipt-scoped formatter in
+`src/receipt/receipt-money.ts` (which re-exports `createMoneyFormatter`
+from it — one implementation, one cache). Semantic decision for the
+formatting wave: the currency code is the source of truth and the
+locale is derived from it via `MONEY_CURRENCY_LOCALES`; fraction digits
+are an explicit per-call-class option (standard 2, whole-amount 0,
+compact), not a hidden per-app default. `formatMoney` takes major
+units; `formatMoneyMinor` takes minor units and scales by the
+currency's ISO 4217 exponent (100:1 for 2-decimal currencies, no
+scaling for zero-decimal XAF/XOF).
+
+One immediate behavior change: the legacy receipt formatter forced 2
+fraction digits for every currency, so XAF/XOF receipts rendered
+fictitious hundredths; `createMoneyFormatter` now defaults to the
+currency exponent for allowlisted currencies (0 for XAF/XOF), pinned
+by a receipt-class fixture in `format-money.test.ts`. Currency codes
+are also normalized (trim + uppercase, ISO 3-letter shape) before
+locale lookup, so stored lowercase/padded codes (`eur`, ` ngn `) now
+resolve their intended locale instead of the legacy en-NG fallback,
+and the receipt VAT default shares that normalization; both are
+pinned in `create-money-formatter.test.ts` and the money VAT test.
+Display defaults in the new `formatMoney` entry points use the ISO
+exponent for every well-formed code (allowlisted exponents are
+table-pinned; others are Intl-derived), matching `formatMoneyMinor`
+scaling. The receipt path (`createMoneyFormatter`) is table-only:
+allowlisted currencies use their table exponent, and
+non-allowlisted receipt currencies keep the legacy 2-digit rendering,
+so receipts gain no new on-device Intl-derivation dependency. The
+receipt-class fixtures pin both behaviors (XOF whole francs, NGN 2
+digits, JPY/KWD legacy 2-digit on receipts vs derived exponents via
+`formatMoney`).
+
+Divergences this unification intentionally removes when the per-app
+adoption PRs land: mobile-storefront's NGN-only hardcoding, web's
+country-derived currency/locale split, and mobile-admin's device-locale
+default. Adoption is one PR per app via thin wrappers preserving
+call-site signatures; only allowlisted currencies may be switched, and
+mobile adoption must first verify those currencies on-device (Hermes
+Intl data can differ from the Node ICU output pinned in
+`format-money.test.ts`).
+
+Receipt-path exemption from that gate: `generateReceiptHtml` already
+ran the legacy formatter on-device in both mobile apps, using the same
+Intl surface and the same locale map, so no new Intl capability is
+introduced there. The only receipt delta is the fraction-digit
+options passed to that existing formatter (exponent-derived instead
+of forced 2), which is option-level behavior, not locale-data
+behavior. The on-device verification gate therefore applies to
+switching app call sites to the new `@baci/shared/money` wrappers,
+not to the receipt re-export.
+
 ## Platform isolation
 
 This package declares only `@noble/hashes` and a Zod peer dependency

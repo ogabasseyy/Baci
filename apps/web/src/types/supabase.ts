@@ -15253,6 +15253,7 @@ export type Database = {
           request_reference: string;
           source: string;
           status: string;
+          terminal_at: string | null;
           transaction_id: string | null;
           type: string;
           updated_at: string | null;
@@ -15278,6 +15279,7 @@ export type Database = {
           request_reference: string;
           source?: string;
           status?: string;
+          terminal_at?: string | null;
           transaction_id?: string | null;
           type: string;
           updated_at?: string | null;
@@ -15303,6 +15305,7 @@ export type Database = {
           request_reference?: string;
           source?: string;
           status?: string;
+          terminal_at?: string | null;
           transaction_id?: string | null;
           type?: string;
           updated_at?: string | null;
@@ -17044,6 +17047,22 @@ export type Database = {
       claim_vtu_customer_notification_attempt: {
         Args: { p_transaction_id: string };
         Returns: Json;
+      };
+      claim_vtu_intent: {
+        Args: {
+          p_admission_live: string[];
+          p_admitted_at: string;
+          p_customer_id: string;
+          p_fingerprint: string;
+          p_key: string;
+          p_merchant_id: string;
+          p_transaction_id: string;
+        };
+        Returns: {
+          created: boolean;
+          idempotency_key: string;
+          transaction_id: string;
+        }[];
       };
       claim_wallet_credit_push: {
         Args: { p_transaction_id: string };
@@ -21851,6 +21870,16 @@ export type Database = {
           p_order_id: string;
         };
         Returns: Json;
+      };
+      vtu_admission_proof: {
+        Args: {
+          p_fingerprint: string;
+          p_merchant_slug: string;
+        };
+        Returns: {
+          admitted_at: string;
+          live_transaction_ids: string[];
+        }[];
       };
       write_admin_reconciliation_export_event_v1: {
         Args: never;

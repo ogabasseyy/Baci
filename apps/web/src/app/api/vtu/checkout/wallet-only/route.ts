@@ -1,13 +1,20 @@
+import { VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
+import {
+  admitVtuClaim,
+  VtuAdmissionError,
+  type VtuAdmissionProof,
+} from '@/lib/vtu-claim-admission';
+import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
+import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
-import { findExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
-import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
+import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
@@ -22,10 +29,12 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  * needs cross-user reads RLS would hide, and vtu_transactions /
  * vtu_idempotency_keys have no customer-facing policies (the replay
  * lookup is keyed by the unguessable key alone, which RLS cannot
- * scope — it needs SECURITY DEFINER RPCs). Tenant isolation is
- * pinned by application checks + route.test.ts (session binding,
- * fingerprint, PK-race cross-customer refusal, cross-merchant
- * rejection).
+ * scope — it needs SECURITY DEFINER RPCs). Exactly-once claiming
+ * is enforced server-side by the service_role-only claim_vtu_intent
+ * RPC (the authority; client registries are hints). Tenant
+ * isolation is pinned by application checks + route.test.ts
+ * (session binding, fingerprint, claim-race cross-customer
+ * refusal, cross-merchant rejection, terminal overlap fence).
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -35,9 +44,10 @@ function createErrorResponse(error: string, status = 400) {
  * Wallet-only VTU checkout (no gateway; `walletAmount === amount`
  * enforced — partial coverage unsupported, gateways stubbed). Flow:
  * validate Idempotency-Key → replay existing mapping (wallet RPC
- * idempotency second backstop) → fresh key: prepare, record,
- * fulfill (wallet debit Phase B.5, then vend). Service-role client
- * only; no `transactions` row or Paystack hop.
+ * idempotency second backstop) → fresh key: prepare, claim
+ * (records-or-joins via claim_vtu_intent), fulfill (wallet debit
+ * Phase B.5, then vend). Service-role client only; no
+ * `transactions` row or Paystack hop.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -85,7 +95,24 @@ export async function POST(request: NextRequest) {
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
     const supabase = createAdminClient();
-    const existing = await findExistingIdempotencyRow(supabase, idempotencyKey);
+    // Admission (Codex R3 P1, R4 P1): key lookup + atomic DB
+    // admission proof (stamp + live-scope snapshot) for the claim
+    // overlap fence. No proof → fail closed BEFORE preparing
+    // (nothing to orphan; the client retries the same key).
+    let existing: ExistingIdempotencyRow | null;
+    let proof: VtuAdmissionProof | null;
+    try {
+      ({ existing, proof } = await admitVtuClaim(
+        supabase,
+        idempotencyKey,
+        input.merchantSlug,
+        requestFingerprint
+      ));
+    } catch (error) {
+      if (!(error instanceof VtuAdmissionError)) throw error;
+      console.error('VTU admission proof unavailable:', error.message);
+      return createErrorResponse('Failed to admit VTU claim.', 500);
+    }
 
     // Replay path: reuse the existing vtu_transaction_id after the
     // ownership guard (a stolen key must not replay cross-customer/
@@ -150,100 +177,105 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Insert the idempotency-key row before fulfillment so a parallel
-    // retry can SELECT it. The PRIMARY KEY on `key` makes this insert
-    // the serialization point for concurrent submits with the same key.
-    const { error: insertError } = await supabase
-      .from('vtu_idempotency_keys')
-      .insert({
-        key: idempotencyKey,
-        vtu_transaction_id: prepared.transaction.id,
-        customer_id: prepared.customer.id,
-        merchant_id: prepared.merchant.id,
-        request_fingerprint: requestFingerprint,
-      });
-    if (insertError) {
-      // Likely a parallel submit won the PRIMARY KEY race — but
-      // re-read the mapping BEFORE treating our row as an orphan
-      // (Codex R124 P2): an insert whose response was lost commits
-      // anyway, so the "loser" may be the mapped winner. Cleaning
-      // up our own row would delete it (spurious terminal 400) or,
-      // when the delete fails and the failed-mark lands, strand the
-      // key on a failed row whose no_collection_evidence marker
-      // misses the refund dispatcher's no_charge shortcut — every
-      // replay throws the split-without-debit invariant as a 500
-      // while both clients retain on 5xx (stuck key). A missing
-      // mapping means our insert truly failed (a committed winner
-      // is always visible to this re-read), so the prepared row is
-      // a genuine orphan. Two steps:
-      //   1. Re-fetch the winner's row.
-      //   2. Unless the winner is us, remove our orphan row
-      //      (verified delete with a terminal failed-mark
-      //      fallback): unreferenced from the idempotency table, it
-      //      must not survive pending — a pending-scan reconciler
-      //      could otherwise re-fulfill it into a SECOND debit (the
-      //      redeem RPC's per-id idempotency would NOT block a
-      //      fresh source). Then replay the winner.
-      // The cleanup outcome never masks the replay (Muse R55 HIGH).
-      const racedExisting = await findExistingIdempotencyRow(
-        supabase,
-        idempotencyKey
-      );
-      if (racedExisting?.vtu_transaction_id !== prepared.transaction.id) {
-        const cleanupOutcome = await cleanupOrphanVtuTransactionAfterKeyRace({
+    // Exactly-once intent claim (epic #3694): the RPC records our
+    // (key, transaction) mapping for this intent scope, or joins the
+    // scope's live-or-overlapping transaction when another key won
+    // the race (second tab/device, registry loss, double submit).
+    // Terminals that settled before our admission are never joined:
+    // a new key after terminalization starts a new purchase
+    // (repeat purchases share fingerprints); terminals overlapping
+    // our admission join (same in-flight operation, even when
+    // preparation delays our row past terminalization — Codex R3
+    // P1 — or the writer's xact-start stamp predates our admission
+    // while its commit lands inside our window, proven by the
+    // admission-liveness snapshot — Codex R4 P1). The RPC returns
+    // the authoritative mapping, subsuming the old insert +
+    // PK-race re-read (Codex R124 P2).
+    // Fresh keys always carry proof (admit throws otherwise).
+    if (!proof) return createErrorResponse('Failed to admit VTU claim.', 500);
+    const { data: claimRows, error: claimError } = await supabase.rpc(
+      'claim_vtu_intent',
+      {
+        p_key: idempotencyKey,
+        p_fingerprint: requestFingerprint,
+        p_transaction_id: prepared.transaction.id,
+        p_merchant_id: prepared.merchant.id,
+        p_customer_id: prepared.customer.id,
+        p_admitted_at: proof.admittedAt,
+        p_admission_live: proof.admissionLive,
+      }
+    );
+    if (claimError) {
+      // Certain-abort claim rejections (claim_*): the RPC raised,
+      // so NOTHING was recorded — our prepared row is orphaned and
+      // must be discarded before responding (Codex R1 P2).
+      // Transport/unknown errors skip cleanup: the claim may still
+      // have committed, and deleting a referenced row would
+      // CASCADE-kill the mapping (see the transport-failure test).
+      if (claimError.message.startsWith('claim_')) {
+        await discardOrphanedClaimTransaction({
+          context: 'rejection',
           merchantId: prepared.merchant.id,
           supabase,
           transactionId: prepared.transaction.id,
         });
-        if (cleanupOutcome === 'unresolved') {
-          console.error(
-            'Orphan VTU cleanup unresolved after idempotency-key race; row may strand pending:',
-            { transactionId: prepared.transaction.id }
-          );
-        }
       }
-      if (racedExisting) {
-        // Same ownership + fingerprint guards as the replay path (no
-        // privilege-escalation via PK race, no changed-intent replay).
-        if (
-          !prepared.customer?.id ||
-          racedExisting.customer_id !== prepared.customer.id
-        ) {
-          return createErrorResponse(
-            'Idempotency-Key does not belong to this customer.',
-            400
-          );
-        }
-        if (racedExisting.merchant_id !== prepared.merchant.id) {
-          return createErrorResponse(
-            'Idempotency-Key does not belong to this storefront.',
-            400
-          );
-        }
-        if (racedExisting.request_fingerprint !== requestFingerprint) {
-          return createErrorResponse(
-            'Idempotency-Key already used with a different request payload. Generate a fresh key for the new purchase.',
-            409
-          );
-        }
-        // Shared replay tail (guards above compare against the
-        // prepared row instead of the requesting ownership).
-        return fulfillReplayVtuTransaction({
-          authSupabase: auth.supabase,
-          input,
-          keyRow: racedExisting,
-          supabase,
-          user: auth.user,
-        });
-      }
-      // Log internally; don't leak the raw DB error to the client.
-      // The key itself is the unguessable replay credential — log
-      // the prepared transaction id instead (Muse R108 MEDIUM).
-      console.error('Failed to record idempotency key:', {
-        error: insertError.message,
+      return respondToClaimError(claimError, prepared.transaction.id);
+    }
+    const claim = claimRows?.[0];
+    if (!claim) {
+      console.error('VTU intent claim returned no mapping:', {
         transactionId: prepared.transaction.id,
       });
-      return createErrorResponse('Failed to record idempotency key.', 500);
+      return createErrorResponse('Failed to claim VTU purchase intent.', 500);
+    }
+
+    if (claim.transaction_id !== prepared.transaction.id) {
+      // Loser path: another key owns this intent's transaction.
+      // Discard our prepared row (guarded pending→failed +
+      // no-collection marker; no reversal — prepare doesn't
+      // debit), then replay the winner. Same-scope/
+      // same-fingerprint by RPC construction, so no ownership
+      // re-check is needed.
+      await discardOrphanedClaimTransaction({
+        context: 'join',
+        merchantId: prepared.merchant.id,
+        supabase,
+        transactionId: prepared.transaction.id,
+      });
+      // Joins should be rare (registries normally reuse keys); a
+      // join storm signals client key churn — investigate the
+      // registry, not the claim. Transaction IDs only: the winner
+      // key is an unguessable replay credential and must never
+      // reach logs (Codex R2 P2, Muse R108).
+      console.info('VTU intent claim joined in-flight transaction:', {
+        preparedTransactionId: prepared.transaction.id,
+        winnerTransactionId: claim.transaction_id,
+      });
+      const replayResponse = await fulfillReplayVtuTransaction({
+        authSupabase: auth.supabase,
+        input,
+        keyRow: {
+          key: claim.idempotency_key,
+          vtu_transaction_id: claim.transaction_id,
+          customer_id: prepared.customer.id,
+          merchant_id: prepared.merchant.id,
+          request_fingerprint: requestFingerprint,
+        },
+        supabase,
+        user: auth.user,
+      });
+      // Winner-key wire: the loser key maps to the winner
+      // server-side (loser-key retries replay), and clients adopt
+      // the winner key for subsequent retries so every attempt
+      // converges on one key instead of re-preparing + orphaning
+      // per attempt. Same-scope by RPC construction — nothing
+      // cross-principal is disclosed.
+      replayResponse.headers.set(
+        VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER,
+        claim.idempotency_key
+      );
+      return replayResponse;
     }
 
     const fulfillment = await fulfillPendingVtuTransaction({

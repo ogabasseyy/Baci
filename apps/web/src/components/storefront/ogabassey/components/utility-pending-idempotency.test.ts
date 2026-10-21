@@ -17,15 +17,19 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { loadPendingVtuSnapshot } from './utility-pending-idempotency-store';
+import {
+  loadPendingVtuSnapshot,
+} from './utility-pending-idempotency-store';
+import * as vtuStore from './utility-pending-idempotency-store';
 import {
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
 } from './utility-pending-vtu-codec';
 import {
   flushPendingVtuPurchases,
-  forgottenScopedKeys,
+  pendingVtuPurchases,
 } from './utility-pending-vtu-sync';
+import { forgottenScopedKeys } from './utility-pending-vtu-tombstones';
 
 // jsdom ships no navigator.locks, and the mint runner fails closed
 // in multi-tab browsers without it (Codex R152 P1) — pin an
@@ -544,4 +548,5 @@ describe('utility-pending-idempotency', () => {
       expect(record.key).toBe('key-H1');
     }
   });
+
 });

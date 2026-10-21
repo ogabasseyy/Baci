@@ -8,6 +8,7 @@ import type { UtilityPurchaseStep } from './use-utility-purchase';
 import type { UtilityTabId } from './UtilityTabs';
 import { forgetPendingVtuPurchaseDurable } from './utility-pending-idempotency';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
+import { isCurrentVtuGeneration } from './utility-pending-vtu-sync';
 
 type WalletSuccess = Extract<
   UtilityCheckoutResult,
@@ -34,6 +35,23 @@ interface UtilityWalletSuccessOutcomeInput {
   setWalletBalance: Dispatch<SetStateAction<number>>;
   submitAmount: number;
   submitBalance: number;
+}
+
+/**
+ * Generation-bound terminal forget (Codex P1, mobile
+ * forgetOwnPendingVtuPurchaseDurable mirror): a delayed K1
+ * terminal response must not delete a newer K2 minted after
+ * this submit — K2's lost-response retry would mint K3 and
+ * debit again. Skips the mutation when this attempt is no
+ * longer current; presentation still shows the real result.
+ */
+async function forgetCurrentVtuGeneration(
+  scoped: string,
+  key: string | undefined
+): Promise<void> {
+  if (key !== undefined && isCurrentVtuGeneration(scoped, key)) {
+    await forgetPendingVtuPurchaseDurable(scoped);
+  }
 }
 
 /**
@@ -81,7 +99,7 @@ export async function applyUtilityWalletSuccessOutcome({
     if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
       // Stale replay answers a NEW intent with the old vend: forget so
       // the next tap mints fresh, and say so.
-      await forgetPendingVtuPurchaseDurable(scoped);
+      await forgetCurrentVtuGeneration(scoped, attempt?.key);
       toast({
         title: 'Purchase Already Completed',
         description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
@@ -91,10 +109,18 @@ export async function applyUtilityWalletSuccessOutcome({
       return true;
     }
     if (scoped !== undefined) {
-      await forgetPendingVtuPurchaseDurable(scoped);
+      await forgetCurrentVtuGeneration(scoped, attempt?.key);
     }
   } else {
-    if (scoped !== undefined) {
+    // Generation veto (Codex P1): skip the note when a sibling tab
+    // persisted a newer generation — noting on the stale entry
+    // would flush it back over the newer key. The veto adopts the
+    // newer generation into memory.
+    if (
+      scoped !== undefined &&
+      attempt?.key !== undefined &&
+      isCurrentVtuGeneration(scoped, attempt.key)
+    ) {
       noteScopedReference(scoped, result.reference);
     }
     refreshWallet();

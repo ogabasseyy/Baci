@@ -4,88 +4,12 @@ import {
   __resetRateLimitStoreForTesting,
   checkRateLimit,
   createRateLimitResponse,
-  getClientIdentifier,
 } from './rate-limit';
 
 // Mock redis to return null (no Redis available — tests use in-memory fallback)
 vi.mock('./redis', () => ({
   getRedis: () => null,
 }));
-
-function identifiedRequest(headers: Record<string, string> = {}): NextRequest {
-  const req = new NextRequest('http://localhost:3000/api/unknown');
-  for (const [name, value] of Object.entries(headers))
-    req.headers.set(name, value);
-  return req;
-}
-
-describe('getClientIdentifier header trust', () => {
-  it('prefers the platform connection IP when present', () => {
-    const req = identifiedRequest({
-      'x-forwarded-for': '1.1.1.1',
-      'x-real-ip': '2.2.2.2',
-      'x-vercel-forwarded-for': '3.3.3.3',
-    });
-    Object.defineProperty(req, 'ip', { value: '9.9.9.9' });
-
-    expect(getClientIdentifier(req)).toBe('9.9.9.9');
-  });
-
-  it('prefers x-vercel-forwarded-for over x-real-ip and x-forwarded-for', () => {
-    // x-vercel-forwarded-for survives a proxy stacked on top of Vercel,
-    // where x-forwarded-for may be rewritten; on plain Vercel all three
-    // carry the same edge-verified client IP.
-    const req = identifiedRequest({
-      'x-forwarded-for': '1.1.1.1',
-      'x-real-ip': '2.2.2.2',
-      'x-vercel-forwarded-for': '3.3.3.3',
-    });
-
-    expect(getClientIdentifier(req)).toBe('3.3.3.3');
-  });
-
-  it('prefers x-real-ip over x-forwarded-for', () => {
-    const req = identifiedRequest({
-      'x-forwarded-for': '1.1.1.1',
-      'x-real-ip': '7.7.7.7',
-    });
-
-    expect(getClientIdentifier(req)).toBe('7.7.7.7');
-  });
-
-  it('resolves chains to the last valid hop, never the spoofable first entry', () => {
-    // The leftmost XFF entry is client-supplied: resolving .at(0) would
-    // let an attacker mint a fresh bucket per request. Last-hop worst
-    // case shares one bucket behind a proxy (fail-closed).
-    expect(
-      getClientIdentifier(
-        identifiedRequest({ 'x-forwarded-for': '198.51.100.9, 203.0.113.5' })
-      )
-    ).toBe('203.0.113.5');
-    expect(
-      getClientIdentifier(
-        identifiedRequest({ 'x-forwarded-for': 'not-an-ip, 203.0.113.6' })
-      )
-    ).toBe('203.0.113.6');
-    expect(
-      getClientIdentifier(
-        identifiedRequest({
-          'x-vercel-forwarded-for': '198.51.100.9, 203.0.113.7',
-        })
-      )
-    ).toBe('203.0.113.7');
-  });
-
-  it('tolerates padded single-value headers and reports unknown otherwise', () => {
-    expect(
-      getClientIdentifier(identifiedRequest({ 'x-real-ip': '  7.7.7.7  ' }))
-    ).toBe('7.7.7.7');
-    expect(getClientIdentifier(identifiedRequest())).toBe('unknown');
-    expect(
-      getClientIdentifier(identifiedRequest({ 'x-forwarded-for': 'not-an-ip' }))
-    ).toBe('unknown');
-  });
-});
 
 describe('Rate Limit — in-memory fallback', () => {
   beforeEach(() => {

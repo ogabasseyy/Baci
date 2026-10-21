@@ -101,11 +101,38 @@ DO $$ DECLARE bad_seen boolean := false; null_seen boolean := false; BEGIN
   END IF;
 END $$;
 
--- Exactly twelve rows persisted (10 + origin-B + sibling merchant).
+-- Cross-overload retries during rollout: a request admitted through the
+-- deprecated 4-arg shim retries cleanly through the 5-arg RPC under the
+-- same id (and vice versa), consuming no network budget either way.
+SELECT public.submit_storefront_product_request(
+  'intake-net-b', 'Need shim crossover', 'netbudget-shim@example.com',
+  '02d00000-0000-4000-8000-000000000305');
+SELECT public.submit_storefront_product_request(
+  'intake-net-b', 'Need shim crossover', 'netbudget-shim@example.com',
+  '02d00000-0000-4000-8000-000000000305',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+SELECT public.submit_storefront_product_request(
+  'intake-net-b', 'Need shim reverse', 'netbudget-reverse@example.com',
+  '02d00000-0000-4000-8000-000000000306',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+SELECT public.submit_storefront_product_request(
+  'intake-net-b', 'Need shim reverse', 'netbudget-reverse@example.com',
+  '02d00000-0000-4000-8000-000000000306');
+DO $$ BEGIN
+  -- Merchant B admitted exactly twice (sibling + reverse); both same-id
+  -- crossover retries consumed nothing.
+  IF (SELECT COALESCE(sum(request_count), 0)
+      FROM storefront_search_private.intake_net_windows
+      WHERE merchant_id = '02d00000-0000-4000-8000-000000000012') <> 2 THEN
+    RAISE EXCEPTION 'crossover retries must not consume network budget';
+  END IF;
+END $$;
+
+-- Exactly fourteen rows persisted (10 + origin-B + sibling merchant + 2 crossover).
 DO $$ BEGIN
   IF (SELECT count(*) FROM public.storefront_product_requests
       WHERE merchant_id IN ('02d00000-0000-4000-8000-000000000011',
-                            '02d00000-0000-4000-8000-000000000012')) <> 12 THEN
-    RAISE EXCEPTION 'expected exactly 12 intake rows';
+                            '02d00000-0000-4000-8000-000000000012')) <> 14 THEN
+    RAISE EXCEPTION 'expected exactly 14 intake rows';
   END IF;
 END $$;

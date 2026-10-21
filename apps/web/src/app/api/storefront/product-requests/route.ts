@@ -3,10 +3,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
 import { getClientIdentifier } from '@/lib/rate-limit';
-import {
-  hashIntakeCallerNet,
-  submitStorefrontProductRequest,
-} from '@/lib/storefront/server-intake-client';
+import { hashIntakeCallerNet } from '@/lib/storefront/hash-intake-caller-net';
+import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
 
 // Public intake threat model. This route exercises no session authority: it
 // forwards Zod-validated input to the restricted storefront_intake RPC, so

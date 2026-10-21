@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/storefront/server-intake-client', () => ({
   submitStorefrontProductRequest: mocks.submit,
+}));
+vi.mock('@/lib/storefront/hash-intake-caller-net', () => ({
   hashIntakeCallerNet: mocks.hashNet,
 }));
 vi.mock('@/lib/logger', () => ({

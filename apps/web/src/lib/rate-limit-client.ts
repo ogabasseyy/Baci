@@ -14,15 +14,16 @@ function isValidIP(ip: string): boolean {
   return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
 }
 
-function lastValidChainIp(value: string | null): string | null {
+function finalChainIp(value: string | null): string | null {
+  // Only the FINAL entry is ever returned: every earlier entry is
+  // attacker-supplied, so falling back to one when the final entry is
+  // invalid would let a caller choose its own bucket with a
+  // '<chosen-ip>, garbage' chain. An invalid final entry returns null
+  // and the caller falls through to the next signal (fail-closed).
   if (!value) return null;
-  const ips = value.split(',').map((ip) => ip.trim());
-  for (let i = ips.length - 1; i >= 0; i--) {
-    const candidate = ips[i];
-    if (candidate && isValidIP(candidate)) {
-      return candidate;
-    }
-  }
+  const entries = value.split(',');
+  const final = entries[entries.length - 1]?.trim();
+  if (final && isValidIP(final)) return final;
   return null;
 }
 
@@ -43,24 +44,28 @@ export function getClientIdentifier(request: NextRequest): string {
   // same value, so none of them is client-spoofable in production. Trust
   // holds ONLY behind such an overwriting edge: self-hosted or
   // direct-to-origin traffic can mint a fresh header value per request and
-  // rotate buckets at will. x-vercel-forwarded-for is read first because
-  // it survives a proxy stacked on top of Vercel, where x-forwarded-for
-  // may be rewritten; on plain Vercel all three carry the same IP.
-  // Multi-entry chains resolve to the LAST valid hop, never the first:
-  // the leftmost entry is client-supplied, so .at(0) would let an attacker
-  // mint a fresh identity per request and bypass the limiter entirely,
-  // while last-hop worst case shares one bucket behind a proxy
-  // (fail-closed). Callers without any usable signal share the single
-  // 'unknown' bucket, which exhausts fast by design.
-  const vercelForwarded = lastValidChainIp(
-    request.headers.get('x-vercel-forwarded-for')
-  );
-  if (vercelForwarded) return vercelForwarded;
+  // rotate buckets at will, so these signals are advisory there.
+  // x-vercel-forwarded-for is read first because it survives a proxy
+  // stacked on top of Vercel, where x-forwarded-for may be rewritten; on
+  // plain Vercel all three carry the same IP. It is gated on VERCEL so a
+  // non-Vercel caller cannot mint it as an extra rotation vector.
+  // Multi-entry chains resolve to the FINAL entry only, never an earlier
+  // one: every earlier entry is client-supplied, so scanning back past an
+  // invalid final entry would let an attacker choose its own bucket, while
+  // an invalid final entry falls through to the next signal (fail-closed).
+  // Callers without any usable signal share the single 'unknown' bucket,
+  // which exhausts fast by design.
+  if (process.env.VERCEL === '1') {
+    const vercelForwarded = finalChainIp(
+      request.headers.get('x-vercel-forwarded-for')
+    );
+    if (vercelForwarded) return vercelForwarded;
+  }
 
   const realIp = request.headers.get('x-real-ip');
   if (realIp && isValidIP(realIp.trim())) return realIp.trim();
 
-  const forwarded = lastValidChainIp(request.headers.get('x-forwarded-for'));
+  const forwarded = finalChainIp(request.headers.get('x-forwarded-for'));
   if (forwarded) return forwarded;
 
   return 'unknown';

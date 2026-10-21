@@ -18,24 +18,31 @@
 -- owner-gated scarce caller signal (CAPTCHA/proof-of-work), not a
 -- header, cookie, or token check — see the intake route threat model.
 --
--- Signature change: the RPC gains p_caller_net_hash (HMAC hex). The old
--- 4-argument signature is dropped (no backward-compatible overload: a
--- hash-less entrypoint would skip the budget it exists to enforce) and
--- the storefront_intake-only grant is re-applied to the new signature.
+-- Signature change (expand-contract): the RPC gains p_caller_net_hash
+-- (HMAC hex). The old 4-argument overload is deliberately RETAINED: deploys
+-- apply migrations before the Vercel route revision, so dropping it here
+-- would 500 every intake submission from still-running old route instances
+-- until the new revision serves 100% of traffic. The retained overload
+-- skips the network budget (merchant/contact budgets still bind); it is a
+-- deprecated rollout shim, removal tracked in #3750 once the new route is
+-- fully live. The storefront_intake-only grant is applied to the new
+-- signature; the old grant persists untouched on the old signature.
 BEGIN;
 
-CREATE TABLE storefront_search_private.intake_net_windows (
+CREATE TABLE IF NOT EXISTS storefront_search_private.intake_net_windows (
   merchant_id uuid NOT NULL,
   net_hash text NOT NULL CHECK (char_length(net_hash) = 64),
   window_start timestamptz NOT NULL,
   request_count integer NOT NULL DEFAULT 0 CHECK (request_count >= 0),
   PRIMARY KEY (merchant_id, net_hash, window_start)
 );
+-- Least-privilege ledger: RLS on with no policies (deny-by-default for
+-- non-owners; the SECURITY DEFINER owner path bypasses RLS), plus
+-- explicit revokes. storefront_search_private is not PostgREST-exposed.
+ALTER TABLE storefront_search_private.intake_net_windows ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON storefront_search_private.intake_net_windows FROM PUBLIC, anon, authenticated, service_role;
 
-DROP FUNCTION IF EXISTS public.submit_storefront_product_request(text, text, text, uuid);
-
-CREATE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid, p_caller_net_hash text)
+CREATE OR REPLACE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid, p_caller_net_hash text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_merchant uuid; v_existing public.storefront_product_requests; v_query text := btrim(p_query); v_contact text := btrim(p_contact); v_contact_key text; v_window_start timestamptz; v_net_count integer;
 BEGIN
@@ -60,12 +67,13 @@ BEGIN
     RAISE EXCEPTION 'Request conflict' USING ERRCODE = '23505';
   END IF;
   IF EXISTS (SELECT 1 FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND storefront_search_private.normalize_request_query_key(query) = storefront_search_private.normalize_request_query_key(v_query) AND created_at > now() - interval '24 hours') THEN RETURN; END IF;
-  -- Durable network-origin budget: fixed hourly window, expired windows for
-  -- this merchant pruned on each admission (only the current window is ever
-  -- read, so steady-state storage is one row per active origin per hour).
-  -- Retries and 24h dedup hits returned above consume no budget.
+  -- Durable network-origin budget: fixed hourly window, ALL expired
+  -- windows pruned on each admission (only the current window is ever
+  -- read, so steady-state storage is one row per active origin per hour,
+  -- including merchants that went inactive). Retries and 24h dedup hits
+  -- returned above consume no budget.
   v_window_start := date_trunc('hour', now());
-  DELETE FROM storefront_search_private.intake_net_windows WHERE merchant_id = v_merchant AND window_start < v_window_start;
+  DELETE FROM storefront_search_private.intake_net_windows WHERE window_start < v_window_start;
   SELECT request_count INTO v_net_count FROM storefront_search_private.intake_net_windows WHERE merchant_id = v_merchant AND net_hash = p_caller_net_hash AND window_start = v_window_start;
   IF (SELECT count(*) FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND created_at > now() - interval '1 hour') >= 50
     OR (SELECT count(*) FROM public.storefront_product_requests WHERE merchant_id = v_merchant AND storefront_search_private.normalize_request_contact_key(contact) = v_contact_key AND created_at > now() - interval '1 hour') >= 3
@@ -77,9 +85,10 @@ BEGIN
   ON CONFLICT (merchant_id, net_hash, window_start) DO UPDATE SET request_count = storefront_search_private.intake_net_windows.request_count + 1;
 END; $$;
 
--- Least-privilege intake, superseding the 4-argument grant in
+-- Least-privilege intake, mirroring the 4-argument grant in
 -- 20261004170500_restrict_storefront_product_request_intake.sql: only the
--- NOINHERIT/NOBYPASSRLS storefront_intake role may execute the submit RPC.
+-- NOINHERIT/NOBYPASSRLS storefront_intake role may execute the submit RPC,
+-- on either signature while the deprecated 4-arg rollout shim lives (#3750).
 REVOKE ALL ON FUNCTION public.submit_storefront_product_request(text, text, text, uuid, text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_storefront_product_request(text, text, text, uuid, text) TO storefront_intake;
 NOTIFY pgrst, 'reload schema';

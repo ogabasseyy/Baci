@@ -152,6 +152,6 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
   {
     repositoryPath:
       'supabase/migrations/20261021120000_storefront_product_request_net_budget.sql',
-    sha256: 'a58481b5d0746d998bb38e5a5567cfa3a3a9cc45e6ae820825d904c6ae33445d',
+    sha256: '545a6578ef7f9eefb81db7f4dc35c01f1e000ccf34fc04d6bd86b7605e2bb1de',
   },
 ];

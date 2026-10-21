@@ -38,6 +38,84 @@ describe('getClientIdentifier', () => {
   });
 });
 
+describe('getClientIdentifier header trust', () => {
+  it('prefers the platform connection IP when present', () => {
+    const req = requestWith({
+      'x-forwarded-for': '1.1.1.1',
+      'x-real-ip': '2.2.2.2',
+      'x-vercel-forwarded-for': '3.3.3.3',
+    });
+    Object.defineProperty(req, 'ip', { value: '9.9.9.9' });
+
+    expect(getClientIdentifier(req)).toBe('9.9.9.9');
+  });
+
+  it('prefers x-vercel-forwarded-for over x-real-ip and x-forwarded-for on Vercel', () => {
+    // x-vercel-forwarded-for survives a proxy stacked on top of Vercel,
+    // where x-forwarded-for may be rewritten; on plain Vercel all three
+    // carry the same edge-verified client IP.
+    vi.stubEnv('VERCEL', '1');
+
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '1.1.1.1',
+          'x-real-ip': '2.2.2.2',
+          'x-vercel-forwarded-for': '3.3.3.3',
+        })
+      )
+    ).toBe('3.3.3.3');
+  });
+
+  it('ignores x-vercel-forwarded-for off Vercel', () => {
+    // Off Vercel the header is client-mintable per request, so it must
+    // not outrank the other signals as a rotation vector.
+    vi.stubEnv('VERCEL', '');
+
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '1.1.1.1',
+          'x-real-ip': '2.2.2.2',
+          'x-vercel-forwarded-for': '3.3.3.3',
+        })
+      )
+    ).toBe('2.2.2.2');
+  });
+
+  it('resolves chains to the final entry only, never an earlier one', () => {
+    // Every earlier entry is client-supplied: scanning back past an
+    // invalid final entry would let an attacker choose its own bucket
+    // with a '<chosen-ip>, garbage' chain. An invalid final entry falls
+    // through to the next signal instead (fail-closed).
+    expect(
+      getClientIdentifier(
+        requestWith({ 'x-forwarded-for': '198.51.100.9, 203.0.113.5' })
+      )
+    ).toBe('203.0.113.5');
+    expect(
+      getClientIdentifier(
+        requestWith({ 'x-forwarded-for': 'not-an-ip, 203.0.113.6' })
+      )
+    ).toBe('203.0.113.6');
+    expect(
+      getClientIdentifier(
+        requestWith({ 'x-forwarded-for': '203.0.113.6, not-an-ip' })
+      )
+    ).toBe('unknown');
+  });
+
+  it('tolerates padded single-value headers and reports unknown otherwise', () => {
+    expect(
+      getClientIdentifier(requestWith({ 'x-real-ip': '  7.7.7.7  ' }))
+    ).toBe('7.7.7.7');
+    expect(getClientIdentifier(requestWith({}))).toBe('unknown');
+    expect(
+      getClientIdentifier(requestWith({ 'x-forwarded-for': 'not-an-ip' }))
+    ).toBe('unknown');
+  });
+});
+
 describe('getTrustedClientIdentifier', () => {
   it('never trusts x-forwarded-for', () => {
     expect(

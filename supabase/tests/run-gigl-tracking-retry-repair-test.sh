@@ -130,7 +130,7 @@ PATH="$fixture_root/bin:$PATH" \
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 \
   < "$repo_root/supabase/tests/gigl_tracking_retry_repair.sql"
 
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 <<'SQL'
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -h 127.0.0.1 <<'SQL'
 DO $$
 DECLARE
   joined_statement_digest text;

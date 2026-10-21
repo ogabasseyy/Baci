@@ -2,6 +2,10 @@ import { useIsFocused } from 'expo-router';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import {
+  cartPairingRevision,
+  peekCartPairingLink,
+} from '@/lib/cart/pairing-link';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
@@ -38,6 +42,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
     pending.current = true;
     setIsPreparing(true);
     const writeRevision = sharedCartWriteRevision();
+    const pairingRevision = cartPairingRevision();
     const sessionAtStart = session.current;
     try {
       const result = await prepareCartCheckout(
@@ -48,6 +53,13 @@ export function useCartCheckoutRecovery(onReady: () => void) {
         Alert.alert(
           'Cart session changed',
           'Your account or store changed. Tap Checkout again to continue with your current cart.'
+        );
+        return;
+      }
+      if (pairingRevision !== cartPairingRevision() || peekCartPairingLink()) {
+        Alert.alert(
+          'Choose your cart',
+          'Review or close the incoming cart link, then tap Checkout again.'
         );
         return;
       }

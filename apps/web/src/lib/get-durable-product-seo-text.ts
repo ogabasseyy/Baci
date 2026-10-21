@@ -13,7 +13,9 @@ import {
 const MAX_SOURCE_LENGTH = 20_000;
 const MAX_NAME_LENGTH = 1_000;
 const QUANTITY_UNIT =
-  /^\s*(?:photos?|songs?|files?|people|users?|models?|colou?rs?|options?|years?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+const MODIFIED_COUNT_UNIT =
+  /^\s+(?:[\p{L}-]+\s+){1,2}(?:models?|colou?rs?|options?|sizes?|picks?)\b/iu;
 // These ISO spellings are also ordinary words, unlike unambiguous usd/ngn.
 const LEXICAL_CURRENCY_CODES = new Set([
   'ALL',
@@ -46,17 +48,29 @@ function retailRelation(text: string, start: number) {
   return {
     cue,
     predicate,
+    separator: /^\s*[:–—-]?\s*$/.test(clause),
     strong: /^(?:price|cost|priced|start|pay|only)/i.test(cue),
-    purchase: /\b(?:buy|purchase|shop|get)\b/i.test(clause),
+    purchase:
+      /\b(?:buy|purchase)\b/i.test(clause) ||
+      /\b(?:get(?!\s+(?:ready|prepared|started)\b)|shop)(?:\s+[^.!?;\n]{1,80})?\s+for\s*$/i.test(
+        clause
+      ),
   };
 }
 
 function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
   const relation = retailRelation(text, candidate.start);
-  const quantity = QUANTITY_UNIT.test(text.slice(candidate.end));
   const rawAmount = candidate.rawAmount.replace(/[.,]+$/, '');
+  const tail = text.slice(candidate.end);
+  const quantity =
+    QUANTITY_UNIT.test(tail) ||
+    (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
   if (!candidate.marker) {
-    if ((!relation.cue && !relation.predicate) || quantity) return false;
+    if (
+      (!relation.cue && !relation.predicate && !relation.separator) ||
+      quantity
+    )
+      return false;
     return (
       relation.predicate ||
       relation.strong ||
@@ -74,11 +88,7 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
       isIsoCode &&
       !relation.strong &&
       !relation.predicate &&
-      !(
-        candidate.marker === candidate.marker.toUpperCase() &&
-        !quantity &&
-        (/[,km]/i.test(rawAmount) || rawAmount.replace(/\D/g, '').length >= 5)
-      ) &&
+      !(candidate.marker === candidate.marker.toUpperCase() && !quantity) &&
       !(relation.purchase && relation.cue === 'for' && !quantity)
     )
       return false;
@@ -119,7 +129,6 @@ function isDenomination(
 ): boolean {
   if (
     !candidate.marker ||
-    candidate.amount === null ||
     retailRelation(text, candidate.start).cue ||
     retailRelation(text, candidate.start).predicate
   )
@@ -127,7 +136,12 @@ function isDenomination(
   if (
     !denominations.some(
       (value) =>
-        value.amount === candidate.amount &&
+        (value.amount !== null && candidate.amount !== null
+          ? value.amount === candidate.amount
+          : value.amount === null &&
+            candidate.amount === null &&
+            value.rawAmount.replace(/[.,]+$/, '').toLowerCase() ===
+              candidate.rawAmount.replace(/[.,]+$/, '').toLowerCase()) &&
         value.currencies.some((code) => candidate.currencies.includes(code))
     )
   )

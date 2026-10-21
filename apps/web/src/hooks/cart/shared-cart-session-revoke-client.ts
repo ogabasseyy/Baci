@@ -161,12 +161,18 @@ export async function revokeCartDeviceSession(
     fenceOnFailure?: boolean;
     signal?: AbortSignal;
     drainActiveWrites?: boolean;
+    deferCacheErasure?: boolean;
   }
 ): Promise<{ ok: boolean }> {
   const request = () =>
     withCartRequestDeadline(
       { ok: false },
-      (signal) => requestDeviceRevocation(merchantSlug, signal),
+      (signal) =>
+        requestDeviceRevocation(
+          merchantSlug,
+          signal,
+          options?.deferCacheErasure
+        ),
       options?.signal
     );
   // Passive cleanup must never request an exclusive lock while running
@@ -193,7 +199,8 @@ export async function revokeCartDeviceSession(
 }
 async function requestDeviceRevocation(
   merchantSlug: string | null | undefined,
-  signal: AbortSignal
+  signal: AbortSignal,
+  deferCacheErasure?: boolean
 ): Promise<{ ok: boolean }> {
   try {
     const response = await fetchWithCsrf(revokeRoute(merchantSlug), {
@@ -219,8 +226,11 @@ async function requestDeviceRevocation(
     if (ok) {
       // A pending retirement parks the previous account's cache. Erase it
       // before releasing access: provisioning and preserved-session adoption
-      // read this key directly after passive revocation succeeds.
+      // read this key directly after passive revocation succeeds. Logout
+      // defers this until the auth logout commits, so a failed logout
+      // keeps the saved device cart for the still-signed-in customer.
       if (
+        !deferCacheErasure &&
         isCartDeviceRevocationPending(merchantSlug) &&
         typeof window !== 'undefined'
       ) {

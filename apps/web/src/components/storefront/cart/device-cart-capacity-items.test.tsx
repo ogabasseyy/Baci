@@ -208,6 +208,7 @@ it('fences the merchant session when removing a capacity line', () => {
     [cartItem({ id: 'charger', cartItemId: 'charger', name: 'Charger' })],
     'shop'
   );
+  window.localStorage.setItem('baci-cart-authority-epoch:shop', 'before');
   render(<DeviceCartCapacityItems merchantSlug="shop" />);
   const shopBefore = getCartSessionGeneration('shop');
   const otherBefore = getCartSessionGeneration('other-shop');
@@ -215,4 +216,8 @@ it('fences the merchant session when removing a capacity line', () => {
   expect(getCartFromStorage('shop')).toEqual([]);
   expect(getCartSessionGeneration('shop')).toBeGreaterThan(shopBefore);
   expect(getCartSessionGeneration('other-shop')).toBe(otherBefore);
+  // The shared epoch rotates so other tabs fence their cloned creates.
+  expect(
+    window.localStorage.getItem('baci-cart-authority-epoch:shop')
+  ).not.toBe('before');
 });

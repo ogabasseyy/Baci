@@ -236,7 +236,9 @@ export async function performCustomerLogout(
   bumpCartSessionGeneration({ merchantSlug });
   try {
     const revoked = await retirement.drained
-      .then(() => revokeCartDeviceSession(merchantSlug))
+      .then(() =>
+        revokeCartDeviceSession(merchantSlug, { deferCacheErasure: true })
+      )
       .catch(() => ({ ok: false }));
     if (!revoked.ok)
       throw new Error(

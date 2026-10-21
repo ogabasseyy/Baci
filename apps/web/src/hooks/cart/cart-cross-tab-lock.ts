@@ -21,6 +21,18 @@ function invalidateEpoch(
   bumpCartSessionGeneration(slug ? { merchantSlug: slug } : undefined);
 }
 export const hasActiveCartCookieWrite = () => activeWrites > 0;
+/** Fence device-cache edits across tabs: rotate the shared epoch so
+ * other tabs bump their session generation and discard cloned creates. */
+export function rotateCartCookieEpoch(slug?: string | null): void {
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(epochKey(slug), crypto.randomUUID());
+    } catch {
+      // Storage denial still fences this tab via the generation below.
+    }
+  }
+  bumpCartSessionGeneration(slug ? { merchantSlug: slug } : undefined);
+}
 
 /** Whether this browser can coordinate shared-cart writes across tabs. */
 export function isCartCrossTabLockSupported(): boolean {

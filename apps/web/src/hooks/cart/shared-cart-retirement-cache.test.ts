@@ -90,6 +90,22 @@ it('retains the parked cache and fence when passive revocation fails', async () 
   expect(getCartFromStorage(SLUG)).toHaveLength(1);
 });
 
+it('defers cache erasure when the caller must commit first', async () => {
+  const real = await vi.importActual<
+    typeof import('./shared-cart-session-revoke-client')
+  >('./shared-cart-session-revoke-client');
+  saveCartToStorage([cartItem({ name: 'Saved device item' })], SLUG);
+  markCartDeviceRevocationPending(SLUG);
+  vi.mocked(fetchWithCsrf).mockResolvedValue(
+    new Response(JSON.stringify({ revoked: true }), { status: 200 })
+  );
+  await expect(
+    real.revokeCartDeviceSession(SLUG, { deferCacheErasure: true })
+  ).resolves.toEqual({ ok: true });
+  expect(getCartFromStorage(SLUG)).toHaveLength(1);
+  expect(real.isCartDeviceRevocationPending(SLUG)).toBe(false);
+});
+
 it('keeps the fence when restricted storage prevents removing the retired cache', async () => {
   const real = await vi.importActual<
     typeof import('./shared-cart-session-revoke-client')

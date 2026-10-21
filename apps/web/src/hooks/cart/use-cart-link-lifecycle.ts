@@ -264,6 +264,17 @@ export function useCartLinkLifecycle(
             type: 'snapshot/polled',
           });
           void hydrateMissing(result.snapshot);
+          // A polled terminal leaves preserved device lines only in
+          // storage; provision the replacement cart now instead of
+          // stranding them until the shopper's next mutation.
+          if (isTerminalCart(result.snapshot)) {
+            const preserved = unimportedTerminalLines(
+              getCartFromStorage(optionsRef.current.merchantSlug),
+              result.snapshot.cartId,
+              getSharedCartImportReceipt(optionsRef.current.merchantSlug)
+            );
+            if (preserved.length > 0) void context.ensureCart();
+          }
         }
       }
       schedule();

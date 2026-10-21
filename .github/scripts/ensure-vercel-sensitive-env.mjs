@@ -238,8 +238,10 @@ async function createSensitiveTargetEnv(envKey, value, envTarget) {
       failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
 
-    const listed = asRecords(listedPayload).filter((row) => row?.key === envKey);
-    if (listed.length !== 1 || !targetSensitiveRecord(listed[0], envKey, envTarget)) {
+    const listed = asRecords(listedPayload).filter((row) =>
+      targetSensitiveRecord(row, envKey, envTarget),
+    );
+    if (listed.length !== 1) {
       failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
   } finally {

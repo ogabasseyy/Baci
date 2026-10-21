@@ -127,7 +127,13 @@ function succeedPreviewCreate({ method, res }) {
     return;
   }
 
-  res.end(JSON.stringify({ envs: [targetRecord('preview')] }));
+  // The sibling Production record already exists: confirmation must
+  // filter by target or the second target's first run fails closed.
+  res.end(
+    JSON.stringify({
+      envs: [targetRecord('production', 'env_existing'), targetRecord('preview')],
+    }),
+  );
 }
 
 test('no-ops when the pulled Production key is already defined', async () => {

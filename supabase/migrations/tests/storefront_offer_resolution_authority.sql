@@ -17,7 +17,7 @@ VALUES ('31000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-00000000
 ('31000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','authority flag off','active',100,5,5,true,false,false),
 ('31000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','authority unmanaged','active',100,0,0,false,false,true),
 ('31000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000001','authority stray variant','active',100,5,5,true,false,true),
-('31000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','authority inactive','inactive',100,5,5,true,false,true);
+('31000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','authority archived','archived',100,5,5,true,false,true);
 -- Chunk page: 201 live products of one merchant, so the scoped call
 -- must slice the serialized-count page (200 ids) instead of tripping
 -- its too_many_product_ids guard.
@@ -62,9 +62,9 @@ BEGIN
  -- The finite scalar binds even on unmanaged parents.
  SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000004']::uuid[]);
  IF n <> 2 THEN RAISE EXCEPTION 'unmanaged parent must not lift the offer scalar'; END IF;
- -- Inactive products resolve nothing.
+ -- Non-active products resolve nothing.
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000006']::uuid[]);
- IF n <> 0 THEN RAISE EXCEPTION 'inactive product must resolve nothing'; END IF;
+ IF n <> 0 THEN RAISE EXCEPTION 'archived product must resolve nothing'; END IF;
  -- Merchant scoping: wrong merchant resolves nothing, NULL stays unscoped.
  SELECT count(*) INTO n FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-999999999999', ARRAY['31000000-0000-4000-8000-000000000001']::uuid[]);
  IF n <> 0 THEN RAISE EXCEPTION 'foreign merchant must resolve nothing'; END IF;

@@ -30,6 +30,24 @@ describe('receipt claim RPC schemas', () => {
     ).toBe(true);
   });
 
+  it('accepts trimmed preview records without the retired identity fields', () => {
+    // The anon preview payload no longer carries top-level customer_id,
+    // merchant_id, or claimed_by_user_id; the loader must parse the
+    // trimmed shape (and the legacy full shape above keeps parsing for
+    // mixed-version rollout pairs).
+    expect(
+      receiptClaimRecordSchema.safeParse({
+        claimed_at: null,
+        customer_email: 'ada@example.com',
+        customer_name: 'Ada',
+        expires_at: '2099-01-01T00:00:00.000Z',
+        id: 'claim-1',
+        merchant: { business_name: 'Ogabassey', slug: 'ogabassey' },
+        orders: [],
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects malformed preview claim records', () => {
     expect(
       receiptClaimRecordSchema.safeParse({

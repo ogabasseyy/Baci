@@ -2,6 +2,7 @@ import {
   MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,
 } from '../money/currency-locales';
+import type { MoneyFormatter } from '../money/money-formatter';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused

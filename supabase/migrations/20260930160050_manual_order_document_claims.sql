@@ -158,7 +158,21 @@ BEGIN
     notification_sent_at = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
         OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
       THEN NULL ELSE receipt_claims.notification_sent_at END,
-    expires_at = now() + interval '90 days', updated_at = now()
+    -- Rotation must not extend the life of already-mailed Bearer [REDACTED]: the
+    -- retained previous/delivered hashes stay redeemable until expires_at,
+    -- so an unconditional reset would push a mailed link past the
+    -- documented 90-day bound on every corrective retry. Advance the clock
+    -- only when no send was ever accepted for this row (nothing mailed yet)
+    -- or when staff corrected the order to a different recipient (whose
+    -- historical hashes are revoked outright above, so the fresh clock
+    -- cannot extend anyone else's access). Same-recipient retries after an
+    -- accepted send keep the original bound; a deliberate resend mints a
+    -- fresh claim row with its own 90 days.
+    expires_at = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+        OR receipt_claims.notification_sent_at IS NULL
+      THEN now() + interval '90 days' ELSE receipt_claims.expires_at END,
+    updated_at = now()
   RETURNING id INTO v_claim_id;
   IF v_claim_id IS NULL THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
   INSERT INTO public.receipt_claim_orders (receipt_claim_id, order_id)

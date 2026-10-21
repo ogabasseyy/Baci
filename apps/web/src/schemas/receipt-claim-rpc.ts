@@ -233,14 +233,17 @@ function normalizeReceiptClaimCampaignStats(value: unknown) {
 
 export const receiptClaimRecordSchema = z.object({
   claimed_at: z.string().nullable(),
-  claimed_by_user_id: z.string().nullable(),
+  // Retired from the anon preview payload (nothing consumes them): kept
+  // nullish so mixed-version rollout pairs still parse in both directions,
+  // exactly like document_kind above.
+  claimed_by_user_id: z.string().nullish(),
   customer_email: z.string(),
-  customer_id: z.string(),
+  customer_id: z.string().nullish(),
   customer_name: z.string().nullable(),
   document_kind: z.enum(['invoice', 'proforma_invoice', 'receipt']).nullish(),
   expires_at: z.string(),
   id: z.string(),
-  merchant_id: z.string(),
+  merchant_id: z.string().nullish(),
   merchant: receiptClaimMerchantSchema.nullable().optional(),
   orders: z.array(receiptClaimOrderSchema).nullable().optional(),
 });

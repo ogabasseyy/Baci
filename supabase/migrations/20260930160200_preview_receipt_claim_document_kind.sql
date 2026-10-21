@@ -126,15 +126,18 @@ BEGIN
     INTO v_document_kind;
   END IF;
 
+  -- The anon-facing payload carries only what the claim UI renders:
+  -- top-level customer/merchant UUIDs and the redeemer id are consumed by
+  -- no caller (the server loader reads claimed_at, customer_name, and the
+  -- login-hint email), so they stay out of the directly invocable anon
+  -- surface. customer_email remains solely as the server-side login-hint
+  -- input and never reaches the client unmasked.
   RETURN jsonb_build_object(
     'id', v_claim.id,
-    'merchant_id', v_claim.merchant_id,
-    'customer_id', v_claim.customer_id,
     'customer_email', v_claim.customer_email,
     'customer_name', v_claim.customer_name,
     'expires_at', v_claim.expires_at,
     'claimed_at', v_claim.claimed_at,
-    'claimed_by_user_id', v_claim.claimed_by_user_id,
     'document_kind', v_document_kind,
     'merchant', v_merchant,
     'orders', v_orders

@@ -245,3 +245,34 @@ SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('c4', 32), 'web
 RESET ROLE;
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.customers WHERE merchant_id = '10000000-0000-4000-8000-000000000001' AND lower(btrim(email)) = 'caseuser@example.com'), 'case-variant redeem creates exactly one row');
 SELECT pg_temp.assert_true((SELECT email = 'caseuser@example.com' FROM public.customers WHERE merchant_id = '10000000-0000-4000-8000-000000000001' AND lower(btrim(email)) = 'caseuser@example.com'), 'redeemed row stores the normalized email');
+-- Rotation after an accepted send must not extend mailed-link lifetime:
+-- retained previous/delivered hashes stay valid only until the original
+-- 90-day bound, while a never-mailed row and a corrected recipient still
+-- get a fresh clock.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000120', '10000000-0000-4000-8000-000000000001', 'expiry@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000121', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000120', '10000000-0000-4000-8000-000000000010', 'expiry@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000121', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000121' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000121' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('a7', 32))->>'status' = 'created'), 'expiry-probe claim created');
+SELECT pg_temp.assert_true((SELECT expires_at BETWEEN now() AND now() + interval '90 days' + interval '1 minute' FROM public.receipt_claims WHERE token_hash = repeat('a7', 32)), 'fresh claim gets a 90-day bound');
+-- now() is frozen for the whole harness transaction, so backdate the bound
+-- by a day: only then can the assertions below distinguish "kept" from
+-- "advanced to now() + 90 days".
+UPDATE public.receipt_claims SET expires_at = expires_at - interval '1 day' WHERE token_hash = repeat('a7', 32);
+CREATE TEMP TABLE exp_probe AS SELECT id AS claim_id, expires_at AS e FROM public.receipt_claims WHERE token_hash = repeat('a7', 32);
+SELECT public.mark_manual_document_claim_sent((SELECT claim_id FROM exp_probe), '10000000-0000-4000-8000-000000000001', repeat('a7', 32));
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000121' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('b7', 32))->>'status' = 'created'), 'same-recipient retry rotates');
+SELECT pg_temp.assert_true((SELECT previous_token_hash = repeat('a7', 32) AND delivered_token_hash = repeat('a7', 32) FROM public.receipt_claims WHERE token_hash = repeat('b7', 32)), 'retry retains mailed hashes as fallbacks');
+SELECT pg_temp.assert_true((SELECT expires_at = (SELECT e FROM exp_probe) FROM public.receipt_claims WHERE token_hash = repeat('b7', 32)), 'rotation after accepted send keeps the original bound');
+UPDATE public.orders SET customer_email = 'moved@example.com' WHERE id = '10000000-0000-4000-8000-000000000121';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000121' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000121' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('c7', 32))->>'status' = 'created'), 'corrected-recipient retry rotates');
+SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL AND delivered_token_hash IS NULL FROM public.receipt_claims WHERE token_hash = repeat('c7', 32)), 'recipient correction revokes historical hashes');
+SELECT pg_temp.assert_true((SELECT expires_at > (SELECT e FROM exp_probe) FROM public.receipt_claims WHERE token_hash = repeat('c7', 32)), 'corrected recipient gets a fresh clock');
+DROP TABLE exp_probe;
+-- The anon preview payload carries only rendered fields: retired top-level
+-- identity UUIDs stay out of the directly invocable anon surface, while
+-- the login-hint email and rendered claim fields remain.
+SELECT pg_temp.assert_true((SELECT p IS NOT NULL AND NOT (p ? 'customer_id') AND NOT (p ? 'merchant_id') AND NOT (p ? 'claimed_by_user_id') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview omits retired identity fields');
+SELECT pg_temp.assert_true((SELECT (p ? 'customer_email') AND (p ? 'customer_name') AND (p ? 'orders') AND (p ? 'merchant') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview keeps rendered fields');

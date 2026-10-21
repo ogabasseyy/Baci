@@ -13,7 +13,10 @@ The existing CRON_SECRET-authenticated `/api/cron/order-notifications` worker se
 a branded email with a PDF attachment and a website claim link. Ogabassey also
 gets optional app links; other tenants do not get Ogabassey promotion. Claim links
 store only the SHA-256 token hash, expire after 90 days and link only the matching
-merchant/customer's orders after purchase-email verification. Both legacy and v2
+merchant/customer's orders after purchase-email verification. Corrective retries
+rotate the token but keep the original 90-day bound once a send was accepted, so
+retained previous/delivered links cannot outlive it; only a never-mailed row or a
+corrected recipient (whose historical hashes are revoked) gets a fresh clock. Both legacy and v2
 redemption enforce the live `auth.users` email and confirmation state.
 
 Pre-dispatch failures use the existing bounded outbox retry policy. A response

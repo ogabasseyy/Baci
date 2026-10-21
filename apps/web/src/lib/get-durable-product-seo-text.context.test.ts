@@ -57,6 +57,7 @@ describe('durable SEO monetary context', () => {
     'The price is 12,345.',
     'The price for SKU is 999.',
     'SAR 1,200 is the listed retail price.',
+    'Price: 4k',
   ])('rejects explicit financial predicates and foreign aliases: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -95,6 +96,50 @@ describe('durable SEO monetary context', () => {
         product: { name: 'Phone' },
       })
     ).toBe('');
+  });
+
+  it('preserves parenthesized product years after identity removal', () => {
+    const text = 'Phone (2025)';
+    expect(getDurableProductSeoText({ text, product: { name: 'Phone' } })).toBe(
+      text
+    );
+  });
+
+  it('preserves CAD software versions without preserving CAD retail prices', () => {
+    const text = 'Supports CAD 2025 software';
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe(text);
+    expect(
+      getDurableProductSeoText({
+        text: 'Price: CAD 2025',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    'Record video at 4K.',
+    'Perfect for 4K streaming.',
+    'Shoot at 8K/30fps.',
+    'Upscales from 4K to 8K.',
+  ])('preserves short resolution values in editorial copy: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe(text);
+  });
+
+  it.each([
+    'The display is 6.1 inches.',
+    'The screen size is 6.7 inches.',
+    'The weight is 1.5 kg.',
+    'Battery life is 1.5 days.',
+    'The weight is 1,200 g.',
+    'Screen size is 6,1 inches.',
+  ])('preserves unit-bearing dimensions and quantities: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe(text);
   });
 
   it.each([

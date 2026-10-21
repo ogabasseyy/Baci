@@ -10,6 +10,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 import { NativeCartMergeConflicts } from './NativeCartMergeConflicts';
 import { savedCartScopeMatches } from './saved-cart-scope';
 import { useSavedCartRead } from './use-saved-cart-read';
@@ -118,6 +119,7 @@ export function NativeCartAccountPanel() {
     pendingInput.current ??= JSON.parse(JSON.stringify(input)) as typeof input;
     setPending(true);
     setLinking(true);
+    markSharedCartIntent();
     try {
       await linkAccount?.(pendingInput.current);
       if (ownerScopeRef.current !== scope) return;

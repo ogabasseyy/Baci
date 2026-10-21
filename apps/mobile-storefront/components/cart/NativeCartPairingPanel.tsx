@@ -23,6 +23,7 @@ import { createNativeCartClient } from '@/lib/cart/shared-cart-client';
 import { CONFIG } from '@/lib/config';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 export function NativeCartPairingPanel() {
   const revision = useSyncExternalStore(
@@ -99,6 +100,7 @@ export function NativeCartPairingPanel() {
       cartPairingRevision() !== revision
     )
       return;
+    markSharedCartIntent();
     try {
       await shared.pair(
         current,

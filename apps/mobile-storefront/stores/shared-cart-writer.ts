@@ -20,6 +20,10 @@ let generation = 0;
 let writeRevision = 0;
 /** Changes at intent time, before controller serialization can defer an edit. */
 export const sharedCartWriteRevision = () => writeRevision;
+/** Direct controller intents (merge, account, pairing choices) fence checkout too. */
+export function markSharedCartIntent(): void {
+  writeRevision += 1;
+}
 let suspended = false;
 const listeners = new Set<() => void>();
 function notifyWriterPresence(): void {

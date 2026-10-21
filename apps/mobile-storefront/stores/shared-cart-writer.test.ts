@@ -1,6 +1,7 @@
 import {
   forwardSharedCartWrite,
   installSharedCartWriter,
+  markSharedCartIntent,
   retireSharedCartWriter,
   sharedCartWriteRevision,
   sharedCartWriterGeneration,
@@ -62,6 +63,11 @@ it('advances checkout intent revision before a queued writer executes', async ()
   } finally {
     release();
   }
+});
+it('advances the checkout intent revision for direct controller choices', () => {
+  const before = sharedCartWriteRevision();
+  markSharedCartIntent();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
 });
 it('does not treat lifecycle reconciliation as a new shopper edit', async () => {
   const release = installSharedCartWriter({

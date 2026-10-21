@@ -65,6 +65,9 @@ jest.mock('@/hooks/use-warm-merchant-payment-settings', () => ({
   useWarmMerchantPaymentSettings: jest.fn(),
 }));
 jest.mock('@/hooks/use-auth-guard', () => mockAuthGuardModule());
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => ({ user: null }) },
+}));
 jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
 jest.mock('@/stores/ui-store', () => mockUIStoreModule());
 

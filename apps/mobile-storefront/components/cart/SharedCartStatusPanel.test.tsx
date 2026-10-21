@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
 const productId = '33333333-3333-4333-8333-333333333333';
@@ -162,6 +163,18 @@ it('retries a failed initial cart creation using prepare rather than a read-only
   expect(refresh).not.toHaveBeenCalled();
 });
 
+it('marks a legacy cart choice as a checkout-fencing intent', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'choice_required',
+    chooseLegacy,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByRole('button', { name: 'Use saved cart' }));
+  expect(chooseLegacy).toHaveBeenCalledWith('keep_server');
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
 it('keeps retrying an empty device cart read-only', () => {
   const prepare = jest.fn().mockResolvedValue(undefined);
   const refresh = jest.fn().mockResolvedValue(undefined);

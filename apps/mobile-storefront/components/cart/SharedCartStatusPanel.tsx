@@ -11,6 +11,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 function conflictKey(item: CartItemIdentity): string {
   return cartLineIdentity(item);
@@ -44,7 +45,9 @@ export function SharedCartStatusPanel() {
   )
     return null;
   function run(operation: (() => Promise<void>) | null): void {
-    if (operation) void operation().catch(() => undefined);
+    if (!operation) return;
+    markSharedCartIntent();
+    void operation().catch(() => undefined);
   }
   const conflicts = state.mergeConflicts;
   const allPicked =

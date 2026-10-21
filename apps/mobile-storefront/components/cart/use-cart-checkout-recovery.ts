@@ -1,8 +1,15 @@
+import { useIsFocused } from 'expo-router';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
+import { useAuthStore } from '@/stores/auth-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
+
+/** Read synchronously: controller replacement lags auth in passive effects. */
+function authSessionKey(): string {
+  return useAuthStore.getState().user?.id ?? 'guest';
+}
 
 /** One shopper checkout intent at a time, including recovery and navigation. */
 export function useCartCheckoutRecovery(onReady: () => void) {
@@ -19,16 +26,29 @@ export function useCartCheckoutRecovery(onReady: () => void) {
       mounted.current = false;
     };
   }, []);
+  const isFocused = useIsFocused();
+  const focused = useRef(isFocused);
+  useLayoutEffect(() => {
+    focused.current = isFocused;
+  }, [isFocused]);
   const recoverCheckout = async () => {
     if (pending.current) return;
     pending.current = true;
     setIsPreparing(true);
     const writeRevision = sharedCartWriteRevision();
+    const sessionAtStart = authSessionKey();
     try {
       const result = await prepareCartCheckout(
         useNativeSharedCartStore.getState
       );
-      if (!mounted.current) return;
+      if (!mounted.current || !focused.current) return;
+      if (authSessionKey() !== sessionAtStart) {
+        Alert.alert(
+          'Cart session changed',
+          'Your account or store changed. Tap Checkout again to continue with your current cart.'
+        );
+        return;
+      }
       if (writeRevision !== sharedCartWriteRevision()) {
         Alert.alert(
           'Cart changed',
@@ -55,7 +75,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
     } catch {
       // Throws outside prepareCartCheckout (state reads, navigation) must
       // still give the shopper retry guidance instead of a silent dead tap.
-      if (!mounted.current) return;
+      if (!mounted.current || !focused.current) return;
       Alert.alert(
         'Could not sync cart',
         'Your items are still saved. Check your connection and tap Checkout to retry.'

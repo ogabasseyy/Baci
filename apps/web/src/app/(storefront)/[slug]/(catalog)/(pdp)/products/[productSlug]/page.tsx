@@ -8,6 +8,7 @@ import { ProductDetailRouteLoading } from '@/app/(storefront)/[slug]/storefront-
 import { StorefrontRouteNotFound } from '@/app/(storefront)/[slug]/storefront-route-not-found';
 import { getBrandMatchedTwitterHandle } from '@/lib/brand-matched-twitter-handle';
 import { getCachedLegacyProductRedirectTarget } from '@/lib/cached-data';
+import { getDurableProductSeoText } from '@/lib/get-durable-product-seo-text';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
@@ -103,10 +104,11 @@ export async function generateMetadata(
     currency,
     country: merchant.country,
   });
-  const normalizedProductMetaTitle = normalizeSeoProductText(
-    product.meta_title,
-    product
-  );
+  const normalizedProductMetaTitle = getDurableProductSeoText({
+    text: product.meta_title,
+    product,
+    currency,
+  });
   const normalizedGeneratedTitle = normalizeSeoProductText(
     priceSeoCopy.title,
     product
@@ -117,10 +119,11 @@ export async function generateMetadata(
     priceSeoCopy.description,
     product
   );
-  const productMetaDescription = normalizeSeoProductText(
-    product.meta_description,
-    product
-  );
+  const productMetaDescription = getDurableProductSeoText({
+    text: product.meta_description,
+    product,
+    currency,
+  });
   const seoDescription = generateMetaDescription(
     productMetaDescription || generatedSeoDescription,
     160,

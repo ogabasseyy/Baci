@@ -249,3 +249,19 @@ it('does not promise a connect action for an empty device cart', () => {
     view.queryByText('Connect these items to your shared cart before checkout.')
   ).toBeNull();
 });
+it('falls back to prepare when refresh is unbound but a snapshot exists', () => {
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: { cartId: 'cart-1', version: 1 } as never,
+    refresh: null,
+    prepare,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const button = view.getByRole('button', { name: 'Connect cart' });
+  expect(
+    button.props.accessibilityState?.disabled ?? button.props.disabled
+  ).toBeFalsy();
+  fireEvent.press(button);
+  expect(prepare).toHaveBeenCalledTimes(1);
+});

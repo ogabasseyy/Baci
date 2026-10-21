@@ -52,6 +52,11 @@ export function SharedCartStatusPanel() {
   const conflicts = state.mergeConflicts;
   const allPicked =
     conflicts.length > 0 && conflicts.every((item) => picks[conflictKey(item)]);
+  // Mirror the pairing retry: fall back to whichever sync operation is
+  // bound rather than leaving a dead button in unbound states.
+  const retryPreferred =
+    state.snapshot || items.length === 0 ? state.refresh : state.prepare;
+  const retryOperation = retryPreferred ?? state.prepare ?? state.refresh;
   return (
     <View
       style={[styles.panel, { backgroundColor: colors.background }]}
@@ -201,28 +206,14 @@ export function SharedCartStatusPanel() {
       ) : !busy && state.status !== 'choice_required' ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{
-            disabled: !(state.snapshot || items.length === 0
-              ? state.refresh
-              : state.prepare),
-          }}
-          disabled={
-            !(state.snapshot || items.length === 0
-              ? state.refresh
-              : state.prepare)
-          }
-          onPress={() =>
-            run(
-              state.snapshot || items.length === 0
-                ? state.refresh
-                : state.prepare
-            )
-          }
+          accessibilityState={{ disabled: !retryOperation }}
+          disabled={!retryOperation}
+          onPress={() => run(retryOperation)}
         >
           <Text style={{ color: colors.primary }}>
-            {state.snapshot || items.length === 0
-              ? 'Retry sync'
-              : 'Connect cart'}
+            {retryOperation && retryOperation === state.prepare
+              ? 'Connect cart'
+              : 'Retry sync'}
           </Text>
         </Pressable>
       ) : null}

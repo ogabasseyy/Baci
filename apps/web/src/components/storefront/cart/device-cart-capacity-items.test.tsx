@@ -110,3 +110,46 @@ it('does not remove a sibling after another writer already removed the selected 
     'Blue',
   ]);
 });
+it.each([
+  true,
+  false,
+])('removes exactly one duplicate saved line (stable IDs: %s)', (stableIds) => {
+  const first = cartItem({
+    cartItemId: stableIds ? 'first' : undefined,
+    quantity: 1,
+  });
+  const second = cartItem({
+    cartItemId: stableIds ? 'second' : undefined,
+    quantity: 2,
+  });
+  saveCartToStorage([first, second], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([second, first], 'shop');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove Phone' })[0]);
+  expect(getCartFromStorage('shop')).toEqual([second]);
+});
+it('removes one indistinguishable legacy occurrence rather than all duplicates', () => {
+  const duplicate = cartItem({ cartItemId: undefined });
+  saveCartToStorage([duplicate, duplicate], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove Phone' })[1]);
+  expect(getCartFromStorage('shop')).toEqual([duplicate]);
+});
+it('does not remove a duplicate sibling when the selected stable ID was already removed', () => {
+  const first = cartItem({ cartItemId: 'first' });
+  const second = cartItem({ cartItemId: 'second', quantity: 2 });
+  saveCartToStorage([first, second], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([second], 'shop');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove Phone' })[0]);
+  expect(getCartFromStorage('shop')).toEqual([second]);
+});
+
+it('removes a unique legacy line after its saved quantity changes', () => {
+  const selected = cartItem({ cartItemId: undefined });
+  saveCartToStorage([selected], 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  saveCartToStorage([{ ...selected, quantity: 3 }], 'shop');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Phone' }));
+  expect(getCartFromStorage('shop')).toEqual([]);
+});

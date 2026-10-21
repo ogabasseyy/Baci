@@ -28,25 +28,40 @@ export function DeviceCartCapacityItems({
     const selected = items[index];
     if (!selected) return;
     const current = getCartFromStorage(merchantSlug);
-    const candidates = current.filter(
-      (item) =>
-        identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
-        item.offerId === selected.offerId &&
-        displayLineMatchesAddLane(item, {
-          voucherToken: selected.quizVoucherToken,
-          voucherAwardId: selected.quizAwardId,
-          negotiatedUnitPriceMinor:
-            selected.negotiatedPrice == null
-              ? undefined
-              : Math.round(selected.negotiatedPrice * 100),
-          negotiationStatus: selected.negotiationStatus,
-        })
-    );
-    // Refresh rather than deleting an arbitrary sibling when the saved
-    // selection no longer exists or its identity is ambiguous.
-    const removed = candidates.length === 1;
+    const matchesSelected = (item: CartItem) =>
+      identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
+      item.offerId === selected.offerId &&
+      displayLineMatchesAddLane(item, {
+        voucherToken: selected.quizVoucherToken,
+        voucherAwardId: selected.quizAwardId,
+        negotiatedUnitPriceMinor:
+          selected.negotiatedPrice == null
+            ? undefined
+            : Math.round(selected.negotiatedPrice * 100),
+        negotiationStatus: selected.negotiationStatus,
+      });
+    const candidates = current.filter(matchesSelected);
+    // A stable saved ID survives reordering and quantity edits. Without an
+    // ID, remove one equivalent legacy occurrence, preserving siblings whose
+    // quantity or assurance differs from the selected row.
+    const target = selected.cartItemId
+      ? candidates.find((item) => item.cartItemId === selected.cartItemId)
+      : candidates.length === 1 &&
+          items.filter(matchesSelected).length === 1 &&
+          !candidates[0].cartItemId
+        ? candidates[0]
+        : candidates.find(
+            (item) =>
+              !item.cartItemId &&
+              item.quantity === selected.quantity &&
+              (item.hasAssurance ?? false) ===
+                (selected.hasAssurance ?? false) &&
+              item.assuranceRate === selected.assuranceRate
+          );
+    const removed = target !== undefined;
+    const targetIndex = target ? current.indexOf(target) : -1;
     let remaining = removed
-      ? current.filter((item) => item !== candidates[0])
+      ? current.filter((_, currentIndex) => currentIndex !== targetIndex)
       : current;
     if (removed && getCartWideNegotiationFromStorage(merchantSlug)) {
       remaining = remaining.map(

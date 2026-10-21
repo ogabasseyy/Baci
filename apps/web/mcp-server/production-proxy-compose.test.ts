@@ -37,6 +37,13 @@ describe('production MCP proxy configuration', () => {
     );
   });
 
+  it('forwards only an explicit cart text-continuation opt-in', () => {
+    const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
+    expect(compose).toContain(
+      'BACI_MCP_PRIVATE_TEXT_CONTINUATION=${BACI_MCP_PRIVATE_TEXT_CONTINUATION:-false}'
+    );
+  });
+
   it('requires an explicit trusted-proxy choice behind the loopback binding', () => {
     const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
 

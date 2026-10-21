@@ -1,9 +1,11 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
 const productId = '33333333-3333-4333-8333-333333333333';
 beforeEach(() => {
+  useCartStore.setState({ items: [] });
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'error',
@@ -134,6 +136,18 @@ it('requires new picks after a conflict attempt changes status', () => {
   ).toBeTruthy();
 });
 it('retries a failed initial cart creation using prepare rather than a read-only refresh', async () => {
+  useCartStore.setState({
+    items: [
+      {
+        id: 'local',
+        product_id: productId,
+        slug: 'phone',
+        name: 'Phone',
+        price: 100,
+        quantity: 1,
+      },
+    ],
+  });
   const prepare = jest.fn().mockResolvedValue(undefined);
   const refresh = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({
@@ -146,4 +160,19 @@ it('retries a failed initial cart creation using prepare rather than a read-only
   fireEvent.press(view.getByText('Retry sync'));
   expect(prepare).toHaveBeenCalledTimes(1);
   expect(refresh).not.toHaveBeenCalled();
+});
+
+it('keeps retrying an empty device cart read-only', () => {
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: null,
+    prepare,
+    refresh,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  fireEvent.press(view.getByText('Retry sync'));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(prepare).not.toHaveBeenCalled();
 });

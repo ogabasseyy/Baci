@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -12,7 +12,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
   const pending = useRef(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const mounted = useRef(true);
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;

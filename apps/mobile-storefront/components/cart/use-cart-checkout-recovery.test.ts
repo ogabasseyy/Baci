@@ -13,7 +13,10 @@ jest.mock('react', () => {
       deps?: import('react').DependencyList
     ) =>
       actual.useEffect(() => {
-        if (!mockDeferPassive) return effect();
+        const cleanup = !mockDeferPassive ? effect() : undefined;
+        return () => {
+          if (!mockDeferPassive) cleanup?.();
+        };
       }, deps),
   };
 });
@@ -180,6 +183,41 @@ it('publishes navigation at commit even when passive effects are deferred', asyn
     });
     expect(oldNext).not.toHaveBeenCalled();
     expect(newNext).toHaveBeenCalledTimes(1);
+  } finally {
+    mockDeferPassive = false;
+  }
+});
+
+it('fences an unmounted screen before passive cleanups run', async () => {
+  let finish!: () => void;
+  mockState.prepare = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = () => {
+          mockState = {
+            ...mockState,
+            metadataReady: true,
+            snapshot: { state: 'active', lines: [{}] },
+          };
+          resolve();
+        };
+      })
+  );
+  const next = jest.fn();
+  const { result, unmount } = renderHook(() => useCartCheckoutRecovery(next));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.recoverCheckout();
+  });
+  mockDeferPassive = true;
+  try {
+    unmount();
+    await act(async () => {
+      finish();
+      await pending;
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(alert).not.toHaveBeenCalled();
   } finally {
     mockDeferPassive = false;
   }

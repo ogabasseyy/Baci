@@ -6,9 +6,11 @@ import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { builderConfig } from '@/components/builder/config';
 import { leasePublicPuckThemeTokens } from '@/components/storefront/public-puck-theme-token-lease';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getCuratedThemeTokenProjection } from '@/lib/storefront-defaults/curated-theme-token-projection';
 import { createClient } from '@/lib/supabase/client';
 import { defaultTheme, type ThemeConfiguration } from '@/lib/theme-config';
+import { PublicPortableHome } from './portable/public-portable-home';
 
 interface PuckStorefrontProps {
   onNoConfig?: () => void;
@@ -146,7 +148,7 @@ async function loadPuckConfig({
 }
 
 export function PuckStorefront({ onNoConfig }: PuckStorefrontProps) {
-  const { merchant } = useMerchant();
+  const { merchant, basePath } = useMerchant();
   const onNoConfigRef = useRef(onNoConfig);
   const [puckData, setPuckData] = useState<MerchantPuckData | null>(null);
   const [puckTheme, setPuckTheme] = useState<MerchantPuckTheme | null>(null);
@@ -218,6 +220,25 @@ export function PuckStorefront({ onNoConfig }: PuckStorefrontProps) {
   // If no Puck data, return null (fallback will be shown)
   if (!activePuckData) {
     return null;
+  }
+
+  // Explicit capability opt-in; unmarked legacy Puck keeps its existing renderer.
+  const root = activePuckData.root as { props?: { rendererVersion?: unknown } };
+  if (root?.props && Object.hasOwn(root.props, 'rendererVersion')) {
+    return (
+      <PublicPortableHome
+        config={activePuckData}
+        merchant={{
+          id: merchant?.id,
+          template_id: merchant?.template_id,
+          slug: merchant?.slug,
+          business_name: merchant?.business_name,
+          logo_url: merchant?.logo_url ?? null,
+          currency: resolveMerchantCurrencyConfig(merchant ?? {}).code,
+        }}
+        basePath={basePath ?? ''}
+      />
+    );
   }
 
   // Render using Puck

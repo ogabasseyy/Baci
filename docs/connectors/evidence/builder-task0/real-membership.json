@@ -1,0 +1,111 @@
+{
+  "scope": "Full frozen history + current-tree sources, real membership helpers, disposable private cutover",
+  "records": [
+    {
+      "name": "full history denies private-table grants to service role",
+      "result": "PASS"
+    },
+    {
+      "name": "real membership draft denial: anon",
+      "result": "PASS"
+    },
+    {
+      "name": "real membership draft denial: unrelated",
+      "result": "PASS"
+    },
+    {
+      "name": "real membership draft denial: non-builder staff",
+      "result": "PASS"
+    },
+    {
+      "name": "real membership draft denial: suspended staff",
+      "result": "PASS"
+    },
+    {
+      "name": "real view-only staff can read but cannot save",
+      "result": "PASS"
+    },
+    {
+      "name": "current public mobile projection survives full cutover",
+      "result": "PASS"
+    },
+    {
+      "name": "adapted browser load composes private draft and public published DTO",
+      "result": "PASS"
+    },
+    {
+      "name": "cross-tenant lifecycle RPC read and write denied under RLS",
+      "result": "PASS"
+    },
+    {
+      "name": "owner save preserves current public config and rejects stale CAS",
+      "result": "PASS"
+    },
+    {
+      "name": "permitted builder staff can load and save private draft with CAS",
+      "result": "PASS"
+    },
+    {
+      "name": "native AI enqueue captures server authorized snapshot, ignores supplied starter",
+      "result": "PASS"
+    },
+    {
+      "name": "homepage layout publication preserves pending and current published side fields",
+      "result": "PASS"
+    },
+    {
+      "name": "ordinary browser publication retains its authorized side-field promotion",
+      "result": "PASS"
+    },
+    {
+      "name": "onboarding never overwrites an existing curated homepage",
+      "result": "PASS"
+    },
+    {
+      "name": "concurrent owner and staff saves admit exactly one CAS winner",
+      "result": "PASS"
+    },
+    {
+      "name": "native AI apply preserves public content, checks CAS and marks exactly once under RLS",
+      "result": "PASS"
+    },
+    {
+      "name": "history failure rolls back public publication and leaves draft intact",
+      "result": "PASS"
+    },
+    {
+      "name": "private rename reconciles through owner RLS and invalidates previous CAS",
+      "result": "PASS"
+    },
+    {
+      "name": "secondary pending pages remain private during homepage publication",
+      "result": "PASS"
+    },
+    {
+      "name": "unpublish and delete hide public rows while preserving private ownership boundaries",
+      "result": "PASS"
+    },
+    {
+      "name": "fresh onboarding atomically creates private draft and compatible public curated homepage",
+      "result": "PASS"
+    },
+    {
+      "name": "real staff revocation is effective for an existing JWT",
+      "result": "PASS"
+    },
+    {
+      "name": "real history/candidate isolation: anon",
+      "result": "PASS"
+    },
+    {
+      "name": "real history/candidate isolation: unrelated",
+      "result": "PASS"
+    },
+    {
+      "name": "real history/candidate isolation: non-builder staff",
+      "result": "PASS"
+    }
+  ],
+  "result": "PASS",
+  "productionActivation": false
+}

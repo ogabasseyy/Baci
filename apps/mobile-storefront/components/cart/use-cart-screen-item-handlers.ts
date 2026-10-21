@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Alert } from 'react-native';
 import type { CartItem } from '@/stores/cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 /**
  * Cart-screen line handlers with in-flight guards: rapid taps on one
@@ -19,6 +20,9 @@ export function useCartScreenItemHandlers({
 
   const handleRemoveItem = (item: CartItem) => {
     if (pendingOperations.current.has(item.id)) return;
+    // Intent-to-open fencing (see cart screen Clear Cart): confirmed
+    // removals must never land under an in-flight checkout.
+    markSharedCartIntent();
     Alert.alert('Remove Item', `Remove ${item.name} from cart?`, [
       { text: 'Cancel', style: 'cancel' },
       {

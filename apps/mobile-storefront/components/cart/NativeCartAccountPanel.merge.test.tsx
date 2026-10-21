@@ -1,6 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 import { NativeCartAccountPanel } from './NativeCartAccountPanel';
 
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'merge-operation' }));
@@ -249,4 +250,22 @@ it.each([
     expectedSavedVersion: 9,
     expectedCurrentVersion: 3,
   });
+});
+
+it('marks a merge-offer pick as a checkout-fencing intent', async () => {
+  const linkAccount = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: true,
+    accountUserId: owner,
+    linkAccount,
+    loadSavedCart: jest.fn().mockResolvedValue(undefined),
+    savedCart: saved,
+    snapshot: current,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByText('Keep saved offer'));
+  expect(sharedCartWriteRevision()).toBe(before + 1);
 });

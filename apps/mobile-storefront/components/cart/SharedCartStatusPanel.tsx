@@ -11,6 +11,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 function conflictKey(item: CartItemIdentity): string {
   return cartLineIdentity(item);
@@ -44,11 +45,20 @@ export function SharedCartStatusPanel() {
   )
     return null;
   function run(operation: (() => Promise<void>) | null): void {
-    if (operation) void operation().catch(() => undefined);
+    if (!operation) return;
+    markSharedCartIntent();
+    void operation().catch(() => undefined);
   }
   const conflicts = state.mergeConflicts;
   const allPicked =
     conflicts.length > 0 && conflicts.every((item) => picks[conflictKey(item)]);
+  // Mirror the pairing retry selection: exactly one useful operation
+  // per state, or none (disabled) when that operation is unbound.
+  const retryOperation = state.snapshot
+    ? state.refresh
+    : items.length === 0
+      ? state.refresh
+      : (state.prepare ?? state.refresh);
   return (
     <View
       style={[styles.panel, { backgroundColor: colors.background }]}
@@ -66,7 +76,9 @@ export function SharedCartStatusPanel() {
           : state.status === 'error'
             ? 'Cart sync was interrupted. Your last confirmed items are saved.'
             : !state.snapshot
-              ? 'Connect these items to your shared cart before checkout.'
+              ? items.length
+                ? 'Connect these items to your shared cart before checkout.'
+                : 'Your shared cart will refresh before checkout.'
               : 'Checking product details before checkout.'}
       </Text>
       {!busy && conflicts.length > 0 && state.chooseLegacy ? (
@@ -103,12 +115,13 @@ export function SharedCartStatusPanel() {
                     <Text style={{ color: colors.text }}>{name}</Text>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() =>
+                      onPress={() => {
+                        markSharedCartIntent();
                         setPicks((current) => ({
                           ...current,
                           [conflictKey(item)]: 'existing',
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <Text style={{ color: colors.primary }}>
                         {picks[conflictKey(item)] === 'existing'
@@ -118,12 +131,13 @@ export function SharedCartStatusPanel() {
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() =>
+                      onPress={() => {
+                        markSharedCartIntent();
                         setPicks((current) => ({
                           ...current,
                           [conflictKey(item)]: 'incoming',
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <Text style={{ color: colors.primary }}>
                         {picks[conflictKey(item)] === 'incoming'
@@ -194,18 +208,14 @@ export function SharedCartStatusPanel() {
       ) : !busy && state.status !== 'choice_required' ? (
         <Pressable
           accessibilityRole="button"
-          onPress={() =>
-            run(
-              state.snapshot || state.status === 'error'
-                ? state.refresh
-                : state.prepare
-            )
-          }
+          accessibilityState={{ disabled: !retryOperation }}
+          disabled={!retryOperation}
+          onPress={() => run(retryOperation)}
         >
           <Text style={{ color: colors.primary }}>
-            {state.snapshot || state.status === 'error'
-              ? 'Retry sync'
-              : 'Connect cart'}
+            {retryOperation && retryOperation === state.prepare
+              ? 'Connect cart'
+              : 'Retry sync'}
           </Text>
         </Pressable>
       ) : null}

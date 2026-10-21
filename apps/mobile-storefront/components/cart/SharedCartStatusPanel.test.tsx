@@ -1,9 +1,12 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
 const productId = '33333333-3333-4333-8333-333333333333';
 beforeEach(() => {
+  useCartStore.setState({ items: [] });
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'error',
@@ -131,5 +134,132 @@ it('requires new picks after a conflict attempt changes status', () => {
   });
   expect(
     combine.props.accessibilityState?.disabled ?? combine.props.disabled
+  ).toBeTruthy();
+});
+it('retries a failed initial cart creation using prepare rather than a read-only refresh', async () => {
+  useCartStore.setState({
+    items: [
+      {
+        id: 'local',
+        product_id: productId,
+        slug: 'phone',
+        name: 'Phone',
+        price: 100,
+        quantity: 1,
+      },
+    ],
+  });
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    prepare,
+    refresh,
+    snapshot: null,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  fireEvent.press(view.getByText('Connect cart'));
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+it('marks a legacy cart choice as a checkout-fencing intent', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'choice_required',
+    chooseLegacy,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByRole('button', { name: 'Use saved cart' }));
+  expect(chooseLegacy).toHaveBeenCalledWith('keep_server');
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('keeps retrying an empty device cart read-only', () => {
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: null,
+    prepare,
+    refresh,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  fireEvent.press(view.getByText('Retry sync'));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(prepare).not.toHaveBeenCalled();
+});
+
+it('labels an empty-cart retry as Retry sync, matching its read-only refresh', () => {
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'ready',
+    snapshot: null,
+    refresh,
+    prepare,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByText('Retry sync'));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(prepare).not.toHaveBeenCalled();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('marks a merge-offer pick as a checkout-fencing intent', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    mergeConflicts: [{ productId }],
+    status: 'choice_required',
+    chooseLegacy,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByRole('button', { name: 'Keep device offer' }));
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+
+it('disables the retry button when no sync operation is bound', () => {
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: null,
+    refresh: null,
+    prepare: null,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const button = view.getByRole('button', { name: 'Retry sync' });
+  expect(
+    button.props.accessibilityState?.disabled ?? button.props.disabled
+  ).toBeTruthy();
+});
+it('does not promise a connect action for an empty device cart', () => {
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'ready',
+    snapshot: null,
+    refresh,
+    prepare: jest.fn().mockResolvedValue(undefined),
+  });
+  const view = render(<SharedCartStatusPanel />);
+  expect(
+    view.getByText('Your shared cart will refresh before checkout.')
+  ).toBeTruthy();
+  expect(view.getByText('Retry sync')).toBeTruthy();
+  expect(
+    view.queryByText('Connect these items to your shared cart before checkout.')
+  ).toBeNull();
+});
+it('disables retry when refresh is unbound but a snapshot exists', () => {
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: { cartId: 'cart-1', version: 1 } as never,
+    refresh: null,
+    prepare,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const button = view.getByRole('button', { name: 'Retry sync' });
+  expect(
+    button.props.accessibilityState?.disabled ?? button.props.disabled
   ).toBeTruthy();
 });

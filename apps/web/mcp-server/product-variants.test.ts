@@ -216,7 +216,9 @@ describe('loadMcpProductVariants', () => {
 
     expect(result.content[0].text).toContain('• used: 70000 - In Stock');
     expect(result.structuredContent).toMatchObject({
-      condition_offers: [{ condition: 'used', availability: 'in_stock' }],
+      condition_offers: [
+        { offer_id: 'offer-used', condition: 'used', availability: 'in_stock' },
+      ],
     });
   });
 

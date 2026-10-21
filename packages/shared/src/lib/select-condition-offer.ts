@@ -32,8 +32,9 @@ export interface ConditionOfferSelection {
 /**
  * Offer identity for a selected condition, shared by the web PDP, the
  * native PDP, and the ogabassey PDP: suppression wins, then each
- * advertised id in order (when it names a member matching the
- * selection), then the condition fallback (exact spelling first when
+ * advertised id in order (a named member wins outright when the
+ * selection has no normalizable condition; with one it must match),
+ * then the condition fallback (exact spelling first when
  * requested, else the first canonical match, excluding the parent
  * family's own condition). A missing selection resolves only a
  * single-offer catalog.
@@ -77,17 +78,19 @@ export function selectConditionOffer<T extends SelectableConditionOffer>(
       (offer) => String(offer.id) === String(candidateId)
     );
     if (!preferred) continue;
-    if (normalizedSelected) {
-      const normalizedPreferred = normalizeCanonicalProductCondition(
-        preferred.condition ?? ''
-      );
-      if (
-        normalizedPreferred !== '' &&
-        normalizedPreferred === normalizedSelected
-      ) {
-        return preferred;
-      }
-    } else if (offers.length === 1) {
+    // A named member wins outright when the selection carries no
+    // normalizable condition (deep-link fidelity: the URL names an
+    // exact offer, and checkout binds exact ids). With a normalizable
+    // condition the member must match it, else a stale id would
+    // price under the wrong condition.
+    if (!normalizedSelected) return preferred;
+    const normalizedPreferred = normalizeCanonicalProductCondition(
+      preferred.condition ?? ''
+    );
+    if (
+      normalizedPreferred !== '' &&
+      normalizedPreferred === normalizedSelected
+    ) {
       return preferred;
     }
   }

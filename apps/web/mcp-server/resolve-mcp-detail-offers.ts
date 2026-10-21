@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { coerceOfferAuthorityRow } from '@baci/shared/lib';
+import { resolveMcpOfferStock } from './resolve-mcp-offer-stock';
+import { selectMcpOfferResolutions } from './select-mcp-offer-resolutions';
 
 export interface McpDetailOfferRow {
   offer_id: string;
@@ -37,40 +38,16 @@ export async function resolveMcpDetailOffers({
     console.error('Failed to fetch public product offers:', offerError);
     return { offers: [], lookupFailed: true };
   }
-  const offers = ((offerData ?? []) as unknown[]).flatMap((row) => {
-    const resolution = coerceOfferAuthorityRow(row);
-    // Case-insensitive: the resolution id is canonical
-    // (lowercase) while the caller id may spell UUID hex
-    // uppercase.
-    if (
-      !resolution ||
-      resolution.productId !== product.id.toLowerCase() ||
-      resolution.priceBasis === null ||
-      resolution.parentEligible !== true
-    )
-      return [];
-    // Display prices from the live basis and availability from the
-    // allocatable stock (policy-capped, parent-inherited): exactly
-    // what checkout enforces. Unbounded rows stay purchasable.
-    return [
-      {
-        offer_id: resolution.offerId,
-        condition: resolution.condition ?? product.condition ?? 'new',
-        price: resolution.priceBasis,
-        compare_at_price: resolution.compareAtPrice ?? null,
-        // Null is unbounded only for serialized_then_unlimited;
-        // any other policy with a missing allocation fails closed
-        // at zero (the SQL legacy arm always coalesces, so null
-        // there means a partial projection).
-        stock_quantity:
-          resolution.allocatableStock ??
-          (resolution.effectivePolicy === 'serialized_then_unlimited'
-            ? Number.MAX_SAFE_INTEGER
-            : 0),
-        grade: resolution.grade ?? null,
-        condition_notes: resolution.conditionNotes ?? null,
-      },
-    ];
-  });
+  const offers = selectMcpOfferResolutions(offerData, product.id).map(
+    (resolution) => ({
+      offer_id: resolution.offerId,
+      condition: resolution.condition ?? product.condition ?? 'new',
+      price: resolution.priceBasis as number,
+      compare_at_price: resolution.compareAtPrice ?? null,
+      stock_quantity: resolveMcpOfferStock(resolution),
+      grade: resolution.grade ?? null,
+      condition_notes: resolution.conditionNotes ?? null,
+    })
+  );
   return { offers, lookupFailed: false };
 }

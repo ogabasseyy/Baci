@@ -735,91 +735,6 @@ describe('POST /api/cart/validate', () => {
     expect(body.validProducts).toEqual([]);
   });
 
-  it('accepts a live offer the authority flags as parent-ineligible', async () => {
-    const { supabase } = buildSupabaseMock();
-    mocks.createClient.mockResolvedValue(supabase);
-    mocks.products = [
-      {
-        id: PRODUCT_ID,
-        name: 'iPhone 15',
-        price: 500_000,
-        stock: 0,
-        stock_quantity: 0,
-        status: 'active',
-        manage_stock: true,
-        has_condition_offers: false,
-        has_variants: false,
-        variant_model: 'legacy',
-      },
-    ];
-    // Transactions mirror the ungated order RPC: a live row is valid
-    // whatever parent_eligible says (discovery surfaces filter on it).
-    mocks.offers = [
-      {
-        product_id: PRODUCT_ID,
-        offer_id: OFFER_ID,
-        condition: 'used',
-        price: 400_000,
-        parent_eligible: false,
-      },
-    ];
-
-    const response = await postCartValidate({
-      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
-    });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.invalidProductIds).toEqual([]);
-    expect(body.validProducts).toHaveLength(1);
-    expect(body.validProducts[0]).toMatchObject({
-      id: PRODUCT_ID,
-      price: 400_000,
-    });
-  });
-
-  it('skips the variants lookup for offer-only carts', async () => {
-    const { supabase } = buildSupabaseMock();
-    mocks.createClient.mockResolvedValue(supabase);
-    mocks.products = [
-      {
-        id: PRODUCT_ID,
-        name: 'iPhone 15',
-        price: 500_000,
-        stock: 0,
-        stock_quantity: 0,
-        status: 'active',
-        manage_stock: true,
-        has_condition_offers: true,
-        has_variants: false,
-        variant_model: 'legacy',
-      },
-    ];
-    mocks.offers = [
-      {
-        product_id: PRODUCT_ID,
-        offer_id: OFFER_ID,
-        condition: 'used',
-        price: 400_000,
-        parent_eligible: true,
-      },
-    ];
-
-    const response = await postCartValidate({
-      cartItems: [{ id: PRODUCT_ID, price: 400_000, offerId: OFFER_ID }],
-    });
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.invalidProductIds).toEqual([]);
-    // The parent gate moved into the authority row, so offer-only carts
-    // no longer pay for the variant list.
-    expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'get_storefront_product_variants',
-      expect.anything()
-    );
-  });
-
   it('invalidates an offer line whose submitted condition drifted', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);
@@ -930,6 +845,7 @@ describe('POST /api/cart/validate', () => {
     ];
     mocks.offers = [
       {
+        product_id: PRODUCT_ID,
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,

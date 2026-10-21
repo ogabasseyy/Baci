@@ -197,13 +197,22 @@ describe('selectConditionOffer', () => {
     // to the condition fallback, never to an explicit id. Checkout
     // accepts the named live offer either way, so honoring agrees
     // with enforcement while nulling would reprice the deep link.
-    const [only] = offers;
+    // Multi-offer catalog: the single-offer carve-out must not be
+    // what carries this.
+    const [, second] = offers;
     expect(
-      selectConditionOffer([only], {
+      selectConditionOffer(offers, {
         selectedCondition: 'stale-spelling-xyz',
-        preferredOfferId: only.id,
+        preferredOfferId: second.id,
       })
-    ).toEqual(only);
+    ).toEqual(second);
+  });
+
+  it('honors an explicit id when no condition is selected, even with siblings', () => {
+    const [, second] = offers;
+    expect(
+      selectConditionOffer(offers, { preferredOfferId: second.id })
+    ).toEqual(second);
   });
 
   it('tries ordered advertised ids before the condition fallback', () => {

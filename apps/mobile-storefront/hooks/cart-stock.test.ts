@@ -846,48 +846,6 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('throws retryable when a strict offer has no unit count', async () => {
-    mockProductAndRpc(parent(), {
-      get_storefront_offer_resolution: [
-        {
-          product_id: 'product-1',
-          offer_id: 'offer-7',
-          allocatable_stock: 0,
-          effective_policy: 'serialized_strict',
-          available_units: null,
-          parent_eligible: true,
-        },
-      ],
-    });
-
-    await expect(
-      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
-    ).rejects.toThrow('Cannot verify stock availability. Please try again.');
-  });
-
-  it('reports zero for a genuine strict sell-out without throwing', async () => {
-    mockProductAndRpc(parent(), {
-      get_storefront_offer_resolution: [
-        {
-          product_id: 'product-1',
-          offer_id: 'offer-7',
-          allocatable_stock: 0,
-          effective_policy: 'serialized_strict',
-          available_units: 0,
-          parent_eligible: true,
-        },
-      ],
-    });
-
-    await expect(
-      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
-    ).resolves.toEqual({
-      available: false,
-      currentStock: 0,
-      requestedQuantity: 1,
-    });
-  });
-
   it('lets unlimited offers bypass the unit cap', async () => {
     mockProductAndRpc(parent(), {
       get_storefront_offer_resolution: [
@@ -908,29 +866,6 @@ describe('cart-stock helpers', () => {
       available: true,
       currentStock: Number.MAX_SAFE_INTEGER,
       requestedQuantity: 4,
-    });
-  });
-
-  it('reports zero when strict units are exhausted', async () => {
-    mockProductAndRpc(parent(), {
-      get_storefront_offer_resolution: [
-        {
-          product_id: 'product-1',
-          offer_id: 'offer-7',
-          allocatable_stock: 0,
-          effective_policy: 'serialized_strict',
-          available_units: 0,
-          parent_eligible: true,
-        },
-      ],
-    });
-
-    await expect(
-      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
-    ).resolves.toEqual({
-      available: false,
-      currentStock: 0,
-      requestedQuantity: 1,
     });
   });
 

@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { coerceOfferAuthorityRow } from '@baci/shared/lib';
+import { resolveMcpOfferStock } from './resolve-mcp-offer-stock';
+import { selectMcpOfferResolutions } from './select-mcp-offer-resolutions';
 
 export interface McpVariantOfferRow {
+  offer_id: string;
   condition: string;
   grade: string | null;
   price: number;
@@ -35,38 +37,17 @@ export async function resolveMcpVariantOffers({
     console.error('Failed to fetch public product offers:', error);
     return { offers: [], lookupFailed: true };
   }
-  const offers = ((data ?? []) as unknown[]).flatMap((row) => {
-    const resolution = coerceOfferAuthorityRow(row);
-    // Case-insensitive: the resolution id is canonical
-    // (lowercase) while the caller id may spell UUID hex
-    // uppercase.
-    if (
-      !resolution ||
-      resolution.productId !== productId.toLowerCase() ||
-      resolution.priceBasis === null ||
-      resolution.parentEligible !== true
-    )
-      return [];
-    // Display prices from the live basis and availability from the
-    // allocatable stock (policy-capped, parent-inherited): exactly
-    // what checkout enforces. Unbounded rows stay purchasable.
-    return [
-      {
-        condition: resolution.condition ?? 'new',
-        grade: resolution.grade ?? null,
-        price: resolution.priceBasis,
-        // Null is unbounded only for serialized_then_unlimited;
-        // any other policy with a missing allocation fails closed
-        // at zero (the SQL legacy arm always coalesces, so null
-        // there means a partial projection).
-        stock_quantity:
-          resolution.allocatableStock ??
-          (resolution.effectivePolicy === 'serialized_then_unlimited'
-            ? Number.MAX_SAFE_INTEGER
-            : 0),
-        condition_notes: resolution.conditionNotes ?? null,
-      },
-    ];
-  });
+  const offers = selectMcpOfferResolutions(data, productId).map(
+    (resolution) => ({
+      // Exact identity: MCP consumers submit the offer by id rather
+      // than an ambiguous condition.
+      offer_id: resolution.offerId,
+      condition: resolution.condition ?? 'new',
+      grade: resolution.grade ?? null,
+      price: resolution.priceBasis as number,
+      stock_quantity: resolveMcpOfferStock(resolution),
+      condition_notes: resolution.conditionNotes ?? null,
+    })
+  );
   return { offers, lookupFailed: false };
 }

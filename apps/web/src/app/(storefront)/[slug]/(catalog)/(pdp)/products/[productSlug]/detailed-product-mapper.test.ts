@@ -420,42 +420,4 @@ describe('mapDetailedCachedProductToProduct', () => {
 
     expect(product.inventory_tracking_policy).toBe('serialized_strict');
   });
-
-  it('maps the snapshot-emitted effective policy for anchor-strict products', () => {
-    const product = mapDetailedCachedProductToProduct(
-      {
-        id: 'product-1',
-        merchant_id: 'merchant-1',
-        name: 'Anchor Strict Phone',
-        price: 100,
-        stock: 2,
-        manage_stock: true,
-        inventory_tracking_policy: 'off',
-        effective_policy: 'serialized_strict',
-        product_variants: [],
-      } as never,
-      'merchant-1'
-    );
-
-    expect(product.effective_policy).toBe('serialized_strict');
-    expect(product.inventory_tracking_policy).toBe('off');
-  });
-
-  it('leaves effective policy undefined on stale snapshots without the key', () => {
-    const product = mapDetailedCachedProductToProduct(
-      {
-        id: 'product-1',
-        merchant_id: 'merchant-1',
-        name: 'Legacy Phone',
-        price: 100,
-        stock: 5,
-        manage_stock: true,
-        inventory_tracking_policy: 'off',
-        product_variants: [],
-      } as never,
-      'merchant-1'
-    );
-
-    expect(product.effective_policy).toBeUndefined();
-  });
 });

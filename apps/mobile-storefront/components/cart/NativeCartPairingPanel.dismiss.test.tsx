@@ -1,7 +1,8 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   captureCartPairingLink,
   clearCartPairingLink,
+  peekCartPairingLink,
 } from '@/lib/cart/pairing-link';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
@@ -122,4 +123,70 @@ it('marks checkout intent when dismissing clears pairing conflicts', async () =>
   fireEvent.press(close);
   expect(useNativeSharedCartStore.getState().mergeConflicts).toEqual([]);
   expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+
+it('retains the resolution sheet when close is pressed before pairing publishes late conflicts', async () => {
+  mockPairingItems = [
+    { product_id: '33333333-3333-4333-8333-333333333333', name: 'Phone' },
+  ];
+  let rejectPair!: () => void;
+  const pair = jest.fn(
+    () =>
+      new Promise<void>((_, reject) => {
+        rejectPair = () => {
+          useNativeSharedCartStore.setState({
+            status: 'error',
+            mergeConflicts: [
+              { productId: '33333333-3333-4333-8333-333333333333' },
+            ],
+            mergeConflictReason: 'price_mismatch',
+          });
+          reject(new Error('merge_conflict'));
+        };
+      })
+  );
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    mergeConflicts: [],
+    mergeConflictReason: undefined,
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  captureCartPairingLink(
+    `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`,
+    {
+      merchantId: merchant,
+      merchantSlug: 'shop',
+      merchantDomain: 'shop.example.com',
+    }
+  );
+  const view = render(<NativeCartPairingPanel />);
+  const connect = await waitFor(() =>
+    view.getByRole('button', { name: 'Combine carts' })
+  );
+  fireEvent.press(connect);
+  // pair is awaiting preview/redeem, but has not set controller status=pending.
+  expect(useNativeSharedCartStore.getState().status).toBe('ready');
+  expect(view.getByLabelText('Syncing cart')).toBeTruthy();
+  expect(
+    view.getByRole('button', { name: 'Close cart link' }).props
+      .accessibilityState.disabled
+  ).toBe(true);
+  fireEvent.press(view.getByRole('button', { name: 'Close cart link' }));
+  expect(peekCartPairingLink()).not.toBeNull();
+  await act(async () => {
+    rejectPair();
+  });
+  await waitFor(() =>
+    expect(
+      view.getByText('Choose which offer to keep for each item.')
+    ).toBeTruthy()
+  );
+  expect(peekCartPairingLink()).not.toBeNull();
+  // Once pairing settles, the shopper can dismiss and clear pairing-owned conflicts.
+  fireEvent.press(view.getByRole('button', { name: 'Close cart link' }));
+  expect(peekCartPairingLink()).toBeNull();
+  expect(useNativeSharedCartStore.getState().mergeConflicts).toEqual([]);
 });

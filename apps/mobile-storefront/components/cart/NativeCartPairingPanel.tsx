@@ -30,7 +30,10 @@ import {
   retryPairingSync,
 } from './pairing-sync';
 
+import { usePairingOperation } from './use-pairing-operation';
+
 export function NativeCartPairingPanel() {
+  const operation = usePairingOperation(dismissPairingLink);
   const revision = useSyncExternalStore(
     subscribeCartPairing,
     cartPairingRevision,
@@ -92,7 +95,10 @@ export function NativeCartPairingPanel() {
   }, [revision, retryTick]);
   if (!link) return null;
   const ready = preview.revision === revision && preview.status === 'ready';
-  const busy = shared.status === 'loading' || shared.status === 'pending';
+  const busy =
+    operation.running ||
+    shared.status === 'loading' ||
+    shared.status === 'pending';
   async function pair(
     choice: 'connect' | 'merge' | 'keep_existing'
   ): Promise<void> {
@@ -127,10 +133,10 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
-        accessibilityState={{ disabled }}
-        disabled={disabled}
+        accessibilityState={{ disabled: disabled || operation.running }}
+        disabled={disabled || operation.running}
         onPress={() => {
-          void run();
+          void operation.run(run);
         }}
         style={styles.button}
       >
@@ -141,7 +147,7 @@ export function NativeCartPairingPanel() {
   return (
     <ModalSheet
       visible
-      onRequestClose={dismissPairingLink}
+      onRequestClose={operation.dismiss}
       cardStyle={[styles.card, { backgroundColor: colors.background }]}
     >
       <Text
@@ -150,9 +156,11 @@ export function NativeCartPairingPanel() {
       >
         Continue with this cart
       </Text>
-      {preview.status === 'loading' ? (
+      {preview.status === 'loading' || operation.running ? (
         <ActivityIndicator
-          accessibilityLabel="Checking cart"
+          accessibilityLabel={
+            operation.running ? 'Syncing cart' : 'Checking cart'
+          }
           color={colors.primary}
         />
       ) : null}
@@ -265,7 +273,9 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close cart link"
-        onPress={dismissPairingLink}
+        onPress={operation.dismiss}
+        disabled={operation.running}
+        accessibilityState={{ disabled: operation.running }}
         style={styles.button}
       >
         <Text style={{ color: colors.text }}>Close</Text>

@@ -90,6 +90,22 @@ describe('findMismatchedOrderOffer', () => {
     expect(callRpc).not.toHaveBeenCalled();
   });
 
+  it('fails closed on a malformed merchant id without querying', async () => {
+    const callRpc = vi.fn(async () => ({ data: [], error: null }));
+
+    const mismatch = await findMismatchedOrderOffer(
+      callRpc,
+      [{ product_id: PRODUCT_ID, offer_id: OFFER_ID }],
+      'not-a-uuid'
+    );
+
+    expect(mismatch).toEqual({
+      product_id: PRODUCT_ID,
+      offer_id: OFFER_ID,
+    });
+    expect(callRpc).not.toHaveBeenCalled();
+  });
+
   it('throws lookup errors for the route to report as a 500', async () => {
     const callRpc = vi.fn(async () => ({
       data: null,

@@ -47,6 +47,17 @@ export async function fetchLiveOrderOffers(
       !uuidRegex.test(item.offer_id)
   );
   if (malformed) return { mismatch: malformed, prices, conditions };
+  // A supplied merchant must be a uuid too: otherwise the authority
+  // call raises 22P02 and the order misclassifies caller input as a
+  // verification failure (500) instead of an invalid offer (400).
+  // offerLines is non-empty here, so the first line always exists.
+  if (
+    merchantId !== undefined &&
+    merchantId !== null &&
+    !uuidRegex.test(merchantId)
+  ) {
+    return { mismatch: offerLines[0], prices, conditions };
+  }
 
   const productIds = Array.from(
     new Set(offerLines.map((item) => String(item.product_id)))

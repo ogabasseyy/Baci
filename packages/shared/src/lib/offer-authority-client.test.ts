@@ -8,6 +8,7 @@ import {
 
 const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
 const OFFER_ID = '22222222-2222-4222-8222-222222222222';
+const MERCHANT_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('coerceOfferAuthorityRow', () => {
   it('coerces PostgREST string numerics', () => {
@@ -93,12 +94,12 @@ describe('fetchOfferResolutions', () => {
       error: null,
     });
     const map = await fetchOfferResolutions(callRpc, {
-      merchantId: 'm',
+      merchantId: MERCHANT_ID,
       productIds: [PRODUCT_ID, PRODUCT_ID],
     });
     expect(callRpc).toHaveBeenCalledTimes(1);
     expect(callRpc).toHaveBeenCalledWith({
-      p_merchant_id: 'm',
+      p_merchant_id: MERCHANT_ID,
       p_product_ids: [PRODUCT_ID],
     });
     expect(map.get(`${PRODUCT_ID}::${OFFER_ID}`)?.priceBasis).toBe(80);
@@ -118,7 +119,7 @@ describe('fetchOfferResolutions', () => {
       error: null,
     }));
     const map = await fetchOfferResolutions(callRpc, {
-      merchantId: 'm',
+      merchantId: MERCHANT_ID,
       productIds: ids,
     });
     expect(callRpc).toHaveBeenCalledTimes(2);
@@ -140,6 +141,17 @@ describe('fetchOfferResolutions', () => {
     const callRpc = vi.fn();
     await expect(
       fetchOfferResolutions(callRpc, { productIds: ['not-a-uuid'] })
+    ).rejects.toBeInstanceOf(OfferAuthorityInputError);
+    expect(callRpc).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a malformed merchant id without calling the RPC', async () => {
+    const callRpc = vi.fn();
+    await expect(
+      fetchOfferResolutions(callRpc, {
+        merchantId: 'not-a-uuid',
+        productIds: [PRODUCT_ID],
+      })
     ).rejects.toBeInstanceOf(OfferAuthorityInputError);
     expect(callRpc).not.toHaveBeenCalled();
   });

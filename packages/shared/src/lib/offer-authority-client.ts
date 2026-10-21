@@ -162,6 +162,16 @@ export async function fetchOfferResolutions(
   callRpc: OfferAuthorityRpcCall,
   args: { merchantId?: string | null; productIds: readonly string[] }
 ): Promise<Map<string, ResolvedOfferResolution>> {
+  // Null/undefined merchant is unscoped (valid); a supplied merchant
+  // must be a uuid — otherwise Postgres raises 22P02 and callers
+  // misclassify the lookup as a 500 instead of fail-closed input.
+  if (
+    args.merchantId !== undefined &&
+    args.merchantId !== null &&
+    !isOfferAuthorityId(args.merchantId)
+  ) {
+    throw new OfferAuthorityInputError([args.merchantId]);
+  }
   const distinct = Array.from(
     new Set(args.productIds.filter((id) => id !== ''))
   );

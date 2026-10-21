@@ -44,6 +44,24 @@ describe('selectConditionOffer', () => {
     ).toEqual(exact);
   });
 
+  it('returns null for a supplied-but-unnormalizable condition even with a single offer', () => {
+    const [only] = offers;
+    expect(
+      selectConditionOffer([only], { selectedCondition: 'stale-spelling-xyz' })
+    ).toBeNull();
+    expect(
+      selectConditionOffer([only], {
+        selectedCondition: 'stale-spelling-xyz',
+        preferExactConditionMatch: true,
+      })
+    ).toBeNull();
+    // No selection at all still resolves the single offer.
+    expect(selectConditionOffer([only], {})?.id).toBe(only.id);
+    expect(selectConditionOffer([only], { selectedCondition: null })?.id).toBe(
+      only.id
+    );
+  });
+
   it('agrees with the feed dedup on the first row per canonical condition', () => {
     const candidates = [
       { id: 'offer-aaa-refurbished', condition: 'refurbished', price: 510 },

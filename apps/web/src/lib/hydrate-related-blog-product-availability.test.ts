@@ -149,6 +149,36 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     expect(result[0]?.has_purchasable_condition_offer).toBe(true);
   });
 
+  it('omits a gated row a partial projection still carries', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [authorityRow('offer-1', { parent_eligible: false })],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product()]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(false);
+    expect(result[0]?.offers).toEqual([]);
+  });
+
+  it('omits a stocked row without a finite price instead of pricing it at zero', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [authorityRow('offer-1', { price_basis: null })],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product()]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(false);
+    expect(result[0]?.offers).toEqual([]);
+  });
+
   it('does not read offers for products that are not currently unavailable', async () => {
     const rpc = vi.fn();
     const products = [

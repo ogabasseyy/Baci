@@ -138,6 +138,13 @@ export async function hydrateRelatedBlogProductAvailability(
             );
             const byProduct = new Map<string, ResolvedOfferResolution[]>();
             for (const resolution of resolutions.values()) {
+              // Live SQL withholds gated-out rows; a partial/stale
+              // projection that still carries one must never price or
+              // stock the rail (checkout rejects ineligible parents).
+              // Rows without a finite price are skipped, never
+              // zero-priced: same fail-closed guards as MCP/native.
+              if (resolution.parentEligible !== true) continue;
+              if (resolution.priceBasis === null) continue;
               const list = byProduct.get(resolution.productId) ?? [];
               list.push(resolution);
               byProduct.set(resolution.productId, list);

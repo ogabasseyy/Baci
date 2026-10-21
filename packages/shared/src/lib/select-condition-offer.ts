@@ -92,7 +92,11 @@ export function selectConditionOffer<T extends SelectableConditionOffer>(
     }
   }
 
-  if (!normalizedSelected) {
+  // The single-offer shortcut applies only when no condition was
+  // supplied at all (raw falsy): a supplied-but-unnormalizable
+  // condition resolved to no offer in every previous implementation,
+  // so it must not price the sole offer under an unselected condition.
+  if (!selectedCondition) {
     return offers.length === 1 ? offers[0] : null;
   }
 
@@ -112,6 +116,9 @@ export function selectConditionOffer<T extends SelectableConditionOffer>(
     );
     if (exact) return exact;
   }
+  // Supplied but unnormalizable (and no exact spelling): no canonical
+  // match is possible — never fall through to a ''-condition row.
+  if (!normalizedSelected) return null;
   return (
     ordered.find(
       (offer) =>

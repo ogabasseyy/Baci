@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { isCartCrossTabLockSupported } from './cart-cross-tab-lock';
 import {
-  getCartSessionGenerationChange,
+  getCartSessionGeneration,
   subscribeCartSessionGeneration,
 } from './shared-cart-storage';
 import { useSharedCart } from './use-shared-cart';
@@ -24,18 +24,18 @@ export function useSharedCartDelegation(input: {
   // Fences the shared-cart session: bumped on every merchant/slug change
   // so late responses from the previous merchant never touch the new cart.
   const [sessionGeneration, setSessionGeneration] = useState(1);
-  useEffect(
-    () =>
-      subscribeCartSessionGeneration(() => {
-        const change = getCartSessionGenerationChange(input.merchantSlug);
-        if (
-          !change?.transition?.merchantSlug ||
-          change.transition.merchantSlug === input.merchantSlug
-        )
-          setSessionGeneration((generation) => generation + 1);
-      }),
-    [input.merchantSlug]
-  );
+  // Compare this merchant's actual generation snapshot instead of the
+  // cached last change: a bump for another merchant must not restart
+  // this merchant's link lifecycle and discard its queued commands.
+  useEffect(() => {
+    let lastSeen = getCartSessionGeneration(input.merchantSlug);
+    return subscribeCartSessionGeneration(() => {
+      const current = getCartSessionGeneration(input.merchantSlug);
+      if (current === lastSeen) return;
+      lastSeen = current;
+      setSessionGeneration((generation) => generation + 1);
+    });
+  }, [input.merchantSlug]);
   function bumpSessionGeneration() {
     setSessionGeneration((generation) => generation + 1);
   }

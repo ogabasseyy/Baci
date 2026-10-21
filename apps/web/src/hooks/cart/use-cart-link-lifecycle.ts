@@ -175,6 +175,18 @@ export function useCartLinkLifecycle(
         if (cached.length) {
           // Provisioning reads the parked source again: remove only consumed mirror lines.
           saveCartToStorage(cached, merchantSlug);
+          // Provisioning re-reads storage: if the filtered cache did
+          // not persist, it would recreate already-consumed items.
+          const persisted = getCartFromStorage(merchantSlug);
+          const persistedOk =
+            persisted.length === cached.length &&
+            persisted.every(
+              (line, index) => line.cartItemId === cached[index].cartItemId
+            );
+          if (!persistedOk) {
+            retryAdopt(attempt, run);
+            return;
+          }
           adoptOutcomeRef.current = 'expired';
           await provision(attempt, run);
           return;

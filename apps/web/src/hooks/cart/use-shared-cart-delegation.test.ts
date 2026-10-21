@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseSharedCart = vi.fn();
 let generationListener: (() => void) | null = null;
+let mockGenerationValue = 1;
 
 vi.mock('./shared-cart-storage', () => ({
-  getCartSessionGenerationChange: () => undefined,
+  getCartSessionGeneration: () => mockGenerationValue,
   subscribeCartSessionGeneration: (listener: () => void) => {
     generationListener = listener;
     return () => {
@@ -33,6 +34,7 @@ describe('useSharedCartDelegation', () => {
     mockUseSharedCart.mockReset();
     mockUseSharedCart.mockReturnValue({ status: 'ready' });
     generationListener = null;
+    mockGenerationValue = 1;
   });
 
   it('delegates when enrollment, merchant and served slug all agree', () => {
@@ -75,6 +77,7 @@ describe('useSharedCartDelegation', () => {
     expect(result.current.sessionGeneration).toBe(2);
 
     act(() => {
+      mockGenerationValue += 1;
       generationListener?.();
     });
     expect(result.current.sessionGeneration).toBe(3);

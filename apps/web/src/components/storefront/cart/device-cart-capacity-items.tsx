@@ -53,7 +53,7 @@ export function DeviceCartCapacityItems({
         ? AbortSignal.timeout(5_000)
         : new AbortController().signal;
     let applied = false;
-    let removed = false;
+    let removedRow: CartItem | null = null;
     let write: Promise<unknown>;
     try {
       write = withCartCookieWrite(
@@ -61,7 +61,7 @@ export function DeviceCartCapacityItems({
         signal,
         () => {
           applied = true;
-          removed = applyRemoval(selected);
+          removedRow = applyRemoval(selected);
           return Promise.resolve(undefined);
         },
         merchantSlug
@@ -82,7 +82,7 @@ export function DeviceCartCapacityItems({
           );
           return;
         }
-        if (!removed) {
+        if (!removedRow) {
           // Another tab already removed this row: only the winning
           // edit may reconcile the live cart, or the quantity would
           // be subtracted twice.
@@ -92,7 +92,10 @@ export function DeviceCartCapacityItems({
         // A create in another tab may have committed while this removal
         // was queued behind it; the cache edit cannot undo that create,
         // so remove the line from the now-live server cart as well.
-        void removeCapacityLineFromLiveCart(selected, merchantSlug).then(
+        // Reconcile the row actually removed from storage: another
+        // tab may have changed its quantity after this list rendered.
+        const removed: CartItem = removedRow;
+        void removeCapacityLineFromLiveCart(removed, merchantSlug).then(
           (ok) => {
             if (!ok)
               setError(
@@ -106,7 +109,7 @@ export function DeviceCartCapacityItems({
         setError('Could not save that change. Check storage access and retry.');
       });
   }
-  function applyRemoval(selected: CartItem): boolean {
+  function applyRemoval(selected: CartItem): CartItem | null {
     const current = getCartFromStorage(merchantSlug);
     const matchesSelected = (item: CartItem) =>
       identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
@@ -147,7 +150,7 @@ export function DeviceCartCapacityItems({
           );
     if (!target) {
       setItems(current);
-      return false;
+      return null;
     }
     const targetIndex = current.indexOf(target);
     let remaining = current.filter(
@@ -189,7 +192,7 @@ export function DeviceCartCapacityItems({
     if (!persistedOk) {
       setItems(persisted);
       setError('Could not save that change. Check storage access and retry.');
-      return false;
+      return null;
     }
     // Clear the group-deal flag only once the stripped cache is known
     // to be persisted; a failed write must keep it for the retry.
@@ -197,7 +200,7 @@ export function DeviceCartCapacityItems({
       saveCartWideNegotiationToStorage(false, merchantSlug);
     setError(null);
     setItems(remaining);
-    return true;
+    return target;
   }
   return (
     <>

@@ -6,7 +6,7 @@ vi.mock('./cart-cross-tab-lock', () => ({
   isCartCrossTabLockSupported: () => locks.supported,
 }));
 vi.mock('./shared-cart-storage', () => ({
-  getCartSessionGenerationChange: () => undefined,
+  getCartSessionGeneration: () => 1,
   subscribeCartSessionGeneration: () => () => {},
 }));
 vi.mock('./use-shared-cart', () => ({

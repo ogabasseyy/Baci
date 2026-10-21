@@ -1,23 +1,33 @@
 'use client';
 
-import type { CartErrorCode } from '@baci/shared/cart';
-
-import {
-  getCartFromStorage,
-  saveSharedCartImportReceipt,
-} from './cart-storage';
-
+import type { CartSnapshot } from '@baci/shared/cart';
+import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
+import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
+import { saveSharedCartImportReceipt } from './cart-storage';
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
+import { createImportFinisher } from './shared-cart-import-finish';
+import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
+import { planProvisioningImport } from './shared-cart-provisioning-plan';
 import { isTerminalCart } from './shared-cart-queue';
-import { planLegacyImport } from './shared-cart-reducer';
+import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
+import {
+  consumedReceiptFields,
+  getCartSessionGeneration,
+} from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
-export function createCartProvisioning(context: SharedCartRuntime) {
+export function createCartProvisioning(
+  context: SharedCartRuntime & {
+    hydrateMissing?: (snapshot: CartSnapshot) => Promise<void>;
+  }
+) {
   const {
     dispatch,
     stateRef,
     generationRef,
+    enabledRef,
+    linkRunRef,
     adoptOutcomeRef,
     importOpIdsRef,
     createOpRef,
@@ -27,11 +37,48 @@ export function createCartProvisioning(context: SharedCartRuntime) {
     bootstrappingRef,
     optionsRef,
   } = context;
+  const createSourceIdsRef = context.createSourceIdsRef ?? {
+    current: [] as Array<{ cartItemId: string; quantity: number }>,
+  };
 
-  async function ensureCart(): Promise<EnsureCartResult> {
-    const generation = generationRef.current;
-    const current = stateRef.current;
+  async function ensureCart(
+    canProceed: () => boolean = () => true
+  ): Promise<EnsureCartResult> {
+    if (reportCartCookieStorageFailure(dispatch, generationRef.current))
+      return { ok: false, code: 'temporarily_unavailable', retryable: true };
     if (
+      !isCartCookieEpochCurrent(
+        context.cookieEpochRef.current?.value,
+        context.merchantSlug
+      )
+    )
+      return null;
+    const cookieEpoch = context.cookieEpochRef.current?.value;
+    const generation = generationRef.current;
+    const linkRun = linkRunRef.current;
+    const storageGeneration = getCartSessionGeneration(context.merchantSlug);
+    const merchantSlug = optionsRef.current.merchantSlug;
+    const fenced = () =>
+      isCartCookieEpochCurrent(cookieEpoch, context.merchantSlug) &&
+      getCartSessionGeneration(context.merchantSlug) === storageGeneration &&
+      generationRef.current === generation &&
+      linkRunRef.current === linkRun &&
+      enabledRef.current;
+    const live = () => fenced() && canProceed();
+    const retireLateSession = () => {
+      if (generationRef.current === generation && !enabledRef.current) {
+        void revokeCartDeviceSession(merchantSlug, { fenceOnFailure: true });
+      }
+    };
+    if (!live()) return null;
+    const current = stateRef.current;
+    // A snapshot read can observe a committed create before its lost reply
+    // is reconciled. Replay that creation to finish the import and receipt.
+    const pendingCreateImport =
+      current.importStatus === 'pending' &&
+      Boolean(createRequestRef.current?.lines);
+    if (
+      !pendingCreateImport &&
       current.cartId &&
       current.confirmed &&
       !isTerminalCart(current.confirmed)
@@ -46,7 +93,9 @@ export function createCartProvisioning(context: SharedCartRuntime) {
       adoptOutcomeRef.current = 'none';
       createAttemptedRef.current = false;
       createOpRef.current = crypto.randomUUID();
-      createRequestRef.current = { operationId: createOpRef.current };
+      // Leave the request unset so the planning gate below can re-plan
+      // device lines preserved across the terminal adoption.
+      createRequestRef.current = null;
       importOpIdsRef.current = new Set();
     }
     // Defensive: the sender only runs once linked, so adoption has
@@ -67,7 +116,10 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         const bootstrapped = await bootstrapSharedCart(
           optionsRef.current.merchantSlug ?? undefined
         );
-        if (generationRef.current !== generation) return null;
+        if (!fenced()) {
+          retireLateSession();
+          return null;
+        }
         if (!bootstrapped.ok) {
           return {
             code: bootstrapped.code,
@@ -77,18 +129,32 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         }
         adoptOutcomeRef.current = 'bootstrap';
       } finally {
-        bootstrappingRef.current = false;
+        if (
+          linkRunRef.current === linkRun &&
+          generationRef.current === generation
+        )
+          bootstrappingRef.current = false;
       }
     }
-    if (createAttemptedRef.current) return null;
+    if (!live() || createAttemptedRef.current) return null;
+    const canAdoptPreserved =
+      adoptOutcomeRef.current === 'bootstrap' && !createRequestRef.current;
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
-      const cached = getCartFromStorage(optionsRef.current.merchantSlug);
       const status = stateRef.current.importStatus;
-      const planned =
-        (status === 'none' || status === 'failed') && cached.length > 0
-          ? planLegacyImport(cached, null, null)
-          : null;
+      const { cached, planned } = planProvisioningImport(
+        optionsRef.current.merchantSlug,
+        stateRef.current
+      );
+      createSourceIdsRef.current =
+        planned?.kind === 'create'
+          ? cached
+              .map((item) => ({
+                cartItemId: item.cartItemId,
+                quantity: item.quantity,
+              }))
+              .filter((line) => Boolean(line.cartItemId))
+          : [];
       if (planned?.kind === 'blocked') {
         // Over-capacity first import: surface the same actionable
         // capacity outcome as the server-cart path instead of hiding
@@ -122,12 +188,27 @@ export function createCartProvisioning(context: SharedCartRuntime) {
       request,
       optionsRef.current.merchantSlug
     );
-    if (generationRef.current !== generation) return null;
+    if (!fenced()) {
+      retireLateSession();
+      return null;
+    }
     if (!created.ok) {
       // Every failure releases the attempt latch: the stable createOpRef
       // key makes the retry replay-safe, so a new attempt must be
       // allowed instead of stranding the head entry behind a set latch.
       createAttemptedRef.current = false;
+      // A definitive bootstrap-scope rejection can mean another tab installed
+      // a live session. Never substitute a GET for an indeterminate replay.
+      if (canAdoptPreserved && created.code === 'unauthorized') {
+        const adopted = await adoptPreservedFallback(
+          context,
+          merchantSlug,
+          fenced,
+          () => ensureCart(canProceed)
+        );
+        if (adopted) return adopted;
+        if (!fenced()) return null;
+      }
       if (lines) {
         if (created.retryable) {
           // Keep the import pending; the failed head entry drives the
@@ -151,7 +232,7 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         // key with a different body would be an idempotency conflict.
         createOpRef.current = crypto.randomUUID();
         createRequestRef.current = { operationId: createOpRef.current };
-        return ensureCart();
+        return ensureCart(canProceed);
       }
       return { code: created.code, ok: false, retryable: created.retryable };
     }
@@ -168,41 +249,14 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         cartId: created.snapshot.cartId,
         importedAt: new Date().toISOString(),
         lineCount: lines?.length ?? 0,
+        ...(createSourceIdsRef.current.length
+          ? consumedReceiptFields(createSourceIdsRef.current)
+          : {}),
       });
     }
     return { ok: true };
   }
 
-  function finishImportOp(
-    operationId: string,
-    outcome: { ok: true } | { ok: false; code: CartErrorCode }
-  ): void {
-    const generation = generationRef.current;
-    if (!importOpIdsRef.current.has(operationId)) return;
-    importOpIdsRef.current.delete(operationId);
-    if (!outcome.ok) {
-      importOpIdsRef.current = new Set();
-      dispatch({
-        code: outcome.code,
-        generation,
-        type: 'import/failed',
-      });
-      return;
-    }
-    if (importOpIdsRef.current.size > 0) return;
-    const current = stateRef.current;
-    if (!current.confirmed) return;
-    dispatch({
-      generation,
-      lineCount: current.confirmed.lines.length,
-      snapshot: current.confirmed,
-      type: 'import/finished',
-    });
-    saveSharedCartImportReceipt(optionsRef.current.merchantSlug, {
-      cartId: current.confirmed.cartId,
-      importedAt: new Date().toISOString(),
-      lineCount: current.confirmed.lines.length,
-    });
-  }
+  const finishImportOp = createImportFinisher(context);
   return { ensureCart, finishImportOp };
 }

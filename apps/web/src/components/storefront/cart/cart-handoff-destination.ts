@@ -12,17 +12,19 @@ export type DestinationLoad =
  * destination cart exists yet.
  */
 export async function fetchDestinationCart(
-  slug: string | null
+  slug: string | null,
+  signal?: AbortSignal
 ): Promise<DestinationLoad> {
   const url = slug
     ? `/api/storefront/cart?merchantSlug=${encodeURIComponent(slug)}`
     : '/api/storefront/cart';
   try {
-    const response = await fetchJson(url);
+    const response = await fetchJson(url, { signal });
     const payload = (await response.json()) as {
       cart?: CartSnapshot;
       code?: string;
     };
+    if (signal?.aborted) return { status: 'error' };
     if (!response.ok) {
       if (
         response.status === 401 &&

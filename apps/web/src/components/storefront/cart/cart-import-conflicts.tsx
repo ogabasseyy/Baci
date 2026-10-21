@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/cart';
+import { DeviceCartCapacityItems } from './device-cart-capacity-items';
 
 /**
  * Explicit per-line choices when a legacy device cart and the shared
@@ -32,9 +33,17 @@ export function CartImportConflicts() {
         </h2>
         <p role="alert" className="mt-2 text-sm">
           Combining these carts exceeds the {SHARED_CART_MAX_LINES}-line limit.
-          Your device items and offers are still saved on this device. Remove
-          items from your shared cart, then retry importing.
+          Your device items and offers are still saved on this device.{' '}
+          {!cart.sharedCartRef && cart.merchantSlug
+            ? 'Remove items below, then retry importing.'
+            : 'Remove items from your shared cart, then retry importing.'}
         </p>
+        {!cart.sharedCartRef && cart.merchantSlug ? (
+          <DeviceCartCapacityItems
+            key={cart.merchantSlug}
+            merchantSlug={cart.merchantSlug}
+          />
+        ) : null}
         <Button type="button" onClick={() => cart.resolveImportConflicts?.([])}>
           Retry importing device cart
         </Button>
@@ -43,7 +52,9 @@ export function CartImportConflicts() {
           variant="outline"
           onClick={() => cart.discardLegacyImport?.()}
         >
-          Keep shared cart and discard saved device cart
+          {!cart.sharedCartRef && cart.merchantSlug
+            ? 'Discard saved device cart'
+            : 'Keep shared cart and discard saved device cart'}
         </Button>
       </section>
     );

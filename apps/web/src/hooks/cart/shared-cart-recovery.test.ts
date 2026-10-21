@@ -25,12 +25,89 @@ it('retries the original failed operation in the live generation', () => {
     ],
   };
   const refreshNow = vi.fn().mockResolvedValue(undefined);
-  createCartRecovery({ ...runtime, dispatch, refreshNow }).retryPendingSync();
+  createCartRecovery({
+    ...runtime,
+    dispatch,
+    refreshNow,
+    ensureCart: vi.fn(),
+  }).retryPendingSync();
   expect(dispatch).toHaveBeenCalledWith({
     generation: 7,
     operationId: 'original',
     type: 'command/retry',
   });
+});
+
+it('erases preserved lines when discarding after a terminal adoption', async () => {
+  const { saveCartToStorage, getCartFromStorage } = await import(
+    './cart-storage'
+  );
+  const { cartItem, snapshot } = await import(
+    './shared-cart-provisioning.test-support'
+  );
+  saveCartToStorage([cartItem({ id: 'prod-9', cartItemId: 'prod-9' })], 'shop');
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const runtime = result.current;
+  runtime.stateRef.current = {
+    ...runtime.stateRef.current,
+    confirmed: snapshot({ state: 'completed', lines: [], version: 2 }),
+    importStatus: 'failed',
+    importWarnings: ['import_capacity_exceeded'],
+  };
+  createCartRecovery({
+    ...runtime,
+    dispatch: vi.fn(),
+    setLinkPhase: vi.fn(),
+    refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
+  }).discardLegacyImport();
+  expect(getCartFromStorage('shop')).toEqual([]);
+});
+
+it('discards a capacity-blocked device cart even when a create is retained', async () => {
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const runtime = result.current;
+  runtime.stateRef.current = {
+    ...runtime.stateRef.current,
+    importStatus: 'failed',
+    importWarnings: ['import_capacity_exceeded'],
+  };
+  runtime.createAttemptedRef.current = true;
+  runtime.createRequestRef.current = {
+    lines: [{ item: { productId: 'prod-1' }, quantity: 1 }],
+    operationId: 'import:create:deadbeef',
+  } as never;
+  const dispatch = vi.fn();
+  const setLinkPhase = vi.fn();
+  createCartRecovery({
+    ...runtime,
+    dispatch,
+    setLinkPhase,
+    refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
+  }).discardLegacyImport();
+  await vi.waitFor(() =>
+    expect(dispatch).toHaveBeenCalledWith({
+      generation: 7,
+      status: 'skipped',
+      type: 'import/resolved',
+    })
+  );
+  expect(runtime.createAttemptedRef.current).toBe(false);
+  expect(runtime.createRequestRef.current).toBeNull();
+  expect(setLinkPhase).toHaveBeenCalledWith('ready');
 });
 
 it('resolves an empty retry instead of leaving an untracked pending import', () => {
@@ -52,6 +129,7 @@ it('resolves an empty retry instead of leaving an untracked pending import', () 
     ...runtime,
     dispatch,
     refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
   }).retryImport();
   expect(dispatch).toHaveBeenCalledWith({
     generation: 7,

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   discard: vi.fn(),
   enabled: true,
+  shared: false,
   warnings: [] as string[],
   conflicts: [
     { item: { productId: 'phone' } },
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
     sharedCartEnabled: mocks.enabled,
+    sharedCartRef: mocks.shared ? { cartId: 'shared' } : null,
+    merchantSlug: 'shop',
     importConflicts: mocks.conflicts,
     importWarnings: mocks.warnings,
     resolveImportConflicts: mocks.resolve,
@@ -25,6 +28,7 @@ beforeEach(() => {
   mocks.resolve.mockReset();
   mocks.discard.mockReset();
   mocks.enabled = true;
+  mocks.shared = false;
   mocks.warnings = [];
 });
 it('requires an explicit offer for every conflicting item and replaces a changed choice', () => {
@@ -68,7 +72,7 @@ it('shows capacity recovery even without offer conflicts and explicitly retries 
     'Your device items and offers are still saved on this device'
   );
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Remove items from your shared cart'
+    'Remove items below, then retry importing'
   );
   fireEvent.click(
     screen.getByRole('button', { name: 'Retry importing device cart' })
@@ -82,9 +86,34 @@ it('offers an explicit discard choice when making room cannot fit the retained d
   expect(mocks.discard).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Keep shared cart and discard saved device cart',
+      name: 'Discard saved device cart',
     })
   );
   expect(mocks.discard).toHaveBeenCalledOnce();
   expect(mocks.resolve).not.toHaveBeenCalled();
+});
+
+it('labels the discard choice for an existing shared cart', () => {
+  mocks.shared = true;
+  mocks.warnings = ['import_capacity_exceeded'];
+  render(<CartImportConflicts />);
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Keep shared cart and discard saved device cart',
+    })
+  );
+  expect(mocks.discard).toHaveBeenCalledOnce();
+});
+
+it('does not refer to device items below when only shared-cart recovery is available', () => {
+  mocks.shared = true;
+  mocks.warnings = ['import_capacity_exceeded'];
+  render(<CartImportConflicts />);
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Remove items from your shared cart'
+  );
+  expect(screen.getByRole('alert')).not.toHaveTextContent('items below');
+  expect(
+    screen.queryByRole('list', { name: 'Saved device cart items' })
+  ).toBeNull();
 });

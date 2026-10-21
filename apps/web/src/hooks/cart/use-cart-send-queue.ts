@@ -3,11 +3,6 @@
 import { useEffect } from 'react';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
-
-import {
-  saveCartToStorage,
-  stripUnconfirmedDisplayLines,
-} from './cart-storage';
 import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
@@ -22,6 +17,7 @@ import {
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { isTerminalCart } from './shared-cart-queue';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
+import { useCartDisplayCache } from './use-cart-display-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function useCartSendQueue(
@@ -33,7 +29,6 @@ export function useCartSendQueue(
     >
 ) {
   const {
-    merchantSlug,
     sessionGeneration,
     enabled,
     state,
@@ -276,30 +271,6 @@ export function useCartSendQueue(
     dispatch,
   ]);
 
-  // The display cache mirrors confirmed state only once the legacy
-  // import resolves: persisting earlier would overwrite the import
-  // source before its receipt exists.
-  useEffect(() => {
-    // Skip the merchant-switch transition commit: the reducer state still
-    // belongs to the previous session while the slug already names the
-    // next one, so persisting here would file A's lines under B's key.
-    if (
-      !enabled ||
-      state.generation !== sessionGeneration ||
-      (state.importStatus !== 'done' && state.importStatus !== 'skipped')
-    )
-      return;
-    saveCartToStorage(
-      stripUnconfirmedDisplayLines(state.display),
-      merchantSlug
-    );
-  }, [
-    enabled,
-    merchantSlug,
-    sessionGeneration,
-    state.display,
-    state.generation,
-    state.importStatus,
-  ]);
+  useCartDisplayCache(context);
   return {};
 }

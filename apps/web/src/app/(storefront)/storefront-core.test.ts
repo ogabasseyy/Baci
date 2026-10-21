@@ -24,6 +24,14 @@ const cssRuleFor = (selector: string, css = storefrontCoreCss) => {
 };
 
 describe('storefront-core OgaBassey navbar layering', () => {
+  it('reserves the ad frame width independently of its percentage-sized child', () => {
+    const frame = cssRuleFor('.ogabassey-ad-slot-frame');
+    expect(frame).toContain('width: var(--ad-slot-w)');
+    expect(frame).toContain('max-width: 100%');
+    expect(storefrontCoreCss).toMatch(
+      /@media\s*\(min-width:\s*768px\)\s*\{\s*\.ogabassey-ad-slot-frame\s*\{\s*width:\s*var\(--ad-slot-w-lg\)/
+    );
+  });
   it('reserves the actual header height at mobile and desktop breakpoints', () => {
     const loadingCss = readFileSync(
       join(dirname(cssPath), 'storefront-header-loading.css'),

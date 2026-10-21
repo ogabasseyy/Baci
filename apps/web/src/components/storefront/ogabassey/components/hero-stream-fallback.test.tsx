@@ -83,4 +83,13 @@ describe('HeroStreamFallback', () => {
       container.querySelector('[data-ogabassey-desktop-hero]')
     ).not.toBeNull();
   });
+
+  it('does not eagerly fetch a mobile image when another surface owns LCP', () => {
+    const { container } = render(
+      <HeroStreamFallback slides={slides} prioritizeFirstImage={false} />
+    );
+    expect(
+      container.querySelector('[data-ogabassey-mobile-hero-panel] img')
+    ).toBeNull();
+  });
 });

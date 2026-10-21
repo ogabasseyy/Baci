@@ -90,12 +90,14 @@ export function HeroStreamFallback({
                   </a>
                 </div>
                 <div className={HERO_MOBILE_IMAGE_COLUMN_CLASSES}>
-                  <MobileLcpHeroImage
-                    alt={first.imageAlt}
-                    imageFit="contain"
-                    shouldPrioritizeImage={prioritizeFirstImage}
-                    src={first.imageUrl}
-                  />
+                  {prioritizeFirstImage && (
+                    <MobileLcpHeroImage
+                      alt={first.imageAlt}
+                      imageFit="contain"
+                      shouldPrioritizeImage
+                      src={first.imageUrl}
+                    />
+                  )}
                 </div>
               </div>
             </div>

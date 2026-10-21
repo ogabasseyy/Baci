@@ -395,6 +395,11 @@
     }
   }
 
+  .ogabassey-ad-slot-frame {
+    max-width: 100%;
+    width: var(--ad-slot-w);
+  }
+
   .ogabassey-ad-slot {
     flex: 0 0 auto;
     height: var(--ad-slot-h);
@@ -404,6 +409,10 @@
   }
 
   @media (min-width: 768px) {
+    .ogabassey-ad-slot-frame {
+      width: var(--ad-slot-w-lg);
+    }
+
     .ogabassey-ad-slot {
       height: var(--ad-slot-h-lg);
       min-width: min(100%, var(--ad-slot-w-lg));

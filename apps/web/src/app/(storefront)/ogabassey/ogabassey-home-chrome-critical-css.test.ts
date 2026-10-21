@@ -8,6 +8,17 @@ import { OGABASSEY_HOME_CHROME_CRITICAL_CSS } from './ogabassey-home-chrome-crit
 import { OGABASSEY_HOME_LCP_CRITICAL_CSS } from './ogabassey-home-lcp-critical-css';
 
 describe('homepage first-screen CSS', () => {
+  it('reserves ad frame widths before the asynchronous full stylesheet arrives', () => {
+    const widths: string[] = [];
+    postcss
+      .parse(OGABASSEY_HOME_CHROME_CRITICAL_CSS)
+      .walkRules('.ogabassey-ad-slot-frame', (rule) => {
+        rule.walkDecls('width', (declaration) => {
+          widths.push(declaration.value);
+        });
+      });
+    expect(widths).toEqual(['var(--ad-slot-w)', 'var(--ad-slot-w-lg)']);
+  });
   it('inlines the extracted loading geometry with unchanged responsive heights', async () => {
     const from = 'src/app/(storefront)/storefront-core.css';
     const result = await postcss([tailwind({ optimize: true })]).process(

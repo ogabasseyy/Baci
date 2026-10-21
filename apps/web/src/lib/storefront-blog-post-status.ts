@@ -7,9 +7,9 @@ import {
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import {
   callStorefrontPreflightRpc,
-  gateStorefrontPreflightStatus,
   type StorefrontPreflightRpcImpl,
 } from './storefront-preflight-rpc';
+import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 interface BlogPostStatusOptions {
   /**
@@ -84,7 +84,7 @@ export async function resolveStorefrontBlogPostStatus(
     return { kind: 'present-or-unknown' };
   }
 
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_BLOG_POST_STATUS_RPC,
     { p_identifier: opts.identifier, p_post_slug: opts.postSlug },
     {
@@ -93,22 +93,34 @@ export async function resolveStorefrontBlogPostStatus(
       timeoutMs: opts.timeoutMs,
     }
   );
-  if (row === null) {
+  if (result === null) {
     return { kind: 'present-or-unknown' };
   }
 
-  const parsed = storefrontBlogPostStatusRowSchema.safeParse(row);
+  const parsed = storefrontBlogPostStatusRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        { ...result.attempt, outcome: 'parse-error' },
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return { kind: 'present-or-unknown' };
   }
   const verdict = parsed.data;
 
   if (
-    !gateStorefrontPreflightStatus(verdict.storefront_status, failOpenContext)
+    !gateStorefrontPreflightStatus(
+      verdict.storefront_status,
+      failOpenContext,
+      result.attempt
+    )
   ) {
     return { kind: 'present-or-unknown' };
   }

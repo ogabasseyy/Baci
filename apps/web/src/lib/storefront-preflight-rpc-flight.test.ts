@@ -25,26 +25,27 @@ describe('storefront preflight RPC flights', () => {
       storefrontPreflightRpcFlightKey('key', 2000, 'production', secondImpl)
     );
     let calls = 0;
+    const firstValue = { data: 'first', attempt: null };
     const first = storefrontPreflightRpcFlights.run('same', async () => {
       calls += 1;
-      return 'first';
+      return firstValue;
     });
     const second = storefrontPreflightRpcFlights.run('same', async () => {
       calls += 1;
-      return 'second';
+      return { data: 'second', attempt: null };
     });
     await expect(Promise.all([first, second])).resolves.toEqual([
-      'first',
-      'first',
+      firstValue,
+      firstValue,
     ]);
     expect(calls).toBe(1);
     storefrontPreflightRpcFlights.reset();
     await expect(
       storefrontPreflightRpcFlights.run('same', async () => {
         calls += 1;
-        return 'fresh';
+        return { data: 'fresh', attempt: null };
       })
-    ).resolves.toBe('fresh');
+    ).resolves.toEqual({ data: 'fresh', attempt: null });
     expect(calls).toBe(2);
   });
 });

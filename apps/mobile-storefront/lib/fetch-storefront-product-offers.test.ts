@@ -244,4 +244,57 @@ describe('fetch-storefront-product-offers', () => {
     ).resolves.toBeNull();
     expect(mockRpc).toHaveBeenCalledTimes(1);
   });
+
+  it('hydrates valid ids offerless for malformed ones instead of failing the batch', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
+            condition: 'used',
+            price_basis: 80000,
+            allocatable_stock: 2,
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
+    );
+
+    const result = await getStorefrontProductOffersByProductIds([
+      PRODUCT_1,
+      'not-a-uuid',
+    ]);
+
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc.mock.calls[0][1]).toEqual({
+      p_merchant_id: null,
+      p_product_ids: [PRODUCT_1],
+    });
+    expect(result?.['not-a-uuid']).toEqual([]);
+    expect(result?.[PRODUCT_1]).toHaveLength(1);
+  });
+
+  it('skips rows without a finite price instead of hydrating null prices', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
+            condition: 'used',
+            price_basis: null,
+            allocatable_stock: 2,
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
+    );
+
+    await expect(
+      getStorefrontProductOffersByProductIds([PRODUCT_1])
+    ).resolves.toEqual({ [PRODUCT_1]: [] });
+  });
 });

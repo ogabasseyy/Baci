@@ -66,7 +66,7 @@ export function applyCriticalRouteOfferToCartProduct(
   offer: CriticalRouteOfferLike,
   stockBase: Pick<
     CartProduct,
-    'inventory_tracking_policy' | 'stock' | 'stock_quantity'
+    'effective_policy' | 'inventory_tracking_policy' | 'stock' | 'stock_quantity'
   >
 ): CartProduct {
   return {
@@ -76,6 +76,7 @@ export function applyCriticalRouteOfferToCartProduct(
     condition: offer.condition,
     stock:
       resolveSerializedOfferStock(offer, {
+        effective_policy: stockBase.effective_policy,
         inventory_tracking_policy: stockBase.inventory_tracking_policy,
         stock: getEffectiveStock(stockBase),
       }) ?? offer.stock_quantity,

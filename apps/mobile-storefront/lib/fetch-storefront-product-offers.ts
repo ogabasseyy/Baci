@@ -1,5 +1,6 @@
 import {
   fetchOfferResolutions,
+  isOfferAuthorityId,
   type OfferAuthorityRpcCall,
   type ResolvedOfferResolution,
 } from '@baci/shared/lib';
@@ -43,6 +44,13 @@ export async function getStorefrontProductOffersByProductIds(
     return {} as Record<string, StorefrontProductConditionOfferRow[]>;
   }
 
+  // Malformed ids cannot join the batched authority call (it throws
+  // on any malformed id); they hydrate offerless individually so one
+  // stale id never poisons the whole batch (mirrors the blog path).
+  const validProductIds = uniqueProductIds.filter((id) =>
+    isOfferAuthorityId(id)
+  );
+
   // Retry lives inside the adapter so every 200-id chunk of a large
   // set gets its own retries; a chunk failure still fails the whole
   // lookup soft (null), exactly like the old single call.
@@ -70,12 +78,12 @@ export async function getStorefrontProductOffersByProductIds(
   try {
     resolutions = await fetchOfferResolutions(callRpc, {
       merchantId: null,
-      productIds: uniqueProductIds,
+      productIds: validProductIds,
     });
   } catch (error) {
     log.error('Failed to fetch storefront product offers', {
       error,
-      productIds: uniqueProductIds,
+      productIds: validProductIds,
     });
     return null;
   }
@@ -96,11 +104,16 @@ export async function getStorefrontProductOffersByProductIds(
     bucket.push(productId);
     keysByLowerId.set(productId.toLowerCase(), bucket);
   }
+  // Malformed ids keep their pre-initialized empty buckets above:
+  // offerless, without failing the valid ids' hydration.
   for (const resolution of resolutions.values()) {
     // Discovery-side ad-gate: unshaped parents never hydrate even
     // though checkout would stage their rows (transactions accept
-    // all rows; only discovery filters on the flag).
+    // all rows; only discovery filters on the flag). Rows without a
+    // finite price are skipped, never null-priced: same fail-closed
+    // guards as MCP/blog.
     if (resolution.parentEligible !== true) continue;
+    if (resolution.priceBasis === null) continue;
     const keys = keysByLowerId.get(resolution.productId);
     if (keys === undefined) continue;
     const offerRow = {

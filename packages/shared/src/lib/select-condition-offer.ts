@@ -1,4 +1,4 @@
-import { compareConditionOfferIdentity } from './eligible-condition-offers';
+import { compareConditionOfferIdentity } from './compare-condition-offer-identity';
 import { normalizeCanonicalProductCondition } from './product-condition';
 
 export interface SelectableConditionOffer {

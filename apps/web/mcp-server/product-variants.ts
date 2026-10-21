@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
-import { coerceOfferAuthorityRow } from '@baci/shared/lib';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
+import { resolveMcpVariantOffers } from './resolve-mcp-variant-offers';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import { getMcpVariantColorValue } from './variant-color-value';
@@ -137,67 +137,20 @@ export async function loadMcpProductVariants({
     }
   }
 
-  let offers: Array<{
-    condition: string;
-    grade: string | null;
-    price: number;
-    stock_quantity: number;
-    condition_notes: string | null;
-  }> = [];
+  let offers: Awaited<ReturnType<typeof resolveMcpVariantOffers>>['offers'] = [];
   if (product.has_condition_offers) {
-    const { data, error } = await supabase.rpc(
-      'get_storefront_offer_resolution',
-      {
-        p_merchant_id: merchantId,
-        p_product_ids: [product.id],
-      }
-    );
-    if (error) {
-      console.error('Failed to fetch public product offers:', error);
+    const variantOffers = await resolveMcpVariantOffers({
+      supabase,
+      productId: product.id,
+      merchantId,
+    });
+    offers = variantOffers.offers;
+    if (variantOffers.lookupFailed) {
       if (!product.has_variants) {
         offerLookupFailed = true;
         return unavailableOptions('Product offers are temporarily unavailable.');
       }
       offerLookupFailed = true;
-    } else {
-      offers = ((data ?? []) as unknown[]).flatMap((row) => {
-        const resolution = coerceOfferAuthorityRow(row);
-        // Discovery-side ad-gate: unshaped parents are not advertised
-        // even though checkout would stage their rows (transactions
-        // accept all rows; only discovery filters on the flag).
-        // Case-insensitive: the resolution id is canonical
-        // (lowercase) while the caller id may spell UUID hex
-        // uppercase.
-        if (
-          !resolution ||
-          resolution.productId !== product.id.toLowerCase() ||
-          resolution.priceBasis === null ||
-          resolution.parentEligible !== true
-        )
-          return [];
-        // Display prices from the live basis and availability from the
-        // allocatable stock (policy-capped, parent-inherited): exactly
-        // what checkout enforces. Rows without a finite price are
-        // skipped, never zero-priced: checkout would not honor 0.
-        // Unbounded rows stay purchasable.
-        return [
-          {
-            condition: resolution.condition ?? 'new',
-            grade: resolution.grade ?? null,
-            price: resolution.priceBasis,
-            // Null is unbounded only for serialized_then_unlimited;
-            // any other policy with a missing allocation fails closed
-            // at zero (the SQL legacy arm always coalesces, so null
-            // there means a partial projection).
-            stock_quantity:
-              resolution.allocatableStock ??
-              (resolution.effectivePolicy === 'serialized_then_unlimited'
-                ? Number.MAX_SAFE_INTEGER
-                : 0),
-            condition_notes: resolution.conditionNotes ?? null,
-          },
-        ];
-      });
     }
   }
 

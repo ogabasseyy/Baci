@@ -1,24 +1,4 @@
-import {
-  toFiniteOfferPrice,
-  toFiniteStockQuantity,
-} from './offer-authority-client';
-
-/**
- * Snapshot-side economics mirroring the SQL authority: PDPs render
- * hydrated product snapshots, not live RPC rows, so they apply the
- * same price/stock rules through these pure helpers.
- */
-
-/**
- * Display price basis for a selected offer: the finite offer price, or
- * the parent price when the snapshot carries none.
- */
-export function resolveOfferPriceBasis(
-  offerPrice: unknown,
-  parentPrice: number
-): number {
-  return toFiniteOfferPrice(offerPrice) ?? parentPrice;
-}
+import { toFiniteStockQuantity } from './to-finite-stock-quantity';
 
 export interface OfferStockBase {
   effective_policy?: string | null;

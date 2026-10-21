@@ -140,9 +140,11 @@ DO $$ BEGIN
       WHERE window_start < date_trunc('hour', now())) THEN
     RAISE EXCEPTION 'prune must collect expired windows';
   END IF;
+  -- Merchant A holds two current-window rows: 10 (origin aaaa) + 1
+  -- (origin bbbb); the prune must keep both.
   IF (SELECT COALESCE(sum(request_count), 0)
       FROM storefront_search_private.intake_net_windows
-      WHERE merchant_id = '02d00000-0000-4000-8000-000000000011') <> 10 THEN
+      WHERE merchant_id = '02d00000-0000-4000-8000-000000000011') <> 11 THEN
     RAISE EXCEPTION 'prune must keep the current window';
   END IF;
 END $$;

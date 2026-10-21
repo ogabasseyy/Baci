@@ -72,6 +72,26 @@ it('removes the live line when quantities match and retries a version conflict',
   );
 });
 
+it('reports failure when the snapshot fetch fails retryably', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(false);
+});
+it('treats a missing live cart as nothing to update', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'not_found',
+    retryable: false,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+});
 it('reports failure when the live cart cannot be updated', async () => {
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(snapshot(2) as never);
   vi.mocked(sendSharedCartCommand).mockResolvedValue({

@@ -56,6 +56,9 @@ export function DeviceCartCapacityItems({
       .then(() => {
         if (!applied) {
           setItems(getCartFromStorage(merchantSlug));
+          setError(
+            'Could not save that change. Check storage access and retry.'
+          );
           return;
         }
         // A create in another tab may have committed while this removal

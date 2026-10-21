@@ -164,8 +164,11 @@ export function useCartLinkLifecycle(
       if (cancelled || generationRef.current !== generation || run !== adoptRun)
         return;
       if (result.ok && isTerminalCart(result.snapshot) && cached.length) {
+        // Re-read storage: another tab may have written fresher device
+        // lines while revocation clearing and the fetch were awaited,
+        // and persisting the effect-start copy would clobber them.
         cached = unimportedTerminalLines(
-          cached,
+          getCartFromStorage(merchantSlug),
           result.snapshot.cartId,
           getSharedCartImportReceipt(merchantSlug)
         );

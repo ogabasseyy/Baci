@@ -21,7 +21,10 @@ export async function removeCapacityLineFromLiveCart(
 ): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
-    if (!fetched.ok) return true;
+    // not_found/unauthorized mean there is no live cart to update;
+    // a retryable fetch failure leaves the outcome unknown, so report
+    // failure instead of silently leaving the line in the live cart.
+    if (!fetched.ok) return !fetched.retryable;
     const snapshot = fetched.snapshot;
     if (isTerminalCart(snapshot)) return true;
     const key = identityKeyOfDisplay(selected);

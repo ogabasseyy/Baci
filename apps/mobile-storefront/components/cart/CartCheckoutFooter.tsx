@@ -14,6 +14,7 @@ interface CartCheckoutFooterProps {
   grandTotal: number;
   hasAcceptedNegotiation: boolean;
   hasNonNegotiableItem?: boolean;
+  isPreparingCheckout?: boolean;
   onCheckout: () => void;
   onCheckoutPressIn: () => void;
   onNegotiateTotal: () => void;
@@ -28,6 +29,7 @@ export default function CartCheckoutFooter({
   grandTotal,
   hasAcceptedNegotiation,
   hasNonNegotiableItem = false,
+  isPreparingCheckout = false,
   onCheckout,
   onCheckoutPressIn,
   onNegotiateTotal,
@@ -93,6 +95,11 @@ export default function CartCheckoutFooter({
         <Pressable
           style={styles.checkoutButtonContainer}
           onPressIn={onCheckoutPressIn}
+          disabled={isPreparingCheckout}
+          accessibilityState={{
+            disabled: isPreparingCheckout,
+            busy: isPreparingCheckout,
+          }}
           onPress={onCheckout}
           accessibilityRole="button"
           accessibilityLabel={`Proceed to checkout, total ${formatPrice(grandTotal)}`}
@@ -115,7 +122,7 @@ export default function CartCheckoutFooter({
                 { color: colors.primaryForeground },
               ]}
             >
-              Checkout
+              {isPreparingCheckout ? 'Syncing cart…' : 'Checkout'}
             </Text>
             <View
               style={[

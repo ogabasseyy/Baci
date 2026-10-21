@@ -27,9 +27,18 @@ export async function prepareCartCheckout(
   // return an existing snapshot without retrying its failed product hydration.
   const operation = initial.snapshot ? initial.refresh : initial.prepare;
   if (!operation) return { ready: false, reason: 'unavailable' };
+  const replaced = () => {
+    const current = getState();
+    return (
+      current.enabled !== initial.enabled ||
+      current.prepare !== initial.prepare ||
+      current.refresh !== initial.refresh
+    );
+  };
   try {
     await operation();
   } catch {
+    if (replaced()) return { ready: false, reason: 'session_changed' };
     return {
       ready: false,
       reason:

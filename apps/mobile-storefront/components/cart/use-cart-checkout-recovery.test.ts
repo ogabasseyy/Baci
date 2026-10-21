@@ -38,15 +38,17 @@ it('deduplicates repeated taps and navigates only after the canonical cart is re
   const { result } = renderHook(() => useCartCheckoutRecovery(next));
   let pending!: Promise<void>;
   act(() => {
-    pending = result.current();
-    void result.current();
+    pending = result.current.recoverCheckout();
+    void result.current.recoverCheckout();
   });
+  expect(result.current.isPreparing).toBe(true);
   expect(mockState.prepare).toHaveBeenCalledTimes(1);
   expect(next).not.toHaveBeenCalled();
   await act(async () => {
     finish();
     await pending;
   });
+  expect(result.current.isPreparing).toBe(false);
   expect(next).toHaveBeenCalledTimes(1);
   expect(alert).not.toHaveBeenCalled();
 });
@@ -55,7 +57,7 @@ it('keeps items parked and shows actionable retry guidance on failure', async ()
   const next = jest.fn();
   const { result } = renderHook(() => useCartCheckoutRecovery(next));
   await act(async () => {
-    await result.current();
+    await result.current.recoverCheckout();
   });
   expect(next).not.toHaveBeenCalled();
   expect(alert).toHaveBeenCalledWith(
@@ -73,7 +75,7 @@ it('does not navigate after the cart screen unmounts during preparation', async 
   );
   const next = jest.fn();
   const { result, unmount } = renderHook(() => useCartCheckoutRecovery(next));
-  const pending = result.current();
+  const pending = result.current.recoverCheckout();
   unmount();
   await act(async () => {
     finish();
@@ -103,7 +105,7 @@ it('uses the latest committed navigation callback when sign-in changes during sy
     ({ next }: { next: () => void }) => useCartCheckoutRecovery(next),
     { initialProps: { next: guest } }
   );
-  const pending = result.current();
+  const pending = result.current.recoverCheckout();
   rerender({ next: signedIn });
   await act(async () => {
     finish();

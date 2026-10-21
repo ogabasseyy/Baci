@@ -107,7 +107,7 @@ export default function CartScreen() {
     triggerHaptic,
   });
 
-  const recoverCheckout = useCartCheckoutRecovery(() => {
+  const { recoverCheckout, isPreparing } = useCartCheckoutRecovery(() => {
     if (isAuthenticated) {
       router.push('/checkout');
     } else {
@@ -225,6 +225,7 @@ export default function CartScreen() {
         enableNegotiationModal={enableNegotiationModal}
         formatPrice={formatPrice}
         grandTotal={grandTotal}
+        isPreparingCheckout={isPreparing}
         handleCheckout={handleCheckout}
         handleClearCart={() => {
           Alert.alert('Clear Cart', 'Remove all items from your cart?', [

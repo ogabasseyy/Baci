@@ -93,3 +93,14 @@ it('permits legacy checkout without creating a server cart', async () => {
   ).resolves.toEqual({ ready: true });
   expect(live.prepare).not.toHaveBeenCalled();
 });
+it('silently fences a rejected operation after controller replacement', async () => {
+  let state: CheckoutCartState = { ...live };
+  state.prepare = jest.fn(async () => {
+    state = { ...state, prepare: jest.fn(), status: 'error' };
+    throw new Error('session_changed');
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'session_changed',
+  });
+});

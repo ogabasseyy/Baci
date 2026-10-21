@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -10,6 +10,7 @@ export function useCartCheckoutRecovery(onReady: () => void) {
     onReadyRef.current = onReady;
   }, [onReady]);
   const pending = useRef(false);
+  const [isPreparing, setIsPreparing] = useState(false);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -17,9 +18,10 @@ export function useCartCheckoutRecovery(onReady: () => void) {
       mounted.current = false;
     };
   }, []);
-  return async () => {
+  const recoverCheckout = async () => {
     if (pending.current) return;
     pending.current = true;
+    setIsPreparing(true);
     try {
       const result = await prepareCartCheckout(
         useNativeSharedCartStore.getState
@@ -38,6 +40,8 @@ export function useCartCheckoutRecovery(onReady: () => void) {
         );
     } finally {
       pending.current = false;
+      if (mounted.current) setIsPreparing(false);
     }
   };
+  return { recoverCheckout, isPreparing };
 }

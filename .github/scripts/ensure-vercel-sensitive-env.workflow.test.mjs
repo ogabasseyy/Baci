@@ -35,6 +35,31 @@ test('production prebuilt deploy provisions a missing HMAC key after pull and be
   assert.doesNotMatch(ensureCommand, /env add/);
 });
 
+test('production prebuilt deploy provisions a missing intake net key after pull and before the presence assert', () => {
+  const workflow = readFileSync(DEPLOY_WORKFLOW, 'utf8');
+  const pullStart = workflow.indexOf(
+    'run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production',
+  );
+  const ensureStart = workflow.indexOf(
+    'ensure-vercel-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY',
+    pullStart,
+  );
+  const readinessStart = workflow.indexOf(
+    'assert-vercel-pulled-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY',
+    pullStart,
+  );
+  const buildStart = workflow.indexOf('      - name: Build for Vercel', pullStart);
+  const ensureCommand = workflow.slice(ensureStart, readinessStart);
+
+  assert.ok(pullStart >= 0);
+  assert.ok(ensureStart > pullStart);
+  assert.ok(readinessStart > ensureStart);
+  assert.ok(readinessStart < buildStart);
+  assert.doesNotMatch(ensureCommand, /run-pinned-vercel\.sh/);
+  assert.doesNotMatch(ensureCommand, /env add/);
+  assert.doesNotMatch(ensureCommand, /--target preview/);
+});
+
 test('preview deploy provisions a missing Preview-target HMAC key after pull and before the presence assert', () => {
   const workflow = readFileSync(PREVIEW_WORKFLOW, 'utf8');
   const pullStart = workflow.indexOf(

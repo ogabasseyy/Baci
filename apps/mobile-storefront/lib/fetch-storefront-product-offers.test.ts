@@ -138,6 +138,29 @@ describe('fetch-storefront-product-offers', () => {
     expect(result?.[ids[249]]).toHaveLength(1);
   });
 
+  it('omits a gated row a partial projection still carries', async () => {
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: PRODUCT_1,
+            offer_id: OFFER_7,
+            condition: 'used',
+            price_basis: 80000,
+            allocatable_stock: 2,
+            parent_eligible: false,
+          },
+        ],
+        error: null,
+      })
+    );
+
+    await expect(
+      getStorefrontProductOffersByProductIds([PRODUCT_1])
+    ).resolves.toEqual({ [PRODUCT_1]: [] });
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+  });
+
   it('returns null when the offer lookup fails', async () => {
     mockRpc.mockReturnValueOnce(
       Promise.resolve({ data: null, error: { message: 'boom' } })

@@ -88,6 +88,11 @@ export async function getStorefrontProductOffersByProductIds(
     offersByProductId[productId] = [];
   }
   for (const resolution of resolutions.values()) {
+    // Live SQL withholds gated-out rows; a partial/stale projection
+    // that still carries one must never hydrate (checkout rejects
+    // ineligible parents). Same fail-closed guard as cart, order,
+    // MCP, and native stock consumers.
+    if (resolution.parentEligible !== true) continue;
     offersByProductId[resolution.productId]?.push({
       compare_at_price: resolution.compareAtPrice ?? null,
       condition: resolution.condition,

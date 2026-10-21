@@ -68,7 +68,7 @@ describe('gateStorefrontPreflightStatus', () => {
       '[storefront-internal-preflight] fail-open',
       expect.objectContaining({
         reason: 'has-error',
-        outcome: 'parse-error',
+        outcome: 'rpc-error',
         attemptId: 'b2db3763-0bca-4bfb-b7eb-c53041ad9a45',
       })
     );

@@ -27,9 +27,12 @@ export function gateStorefrontPreflightStatus(
       reason: UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
     });
   } else if (attempt) {
+    // rpc-error, not parse-error: the row already schema-parsed — only its
+    // status value is unexpected. Distinct from transport success so gate
+    // incidents never read as successes downstream.
     storefrontInternalPreflight.warnRpcFailOpen(
       failOpenContext,
-      { ...attempt, outcome: 'parse-error' },
+      { ...attempt, outcome: 'rpc-error' },
       'has-error'
     );
   } else {

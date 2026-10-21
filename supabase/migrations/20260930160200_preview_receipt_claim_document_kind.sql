@@ -94,8 +94,12 @@ BEGIN
     -- the sender's proforma rule (resolveInvoiceTypeCode with
     -- wasPaid=false): an unpaid, invoice-method order with no accepted
     -- payment and no explicit stored code previews as proforma.
-    SELECT COALESCE(
-      (
+    --
+    -- A marked row whose outbox row is gone (deleted/recreated around a
+    -- resend) resolves to NULL, which the loader surfaces as 'unknown',
+    -- instead of asserting 'receipt' for a document that may never have
+    -- been sent.
+    SELECT (
         SELECT CASE
           WHEN n.dispatch_started_at IS NOT NULL
             AND n.metadata->>'sent_document_kind' IN ('receipt', 'invoice', 'proforma_invoice')
@@ -120,9 +124,7 @@ BEGIN
         FROM public.order_notification_outbox AS n
         JOIN public.orders AS o ON o.id = n.order_id
         WHERE n.id = v_claim.manual_notification_id
-      ),
-      'receipt'
-    )
+      )
     INTO v_document_kind;
   END IF;
 

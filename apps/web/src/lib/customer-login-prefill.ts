@@ -1,4 +1,7 @@
-import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
+import {
+  sanitizeCustomerLoginEmailHint,
+  sanitizeMaskedCustomerLoginEmailHint,
+} from '@baci/shared/schemas';
 
 const RECEIPT_CLAIM_REDIRECT_PREFIX = '/receipts/claim/';
 
@@ -21,7 +24,10 @@ export function getReceiptClaimTokenFromLoginRedirect(redirect: string) {
   return token || null;
 }
 
-export async function fetchCustomerLoginEmailPrefillForRedirect(
+// The claim login hint is a masked address fragment (never the full
+// recipient email): callers display it as sign-in guidance, never as an
+// input value.
+export async function fetchCustomerLoginEmailHintForRedirect(
   redirect: string,
   fetchImpl: typeof fetch = fetch
 ) {
@@ -47,7 +53,7 @@ export async function fetchCustomerLoginEmailPrefillForRedirect(
         : null;
 
     return typeof emailHint === 'string'
-      ? sanitizeCustomerLoginEmailPrefill(emailHint)
+      ? sanitizeMaskedCustomerLoginEmailHint(emailHint)
       : '';
   } catch {
     return '';

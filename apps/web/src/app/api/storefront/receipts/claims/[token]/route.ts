@@ -41,32 +41,6 @@ async function validateReceiptClaimCsrf(request: NextRequest) {
   return await checkCsrfProtection(request);
 }
 
-function isMissingRedeemReceiptClaimV2Function(
-  error: {
-    code?: string | null;
-    message?: string | null;
-  } | null
-) {
-  if (!error) {
-    return false;
-  }
-
-  if (error.code === 'PGRST202' || error.code === '42883') {
-    return true;
-  }
-
-  // Narrow to true not-found signals only: a bare 'function' match would
-  // misclassify e.g. 'permission denied for function
-  // redeem_receipt_claim_v2' and silently downgrade redemption to the
-  // legacy RPC, which skips the verified-email and binding checks.
-  // Ambiguous errors fail closed (500) via the caller.
-  const message = (error.message ?? '').toLowerCase();
-  return (
-    message.includes('redeem_receipt_claim_v2') &&
-    (message.includes('could not find') || message.includes('does not exist'))
-  );
-}
-
 async function redeemReceiptClaim({
   source,
   supabase,
@@ -76,18 +50,24 @@ async function redeemReceiptClaim({
   supabase: Pick<SupabaseClient, 'rpc'>;
   tokenHash: string;
 }) {
+  // No legacy fallback, by design: when v2 is missing (pre-migration
+  // database) this fails closed with 500 via the caller instead of
+  // downgrading to the legacy RPC, which skips the verified-email and
+  // binding checks. Redemption is user-initiated and retryable, so the
+  // minutes-long predeploy window degrades to a retryable 500 rather
+  // than an unverified redemption.
   const response = await supabase.rpc('redeem_receipt_claim_v2', {
     p_source: source,
     p_token_hash: tokenHash,
   });
 
-  if (!isMissingRedeemReceiptClaimV2Function(response.error)) {
-    return response;
+  if (response.error) {
+    throw new Error(
+      `Failed to redeem receipt claim: ${response.error.message}`
+    );
   }
 
-  return await supabase.rpc('redeem_receipt_claim', {
-    p_token_hash: tokenHash,
-  });
+  return response;
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -162,15 +142,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const { data, error } = await redeemReceiptClaim({
+    // redeemReceiptClaim throws on any RPC error, so only the data
+    // outcome needs handling here.
+    const { data } = await redeemReceiptClaim({
       source: hasBearerAuthorization(request) ? 'app' : 'web',
       supabase: auth.supabase,
       tokenHash: hashReceiptClaimToken(token),
     });
-
-    if (error) {
-      throw new Error(`Failed to redeem receipt claim: ${error.message}`);
-    }
 
     if (!data) {
       return NextResponse.json(

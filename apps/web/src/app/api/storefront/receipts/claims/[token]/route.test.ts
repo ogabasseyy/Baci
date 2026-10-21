@@ -154,27 +154,24 @@ describe('POST /api/storefront/receipts/claims/[token] status mapping', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it('falls back to legacy redemption for verified users during rollout', async () => {
+  it('fails closed instead of legacy fallback when v2 is missing', async () => {
     const supabase = createSupabaseRpcMock({ data: null, error: null });
-    supabase.rpc
-      .mockResolvedValueOnce({
-        data: null,
-        error: { code: '42883', message: 'function does not exist' },
-      })
-      .mockResolvedValueOnce({
-        data: { redirectPath: '/receipts', status: 'ok' },
-        error: null,
-      });
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '42883', message: 'function does not exist' },
+    });
     mockAuthenticatedSupabase(supabase, {
       email_confirmed_at: '2026-01-01T00:00:00Z',
     });
 
     const response = await POST(postRequest(), params);
 
-    expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledTimes(2);
-    expect(supabase.rpc).toHaveBeenNthCalledWith(
-      2,
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to redeem receipt claim',
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
       'redeem_receipt_claim',
       expect.anything()
     );

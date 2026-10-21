@@ -125,7 +125,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       'record_receipt_claim_login_started',
       expect.anything()
     );
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
   });
 
   it('serves the hint from the service function when the preview carries no email', async () => {
@@ -144,7 +144,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('get_receipt_claim_login_hint', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
   });
 
   it('records app login-start activity from the mobile email hint request', async () => {
@@ -156,7 +156,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
     expect(supabase.rpc).toHaveBeenCalledWith(
       'record_receipt_claim_login_started_v2',
       {
@@ -178,7 +178,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body).toEqual({ emailHint: 'basseybjohn@yahoo.co.uk' });
+    expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
     expect(mockConsoleError).toHaveBeenCalledWith(
       'Failed to record receipt claim login start',
       expect.any(Error)

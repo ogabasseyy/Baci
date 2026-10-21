@@ -1,5 +1,5 @@
+import { maskCustomerLoginEmailHint } from '@baci/shared/schemas';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import {
   buildReceiptDeviceList,
   hashReceiptClaimToken,
@@ -156,9 +156,12 @@ export async function loadReceiptClaimLoginEmailHint({
   }
 
   // The recipient address travels through the service-role-only hint
-  // function so the anon preview payload never carries it. During the
-  // predeploy window the function does not exist yet: fall back to the
-  // legacy preview email, which the schema still tolerates.
+  // function so the anon preview payload never carries it, and only a
+  // masked hint leaves the server: an anonymous token holder learns which
+  // inbox to open, never the full address. During the predeploy window
+  // the function does not exist yet: fall back to the legacy preview
+  // email, which the schema still tolerates.
+  let rawEmail: string | null = null;
   if (serviceSupabase) {
     const { data, error } = await serviceSupabase.rpc(
       'get_receipt_claim_login_hint',
@@ -166,22 +169,15 @@ export async function loadReceiptClaimLoginEmailHint({
     );
 
     if (!error) {
-      return {
-        emailHint: sanitizeCustomerLoginEmailPrefill(
-          typeof data === 'string' ? data : null
-        ),
-        ok: true,
-      };
-    }
-
-    if (!isMissingLoginHintFunction(error)) {
+      rawEmail = typeof data === 'string' ? data : null;
+    } else if (!isMissingLoginHintFunction(error)) {
       throw new Error(`Failed to load receipt claim: ${error.message}`);
     }
   }
 
   return {
-    emailHint: sanitizeCustomerLoginEmailPrefill(
-      record.claim.customer_email ?? null
+    emailHint: maskCustomerLoginEmailHint(
+      rawEmail ?? record.claim.customer_email ?? null
     ),
     ok: true,
   };

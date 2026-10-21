@@ -213,37 +213,26 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     });
   });
 
-  it('falls back to the legacy redemption RPC when the v2 RPC is absent during rollout', async () => {
+  it('fails closed without legacy fallback when the v2 RPC is absent', async () => {
     const supabase = {
-      rpc: vi
-        .fn()
-        .mockResolvedValueOnce({
-          data: null,
-          error: {
-            code: 'PGRST202',
-            message: 'Could not find function public.redeem_receipt_claim_v2',
-          },
-        })
-        .mockResolvedValueOnce({
-          data: { redirectPath: '/receipts', status: 'ok' },
-          error: null,
-        }),
+      rpc: vi.fn().mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message: 'Could not find function public.redeem_receipt_claim_v2',
+        },
+      }),
     };
     mockAuthenticatedSupabase(supabase);
 
     const response = await POST(postRequest(), params);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body).toEqual({
-      redirectPath: '/receipts',
-      success: true,
-    });
-    expect(supabase.rpc).toHaveBeenNthCalledWith(1, 'redeem_receipt_claim_v2', {
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: 'Failed to redeem receipt claim' });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith('redeem_receipt_claim_v2', {
       p_source: 'web',
-      p_token_hash: hashReceiptClaimToken('claim-token'),
-    });
-    expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'redeem_receipt_claim', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
   });

@@ -244,13 +244,12 @@ describe('OgabasseyLoginPage', () => {
       });
     });
 
-    it('prefills receipt claim login email from the token redirect', async () => {
+    it('shows masked receipt claim guidance without prefilling the input', async () => {
       const setEmail = vi.fn();
       const fetchMock = vi.fn(async () =>
-        new Response(
-          JSON.stringify({ emailHint: '  BasseyBJohn@Yahoo.CO.UK  ' }),
-          { status: 200 }
-        )
+        new Response(JSON.stringify({ emailHint: 'b***@yahoo.co.uk' }), {
+          status: 200,
+        })
       );
       vi.stubGlobal('fetch', fetchMock);
       mockSearchParams.get = vi.fn((key) =>
@@ -281,8 +280,14 @@ describe('OgabasseyLoginPage', () => {
       render(<OgabasseyLoginPage />);
 
       await waitFor(() => {
-        expect(setEmail).toHaveBeenCalledWith('basseybjohn@yahoo.co.uk');
+        expect(
+          screen.getByText(
+            'This receipt was sent to b***@yahoo.co.uk — sign in with that address.'
+          )
+        ).toBeInTheDocument();
       });
+      // The masked hint guides; the input is never prefilled with it.
+      expect(setEmail).not.toHaveBeenCalled();
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/storefront/receipts/claims/token_123/login-email',
         { headers: { accept: 'application/json' } }

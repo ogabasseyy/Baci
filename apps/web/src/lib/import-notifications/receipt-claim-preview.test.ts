@@ -150,7 +150,7 @@ describe('receipt claim preview', () => {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(result).toEqual({
-      emailHint: 'basseybjohn@yahoo.co.uk',
+      emailHint: 'b***@yahoo.co.uk',
       ok: true,
     });
   });
@@ -177,9 +177,12 @@ describe('receipt claim preview', () => {
       { p_token_hash: hashReceiptClaimToken('claim-token') }
     );
     expect(result).toEqual({
-      emailHint: 'basseybjohn@yahoo.co.uk',
+      emailHint: 'b***@yahoo.co.uk',
       ok: true,
     });
+    // The full recipient address never reaches an unauthenticated caller,
+    // even though the service function resolves it.
+    expect(result.ok ? result.emailHint : '').not.toContain('basseybjohn');
   });
 
   it('falls back to the preview email when the hint function is missing', async () => {
@@ -205,7 +208,7 @@ describe('receipt claim preview', () => {
     });
 
     expect(result).toEqual({
-      emailHint: 'basseybjohn@yahoo.co.uk',
+      emailHint: 'b***@yahoo.co.uk',
       ok: true,
     });
   });

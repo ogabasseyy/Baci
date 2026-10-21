@@ -284,3 +284,11 @@ SELECT pg_temp.assert_true((SELECT NOT has_function_privilege('authenticated', '
 SELECT pg_temp.assert_true((SELECT has_function_privilege('service_role', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'service_role can execute the login-hint function');
 SELECT pg_temp.assert_true((SELECT public.get_receipt_claim_login_hint(repeat('c7', 32)) = 'moved@example.com'), 'login hint resolves the live claim email');
 SELECT pg_temp.assert_true((SELECT public.get_receipt_claim_login_hint(repeat('e9', 32)) IS NULL), 'login hint is null for unknown hashes');
+-- A marked claim whose outbox row is gone previews an unknown kind rather
+-- than asserting 'receipt'. The FK cascade normally prevents this state,
+-- so the probe lifts the constraint inside this transaction only (the
+-- harness rolls everything back) to cover the defensive branch.
+ALTER TABLE public.receipt_claims DISABLE TRIGGER ALL;
+UPDATE public.receipt_claims SET manual_notification_id = '20000000-0000-4000-8000-000000000001' WHERE token_hash = repeat('c7', 32);
+SELECT pg_temp.assert_true((SELECT (p->>'document_kind') IS NULL FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'missing outbox row previews unknown kind');
+ALTER TABLE public.receipt_claims ENABLE TRIGGER ALL;

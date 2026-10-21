@@ -1,7 +1,6 @@
 import { VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { authenticateApiRequest } from '@/lib/api-auth';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
 import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu-wallet-only';
@@ -27,6 +26,7 @@ export interface JoinedVtuClaimMapping {
 export async function fulfillJoinedVtuClaim({
   authSupabase,
   userSupabase,
+  fulfillSupabase,
   user,
   input,
   customerId,
@@ -38,6 +38,9 @@ export async function fulfillJoinedVtuClaim({
 }: {
   authSupabase: SupabaseClient;
   userSupabase: SupabaseClient;
+  /** Privileged fulfill client (param-injected: lib modules must not
+   * import the admin client — event-pipeline boundary contract). */
+  fulfillSupabase: SupabaseClient;
   user: JoinAuthUser;
   input: VtuWalletOnlyChargeInput;
   customerId: string;
@@ -73,7 +76,7 @@ export async function fulfillJoinedVtuClaim({
       merchant_id: merchantId,
       request_fingerprint: requestFingerprint,
     },
-    supabase: createAdminClient(),
+    supabase: fulfillSupabase,
     user,
   });
   // Winner-key wire: the loser key maps to the winner

@@ -31,6 +31,7 @@ import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-rep
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
 import { STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-tail-pending-sources';
+import { VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-checkout-rls-pending-sources';
 import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
 import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
 
@@ -38,13 +39,6 @@ const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d
 const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
 const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
 const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
-const VTU_CHECKOUT_RLS_PENDING_SOURCES = `f4c1b7a24a881e6ab5fe0a1498f90b3a2f0c9b8cb16a04781960f4162dce9155 20261020090100_vtu_replay_binding_rpc.sql
-1404c72f2c5eac3602eaaad4654d35570bce6ef608e82cfd4f77eb980bf32be1 20261020090101_vtu_checkout_customer_rpcs.sql
-55e0915d0b9772fe92f72b13ee600ec50f4c8cdf631301e646f340f3b36c3bf5 20261020090102_vtu_checkout_settings_projection.sql
-24af17520e938ed72c3c61948a2940d587a99e479600c4ef19714774d6c7e2d0 20261020090103_vtu_prepare_insert_rpc.sql
-3f51401672bbe2ed2b3f6d7e26eaace7467f01565d903cff6df5a41878534dcb 20261020090104_vtu_idempotency_lookup_rpc.sql
-8466802d23e567e0b6afe4dd9dec99847a7250122dbeed6cb043739ff4ebe6f6 20261020090105_harden_claim_vtu_intent.sql
-215ed9498eeec2c74937ab88ea9fad3c44954efe9dc385a15e18b2b90f06f9ec 20261020090106_vtu_orphan_fail_rpc.sql`;
 const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
 const TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES = `8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c 20260923150000_include_tracking_order_method_and_import_source.sql`;
 const INVOICE_ARTIFACT_PROOF_RPCS_PENDING_SOURCES = `ce700c747390cbaddac5282dd933b7c83273ad747dec77a70fb2b7b4b3b12425 20260923150100_invoice_artifact_proof_bound_rpcs.sql`;
@@ -287,7 +281,7 @@ const PENDING_SOURCES = [
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
-  VTU_CHECKOUT_RLS_PENDING_SOURCES,
+  VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })

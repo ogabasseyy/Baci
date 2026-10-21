@@ -69,7 +69,9 @@ export function SharedCartStatusPanel() {
           : state.status === 'error'
             ? 'Cart sync was interrupted. Your last confirmed items are saved.'
             : !state.snapshot
-              ? 'Connect these items to your shared cart before checkout.'
+              ? items.length
+                ? 'Connect these items to your shared cart before checkout.'
+                : 'Your shared cart will refresh before checkout.'
               : 'Checking product details before checkout.'}
       </Text>
       {!busy && conflicts.length > 0 && state.chooseLegacy ? (

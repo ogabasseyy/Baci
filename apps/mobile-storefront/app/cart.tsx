@@ -229,6 +229,9 @@ export default function CartScreen() {
         isPreparingCheckout={isPreparing}
         handleCheckout={handleCheckout}
         handleClearCart={() => {
+          // Intent-to-open fencing: a confirmed clear must never land
+          // under an in-flight checkout, even at the cost of one
+          // spurious Cart changed alert when the dialog is cancelled.
           markSharedCartIntent();
           Alert.alert('Clear Cart', 'Remove all items from your cart?', [
             { text: 'Cancel', style: 'cancel' },

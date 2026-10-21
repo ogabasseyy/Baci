@@ -20,6 +20,8 @@ export function useCartScreenItemHandlers({
 
   const handleRemoveItem = (item: CartItem) => {
     if (pendingOperations.current.has(item.id)) return;
+    // Intent-to-open fencing (see cart screen Clear Cart): confirmed
+    // removals must never land under an in-flight checkout.
     markSharedCartIntent();
     Alert.alert('Remove Item', `Remove ${item.name} from cart?`, [
       { text: 'Cancel', style: 'cancel' },

@@ -196,7 +196,7 @@ describe('useReceipts completion dating', () => {
     );
   });
 
-  it('fails the list load when receipt transaction dating fails', async () => {
+  it('demotes the affected manual receipt when transaction dating fails', async () => {
     const { useReceipts } = await import('@/hooks/use-receipts');
     mockOrder.mockResolvedValue({
       data: [
@@ -232,11 +232,13 @@ describe('useReceipts completion dating', () => {
 
     render(<Probe />);
     const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const receipts = (await options.queryFn()) as Array<{
+      document_kind: string;
+    }>;
 
-    // A promoted receipt must never file under a stale invoice date: like
-    // the web orders route, the whole load fails instead of misdating.
-    await expect(options.queryFn()).rejects.toThrow(
-      'transaction lookup failed'
-    );
+    // A promoted receipt must never file under a stale invoice date, but
+    // the failure is contained per row: the unverifiable manual receipt
+    // demotes to invoice instead of blanking the whole archive.
+    expect(receipts.map((row) => row.document_kind)).toEqual(['invoice']);
   });
 });

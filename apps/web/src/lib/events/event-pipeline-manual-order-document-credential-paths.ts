@@ -7,6 +7,8 @@ const claimLinks =
   'apps/web/src/lib/import-notifications/receipt-claim-links.ts';
 const zeptomail = 'apps/web/src/lib/zeptomail.ts';
 const admin = 'apps/web/src/lib/supabase/admin.ts';
+const loginEmailRoute =
+  'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts';
 
 // The CRON-authenticated manual-order document sender builds receipt-claim
 // links and dispatches Zeptomail delivery from the order-notification outbox
@@ -26,4 +28,9 @@ export const eventPipelineManualOrderDocumentCredentialPaths = [
   [...claimLinksTail],
   [...zeptomailTail],
   [...zeptomailAdminTail],
+  // The token-scoped login-email route resolves the recipient address
+  // through the service-role-only login-hint RPC (PR 3580): the 256-bit
+  // claim Bearer [REDACTED] is the only credential on this path, and no table
+  // access flows through it.
+  [loginEmailRoute, admin, envPath],
 ] as const;

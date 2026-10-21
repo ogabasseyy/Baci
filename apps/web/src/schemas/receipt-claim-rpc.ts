@@ -233,12 +233,6 @@ function normalizeReceiptClaimCampaignStats(value: unknown) {
 
 export const receiptClaimRecordSchema = z.object({
   claimed_at: z.string().nullable(),
-  // Retired from the anon preview payload (nothing consumes them): kept
-  // nullish so mixed-version rollout pairs still parse in both directions,
-  // exactly like document_kind above. customer_email is also retired from
-  // the anon payload (the login hint travels via the service-role-only
-  // hint function); the loader falls back to it only against pre-migration
-  // databases, so it stays tolerated here.
   claimed_by_user_id: z.string().nullish(),
   customer_email: z.string().nullish(),
   customer_id: z.string().nullish(),

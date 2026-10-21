@@ -42,7 +42,12 @@ const fixtureSubpaths = listFixtureFiles(fixtureRoot).map(
 );
 const subpaths = [
   ...Object.keys(pkg.exports)
-    .filter((key) => key.startsWith('./test-fixtures/') || key === './vtu')
+    .filter(
+      (key) =>
+        key.startsWith('./test-fixtures/') ||
+        key === './vtu' ||
+        key === './money'
+    )
     .map((key) => `@baci/shared${key.slice(1)}`),
 ];
 
@@ -58,6 +63,7 @@ const expectedSubpaths = [
   '@baci/shared/test-fixtures/piggyvest-schedule',
   '@baci/shared/test-fixtures/fixture-mock',
   '@baci/shared/test-fixtures/order-wallet-funding-intent',
+  '@baci/shared/money',
 ];
 
 describe('@baci/shared exports resolution (no test aliases)', () => {
@@ -92,6 +98,7 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
         'src/test-fixtures/fixture-mock.ts',
       '@baci/shared/test-fixtures/order-wallet-funding-intent':
         'src/test-fixtures/order-wallet-funding-intent.ts',
+      '@baci/shared/money': 'src/money/index.ts',
     };
     for (const [specifier, target] of Object.entries(expectedTargets)) {
       const resolved = appRequire.resolve(specifier);
@@ -128,6 +135,19 @@ describe('@baci/shared exports resolution (no test aliases)', () => {
       buildPendingVtuScopeTag: unknown;
     };
     expect(typeof vtu.buildPendingVtuScopeTag).toBe('function');
+    // Load (not just resolve) the money subpath through the exports map
+    // and exercise it the way a consumer would.
+    const money = (await import(
+      pathToFileURL(appRequire.resolve('@baci/shared/money')).href
+    )) as {
+      formatMoney: (amount: number, currency: string) => string;
+    };
+    expect(typeof money.formatMoney).toBe('function');
+    // Exercise only: exact ICU rendering is pinned in the shared
+    // package's money tests, not in this resolution suite.
+    const rendered = money.formatMoney(1234.5, 'NGN');
+    expect(typeof rendered).toBe('string');
+    expect(rendered.length).toBeGreaterThan(0);
   });
 
   it('every src domain directory with an index has a subpath export', () => {

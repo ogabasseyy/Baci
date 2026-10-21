@@ -56,6 +56,7 @@ export async function prepareCartCheckout(
     // On the create/import path the prepared snapshot becomes the
     // reviewed baseline for the version fence below.
     if (!baseline && observed.snapshot) baseline = observed.snapshot;
+    if (replaced()) return { ready: false, reason: 'session_changed' };
     if (
       !initial.snapshot &&
       observed.snapshot &&

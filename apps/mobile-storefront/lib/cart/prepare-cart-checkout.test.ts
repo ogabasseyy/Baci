@@ -202,3 +202,20 @@ it('stops after one unsuccessful hydration retry without recreating the cart', a
   expect(state.prepare).toHaveBeenCalledTimes(1);
   expect(state.refresh).toHaveBeenCalledTimes(1);
 });
+it('does not run the hydration retry on a replacement controller', async () => {
+  const replacementRefresh = jest.fn().mockResolvedValue(undefined);
+  let state: CheckoutCartState = { ...live };
+  state.prepare = jest.fn(async () => {
+    state = {
+      ...state,
+      snapshot: { state: 'active', lines: [{}] },
+      prepare: jest.fn().mockResolvedValue(undefined),
+      refresh: replacementRefresh,
+    };
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'session_changed',
+  });
+  expect(replacementRefresh).not.toHaveBeenCalled();
+});

@@ -7,19 +7,24 @@ export interface ProductSeoMoneyCandidate {
   amount: number | null;
   rawAmount: string;
   currencies: string[];
+  fallbackIsoCode?: boolean;
 }
 
-function getSupportedIsoCurrencies(): string[] {
+function getSupportedIsoCurrencies(): string[] | null {
   try {
     if (typeof Intl.supportedValuesOf === 'function')
       return Intl.supportedValuesOf('currency');
   } catch {
     // Some runtimes expose the API but do not implement the currency key.
   }
-  return Object.keys(CURRENCY_SYMBOLS);
+  return null;
 }
 
-const isoCurrencies = new Set(getSupportedIsoCurrencies());
+const runtimeIsoCurrencies = getSupportedIsoCurrencies();
+const isoCurrencies = new Set(
+  runtimeIsoCurrencies ?? Object.keys(CURRENCY_SYMBOLS)
+);
+const useBoundedIsoFallback = runtimeIsoCurrencies === null;
 const namedCurrencyAliases: Record<string, string[]> = {
   NAIRA: ['NGN'],
   NAIRAS: ['NGN'],
@@ -63,11 +68,17 @@ const markerPattern = [...new Set([...isoCurrencies, ...Object.keys(aliases)])]
   .join('|');
 // Bounded token grammar: no rescanning arbitrarily long numeric/comma runs.
 const amountPattern =
-  "(?:\\d{1,3}(?:,\\d{3})+|\\d{1,3}(?:\\.\\d{3})+|\\d{1,2}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:[ '\\u2019\\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?(?:[km])?";
+  "(?:\\d{1,3}(?:,\\d{3})+|\\d{1,3}(?:\\.\\d{3})+|\\d{1,2}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:[ '\\u2019\\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?(?:[kKmM])?";
 const taggedPattern = new RegExp(
   `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N},])`,
   'giu'
 );
+const fallbackTaggedPattern = useBoundedIsoFallback
+  ? new RegExp(
+      `(?<![\\p{L}\\p{N},.])(?:([A-Z]{3})\\s*[:–—-]?\\s*(${amountPattern})|(${amountPattern})\\s*[:–—-]?\\s*([A-Z]{3}))(?![\\p{L}\\p{N},])`,
+      'gu'
+    )
+  : null;
 const barePattern = new RegExp(
   `(?<![\\p{L}\\p{N},.])(${amountPattern})(?![\\p{L}\\p{N},])`,
   'giu'
@@ -118,7 +129,9 @@ function currencyCodes(marker: string): string[] {
 export function getProductSeoMoneyCandidates(
   text: string
 ): ProductSeoMoneyCandidate[] {
-  const tagged = [...text.matchAll(taggedPattern)].map((match) => {
+  const tagged: ProductSeoMoneyCandidate[] = [
+    ...text.matchAll(taggedPattern),
+  ].map((match) => {
     const marker = match[2] || match[6];
     const rawAmount = match[3] || match[5];
     let currencies = currencyCodes(marker);
@@ -137,6 +150,33 @@ export function getProductSeoMoneyCandidates(
       currencies,
     };
   });
+  if (fallbackTaggedPattern) {
+    const fallbackTagged = [...text.matchAll(fallbackTaggedPattern)]
+      .map((match) => {
+        const marker = match[1] || match[4];
+        const rawAmount = match[2] || match[3];
+        return {
+          start: match.index,
+          end: match.index + match[0].length,
+          marker,
+          rawAmount,
+          amount: parseAmount(rawAmount),
+          currencies: [marker],
+          fallbackIsoCode: true,
+        };
+      })
+      .filter(
+        (candidate) =>
+          !isoCurrencies.has(candidate.marker) &&
+          !Object.hasOwn(aliases, candidate.marker) &&
+          !tagged.some(
+            (known) =>
+              known.start < candidate.end && candidate.start < known.end
+          )
+      );
+    tagged.push(...fallbackTagged);
+    tagged.sort((a, b) => a.start - b.start);
+  }
   let taggedIndex = 0;
   const bare: ProductSeoMoneyCandidate[] = [];
   for (const match of text.matchAll(barePattern)) {

@@ -22,6 +22,12 @@ describe('getProductSeoMoneyCandidates', () => {
       expect(tokenize('USD 50')).toMatchObject([
         { amount: 50, currencies: ['USD'] },
       ]);
+      expect(tokenize('Buy this phone for CHF 900')).toMatchObject([
+        { marker: 'CHF', amount: 900, currencies: ['CHF'] },
+      ]);
+      expect(tokenize('for 350,000')).toMatchObject([
+        { marker: '', amount: 350_000, rawAmount: '350,000' },
+      ]);
     } finally {
       vi.unstubAllGlobals();
       vi.resetModules();

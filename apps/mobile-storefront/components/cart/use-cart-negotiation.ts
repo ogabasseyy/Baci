@@ -122,6 +122,7 @@ export function useCartNegotiation({
     );
 
     if (itemsWithIndividualNegotiation.length > 0) {
+      markSharedCartIntent();
       Alert.alert(
         'Reset individual prices?',
         'Negotiating your whole cart will clear the prices you negotiated on individual items. Reset them and continue?',

@@ -265,7 +265,13 @@ export function NativeCartPairingPanel() {
                 async () => {
                   markSharedCartIntent();
                   try {
-                    await shared.refresh?.();
+                    // Mirror the status panel: a read-only refresh cannot
+                    // create a missing canonical cart after a failed pair.
+                    const operation =
+                      shared.snapshot || items.length === 0
+                        ? shared.refresh
+                        : shared.prepare;
+                    await (operation ?? shared.refresh)?.();
                   } catch {
                     setFailed(true);
                   }

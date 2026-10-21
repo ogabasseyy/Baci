@@ -4,7 +4,12 @@ export interface CheckoutCartState {
   enabled: boolean;
   status?: string;
   metadataReady?: boolean;
-  snapshot?: { state: string; lines: readonly unknown[] } | null;
+  snapshot?: {
+    state: string;
+    lines: readonly unknown[];
+    cartId?: string;
+    version?: number;
+  } | null;
   prepare: (() => Promise<void>) | null;
   refresh: (() => Promise<void>) | null;
 }
@@ -12,7 +17,11 @@ export type CheckoutPreparation =
   | { ready: true }
   | {
       ready: false;
-      reason: 'choice_required' | 'unavailable' | 'session_changed';
+      reason:
+        | 'choice_required'
+        | 'unavailable'
+        | 'session_changed'
+        | 'cart_changed';
     };
 
 /** Checkout is an explicit intent to import saved lines; never bypass its review. */
@@ -64,6 +73,15 @@ export async function prepareCartCheckout(
   }
   const current = getState();
   if (replaced()) return { ready: false, reason: 'session_changed' };
+  // A polling/foreground refresh can publish a different canonical cart
+  // mid-preparation; the shopper must review that version before checkout.
+  if (
+    initial.snapshot &&
+    current.snapshot &&
+    (current.snapshot.cartId !== initial.snapshot.cartId ||
+      current.snapshot.version !== initial.snapshot.version)
+  )
+    return { ready: false, reason: 'cart_changed' };
   if (sharedCartCheckoutReady(current)) return { ready: true };
   return {
     ready: false,

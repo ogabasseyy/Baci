@@ -132,3 +132,44 @@ it('does not navigate ahead of a direct merge, account, or pairing choice', asyn
     expect.stringContaining('Checkout again')
   );
 });
+it('does not navigate when a polling refresh publishes a new cart version during sync', async () => {
+  mockState = {
+    ...mockState,
+    metadataReady: false,
+    snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 1 },
+  };
+  let finish!: () => void;
+  mockState.refresh = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = () => {
+          mockState = {
+            ...mockState,
+            metadataReady: true,
+            snapshot: {
+              state: 'active',
+              lines: [{}],
+              cartId: 'cart-1',
+              version: 2,
+            },
+          };
+          resolve();
+        };
+      })
+  );
+  const next = jest.fn();
+  const { result } = renderHook(() => useCartCheckoutRecovery(next));
+  let pending!: Promise<void>;
+  act(() => {
+    pending = result.current.recoverCheckout();
+  });
+  await act(async () => {
+    finish();
+    await pending;
+  });
+  expect(next).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith(
+    'Cart changed',
+    expect.stringContaining('Checkout again')
+  );
+});

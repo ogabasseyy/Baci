@@ -118,6 +118,23 @@ it('retries hydration once when prepare discovers the canonical cart', async () 
   expect(state.prepare).toHaveBeenCalledTimes(1);
   expect(state.refresh).toHaveBeenCalledTimes(1);
 });
+it('withholds checkout when a polling refresh publishes a new cart version mid-preparation', async () => {
+  let state: CheckoutCartState = {
+    ...live,
+    snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 1 },
+  };
+  state.refresh = jest.fn(async () => {
+    state = {
+      ...state,
+      metadataReady: true,
+      snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 2 },
+    };
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'cart_changed',
+  });
+});
 it('stops after one unsuccessful hydration retry without recreating the cart', async () => {
   let state: CheckoutCartState = { ...live };
   state.prepare = jest.fn(async () => {

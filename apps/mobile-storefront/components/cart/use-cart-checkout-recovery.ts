@@ -59,6 +59,11 @@ export function useCartCheckoutRecovery(onReady: () => void) {
         return;
       }
       if (result.ready) onReadyRef.current();
+      else if (result.reason === 'cart_changed')
+        Alert.alert(
+          'Cart changed',
+          'Your cart was updated during sync. Review your items and tap Checkout again.'
+        );
       else if (result.reason === 'choice_required')
         Alert.alert(
           'Choose your cart',

@@ -342,3 +342,27 @@ describe('checkout fencing intent', () => {
     expect(sharedCartWriteRevision()).toBe(before + 1);
   });
 });
+
+it('marks the cart-wide reset prompt as a checkout intent', async () => {
+  const { sharedCartWriteRevision } = await import(
+    '@/stores/shared-cart-writer'
+  );
+  mockOpenNegotiation.mockClear();
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  (Alert.alert as jest.Mock).mockClear();
+  const items = [createItem({ negotiatedPrice: 450000 })];
+  const { result } = renderHook(() =>
+    useCartNegotiation({ items, grandTotal: 450000 })
+  );
+  const before = sharedCartWriteRevision();
+  act(() => {
+    result.current.openTotalNegotiation();
+  });
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Reset individual prices?',
+    expect.any(String),
+    expect.any(Array)
+  );
+  expect(mockOpenNegotiation).not.toHaveBeenCalled();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});

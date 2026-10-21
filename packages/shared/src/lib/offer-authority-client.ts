@@ -72,8 +72,23 @@ export function toFiniteStockQuantity(value: unknown): number | null {
 }
 
 /**
+ * Finite stock scalar (floored), or null when absent. Deliberately
+ * NOT clamped: a negative allocation from a partial projection must
+ * keep failing schema-validated surfaces as unavailable (see the MCP
+ * output contract), while every quantity comparison (> 0) already
+ * treats it as unpurchasable.
+ */
+function toUnclampedStockQuantity(value: unknown): number | null {
+  const parsed = toFiniteNumber(value);
+  return parsed === null ? null : Math.floor(parsed);
+}
+
+/**
  * Coerces one raw authority row (PostgREST decodes numerics as strings).
- * Returns null for rows without a product/offer identity.
+ * Returns null for rows without a product/offer identity. Identity ids
+ * are lowercased (UUID hex is case-insensitive; Postgres canonicalizes
+ * to lowercase) so consumers comparing against caller-supplied ids
+ * meet regardless of spelling.
  */
 export function coerceOfferAuthorityRow(
   row: unknown
@@ -93,14 +108,14 @@ export function coerceOfferAuthorityRow(
   const grade = record.grade;
   const conditionNotes = record.condition_notes ?? record.conditionNotes;
   return {
-    productId,
-    offerId: offerIdText,
+    productId: productId.toLowerCase(),
+    offerId: offerIdText.toLowerCase(),
     condition:
       typeof condition === 'string' && condition !== '' ? condition : null,
     priceBasis: toFiniteNumber(
       record.price_basis ?? record.priceBasis ?? record.price
     ),
-    allocatableStock: toFiniteNumber(
+    allocatableStock: toUnclampedStockQuantity(
       record.allocatable_stock ??
         record.allocatableStock ??
         record.stock_quantity
@@ -155,6 +170,9 @@ const AUTHORITY_BATCH_SIZE = 200;
 /**
  * The one live-offer fetch: batched authority calls (chunked to the
  * SQL batch cap) merged into one map keyed by `productId::offerId`.
+ * Chunks run serially by design — merge order stays deterministic
+ * and a chunk failure fails the whole lookup closed with no partial
+ * map — at most 5 sequential RPCs for a 1000-id merchant batch.
  * Throws OfferAuthorityInputError for malformed ids (adapters fail
  * closed) and Error for lookup failures.
  */

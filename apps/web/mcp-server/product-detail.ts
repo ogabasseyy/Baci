@@ -102,9 +102,12 @@ export async function buildMcpProductDetail({
         // still carries one must never be advertised (checkout rejects
         // ineligible parents). Same fail-closed guard as cart, order,
         // and native consumers.
+        // Case-insensitive: the resolution id is canonical
+        // (lowercase) while the caller id may spell UUID hex
+        // uppercase.
         if (
           !resolution ||
-          resolution.productId !== product.id ||
+          resolution.productId !== product.id.toLowerCase() ||
           resolution.priceBasis === null ||
           resolution.parentEligible !== true
         )

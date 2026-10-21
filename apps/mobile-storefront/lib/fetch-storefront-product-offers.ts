@@ -84,8 +84,15 @@ export async function getStorefrontProductOffersByProductIds(
     string,
     StorefrontProductConditionOfferRow[]
   > = {};
+  // Caller-case keys (callers look up by their own id spelling);
+  // resolution ids are canonical lowercase, so push through a
+  // case-insensitive index instead of direct keying.
+  const keyByLowerId = new Map<string, string>();
   for (const productId of uniqueProductIds) {
     offersByProductId[productId] = [];
+    if (!keyByLowerId.has(productId.toLowerCase())) {
+      keyByLowerId.set(productId.toLowerCase(), productId);
+    }
   }
   for (const resolution of resolutions.values()) {
     // Live SQL withholds gated-out rows; a partial/stale projection
@@ -93,7 +100,9 @@ export async function getStorefrontProductOffersByProductIds(
     // ineligible parents). Same fail-closed guard as cart, order,
     // MCP, and native stock consumers.
     if (resolution.parentEligible !== true) continue;
-    offersByProductId[resolution.productId]?.push({
+    const key = keyByLowerId.get(resolution.productId);
+    if (key === undefined) continue;
+    offersByProductId[key]?.push({
       compare_at_price: resolution.compareAtPrice ?? null,
       condition: resolution.condition,
       condition_notes: resolution.conditionNotes ?? null,

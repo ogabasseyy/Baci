@@ -153,7 +153,10 @@ export async function hydrateRelatedBlogProductAvailability(
               // Availability prices from the live basis and counts the
               // allocatable stock (policy-capped, parent-inherited):
               // exactly what checkout enforces.
-              const rows = (byProduct.get(product.id) ?? []).map(
+              // Lowercased: the map holds canonical (lowercase)
+              // resolution ids while caller ids may spell UUID hex
+              // uppercase.
+              const rows = (byProduct.get(product.id.toLowerCase()) ?? []).map(
                 (resolution) => ({
                   condition: resolution.condition,
                   price: resolution.priceBasis,

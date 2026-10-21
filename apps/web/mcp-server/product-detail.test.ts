@@ -163,6 +163,21 @@ describe('buildMcpProductDetail', () => {
     });
   });
 
+  it('matches an uppercase caller id to a lowercase live row', async () => {
+    const supabase = { rpc: vi.fn(async () => ({ data: [
+      { product_id: 'option-phone', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+    ], error: null })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: { ...product, id: 'OPTION-PHONE', has_variants: false, has_condition_offers: true },
+      supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.content[0].text).toContain('• used: 70000 - In Stock');
+    expect(result.structuredContent).toMatchObject({
+      condition_offers: [{ condition: 'used', availability: 'in_stock' }],
+    });
+  });
+
   it('shows a stocked variant price instead of an unavailable parent price', async () => {
     const supabase = { rpc: vi.fn(async () => ({ data: [
       { attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', images: [] },

@@ -173,6 +173,20 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     expect(result[0]?.has_purchasable_condition_offer).toBe(false);
   });
 
+  it('matches an uppercase caller id to a lowercase live row', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [authorityRow('offer-1')],
+      error: null,
+    });
+
+    const result = await hydrateRelatedBlogProductAvailability(
+      { rpc } as never,
+      [product({ id: PRODUCT_ID.toUpperCase() })]
+    );
+
+    expect(result[0]?.has_purchasable_condition_offer).toBe(true);
+  });
+
   it('omits a gated row a partial projection still carries', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [authorityRow('offer-1', { parent_eligible: false })],

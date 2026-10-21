@@ -13,7 +13,9 @@ import {
 const MAX_SOURCE_LENGTH = 20_000;
 const MAX_NAME_LENGTH = 1_000;
 const QUANTITY_UNIT =
-  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|hours?|cycles?|washes|uses|mah|gb|tb|mb|hz|mp|watts?)\b/i;
+const LIFESPAN_QUANTITY_UNIT =
+  /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
 const MODIFIED_COUNT_UNIT =
   /^\s+(?:[\p{L}-]+\s+){1,2}(?:models?|colou?rs?|options?|sizes?|picks?)\b/iu;
 // These ISO spellings are also ordinary words, unlike unambiguous usd/ngn.
@@ -30,6 +32,10 @@ const LEXICAL_CURRENCY_CODES = new Set([
   'BOB',
   'SOS',
 ]);
+const NON_RETAIL_AMOUNT_LABEL =
+  /^\s+(?:(?:gift[- ]card\s+)?bonus|cashback|cash\s+back|trade[- ]in\s+credit|credit|rebate|reward|discount)\b/i;
+const MAGNITUDE_SPECIFICATION_UNIT =
+  /^\s+(?:display|screen|resolution|video|recording|camera|photos?|pixels?)\b/i;
 
 function retailRelation(text: string, start: number) {
   const clause =
@@ -62,13 +68,33 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
   const relation = retailRelation(text, candidate.start);
   const rawAmount = candidate.rawAmount.replace(/[.,]+$/, '');
   const tail = text.slice(candidate.end);
+  const nearbyPrefix = text.slice(
+    Math.max(0, candidate.start - 80),
+    candidate.start
+  );
+  const lastCueIndex = (pattern: RegExp) =>
+    [...nearbyPrefix.matchAll(pattern)].at(-1)?.index ?? -1;
+  const physicalPounds =
+    ['POUND', 'POUNDS'].includes(candidate.marker.toUpperCase()) &&
+    lastCueIndex(/\b(?:weigh|weighs|weighing|weight)\b/gi) >
+      lastCueIndex(
+        /\b(?:cost|costs|price|prices|priced|buy|purchase|pay|sell)\b/gi
+      );
+  if (physicalPounds) return false;
   const quantity =
     QUANTITY_UNIT.test(tail) ||
+    (LIFESPAN_QUANTITY_UNIT.test(tail) &&
+      !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
   if (!candidate.marker) {
     if (
       (!relation.cue && !relation.predicate && !relation.separator) ||
       quantity
+    )
+      return false;
+    if (
+      /[km]$/i.test(candidate.rawAmount) &&
+      MAGNITUDE_SPECIFICATION_UNIT.test(tail)
     )
       return false;
     return (
@@ -98,7 +124,7 @@ function isPrice(candidate: ProductSeoMoneyCandidate, text: string): boolean {
     candidate.marker.toUpperCase() === 'AMD' &&
     !relation.cue &&
     !relation.predicate &&
-    (/^\s+(?:processors?|cpus?|gpus?|graphics)\b/i.test(
+    (/^\s+(?:(?:XT|XTX|GRE|G|X|PRO)\s+)?(?:processors?|cpus?|gpus?|graphics)\b/i.test(
       text.slice(candidate.end)
     ) ||
       /\bpowered\s+by\s*$/i.test(
@@ -192,19 +218,32 @@ export function getDurableProductSeoText({
   )
     return '';
   const monetaryText = productName.trim()
-    ? plainText.replace(
-        new RegExp(productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
-        ''
-      )
+    ? [
+        productName,
+        stripHtmlTags(decodeHTML(getSeoProductName({ name: product.name }))),
+      ].reduce((result, identity) => {
+        if (!identity) return result;
+        return result.replace(
+          new RegExp(identity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+          ''
+        );
+      }, plainText)
     : plainText;
   const denominations = /\bgift[- ]card\b/i.test(productName)
     ? getProductSeoMoneyCandidates(productName).filter((value) => value.marker)
     : [];
-  return getProductSeoMoneyCandidates(monetaryText).some(
-    (candidate) =>
+  return getProductSeoMoneyCandidates(monetaryText).some((candidate) => {
+    const relation = retailRelation(monetaryText, candidate.start);
+    const clearlyNonRetail =
+      !relation.strong &&
+      !relation.predicate &&
+      NON_RETAIL_AMOUNT_LABEL.test(monetaryText.slice(candidate.end));
+    return (
       isPrice(candidate, monetaryText) &&
+      !clearlyNonRetail &&
       !isDenomination(candidate, monetaryText, productName, denominations)
-  )
+    );
+  })
     ? ''
     : plainText;
 }

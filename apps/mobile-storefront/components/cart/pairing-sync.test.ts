@@ -1,7 +1,11 @@
 import { peekCartPairingLink } from '@/lib/cart/pairing-link';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
-import { dismissPairingLink, pairingRetryOperation } from './pairing-sync';
+import {
+  dismissPairingLink,
+  pairingRetryOperation,
+  retryPairingSync,
+} from './pairing-sync';
 
 const prepare = jest.fn().mockResolvedValue(undefined);
 const refresh = jest.fn().mockResolvedValue(undefined);
@@ -64,4 +68,31 @@ it('keeps legacy choice conflicts gated on dismiss', () => {
   dismissPairingLink();
   expect(useNativeSharedCartStore.getState().mergeConflicts).toHaveLength(1);
   expect(sharedCartWriteRevision()).toBe(before);
+});
+
+it.each([
+  null,
+  { cartId: 'cart', version: 1 },
+])('clears failure only for a changed existing canonical cart (%s)', async (snapshot) => {
+  const operation = jest.fn(async () => {
+    useNativeSharedCartStore.setState({
+      snapshot: { cartId: 'cart', version: 2 } as never,
+    });
+  });
+  await expect(
+    retryPairingSync({ snapshot, prepare: operation, refresh: operation }, 1)
+  ).resolves.toBe(Boolean(snapshot));
+  expect(operation).toHaveBeenCalledTimes(1);
+});
+it('preserves failed pairing when retry rejects', async () => {
+  await expect(
+    retryPairingSync(
+      {
+        snapshot: null,
+        prepare: jest.fn().mockRejectedValue(new Error('offline')),
+        refresh: null,
+      },
+      1
+    )
+  ).resolves.toBe(false);
 });

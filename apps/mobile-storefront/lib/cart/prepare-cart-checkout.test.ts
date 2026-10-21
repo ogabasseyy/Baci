@@ -219,3 +219,36 @@ it('does not run the hydration retry on a replacement controller', async () => {
   });
   expect(replacementRefresh).not.toHaveBeenCalled();
 });
+
+it('waits for an overlapping poll when the cart was already fully ready', async () => {
+  let finish!: () => void;
+  let state: CheckoutCartState = {
+    ...live,
+    metadataReady: true,
+    snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 1 },
+  };
+  state.refresh = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      })
+  );
+  let settled = false;
+  const pending = prepareCartCheckout(() => state).then((result) => {
+    settled = true;
+    return result;
+  });
+  await Promise.resolve();
+  expect(state.refresh).toHaveBeenCalledTimes(1);
+  expect(settled).toBe(false);
+  // The queued refresh observes the version published by the earlier poll.
+  state = {
+    ...state,
+    snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 2 },
+  };
+  finish();
+  await expect(pending).resolves.toEqual({
+    ready: false,
+    reason: 'cart_changed',
+  });
+});

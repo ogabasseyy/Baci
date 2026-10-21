@@ -27,6 +27,7 @@ import {
   dismissPairingLink,
   pairingRetryOperation,
   pairWithSharedCart,
+  retryPairingSync,
 } from './pairing-sync';
 
 export function NativeCartPairingPanel() {
@@ -254,26 +255,8 @@ export function NativeCartPairingPanel() {
           {failed && pairingRetryOperation(shared, items.length)
             ? button(
                 'Retry sync',
-                async () => {
-                  markSharedCartIntent();
-                  const before = shared.snapshot;
-                  try {
-                    await pairingRetryOperation(shared, items.length)?.();
-                    // Only a newly committed canonical cart counts.
-                    const after = useNativeSharedCartStore.getState().snapshot;
-                    // A cart created by prepare alone never redeemed the
-                    // handoff, so only a changed existing cart clears this.
-                    if (
-                      before &&
-                      after &&
-                      (after.cartId !== before.cartId ||
-                        after.version !== before.version)
-                    )
-                      setFailed(false);
-                  } catch {
-                    setFailed(true);
-                  }
-                },
+                async () =>
+                  setFailed(!(await retryPairingSync(shared, items.length))),
                 busy
               )
             : null}

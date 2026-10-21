@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from 'vitest';
 import {
   bumpCartSessionGeneration,
+  getCartSessionGeneration,
   getSharedCartImportReceipt,
   saveSharedCartImportReceipt,
   subscribeCartSessionGeneration,
@@ -25,4 +26,11 @@ it('notifies only subscribed generation observers', () => {
   unsubscribe();
   bumpCartSessionGeneration();
   expect(count).toBe(1);
+});
+it('scopes a merchant generation bump to that merchant only', () => {
+  const otherBefore = getCartSessionGeneration('other-shop');
+  const shopBefore = getCartSessionGeneration('shop');
+  bumpCartSessionGeneration({ merchantSlug: 'shop' });
+  expect(getCartSessionGeneration('other-shop')).toBe(otherBefore);
+  expect(getCartSessionGeneration('shop')).toBeGreaterThan(shopBefore);
 });

@@ -86,11 +86,23 @@ it('offers an explicit discard choice when making room cannot fit the retained d
   expect(mocks.discard).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole('button', {
-      name: 'Keep shared cart and discard saved device cart',
+      name: 'Discard saved device cart',
     })
   );
   expect(mocks.discard).toHaveBeenCalledOnce();
   expect(mocks.resolve).not.toHaveBeenCalled();
+});
+
+it('labels the discard choice for an existing shared cart', () => {
+  mocks.shared = true;
+  mocks.warnings = ['import_capacity_exceeded'];
+  render(<CartImportConflicts />);
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Keep shared cart and discard saved device cart',
+    })
+  );
+  expect(mocks.discard).toHaveBeenCalledOnce();
 });
 
 it('does not refer to device items below when only shared-cart recovery is available', () => {

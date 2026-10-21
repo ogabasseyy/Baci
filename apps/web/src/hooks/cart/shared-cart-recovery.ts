@@ -155,12 +155,25 @@ export function createCartRecovery(
     if (
       !enabled ||
       stateRef.current.importStatus !== 'failed' ||
-      bootstrappingRef.current ||
-      (!stateRef.current.confirmed &&
-        (createAttemptedRef.current ||
-          Boolean(createRequestRef.current?.lines)))
+      bootstrappingRef.current
     )
       return;
+    const capacityBlocked =
+      stateRef.current.importWarnings?.includes('import_capacity_exceeded') ??
+      false;
+    if (
+      !stateRef.current.confirmed &&
+      (createAttemptedRef.current ||
+        Boolean(createRequestRef.current?.lines)) &&
+      !capacityBlocked
+    )
+      return;
+    if (!stateRef.current.confirmed && capacityBlocked) {
+      // The shopper explicitly abandons the retained device cart, so the
+      // indeterminate create that carried it must not replay afterwards.
+      createAttemptedRef.current = false;
+      createRequestRef.current = null;
+    }
     dispatch({
       generation: generationRef.current,
       status: 'skipped',

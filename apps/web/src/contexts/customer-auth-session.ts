@@ -39,7 +39,7 @@ async function retirePreviousAccountCartAuthority(
 ): Promise<boolean> {
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
-  bumpCartSessionGeneration();
+  bumpCartSessionGeneration({ merchantSlug });
   try {
     await retirement.drained;
     const revoked = await revokeCartDeviceSession(merchantSlug);
@@ -232,7 +232,7 @@ export async function performCustomerLogout(
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
-  bumpCartSessionGeneration();
+  bumpCartSessionGeneration({ merchantSlug });
   try {
     const revoked = await retirement.drained
       .then(() => revokeCartDeviceSession(merchantSlug))
@@ -241,24 +241,30 @@ export async function performCustomerLogout(
       throw new Error(
         'Could not safely sign out. Please retry when connected.'
       );
+    let response: Response;
     try {
-      const response = await fetch('/api/storefront/auth/logout', {
+      response = await fetch('/api/storefront/auth/logout', {
         method: 'POST',
       });
-      if (response.ok) {
-        clearCustomerAuthRollbackPending(merchantSlug);
-      }
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
-      setRememberedCustomerUserId(merchantSlug, null);
-      setUser(null);
-      setCustomer(null);
-      publishCustomerIdentity(null, null, merchantSlug);
-      setOtpState(null);
-      // Clear cart on logout to prevent cart data leakage between users
-      clearCartStorage(merchantSlug, previousUserId ?? userId);
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
     }
+    if (!response.ok) {
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
+    }
+    clearCustomerAuthRollbackPending(merchantSlug);
+    setRememberedCustomerUserId(merchantSlug, null);
+    setUser(null);
+    setCustomer(null);
+    publishCustomerIdentity(null, null, merchantSlug);
+    setOtpState(null);
+    // Clear cart on logout to prevent cart data leakage between users
+    clearCartStorage(merchantSlug, previousUserId ?? userId);
   } finally {
     retirement.release();
   }

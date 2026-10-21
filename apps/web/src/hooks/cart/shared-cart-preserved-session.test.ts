@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { saveCartToStorage } from './cart-storage';
+import { saveCartToStorage, saveSharedCartImportReceipt } from './cart-storage';
 import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
 import { createCartRecovery } from './shared-cart-recovery';
@@ -89,6 +89,36 @@ it('surfaces temporary busy recovery rather than silently ignoring a retry', () 
     type: 'import/failed',
     code: 'temporarily_unavailable',
   });
+});
+
+it('honors an existing import receipt instead of replanning the mirrored cache', () => {
+  window.localStorage.clear();
+  saveCartToStorage([cartItem()], 'shop');
+  const snap = snapshot({ lines: [] });
+  saveSharedCartImportReceipt('shop', {
+    cartId: snap.cartId,
+    importedAt: '2026-10-21T00:00:00.000Z',
+    lineCount: 1,
+  });
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const dispatch = vi.fn();
+  const runtime = { ...result.current, dispatch };
+  expect(adoptPreservedCart(runtime, snap)).toBe(true);
+  expect(dispatch).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'import/resolved', status: 'done' })
+  );
+  expect(dispatch).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'import/enqueue' })
+  );
+  expect(dispatch).not.toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'import/conflicts' })
+  );
 });
 
 it('does not adopt or import parked cache while revocation is pending', () => {

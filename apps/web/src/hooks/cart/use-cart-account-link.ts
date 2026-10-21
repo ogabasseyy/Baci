@@ -72,7 +72,8 @@ export function useCartAccountLink(options: Options) {
         return;
       }
       const captured = state.current.scope;
-      const generation = getCartSessionGeneration(options.merchantSlug);
+      const merchant = state.current.options.merchantSlug;
+      const generation = getCartSessionGeneration(merchant);
       const run = ++state.current.readRun;
       state.current.loadedScope = null;
       state.current.savedCart = null;
@@ -82,12 +83,10 @@ export function useCartAccountLink(options: Options) {
         setStatus('error');
         return;
       }
-      const result = await fetchSavedAccountCart(
-        state.current.options.merchantSlug
-      );
+      const result = await fetchSavedAccountCart(merchant);
       if (
         state.current.scope !== captured ||
-        getCartSessionGeneration(options.merchantSlug) !== generation ||
+        getCartSessionGeneration(merchant) !== generation ||
         state.current.readRun !== run
       )
         return;
@@ -102,14 +101,14 @@ export function useCartAccountLink(options: Options) {
     };
     const send = async (input: CartAccountLinkInput): Promise<boolean> => {
       const captured = state.current.scope;
-      const generation = getCartSessionGeneration(options.merchantSlug);
-      const lifecycle = state.current.lifecycle;
       const merchant = state.current.options.merchantSlug;
+      const generation = getCartSessionGeneration(merchant);
+      const lifecycle = state.current.lifecycle;
       setStatus('linking');
       const result = await linkAccountCart(input, merchant);
       if (
         state.current.scope !== captured ||
-        getCartSessionGeneration(options.merchantSlug) !== generation ||
+        getCartSessionGeneration(merchant) !== generation ||
         state.current.lifecycle !== lifecycle
       )
         return false;
@@ -128,7 +127,7 @@ export function useCartAccountLink(options: Options) {
       await state.current.options.onLinked?.();
       if (
         state.current.scope === captured &&
-        getCartSessionGeneration(options.merchantSlug) === generation
+        getCartSessionGeneration(merchant) === generation
       )
         await loadSavedCart();
       return true;

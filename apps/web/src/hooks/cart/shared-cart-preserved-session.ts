@@ -1,6 +1,6 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { buildImportEntries } from './build-import-entries';
-import { getCartFromStorage } from './cart-storage';
+import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import { planLegacyImport } from './shared-cart-reducer';
 import { isCartDeviceRevocationPending } from './shared-cart-session-revoke-client';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
@@ -15,6 +15,13 @@ export function adoptPreservedCart(
   const generation = runtime.generationRef.current;
   runtime.adoptOutcomeRef.current = 'session';
   runtime.dispatch({ generation, snapshot, type: 'link/snapshot' });
+  const receipt = getSharedCartImportReceipt(
+    runtime.optionsRef.current.merchantSlug
+  );
+  if (receipt?.cartId === snapshot.cartId) {
+    runtime.dispatch({ generation, status: 'done', type: 'import/resolved' });
+    return true;
+  }
   const plan = planLegacyImport(
     getCartFromStorage(runtime.optionsRef.current.merchantSlug),
     snapshot,

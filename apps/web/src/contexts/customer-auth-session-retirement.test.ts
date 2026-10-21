@@ -53,6 +53,24 @@ it('fences and drains authority writes before logout revocation', async () => {
   expect(isCartSessionRetiring('ogabassey')).toBe(false);
 });
 
+it('does not clear the local session when the server logout fails', async () => {
+  vi.mocked(clearCartStorage).mockClear();
+  vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(new Response('logout failed', { status: 500 }))
+  );
+  const setUser = vi.fn();
+  const setCustomer = vi.fn();
+  await expect(
+    performCustomerLogout('ogabassey', setUser, setCustomer, vi.fn(), 'user-1')
+  ).rejects.toThrow('Could not safely sign out');
+  expect(clearCartStorage).not.toHaveBeenCalled();
+  expect(setUser).not.toHaveBeenCalled();
+  expect(setCustomer).not.toHaveBeenCalled();
+  expect(isCartSessionRetiring('ogabassey')).toBe(false);
+});
+
 it('preserves saved device items when logout revocation fails', async () => {
   vi.mocked(clearCartStorage).mockClear();
   vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: false });

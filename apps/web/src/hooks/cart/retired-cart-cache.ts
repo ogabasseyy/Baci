@@ -10,7 +10,10 @@ export function eraseRetiredCartCache(slug?: string | null): void {
     const suffix = key.slice(prefix.length);
     if (suffix === 'guest' || userId.test(suffix)) storage.removeItem(key);
   }
-  // Historical unscoped payloads are not safe to adopt after retirement.
-  storage.removeItem('baci-cart');
-  storage.removeItem('baci-cart-guest');
+  // Historical unscoped payloads belong to the merchant-less fallback;
+  // only a merchant-less retirement may erase them.
+  if (!slug) {
+    storage.removeItem('baci-cart');
+    storage.removeItem('baci-cart-guest');
+  }
 }

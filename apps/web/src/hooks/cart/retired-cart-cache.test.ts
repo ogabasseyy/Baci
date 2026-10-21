@@ -18,7 +18,21 @@ it('erases merchant account and guest payloads without clearing sibling merchant
   expect(localStorage.getItem('baci-cart-shop-guest')).toBeNull();
   expect(localStorage.getItem(`baci-cart-shop-extra-${user}`)).toBe('saved');
   expect(localStorage.getItem('baci-cart-other-guest')).toBe('saved');
+  // The merchant-less fallback belongs to no single merchant, so a
+  // merchant-scoped retirement must preserve it.
+  expect(localStorage.getItem('baci-cart')).toBe('saved');
+  expect(localStorage.getItem('baci-cart-guest')).toBe('saved');
+});
+
+it('erases the merchant-less fallback only on a merchant-less retirement', () => {
+  localStorage.clear();
+  localStorage.setItem('baci-cart', 'saved');
+  localStorage.setItem('baci-cart-guest', 'saved');
+  localStorage.setItem('baci-cart-shop-guest', 'saved');
+  eraseRetiredCartCache();
   expect(localStorage.getItem('baci-cart')).toBeNull();
+  expect(localStorage.getItem('baci-cart-guest')).toBeNull();
+  expect(localStorage.getItem('baci-cart-shop-guest')).toBe('saved');
 });
 it('clears the account cache during passive revocation before releasing pending authority', async () => {
   const { fetchWithCsrf } = await import('@/lib/api-client');

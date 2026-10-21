@@ -1,7 +1,51 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getDurableProductSeoText } from './get-durable-product-seo-text';
 
 describe('getDurableProductSeoText', () => {
+  it.each([
+    'missing',
+    'throws',
+  ] as const)('rejects explicit unmapped ISO currency prices when Intl.supportedValuesOf %s', async (mode) => {
+    vi.resetModules();
+    vi.stubGlobal('Intl', {
+      supportedValuesOf:
+        mode === 'missing'
+          ? undefined
+          : () => {
+              throw new Error('unsupported currency key');
+            },
+    });
+    try {
+      const { getDurableProductSeoText: classify } = await import(
+        './get-durable-product-seo-text'
+      );
+      expect(
+        classify({
+          text: 'Buy this phone for CHF 900.',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({
+          text: 'Buy iPhone 13 for 350,000 today',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({
+          text: 'Buy Pixel 10 for 999.99 today',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({ text: 'RAM 16GB storage.', product: { name: 'Phone' } })
+      ).toBe('RAM 16GB storage.');
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
   it.each([
     undefined,
     null,
@@ -219,6 +263,12 @@ describe('getDurableProductSeoText', () => {
     'Buy this item; it weighs 5 pounds.',
     'The display is 1,000 nits.',
     'The camera is 1,000 pixels.',
+    'The voltage is 12.5 volts.',
+    'The brightness is 1,200 lumens.',
+    'The bottle holds 1.5 liters.',
+    'The temperature is 23.5 degrees.',
+    'Maximum load capacity is 900 pounds.',
+    'Payload capacity is 1,200 pounds.',
   ])('preserves specifications and non-price numeric context: %s', (text) => {
     expect(
       getDurableProductSeoText({

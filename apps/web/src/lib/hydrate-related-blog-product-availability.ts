@@ -8,6 +8,7 @@ import { hasStockedRelatedBlogVariant } from '@/lib/has-stocked-related-blog-var
 import { hydrateRelatedBlogProductSerializedInventory } from '@/lib/hydrate-related-blog-product-serialized-inventory';
 import { mergeRelatedBlogProductSerializedInventory } from '@/lib/merge-related-blog-product-serialized-inventory';
 import { normalizeOfferRows } from '@/lib/normalize-offer-rows';
+import { normalizeRelatedBlogVariantRows } from '@/lib/normalize-related-blog-variant-rows';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type {
   RelatedBlogProduct,
@@ -18,13 +19,6 @@ import { isValidUuid } from '@/lib/sanitize-core';
 import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import { toFinitePrice } from '@/lib/to-finite-price';
 
-interface VariantStockRow {
-  id?: string | null;
-  inventory_tracking_policy?: string | null;
-  price_override?: number | string | null;
-  product_id?: string | null;
-  stock_quantity?: number | string | null;
-}
 interface AvailabilityResolution {
   available?: boolean;
   offers?: RelatedBlogProductOffer[];
@@ -37,39 +31,6 @@ type HydrateRelatedBlogProductAvailabilityOptions = {
   /** Throw after an RPC error so a cache scope cannot persist a degraded rail. */
   throwOnError?: boolean;
 };
-function isVariantStockRow(value: unknown): value is VariantStockRow {
-  return typeof value === 'object' && value !== null;
-}
-
-function normalizeVariantRows(
-  data: unknown,
-  product: RelatedBlogProduct
-): RelatedBlogProductVariant[] {
-  if (!Array.isArray(data)) return [];
-
-  return data.flatMap((variant) => {
-    if (!isVariantStockRow(variant) || variant.product_id !== product.id) {
-      return [];
-    }
-    const priceOverride = toFinitePrice(variant.price_override);
-    const parentPrice = toFinitePrice(product.price);
-    return [
-      {
-        ...(variant.id ? { id: variant.id } : {}),
-        ...(variant.inventory_tracking_policy
-          ? { inventory_tracking_policy: variant.inventory_tracking_policy }
-          : {}),
-        ...(priceOverride !== null
-          ? { price_override: priceOverride }
-          : parentPrice !== null
-            ? { price_override: parentPrice }
-            : {}),
-        stock_quantity: toFinitePrice(variant.stock_quantity),
-      },
-    ];
-  });
-}
-
 function needsAlternateAvailability(product: RelatedBlogProduct): boolean {
   const hasInventorySignal =
     product.manage_stock !== undefined ||
@@ -232,7 +193,7 @@ export async function hydrateRelatedBlogProductAvailability(
                   product.id,
                   {
                     available: hasStockedRelatedBlogVariant(data, product),
-                    variants: normalizeVariantRows(data, product),
+                    variants: normalizeRelatedBlogVariantRows(data, product),
                   },
                 ] satisfies AvailabilityPair
             );

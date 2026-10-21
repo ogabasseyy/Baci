@@ -15,7 +15,12 @@
 --
 -- Claim internals below the gate are UNCHANGED (advisory lock,
 -- same-key-first, live-or-overlapping join, loser-key mapping,
--- contention loop).
+-- contention loop), plus one addition: the claimed transaction must
+-- live in the claimed scope (Codex P1, PR #3741). Without it an
+-- authenticated caller could map their own key onto another
+-- customer's transaction and fulfill it through replay (the replay
+-- binding would catch it, but the mapping write itself must not
+-- cross scopes).
 
 CREATE OR REPLACE FUNCTION public.claim_vtu_intent(
   p_key uuid,
@@ -68,6 +73,16 @@ BEGIN
     OR p_admission_live IS NULL
   THEN
     RAISE EXCEPTION 'claim_invalid_arguments: claim_vtu_intent requires key, fingerprint, transaction, merchant, customer, admission timestamp, admission liveness';
+  END IF;
+
+  -- Transaction scope (Codex P1): fail fast before taking the lock.
+  PERFORM 1
+  FROM public.vtu_transactions AS t
+  WHERE t.id = p_transaction_id
+    AND t.merchant_id = p_merchant_id
+    AND t.customer_id = p_customer_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'claim_scope_mismatch: claimed transaction is outside the customer scope';
   END IF;
 
   PERFORM pg_catalog.pg_advisory_xact_lock(

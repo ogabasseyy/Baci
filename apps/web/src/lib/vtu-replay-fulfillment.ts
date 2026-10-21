@@ -37,9 +37,10 @@ export async function fulfillReplayVtuTransaction({
   user: ReplayAuthUser;
 }) {
   // Owner binding: the key row's owner was validated above;
-  // the transaction row must match before fulfilling. Reads run on
-  // the authenticated client (buyer SELECT policy, Phase 2); only
-  // the fulfill below stays privileged.
+  // the transaction row must match before fulfilling. Binding reads
+  // run on the authenticated client through the narrow binding RPC
+  // (no buyer SELECT policy exists — Codex P1); only the fulfill
+  // below stays privileged.
   const binding = await verifyReplayTransactionBinding({
     supabase: authSupabase,
     keyRow,

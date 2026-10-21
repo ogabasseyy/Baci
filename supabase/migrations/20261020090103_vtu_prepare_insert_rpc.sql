@@ -1,17 +1,25 @@
--- Ownership-verified prepare-INSERT for the wallet-only
--- checkout (epic #3694 Phase 2).
+-- Service-role-only prepare-INSERT for the wallet-only checkout
+-- (epic #3694 Phase 2).
 --
 -- There is deliberately NO buyer INSERT policy on
 -- vtu_transactions: fulfillment credits row money columns, and a
 -- direct-INSERT policy would let buyers forge rows (Rev 2 re-review:
--- forged cashback + a forged cron marker = mint). The checkout
--- inserts through this RPC instead, which verifies the target
--- customer is the caller's own row and then inserts the full
--- prepared payload — including money columns — in one allowlisted
--- write. Status is pinned to pending server-side; the RETURNING
--- shape matches preparePendingVtuTransaction's select exactly
--- (id, amount, customer_identifier, metadata, request_reference,
--- status, type).
+-- forged cashback + a forged cron marker = mint). There is
+-- deliberately no authenticated EXECUTE on this RPC either (Codex
+-- P1, PR #3741): the settlement payload (source, commissions,
+-- cashback, metadata payment split) is server-computed by the
+-- route — the commerce calc is an external service call the RPC
+-- cannot reproduce — so any authenticated grant would let buyers
+-- forge gift-sourced (no-debit vend) or cashback-inflated rows and
+-- fulfill them through claim + replay. Only the route's privileged
+-- client calls it, with server-computed values.
+--
+-- Defense in depth: status is pinned to pending, source must be
+-- 'checkout' (this RPC serves the wallet-only checkout only), and
+-- amount must be positive — all fail closed even for privileged
+-- callers. The RETURNING shape matches
+-- preparePendingVtuTransaction's select exactly (id, amount,
+-- customer_identifier, metadata, request_reference, status, type).
 
 CREATE OR REPLACE FUNCTION public.insert_prepared_vtu_transaction(
   p_merchant_id uuid,
@@ -63,6 +71,16 @@ BEGIN
     RAISE EXCEPTION 'invalid_arguments: insert_prepared_vtu_transaction requires merchant, customer, user, type, network, phone, amount, reference, source';
   END IF;
 
+  -- This RPC serves the wallet-only checkout only: any other
+  -- source (gift/loyalty/direct) follows a different settlement
+  -- path and must never be minted here (Codex P1 forge).
+  IF p_source IS DISTINCT FROM 'checkout' THEN
+    RAISE EXCEPTION 'invalid_arguments: insert_prepared_vtu_transaction requires source checkout';
+  END IF;
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'invalid_arguments: insert_prepared_vtu_transaction requires a positive amount';
+  END IF;
+
   -- Ownership: the target customer must be the caller's own row.
   v_owner :=
     public._vtu_checkout_caller_customer(p_merchant_id, p_user_id);
@@ -104,10 +122,10 @@ REVOKE ALL ON FUNCTION public.insert_prepared_vtu_transaction(
 GRANT EXECUTE ON FUNCTION public.insert_prepared_vtu_transaction(
   uuid, uuid, uuid, uuid, text, text, text, numeric, text, text,
   numeric, numeric, numeric, text, text, text, text, jsonb
-) TO authenticated, service_role;
+) TO service_role;
 
 COMMENT ON FUNCTION public.insert_prepared_vtu_transaction(
   uuid, uuid, uuid, uuid, text, text, text, numeric, text, text,
   numeric, numeric, numeric, text, text, text, text, jsonb
 ) IS
-  'Phase 2 (#3694): ownership-verified VTU prepare-INSERT. Status pinned pending. Replaces the buyer INSERT policy that must never exist (mint hole).';
+  'Phase 2 (#3694): service-role-only VTU prepare-INSERT. Status pinned pending, source pinned checkout, amount positive. No buyer INSERT policy and no authenticated EXECUTE exist by design (mint hole).';

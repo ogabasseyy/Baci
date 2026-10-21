@@ -15,7 +15,11 @@ import {
   ROOT_DOMAIN,
 } from '@/lib/proxy/host';
 import { isAuthenticatedInternalRequest } from '@/lib/proxy/request-classification';
-import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
+import {
+  checkRateLimit,
+  createRateLimitResponse,
+  type RateLimitResult,
+} from '@/lib/rate-limit';
 import { isRecentlyUnmappedCustomDomain } from '@/lib/reverse-domain-cache';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
@@ -63,7 +67,8 @@ export function getApiSecurityContext(
  */
 export async function runApiSecurityStage(
   request: NextRequest,
-  context: ApiSecurityContext
+  context: ApiSecurityContext,
+  onRateLimit?: (result: RateLimitResult, pathname: string) => void
 ): Promise<NextResponse | null> {
   const { apiRateLimitPathname, aliasApiShape, isAliasApiShaped } = context;
   // Repeat forged origins are rejected before they can burn the caller's
@@ -83,6 +88,7 @@ export async function runApiSecurityStage(
     const rateLimitResult = isExemptInternalCall
       ? null
       : await checkRateLimit(request, apiRateLimitPathname);
+    if (rateLimitResult) onRateLimit?.(rateLimitResult, apiRateLimitPathname);
     if (rateLimitResult && !rateLimitResult.allowed) {
       return createRateLimitResponse(
         rateLimitResult.limit,

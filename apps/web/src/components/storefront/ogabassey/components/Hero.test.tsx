@@ -9,7 +9,12 @@ const mockEmptyMobileHero = vi.hoisted(() => vi.fn());
 vi.mock('./hero-mobile-carousel', () => ({
   HeroMobileCarousel: (props: Record<string, unknown>) => {
     mockMobileCarousel(props);
-    return <div role="region" aria-label="Featured launch product carousel" />;
+    return (
+      <div
+        role="region"
+        aria-label="Featured launch product carousel"
+      />
+    );
   },
 }));
 
@@ -17,10 +22,7 @@ vi.mock('./hero-desktop-grid', () => ({
   HeroDesktopGrid: (props: Record<string, unknown>) => {
     mockDesktopGrid(props);
     return (
-      <section
-        aria-label="Featured products"
-        data-ogabassey-desktop-hero="true"
-      />
+      <section aria-label="Featured products" data-ogabassey-desktop-hero="true" />
     );
   },
 }));
@@ -64,7 +66,7 @@ const SLIDES: LaunchProductSlide[] = [
 describe('Hero', () => {
   beforeEach(() => {
     mockGadgetPattern.mockClear();
-    mockMobileCarousel.mockReset();
+    mockMobileCarousel.mockClear();
     mockDesktopGrid.mockClear();
     mockEmptyMobileHero.mockClear();
   });
@@ -78,7 +80,9 @@ describe('Hero', () => {
   });
 
   it('omits the document heading when the parent already committed one', () => {
-    render(<Hero omitDocumentHeading omitMobileCarousel slides={SLIDES} />);
+    render(
+      <Hero omitDocumentHeading omitMobileCarousel slides={SLIDES} />
+    );
 
     expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
     expect(
@@ -144,28 +148,6 @@ describe('Hero', () => {
     expect(
       container.querySelector('[data-ogabassey-empty-desktop-hero="true"]')
     ).toHaveClass('lg:h-[540px]');
-  });
-
-  it('keeps a hero reserve when the carousel suspends instead of exposing the product reserve above it', () => {
-    const pending = new Promise<never>(() => {});
-    mockMobileCarousel.mockImplementation(() => {
-      throw pending;
-    });
-
-    const { container } = render(<Hero slides={SLIDES} />);
-
-    const reserve = container.querySelector(
-      '[data-ogabassey-hero-stream-fallback="true"]'
-    );
-    expect(reserve).not.toBeNull();
-    expect(reserve).not.toHaveAttribute('aria-hidden');
-    expect(
-      reserve?.querySelector('[data-ogabassey-mobile-hero-panel]')
-    ).not.toBeNull();
-    expect(
-      reserve?.querySelector('[data-ogabassey-hero-utility]')
-    ).not.toBeNull();
-    expect(reserve).toHaveTextContent('Samsung Galaxy A27 5G');
   });
 
   it('extends the patterned mobile shell behind the carousel', () => {

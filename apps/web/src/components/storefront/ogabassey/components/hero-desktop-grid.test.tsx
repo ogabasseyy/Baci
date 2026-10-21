@@ -1,12 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type React from 'react';
-import { Suspense } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-
-const routing = vi.hoisted(() => ({
-  suspended: false,
-  pending: new Promise<never>(() => {}),
-}));
 
 vi.mock('next/link', () => ({
   default: ({
@@ -18,14 +12,11 @@ vi.mock('next/link', () => ({
     children: React.ReactNode;
     href: string;
     prefetch?: boolean;
-  } & Record<string, unknown>) => {
-    if (routing.suspended) throw routing.pending;
-    return (
-      <a href={href} data-prefetch={String(prefetch)} {...rest}>
-        {children}
-      </a>
-    );
-  },
+  } & Record<string, unknown>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock('next/image', () => ({
@@ -33,8 +24,7 @@ vi.mock('next/image', () => ({
     <img
       {...Object.fromEntries(
         Object.entries(props).filter(
-          ([key]) =>
-            key !== 'fill' && key !== 'priority' && key !== 'unoptimized'
+          ([key]) => key !== 'fill' && key !== 'priority' && key !== 'unoptimized'
         )
       )}
       alt={String(props.alt ?? '')}
@@ -56,11 +46,7 @@ vi.mock('next/image', () => ({
     const imageSrc = String(src);
     const resolvedSrc =
       typeof loader === 'function'
-        ? loader({
-            src: imageSrc,
-            width: Number(width),
-            quality: Number(quality),
-          })
+        ? loader({ src: imageSrc, width: Number(width), quality: Number(quality) })
         : imageSrc;
     return {
       props: {
@@ -80,20 +66,6 @@ vi.mock('next/image', () => ({
 
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import type { LaunchProductSlide } from './LaunchCarousel';
-
-it('renders the server-only first frame while the router link module is unavailable', () => {
-  routing.suspended = true;
-  try {
-    render(
-      <Suspense fallback={<p>Waiting for router</p>}>
-        <HeroDesktopGrid staticLinks slides={[makeSlide({ id: 'first' })]} />
-      </Suspense>
-    );
-    expect(screen.getByRole('link', { name: /first/ })).toBeInTheDocument();
-  } finally {
-    routing.suspended = false;
-  }
-});
 
 function makeSlide(
   overrides: Partial<LaunchProductSlide> & Pick<LaunchProductSlide, 'id'>
@@ -222,6 +194,7 @@ describe('HeroDesktopGrid', () => {
       screen.queryByRole('heading', { name: 'Should Not Render' })
     ).not.toBeInTheDocument();
   });
+
 
   it('media-gates side-card images so mobile receives transparent fallbacks', () => {
     const { container } = render(<HeroDesktopGrid slides={SLIDES} />);

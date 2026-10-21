@@ -4,10 +4,6 @@ import { GadgetPattern } from './GadgetPattern';
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
 import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
-import {
-  HERO_DOCUMENT_HEADING,
-  HeroStreamFallback,
-} from './hero-stream-fallback';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
 import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 import type { LaunchProductSlide } from './LaunchCarousel';
@@ -83,22 +79,16 @@ export const Hero: React.FC<HeroProps> = ({
     prioritizeMobileHeroImage ?? !omitDocumentHeading;
 
   return (
-    <Suspense
-      fallback={
-        <HeroStreamFallback
-          slides={slides}
-          omitMobileCarousel={omitMobileCarousel}
-          prioritizeFirstImage={shouldPrioritizeMobileHeroImage}
-          omitDocumentHeading={omitDocumentHeading}
-        />
-      }
-    >
+    <Suspense fallback={null}>
       <div
         className="w-full bg-store-background relative"
         data-ogabassey-hero="true"
       >
         {omitDocumentHeading ? null : (
-          <h1 className="sr-only">{HERO_DOCUMENT_HEADING}</h1>
+          <h1 className="sr-only">
+            OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later
+            in Nigeria
+          </h1>
         )}
 
         {omitMobileCarousel ? null : (

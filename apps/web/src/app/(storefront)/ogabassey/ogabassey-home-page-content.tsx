@@ -46,7 +46,7 @@ export function resolveOgabasseyHomePathPrefix(
   return resolveMerchantContextIdentifier(headersList) ? '' : staticPathPrefix;
 }
 
-export function PublishedOgabasseyHomePageContent({
+function renderPublishedOgabasseyHomePageContent({
   merchant,
   omitDocumentHeading,
   omitMobileCarousel,
@@ -155,7 +155,7 @@ async function renderOgabasseyHomePageContentAsync({
     return <StoreNotPublished businessName={merchant.business_name} />;
   }
 
-  return PublishedOgabasseyHomePageContent({
+  return renderPublishedOgabasseyHomePageContent({
     merchant,
     omitDocumentHeading,
     omitMobileCarousel,
@@ -188,7 +188,7 @@ export function OgabasseyHomePageContent(props: OgabasseyHomePageContentProps) {
       settled.merchant &&
       (settled.merchant.is_published || isDevelopment)
     ) {
-      return PublishedOgabasseyHomePageContent({
+      return renderPublishedOgabasseyHomePageContent({
         merchant: settled.merchant,
         omitDocumentHeading,
         omitMobileCarousel,

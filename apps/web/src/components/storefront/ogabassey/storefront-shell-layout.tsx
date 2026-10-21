@@ -30,7 +30,7 @@ export function StorefrontShellLayout({
         {headerChrome}
         <main
           id="main-content"
-          className="ogabassey-storefront-main min-h-[calc(100svh-132px)] md:min-h-svh"
+          className="ogabassey-storefront-main"
         >
           {children}
         </main>

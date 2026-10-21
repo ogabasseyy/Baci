@@ -18,8 +18,4 @@ it('keeps the footer below the viewport while a streamed route temporarily has n
   );
   expect(screen.getByRole('main')).toHaveClass('ogabassey-storefront-main');
   expect(screen.getByRole('main')).not.toHaveStyle({ minHeight: '100svh' });
-  expect(screen.getByRole('main')).toHaveClass(
-    'min-h-[calc(100svh-132px)]',
-    'md:min-h-svh'
-  );
 });

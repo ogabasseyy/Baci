@@ -115,6 +115,13 @@
 
   .ogabassey-storefront-main {
     flex: 1 1 auto;
+    min-height: calc(100svh - 132px);
+  }
+
+  @media (min-width: 768px) {
+    .ogabassey-storefront-main {
+      min-height: 100svh;
+    }
   }
 
   .ogabassey-footer {

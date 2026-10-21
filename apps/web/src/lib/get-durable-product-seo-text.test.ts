@@ -23,6 +23,12 @@ describe('getDurableProductSeoText', () => {
     'Buy iPhone 13 for 350,000 NGN.',
     'Buy iPhone 13 from <strong>₦350,000</strong>.',
     'Buy iPhone 13 for 350,000₦.',
+    'Buy iPhone 13 for USD 900.',
+    'Buy iPhone 13 for 900 USD.',
+    'Buy iPhone 13 for CHF 900.',
+    'iPhone 13 Price – From 350,000',
+    'Buy iPhone 13 for 350,000 today',
+    'iPhone 13 starts at 350,000.',
   ])('rejects an unbound monetary claim: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -53,6 +59,97 @@ describe('getDurableProductSeoText', () => {
         currency: 'NGN',
       })
     ).toBe('');
+  });
+
+  it.each([
+    'Confirm specs, condition, variants and availability',
+    'Confirm specs, condition, variants & availability.',
+    'Confirm specs, condition, variants and availability. Shop now.',
+  ])('rejects punctuation/CTA variants of the import template: %s', (suffix) => {
+    expect(
+      getDurableProductSeoText({
+        text: `Buy iPhone 13 in Nigeria from Ogabassey. ${suffix}`,
+        product: { name: 'iPhone 13' },
+        currency: 'NGN',
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    ['KES', 'KSh 50,000'],
+    ['ZAR', 'R 9,000'],
+    ['XAF', '50,000 FCFA'],
+    ['TZS', 'TSh 50,000'],
+    ['UGX', '50,000 USh'],
+    ['RWF', 'FRw 50,000'],
+  ])('rejects local display aliases for %s', (currency, amount) => {
+    expect(
+      getDurableProductSeoText({
+        text: `Laptop price: ${amount}`,
+        product: { name: 'Laptop' },
+        currency,
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    [
+      'PSN Gift Card £50 GBP',
+      'PSN Gift Card £50 GBP: £50 value for a UK account',
+    ],
+    [
+      'Amazon Gift Card 50 USD',
+      'Use this 50 USD gift card for Amazon purchases',
+    ],
+    [
+      'Amazon Gift Card 50 USD',
+      'Use this USD 50 gift card for Amazon purchases',
+    ],
+  ])('preserves face-value forms for %s', (name, text) => {
+    const args = { product: { name }, currency: 'USD' };
+    expect(getDurableProductSeoText({ ...args, text })).toBe(text);
+    expect(
+      getDurableProductSeoText({ ...args, text: `${text}. Buy for USD 80.` })
+    ).toBe('');
+    expect(
+      getDurableProductSeoText({ ...args, text: `${text}. Buy for USD 50.` })
+    ).toBe('');
+  });
+
+  it.each([
+    'Laptop with RAM 16GB, SSD 512GB and DDR4 support.',
+    'R16 processor and a 4,000 mAh battery; suitable for 5G networks.',
+    'Compare iPhones from 2025 and choose storage for 4,000 photos.',
+    'Choose from all 3 storage options. Try 2 colours or the top 3 models.',
+  ])('preserves specifications and non-price numeric context: %s', (text) => {
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Device' },
+        currency: 'NGN',
+      })
+    ).toBe(text);
+  });
+
+  it('does not confuse different dollar currencies with the same face value', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Use this 50 CAD gift card for Canadian purchases',
+        product: { name: 'Amazon Gift Card 50 USD' },
+        currency: 'USD',
+      })
+    ).toBe('');
+  });
+
+  it('preserves ordinary words even when they match the merchant currency code', () => {
+    const text = 'Try 2 colours before choosing your phone.';
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Phone' },
+        currency: 'TRY',
+      })
+    ).toBe(text);
   });
 
   it('preserves a denomination in the product name but rejects a separate retail price', () => {

@@ -3,17 +3,19 @@ import {
   UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
 } from './storefront-internal-preflight';
 import type { StorefrontPreflightRpcContext } from './storefront-preflight-rpc';
+import type { StorefrontPreflightRpcAttempt } from './storefront-preflight-rpc-attempt';
 
 /**
  * Shared storefront-status gate for RPC verdict rows: true only for a
  * published storefront. Unknown/unpublished is the DESIGNED junk-traffic
  * fail-open (skip-logged, no capture — parity with the routes'
  * `failOpenReason: 'unknown-storefront'`); any future status value fails open
- * as a captured has-error.
+ * as a captured has-error, correlated with the producing attempt when known.
  */
 export function gateStorefrontPreflightStatus(
   status: string,
-  failOpenContext: StorefrontPreflightRpcContext
+  failOpenContext: StorefrontPreflightRpcContext,
+  attempt?: StorefrontPreflightRpcAttempt | null
 ): boolean {
   if (status === 'published') {
     return true;
@@ -24,6 +26,12 @@ export function gateStorefrontPreflightStatus(
       ...failOpenContext,
       reason: UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
     });
+  } else if (attempt) {
+    storefrontInternalPreflight.warnRpcFailOpen(
+      failOpenContext,
+      attempt,
+      'has-error'
+    );
   } else {
     storefrontInternalPreflight.warnFailOpen({
       ...failOpenContext,

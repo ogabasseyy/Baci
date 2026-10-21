@@ -257,20 +257,23 @@ function handleRpcFailure(
     reason,
     detail
   );
-  captureBreakerOpenTransition(failOpenContext);
+  captureBreakerOpenTransition(failOpenContext, attemptContext);
   return null;
 }
 
 function captureBreakerOpenTransition(
-  failOpenContext: StorefrontPreflightRpcContext
+  failOpenContext: StorefrontPreflightRpcContext,
+  attempt: StorefrontPreflightRpcAttempt
 ): void {
   if (breaker.consumeOpenTransition()) {
     // Exactly one capture per open transition — its own fingerprint makes a
-    // brownout alertable without a capture per suppressed navigation.
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'circuit-open',
-    });
+    // brownout alertable without a capture per suppressed navigation. Carries
+    // the tripping attempt so it joins the attempt that caused it.
+    storefrontInternalPreflight.warnRpcFailOpen(
+      failOpenContext,
+      attempt,
+      'circuit-open'
+    );
   }
 }
 

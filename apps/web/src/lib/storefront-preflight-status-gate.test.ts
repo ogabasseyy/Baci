@@ -4,6 +4,7 @@ import {
   expectFailOpenReason,
   expectSkipReason,
 } from './storefront-preflight-rpc.test-utils';
+import type { StorefrontPreflightRpcAttempt } from './storefront-preflight-rpc-attempt';
 import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -44,5 +45,31 @@ describe('gateStorefrontPreflightStatus', () => {
 
     expect(result).toBe(false);
     expectFailOpenReason(consoleWarnSpy, 'has-error');
+  });
+
+  it('correlates the has-error capture with the producing attempt when known', () => {
+    const attempt: StorefrontPreflightRpcAttempt = {
+      attemptId: 'b2db3763-0bca-4bfb-b7eb-c53041ad9a45',
+      deadlineMs: 4_000,
+      elapsedMs: 12,
+      outcome: 'success',
+      rpcName: 'fn',
+      surface: 'product-slug',
+    };
+
+    const result = gateStorefrontPreflightStatus(
+      'weird-future-value',
+      context(),
+      attempt
+    );
+
+    expect(result).toBe(false);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[storefront-internal-preflight] fail-open',
+      expect.objectContaining({
+        reason: 'has-error',
+        attemptId: 'b2db3763-0bca-4bfb-b7eb-c53041ad9a45',
+      })
+    );
   });
 });

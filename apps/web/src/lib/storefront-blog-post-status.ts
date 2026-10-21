@@ -102,7 +102,7 @@ export async function resolveStorefrontBlogPostStatus(
     if (result.attempt) {
       storefrontInternalPreflight.warnRpcFailOpen(
         failOpenContext,
-        result.attempt,
+        { ...result.attempt, outcome: 'parse-error' },
         'parse'
       );
     } else {
@@ -116,7 +116,11 @@ export async function resolveStorefrontBlogPostStatus(
   const verdict = parsed.data;
 
   if (
-    !gateStorefrontPreflightStatus(verdict.storefront_status, failOpenContext)
+    !gateStorefrontPreflightStatus(
+      verdict.storefront_status,
+      failOpenContext,
+      result.attempt
+    )
   ) {
     return { kind: 'present-or-unknown' };
   }

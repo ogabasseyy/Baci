@@ -157,7 +157,10 @@ function warnRpcFailOpen(
   reason: StorefrontInternalPreflightFailOpenReason,
   detail?: string
 ) {
-  warnFailOpen({ ...context, ...attempt, reason, detail });
+  // Attempt telemetry lands first: under single-flight coalescing, joined
+  // callers share the owner's attempt, but the warn must keep the CALLER's
+  // surface/identity so PostHog fingerprints group correctly.
+  warnFailOpen({ ...attempt, ...context, reason, detail });
 }
 
 function warnFailOpen(context: StorefrontInternalPreflightContext) {

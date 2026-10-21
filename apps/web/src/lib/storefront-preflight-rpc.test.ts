@@ -235,6 +235,14 @@ describe('callStorefrontPreflightRpc', () => {
     // 5 per-failure warns + exactly 1 one-time "circuit-open" transition capture.
     expect(failOpenCalls).toHaveLength(6);
     expect(failOpenCalls[5][1]).toMatchObject({ reason: 'circuit-open' });
+    // The transition capture joins the tripping attempt (same attempt_id as
+    // the 5th failure's warn).
+    expect(failOpenCalls[5][1]).toMatchObject({
+      attemptId: (failOpenCalls[4][1] as Record<string, unknown>).attemptId,
+    });
+    expect((failOpenCalls[5][1] as Record<string, unknown>).attemptId).toMatch(
+      /^[0-9a-f-]{36}$/i
+    );
 
     const sixthResult = await callRpc('breaker_fn', { p: 'a' }, rpcImpl);
 

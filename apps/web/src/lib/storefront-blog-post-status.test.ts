@@ -143,6 +143,7 @@ describe('resolveStorefrontBlogPostStatus', () => {
       '[storefront-internal-preflight] fail-open',
       expect.objectContaining({
         reason: 'parse',
+        outcome: 'parse-error',
         attemptId: attemptProperties.attempt_id,
       })
     );

@@ -118,7 +118,7 @@ export async function getStorefrontProductCanonicalRedirectResult(
     if (result.attempt) {
       storefrontInternalPreflight.warnRpcFailOpen(
         failOpenContext,
-        result.attempt,
+        { ...result.attempt, outcome: 'parse-error' },
         'parse'
       );
     } else {
@@ -132,7 +132,11 @@ export async function getStorefrontProductCanonicalRedirectResult(
   const verdict = parsed.data;
 
   if (
-    !gateStorefrontPreflightStatus(verdict.storefront_status, failOpenContext)
+    !gateStorefrontPreflightStatus(
+      verdict.storefront_status,
+      failOpenContext,
+      result.attempt
+    )
   ) {
     return { kind: 'unknown' };
   }

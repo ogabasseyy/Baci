@@ -60,7 +60,7 @@ async function isPublishedStorefront(
     if (result.attempt) {
       storefrontInternalPreflight.warnRpcFailOpen(
         failOpenContext,
-        result.attempt,
+        { ...result.attempt, outcome: 'parse-error' },
         'parse'
       );
     } else {

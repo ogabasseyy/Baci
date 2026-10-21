@@ -94,6 +94,18 @@ re-runnable: orders that already have a manual row are skipped, and the
 enqueue function re-validates all eligibility. In environments without the
 deploy pipeline, run the statements in 20260930160300 manually as one
 transaction after verifying the new worker drains batches with no 5xx.
+Catch-up scope: the backfill mails post-rollout manual orders created
+while the triggers were disabled (each re-validated by the enqueue
+function); pre-rollout orders carry the flag as false and are never
+mailed. A long predeploy-to-postdeploy gap therefore mails the whole
+gap's manual volume at activation — keep the gap minutes-long.
+
+Accepted Bearer [REDACTED] risk: the unauthenticated login-email GET returns the
+masked hint (`b***@domain`) and records login-started activity for any
+token holder. Token possession already grants the anon preview and
+redemption itself, so the masked fragment discloses nothing beyond what
+the Bearer [REDACTED] already conveys; the activity write is funnel telemetry, not
+an authorization decision.
 
 This ordering matters because old revisions 500 the whole claimed batch
 (including unrelated shipped/delivered rows, which then wait for lease

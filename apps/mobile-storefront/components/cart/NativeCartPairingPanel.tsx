@@ -267,11 +267,13 @@ export function NativeCartPairingPanel() {
                   try {
                     // Mirror the status panel: a read-only refresh cannot
                     // create a missing canonical cart after a failed pair.
-                    const operation =
+                    const preferred =
                       shared.snapshot || items.length === 0
                         ? shared.refresh
                         : shared.prepare;
-                    await (operation ?? shared.refresh)?.();
+                    const operation =
+                      preferred ?? shared.prepare ?? shared.refresh;
+                    await operation?.();
                   } catch {
                     setFailed(true);
                   }

@@ -218,3 +218,17 @@ it('marks a merge-offer pick as a checkout-fencing intent', () => {
   fireEvent.press(view.getByRole('button', { name: 'Keep device offer' }));
   expect(sharedCartWriteRevision()).toBe(before + 1);
 });
+
+it('disables the retry button when no sync operation is bound', () => {
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    snapshot: null,
+    refresh: null,
+    prepare: null,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const button = view.getByRole('button', { name: 'Retry sync' });
+  expect(
+    button.props.accessibilityState?.disabled ?? button.props.disabled
+  ).toBeTruthy();
+});

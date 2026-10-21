@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// If a required sensitive Production key is missing from `vercel pull` output,
-// create it once through the Vercel REST API and record the blank placeholder so
-// the presence assert can pass. Pinned CLI 57.0.0 `env add --sensitive` can exit 0
-// after storing an empty stdin/--value write, so this path never uses the CLI.
-// Never logs, parses, or prints the generated value.
+// If a required sensitive key is missing from `vercel pull` output, create
+// it once through the Vercel REST API and record the blank placeholder so
+// the presence assert can pass. Pinned CLI 57.0.0 `env add --sensitive` can
+// exit 0 after storing an empty stdin/--value write, so this path never
+// uses the CLI. Never logs, parses, or prints the generated value.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
@@ -11,17 +11,28 @@ import os from 'node:os';
 import path from 'node:path';
 
 const VERCEL_API_ORIGIN = 'https://api.vercel.com';
+const TARGETS = ['production', 'preview'];
 const [key, file, ...extraArgs] = process.argv.slice(2);
+let target = 'production';
+if (extraArgs.length === 2 && extraArgs[0] === '--target') {
+  target = extraArgs[1];
+  extraArgs.splice(0, 2);
+}
 
 if (
   !key ||
   !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ||
   !file ||
+  !TARGETS.includes(target) ||
   extraArgs.length > 0
 ) {
-  console.error('Usage: ensure-vercel-sensitive-env.mjs <KEY> <ENV_FILE>');
+  console.error(
+    'Usage: ensure-vercel-sensitive-env.mjs <KEY> <ENV_FILE> [--target production|preview]',
+  );
   process.exit(2);
 }
+
+const targetLabel = target === 'preview' ? 'Preview' : 'Production';
 
 if (!fs.existsSync(file)) {
   console.error(
@@ -44,14 +55,14 @@ if (assignmentCount > 1) {
 
 if (assignmentCount === 1) {
   console.log(
-    `${key} is already defined in the pulled Vercel Production environment.`,
+    `${key} is already defined in the pulled Vercel ${targetLabel} environment.`,
   );
   process.exit(0);
 }
 
 class ClosedFailure extends Error {}
 
-function failClosed(message = `Failed to create ${key} in Vercel Production.`) {
+function failClosed(message = `Failed to create ${key} in Vercel ${targetLabel}.`) {
   throw new ClosedFailure(message);
 }
 
@@ -62,12 +73,12 @@ if (secret.length < 32) {
 }
 
 try {
-  await createSensitiveProductionEnv(key, secret);
+  await createSensitiveTargetEnv(key, secret, target);
 } catch (error) {
   console.error(
     error instanceof ClosedFailure
       ? error.message
-      : `Failed to create ${key} in Vercel Production.`,
+      : `Failed to create ${key} in Vercel ${targetLabel}.`,
   );
   process.exit(1);
 }
@@ -75,7 +86,7 @@ try {
 const suffix = fileContents.endsWith('\n') || fileContents.length === 0 ? '' : '\n';
 fs.writeFileSync(file, `${fileContents}${suffix}${key}=""\n`);
 console.log(
-  `${key} was missing from the pulled Production environment and has been created as a sensitive Vercel Production value.`,
+  `${key} was missing from the pulled ${targetLabel} environment and has been created as a sensitive Vercel ${targetLabel} value.`,
 );
 
 function digest(value) {
@@ -112,7 +123,7 @@ function resolveApiOrigin() {
 function requireEnv(name) {
   const value = process.env[name];
   if (typeof value !== 'string' || value.length === 0) {
-    failClosed(`Missing ${name} for sensitive Production env creation.`);
+    failClosed(`Missing ${name} for sensitive ${targetLabel} env creation.`);
   }
   return value;
 }
@@ -120,7 +131,7 @@ function requireEnv(name) {
 function requirePathId(name) {
   const value = requireEnv(name);
   if (/[/?#&=]/.test(value)) {
-    failClosed(`Invalid ${name} for sensitive Production env creation.`);
+    failClosed(`Invalid ${name} for sensitive ${targetLabel} env creation.`);
   }
   return value;
 }
@@ -140,14 +151,14 @@ function asRecords(payload) {
   return [payload];
 }
 
-function productionSensitiveRecord(row, expectedKey) {
+function targetSensitiveRecord(row, expectedKey, expectedTarget) {
   if (!row || typeof row !== 'object') return false;
   if (row.key !== expectedKey || row.type !== 'sensitive') return false;
   if (typeof row.id !== 'string' || row.id.length === 0) return false;
   if (typeof row.value === 'string' && row.value.length > 0) return false;
   return (
-    row.target === 'production' ||
-    (Array.isArray(row.target) && row.target.includes('production'))
+    row.target === expectedTarget ||
+    (Array.isArray(row.target) && row.target.includes(expectedTarget))
   );
 }
 
@@ -159,7 +170,7 @@ async function readResponseText(response, envKey, value) {
   return text;
 }
 
-async function createSensitiveProductionEnv(envKey, value) {
+async function createSensitiveTargetEnv(envKey, value, envTarget) {
   const origin = resolveApiOrigin();
   const token = requireEnv('VERCEL_TOKEN');
   const projectId = requirePathId('VERCEL_PROJECT_ID');
@@ -188,7 +199,7 @@ async function createSensitiveProductionEnv(envKey, value) {
         key: envKey,
         value: fromFile,
         type: 'sensitive',
-        target: ['production'],
+        target: [envTarget],
       }),
       signal: AbortSignal.timeout(20_000),
     });
@@ -203,10 +214,10 @@ async function createSensitiveProductionEnv(envKey, value) {
     }
 
     const created = asRecords(createdPayload).filter((row) =>
-      productionSensitiveRecord(row, envKey),
+      targetSensitiveRecord(row, envKey, envTarget),
     );
     if (created.length !== 1) {
-      failClosed(`Failed to confirm ${envKey} in Vercel Production.`);
+      failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
 
     const listUrl = new URL(`/v10/projects/${projectId}/env`, origin);
@@ -217,19 +228,19 @@ async function createSensitiveProductionEnv(envKey, value) {
     });
     const listedText = await readResponseText(listedResponse, envKey, value);
     if (!listedResponse.ok) {
-      failClosed(`Failed to confirm ${envKey} in Vercel Production.`);
+      failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
 
     let listedPayload;
     try {
       listedPayload = JSON.parse(listedText);
     } catch {
-      failClosed(`Failed to confirm ${envKey} in Vercel Production.`);
+      failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
 
     const listed = asRecords(listedPayload).filter((row) => row?.key === envKey);
-    if (listed.length !== 1 || !productionSensitiveRecord(listed[0], envKey)) {
-      failClosed(`Failed to confirm ${envKey} in Vercel Production.`);
+    if (listed.length !== 1 || !targetSensitiveRecord(listed[0], envKey, envTarget)) {
+      failClosed(`Failed to confirm ${envKey} in Vercel ${targetLabel}.`);
     }
   } finally {
     try {

@@ -170,3 +170,77 @@ describe('Cloudflare distrust', () => {
     expect(getTrustedClientIdentifier(requestWith(headers))).toBe('172.64.0.1');
   });
 });
+
+describe('getTrustedClientIdentifier', () => {
+  it('never trusts x-forwarded-for', () => {
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-forwarded-for': '203.0.113.1' })
+      )
+    ).toBe('unknown');
+  });
+
+  it('ignores a spoofable x-real-ip without a proxy guarantee', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('unknown');
+  });
+
+  it('does not trust a nonempty non-sentinel VERCEL value', () => {
+    vi.stubEnv('VERCEL', 'yes');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('unknown');
+  });
+
+  it('uses x-real-ip when the platform guarantees it', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('192.0.2.44');
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', 'true');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('192.0.2.44');
+  });
+
+  it('prefers x-vercel-forwarded-for on Vercel, like the lenient identifier', () => {
+    // A proxy stacked on top of Vercel may rewrite x-forwarded-for while
+    // the Vercel header still carries the edge-verified client IP; both
+    // identifiers must agree there or the proxy and durable budget layers
+    // measure different callers.
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '198.51.100.9',
+          'x-real-ip': '192.0.2.1',
+          'x-vercel-forwarded-for': '203.0.113.7',
+        })
+      )
+    ).toBe('203.0.113.7');
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '198.51.100.9',
+          'x-real-ip': '192.0.2.1',
+          'x-vercel-forwarded-for': '203.0.113.7',
+        })
+      )
+    ).toBe('203.0.113.7');
+  });
+
+  it('ignores x-vercel-forwarded-for off Vercel', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-vercel-forwarded-for': '203.0.113.7' })
+      )
+    ).toBe('unknown');
+  });
+});

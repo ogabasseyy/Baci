@@ -520,7 +520,13 @@ jobs:
         run: node .github/scripts/ensure-vercel-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.production.local
       - name: Verify intake network HMAC Production configuration is present
         # Presence-only, like the wallet HMAC: proves the Production key is
-        # defined, not its runtime value.
+        # defined, not its runtime value. A pre-existing but invalid value
+        # (<32 chars, whitespace-only, or equal to the intake JWT) passes
+        # this gate and 503s intake at runtime — sensitive values cannot be
+        # read back, so validity beyond presence is a pre-merge checklist
+        # item (rotate any hand-provisioned value to a fresh 64-hex), not a
+        # pipeline assertion. Symptom if missed: intake 503s with
+        # 'Storefront intake network key is unavailable' in server logs.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.production.local
       - name: Synchronize Cloudflare runtime credentials to Vercel Production
         run: .github/scripts/sync-cloudflare-vercel-production-env.sh .github/scripts/run-pinned-vercel.sh

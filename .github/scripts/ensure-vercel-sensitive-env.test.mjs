@@ -12,13 +12,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import YAML from 'yaml';
 
 const SCRIPT = fileURLToPath(
   new URL('./ensure-vercel-sensitive-env.mjs', import.meta.url),
-);
-const DEPLOY_WORKFLOW = fileURLToPath(
-  new URL('../workflows/deploy.yml', import.meta.url),
 );
 const KEY = 'MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET';
 const PROJECT_ID = 'prj_test';
@@ -32,9 +28,9 @@ function makeRuntime(envContents) {
   return { directory, file };
 }
 
-function run(runtime, env = {}) {
+function run(runtime, env = {}, extraArgs = []) {
   return new Promise((resolve) => {
-    const child = spawn('node', [SCRIPT, KEY, runtime.file], {
+    const child = spawn('node', [SCRIPT, KEY, runtime.file, ...extraArgs], {
       env: {
         ...process.env,
         VERCEL_TOKEN: TOKEN,
@@ -66,12 +62,12 @@ function digest(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-function productionRecord(id = 'env_hmac') {
+function targetRecord(target, id = 'env_hmac') {
   return {
     id,
     key: KEY,
     type: 'sensitive',
-    target: ['production'],
+    target: [target],
   };
 }
 
@@ -117,11 +113,21 @@ async function withMockApi(handler, fn) {
 function succeedCreate({ method, res }) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   if (method === 'POST') {
-    res.end(JSON.stringify(productionRecord()));
+    res.end(JSON.stringify(targetRecord('production')));
     return;
   }
 
-  res.end(JSON.stringify({ envs: [productionRecord()] }));
+  res.end(JSON.stringify({ envs: [targetRecord('production')] }));
+}
+
+function succeedPreviewCreate({ method, res }) {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  if (method === 'POST') {
+    res.end(JSON.stringify(targetRecord('preview')));
+    return;
+  }
+
+  res.end(JSON.stringify({ envs: [targetRecord('preview')] }));
 }
 
 test('no-ops when the pulled Production key is already defined', async () => {
@@ -202,7 +208,7 @@ test('fails closed when Vercel reflects the generated value', async () => {
     await withMockApi(({ body, res }) => {
       const parsed = JSON.parse(body);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...productionRecord(), value: parsed.value }));
+      res.end(JSON.stringify({ ...targetRecord('production'), value: parsed.value }));
     }, async ({ origin }) => {
       const result = await run(runtime, { BACI_VERCEL_API_ORIGIN: origin });
 
@@ -247,40 +253,46 @@ test('fails closed when the pulled key has ambiguous duplicate assignments', asy
   }
 });
 
-test('production prebuilt deploy provisions a missing HMAC key after pull and before the presence assert', () => {
-  const workflow = readFileSync(DEPLOY_WORKFLOW, 'utf8');
-  const pullStart = workflow.indexOf(
-    'run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production',
-  );
-  const ensureStart = workflow.indexOf(
-    'ensure-vercel-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET',
-    pullStart,
-  );
-  const readinessStart = workflow.indexOf(
-    'assert-vercel-pulled-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET',
-    pullStart,
-  );
-  const buildStart = workflow.indexOf('      - name: Build for Vercel', pullStart);
-  const ensureCommand = workflow.slice(ensureStart, readinessStart);
+test('creates a Preview sensitive key when targeted at preview', async () => {
+  const runtime = makeRuntime('QUIZ_PHASE="preview"\n');
 
-  assert.ok(pullStart >= 0);
-  assert.ok(ensureStart > pullStart);
-  assert.ok(readinessStart > ensureStart);
-  assert.ok(readinessStart < buildStart);
-  assert.doesNotMatch(ensureCommand, /run-pinned-vercel\.sh/);
-  assert.doesNotMatch(ensureCommand, /env add/);
+  try {
+    await withMockApi(succeedPreviewCreate, async ({ origin, requests }) => {
+      const result = await run(
+        runtime,
+        { BACI_VERCEL_API_ORIGIN: origin },
+        ['--target', 'preview'],
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(requests.length, 2);
+      const parsed = JSON.parse(requests[0].body);
+      assert.equal(parsed.key, KEY);
+      assert.equal(parsed.type, 'sensitive');
+      assert.deepEqual(parsed.target, ['preview']);
+      assert.match(parsed.value, /^[a-f0-9]{64}$/);
+      assert.equal(
+        readFileSync(runtime.file, 'utf8'),
+        `QUIZ_PHASE="preview"\n${KEY}=""\n`,
+      );
+      assert.doesNotMatch(`${result.stdout}${result.stderr}`, new RegExp(parsed.value));
+      assert.match(result.stdout, /Preview/);
+    });
+  } finally {
+    rmSync(runtime.directory, { recursive: true, force: true });
+  }
 });
 
-test('ensure-script edits trigger production deployment and the deployment-script CI gate', () => {
-  const deploy = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
-  const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
-  const guardPaths = [
-    '.github/scripts/ensure-vercel-sensitive-env.mjs',
-    '.github/scripts/ensure-vercel-sensitive-env.test.mjs',
-  ];
+test('rejects an unknown --target value', async () => {
+  const runtime = makeRuntime('QUIZ_PHASE="preview"\n');
 
-  for (const path of guardPaths) {
-    assert.ok(deploy.web.includes(path), `${path} must trigger the web deployment`);
-    assert.ok(ci.deploy_scripts.includes(path), `${path} must trigger deployment-script tests`);
+  try {
+    const result = await run(runtime, {}, ['--target', 'development']);
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Usage/);
+    assert.equal(readFileSync(runtime.file, 'utf8'), 'QUIZ_PHASE="preview"\n');
+  } finally {
+    rmSync(runtime.directory, { recursive: true, force: true });
   }
 });

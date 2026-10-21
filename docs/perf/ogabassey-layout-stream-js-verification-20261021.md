@@ -1,134 +1,101 @@
-# OgaBassey layout, streamed hero and JavaScript verification
+# OgaBassey layout and deferred JavaScript review status
 
-## Verdict and scope
+## Scope correction (2026-10-22)
 
-The local implementation fixes three identified layout mechanisms and emits
-authorized hero content in visible initial HTML. It is ready for PR review, not
-an assertion of production CWV improvement. Nothing was deployed.
+This draft retains the catalog/ad-frame layout repairs, the streamed main-region
+minimum height, and the bounded BlogSnippet SDK deferral. It does not fix the
+streamed hero or establish a production LCP improvement. Nothing was deployed.
 
-Runtime source commits: `3149f07475` and
-`2f5f5699376f3a4c4ade44d4f7e886d639b093b4`. The branch incorporates main through
-`4af36fcc4b`; that later base update changes native/MCP configuration, not the
-storefront runtime exercised here. The approved route-inventory snapshot is
-generated from exact source commit `2f5f5699376f3a4c4ade44d4f7e886d639b093b4`,
-with 584 rows and SHA-256
-`57375622a7287834048e78aac7437fd3f7046fdd9c5456bd6b217aa0d82e1f32`.
+The initial sibling canonical homepage route is withdrawn. Although its hero
+appeared in visible initial HTML, it bypassed the persistent [slug] layout.
+Client-side navigation alone did not prove provider identity preservation.
+Restoring the original route also restores its development preview and
+pre-hydration dark-canvas behavior. No authorization or boundary gate is relaxed.
 
-Changes:
+The main minimum height now preserves the mobile header offset
+(calc(100svh - 132px)) and uses a full viewport on desktop. The previous inline
+100svh override was incorrect for short mobile pages.
 
-- Give the streamed main region a stable viewport minimum so the footer cannot
-  initially occupy its space and then jump away.
-- Keep independently streamed maintained catalog links after the product list,
-  instead of inserting them above already-painted products.
-- Size the ad frame, not only its percentage-sized child. Mirror its responsive
-  widths in the existing inline critical CSS, preserving delivery and cascade.
-- Use the canonical home route's existing merchant/publication/layout guards,
-  passing resolved hero data into the existing renderer. Blog/PDP routes retain
-  their own layouts and do not await the home feed.
-- Render a meaningful geometry-matched hero fallback from caller-authorized
-  slides, with native product links, the correct document heading, and no eager
-  mobile image when another surface owns LCP.
-- Defer the legacy BlogSnippet SDK import until the existing bounded LCP or
-  interaction signal; cancel after navigation. Existing cart/PostHog deferrals
-  were retained rather than duplicated.
+The final reservation lives in shared route CSS, not Tailwind utility names:
+browser inspection proved those utilities were not emitted on blog/PDP.
+The repaired built pages compute 691px on an 823px mobile viewport and 940px
+on a 940px desktop viewport, on home/blog/PDP, with no inline override.
+The CSS regression failed before the rule and passes after it.
 
-## Structural build evidence
+Corrected runtime source: 11f74c506ac08e56c9f3c8edcccc0e4d11059882.
+The inventory was regenerated from that exact commit because removing the
+canonical shortcut changes the route input set. It has 584 rows and SHA-256
+b10bfe508b24b5d5f81c2d2030ac4dece881140b17bcb5dfd5ef741db63b4924.
 
-Both arms use local production-mode builds with the repository's existing
-preview catalog-enumeration cap. This is not deployment-environment parity.
-The final candidate build exited 0. BUILD_ID is not a unique identifier in this
-repository; artifact hashes and source receipts identify the comparison.
+## Retained changes
 
-| Build-output observation | Frozen control | Final candidate |
-| --- | ---: | ---: |
-| First mobile hero title byte offset | 74,458 | 41,800 |
-| Hidden ancestor of that title | `S:8` | none |
-| Head script files | 24 | 22 |
-| Sum of separately gzip-compressed head script bodies | 346,230 B | 334,280 B |
-| Static document gzip | 18,720 B | 20,249 B |
+- Keep independently streamed catalog links after the primary products.
+- Give the ad frame itself stable responsive geometry, mirrored in critical CSS.
+- Reserve the main region so a streamed response cannot initially place the
+  footer in the content area.
+- Delay BlogSnippet's Supabase SDK import until the existing bounded LCP or
+  interaction signal, and cancel work after navigation.
 
-The served candidate hero panel also arrives in the first static body burst.
-No-JS hero visibility/native-link checks pass. Home → blog → home navigation
-preserves the client-navigation sentinel, and the cart drawer opens normally.
-The hero rotated between builds (Standing Case versus Magnet Case), so these
-are structural observations, not a content-matched LCP experiment.
+Blog/PDP initial head-script totals were unchanged in the earlier build.
+The SDK change is a deferral contract, not a demonstrated initial-byte saving.
 
-Blog/PDP head-script totals remain unchanged. The BlogSnippet change establishes
-a runtime deferral contract, not a measured current-PDP initial-byte saving.
+## Evidence and limits
 
-## Layout and browser verification
+Earlier local correctness captures covered 150 route/profile visits, six
+Browsertime videos and six Lighthouse reports. They belong to the superseded
+initial source, not to this corrected draft. Their catalog/ad observations
+supported the retained repairs: desktop products CLS 0.300619 to 0, and search
+0.068594-0.136634 to 0.000554. These are not production or field-p75 claims.
+Final-source browser verification is recorded separately below; it does not
+establish production performance or resolve the disclosed baseline errors.
 
-The complete repository matrix was exercised: 25 route families × mobile and
-desktop × three cold browser contexts = **150 navigations**. Native Chrome
-149.0.7827.22 used mobile 412×823/DPR2 and desktop 1350×940/DPR1. Each visit
-included load, settling and a one-viewport scroll with session-window CLS
-collection. These are bounded correctness captures, not field measurements.
+Final-source matrix: 25 route families x two viewports x three cold contexts =
+150 visits with Chrome 149.0.7827.22. Maximum session CLS was 0.002067745;
+zero broken visible images; desktop products and search each recorded CLS 0
+in all three samples. Six rewards visits still render the baseline auth error
+(React 419); they are not functional passes. The old contact int64 occurrence
+did not recur, which does not establish its cause or clearance.
 
-- Zero broken visible images across all 150 visits.
-- Maximum recorded session CLS: **0.002068**. Small residuals include the
-  existing chat anchor and cart content; this is not a universal CLS=0 promise.
-- All documents returned HTTP 200; this does **not** count an error-boundary UI
-  as functional success. Rewards failed as documented below.
-- Desktop products: **0.300619 → 0** in all three before/final samples.
-- Desktop search: **0.068594–0.136634 → 0.000554**. The ad-frame horizontal
-  resize disappears; the small chat-anchor shift remains.
+Six separate Sitespeed 42.7.0 / Chrome 151.0.7922.169 recordings cover
+home/blog/PDP on mobile and desktop. All report CLS 0. Reviewed contact sheets
+show styled content staying present after paint, with reserved image geometry
+and no observed footer flash. All six retain cart401/events403 and console
+warnings; these are diagnostic layout captures, not clean performance reports.
+The native matrix and part of the video collection overlapped; timing and speed
+comparisons are explicitly withheld. Lighthouse was run separately afterward.
+All six Lighthouse 13.4.1 reports also recorded CLS 0, without runtime errors.
+Their timing/scores are not comparative evidence and are not used as speed claims.
 
-Those last comparisons isolate the follow-up catalog/ad repairs within this
-local implementation. Do not compare them numerically to a different live PSI
-profile or claim a production p75 change.
+Private final-source evidence uses the r1-final- prefix under the evidence root
+/Users/mac/.codex/cwv-lab-builds/20261021-live-psi. The earlier r1-withdrawal-
+matrix stopped after a missing-utility CSS defect was found; it is superseded,
+not merged into final-source results. The corrected main-height probe is bound
+to the final build. Browser artifacts are not committed or uploaded raw.
 
-Separate Sitespeed 42.7.0/Browsertime videos cover home/blog/PDP × both viewports.
-The actual HAR browser is Chrome 151.0.7922.169 (mobile emulates Moto G4, not the
-native matrix's 412px profile). All six report CLS 0. Videos/contact sheets show
-styled content remaining visible after its initial paint, without a late blank
-or a footer flash. Image, HAR and console evidence is retained.
+The original current-head CI exposed a credential-boundary path through the
+new sibling route. That route is removed rather than allowlisted.
 
-Separate Lighthouse 13.4.1 checks report **CLS 0 in all six core-page cells**.
-Host load was elevated and there is no matched control series, so timing and
-scores are informational only. For transparency, simulated mobile LCP was
-3.705s home, 3.545s blog and 4.815s PDP; observed local LCP was 262/100/1162ms.
-Those are different measurement quantities, not production speed claims.
-Sub-2.5s mobile LCP is not established by this work.
+The corrected production build, TypeScript check and web lint pass. The live
+event-boundary test passes with no new exception. Focused layout/SDK tests pass
+(39), restored-home/Hero tests pass (59), and the final CSS parity/budget suites
+pass (10). These sets overlap and must not be summed. The inventory test is
+rerun separately after regeneration. Both correction reviews completed with
+zero CodeRabbit issues. Home-blog-home preserves one active shared shell.
 
-## Exceptions and limitations retained
+Known separate issues remain: rewards' missing CustomerAuthProvider, lab events
+403 / anonymous cart 401, and one unattributed contact int64 error. Earlier
+shaped navigation failures and busy-host timing results are not speed evidence.
 
-- `/pages/rewards` renders the existing missing `CustomerAuthProvider` error
-  boundary in all six matrix visits. The unchanged control reproduces the same
-  UI and server error. This separate auth defect is not repaired here.
-- One contact desktop visit recorded `Uncaught Error: int64`. One instrumented
-  visit per arm did not reproduce it. Both arms load GPT code containing that
-  exact throw string, but the original capture lacks its stack, so attribution
-  is unresolved. It is not declared harmless or cleared by a clean rerun.
-- Anonymous cart requests return 401, and lab `/api/events` requests return 403
-  in both arms. The latter remains unresolved. Console/network is not described
-  as clean; no proxy or auth policy was weakened to hide these responses.
-- Earlier CDP-shaped diagnostics produced hydration failures in both arms.
-  Those timings are withheld; the later native/video checks do not retroactively
-  validate them.
-- No field INP, production p75, uploaded-image budget or CDN improvement is
-  claimed. This does not replace a current-head PR review or deployment checks.
+## Streamed hero: unresolved
 
-## Tests and review
+Keeping the persistent shared layout in subsequent structural builds still
+placed the hero in hidden streamed sections. The cached-output trial's first
+title was at byte 43,266 under S:4. It failed the visible-initial-HTML criterion.
+Those trial changes are withdrawn; tests and successful builds do not override
+this failed structural check. No React scheduler, guard, or proxy workaround
+is included.
 
-- Failing-first regressions were observed for main/fallback geometry, guarded
-  canonical composition, native fallback links/heading, deferred SDK import,
-  maintained-link ordering, ad-frame widths and the critical-CSS mirror.
-- Final affected web run: **186 files, 1,007 tests passed**.
-- Final focused layout run: **25/25**; inventory tests: **7/7**.
-- Full monorepo typecheck: **6/6**; pre-commit full lint: **7/7** successful.
-  Existing non-failing warnings are not described as a warning-free repository.
-- Fresh CodeRabbit follow-up review completed with **zero findings** after the
-  final runtime edits. Earlier findings and their evidence-based dispositions
-  are retained privately in the review ledger.
-
-Private capture root: `/Users/mac/.codex/cwv-lab-builds/20261021-live-psi`.
-It contains build receipts, `build-comparison.json`, `stream-chunks.json`,
-`route-matrix-before.json`, `route-matrix-results.json`, navigation checks,
-baseline/contact diagnostics, six `final-video-*` bundles, six
-`final-lighthouse-*` reports, review receipts and command logs. No environment
-files, credentials, customer mutations, payments or deployment artifacts are
-included in this PR.
-
-Next gate: current-head PR review and CI. Merge/deploy require separate owner
-authorization; only after an approved deployment should unchanged production
-URLs be rechecked with PSI and field RUM.
+The next streaming investigation must address the shared layout's request-time
+boundary while preserving tenant/publication checks, persistent providers and
+generic-store PPR behavior. Protected proxy changes require explicit approval.
+No sub-2.5s, field improvement, merge or deployment claim is made.

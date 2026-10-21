@@ -1,4 +1,3 @@
-import { VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -10,6 +9,7 @@ import {
   VtuAdmissionError,
   type VtuAdmissionProof,
 } from '@/lib/vtu-claim-admission';
+import { fulfillJoinedVtuClaim } from '@/lib/vtu-claim-join';
 import { discardOrphanedClaimTransaction } from '@/lib/vtu-claim-orphan-discard';
 import { respondToClaimError } from '@/lib/vtu-claim-rejection';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
@@ -252,52 +252,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (claim.transaction_id !== prepared.transaction.id) {
-      // Loser path: another key owns this intent's transaction.
-      // Discard our prepared row (guarded pending→failed +
-      // no-collection marker; no reversal — prepare doesn't
-      // debit), then replay the winner. Same-scope/
-      // same-fingerprint by RPC construction, so no ownership
-      // re-check is needed.
-      await discardOrphanedClaimTransaction({
-        context: 'join',
+      return fulfillJoinedVtuClaim({
+        authSupabase: auth.supabase,
+        userSupabase,
+        user: auth.user,
+        input,
+        customerId: prepared.customer.id,
         merchantId: prepared.merchant.id,
-        supabase: userSupabase,
-        transactionId: prepared.transaction.id,
+        preparedTransactionId: prepared.transaction.id,
+        claim,
+        requestFingerprint,
         userId: auth.user.id,
       });
-      // Joins should be rare (registries normally reuse keys); a
-      // join storm signals client key churn — investigate the
-      // registry, not the claim. Transaction IDs only: the winner
-      // key is an unguessable replay credential and must never
-      // reach logs (Codex R2 P2, Muse R108).
-      console.info('VTU intent claim joined in-flight transaction:', {
-        preparedTransactionId: prepared.transaction.id,
-        winnerTransactionId: claim.transaction_id,
-      });
-      const replayResponse = await fulfillReplayVtuTransaction({
-        authSupabase: auth.supabase,
-        input,
-        keyRow: {
-          key: claim.idempotency_key,
-          vtu_transaction_id: claim.transaction_id,
-          customer_id: prepared.customer.id,
-          merchant_id: prepared.merchant.id,
-          request_fingerprint: requestFingerprint,
-        },
-        supabase: createAdminClient(),
-        user: auth.user,
-      });
-      // Winner-key wire: the loser key maps to the winner
-      // server-side (loser-key retries replay), and clients adopt
-      // the winner key for subsequent retries so every attempt
-      // converges on one key instead of re-preparing + orphaning
-      // per attempt. Same-scope by RPC construction — nothing
-      // cross-principal is disclosed.
-      replayResponse.headers.set(
-        VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER,
-        claim.idempotency_key
-      );
-      return replayResponse;
     }
 
     // Sole service-role use on this route (narrowed exception).

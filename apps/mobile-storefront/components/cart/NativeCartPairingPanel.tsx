@@ -15,7 +15,6 @@ import { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } from '@/env';
 import { resolveCartApiOrigin } from '@/lib/cart/api-origin';
 import {
   cartPairingRevision,
-  clearCartPairingLink,
   peekCartPairingLink,
   subscribeCartPairing,
 } from '@/lib/cart/pairing-link';
@@ -24,6 +23,7 @@ import { CONFIG } from '@/lib/config';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { markSharedCartIntent } from '@/stores/shared-cart-writer';
+import { dismissPairingLink, pairingRetryOperation } from './pairing-sync';
 
 export function NativeCartPairingPanel() {
   const revision = useSyncExternalStore(
@@ -114,19 +114,6 @@ export function NativeCartPairingPanel() {
       setFailed(true);
     }
   }
-  function dismissPairing(): void {
-    clearCartPairingLink();
-    // Pairing-published conflicts have no resolution path once the sheet
-    // closes; legacy choice conflicts (status choice_required) stay gated.
-    const state = useNativeSharedCartStore.getState();
-    if (state.status !== 'choice_required' && state.mergeConflicts.length) {
-      markSharedCartIntent();
-      useNativeSharedCartStore.setState({
-        mergeConflicts: [],
-        mergeConflictReason: undefined,
-      });
-    }
-  }
   async function browser(): Promise<void> {
     const current = peekCartPairingLink();
     if (
@@ -161,7 +148,7 @@ export function NativeCartPairingPanel() {
   return (
     <ModalSheet
       visible
-      onRequestClose={dismissPairing}
+      onRequestClose={dismissPairingLink}
       cardStyle={[styles.card, { backgroundColor: colors.background }]}
     >
       <Text
@@ -278,15 +265,7 @@ export function NativeCartPairingPanel() {
                 async () => {
                   markSharedCartIntent();
                   try {
-                    // Mirror the status panel: a read-only refresh cannot
-                    // create a missing canonical cart after a failed pair.
-                    const preferred =
-                      shared.snapshot || items.length === 0
-                        ? shared.refresh
-                        : shared.prepare;
-                    const operation =
-                      preferred ?? shared.prepare ?? shared.refresh;
-                    await operation?.();
+                    await pairingRetryOperation(shared, items.length)?.();
                     setFailed(false);
                   } catch {
                     setFailed(true);
@@ -300,7 +279,7 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close cart link"
-        onPress={dismissPairing}
+        onPress={dismissPairingLink}
         style={styles.button}
       >
         <Text style={{ color: colors.text }}>Close</Text>

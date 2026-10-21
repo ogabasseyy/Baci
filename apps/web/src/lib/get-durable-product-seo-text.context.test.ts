@@ -36,6 +36,7 @@ describe('durable SEO monetary context', () => {
   });
   it.each([
     'The price of iPhone 13 is 350,000.',
+    'This phone is 350,000.',
     'Price in Lagos: 350,000.',
     'Price: all 350,000',
     'Device ALL 350,000',
@@ -87,6 +88,8 @@ describe('durable SEO monetary context', () => {
     'The price guide edition is 2025.',
     'Compare the price of models whose release year is 2025.',
     'Compare an N350 processor with an R16 processor.',
+    'The display resolution is 1,920 × 1,080 pixels.',
+    'The display resolution is 1,920 by 1,080 pixels.',
   ])('preserves numeric specifications despite nearby price vocabulary: %s', (text) => {
     expect(
       getDurableProductSeoText({

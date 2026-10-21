@@ -9,7 +9,17 @@ export interface ProductSeoMoneyCandidate {
   currencies: string[];
 }
 
-const isoCurrencies = new Set(Intl.supportedValuesOf('currency'));
+function getSupportedIsoCurrencies(): string[] {
+  try {
+    if (typeof Intl.supportedValuesOf === 'function')
+      return Intl.supportedValuesOf('currency');
+  } catch {
+    // Some runtimes expose the API but do not implement the currency key.
+  }
+  return Object.keys(CURRENCY_SYMBOLS);
+}
+
+const isoCurrencies = new Set(getSupportedIsoCurrencies());
 const namedCurrencyAliases: Record<string, string[]> = {
   NAIRA: ['NGN'],
   NAIRAS: ['NGN'],

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getBrandMatchedTwitterHandle } from '@/lib/brand-matched-twitter-handle';
 import type { CachedMerchant } from '@/lib/cached-data';
+import { getDurableProductSeoText } from '@/lib/get-durable-product-seo-text';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   generateMetaDescription,
@@ -8,7 +9,6 @@ import {
   getValidatedProductUrl,
 } from '@/lib/seo-utils';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
-import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 import { normalizeSeoProductText } from '@/lib/storefront-product-slug-disambiguation';
 import { getStorefrontProductSocialMetadata } from '@/lib/storefront-product-social-metadata';
@@ -46,13 +46,16 @@ export function buildCategoryProductMetadata({
     currency,
     country: merchant.country,
   });
-  const productDescription = stripVolatileProductPriceSentences(
-    product.description
-  );
-  const productMetaDescription = normalizeSeoProductText(
-    stripVolatileProductPriceSentences(product.meta_description),
-    product
-  );
+  const productDescription = getDurableProductSeoText({
+    text: product.description,
+    product,
+    currency,
+  });
+  const productMetaDescription = getDurableProductSeoText({
+    text: product.meta_description,
+    product,
+    currency,
+  });
   const generatedSeoDescription = normalizeSeoProductText(
     priceSeoCopy.description,
     product
@@ -74,10 +77,11 @@ export function buildCategoryProductMetadata({
     product,
     currency
   );
-  const normalizedProductMetaTitle = normalizeSeoProductText(
-    product.meta_title,
-    product
-  );
+  const normalizedProductMetaTitle = getDurableProductSeoText({
+    text: product.meta_title,
+    product,
+    currency,
+  });
   const normalizedGeneratedTitle = normalizeSeoProductText(
     priceSeoCopy.title,
     product

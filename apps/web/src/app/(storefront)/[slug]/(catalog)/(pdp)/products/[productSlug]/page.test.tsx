@@ -92,7 +92,8 @@ vi.mock('@/lib/storefront-content/get-published-cluster-posts', () => ({
     mockGetPublishedClusterPosts(...args),
 }));
 
-vi.mock('@/lib/sanitize-core', () => ({
+vi.mock('@/lib/sanitize-core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/sanitize-core')>()),
   escapeHtml: (v: string) => v,
 }));
 

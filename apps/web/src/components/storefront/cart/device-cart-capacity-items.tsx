@@ -171,11 +171,21 @@ export function DeviceCartCapacityItems({
     const persisted = getCartFromStorage(merchantSlug);
     const persistedOk =
       persisted.length === remaining.length &&
-      persisted.every(
-        (item, index) =>
-          item.cartItemId === remaining[index].cartItemId &&
-          item.quantity === remaining[index].quantity
-      );
+      persisted.every((item, index) => {
+        const expected = remaining[index];
+        return (
+          item.cartItemId === expected.cartItemId &&
+          item.quantity === expected.quantity &&
+          identityKeyOfDisplay(item) === identityKeyOfDisplay(expected) &&
+          item.offerId === expected.offerId &&
+          item.quizVoucherToken === expected.quizVoucherToken &&
+          item.quizAwardId === expected.quizAwardId &&
+          item.negotiatedPrice === expected.negotiatedPrice &&
+          item.negotiationStatus === expected.negotiationStatus &&
+          (item.hasAssurance ?? false) === (expected.hasAssurance ?? false) &&
+          item.assuranceRate === expected.assuranceRate
+        );
+      });
     if (!persistedOk) {
       setItems(persisted);
       setError('Could not save that change. Check storage access and retry.');

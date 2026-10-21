@@ -96,7 +96,16 @@ export function withCartCookieWrite<T>(
   slug?: string | null
 ): Promise<T> {
   const manager = lockManager();
-  if (!manager) return operation();
+  if (!manager) {
+    // No lock manager (insecure context): still fence on the shared
+    // epoch so a retirement rotation during the operation discards
+    // its result instead of letting it rewrite retired state.
+    const startedEpoch = epoch(slug);
+    if (signal.aborted) return Promise.resolve(fallback);
+    return operation().then((result) =>
+      epoch(slug) === startedEpoch && !signal.aborted ? result : fallback
+    );
+  }
   const startedEpoch = epoch(slug);
   return manager.request(LOCK_NAME, { mode: 'exclusive', signal }, () => {
     // A request queued before retirement must not mint authority afterward.

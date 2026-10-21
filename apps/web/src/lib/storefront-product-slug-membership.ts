@@ -8,9 +8,9 @@ import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import { buildStorefrontPdpCanonicalPath } from './storefront-pdp-canonical-path';
 import {
   callStorefrontPreflightRpc,
-  gateStorefrontPreflightStatus,
   type StorefrontPreflightRpcImpl,
 } from './storefront-preflight-rpc';
+import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 interface SlugMissingOptions {
   /**
@@ -86,7 +86,7 @@ export async function resolveStorefrontProductSlugResolution(
     return { kind: 'present-or-unknown' };
   }
 
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_PDP_PREFLIGHT_RPC,
     { p_identifier: opts.identifier, p_product_slug: opts.productSlug },
     {
@@ -95,22 +95,34 @@ export async function resolveStorefrontProductSlugResolution(
       timeoutMs: opts.timeoutMs,
     }
   );
-  if (row === null) {
+  if (result === null) {
     return { kind: 'present-or-unknown' };
   }
 
-  const parsed = storefrontPdpPreflightRowSchema.safeParse(row);
+  const parsed = storefrontPdpPreflightRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        { ...result.attempt, outcome: 'parse-error' },
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return { kind: 'present-or-unknown' };
   }
   const verdict = parsed.data;
 
   if (
-    !gateStorefrontPreflightStatus(verdict.storefront_status, failOpenContext)
+    !gateStorefrontPreflightStatus(
+      verdict.storefront_status,
+      failOpenContext,
+      result.attempt
+    )
   ) {
     return { kind: 'present-or-unknown' };
   }

@@ -149,8 +149,9 @@ worktree was changing; it was stopped and is not reported as a clean full-suite
 run. Frozen-replay registry tests passed after moving prototype SQL out of the
 migration registry. The edge-inventory audit requires current bytes to match HEAD;
 it passes on the frozen baseline and rejects an uncommitted source tree by design.
-The current source remains uncommitted, so that HEAD-bound gate is not claimed
-as passed for this patch.
+After committing the source, the edge-inventory audit and both replay-registry
+files passed: **3 files / 22 tests**. The commit hook also completed repository
+lint; existing warnings are separate from the passing targeted checks.
 
 The fresh reviewer found a same-store URL normalization bypass; regression tests
 reproduced it and the reviewer confirmed the fix, explicit template eligibility

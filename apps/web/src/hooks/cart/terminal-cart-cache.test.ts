@@ -26,6 +26,18 @@ it('filters consumed lines by stable device-line identity, ignoring order and co
     })
   ).toEqual([fresh]);
 });
+it('keeps only the post-import quantity increase for a consumed line ID', () => {
+  const edited = cartItem({ cartItemId: 'line-a', quantity: 5 });
+  expect(
+    unimportedTerminalLines([edited], 'done', {
+      cartId: 'done',
+      importedAt: '2026-10-20T00:00:00Z',
+      lineCount: 1,
+      consumedCartItemIds: ['line-a'],
+      consumedQuantities: { 'line-a': 2 },
+    })
+  ).toEqual([{ ...edited, quantity: 3 }]);
+});
 it('keeps fresh device lines written after a matching receipt', () => {
   const fresh = cartItem({ id: 'new', cartItemId: 'new' });
   expect(

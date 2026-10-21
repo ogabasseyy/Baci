@@ -70,11 +70,15 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
 
   // Device line IDs the in-flight create consumes, recorded on the
   // import receipt so terminal recovery can identify them exactly.
-  const createSourceIdsRef = useRef<string[]>([]);
+  const createSourceIdsRef = useRef<
+    Array<{ cartItemId: string; quantity: number }>
+  >([]);
 
   // Device line IDs a merge import reconciles, recorded on the receipt
   // when its operations finish (same purpose as the create list).
-  const importSourceIdsRef = useRef<string[]>([]);
+  const importSourceIdsRef = useRef<
+    Array<{ cartItemId: string; quantity: number }>
+  >([]);
 
   const createAttemptedRef = useRef(false);
   const retiredCartIdRef = useRef<string | null>(null);

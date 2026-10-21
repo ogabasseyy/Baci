@@ -23,7 +23,20 @@ export async function adoptPreservedFallback(
 ): Promise<EnsureCartResult> {
   const preserved = await fetchSharedCartSnapshot(undefined, merchantSlug);
   if (!fenced()) return null;
-  if (!preserved.ok) return null;
+  if (!preserved.ok) {
+    // A transient read must not strand the cart behind the populated
+    // create request: drop it so the retry can re-enter this fallback
+    // (the definitive unauthorized create makes replay safe to redo).
+    if (preserved.retryable) {
+      context.createRequestRef.current = null;
+      return {
+        ok: false,
+        code: 'temporarily_unavailable',
+        retryable: true,
+      };
+    }
+    return null;
+  }
   if (isTerminalCart(preserved.snapshot)) {
     const preservedLines = unimportedTerminalLines(
       getCartFromStorage(merchantSlug),
@@ -31,6 +44,20 @@ export async function adoptPreservedFallback(
       getSharedCartImportReceipt(merchantSlug)
     );
     saveCartToStorage(preservedLines, merchantSlug);
+    // Provisioning re-reads storage: if the filtered cache did not
+    // persist, retrying would recreate already-consumed items.
+    const persisted = getCartFromStorage(merchantSlug);
+    const persistedOk =
+      persisted.length === preservedLines.length &&
+      persisted.every(
+        (line, index) => line.cartItemId === preservedLines[index].cartItemId
+      );
+    if (!persistedOk)
+      return {
+        ok: false,
+        code: 'temporarily_unavailable',
+        retryable: true,
+      };
     context.retiredCartIdRef.current = preserved.snapshot.cartId;
     context.adoptOutcomeRef.current = 'expired';
     context.createRequestRef.current = null;

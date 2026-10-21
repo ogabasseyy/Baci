@@ -2,6 +2,10 @@
 
 import { buildImportEntries } from './build-import-entries';
 
+import {
+  rotateCartCookieEpoch,
+  withCartCookieWrite,
+} from './cart-cross-tab-lock';
 import { getCartFromStorage, saveCartToStorage } from './cart-storage';
 import type { createCartProvisioning } from './shared-cart-provisioning';
 import { planLegacyImport } from './shared-cart-reducer';
@@ -151,8 +155,11 @@ export function createCartRecovery(
     importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
     if (context.importSourceIdsRef)
       context.importSourceIdsRef.current = cached
-        .map((item) => item.cartItemId)
-        .filter(Boolean);
+        .map((item) => ({
+          cartItemId: item.cartItemId,
+          quantity: item.quantity,
+        }))
+        .filter((line) => Boolean(line.cartItemId));
     dispatch({ entries, generation, type: 'import/enqueue' });
   }
   function discardLegacyImport(): void {
@@ -181,13 +188,46 @@ export function createCartRecovery(
     // Discarding explicitly abandons the device lines: erase the parked
     // cache so a later terminal guard or re-plan cannot resurrect them.
     // The display cache re-persists the kept server cart afterwards.
-    saveCartToStorage([], optionsRef.current.merchantSlug);
-    dispatch({
-      generation: generationRef.current,
-      status: 'skipped',
-      type: 'import/resolved',
-    });
-    setLinkPhase('ready');
+    // Serialize with in-flight creates in other tabs and rotate the
+    // epoch so a cloned pre-discard request is fenced, then verify the
+    // erasure persisted before resolving the import as skipped.
+    const merchantSlug = optionsRef.current.merchantSlug;
+    const generation = generationRef.current;
+    const signal =
+      typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(5_000)
+        : new AbortController().signal;
+    void withCartCookieWrite(
+      undefined,
+      signal,
+      () => {
+        rotateCartCookieEpoch(merchantSlug);
+        saveCartToStorage([], merchantSlug);
+        return Promise.resolve(undefined);
+      },
+      merchantSlug
+    )
+      .then(() => {
+        if (generationRef.current !== generation) return;
+        if (getCartFromStorage(merchantSlug).length === 0) {
+          dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+          setLinkPhase('ready');
+          return;
+        }
+        dispatch({
+          code: 'temporarily_unavailable',
+          generation,
+          type: 'import/failed',
+        });
+      })
+      .catch(() => {
+        if (generationRef.current !== generation) return;
+        dispatch({
+          code: 'temporarily_unavailable',
+          generation,
+          type: 'import/failed',
+        });
+      });
   }
   function resolveImportConflicts(
     resolutions: import('@baci/shared/cart').CartMergeResolution[]

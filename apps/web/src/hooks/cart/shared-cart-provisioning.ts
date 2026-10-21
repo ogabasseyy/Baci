@@ -34,7 +34,7 @@ export function createCartProvisioning(
     optionsRef,
   } = context;
   const createSourceIdsRef = context.createSourceIdsRef ?? {
-    current: [] as string[],
+    current: [] as Array<{ cartItemId: string; quantity: number }>,
   };
 
   async function ensureCart(
@@ -144,7 +144,12 @@ export function createCartProvisioning(
       );
       createSourceIdsRef.current =
         planned?.kind === 'create'
-          ? cached.map((item) => item.cartItemId).filter(Boolean)
+          ? cached
+              .map((item) => ({
+                cartItemId: item.cartItemId,
+                quantity: item.quantity,
+              }))
+              .filter((line) => Boolean(line.cartItemId))
           : [];
       if (planned?.kind === 'blocked') {
         // Over-capacity first import: surface the same actionable
@@ -241,7 +246,17 @@ export function createCartProvisioning(
         importedAt: new Date().toISOString(),
         lineCount: lines?.length ?? 0,
         ...(createSourceIdsRef.current.length
-          ? { consumedCartItemIds: [...createSourceIdsRef.current] }
+          ? {
+              consumedCartItemIds: createSourceIdsRef.current.map(
+                (line) => line.cartItemId
+              ),
+              consumedQuantities: Object.fromEntries(
+                createSourceIdsRef.current.map((line) => [
+                  line.cartItemId,
+                  line.quantity,
+                ])
+              ),
+            }
           : {}),
       });
     }
@@ -278,7 +293,17 @@ export function createCartProvisioning(
       importedAt: new Date().toISOString(),
       lineCount: current.confirmed.lines.length,
       ...(context.importSourceIdsRef?.current.length
-        ? { consumedCartItemIds: [...context.importSourceIdsRef.current] }
+        ? {
+            consumedCartItemIds: context.importSourceIdsRef.current.map(
+              (line) => line.cartItemId
+            ),
+            consumedQuantities: Object.fromEntries(
+              context.importSourceIdsRef.current.map((line) => [
+                line.cartItemId,
+                line.quantity,
+              ])
+            ),
+          }
         : {}),
     });
   }

@@ -71,7 +71,7 @@ export function importInitialDeviceCart(
   importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
   if (context.importSourceIdsRef)
     context.importSourceIdsRef.current = cached
-      .map((item) => item.cartItemId)
-      .filter(Boolean);
+      .map((item) => ({ cartItemId: item.cartItemId, quantity: item.quantity }))
+      .filter((line) => Boolean(line.cartItemId));
   dispatch({ entries, generation, type: 'import/enqueue' });
 }

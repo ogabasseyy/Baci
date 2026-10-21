@@ -84,7 +84,7 @@ describe('initial device cart recovery', () => {
     expect(result.current.importStatus).toBe('failed');
     if (action === 'discard') {
       act(() => result.current.discardLegacyImport());
-      expect(result.current.importStatus).toBe('skipped');
+      await waitFor(() => expect(result.current.importStatus).toBe('skipped'));
       expect(result.current.cart).toEqual([]);
       expect(createSharedCart).not.toHaveBeenCalled();
     } else {

@@ -13,9 +13,17 @@ export function unimportedTerminalLines(
   // reordering, or merged plans cannot misclassify a fresh line.
   if (receipt.consumedCartItemIds?.length) {
     const consumed = new Set(receipt.consumedCartItemIds);
-    return fresh.filter(
-      (line) => !line.cartItemId || !consumed.has(line.cartItemId)
-    );
+    const quantities = receipt.consumedQuantities;
+    return fresh.flatMap((line) => {
+      if (!line.cartItemId || !consumed.has(line.cartItemId)) return [line];
+      // cartItemId is deterministic per product/options lane, so a
+      // post-import quantity edit reuses the consumed ID: retain only
+      // the increase over the imported source quantity.
+      const sourceQuantity = quantities?.[line.cartItemId];
+      if (sourceQuantity === undefined) return [];
+      const delta = line.quantity - sourceQuantity;
+      return delta > 0 ? [{ ...line, quantity: delta }] : [];
+    });
   }
   // A matching receipt consumes the imported source set, but fresh
   // device-only writes after the import still lack a server line ID.

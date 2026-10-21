@@ -22,11 +22,10 @@ export function adoptPreservedCart(
     runtime.dispatch({ generation, status: 'done', type: 'import/resolved' });
     return true;
   }
-  const plan = planLegacyImport(
-    getCartFromStorage(runtime.optionsRef.current.merchantSlug),
-    snapshot,
-    snapshot.cartId
+  const cachedLines = getCartFromStorage(
+    runtime.optionsRef.current.merchantSlug
   );
+  const plan = planLegacyImport(cachedLines, snapshot, snapshot.cartId);
   if (plan.kind === 'blocked') {
     runtime.dispatch({ generation, type: 'import/capacity_exceeded' });
   } else if (plan.kind === 'conflicts') {
@@ -45,6 +44,13 @@ export function adoptPreservedCart(
     runtime.importOpIdsRef.current = new Set(
       entries.map((entry) => entry.operationId)
     );
+    if (runtime.importSourceIdsRef)
+      runtime.importSourceIdsRef.current = cachedLines
+        .map((item) => ({
+          cartItemId: item.cartItemId,
+          quantity: item.quantity,
+        }))
+        .filter((line) => Boolean(line.cartItemId));
     if (entries.length)
       runtime.dispatch({ generation, type: 'import/enqueue', entries });
     else

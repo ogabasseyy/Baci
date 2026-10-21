@@ -43,12 +43,13 @@ export function DeviceCartCapacityItems({
         ? AbortSignal.timeout(5_000)
         : new AbortController().signal;
     let applied = false;
+    let removed = false;
     void withCartCookieWrite(
       undefined,
       signal,
       () => {
         applied = true;
-        applyRemoval(selected);
+        removed = applyRemoval(selected);
         return Promise.resolve(undefined);
       },
       merchantSlug
@@ -59,6 +60,13 @@ export function DeviceCartCapacityItems({
           setError(
             'Could not save that change. Check storage access and retry.'
           );
+          return;
+        }
+        if (!removed) {
+          // Another tab already removed this row: only the winning
+          // edit may reconcile the live cart, or the quantity would
+          // be subtracted twice.
+          setItems(getCartFromStorage(merchantSlug));
           return;
         }
         // A create in another tab may have committed while this removal
@@ -78,7 +86,7 @@ export function DeviceCartCapacityItems({
         setError('Could not save that change. Check storage access and retry.');
       });
   }
-  function applyRemoval(selected: CartItem) {
+  function applyRemoval(selected: CartItem): boolean {
     const current = getCartFromStorage(merchantSlug);
     const matchesSelected = (item: CartItem) =>
       identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
@@ -119,7 +127,7 @@ export function DeviceCartCapacityItems({
           );
     if (!target) {
       setItems(current);
-      return;
+      return false;
     }
     const targetIndex = current.indexOf(target);
     let remaining = current.filter(
@@ -151,10 +159,11 @@ export function DeviceCartCapacityItems({
     if (!persistedOk) {
       setItems(persisted);
       setError('Could not save that change. Check storage access and retry.');
-      return;
+      return false;
     }
     setError(null);
     setItems(remaining);
+    return true;
   }
   return (
     <>

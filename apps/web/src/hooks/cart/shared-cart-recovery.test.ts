@@ -70,7 +70,7 @@ it('erases preserved lines when discarding after a terminal adoption', async () 
   expect(getCartFromStorage('shop')).toEqual([]);
 });
 
-it('discards a capacity-blocked device cart even when a create is retained', () => {
+it('discards a capacity-blocked device cart even when a create is retained', async () => {
   const { result } = renderHook(() =>
     useSharedCartRuntime({
       merchantId: 'merchant',
@@ -98,11 +98,13 @@ it('discards a capacity-blocked device cart even when a create is retained', () 
     refreshNow: vi.fn(),
     ensureCart: vi.fn(),
   }).discardLegacyImport();
-  expect(dispatch).toHaveBeenCalledWith({
-    generation: 7,
-    status: 'skipped',
-    type: 'import/resolved',
-  });
+  await vi.waitFor(() =>
+    expect(dispatch).toHaveBeenCalledWith({
+      generation: 7,
+      status: 'skipped',
+      type: 'import/resolved',
+    })
+  );
   expect(runtime.createAttemptedRef.current).toBe(false);
   expect(runtime.createRequestRef.current).toBeNull();
   expect(setLinkPhase).toHaveBeenCalledWith('ready');

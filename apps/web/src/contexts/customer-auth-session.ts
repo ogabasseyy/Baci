@@ -52,8 +52,13 @@ async function retirePreviousAccountCartAuthority(
       setRememberedCustomerUserId(merchantSlug, previousUserId);
       return false;
     }
+    // Revocation can succeed while deliberately retaining the pending
+    // marker because cache erasure failed. Only lift that fence once
+    // the previous account's cache is verifiably gone; otherwise the
+    // new account could adopt the surviving parked cart.
+    const erased = eraseRetiredCartCache(merchantSlug, previousUserId);
     clearCartStorage(merchantSlug, previousUserId);
-    clearCartDeviceRevocationPending?.(merchantSlug);
+    if (erased) clearCartDeviceRevocationPending?.(merchantSlug);
     setRememberedCustomerUserId(merchantSlug, null);
     return true;
   } catch {

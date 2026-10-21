@@ -22,6 +22,8 @@ export interface SharedCartImportReceipt {
   lineCount: number;
   /** Device line IDs the import consumed, when known. */
   consumedCartItemIds?: string[];
+  /** Source quantity per consumed device line ID, when known. */
+  consumedQuantities?: Record<string, number>;
 }
 
 export function isSharedCartImportReceipt(
@@ -36,7 +38,13 @@ export function isSharedCartImportReceipt(
     typeof receipt.lineCount === 'number' &&
     (receipt.consumedCartItemIds === undefined ||
       (Array.isArray(receipt.consumedCartItemIds) &&
-        receipt.consumedCartItemIds.every((id) => typeof id === 'string')))
+        receipt.consumedCartItemIds.every((id) => typeof id === 'string'))) &&
+    (receipt.consumedQuantities === undefined ||
+      (typeof receipt.consumedQuantities === 'object' &&
+        receipt.consumedQuantities !== null &&
+        Object.values(receipt.consumedQuantities).every(
+          (quantity) => typeof quantity === 'number'
+        )))
   );
 }
 
@@ -115,11 +123,40 @@ type GenerationChange = {
 };
 let generationChange: GenerationChange | null = null;
 const generationChangesByMerchant = new Map<string, GenerationChange>();
+// Operation-bearing changes must survive until their subscriber's
+// effect consumes them, so retain the last few per merchant indexed
+// by the generation they produced instead of only the latest.
+const generationChangesByGeneration = new Map<
+  string,
+  Map<number, GenerationChange>
+>();
+const MAX_RETAINED_GENERATION_CHANGES = 8;
+function recordGenerationChange(key: string, change: GenerationChange) {
+  generationChangesByMerchant.set(key, change);
+  let byGeneration = generationChangesByGeneration.get(key);
+  if (!byGeneration) {
+    byGeneration = new Map<number, GenerationChange>();
+    generationChangesByGeneration.set(key, byGeneration);
+  }
+  byGeneration.set(change.generation, change);
+  while (byGeneration.size > MAX_RETAINED_GENERATION_CHANGES) {
+    const oldest = byGeneration.keys().next().value;
+    if (oldest === undefined) break;
+    byGeneration.delete(oldest);
+  }
+}
 const GLOBAL_CHANGE_KEY = '__global__';
 export const getCartSessionGenerationChange = (
-  merchantSlug?: string | null
+  merchantSlug?: string | null,
+  generation?: number
 ) => {
   if (merchantSlug !== undefined) {
+    if (generation !== undefined) {
+      const indexed = generationChangesByGeneration
+        .get(merchantSlug ?? GLOBAL_CHANGE_KEY)
+        ?.get(generation);
+      if (indexed) return indexed;
+    }
     return (
       generationChangesByMerchant.get(merchantSlug ?? GLOBAL_CHANGE_KEY) ??
       generationChange
@@ -141,7 +178,7 @@ export const bumpCartSessionGeneration = (
     merchantGenerations.clear();
   }
   generationChange = { from, generation: cartSessionGeneration, transition };
-  generationChangesByMerchant.set(
+  recordGenerationChange(
     transition?.merchantSlug ?? GLOBAL_CHANGE_KEY,
     generationChange
   );
@@ -149,7 +186,7 @@ export const bumpCartSessionGeneration = (
   // merchant as well as the global slot.
   if (!transition?.merchantSlug) {
     for (const slug of knownMerchants)
-      generationChangesByMerchant.set(slug, generationChange);
+      recordGenerationChange(slug, generationChange);
   }
   for (const listener of [...cartSessionGenerationListeners]) {
     listener();

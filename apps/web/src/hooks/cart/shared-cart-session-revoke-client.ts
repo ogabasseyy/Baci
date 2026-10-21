@@ -11,8 +11,60 @@ import { eraseRetiredCartCache } from './retired-cart-cache';
 
 const PENDING_REVOCATION_KEY_PREFIX = 'baci-cart-revocation-pending';
 const ACTIVE_SESSION_KEY_PREFIX = 'baci-cart-device-session-active';
+const DEFERRED_LOGOUT_KEY_PREFIX = 'baci-cart-logout-deferred';
 const pendingRevocationMerchants = new Set<string>();
 const volatilePendingMerchants = new Set<string>();
+const deferredLogoutMerchants = new Set<string>();
+
+function getDeferredLogoutStorageKey(merchantSlug?: string | null): string {
+  return `${DEFERRED_LOGOUT_KEY_PREFIX}:${normalizeMerchantKey(merchantSlug)}`;
+}
+
+/** Mark a logout whose cache erasure is deferred until the auth logout commits. */
+export function beginDeferredCartLogout(merchantSlug?: string | null): void {
+  deferredLogoutMerchants.add(normalizeMerchantKey(merchantSlug));
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(getDeferredLogoutStorageKey(merchantSlug), '1');
+  } catch {
+    // The in-memory marker still fences this tab.
+  }
+}
+
+/** End a deferred logout after its committed cleanup ran. */
+export function endDeferredCartLogout(merchantSlug?: string | null): void {
+  deferredLogoutMerchants.delete(normalizeMerchantKey(merchantSlug));
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(getDeferredLogoutStorageKey(merchantSlug));
+  } catch {
+    // Ignore storage errors in restricted frames.
+  }
+}
+
+/**
+ * Abandon a deferred logout whose auth request failed: the customer is
+ * still signed in, so lift the revocation fence WITHOUT erasing the
+ * parked cache, which the replacement session re-imports.
+ */
+export function cancelDeferredCartLogout(merchantSlug?: string | null): void {
+  endDeferredCartLogout(merchantSlug);
+  clearCartDeviceRevocationPending(merchantSlug);
+}
+
+function isDeferredCartLogout(merchantSlug?: string | null): boolean {
+  if (deferredLogoutMerchants.has(normalizeMerchantKey(merchantSlug)))
+    return true;
+  if (typeof window === 'undefined') return false;
+  try {
+    return (
+      window.localStorage.getItem(getDeferredLogoutStorageKey(merchantSlug)) ===
+      '1'
+    );
+  } catch {
+    return false;
+  }
+}
 
 function normalizeMerchantKey(merchantSlug?: string | null): string {
   return merchantSlug?.trim() || '__default__';
@@ -266,6 +318,10 @@ export async function ensureCartDeviceRevocationCleared(
   signal?: AbortSignal
 ): Promise<boolean> {
   if (isCartSessionRetiring(merchantSlug)) return false;
+  // A deferred logout owns the pending revocation until the auth
+  // logout commits or is abandoned; clearing here would erase the
+  // still-signed-in customer's parked cache on a transient failure.
+  if (isDeferredCartLogout(merchantSlug)) return false;
   if (!isCartDeviceRevocationPending(merchantSlug)) return true;
   const revoked = await revokeCartDeviceSession(merchantSlug, { signal });
   return revoked.ok && !isCartDeviceRevocationPending(merchantSlug);

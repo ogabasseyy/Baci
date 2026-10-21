@@ -13,6 +13,9 @@ import {
 import { clearCartStorage } from '@/hooks/use-cart';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
+  beginDeferredCartLogout: vi.fn(),
+  cancelDeferredCartLogout: vi.fn(),
+  endDeferredCartLogout: vi.fn(),
   clearCartDeviceRevocationPending: vi.fn(),
   clearCartDeviceSessionActive: vi.fn(),
   markCartDeviceRevocationPending: vi.fn(),

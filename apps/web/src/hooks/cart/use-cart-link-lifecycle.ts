@@ -166,12 +166,16 @@ export function useCartLinkLifecycle(
       );
       if (cancelled || generationRef.current !== generation || run !== adoptRun)
         return;
-      if (result.ok && isTerminalCart(result.snapshot) && cached.length) {
-        // Re-read storage: another tab may have written fresher device
-        // lines while revocation clearing and the fetch were awaited,
-        // and persisting the effect-start copy would clobber them.
+      if (result.ok && isTerminalCart(result.snapshot)) {
+        // Decide recovery from a fresh read, not the effect-start
+        // copy: another tab may have written fresher device lines
+        // while revocation clearing and the fetch were awaited. A
+        // pending revocation parks the cache, so it reads as empty.
+        const storedNow = isCartDeviceRevocationPending(merchantSlug)
+          ? []
+          : getCartFromStorage(merchantSlug);
         cached = unimportedTerminalLines(
-          getCartFromStorage(merchantSlug),
+          storedNow,
           result.snapshot.cartId,
           getSharedCartImportReceipt(merchantSlug)
         );
@@ -191,6 +195,16 @@ export function useCartLinkLifecycle(
           adoptOutcomeRef.current = 'expired';
           await provision(attempt, run);
           return;
+        }
+        if (storedNow.length) {
+          // Every cached row was consumed by the terminal cart:
+          // persist the empty filter so mirrored rows cannot be
+          // re-planned as a fresh import once the proof expires.
+          saveCartToStorage([], merchantSlug);
+          if (getCartFromStorage(merchantSlug).length) {
+            retryAdopt(attempt, run);
+            return;
+          }
         }
       }
       if (result.ok) {

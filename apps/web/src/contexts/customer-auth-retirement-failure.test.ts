@@ -14,6 +14,9 @@ vi.mock('@/hooks/cart/cart-session-write-fence', () => ({
   }),
 }));
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
+  beginDeferredCartLogout: vi.fn(),
+  cancelDeferredCartLogout: vi.fn(),
+  endDeferredCartLogout: vi.fn(),
   revokeCartDeviceSession: vi.fn(),
   markCartDeviceRevocationPending: vi.fn(),
   clearCartDeviceRevocationPending: vi.fn(),

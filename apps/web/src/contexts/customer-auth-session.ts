@@ -11,8 +11,11 @@ import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fenc
 // runtime cycle back into the context module.
 import { eraseRetiredCartCache } from '@/hooks/cart/retired-cart-cache';
 import {
+  beginDeferredCartLogout,
+  cancelDeferredCartLogout,
   clearCartDeviceRevocationPending,
   clearCartDeviceSessionActive,
+  endDeferredCartLogout,
   markCartDeviceRevocationPending,
   revokeCartDeviceSession,
 } from '@/hooks/cart/shared-cart-session-revoke-client';
@@ -242,7 +245,12 @@ export async function performCustomerLogout(
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
   const retirement = beginCartSessionRetirement(merchantSlug);
   markCartDeviceRevocationPending?.(merchantSlug);
+  // The deferred marker keeps concurrent lifecycle passes from
+  // clearing this revocation (and erasing the parked cache) before
+  // the auth logout commits.
+  beginDeferredCartLogout?.(merchantSlug);
   bumpCartSessionGeneration({ merchantSlug });
+  let revokedOk = false;
   try {
     const revoked = await retirement.drained
       .then(() =>
@@ -256,6 +264,7 @@ export async function performCustomerLogout(
       throw new Error(
         'Could not safely sign out. Please retry when connected.'
       );
+    revokedOk = true;
     let response: Response;
     try {
       response = await fetch('/api/storefront/auth/logout', {
@@ -276,6 +285,7 @@ export async function performCustomerLogout(
         'Could not safely sign out. Please retry when connected.'
       );
     }
+    endDeferredCartLogout?.(merchantSlug);
     clearCustomerAuthRollbackPending(merchantSlug);
     // Complete the deferred revocation cleanup now that logout committed.
     // A storage failure must not strand the committed logout: keep the
@@ -291,6 +301,13 @@ export async function performCustomerLogout(
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
     clearCartStorage(merchantSlug, previousUserId ?? userId);
+  } catch (error) {
+    // The auth logout did not commit: abandon the deferred revocation
+    // without erasing the parked cache. If revocation itself failed,
+    // keep its fence; the deferred marker always ends.
+    if (revokedOk) cancelDeferredCartLogout?.(merchantSlug);
+    else endDeferredCartLogout?.(merchantSlug);
+    throw error;
   } finally {
     retirement.release();
   }

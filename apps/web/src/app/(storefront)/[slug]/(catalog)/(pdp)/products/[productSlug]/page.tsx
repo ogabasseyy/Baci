@@ -107,7 +107,6 @@ export async function generateMetadata(
   const normalizedProductMetaTitle = getDurableProductSeoText({
     text: product.meta_title,
     product,
-    currency,
   });
   const normalizedGeneratedTitle = normalizeSeoProductText(
     priceSeoCopy.title,
@@ -122,7 +121,6 @@ export async function generateMetadata(
   const productMetaDescription = getDurableProductSeoText({
     text: product.meta_description,
     product,
-    currency,
   });
   const seoDescription = generateMetaDescription(
     productMetaDescription || generatedSeoDescription,

@@ -6,11 +6,10 @@ import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-v
 /** Product narrative stays price-free; authoritative prices live in Offer data. */
 export function getProductSchemaDescription(
   product: Pick<Product, 'name' | 'slug' | 'description' | 'meta_description'>,
-  merchantName: string,
-  currency: string
+  merchantName: string
 ): string {
   for (const text of [product.description, product.meta_description]) {
-    const durable = getDurableProductSeoText({ text, product, currency });
+    const durable = getDurableProductSeoText({ text, product });
     if (durable && !isUnsupportedSpecValue(durable)) {
       return generateMetaDescription(durable, 500);
     }

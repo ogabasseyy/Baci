@@ -1,12 +1,9 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MerchantProvider } from './merchant/merchant-provider';
 import type { MerchantData, StaffAccess } from './use-merchant';
-import {
-  MerchantProvider,
-  useMerchant,
-  useMerchantSafe,
-} from './use-merchant-client';
+import { useMerchant, useMerchantSafe } from './use-merchant-client';
 
 // Mock Supabase client
 const mockFrom = vi.fn();

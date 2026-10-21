@@ -5,8 +5,6 @@ import {
 
 import type { Product } from '@/lib/products';
 
-import { createClient } from '@/lib/supabase/client';
-
 export const HYDRATION_SELECT =
   'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint';
 
@@ -25,6 +23,9 @@ export async function fetchSharedCartProducts(
   const unique = [...new Set(productIds.filter((id) => id.trim().length > 0))];
   if (unique.length === 0) return empty;
   try {
+    // Loaded on demand: the cart provider wraps every storefront page, so a
+    // static import would ship supabase-js in every page's initial <head> JS.
+    const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     const { data, error } = await supabase
       .from('products')

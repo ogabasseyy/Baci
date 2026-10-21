@@ -25,6 +25,17 @@ describe('homepage carousel critical CSS', () => {
         color: 'var(--store-foreground, #111827)',
       });
     }
+    expect(
+      declarationsFor('[data-ogabassey-mobile-utility-panel]')
+    ).toMatchObject({
+      'min-height': '158px',
+    });
+    expect(
+      declarationsFor('[data-ogabassey-hero-utility] span>span:last-child')
+    ).toMatchObject({
+      display: 'inline-grid',
+      'line-height': '1',
+    });
   });
   it('contains product fill images before the deferred card stylesheet arrives', () => {
     expect(declarationsFor('.ogabassey-home-product-card')).toMatchObject({

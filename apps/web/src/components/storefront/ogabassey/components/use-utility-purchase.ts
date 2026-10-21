@@ -12,6 +12,7 @@ import {
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
 import { settleUtilityPurchaseResult } from './utility-purchase-result-settlement';
+import { adoptSubmittedCanonicalKey } from './utility-purchase-canonical-adoption';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import {
   type AirtimeDataSubmit,
@@ -96,6 +97,7 @@ export function useUtilityPurchase({
   // after dispatch but before React commits the rerender.
   const submittingRef = useRef(false);
   const {
+    adoptCanonicalKey,
     captureAttemptKey,
     forgetScopedKey,
     isAttemptRetained,
@@ -217,6 +219,11 @@ export function useUtilityPurchase({
         captured.attempt = await captureAttemptKey(payloadSignature);
         return captured.attempt.key;
       },
+    });
+    captured.attempt = await adoptSubmittedCanonicalKey({
+      adoptCanonicalKey,
+      attempt: captured.attempt,
+      canonicalKey: result.canonicalIdempotencyKey,
     });
 
     await settleUtilityPurchaseResult({

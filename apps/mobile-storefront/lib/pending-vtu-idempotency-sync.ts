@@ -1,17 +1,18 @@
 import {
   hasLegacyVtuScopeKeys,
   parsePendingVtuSnapshot,
-  serializePendingVtuEntries,
 } from './pending-vtu-idempotency-codec';
 import {
   acquirePendingVtuMintLock,
-  forgottenVtuScopes,
   loadPendingVtuSnapshot,
-  noteForgottenVtuScopes,
   PENDING_VTU_MINT_LOCK_NAME,
   persistPendingVtuEntries,
   releasePendingVtuMintLock,
 } from './pending-vtu-idempotency-store';
+import {
+  forgottenVtuScopes,
+  noteForgottenVtuScopes,
+} from './pending-vtu-tombstones';
 
 export interface PendingVtuPurchase {
   key: string;
@@ -32,19 +33,6 @@ export interface PendingVtuPurchase {
  * gate (Codex R145 P1).
  */
 export const pendingPurchases = new Map<string, PendingVtuPurchase>();
-
-/** Serializes live entries + tombstones for MMKV (prunes TTL-expired). */
-export function serializePendingVtuPurchases(now: number = Date.now()): string {
-  return serializePendingVtuEntries(
-    pendingPurchases,
-    [...forgottenVtuScopes].map(([s, record]) => ({
-      scoped: s,
-      forgottenAt: record.forgottenAt,
-      ...(record.key !== undefined ? { key: record.key } : {}),
-    })),
-    now
-  );
-}
 
 /**
  * Restores entries from a snapshot (same code path as restart).
@@ -117,12 +105,15 @@ export function syncPendingVtuPurchasesFromSnapshot(
       continue;
     }
     // Entry-merge is KEY-bound like live-delete (web R61 parity).
-    const tombstone = forgottenVtuScopes.get(scoped);
-    if (
-      tombstone !== undefined &&
-      entry.rememberedAt <= tombstone.forgottenAt &&
-      (tombstone.key === undefined || tombstone.key === entry.key)
-    ) {
+    // Multi-key (CodeRabbit Major): a scope can carry several
+    // generation tombstones — any matching record suppresses.
+    const tombstones = forgottenVtuScopes.get(scoped) ?? [];
+    const suppressed = tombstones.some(
+      (tombstone) =>
+        entry.rememberedAt <= tombstone.forgottenAt &&
+        (tombstone.key === undefined || tombstone.key === entry.key)
+    );
+    if (suppressed) {
       continue;
     }
     pendingPurchases.set(scoped, {

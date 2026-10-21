@@ -28,13 +28,17 @@ import {
 import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
   flushPendingVtuPurchases,
-  forgottenScopedKeys,
   hydratePendingVtuPurchases,
+  isCurrentVtuGeneration,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
   serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
+import {
+  forgottenScopedKeys,
+  noteForgottenVtuScope,
+} from './utility-pending-vtu-tombstones';
 
 // jsdom ships no navigator.locks, and the mint runner fails closed
 // in multi-tab browsers without it (Codex R152 P1) — pin an
@@ -858,5 +862,150 @@ describe('keyed tombstones (6rrMIj)', () => {
       consoleError.mockRestore();
       setItem.mockRestore();
     }
+  });
+
+  it('keeps every generation tombstone for a scope until the next persist', () => {
+    // Multi-key (CodeRabbit Major, mobile mirror): a non-durable
+    // canonical adoption tombstones the persisted loser, then
+    // terminal settlement tombstones the winner. Single-slot
+    // replacement would drop the loser record and resurrect the
+    // persisted loser on merge — both records must accumulate and
+    // any matching record must suppress.
+    const scoped = scopePendingVtuSignature(
+      'user-multikey',
+      'merchant-1',
+      '{"multikey":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-loser');
+    const now = Date.now();
+    noteForgottenVtuScope(scoped, now, 'key-loser');
+    noteForgottenVtuScope(scoped, now + 5, 'key-winner');
+
+    // Both records ride the snapshot (one scope, two tombstones).
+    const serialized = parsePendingVtuSnapshot(serializePendingVtuPurchases());
+    expect(serialized.forgotten).toHaveLength(2);
+    // Either generation's persisted entry is suppressed on merge.
+    expect(
+      syncSuppressesForTesting(scoped, 'key-loser', now - 1000)
+    ).toBe(true);
+    expect(
+      syncSuppressesForTesting(scoped, 'key-winner', now - 1000)
+    ).toBe(true);
+    expect(
+      syncSuppressesForTesting(scoped, 'key-other', now - 1000)
+    ).toBe(false);
+
+    function syncSuppressesForTesting(
+      descriptor: string,
+      key: string,
+      rememberedAt: number
+    ): boolean {
+      pendingVtuPurchases.delete(descriptor);
+      expect(
+        savePendingVtuSnapshot(
+          JSON.stringify({
+            entries: [
+              [
+                descriptor,
+                {
+                  key,
+                  reference: null,
+                  rememberedAt,
+                  completedAt: null,
+                },
+              ],
+            ],
+            forgotten: [],
+          })
+        )
+      ).toBe(true);
+      syncPendingVtuPurchasesFromSnapshot();
+      return !pendingVtuPurchases.has(descriptor);
+    }
+  });
+
+  it('vetoes a superseded generation and adopts the persisted newer one', () => {
+    // Codex P1: a sibling tab settled and persisted a newer
+    // same-descriptor generation after this tab adopted. The
+    // caller must skip its stale note (noting would flush the
+    // stale entry back over the newer generation), and memory
+    // converges to the newer generation.
+    const scoped = scopePendingVtuSignature(
+      'user-veto',
+      'merchant-1',
+      '{"veto":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-old');
+    const live = pendingVtuPurchases.get(scoped);
+    expect(live).toBeDefined();
+    expect(
+      savePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [
+            [
+              scoped,
+              {
+                key: 'key-new',
+                reference: null,
+                rememberedAt: (live?.rememberedAt ?? 0) + 1000,
+                completedAt: null,
+              },
+            ],
+          ],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+
+    expect(isCurrentVtuGeneration(scoped, 'key-old')).toBe(false);
+    expect(recallPendingVtuKey(scoped)).toBe('key-new');
+  });
+
+  it('ignores a tombstoned persisted loser after a non-durable adoption', () => {
+    // CodeRabbit Minor: adoption rebound memory to the winner
+    // (keeping rememberedAt) but the flush failed, so the
+    // snapshot still holds the loser — explicitly tombstoned.
+    // The veto must not converge the loser back and veto the
+    // winner's terminal settlement (unmarked winner).
+    const scoped = scopePendingVtuSignature(
+      'user-tombveto',
+      'merchant-1',
+      '{"tombveto":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-loser');
+    persistPendingVtuPurchases();
+    const live = pendingVtuPurchases.get(scoped);
+    expect(live).toBeDefined();
+    pendingVtuPurchases.set(scoped, { ...live!, key: 'key-winner' });
+    noteForgottenVtuScope(scoped, Date.now(), 'key-loser');
+
+    expect(isCurrentVtuGeneration(scoped, 'key-winner')).toBe(true);
+    expect(recallPendingVtuKey(scoped)).toBe('key-winner');
+  });
+
+  it('reports current when memory holds the expected key and storage agrees', () => {
+    const scoped = scopePendingVtuSignature(
+      'user-current',
+      'merchant-1',
+      '{"current":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-mine');
+    persistPendingVtuPurchases();
+
+    expect(isCurrentVtuGeneration(scoped, 'key-mine')).toBe(true);
+    expect(recallPendingVtuKey(scoped)).toBe('key-mine');
+  });
+
+  it('reports superseded when memory already rotated', () => {
+    const scoped = scopePendingVtuSignature(
+      'user-rotated',
+      'merchant-1',
+      '{"rotated":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-new');
+
+    expect(isCurrentVtuGeneration(scoped, 'key-old')).toBe(false);
+    // Nothing to reconcile — memory already moved on.
+    expect(recallPendingVtuKey(scoped)).toBe('key-new');
   });
 });

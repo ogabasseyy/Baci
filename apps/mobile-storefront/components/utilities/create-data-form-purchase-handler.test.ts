@@ -123,10 +123,10 @@ describe('data form purchase cashback', () => {
     );
   });
 
-  it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
-    // The submitter's retained key would replay the dead
-    // transaction when they retry — finalize it for the submitter
-    // even though the result UI is discarded.
+  it('leaves rotation to chargeWalletForVtu on a terminal 4xx when the account switched', async () => {
+    // Rotation lives inside chargeWalletForVtu (the only layer
+    // that knows the canonical key): the handler only discards
+    // the result UI here.
     mockChargeWalletForVtu.mockRejectedValueOnce(
       new HttpError(400, 'Insufficient funds')
     );
@@ -141,7 +141,7 @@ describe('data form purchase cashback', () => {
       invalidateWallets,
     });
 
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     // The switch helper invalidates all cached wallets for the retry.
     expect(invalidateWallets).toHaveBeenCalledTimes(1);
     expect(refetchWallet).not.toHaveBeenCalled();

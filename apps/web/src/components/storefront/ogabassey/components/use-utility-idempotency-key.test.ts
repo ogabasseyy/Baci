@@ -8,11 +8,13 @@ import {
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
+import { savePendingVtuSnapshot } from './utility-pending-idempotency-store';
 import {
   finalizeSuppressedAttempt,
   shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
 } from './use-utility-idempotency-key';
+import { pendingVtuPurchases } from './utility-pending-vtu-sync';
 
 // jsdom ships no navigator.locks, and the mint runner fails closed
 // in multi-tab browsers without it (Codex R152 P1) — pin an
@@ -352,6 +354,58 @@ describe('finalizeSuppressedAttempt', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('skips noting a superseded generation and adopts the persisted newer one', () => {
+    // Codex P1: a sibling tab settled and persisted a newer
+    // generation after this tab adopted. Noting the stale
+    // response's reference on the old entry would flush it back
+    // over the newer generation (memory-wins), orphaning the
+    // newer key — skip the note and converge memory instead.
+    const scoped = scopePendingVtuSignature(
+      'user-superseded',
+      'merchant-1',
+      '{"superseded":true}'
+    );
+    rememberPendingVtuPurchase(scoped, 'key-old');
+    const live = pendingVtuPurchases.get(scoped);
+    expect(live).toBeDefined();
+    expect(
+      savePendingVtuSnapshot(
+        JSON.stringify({
+          entries: [
+            [
+              scoped,
+              {
+                key: 'key-new',
+                reference: null,
+                rememberedAt: (live?.rememberedAt ?? 0) + 1000,
+                completedAt: null,
+              },
+            ],
+          ],
+          forgotten: [],
+        })
+      )
+    ).toBe(true);
+
+    finalizeSuppressedAttempt(
+      { key: 'key-old', scoped, recalled: false },
+      {
+        kind: 'wallet-success',
+        reference: 'REF-STALE',
+        amount: 1000,
+        processing: false,
+      }
+    );
+
+    // Stale note skipped; memory converged to the newer
+    // generation, which keeps no foreign reference/completion.
+    expect(recallPendingVtuKey(scoped)).toBe('key-new');
+    expect(hasNotedPendingVtuReference(scoped, 'REF-STALE')).toBe(false);
+    const converged = pendingVtuPurchases.get(scoped);
+    expect(converged?.reference).toBeNull();
+    expect(converged?.completedAt).toBeNull();
   });
 
   it('notes the reference when the switched result is processing', async () => {

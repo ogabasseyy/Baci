@@ -59,4 +59,38 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261016132000_drop_vtu_replay_owner_policy_after_repair.sql',
     sha256: 'fff472cbedce07e61a8968d9294e03dc77c5d6ee02db625f24298f1bfe487e21',
   },
+  {
+    repositoryPath: 'supabase/migrations/20261019120000_claim_vtu_intent.sql',
+    sha256: '085106d8245cc8f7a7d7e9ef7d6131469f33e85625a28df15c9919302955da08',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020053000_join_overlapping_terminal_vtu_intent.sql',
+    sha256: '9b002b402f7e6a38bda2fe1329474fdb0811be0ca6841b76264b515cfcd57fff',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020061000_stamp_vtu_terminal_transition.sql',
+    sha256: '0e46b29e365197d00ad956045a382b3836ee75c0bebe043dd9318aedb6c26ceb',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020064000_claim_vtu_intent_admission_fence.sql',
+    sha256: '64605f81a684b36689eed8e4879a1c1d1e2f9ff8b1d8676ccf82a1d0f8a681ce',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020071000_vtu_admission_proof.sql',
+    sha256: 'f192a278a1f5d2a4465535e3495c496f10e52d78a0baf858597a35a60ddbc040',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020072000_claim_vtu_intent_admission_liveness.sql',
+    sha256: '143ebfaf389f25990edb62cbf3c9a85f67f008d7e786062a4717945052de6be0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020073000_vtu_admission_proof_index.sql',
+    sha256: '56003d758b19b39621cbe8801b82f2d14552778174fd5adb3e01f26a34b25b3c',
+  },
 ];

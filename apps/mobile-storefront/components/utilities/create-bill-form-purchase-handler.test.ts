@@ -2,7 +2,11 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
-import * as vtuSync from '@/lib/pending-vtu-idempotency-sync';
+import * as vtuGuards from '@/lib/pending-vtu-generation-guards';
+import {
+  clearPendingVtuKeys,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
 
@@ -110,6 +114,7 @@ function createValidHandler(overrides: PurchaseHandlerOverrides = {}) {
 describe('createBillFormPurchaseHandler', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearPendingVtuKeys();
     mockGetSettlementPass.mockReturnValue(null);
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockChargeWalletForVtu.mockResolvedValue({
@@ -130,7 +135,12 @@ describe('createBillFormPurchaseHandler', () => {
       onSuccess,
       payment: createPaymentState({
         getWalletBalance: () => 1500,
-        getWalletIdempotencyKey: jest.fn(async () => 'idem-key-1'),
+        getWalletIdempotencyKey: jest.fn(async (descriptor: string) => {
+          // Production recall-or-mint invariant: the returned key
+          // is always the live entry's key.
+          rememberPendingVtuPurchase(descriptor, 'idem-key-1');
+          return 'idem-key-1';
+        }),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
         captureSubmittingUserId: () => 'test-user',
@@ -139,10 +149,14 @@ describe('createBillFormPurchaseHandler', () => {
       }),
     });
 
-    // Durable terminal forget (Codex R153 P2): the success path
-    // awaits the barrel's durable forget (spy calls through to the
-    // real fallback flush) instead of the hook's scheduled reset.
-    const durableSpy = jest.spyOn(vtuSync, 'forgetPendingVtuPurchaseDurable');
+    // Guarded durable terminal forget (Codex R153 P2 + R6 P1): the
+    // success path awaits the generation-guarded durable forget
+    // (spy calls through to the real fallback flush) instead of
+    // the hook's scheduled reset.
+    const durableSpy = jest.spyOn(
+      vtuGuards,
+      'forgetOwnPendingVtuPurchaseDurable'
+    );
 
     await handlePurchase();
 
@@ -155,6 +169,7 @@ describe('createBillFormPurchaseHandler', () => {
     });
     expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     expect(durableSpy).toHaveBeenCalledTimes(1);
+    expect(durableSpy).toHaveBeenCalledWith(expect.any(String), 'idem-key-1');
     await expect(durableSpy.mock.results[0]?.value).resolves.toBe(true);
     expect(onSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'successful', reference: 'WAL-1' })
@@ -443,10 +458,10 @@ describe('createBillFormPurchaseHandler', () => {
       );
     });
 
-    it('rotates the idempotency key on a 4xx response (request rejected before any state)', async () => {
-      // A definitive route 4xx recorded its outcome under the key. A
-      // retry with the same key would just keep failing — fresh key
-      // lets the user correct and resubmit cleanly.
+    it('leaves rotation to chargeWalletForVtu on a 4xx response (request rejected before any state)', async () => {
+      // A definitive route 4xx recorded its outcome under the key;
+      // chargeWalletForVtu rotates it (only it knows the canonical
+      // key). The handler only refetches the possibly-stale balance.
       mockChargeWalletForVtu.mockRejectedValueOnce(
         new HttpError(400, 'Bad Request')
       );
@@ -472,7 +487,7 @@ describe('createBillFormPurchaseHandler', () => {
       await handlePurchase();
 
       expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
-      expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+      expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
       // The rejection may prove a stale balance: refetch so the next
       // tap's readiness check sees the real balance.
       expect(refetchWallet).toHaveBeenCalledTimes(1);
@@ -543,10 +558,10 @@ describe('createBillFormPurchaseHandler', () => {
       expect(refetchWallet).not.toHaveBeenCalled();
     });
 
-    it('rotates the idempotency key on a terminal 4xx even when the account switched', async () => {
-      // The submitter's retained key would replay the dead
-      // transaction when they retry — finalize it for the submitter
-      // even though the result UI is discarded.
+    it('leaves rotation to chargeWalletForVtu on a terminal 4xx when the account switched', async () => {
+      // Rotation lives inside chargeWalletForVtu (the only layer
+      // that knows the canonical key): the handler only discards
+      // the result UI here.
       mockChargeWalletForVtu.mockRejectedValueOnce(
         new HttpError(400, 'Insufficient funds')
       );
@@ -567,7 +582,7 @@ describe('createBillFormPurchaseHandler', () => {
 
       await handlePurchase();
 
-      expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+      expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
       // The switch helper invalidates all cached wallets for the retry.
       expect(invalidateWallets).toHaveBeenCalledTimes(1);
       expect(refetchWallet).not.toHaveBeenCalled();

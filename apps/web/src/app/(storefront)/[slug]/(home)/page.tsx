@@ -23,7 +23,6 @@ import {
   getOgabasseyHomePathPrefix,
   isOgabasseyCanonicalDomainSlug,
   isOgabasseyHomeIdentifier,
-  OGABASSEY_DOMAIN_IDENTIFIER,
 } from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 // Statically imported alongside OgabasseyHomeCommittedLcp so
@@ -52,7 +51,7 @@ function warmOgabasseyHomeHeroShell(): void {
 }
 
 export function generateStaticParams(): Array<{ slug: string }> {
-  return [OGABASSEY_DOMAIN_IDENTIFIER, OGABASSEY_TEMPLATE_ID].map((slug) => ({
+  return [OGABASSEY_TEMPLATE_ID].map((slug) => ({
     slug,
   }));
 }

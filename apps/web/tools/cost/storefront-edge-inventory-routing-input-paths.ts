@@ -7,6 +7,7 @@ import { STOREFRONT_EDGE_ROUTING_INPUT_PATHS } from './storefront-edge-routing-i
 
 /** Reviewed routing-input bytes hashed into the Task 1A inventory authority. */
 export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
+  'apps/web/src/app/(storefront)/ogabassey.com/page.tsx',
   ...STOREFRONT_EDGE_ROUTING_INPUT_PATHS,
   'apps/web/next.config.ts',
   'apps/web/src/app/actions/repair.ts',

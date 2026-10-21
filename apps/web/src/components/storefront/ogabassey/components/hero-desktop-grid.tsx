@@ -12,6 +12,8 @@ interface HeroDesktopGridProps {
    *  hero (its image is the eager desktop LCP element); slides[1]/[2] fill the
    *  two side cards. All deep-links to their PDP. */
   slides: LaunchProductSlide[];
+  /** Server-only stream fallback; avoids suspending on the router module. */
+  staticLinks?: boolean;
 }
 
 // Light, neutral card surface (matches the previous hero's restrained palette):
@@ -28,7 +30,8 @@ const BIG_IMAGE_SIZES = '(min-width: 768px) 480px, 1px';
 const SIDE_IMAGE_WIDTH = 320;
 const SIDE_IMAGE_HEIGHT = 320;
 const SIDE_IMAGE_SOURCE_MEDIA = '(min-width: 768px)';
-const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
+const SIDE_IMAGE_SIZES =
+  '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
 const HERO_IMAGE_QUALITY = 70;
 
 /** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
@@ -86,14 +89,17 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
 function HeroBigCard({
   hasSideCards,
   slide,
+  staticLinks = false,
 }: {
   hasSideCards: boolean;
   slide: LaunchProductSlide;
+  staticLinks?: boolean;
 }) {
+  const CardLink = staticLinks ? 'a' : Link;
   return (
-    <Link
+    <CardLink
       href={asRoute(slide.href)}
-      prefetch={false}
+      {...(staticLinks ? {} : { prefetch: false })}
       aria-label={`${slide.name} — ${slide.ctaLabel}`}
       className={`group relative ${hasSideCards ? 'lg:col-span-3' : 'lg:col-span-5'} h-[400px] lg:h-full overflow-hidden rounded-2xl ring-1 ring-store-border/70 shadow-lg hover:shadow-xl transition-all duration-300 grid grid-cols-5 ${CARD_SURFACE}`}
     >
@@ -115,10 +121,9 @@ function HeroBigCard({
       <div className="relative col-span-2">
         <HeroBigImage alt={slide.imageAlt} src={slide.imageUrl} />
       </div>
-    </Link>
+    </CardLink>
   );
 }
-
 
 /** Desktop-only side-card image. The fallback `<img>` is a transparent pixel so
  * hidden desktop cards do not add mobile hero image requests. */
@@ -165,11 +170,18 @@ function HeroSideImage({ alt, src }: { alt: string; src: string }) {
 }
 
 /** A compact side card backed by a launch product. Image is lazy (not LCP). */
-function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
+function HeroSideCard({
+  slide,
+  staticLinks = false,
+}: {
+  slide: LaunchProductSlide;
+  staticLinks?: boolean;
+}) {
+  const CardLink = staticLinks ? 'a' : Link;
   return (
-    <Link
+    <CardLink
       href={asRoute(slide.href)}
-      prefetch={false}
+      {...(staticLinks ? {} : { prefetch: false })}
       aria-label={`${slide.name} — ${slide.ctaLabel}`}
       className={`group relative grid flex-1 grid-cols-5 overflow-hidden rounded-2xl shadow-lg ring-1 ring-store-border/70 transition-all duration-300 hover:shadow-xl ${CARD_SURFACE}`}
     >
@@ -180,7 +192,9 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
         <h3 className="line-clamp-2 text-lg font-bold leading-tight text-store-secondary-text">
           {slide.name}
         </h3>
-        <p className="text-sm font-semibold text-store-secondary-text">{slide.priceLabel}</p>
+        <p className="text-sm font-semibold text-store-secondary-text">
+          {slide.priceLabel}
+        </p>
         <span className="mt-1 text-xs font-bold text-store-primary underline underline-offset-2">
           {slide.ctaLabel}
         </span>
@@ -188,7 +202,7 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
       <div className="relative col-span-2">
         <HeroSideImage alt={slide.imageAlt} src={slide.imageUrl} />
       </div>
-    </Link>
+    </CardLink>
   );
 }
 
@@ -209,7 +223,10 @@ function HeroDesktopSideCardsReserve({ count }: { count: number }) {
   );
 }
 
-export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
+export function HeroDesktopGrid({
+  slides,
+  staticLinks = false,
+}: HeroDesktopGridProps) {
   const [big, ...rest] = slides;
   const sideCards = rest.slice(0, 2);
 
@@ -224,7 +241,11 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
       data-ogabassey-desktop-hero="true"
       role="region"
     >
-      <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
+      <HeroBigCard
+        hasSideCards={sideCards.length > 0}
+        slide={big}
+        staticLinks={staticLinks}
+      />
 
       {sideCards.length > 0 ? (
         <Suspense
@@ -232,7 +253,11 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
         >
           <div className="flex flex-col gap-4 h-full lg:col-span-2">
             {sideCards.map((slide) => (
-              <HeroSideCard key={slide.id} slide={slide} />
+              <HeroSideCard
+                key={slide.id}
+                slide={slide}
+                staticLinks={staticLinks}
+              />
             ))}
           </div>
         </Suspense>

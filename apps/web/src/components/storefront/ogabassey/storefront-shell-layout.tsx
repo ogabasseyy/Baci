@@ -31,6 +31,7 @@ export function StorefrontShellLayout({
         <main
           id="main-content"
           className="ogabassey-storefront-main"
+          style={{ minHeight: '100svh' }}
         >
           {children}
         </main>

@@ -94,6 +94,31 @@ describe('prepareCheckoutQuoteDestination', () => {
       { persistAttestedCoordinates: true }
     );
   });
+  it('bills the live offer price for uppercase caller spellings', async () => {
+    const { params, result } = input();
+    result.data = [{ id: 'PROD', name: 'Phone' }];
+    await prepareCheckoutQuoteDestination({
+      ...params,
+      items: [
+        {
+          product_id: 'PROD',
+          offer_id: 'OFFER',
+          quantity: 1,
+          price: 999,
+        },
+      ],
+      offerPrices: new Map([['prod::offer', 400]]),
+    });
+    // The live basis wins over the stale submitted price only when
+    // the canonical key meets the lowercase live map.
+    expect(mocks.convert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ price: 400, quantity: 1 }),
+      ]),
+      { includeValue: true }
+    );
+  });
+
   it('reproduces new-order shape on confirmed retries without bypassing fee/provider validation', async () => {
     const { params } = input();
     mocks.replay.mockResolvedValue(true);

@@ -322,39 +322,19 @@ function buildSupabase(
         };
       }
       if (table === 'vtu_transactions') {
-        // No delete/update: orphan cleanup is an RPC verdict now
-        // (Phase 2). select serves the replay binding read only.
+        // Dead by design (Codex P1): no buyer policy exists — the
+        // replay binding is an RPC, orphan cleanup is an RPC
+        // verdict. Any direct table touch throws loudly instead of
+        // passing.
         const gone = () => {
-          throw new Error('direct vtu_transactions writes are removed');
+          throw new Error('direct vtu_transactions access is removed');
         };
         return {
           delete: gone,
           update: gone,
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              maybeSingle: vi.fn().mockImplementation(() => {
-                // Lazily derived: the fresh path inserts the key row
-                // after this mock is built.
-                const binding =
-                  options?.transactionBinding !== undefined
-                    ? options.transactionBinding
-                    : state.row
-                      ? {
-                          id: state.row.vtu_transaction_id,
-                          customer_id: state.row.customer_id,
-                          merchant_id: state.row.merchant_id,
-                          status: 'processing',
-                        }
-                      : {
-                          id: 'vtu-tx-new',
-                          customer_id: 'customer-1',
-                          merchant_id: 'merchant-1',
-                          status: 'processing',
-                        };
-                return Promise.resolve({ data: binding, error: null });
-              }),
-            })),
-          })),
+          select: () => {
+            throw new Error('direct vtu_transactions access is removed');
+          },
         };
       }
       return {
@@ -421,6 +401,30 @@ function buildSupabase(
         }
         return Promise.resolve({
           data: [{ verdict: 'owned', ...state.row }],
+          error: null,
+        });
+      }
+      if (fn === 'get_vtu_replay_binding') {
+        // Lazily derived: the fresh path inserts the key row
+        // after this mock is built. Zero rows for missing.
+        const binding =
+          options?.transactionBinding !== undefined
+            ? options.transactionBinding
+            : state.row
+              ? {
+                  id: state.row.vtu_transaction_id,
+                  customer_id: state.row.customer_id,
+                  merchant_id: state.row.merchant_id,
+                  status: 'processing',
+                }
+              : {
+                  id: 'vtu-tx-new',
+                  customer_id: 'customer-1',
+                  merchant_id: 'merchant-1',
+                  status: 'processing',
+                };
+        return Promise.resolve({
+          data: binding === null ? [] : [binding],
           error: null,
         });
       }
@@ -1200,6 +1204,19 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       if (fn === 'fail_orphan_vtu_transaction') {
         return Promise.resolve({ data: 'marked_failed', error: null });
       }
+      if (fn === 'get_vtu_replay_binding') {
+        return Promise.resolve({
+          data: [
+            {
+              id: 'vtu-tx-winner',
+              customer_id: 'customer-1',
+              merchant_id: 'merchant-1',
+              status: 'processing',
+            },
+          ],
+          error: null,
+        });
+      }
       return Promise.resolve({ data: null, error: null });
     });
     userSupabaseMockRef.current = {
@@ -1226,29 +1243,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'vtu_transactions') {
-          // Replay owner binding (Muse R119): the winner's row
-          // belongs to the key owner. No delete/update: cleanup is
-          // an RPC verdict now.
-          const gone = () => {
-            throw new Error('direct vtu_transactions writes are removed');
-          };
-          return {
-            delete: gone,
-            update: gone,
-            select: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: {
-                    id: 'vtu-tx-winner',
-                    customer_id: 'customer-1',
-                    merchant_id: 'merchant-1',
-                    status: 'processing',
-                  },
-                  error: null,
-                }),
-              })),
-            })),
-          };
+          // Dead by design (Codex P1): the replay binding is an
+          // RPC and cleanup is an RPC verdict — no buyer policy
+          // exists. Any direct table touch throws loudly.
+          throw new Error('direct vtu_transactions access is removed');
         }
         return {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
@@ -2252,7 +2250,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     ]);
   });
 
-  it('prepare runs on the user client with the RPC flags', async () => {
+  it('prepare reads on the user client, inserts on the privileged client', async () => {
+    // Codex P1: the insert RPC is service-role-only (server-computed
+    // settlement money); reads stay on the authenticated client.
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     userSupabaseMockRef.current = buildSupabase(state);
 
@@ -2264,6 +2264,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockPrepare).toHaveBeenCalledWith(
       expect.objectContaining({
         supabase: userSupabaseMockRef.current,
+        insertSupabase: supabaseMockRef.current,
         linkCustomerViaRpc: true,
         insertViaRpc: true,
       })

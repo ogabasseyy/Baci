@@ -6,12 +6,14 @@ import type { Database } from '@/types/supabase';
  * vtu-pending-transaction.ts per the Boy Scout Rule).
  *
  * Two paths, one payload: privileged callers (`/api/vtu/purchase`)
- * keep the direct insert; the RLS-bound wallet-only checkout
- * (Phase 2, epic #3694) inserts through the ownership-verifying
+ * keep the direct insert; the wallet-only checkout (Phase 2, epic
+ * #3694) inserts through the service-role-only
  * `insert_prepared_vtu_transaction` RPC — there is deliberately no
- * buyer INSERT policy (direct writes would be a mint primitive).
- * Both return the same prepared shape and throw the same
- * whitelisted error on failure.
+ * buyer INSERT policy (direct writes would be a mint primitive),
+ * and the RPC takes no authenticated EXECUTE either: its
+ * settlement fields are server-computed money that must never be
+ * caller-supplied (Codex P1, PR #3741). Both return the same
+ * prepared shape and throw the same whitelisted error on failure.
  */
 
 export type VtuTransactionInsertPayload =

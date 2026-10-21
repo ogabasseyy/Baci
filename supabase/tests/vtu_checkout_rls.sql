@@ -1,7 +1,14 @@
 -- =====================================================================
 -- REGRESSION TEST: wallet-only checkout RLS boundary, part 1
--- (buyer SELECT policy, write default-deny, customer find/link RPCs,
+-- (replay binding RPC, write default-deny, customer find/link RPCs,
 -- settings projection RPC) — epic #3694 Phase 2.
+--
+-- NOTE: an earlier revision exposed a buyer SELECT policy on
+-- vtu_transactions; Codex P1 (PR #3741) showed it reopens the
+-- full-row exposure that 20261012235000 deliberately removed.
+-- There is NO buyer SELECT policy: direct reads see zero rows
+-- (P1/P2) and the replay binding goes through the 4-column
+-- get_vtu_replay_binding RPC (B1/B2).
 --
 -- USAGE:
 --   pnpm --filter @baci/web db:replay:chronological \
@@ -125,7 +132,10 @@ BEGIN
 END;
 $fixtures$;
 
--- --- P1: buyer sees own transaction -----------------------------------
+-- --- P1: buyer direct SELECT sees nothing (default-deny) ------------
+-- No buyer SELECT policy exists by design (Codex P1): even own
+-- rows are invisible to direct reads; the binding RPC below is the
+-- only owned-row read path.
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SELECT pg_catalog.set_config(
@@ -139,8 +149,8 @@ BEGIN
   SELECT count(*) INTO v_count
   FROM public.vtu_transactions
   WHERE id = 'c3c3c3c3-0000-4000-8000-000000000001';
-  IF v_count <> 1 THEN
-    RAISE EXCEPTION 'P1: buyer must see own transaction (saw %)', v_count;
+  IF v_count <> 0 THEN
+    RAISE EXCEPTION 'P1: buyer direct SELECT must see zero rows (saw %)', v_count;
   END IF;
 END;
 $p1$;
@@ -161,6 +171,51 @@ BEGIN
   END IF;
 END;
 $p2$;
+
+-- --- B1: binding RPC returns the owned row (4 columns exactly) --------
+DO $b1$
+DECLARE
+  v_bound record;
+BEGIN
+  SELECT * INTO v_bound
+  FROM public.get_vtu_replay_binding(
+    'c3c3c3c3-0000-4000-8000-000000000001'
+  );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'B1: binding RPC returned zero rows for the owned transaction';
+  END IF;
+  IF v_bound.id IS DISTINCT FROM 'c3c3c3c3-0000-4000-8000-000000000001'
+    OR v_bound.customer_id IS DISTINCT FROM 'f2f2f2f2-0000-4000-8000-000000000001'
+    OR v_bound.merchant_id IS DISTINCT FROM 'e1e1e1e1-0000-4000-8000-000000000001'
+    OR v_bound.status IS DISTINCT FROM 'pending'
+    OR (SELECT count(*) FROM jsonb_object_keys(row_to_json(v_bound)::jsonb)) <> 4
+  THEN
+    RAISE EXCEPTION 'B1: binding projection wrong: %', row_to_json(v_bound);
+  END IF;
+END;
+$b1$;
+
+-- --- B2: binding RPC hides foreign and missing rows -------------------
+DO $b2$
+DECLARE
+  v_count integer;
+BEGIN
+  SELECT count(*) INTO v_count
+  FROM public.get_vtu_replay_binding(
+    'c3c3c3c3-0000-4000-8000-000000000002'
+  );
+  IF v_count <> 0 THEN
+    RAISE EXCEPTION 'B2: binding RPC leaked a foreign row';
+  END IF;
+  SELECT count(*) INTO v_count
+  FROM public.get_vtu_replay_binding(
+    'c3c3c3c3-0000-4000-8000-000000000099'
+  );
+  IF v_count <> 0 THEN
+    RAISE EXCEPTION 'B2: binding RPC returned a row for a missing id';
+  END IF;
+END;
+$b2$;
 
 -- --- P3: anon sees nothing --------------------------------------------
 SET LOCAL ROLE anon;
@@ -227,9 +282,12 @@ BEGIN
     RAISE EXCEPTION 'P6: authenticated DELETE unexpectedly matched % rows', v_rows;
   END IF;
 
+  -- Direct SELECT sees nothing (no buyer policy); confirm the row
+  -- is unmutated through the binding RPC instead.
   SELECT status INTO v_status
-  FROM public.vtu_transactions
-  WHERE id = 'c3c3c3c3-0000-4000-8000-000000000001';
+  FROM public.get_vtu_replay_binding(
+    'c3c3c3c3-0000-4000-8000-000000000001'
+  );
   IF v_status IS DISTINCT FROM 'pending' THEN
     RAISE EXCEPTION 'P5/P6: own row mutated to %', v_status;
   END IF;
@@ -649,6 +707,20 @@ BEGIN
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'helper _vtu_checkout_caller_customer must be confined (no authenticated grant)';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.get_vtu_replay_binding(uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'authenticated must have EXECUTE on get_vtu_replay_binding';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.get_vtu_replay_binding(uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must NOT have EXECUTE on get_vtu_replay_binding';
   END IF;
 END;
 $grants$;

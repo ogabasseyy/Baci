@@ -19267,6 +19267,15 @@ export type Database = {
           vtu_tv_enabled: boolean | null;
         }[];
       };
+      get_vtu_replay_binding: {
+        Args: { p_transaction_id: string };
+        Returns: {
+          customer_id: string | null;
+          id: string;
+          merchant_id: string | null;
+          status: string | null;
+        }[];
+      };
       get_wallet_summary: {
         Args: { p_merchant_id: string };
         Returns: {

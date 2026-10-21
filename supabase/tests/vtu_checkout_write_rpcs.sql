@@ -7,8 +7,15 @@
 --   pnpm --filter @baci/web db:replay:chronological \
 --     --sql-check supabase/tests/vtu_checkout_write_rpcs.sql
 --
--- Part 1 (buyer SELECT policy, write default-deny, customer
+-- Part 1 (replay binding RPC, write default-deny, customer
 -- find/link, settings projection) lives in vtu_checkout_rls.sql.
+--
+-- NOTE: the prepare-insert RPC is service_role-only (Codex P1, PR
+-- #3741): its settlement fields (source, commissions, cashback,
+-- metadata payment split) are server-computed by the route and can
+-- never be caller-supplied — an authenticated grant would let
+-- buyers forge gift-sourced or cashback-inflated rows. I1/I3 run
+-- as service_role; I2 proves authenticated EXECUTE is denied.
 -- =====================================================================
 
 BEGIN;
@@ -85,7 +92,10 @@ SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true
 );
 
--- --- I1: owner insert records the full prepared row -------------------
+-- --- I1: service_role insert records the full prepared row ---------
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 DO $i1$
 DECLARE
   v_prepared record;
@@ -112,11 +122,9 @@ BEGIN
     RAISE EXCEPTION 'I1: prepared shape wrong: %', row_to_json(v_prepared);
   END IF;
 
-  SET LOCAL ROLE service_role;
   SELECT * INTO v_row
   FROM public.vtu_transactions
   WHERE request_reference = 'WRPC-INSERT-001';
-  SET LOCAL ROLE authenticated;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'I1: inserted row not found';
   END IF;
@@ -136,23 +144,68 @@ BEGIN
 END;
 $i1$;
 
--- --- I2: cross-customer insert is refused -----------------------------
+-- --- I1b: forged source / non-positive amount refused -----------------
+-- Defense in depth: the RPC serves the wallet-only checkout only,
+-- so non-checkout sources and non-positive amounts fail closed
+-- even for privileged callers.
+DO $i1b$
+BEGIN
+  BEGIN
+    PERFORM public.insert_prepared_vtu_transaction(
+      'e2e2e2e2-0000-4000-8000-000000000001',
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      'b22df000-0000-4000-8000-000000000001',
+      NULL, 'airtime', 'mtn', '08030000017', 500, 'WRPC-INSERT-GIFT',
+      'gift', 25, 50, 5,
+      NULL, NULL, NULL, NULL, '{}'::jsonb
+    );
+    RAISE EXCEPTION 'I1b: gift-sourced insert unexpectedly allowed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'invalid_arguments%' THEN
+      RAISE EXCEPTION 'I1b: wrong raise for source: %', SQLERRM;
+    END IF;
+  END;
+  BEGIN
+    PERFORM public.insert_prepared_vtu_transaction(
+      'e2e2e2e2-0000-4000-8000-000000000001',
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      'b22df000-0000-4000-8000-000000000001',
+      NULL, 'airtime', 'mtn', '08030000018', 0, 'WRPC-INSERT-ZERO',
+      'checkout', 25, 50, 5,
+      NULL, NULL, NULL, NULL, '{}'::jsonb
+    );
+    RAISE EXCEPTION 'I1b: zero-amount insert unexpectedly allowed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'invalid_arguments%' THEN
+      RAISE EXCEPTION 'I1b: wrong raise for amount: %', SQLERRM;
+    END IF;
+  END;
+END;
+$i1b$;
+
+-- --- I2: authenticated EXECUTE is permission-denied -------------------
+-- The settlement payload is server-computed; buyers must not invoke
+-- this RPC at all (Codex P1 forge: gift source / inflated money).
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true
+);
+
 DO $i2$
 BEGIN
   BEGIN
     PERFORM public.insert_prepared_vtu_transaction(
       'e2e2e2e2-0000-4000-8000-000000000001',
-      'f3f3f3f3-0000-4000-8000-000000000002',
+      'f3f3f3f3-0000-4000-8000-000000000001',
       'b22df000-0000-4000-8000-000000000001',
       NULL, 'airtime', 'mtn', '08030000015', 500, 'WRPC-INSERT-002',
-      'checkout', 25, 50, 5,
+      'gift', 2500, 5000, 500,
       NULL, NULL, NULL, NULL, '{}'::jsonb
     );
-    RAISE EXCEPTION 'I2: cross-customer insert unexpectedly allowed';
-  EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM NOT LIKE 'not authorized%' THEN
-      RAISE EXCEPTION 'I2: wrong raise: %', SQLERRM;
-    END IF;
+    RAISE EXCEPTION 'I2: authenticated prepare-insert unexpectedly allowed';
+  EXCEPTION WHEN insufficient_privilege THEN
+    -- Expected: service_role-only grant.
   END;
 END;
 $i2$;
@@ -343,6 +396,31 @@ BEGIN
   END;
 END;
 $c2$;
+
+-- --- C6: claim on an out-of-scope transaction is refused -------------
+-- The mapping scope is owned (u1/c1) but the transaction belongs to
+-- c2: recording it would let a key fulfill another customer's row
+-- (Codex P1 forge limb).
+DO $c6$
+BEGIN
+  BEGIN
+    PERFORM public.claim_vtu_intent(
+      'e5e5e5e5-0000-4000-8000-000000000016',
+      'wrpc-fp-claim-6',
+      'd4d4d4d4-0000-4000-8000-000000000002',
+      'e2e2e2e2-0000-4000-8000-000000000001',
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      now(),
+      '{}'
+    );
+    RAISE EXCEPTION 'C6: out-of-scope transaction claim unexpectedly allowed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'claim_scope_mismatch%' THEN
+      RAISE EXCEPTION 'C6: wrong raise: %', SQLERRM;
+    END IF;
+  END;
+END;
+$c6$;
 
 -- --- C3: second key for the same scope joins in-flight ----------------
 DO $c3$
@@ -561,12 +639,21 @@ $d6$;
 -- --- Grants ------------------------------------------------------------
 DO $grants$
 BEGIN
-  IF NOT pg_catalog.has_function_privilege(
+  -- Service-role-only (Codex P1 forge): buyers must never execute
+  -- the prepare insert directly.
+  IF pg_catalog.has_function_privilege(
     'authenticated',
     'public.insert_prepared_vtu_transaction(uuid, uuid, uuid, uuid, text, text, text, numeric, text, text, numeric, numeric, numeric, text, text, text, text, jsonb)',
     'EXECUTE'
   ) THEN
-    RAISE EXCEPTION 'authenticated must have EXECUTE on insert_prepared_vtu_transaction';
+    RAISE EXCEPTION 'authenticated must NOT have EXECUTE on insert_prepared_vtu_transaction';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.insert_prepared_vtu_transaction(uuid, uuid, uuid, uuid, text, text, text, numeric, text, text, numeric, numeric, numeric, text, text, text, text, jsonb)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'service_role must have EXECUTE on insert_prepared_vtu_transaction';
   END IF;
   IF NOT pg_catalog.has_function_privilege(
     'authenticated',

@@ -448,6 +448,7 @@ export interface PreparedVtuTransaction {
 
 export async function preparePendingVtuTransaction({
   supabase,
+  insertSupabase,
   user,
   input,
   source,
@@ -457,6 +458,14 @@ export async function preparePendingVtuTransaction({
   insertViaRpc = false,
 }: {
   supabase: SupabaseClient;
+  /**
+   * Write client for the prepare insert (Codex P1, PR #3741): the
+   * settlement payload is server-computed money, so the insert RPC
+   * is service-role-only and RLS-bound callers pass their
+   * privileged client here. Reads stay on `supabase`. Defaults to
+   * `supabase` for privileged callers (direct insert ignores it).
+   */
+  insertSupabase?: SupabaseClient;
   user: User;
   /**
    * `customerName` here is the **bill customer-of-record** (e.g. meter owner
@@ -476,7 +485,8 @@ export async function preparePendingVtuTransaction({
    */
   linkCustomerViaRpc?: boolean;
   /**
-   * Insert the prepared row through the ownership-verifying RPC.
+   * Insert the prepared row through the service-role-only RPC
+   * (Codex P1: the settlement payload is server-computed money).
    * False keeps the direct insert for privileged callers.
    */
   insertViaRpc?: boolean;
@@ -891,16 +901,17 @@ export async function preparePendingVtuTransaction({
     },
   };
 
-  // Direct insert for privileged callers; ownership-verified RPC
-  // for the RLS-bound checkout (no buyer INSERT policy exists by
-  // design). Same payload, same prepared shape, same error.
+  // Direct insert for privileged callers; service-role-only RPC
+  // for the wallet-only checkout (no buyer INSERT policy and no
+  // authenticated EXECUTE exist by design — server-computed
+  // money). Same payload, same prepared shape, same error.
   let transaction: InsertedPreparedVtuTransaction;
   if (insertViaRpc) {
     if (!customer?.id) {
       throw new Error('Customer account not found for this storefront');
     }
     transaction = await insertPreparedVtuTransactionViaRpc(
-      supabase,
+      insertSupabase ?? supabase,
       { ...insertPayload, customer_id: customer.id },
       user.id
     );

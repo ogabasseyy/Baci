@@ -24,18 +24,20 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  * SERVICE-ROLE BOUNDARY (owner-approved narrow exception, PR #3655,
  * narrowed Phase 2, epic #3694; expires 2027-01-14 or when the
  * migration epic lands — see AGENTS.md TEMPORARY VTU WALLET-ONLY
- * CHECKOUT EXCEPTION). Reads/writes run on the authenticated
- * client: buyer RLS policies for owned-row reads, JWT-verifying
- * SECURITY DEFINER RPCs for the key lookup, customer find/link,
- * settings projection, prepare insert, intent claim, and orphan
- * cleanup. The service-role client exists ONLY for the
- * admission-proof RPC (merchant-wide live set spans customers by
- * design — fence input only, never returned) and
- * fulfillPendingVtuTransaction (wallet debit/credit/refund RPCs
- * plus its transaction, ledger, marker, loyalty, and notification
- * writes — criterion 3's documented privilege boundary). Tenant
- * isolation is pinned by RLS + the RPC ownership checks +
- * route.test.ts + supabase/tests/vtu_checkout_*.sql.
+ * CHECKOUT EXCEPTION). Reads run on the authenticated client:
+ * public merchant rows plus JWT-verifying SECURITY DEFINER RPCs
+ * for the key lookup, replay binding, customer find/link,
+ * settings projection, intent claim, and orphan cleanup (no buyer
+ * policies on vtu_transactions by design — Codex P1, PR #3741).
+ * The service-role client exists ONLY for the admission-proof RPC
+ * (merchant-wide live set spans customers by design — fence input
+ * only, never returned), the prepare insert (server-computed
+ * settlement money that must never be caller-supplied — Codex P1),
+ * and fulfillPendingVtuTransaction (wallet debit/credit/refund
+ * RPCs plus its transaction, ledger, marker, loyalty, and
+ * notification writes — criterion 3's documented privilege
+ * boundary). Tenant isolation is pinned by the RPC ownership
+ * checks + route.test.ts + supabase/tests/vtu_checkout_*.sql.
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -181,6 +183,10 @@ export async function POST(request: NextRequest) {
 
     const prepared = await preparePendingVtuTransaction({
       supabase: userSupabase,
+      // Service-role-only insert (Codex P1): the settlement
+      // payload is server-computed money. Reads above stay on the
+      // authenticated client.
+      insertSupabase: adminSupabase,
       user: auth.user,
       input: input,
       source: 'checkout',

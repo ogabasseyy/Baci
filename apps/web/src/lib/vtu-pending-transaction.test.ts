@@ -206,6 +206,7 @@ function prepareAirtime(
   networkProvider = 'mtn',
   options?: {
     insertViaRpc?: boolean;
+    insertSupabase?: PrepareSupabase;
     linkCustomerViaRpc?: boolean;
     requireCustomer?: boolean;
     strictLookups?: boolean;
@@ -213,6 +214,7 @@ function prepareAirtime(
 ) {
   return preparePendingVtuTransaction({
     supabase,
+    insertSupabase: options?.insertSupabase,
     user: {
       id: 'user-1',
       email_confirmed_at: '2026-01-01T00:00:00.000Z',
@@ -1754,6 +1756,30 @@ describe('preparePendingVtuTransaction RPC boundary (Phase 2, #3694)', () => {
     for (const call of (from as ReturnType<typeof vi.fn>).mock.calls) {
       expect(call[0]).not.toBe('vtu_transactions');
     }
+  });
+
+  it('inserts on the write client while reads stay on the read client', async () => {
+    // Codex P1: the settlement payload is server-computed money,
+    // so the insert RPC is service-role-only — reads (settings,
+    // link) stay on the authenticated client.
+    const user = createMockSupabase();
+    const admin = createMockSupabase();
+
+    await prepareAirtime(user.supabase, 'mtn', {
+      ...RPC_FLAGS,
+      insertSupabase: admin.supabase,
+    });
+
+    const userFns = (user.rpc as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([fn]) => fn
+    );
+    const adminFns = (admin.rpc as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([fn]) => fn
+    );
+    expect(userFns).toContain('get_vtu_checkout_settings');
+    expect(userFns).toContain('link_vtu_customer_by_email');
+    expect(userFns).not.toContain('insert_prepared_vtu_transaction');
+    expect(adminFns).toEqual(['insert_prepared_vtu_transaction']);
   });
 
   it('throws before the RPC insert when the link misses', async () => {

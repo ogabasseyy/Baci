@@ -516,6 +516,31 @@ describe('products/[productSlug] page', () => {
   });
 
   describe('uncategorized product', () => {
+    it('uses current pricing across social metadata when legacy copy has compact or encoded prices', async () => {
+      mockGetCachedProductWithDetails.mockResolvedValue({
+        ...uncategorizedProduct,
+        meta_title: 'Mystery Item Price – N350k',
+        meta_description: '<p>Buy this phone for ₦&nbsp;350,000.</p>',
+      });
+      const metadata = await generateMetadata(
+        {
+          params: Promise.resolve({
+            slug: 'teststore',
+            productSlug: 'mystery-item',
+          }),
+          searchParams: Promise.resolve({}),
+        },
+        stubParent
+      );
+      expect(metadata.title).toEqual({
+        absolute: 'Mystery Item Price in Nigeria | TestStore',
+      });
+      expect(metadata.description).toContain('₦500,000');
+      expect(metadata.description).not.toMatch(/350|nbsp/);
+      expect(metadata.openGraph?.description).toBe(metadata.description);
+      expect(metadata.twitter?.description).toBe(metadata.description);
+    });
+
     it('renders metadata instead of redirecting when product has no category', async () => {
       mockGetCachedProductWithDetails.mockResolvedValue(uncategorizedProduct);
 

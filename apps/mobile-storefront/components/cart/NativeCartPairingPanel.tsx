@@ -114,6 +114,17 @@ export function NativeCartPairingPanel() {
       setFailed(true);
     }
   }
+  function dismissPairing(): void {
+    clearCartPairingLink();
+    // Pairing-published conflicts have no resolution path once the sheet
+    // closes; legacy choice conflicts (status choice_required) stay gated.
+    const state = useNativeSharedCartStore.getState();
+    if (state.status !== 'choice_required' && state.mergeConflicts.length)
+      useNativeSharedCartStore.setState({
+        mergeConflicts: [],
+        mergeConflictReason: undefined,
+      });
+  }
   async function browser(): Promise<void> {
     const current = peekCartPairingLink();
     if (
@@ -148,7 +159,7 @@ export function NativeCartPairingPanel() {
   return (
     <ModalSheet
       visible
-      onRequestClose={clearCartPairingLink}
+      onRequestClose={dismissPairing}
       cardStyle={[styles.card, { backgroundColor: colors.background }]}
     >
       <Text
@@ -286,7 +297,7 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close cart link"
-        onPress={clearCartPairingLink}
+        onPress={dismissPairing}
         style={styles.button}
       >
         <Text style={{ color: colors.text }}>Close</Text>

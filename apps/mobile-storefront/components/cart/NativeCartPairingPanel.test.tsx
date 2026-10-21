@@ -339,3 +339,51 @@ it('retries through prepare when refresh is unbound but a snapshot exists', asyn
   fireEvent.press(retry);
   await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
 });
+it('clears pairing-owned conflicts when the shopper dismisses the sheet', async () => {
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair: jest.fn().mockResolvedValue(undefined),
+    mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
+    mergeConflictReason: 'price_mismatch',
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const close = await waitFor(() =>
+    screen.getByRole('button', { name: 'Close cart link' })
+  );
+  fireEvent.press(close);
+  expect(useNativeSharedCartStore.getState().mergeConflicts).toEqual([]);
+  expect(
+    useNativeSharedCartStore.getState().mergeConflictReason
+  ).toBeUndefined();
+});
+it('keeps legacy choice conflicts gated when dismissing a pairing sheet', async () => {
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'choice_required',
+    pair: jest.fn().mockResolvedValue(undefined),
+    mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const close = await waitFor(() =>
+    screen.getByRole('button', { name: 'Close cart link' })
+  );
+  fireEvent.press(close);
+  expect(useNativeSharedCartStore.getState().mergeConflicts).toHaveLength(1);
+});

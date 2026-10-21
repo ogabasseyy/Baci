@@ -511,6 +511,17 @@ jobs:
         # Sensitive Vercel values are intentionally blank in the pulled dotenv
         # file. This proves the Production key is defined, not its runtime value.
         run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs MERCHANT_WALLET_FUNDING_RECOVERY_HMAC_SECRET .vercel/.env.production.local
+      - name: Ensure intake network HMAC Production configuration exists
+        # The intake route fails closed (503) without its dedicated HMAC key,
+        # so the first deploy carrying the mandatory key must not land on a
+        # deployment missing the value. Same create-once semantics as the
+        # wallet HMAC above; the generated 64-hex value satisfies the >=32
+        # floor and rotation only resets intake buckets. Never logs the value.
+        run: node .github/scripts/ensure-vercel-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.production.local
+      - name: Verify intake network HMAC Production configuration is present
+        # Presence-only, like the wallet HMAC: proves the Production key is
+        # defined, not its runtime value.
+        run: node .github/scripts/assert-vercel-pulled-sensitive-env.mjs SUPABASE_STOREFRONT_INTAKE_NET_KEY .vercel/.env.production.local
       - name: Synchronize Cloudflare runtime credentials to Vercel Production
         run: .github/scripts/sync-cloudflare-vercel-production-env.sh .github/scripts/run-pinned-vercel.sh
       - name: Ensure build-time presence of runtime-only quiz RPC secret

@@ -7,11 +7,30 @@ import type { NextRequest } from 'next/server';
 const IPV4_REGEX =
   /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
-const IPV6_REGEX =
-  /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^::$/;
+const IPV6_GROUP_REGEX = /^[0-9a-fA-F]{1,4}$/;
+
+// Complete IPv6 validation (a regex alternation cannot cover every
+// compression shape: '2001:db8:85a3::8a2e:370:7334' has groups on both
+// sides of '::' and must validate). '::' may appear at most once and
+// must compress at least one group; without it exactly 8 groups are
+// required. IPv4-mapped forms ('::ffff:1.2.3.4') stay rejected: the
+// dotted tail is not a hex group.
+function isValidIPv6(ip: string): boolean {
+  if (ip.includes(':::')) return false;
+  const halves = ip.split('::');
+  if (halves.length > 2) return false;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  for (const group of [...head, ...tail]) {
+    if (!IPV6_GROUP_REGEX.test(group)) return false;
+  }
+  const explicit = head.length + tail.length;
+  if (halves.length === 1) return explicit === 8;
+  return explicit <= 7;
+}
 
 function isValidIP(ip: string): boolean {
-  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
+  return IPV4_REGEX.test(ip) || isValidIPv6(ip);
 }
 
 function finalChainIp(value: string | null): string | null {

@@ -119,6 +119,36 @@ describe('getClientIdentifier header trust', () => {
       getClientIdentifier(requestWith({ 'x-forwarded-for': 'not-an-ip' }))
     ).toBe('unknown');
   });
+
+  it('accepts every compressed IPv6 shape, including groups on both sides of ::', () => {
+    // A regex alternation cannot cover every compression; these must all
+    // validate or v6 shoppers pool into 'unknown'.
+    for (const ip of [
+      '2001:0db8:0000:0000:0000:0000:0000:0001',
+      '2001:db8:85a3::8a2e:370:7334',
+      '2001:db8::1',
+      '::1',
+      'fe80::',
+      '2001:db8::',
+    ]) {
+      expect(getClientIdentifier(requestWith({ 'x-real-ip': ip }))).toBe(ip);
+    }
+  });
+
+  it('rejects malformed IPv6 without pooling valid neighbors', () => {
+    for (const ip of [
+      '1:::2',
+      '1::2::3',
+      '1:2:3:4:5:6:7:8:9',
+      'gggg::1',
+      '::ffff:1.2.3.4',
+      '2001:db8:85a3:8a2e:370:7334',
+    ]) {
+      expect(getClientIdentifier(requestWith({ 'x-real-ip': ip }))).toBe(
+        'unknown'
+      );
+    }
+  });
 });
 
 describe('Cloudflare distrust', () => {

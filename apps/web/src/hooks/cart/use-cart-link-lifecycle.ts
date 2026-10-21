@@ -181,7 +181,9 @@ export function useCartLinkLifecycle(
           const persistedOk =
             persisted.length === cached.length &&
             persisted.every(
-              (line, index) => line.cartItemId === cached[index].cartItemId
+              (line, index) =>
+                line.cartItemId === cached[index].cartItemId &&
+                line.quantity === cached[index].quantity
             );
           if (!persistedOk) {
             retryAdopt(attempt, run);

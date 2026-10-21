@@ -40,7 +40,11 @@ export async function removeCapacityLineFromLiveCart(
             ? undefined
             : Math.round(selected.negotiatedPrice * 100)) &&
         (candidate.negotiationStatus ?? 'none') ===
-          (selected.negotiationStatus ?? 'none')
+          (selected.negotiationStatus ?? 'none') &&
+        (candidate.hasAssurance ?? false) ===
+          (selected.hasAssurance ?? false) &&
+        (candidate.assuranceRate ?? undefined) ===
+          (selected.assuranceRate ?? undefined)
     );
     if (!line) return true;
     const remainingQuantity = line.quantity - selected.quantity;

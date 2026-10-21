@@ -50,7 +50,9 @@ export async function adoptPreservedFallback(
     const persistedOk =
       persisted.length === preservedLines.length &&
       persisted.every(
-        (line, index) => line.cartItemId === preservedLines[index].cartItemId
+        (line, index) =>
+          line.cartItemId === preservedLines[index].cartItemId &&
+          line.quantity === preservedLines[index].quantity
       );
     if (!persistedOk)
       return {

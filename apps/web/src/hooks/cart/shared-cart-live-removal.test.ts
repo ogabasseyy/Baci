@@ -72,6 +72,37 @@ it('removes the live line when quantities match and retries a version conflict',
   );
 });
 
+it('targets the line matching the assurance lane among same-identity lines', async () => {
+  const base = snapshot(4);
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        { ...base.snapshot.lines[0], id: 'line-plain', hasAssurance: false },
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-assured',
+          hasAssurance: true,
+          assuranceRate: 0.05,
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({ ok: true } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(
+      cartItem({ quantity: 1, hasAssurance: true, assuranceRate: 0.05 }),
+      'shop'
+    )
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: { type: 'set_quantity', lineId: 'line-assured', quantity: 3 },
+    }),
+    'shop'
+  );
+});
 it('reports failure when the snapshot fetch fails retryably', async () => {
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: false,

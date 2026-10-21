@@ -28,6 +28,7 @@ import { isValidCartStore } from '@/lib/cart-validation';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { formatPrice, useCartStore } from '@/stores/cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 export default function CartScreen() {
   // Reconcile lines stamped pending while the setting was unknown: a
@@ -228,6 +229,7 @@ export default function CartScreen() {
         isPreparingCheckout={isPreparing}
         handleCheckout={handleCheckout}
         handleClearCart={() => {
+          markSharedCartIntent();
           Alert.alert('Clear Cart', 'Remove all items from your cart?', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Clear', style: 'destructive', onPress: clearCart },

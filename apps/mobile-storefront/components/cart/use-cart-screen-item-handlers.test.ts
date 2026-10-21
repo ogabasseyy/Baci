@@ -83,3 +83,21 @@ describe('useCartScreenItemHandlers', () => {
     expect(updateQuantity).toHaveBeenCalledTimes(2);
   });
 });
+
+it('marks a checkout intent when the remove confirmation opens', async () => {
+  const { sharedCartWriteRevision } = await import(
+    '@/stores/shared-cart-writer'
+  );
+  const { result, removeItem } = setup();
+  const before = sharedCartWriteRevision();
+  act(() => {
+    result.current.handleRemoveItem(item());
+  });
+  expect(mockAlert).toHaveBeenCalledWith(
+    'Remove Item',
+    expect.any(String),
+    expect.any(Array)
+  );
+  expect(removeItem).not.toHaveBeenCalled();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});

@@ -79,7 +79,10 @@ export function forwardSharedCartWrite(
 ): Promise<void> | null {
   const current = owner;
   if (!current) return null;
-  if (!action.type.startsWith('legacy_')) writeRevision += 1;
+  // Repricing is forwarded only on reported drift, so it invalidates a
+  // pending checkout like any other substantive cart change.
+  if (action.type !== 'legacy_restore' && action.type !== 'legacy_generation')
+    writeRevision += 1;
   const pending = Promise.resolve().then(() => {
     if (current !== owner || suspended) throw new Error('Cart session changed');
     return current.write(action);

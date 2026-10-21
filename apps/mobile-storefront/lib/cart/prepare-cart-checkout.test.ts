@@ -135,6 +135,28 @@ it('withholds checkout when a polling refresh publishes a new cart version mid-p
     reason: 'cart_changed',
   });
 });
+it('withholds checkout when the cart created by prepare changes during hydration retry', async () => {
+  let state: CheckoutCartState = { ...live };
+  state.prepare = jest.fn(async () => {
+    state = {
+      ...state,
+      snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 1 },
+    };
+  });
+  state.refresh = jest.fn(async () => {
+    state = {
+      ...state,
+      metadataReady: true,
+      snapshot: { state: 'active', lines: [{}], cartId: 'cart-1', version: 2 },
+    };
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'cart_changed',
+  });
+  expect(state.prepare).toHaveBeenCalledTimes(1);
+  expect(state.refresh).toHaveBeenCalledTimes(1);
+});
 it('stops after one unsuccessful hydration retry without recreating the cart', async () => {
   let state: CheckoutCartState = { ...live };
   state.prepare = jest.fn(async () => {

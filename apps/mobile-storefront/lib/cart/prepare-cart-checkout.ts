@@ -44,10 +44,14 @@ export async function prepareCartCheckout(
       current.refresh !== initial.refresh
     );
   };
+  let baseline = initial.snapshot;
   try {
     await operation();
     if (replaced()) return { ready: false, reason: 'session_changed' };
     const observed = getState();
+    // On the create/import path the prepared snapshot becomes the
+    // reviewed baseline for the version fence below.
+    if (!baseline && observed.snapshot) baseline = observed.snapshot;
     if (
       !initial.snapshot &&
       observed.snapshot &&
@@ -76,10 +80,10 @@ export async function prepareCartCheckout(
   // A polling/foreground refresh can publish a different canonical cart
   // mid-preparation; the shopper must review that version before checkout.
   if (
-    initial.snapshot &&
+    baseline &&
     current.snapshot &&
-    (current.snapshot.cartId !== initial.snapshot.cartId ||
-      current.snapshot.version !== initial.snapshot.version)
+    (current.snapshot.cartId !== baseline.cartId ||
+      current.snapshot.version !== baseline.version)
   )
     return { ready: false, reason: 'cart_changed' };
   if (sharedCartCheckoutReady(current)) return { ready: true };

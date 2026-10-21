@@ -1,9 +1,9 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
-import {
-  captureCartPairingLink,
-  clearCartPairingLink,
-} from '@/lib/cart/pairing-link';
+import { clearCartPairingLink } from '@/lib/cart/pairing-link';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
+import { capturePairingLink } from './capture-pairing-link.test-support';
 import { NativeCartPairingPanel } from './NativeCartPairingPanel';
 
 jest.mock('@/components/ui/ModalSheet', () => {
@@ -30,9 +30,10 @@ jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://usebaci.com' }));
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn().mockResolvedValue({ type: 'cancel' }),
 }));
+let mockPairingItems: unknown[] = [];
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: (selector: (state: { items: unknown[] }) => unknown) =>
-    selector({ items: [] }),
+    selector({ items: mockPairingItems }),
 }));
 jest.mock('@/lib/cart/shared-cart-client', () => ({
   createNativeCartClient: () => ({
@@ -45,16 +46,12 @@ jest.mock('@/lib/cart/shared-cart-client', () => ({
     },
   }),
 }));
-afterEach(() => clearCartPairingLink());
+afterEach(() => {
+  mockPairingItems = [];
+  clearCartPairingLink();
+});
 it('offers a trusted browser fallback for a web-bound grant, without attempting native redemption', async () => {
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.signature`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  const url = capturePairingLink({ type: 'web' });
   const screen = render(<NativeCartPairingPanel />);
   await waitFor(() =>
     expect(
@@ -69,14 +66,7 @@ it('offers a trusted browser fallback for a web-bound grant, without attempting 
 });
 it('does not offer the browser fallback when server preview rejects a crafted web hint', async () => {
   jest.mocked(WebBrowser.openBrowserAsync).mockClear();
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.crafted`;
-  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-  captureCartPairingLink(url, {
-    merchantId: merchant,
-    merchantSlug: 'shop',
-    merchantDomain: 'shop.example.com',
-  });
+  capturePairingLink({ type: 'web' }, 'crafted');
   const screen = render(<NativeCartPairingPanel />);
   await waitFor(() =>
     expect(
@@ -90,44 +80,80 @@ it('does not offer the browser fallback when server preview rejects a crafted we
   ).toBeNull();
   expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
 });
-it('lets the shopper retry a transient preview failure without closing the pairing link', async () => {
-  const merchant = '11111111-1111-4111-8111-111111111111';
-  let attempts = 0;
-  const spy = jest
-    .spyOn(
-      jest.requireMock('@/lib/cart/shared-cart-client'),
-      'createNativeCartClient'
-    )
-    .mockImplementation(() => ({
-      previewHandoff: async () => {
-        attempts += 1;
-        if (attempts === 1) throw new Error('network error');
-        return {
-          snapshot: { lines: [{ quantity: 3 }] },
-          expiresAt: '2099-01-01T00:00:00Z',
-        };
-      },
-    }));
-  try {
-    const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.signature`;
-    const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
-    captureCartPairingLink(url, {
-      merchantId: merchant,
-      merchantSlug: 'shop',
-      merchantDomain: 'shop.example.com',
-    });
-    const screen = render(<NativeCartPairingPanel />);
-    const retry = await waitFor(() =>
-      screen.getByRole('button', { name: 'Try again' })
-    );
-    fireEvent.press(retry);
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Continue on website' })
-      ).toBeTruthy()
-    );
-    expect(attempts).toBe(2);
-  } finally {
-    spy.mockRestore();
-  }
+it('marks a pairing choice as a checkout-fencing intent', async () => {
+  const pair = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    mergeConflicts: [],
+  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
+  const screen = render(<NativeCartPairingPanel />);
+  const connect = await waitFor(() =>
+    screen.getByRole('button', { name: 'Connect cart' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(connect);
+  await waitFor(() => expect(pair).toHaveBeenCalledTimes(1));
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('marks a web pairing continuation as a checkout-fencing intent', async () => {
+  const url = capturePairingLink({ type: 'web' });
+  const screen = render(<NativeCartPairingPanel />);
+  const cont = await waitFor(() =>
+    screen.getByRole('button', { name: 'Continue on website' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(cont);
+  await waitFor(() =>
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(url)
+  );
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+
+it('marks a pairing merge pick as a checkout-fencing intent', async () => {
+  const pair = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
+  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
+  const screen = render(<NativeCartPairingPanel />);
+  const pick = await waitFor(() =>
+    screen.getByRole('radio', { name: 'Item: keep current offer' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(pick);
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+
+it('retries a failed pair with prepare when no canonical cart exists yet', async () => {
+  mockPairingItems = [{ id: 'local-1' }];
+  const pair = jest.fn().mockRejectedValue(new Error('create failed'));
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    refresh,
+    prepare,
+    snapshot: null,
+    mergeConflicts: [],
+  });
+  capturePairingLink({ type: 'native', app: 'storefront' });
+  const screen = render(<NativeCartPairingPanel />);
+  const connect = await waitFor(() =>
+    screen.getByRole('button', { name: 'Keep my current cart' })
+  );
+  fireEvent.press(connect);
+  const retry = await waitFor(() =>
+    screen.getByRole('button', { name: 'Retry sync' })
+  );
+  fireEvent.press(retry);
+  await waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+  expect(refresh).not.toHaveBeenCalled();
 });

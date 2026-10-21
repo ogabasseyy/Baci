@@ -13,6 +13,7 @@ import {
 } from '@/services/cart-reprice';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 function getCartRepriceKey(items: CartItem[]) {
   return items
@@ -83,6 +84,9 @@ export function useCartReprice() {
         // vanished product/allocation must reach the shopper in the
         // cart, not only at the checkout guard. Set unconditionally so
         // a later clean reprice clears a stale warning.
+        // An availability-only review blocks checkout without a writer
+        // write, so fence any in-flight checkout explicitly.
+        if (result.unavailable?.length) markSharedCartIntent();
         setUnavailableLines(result.unavailable ?? []);
         if (
           result.changes.length > 0 ||

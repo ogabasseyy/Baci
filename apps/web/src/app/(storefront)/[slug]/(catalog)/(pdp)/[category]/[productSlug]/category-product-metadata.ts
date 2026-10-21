@@ -49,12 +49,10 @@ export function buildCategoryProductMetadata({
   const productDescription = getDurableProductSeoText({
     text: product.description,
     product,
-    currency,
   });
   const productMetaDescription = getDurableProductSeoText({
     text: product.meta_description,
     product,
-    currency,
   });
   const generatedSeoDescription = normalizeSeoProductText(
     priceSeoCopy.description,
@@ -80,7 +78,6 @@ export function buildCategoryProductMetadata({
   const normalizedProductMetaTitle = getDurableProductSeoText({
     text: product.meta_title,
     product,
-    currency,
   });
   const normalizedGeneratedTitle = normalizeSeoProductText(
     priceSeoCopy.title,

@@ -12,7 +12,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -50,7 +49,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -62,7 +60,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe(text);
   });
@@ -72,14 +69,12 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'iPhone 13 N350,000',
         product: { name: 'iPhone 13' },
-        currency: 'USD',
       })
     ).toBe('');
     expect(
       getDurableProductSeoText({
         text: 'N16 processor',
         product: { name: 'Device' },
-        currency: 'USD',
       })
     ).toBe('N16 processor');
   });
@@ -89,7 +84,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Buy iPhone 13 in Nigeria from Ogabassey. Confirm specs, condition, variants and availability.',
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -103,7 +97,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: `Buy iPhone 13 in Nigeria from Ogabassey. ${suffix}`,
         product: { name: 'iPhone 13' },
-        currency: 'NGN',
       })
     ).toBe('');
   });
@@ -115,12 +108,11 @@ describe('getDurableProductSeoText', () => {
     ['TZS', 'TSh 50,000'],
     ['UGX', '50,000 USh'],
     ['RWF', 'FRw 50,000'],
-  ])('rejects local display aliases for %s', (currency, amount) => {
+  ])('rejects local display aliases for %s', (_currency, amount) => {
     expect(
       getDurableProductSeoText({
         text: `Laptop price: ${amount}`,
         product: { name: 'Laptop' },
-        currency,
       })
     ).toBe('');
   });
@@ -153,7 +145,7 @@ describe('getDurableProductSeoText', () => {
       'Use this $50 USD gift card for American purchases',
     ],
   ])('preserves face-value forms for %s', (name, text) => {
-    const args = { product: { name }, currency: 'USD' };
+    const args = { product: { name } };
     expect(getDurableProductSeoText({ ...args, text })).toBe(text);
     expect(
       getDurableProductSeoText({ ...args, text: `${text}. Buy for USD 80.` })
@@ -168,7 +160,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Buy for USD 50 Amazon gift card credit.',
         product: { name: 'Amazon Gift Card 50 USD' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -188,7 +179,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'Device' },
-        currency: 'NGN',
       })
     ).toBe(text);
   });
@@ -198,7 +188,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Use this 50 CAD gift card for Canadian purchases',
         product: { name: 'Amazon Gift Card 50 USD' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -208,7 +197,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Use this $50 CAD gift card for Canadian purchases',
         product: { name: 'Amazon Gift Card 50 USD' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -218,7 +206,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Use this $50 USD gift card for purchases',
         product: { name: 'Amazon Gift Card $50 CAD' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -232,7 +219,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text,
         product: { name: 'Amazon Gift Card 50 USD' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -242,7 +228,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Laptop price: R 9,000',
         product: { name: 'Laptop' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -252,7 +237,6 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: `${'1,'.repeat(20_000)}Buy for USD 900.`,
         product: { name: 'Phone' },
-        currency: 'USD',
       })
     ).toBe('');
   });
@@ -262,18 +246,16 @@ describe('getDurableProductSeoText', () => {
       getDurableProductSeoText({
         text: 'Useful product information. '.repeat(2_000),
         product: { name: 'Phone' },
-        currency: 'USD',
       })
     ).toBe('');
   });
 
-  it('preserves ordinary words even when they match the merchant currency code', () => {
+  it('preserves ordinary words that also spell currency codes', () => {
     const text = 'Try 2 colours before choosing your phone.';
     expect(
       getDurableProductSeoText({
         text,
         product: { name: 'Phone' },
-        currency: 'TRY',
       })
     ).toBe(text);
   });
@@ -282,7 +264,6 @@ describe('getDurableProductSeoText', () => {
     const text = 'PSN Gift Card £50 GBP Price in Nigeria';
     const args = {
       product: { name: 'PSN Gift Card £50 GBP' },
-      currency: 'NGN',
     };
     expect(getDurableProductSeoText({ ...args, text })).toBe(text);
     expect(
@@ -290,20 +271,18 @@ describe('getDurableProductSeoText', () => {
     ).toBe('');
   });
 
-  it('uses the merchant currency code rather than treating RAM specifications as money', () => {
+  it('distinguishes explicit currency codes from RAM specifications', () => {
     const text = 'Laptop with RAM 16GB and a 512GB SSD.';
     expect(
       getDurableProductSeoText({
         text,
         product: { name: 'Laptop' },
-        currency: 'NGN',
       })
     ).toBe(text);
     expect(
       getDurableProductSeoText({
         text: 'Laptop from KES 50,000',
         product: { name: 'Laptop' },
-        currency: 'KES',
       })
     ).toBe('');
   });
@@ -311,7 +290,6 @@ describe('getDurableProductSeoText', () => {
   it('preserves a repeated gift-card face value but not a quoted retail price', () => {
     const args = {
       product: { name: 'PSN Gift Card £50 GBP' },
-      currency: 'NGN',
     };
     const text =
       'PSN Gift Card £50 GBP at Ogabassey: £50 GBP value for PlayStation Store.';

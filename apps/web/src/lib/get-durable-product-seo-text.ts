@@ -161,14 +161,13 @@ function isDenomination(
     .every((word) => identityWords.has(word.toLowerCase()));
 }
 
-/** Keeps useful editorial overrides; prices must come from current offer data. */
+/** Keeps editorial copy price-free across currencies; offers supply live prices. */
 export function getDurableProductSeoText({
   text,
   product,
 }: {
   text: string | null | undefined;
   product: { name: string; slug?: string | null };
-  currency: string;
 }): string {
   if (
     typeof text !== 'string' ||

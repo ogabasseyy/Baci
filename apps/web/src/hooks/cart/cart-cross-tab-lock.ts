@@ -51,7 +51,7 @@ export function isCartCookieEpochCurrent(
   return false;
 }
 
-/** Shared locks cover the entire request, including headers/cookie delivery. */
+/** Serialize cookie writers through response headers and cookie delivery. */
 export function withCartCookieWrite<T>(
   fallback: T,
   signal: AbortSignal,
@@ -60,7 +60,7 @@ export function withCartCookieWrite<T>(
   const manager = lockManager();
   if (!manager) return operation();
   const startedEpoch = epoch();
-  return manager.request(LOCK_NAME, { mode: 'shared', signal }, () => {
+  return manager.request(LOCK_NAME, { mode: 'exclusive', signal }, () => {
     // A request queued before retirement must not mint authority afterward.
     if (signal.aborted || epoch() !== startedEpoch) return fallback;
     activeWrites += 1;

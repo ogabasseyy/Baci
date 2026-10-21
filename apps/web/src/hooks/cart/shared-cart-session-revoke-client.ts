@@ -159,7 +159,11 @@ async function readRevokeBody(
 /** Device-scoped revocation on sign-out; never clears the shared cart. */
 export async function revokeCartDeviceSession(
   merchantSlug?: string | null,
-  options?: { fenceOnFailure?: boolean; signal?: AbortSignal }
+  options?: {
+    fenceOnFailure?: boolean;
+    signal?: AbortSignal;
+    drainActiveWrites?: boolean;
+  }
 ): Promise<{ ok: boolean }> {
   const request = () =>
     withCartRequestDeadline(
@@ -171,7 +175,7 @@ export async function revokeCartDeviceSession(
   // inside a shared writer. Its lifecycle retry runs outside that writer.
   const result = isCartSessionRetirementReady(merchantSlug)
     ? await request()
-    : hasActiveCartCookieWrite()
+    : hasActiveCartCookieWrite() && !options?.drainActiveWrites
       ? { ok: false }
       : await (async () => {
           if (isCartSessionRetiring(merchantSlug)) return { ok: false };
@@ -262,6 +266,9 @@ export function retireDeEnrolledCartDeviceSession(
     hasActiveCartDeviceSession(merchantSlug) ||
     isCartDeviceRevocationPending(merchantSlug)
   ) {
-    void revokeCartDeviceSession(merchantSlug, { fenceOnFailure: false });
+    void revokeCartDeviceSession(merchantSlug, {
+      fenceOnFailure: false,
+      drainActiveWrites: true,
+    });
   }
 }

@@ -51,6 +51,9 @@ async function retirePreviousAccountCartAuthority(
     clearCartDeviceRevocationPending?.(merchantSlug);
     setRememberedCustomerUserId(merchantSlug, null);
     return true;
+  } catch {
+    setRememberedCustomerUserId(merchantSlug, previousUserId);
+    return false;
   } finally {
     retirement.release();
   }
@@ -231,8 +234,9 @@ export async function performCustomerLogout(
   markCartDeviceRevocationPending?.(merchantSlug);
   bumpCartSessionGeneration();
   try {
-    await retirement.drained;
-    const revoked = await revokeCartDeviceSession(merchantSlug);
+    const revoked = await retirement.drained
+      .then(() => revokeCartDeviceSession(merchantSlug))
+      .catch(() => ({ ok: false }));
     if (!revoked.ok)
       throw new Error(
         'Could not safely sign out. Please retry when connected.'

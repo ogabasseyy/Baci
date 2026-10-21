@@ -6,6 +6,10 @@ import { parseSnapshot } from '@/lib/cart/checkout-snapshot';
 import { runBoundedCartSessionWrite } from './cart-session-write-fence';
 import type { CartItem } from './cart-types';
 import { cartRoute, failureOf, readBody } from './shared-cart-client';
+import {
+  ensureCartDeviceRevocationCleared,
+  isCartDeviceRevocationPending,
+} from './shared-cart-session-revoke-client';
 
 export interface SharedCartCheckoutReview {
   checkoutSessionId: string;
@@ -125,7 +129,11 @@ export function prepareSharedCartCheckout(
       ok: false,
       retryable: true,
     },
-    (signal) => requestSharedCartCheckout(input, merchantSlug, signal)
+    (signal) => requestSharedCartCheckout(input, merchantSlug, signal),
+    undefined,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
+      : undefined
   );
 }
 async function requestSharedCartCheckout(
@@ -133,6 +141,13 @@ async function requestSharedCartCheckout(
   merchantSlug: string | null | undefined,
   signal: AbortSignal
 ): Promise<PrepareSharedCartCheckoutResult> {
+  if (isCartDeviceRevocationPending(merchantSlug))
+    return {
+      code: 'temporarily_unavailable',
+      currentVersion: null,
+      ok: false,
+      retryable: true,
+    };
   let response: Response;
   try {
     response = await fetchWithCsrf(

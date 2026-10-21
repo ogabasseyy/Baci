@@ -13,7 +13,10 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 // durable budget is keyed on the TRUSTED identifier (see
 // getTrustedClientIdentifier), never the lenient proxy one: header values
 // a caller can mint per request would mint a fresh DB bucket per request
-// too, leaving the durable layer with no binding power at all.
+// too, leaving the durable layer with no binding power at all. Behind
+// Cloudflare the helper prefers CF-Connecting-IP verified against
+// Cloudflare egress ranges, so shoppers sharing an egress IP don't pool
+// one durable bucket (without that, every Vercel header names the egress).
 // Deliberately rejected controls, with bypass reasons:
 // - Host binding (Host merchant must equal body slug): an attacker POSTs
 //   directly to the victim host with the victim slug and passes; a native

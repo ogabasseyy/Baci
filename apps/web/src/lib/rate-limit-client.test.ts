@@ -121,6 +121,103 @@ describe('getClientIdentifier header trust', () => {
   });
 });
 
+describe('Cloudflare boundary', () => {
+  // 172.64.0.1 is inside 172.64.0.0/13 (published CF egress); 192.0.2.1
+  // (TEST-NET-1) is not. Behind Cloudflare, Vercel overwrites every
+  // Vercel-set header with the shared egress IP, so only a verified
+  // CF-Connecting-IP names the shopper.
+  const EGRESS = '172.64.0.1';
+  const SHOPPER = '198.51.100.9';
+
+  it('prefers CF-Connecting-IP behind verified Cloudflare egress', () => {
+    vi.stubEnv('VERCEL', '1');
+    const headers = {
+      'x-forwarded-for': EGRESS,
+      'x-real-ip': EGRESS,
+      'x-vercel-forwarded-for': EGRESS,
+      'cf-connecting-ip': SHOPPER,
+    };
+
+    expect(getClientIdentifier(requestWith(headers))).toBe(SHOPPER);
+    expect(getTrustedClientIdentifier(requestWith(headers))).toBe(SHOPPER);
+  });
+
+  it('prefers CF-Connecting-IP when the platform IP is the egress', () => {
+    // The CF check runs before the request.ip fast path, or an egress
+    // platform IP would shadow the shopper header.
+    vi.stubEnv('VERCEL', '1');
+    const req = requestWith({ 'cf-connecting-ip': SHOPPER });
+    Object.defineProperty(req, 'ip', { value: EGRESS });
+
+    expect(getClientIdentifier(req)).toBe(SHOPPER);
+    expect(getTrustedClientIdentifier(req)).toBe(SHOPPER);
+  });
+
+  it('ignores CF-Connecting-IP when the peer is not Cloudflare egress', () => {
+    // Direct-to-origin caller forging the header: the peer (x-real-ip)
+    // is outside CF ranges, so the header is untrusted.
+    vi.stubEnv('VERCEL', '1');
+    const headers = {
+      'x-real-ip': '192.0.2.1',
+      'x-vercel-forwarded-for': '203.0.113.7',
+      'cf-connecting-ip': SHOPPER,
+    };
+
+    expect(getClientIdentifier(requestWith(headers))).toBe('203.0.113.7');
+  });
+
+  it('ignores CF-Connecting-IP off Vercel', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    const headers = { 'x-real-ip': EGRESS, 'cf-connecting-ip': SHOPPER };
+
+    expect(getTrustedClientIdentifier(requestWith(headers))).toBe('unknown');
+  });
+
+  it('ignores chained or invalid CF-Connecting-IP values', () => {
+    // Cloudflare sends one IP; a chain is malformed and untrusted.
+    vi.stubEnv('VERCEL', '1');
+
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'x-real-ip': EGRESS,
+          'x-vercel-forwarded-for': EGRESS,
+          'cf-connecting-ip': `${SHOPPER}, 203.0.113.5`,
+        })
+      )
+    ).toBe(EGRESS);
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'x-real-ip': EGRESS,
+          'cf-connecting-ip': 'not-an-ip',
+        })
+      )
+    ).toBe(EGRESS);
+  });
+
+  it('verifies IPv6 Cloudflare egress ranges', () => {
+    vi.stubEnv('VERCEL', '1');
+    const headers = {
+      'x-real-ip': '2606:4700:0000:0000:0000:0000:0000:0001',
+      'cf-connecting-ip': '2001:0db8:0000:0000:0000:0000:0000:0001',
+    };
+
+    expect(getClientIdentifier(requestWith(headers))).toBe(
+      '2001:0db8:0000:0000:0000:0000:0000:0001'
+    );
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'x-real-ip': '2001:0db8:0000:0000:0000:0000:0000:0002',
+          'cf-connecting-ip': '2001:0db8:0000:0000:0000:0000:0000:0001',
+        })
+      )
+    ).toBe('2001:0db8:0000:0000:0000:0000:0000:0002');
+  });
+});
+
 describe('getTrustedClientIdentifier', () => {
   it('never trusts x-forwarded-for', () => {
     expect(

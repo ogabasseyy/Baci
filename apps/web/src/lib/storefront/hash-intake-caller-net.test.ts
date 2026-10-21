@@ -45,6 +45,24 @@ describe('intake caller-network hash', () => {
       'Storefront intake network key is unavailable'
     );
   });
+  it('fails closed on a whitespace-only network key', () => {
+    vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', ' '.repeat(40));
+
+    expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
+      'Storefront intake network key is unavailable'
+    );
+  });
+  it('rejects reusing the bearer intake JWT as the key', () => {
+    // The JWT is transmitted on every RPC; reusing it as key material
+    // would expose the HMAC key with any credential leak.
+    const jwt = 'header.eyJyb2xlIjoic3RvcmVmcm9udF9pbnRha2UifQ.signature';
+    vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_KEY', jwt);
+    vi.stubEnv('SUPABASE_STOREFRONT_INTAKE_NET_KEY', jwt);
+
+    expect(() => hashIntakeCallerNet('192.0.2.10')).toThrow(
+      'Storefront intake network key is unavailable'
+    );
+  });
   it('does not reuse the bearer intake JWT as key material', () => {
     // The JWT is transmitted on every RPC; keying the HMAC with it would
     // let any exposure retroactively reverse stored hashes. The network

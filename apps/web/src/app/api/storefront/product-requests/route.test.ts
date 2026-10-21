@@ -113,6 +113,23 @@ describe('product request intake', () => {
     expect(response.status).toBe(200);
     expect(mocks.hashNet).toHaveBeenCalledWith('203.0.113.7');
   });
+  it('keys the budget on the shopper IP behind verified Cloudflare egress', async () => {
+    // Cloudflare-fronted on Vercel: every Vercel-set header carries the
+    // shared egress IP, so the durable key must come from the verified
+    // CF-Connecting-IP or unrelated shoppers pool one bucket.
+    vi.stubEnv('VERCEL', '1');
+    const response = await POST(
+      request(input, {
+        'x-forwarded-for': '172.64.0.1',
+        'x-real-ip': '172.64.0.1',
+        'x-vercel-forwarded-for': '172.64.0.1',
+        'cf-connecting-ip': '198.51.100.9',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.hashNet).toHaveBeenCalledWith('198.51.100.9');
+  });
   it('collapses mintable header signals into the unknown bucket off Vercel', async () => {
     // Without the edge guarantee x-real-ip is caller-supplied, so the
     // durable key must fail closed into the shared bucket, not rotate.

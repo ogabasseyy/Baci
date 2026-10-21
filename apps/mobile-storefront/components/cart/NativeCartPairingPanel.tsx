@@ -23,7 +23,11 @@ import { CONFIG } from '@/lib/config';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { markSharedCartIntent } from '@/stores/shared-cart-writer';
-import { dismissPairingLink, pairingRetryOperation } from './pairing-sync';
+import {
+  dismissPairingLink,
+  pairingRetryOperation,
+  pairWithSharedCart,
+} from './pairing-sync';
 
 export function NativeCartPairingPanel() {
   const revision = useSyncExternalStore(
@@ -91,28 +95,16 @@ export function NativeCartPairingPanel() {
   async function pair(
     choice: 'connect' | 'merge' | 'keep_existing'
   ): Promise<void> {
-    const current = peekCartPairingLink();
-    if (
-      !current ||
-      !ready ||
-      !shared.enabled ||
-      !shared.pair ||
-      cartPairingRevision() !== revision
-    )
-      return;
-    markSharedCartIntent();
-    try {
-      await shared.pair(
-        current,
-        choice,
-        shared.mergeConflicts.flatMap((item) => {
-          const keep = resolutions[cartLineIdentity(item)];
-          return keep ? [{ item, keep }] : [];
-        })
-      );
-    } catch {
-      setFailed(true);
-    }
+    if (!shared.enabled) return;
+    const paired = await pairWithSharedCart({
+      ready,
+      revision,
+      pair: shared.pair,
+      mergeConflicts: shared.mergeConflicts,
+      resolutions,
+      choice,
+    });
+    if (!paired) setFailed(true);
   }
   async function browser(): Promise<void> {
     const current = peekCartPairingLink();
@@ -264,10 +256,17 @@ export function NativeCartPairingPanel() {
                 'Retry sync',
                 async () => {
                   markSharedCartIntent();
+                  const before = shared.snapshot;
                   try {
                     await pairingRetryOperation(shared, items.length)?.();
-                    // Only a published canonical cart counts as synced.
-                    if (useNativeSharedCartStore.getState().snapshot)
+                    // Only a newly committed canonical cart counts.
+                    const after = useNativeSharedCartStore.getState().snapshot;
+                    if (
+                      after &&
+                      (!before ||
+                        after.cartId !== before.cartId ||
+                        after.version !== before.version)
+                    )
                       setFailed(false);
                   } catch {
                     setFailed(true);

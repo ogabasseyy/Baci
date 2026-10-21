@@ -5,6 +5,7 @@ import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import {
   getCartFromStorage,
+  getSharedCartImportReceipt,
   saveSharedCartImportReceipt,
 } from './cart-storage';
 import {
@@ -18,6 +19,7 @@ import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import { revokeCartDeviceSession } from './shared-cart-session-revoke-client';
 import { getCartSessionGeneration } from './shared-cart-storage';
+import { unimportedTerminalLines } from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
 export function createCartProvisioning(
@@ -93,7 +95,9 @@ export function createCartProvisioning(
       adoptOutcomeRef.current = 'none';
       createAttemptedRef.current = false;
       createOpRef.current = crypto.randomUUID();
-      createRequestRef.current = { operationId: createOpRef.current };
+      // Leave the request unset so the planning gate below can re-plan
+      // device lines preserved across the terminal adoption.
+      createRequestRef.current = null;
       importOpIdsRef.current = new Set();
     }
     // Defensive: the sender only runs once linked, so adoption has
@@ -139,10 +143,26 @@ export function createCartProvisioning(
       adoptOutcomeRef.current === 'bootstrap' && !createRequestRef.current;
     createAttemptedRef.current = true;
     if (!createRequestRef.current) {
-      const cached = getCartFromStorage(optionsRef.current.merchantSlug);
       const status = stateRef.current.importStatus;
+      const terminal = stateRef.current.confirmed;
+      const isTerminalReset = terminal !== null && isTerminalCart(terminal);
+      const stored = getCartFromStorage(optionsRef.current.merchantSlug);
+      // After a mid-session terminal adoption the preserved device lines
+      // are still in storage; drop consumed mirrors before re-planning.
+      const cached =
+        isTerminalReset && terminal
+          ? unimportedTerminalLines(
+              stored,
+              terminal.cartId,
+              getSharedCartImportReceipt(optionsRef.current.merchantSlug)
+            )
+          : stored;
+      const replannable =
+        status === 'none' ||
+        status === 'failed' ||
+        (status === 'skipped' && isTerminalReset);
       const planned =
-        (status === 'none' || status === 'failed') && cached.length > 0
+        replannable && cached.length > 0
           ? planLegacyImport(cached, null, null)
           : null;
       if (planned?.kind === 'blocked') {

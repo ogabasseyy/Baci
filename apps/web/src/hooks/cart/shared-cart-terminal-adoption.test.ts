@@ -5,7 +5,7 @@ import {
   sharedCartReducer,
 } from './shared-cart-reducer';
 
-it('preserves unimported device lines when polling adopts a terminal cart', () => {
+it('clears display lines when polling adopts a terminal cart', () => {
   const started = sharedCartReducer(initialSharedCartState, {
     cached: [
       cartItem({ id: 'prod-9', cartItemId: 'prod-9' }),
@@ -30,8 +30,10 @@ it('preserves unimported device lines when polling adopts a terminal cart', () =
     snapshot: snapshot({ state: 'completed', lines: [], version: 2 }),
     type: 'snapshot/polled',
   });
-  // The never-imported line survives for the next cart; the consumed
-  // mirror (stable server line id) does not.
-  expect(terminal.unimportedCache.map((line) => line.id)).toEqual(['prod-9']);
-  expect(terminal.display.map((line) => line.id)).toContain('prod-9');
+  // Display clears on terminal adoption; unimported device lines survive
+  // only in the storage cache, where provisioning re-plans them into
+  // the next cart (covered by the terminal re-plan suite).
+  expect(terminal.unimportedCache).toEqual([]);
+  expect(terminal.display).toEqual([]);
+  expect(terminal.importStatus).toBe('skipped');
 });

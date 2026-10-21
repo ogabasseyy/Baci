@@ -1,8 +1,13 @@
 'use client';
 import { useEffect } from 'react';
-import { saveCartToStorage } from './cart-storage';
+import {
+  getCartFromStorage,
+  getSharedCartImportReceipt,
+  saveCartToStorage,
+} from './cart-storage';
 import { isTerminalCart } from './shared-cart-queue';
 import { stripUnconfirmedDisplayLines } from './shared-cart-storage';
+import { unimportedTerminalLines } from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 /** Persist only confirmed display data after legacy import completes. */
 export function useCartDisplayCache(context: SharedCartRuntime) {
@@ -14,17 +19,28 @@ export function useCartDisplayCache(context: SharedCartRuntime) {
     // Skip the merchant-switch transition commit: the reducer state still
     // belongs to the previous session while the slug already names the
     // next one, so persisting here would file A's lines under B's key.
-    // A terminal snapshot adopted via polling/send-queue must not erase
-    // unimported device lines still held only in storage: the next
-    // provisioning reads that storage cache (and filters consumed
-    // mirrors), so leave it untouched here.
     if (
       !enabled ||
       state.generation !== sessionGeneration ||
-      (state.importStatus !== 'done' && state.importStatus !== 'skipped') ||
-      (state.confirmed !== null && isTerminalCart(state.confirmed))
+      (state.importStatus !== 'done' && state.importStatus !== 'skipped')
     )
       return;
+    // A terminal snapshot adopted via polling/send-queue must not erase
+    // unimported device lines still held only in storage: the next
+    // provisioning reads that storage cache (and filters consumed
+    // mirrors), so leave it untouched while such lines remain. Consumed
+    // mirrors (receipt/server-line) still fall through so the cache
+    // clears as before.
+    if (state.confirmed !== null && isTerminalCart(state.confirmed)) {
+      const preserved =
+        state.unimportedCache.length > 0 ||
+        unimportedTerminalLines(
+          getCartFromStorage(merchantSlug),
+          state.confirmed.cartId,
+          getSharedCartImportReceipt(merchantSlug)
+        ).length > 0;
+      if (preserved) return;
+    }
     saveCartToStorage(
       stripUnconfirmedDisplayLines(state.display),
       merchantSlug
@@ -37,5 +53,6 @@ export function useCartDisplayCache(context: SharedCartRuntime) {
     state.display,
     state.generation,
     state.importStatus,
+    state.unimportedCache,
   ]);
 }

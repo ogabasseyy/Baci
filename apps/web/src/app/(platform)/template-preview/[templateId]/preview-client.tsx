@@ -22,8 +22,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { CartProvider } from '@/hooks/use-cart';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import {
   TEMPLATE_REGISTRY,

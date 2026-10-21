@@ -3,9 +3,9 @@
 // Client-runtime re-exports for the merchant hook.
 //
 // Use this path from Client Components that need to consume the merchant
-// hook or render the provider. Server Components should import types from
-// `@/hooks/use-merchant` (the types-only sibling) instead — it has no
-// 'use client' directive and produces no client-boundary work.
+// hook. Dashboard/builder surfaces that mount the authenticated provider
+// should import `MerchantProvider` from `@/hooks/merchant/merchant-provider`
+// so storefront consumers of `useMerchant` / `useMerchantSafe` do not pull
+// dashboard auth and Supabase client bundles into storefront chunks.
 
-export { MerchantProvider } from './merchant/merchant-provider';
 export { useMerchant, useMerchantSafe } from './merchant/use-merchant';

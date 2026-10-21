@@ -1,5 +1,6 @@
 import { getImageProps } from 'next/image';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import { asRoute } from '@/lib/routes';
@@ -9,7 +10,7 @@ import type { LaunchProductSlide } from './LaunchCarousel';
 interface HeroDesktopGridProps {
   /** Launch products, newest-first with pins applied. slides[0] is the big
    *  hero (its image is the eager desktop LCP element); slides[1]/[2] fill the
-   *  two side cards. All deep-link to their PDP. */
+   *  two side cards. All deep-links to their PDP. */
   slides: LaunchProductSlide[];
 }
 
@@ -103,7 +104,9 @@ function HeroBigCard({
         <h2 className="line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
           {slide.name}
         </h2>
-        <p className="text-xl font-semibold text-store-secondary-text">{slide.priceLabel}</p>
+        <p className="text-xl font-semibold text-store-secondary-text">
+          {slide.priceLabel}
+        </p>
         <div className="mt-1 h-1.5 w-16 rounded-full bg-store-primary" />
         <span className="mt-3 inline-flex w-fit items-center rounded-full bg-store-primary px-7 py-3 text-base font-bold text-store-on-primary shadow-sm transition-all group-hover:scale-105 group-hover:shadow-lg group-active:scale-95">
           {slide.ctaLabel}
@@ -189,6 +192,23 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
   );
 }
 
+function HeroDesktopSideCardsReserve({ count }: { count: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex flex-col gap-4 h-full lg:col-span-2"
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: static reserve slots
+          key={index}
+          className={`flex-1 min-h-[160px] lg:min-h-0 rounded-2xl shadow-lg ring-1 ring-store-border/70 ${CARD_SURFACE}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
   const [big, ...rest] = slides;
   const sideCards = rest.slice(0, 2);
@@ -207,11 +227,15 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
       <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
 
       {sideCards.length > 0 ? (
-        <div className="flex flex-col gap-4 h-full lg:col-span-2">
-          {sideCards.map((slide) => (
-            <HeroSideCard key={slide.id} slide={slide} />
-          ))}
-        </div>
+        <Suspense
+          fallback={<HeroDesktopSideCardsReserve count={sideCards.length} />}
+        >
+          <div className="flex flex-col gap-4 h-full lg:col-span-2">
+            {sideCards.map((slide) => (
+              <HeroSideCard key={slide.id} slide={slide} />
+            ))}
+          </div>
+        </Suspense>
       ) : null}
     </div>
   );

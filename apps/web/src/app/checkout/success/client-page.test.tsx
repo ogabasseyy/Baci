@@ -7,10 +7,12 @@ const merchantMock = vi.hoisted(() => ({
   merchant: { country: 'NG' } as { country: string } | null,
 }));
 
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
+}));
+vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchant: () => ({ merchant: merchantMock.merchant }),
 }));
 

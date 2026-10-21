@@ -3,7 +3,7 @@ export const OGABASSEY_HOME_CAROUSEL_CRITICAL_CSS = `@layer components{
 [data-ogabassey-hero]{width:100%;background:var(--store-background,#ffffff);position:relative}
 [data-ogabassey-hero]>section,[data-ogabassey-home-hero-reserve-fallback]>section{max-width:1400px;margin:0 auto;padding:1rem 1rem 0;position:relative;z-index:10;display:flex;flex-direction:column}
 [data-ogabassey-hero-utility]{width:100%;background:var(--store-background, #ffffff);color:var(--store-foreground, #111827);margin:.75rem 0 1.5rem;border-top:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6}
-[data-ogabassey-hero-utility] span>span:last-child{display:inline-grid;min-width:60px;text-align:left;vertical-align:baseline;font-weight:700;color:var(--store-primary,#d62027)}
+[data-ogabassey-hero-utility] span>span:last-child{display:inline-grid;line-height:1;min-width:60px;text-align:left;vertical-align:baseline;font-weight:700;color:var(--store-primary,#d62027)}
 [data-ogabassey-hero-utility] span>span:last-child>span{grid-area:1/1}
 [data-ogabassey-hero-utility] span>span:last-child>span[aria-hidden="true"],[data-ogabassey-home-hero-reserve-utility]{visibility:hidden}
 [data-ogabassey-hero-utility] button{display:flex;flex-direction:column;align-items:center;gap:.5rem;padding:0}
@@ -49,7 +49,7 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 [data-ogabassey-mobile-hero] button[aria-pressed]{display:flex;align-items:center;justify-content:center;background:var(--store-primary,#d62027);color:var(--store-on-primary,#ffffff)}
 [data-ogabassey-hero-utility]>:first-child{padding:0 1rem}
 [data-ogabassey-hero-utility]>:nth-child(2){display:none}
-[data-ogabassey-mobile-utility-panel]{min-height:156px;background:var(--store-background, #ffffff);color:var(--store-foreground, #111827);border-radius:1.5rem;border:1px solid #f3f4f6;padding:.5rem}
+[data-ogabassey-mobile-utility-panel]{min-height:158px;background:var(--store-background, #ffffff);color:var(--store-foreground, #111827);border-radius:1.5rem;border:1px solid #f3f4f6;padding:.5rem}
 [data-ogabassey-mobile-utility-panel]>:first-child{border-radius:1rem;padding:.75rem 1rem;margin-bottom:1rem;text-align:center;font-size:.875rem;line-height:1.25rem;background:color-mix(in srgb,var(--store-primary,#d62027) 5%,transparent)}
 [data-ogabassey-mobile-utility-panel]>:last-child{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.5rem;padding:0 .25rem .5rem}
 }
@@ -68,12 +68,12 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 [data-ogabassey-desktop-hero] picture{position:absolute;inset:0;display:block;height:100%;width:100%}
 [data-ogabassey-desktop-hero] img{height:100%;width:100%;object-fit:contain;padding:1rem}
 [data-ogabassey-desktop-hero]>div{display:flex;flex-direction:column;gap:1rem;height:100%}
-[data-ogabassey-desktop-hero]>div>a,[data-ogabassey-empty-desktop-hero]>:nth-child(2)>div,[data-ogabassey-home-hero-reserve-fallback]>section>:last-child>:nth-child(2)>div{flex:1 1 0%;border-radius:1rem;background:var(--store-secondary,#f3f4f6)}
+[data-ogabassey-desktop-hero]>div>a,[data-ogabassey-desktop-hero]>div>div,[data-ogabassey-empty-desktop-hero]>:nth-child(2)>div,[data-ogabassey-home-hero-reserve-fallback]>section>:last-child>:nth-child(2)>div{flex:1 1 0%;border-radius:1rem;background:var(--store-secondary,#f3f4f6)}
 [data-ogabassey-desktop-hero]>div>a>:first-child{gap:.375rem;padding:1rem 1.25rem}
 [data-ogabassey-desktop-hero]>div>a h3{-webkit-line-clamp:2;font-size:1.125rem}
 [data-ogabassey-hero-utility]{margin-top:2rem;padding:1.25rem 0}
 [data-ogabassey-hero-utility]>:first-child{display:none}
-[data-ogabassey-hero-utility]>:nth-child(2){display:flex;max-width:1400px;margin:0 auto;padding:0 1.5rem;align-items:center;justify-content:space-between}
+[data-ogabassey-hero-utility]>:nth-child(2){display:flex;max-width:1400px;min-height:92px;margin:0 auto;padding:0 1.5rem;align-items:center;justify-content:space-between}
 [data-ogabassey-hero-utility]>:nth-child(2)>:first-child,[data-ogabassey-hero-utility]>:nth-child(2)>:last-child{background:color-mix(in srgb,var(--store-primary,#d62027) 5%,transparent);padding:2rem 2.5rem;border-radius:.5rem;min-width:280px;text-align:center;font-size:1.25rem;line-height:1.75rem;font-weight:500}
 [data-ogabassey-hero-utility]>:nth-child(2)>:nth-child(2){display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}
 .ogabassey-home-products{padding:2rem 1.5rem}

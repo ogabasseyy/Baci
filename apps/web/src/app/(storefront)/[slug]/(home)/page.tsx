@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
 import {
-  OGABASSEY_APPLE_TOUCH_ICON_URL,
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_FAVICON_URL,
-  OGABASSEY_SOCIAL_IMAGE_URL,
-  OGABASSEY_TITLE,
-  OGABASSEY_TWITTER_HANDLE,
-  OGABASSEY_URL,
-} from '@/config/ogabassey';
+  getSettledCanonicalOgabasseyHomeStateBox,
+  hydrateSettledCanonicalOgabasseyHomeStateFromParams,
+  peekSettledCanonicalOgabasseyHomeState,
+  recordSettledCanonicalOgabasseyHomeState,
+  type SettledCanonicalOgabasseyHomeState,
+  settleCanonicalOgabasseyHomeMerchant,
+} from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
+import { OGABASSEY_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getBrandMatchedTwitterHandle } from '@/lib/brand-matched-twitter-handle';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
@@ -18,16 +18,34 @@ import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { buildFactualStorefrontDescription } from '@/lib/storefront-seo/build-factual-storefront-description';
 import { buildHomeSeoDecision } from '@/lib/storefront-seo/build-home-seo-decision';
 import { toNextRobotsMetadata } from '@/lib/storefront-seo/to-next-robots-metadata';
-import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
+import {
+  getOgabasseyHomePathPrefix,
+  isOgabasseyCanonicalDomainSlug,
+  isOgabasseyHomeIdentifier,
+  OGABASSEY_DOMAIN_IDENTIFIER,
+} from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 // Statically imported alongside OgabasseyHomeCommittedLcp so
 // renderOgabasseyStaticHomePage returns a synchronous RSC element during
 // RenderStage.Static; GenericStorefrontHomePage remains dynamically imported.
 import { OgabasseyStaticHomePage } from './ogabassey-static-home-page';
+import { buildOgabasseyStaticHomeMetadata } from './page-metadata';
 
-const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
+function buildStorefrontLanguageAlternates(
+  baseUrl: string,
+  country: string | null | undefined
+): Record<string, string> {
+  const languages: Record<string, string> = {
+    'x-default': baseUrl,
+  };
+
+  if (country?.trim().toUpperCase() === 'NG') {
+    languages['en-NG'] = baseUrl;
+  }
+
+  return languages;
+}
 
 function warmOgabasseyHomeHeroShell(): void {
   void resolveOgabasseyHomeHeroShell().catch(() => undefined);
@@ -37,16 +55,6 @@ export function generateStaticParams(): Array<{ slug: string }> {
   return [OGABASSEY_DOMAIN_IDENTIFIER, OGABASSEY_TEMPLATE_ID].map((slug) => ({
     slug,
   }));
-}
-
-function isOgabasseyCanonicalDomainSlug(slug: string): boolean {
-  return slug.toLowerCase() === OGABASSEY_DOMAIN_IDENTIFIER;
-}
-
-function getOgabasseyHomePathPrefix(slug: string): string {
-  return isOgabasseyCanonicalDomainSlug(slug)
-    ? ''
-    : `/${OGABASSEY_TEMPLATE_ID}`;
 }
 
 async function renderGenericStorefrontHomePage(
@@ -67,90 +75,12 @@ function renderOgabasseyStaticHomePage(slug: string) {
   );
 }
 
-function buildOgabasseyStaticHomeMetadata(
-  robots: Metadata['robots']
-): Metadata {
-  const other = mergeStorefrontSmartAppBannerOther(OGABASSEY_TEMPLATE_ID);
-  const { metadataTitle, title } = buildStorefrontMetadataTitle({
-    fallback: 'OgaBassey',
-    title: OGABASSEY_TITLE,
-  });
-
-  return {
-    metadataBase: new URL(OGABASSEY_URL),
-    title: metadataTitle,
-    description: OGABASSEY_DESCRIPTION,
-    robots,
-    keywords: [
-      'Showmax Subscription',
-      'Buy Showmax Online',
-      'Cheap Airtime',
-      'Buy Data Bundle',
-      'Pay Electricity Bill',
-      'Utility Payment',
-      'OgaBassey',
-      'Online Shopping',
-      'Nigeria',
-    ],
-    alternates: {
-      canonical: OGABASSEY_URL,
-      languages: {
-        'en-NG': OGABASSEY_URL,
-        'x-default': OGABASSEY_URL,
-      },
-    },
-    openGraph: {
-      title,
-      description: OGABASSEY_DESCRIPTION,
-      url: OGABASSEY_URL,
-      type: 'website',
-      siteName: 'OgaBassey',
-      images: [
-        {
-          url: OGABASSEY_SOCIAL_IMAGE_URL,
-          width: 1440,
-          height: 900,
-          alt: 'OgaBassey storefront preview',
-        },
-      ],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description: OGABASSEY_DESCRIPTION,
-      images: [OGABASSEY_SOCIAL_IMAGE_URL],
-      site: OGABASSEY_TWITTER_HANDLE,
-    },
-    icons: {
-      icon: OGABASSEY_FAVICON_URL,
-      shortcut: OGABASSEY_FAVICON_URL,
-      apple: OGABASSEY_APPLE_TOUCH_ICON_URL,
-    },
-    ...(other ? { other } : {}),
-    manifest: null,
-  };
-}
-
-function buildStorefrontLanguageAlternates(
-  baseUrl: string,
-  country: string | null | undefined
-): Record<string, string> {
-  const languages: Record<string, string> = {
-    'x-default': baseUrl,
-  };
-
-  if (country?.trim().toUpperCase() === 'NG') {
-    languages['en-NG'] = baseUrl;
-  }
-
-  return languages;
-}
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
+  const stateBox = getSettledCanonicalOgabasseyHomeStateBox(params);
   const { slug } = await params;
 
   if (isOgabasseyHomeIdentifier(slug)) {
@@ -163,10 +93,18 @@ export async function generateMetadata({
     // On the /ogabassey path route, warm the shell without delaying head tags.
     let merchant: Awaited<ReturnType<typeof getRequestScopedMerchant>>;
     if (isOgabasseyCanonicalDomainSlug(slug)) {
-      [merchant] = await Promise.all([
+      const [resolvedMerchant, heroShell] = await Promise.all([
         getRequestScopedMerchant(slug),
         resolveOgabasseyHomeHeroShell(),
       ]);
+      recordSettledCanonicalOgabasseyHomeState({
+        box: stateBox,
+        heroShell,
+        merchant: resolvedMerchant,
+        params,
+        slug,
+      });
+      merchant = resolvedMerchant;
     } else {
       warmOgabasseyHomeHeroShell();
       merchant = await getRequestScopedMerchant(slug);
@@ -272,16 +210,47 @@ export async function generateMetadata({
   };
 }
 
-async function StorefrontHomeRoute({
+async function renderStorefrontHomeRouteAsync(
+  params: Promise<{ slug: string }>,
+  stateBox: SettledCanonicalOgabasseyHomeState
+) {
+  const { slug } = await params;
+
+  if (isOgabasseyHomeIdentifier(slug)) {
+    if (isOgabasseyCanonicalDomainSlug(slug)) {
+      const [resolvedMerchant, heroShell] = await Promise.all([
+        settleCanonicalOgabasseyHomeMerchant(getRequestScopedMerchant(slug)),
+        resolveOgabasseyHomeHeroShell(),
+      ]);
+      recordSettledCanonicalOgabasseyHomeState({
+        box: stateBox,
+        heroShell,
+        merchant: resolvedMerchant,
+        params,
+        slug,
+      });
+    }
+
+    return renderOgabasseyStaticHomePage(slug);
+  }
+
+  return renderGenericStorefrontHomePage(params);
+}
+
+function StorefrontHomeRoute({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
+  const stateBox = getSettledCanonicalOgabasseyHomeStateBox(params);
+  const settled =
+    hydrateSettledCanonicalOgabasseyHomeStateFromParams(params) ??
+    peekSettledCanonicalOgabasseyHomeState();
+  if (settled?.slug && isOgabasseyHomeIdentifier(settled.slug)) {
+    return renderOgabasseyStaticHomePage(settled.slug);
+  }
 
-  return isOgabasseyHomeIdentifier(slug)
-    ? renderOgabasseyStaticHomePage(slug)
-    : renderGenericStorefrontHomePage(params);
+  return renderStorefrontHomeRouteAsync(params, stateBox);
 }
 
 export default function StorefrontPage({

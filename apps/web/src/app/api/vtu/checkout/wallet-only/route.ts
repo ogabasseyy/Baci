@@ -261,6 +261,7 @@ export async function POST(request: NextRequest) {
       return fulfillJoinedVtuClaim({
         authSupabase: auth.supabase,
         userSupabase,
+        fulfillSupabase: adminSupabase,
         user: auth.user,
         input,
         customerId: prepared.customer.id,

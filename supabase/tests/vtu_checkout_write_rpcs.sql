@@ -765,6 +765,27 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'anon must NOT have EXECUTE on insert_prepared_vtu_transaction';
   END IF;
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.lookup_vtu_idempotency_row(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must NOT have EXECUTE on lookup_vtu_idempotency_row';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.claim_vtu_intent(uuid, text, uuid, uuid, uuid, timestamptz, uuid[])',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must NOT have EXECUTE on claim_vtu_intent';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.fail_orphan_vtu_transaction(uuid, uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must NOT have EXECUTE on fail_orphan_vtu_transaction';
+  END IF;
 END;
 $grants$;
 

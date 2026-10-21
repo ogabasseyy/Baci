@@ -632,10 +632,26 @@ BEGIN
 END;
 $s3$;
 
--- --- S4: anon gets zero rows ------------------------------------------
+-- --- S4: anon is denied the settings RPC -----------------------------
+-- No anon EXECUTE grant exists by design (least privilege): the call
+-- must fail with insufficient_privilege, never execute. The grant
+-- pin (S4-grant) and the behavioral probe (S4) are separate blocks
+-- so a replay failure localizes to grants vs execution by line.
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+DO $s4grant$
+BEGIN
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.get_vtu_checkout_settings(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'S4-grant: anon must NOT have EXECUTE on get_vtu_checkout_settings';
+  END IF;
+END;
+$s4grant$;
 
 DO $s4$
 BEGIN
@@ -693,6 +709,13 @@ BEGIN
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'authenticated must have EXECUTE on get_vtu_checkout_settings';
+  END IF;
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.get_vtu_checkout_settings(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must NOT have EXECUTE on get_vtu_checkout_settings';
   END IF;
   IF pg_catalog.has_function_privilege(
     'anon',

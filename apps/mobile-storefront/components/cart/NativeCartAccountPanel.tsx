@@ -195,7 +195,8 @@ export function NativeCartAccountPanel() {
             conflicts={conflicts}
             colors={colors}
             disabled={pending || !savedReady}
-            onPick={(pick) =>
+            onPick={(pick) => {
+              markSharedCartIntent();
               setPicks((existing) => [
                 ...existing.filter(
                   (candidate) =>
@@ -203,8 +204,8 @@ export function NativeCartAccountPanel() {
                     cartLineIdentity(pick.item)
                 ),
                 pick,
-              ])
-            }
+              ]);
+            }}
           />
           <Pressable
             accessibilityRole="button"

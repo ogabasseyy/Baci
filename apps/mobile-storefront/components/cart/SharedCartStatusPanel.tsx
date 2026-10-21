@@ -106,12 +106,13 @@ export function SharedCartStatusPanel() {
                     <Text style={{ color: colors.text }}>{name}</Text>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() =>
+                      onPress={() => {
+                        markSharedCartIntent();
                         setPicks((current) => ({
                           ...current,
                           [conflictKey(item)]: 'existing',
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <Text style={{ color: colors.primary }}>
                         {picks[conflictKey(item)] === 'existing'
@@ -121,12 +122,13 @@ export function SharedCartStatusPanel() {
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() =>
+                      onPress={() => {
+                        markSharedCartIntent();
                         setPicks((current) => ({
                           ...current,
                           [conflictKey(item)]: 'incoming',
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <Text style={{ color: colors.primary }}>
                         {picks[conflictKey(item)] === 'incoming'
@@ -206,7 +208,7 @@ export function SharedCartStatusPanel() {
           }
         >
           <Text style={{ color: colors.primary }}>
-            {state.snapshot || state.status === 'error'
+            {state.snapshot || items.length === 0 || state.status === 'error'
               ? 'Retry sync'
               : 'Connect cart'}
           </Text>

@@ -209,3 +209,28 @@ it('marks a web pairing continuation as a checkout-fencing intent', async () => 
   );
   expect(sharedCartWriteRevision()).toBe(before + 1);
 });
+
+it('marks a pairing merge pick as a checkout-fencing intent', async () => {
+  const pair = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const pick = await waitFor(() =>
+    screen.getByRole('radio', { name: 'Item: keep current offer' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(pick);
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});

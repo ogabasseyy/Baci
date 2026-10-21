@@ -206,12 +206,13 @@ export function NativeCartPairingPanel() {
                         accessibilityState={{
                           checked: resolutions[key] === keep,
                         }}
-                        onPress={() =>
+                        onPress={() => {
+                          markSharedCartIntent();
                           setResolutions((previous) => ({
                             ...previous,
                             [key]: keep,
-                          }))
-                        }
+                          }));
+                        }}
                         style={styles.button}
                       >
                         <Text style={{ color: colors.primary }}>

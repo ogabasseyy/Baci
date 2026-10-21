@@ -189,3 +189,32 @@ it('keeps retrying an empty device cart read-only', () => {
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(prepare).not.toHaveBeenCalled();
 });
+
+it('labels an empty-cart retry as Retry sync, matching its read-only refresh', () => {
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  const prepare = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    status: 'ready',
+    snapshot: null,
+    refresh,
+    prepare,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByText('Retry sync'));
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(prepare).not.toHaveBeenCalled();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('marks a merge-offer pick as a checkout-fencing intent', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    mergeConflicts: [{ productId }],
+    status: 'choice_required',
+    chooseLegacy,
+  });
+  const view = render(<SharedCartStatusPanel />);
+  const before = sharedCartWriteRevision();
+  fireEvent.press(view.getByRole('button', { name: 'Keep device offer' }));
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});

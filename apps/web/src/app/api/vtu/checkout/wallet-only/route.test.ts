@@ -831,8 +831,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
   it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {
     // Codex P2: the replay path never uses the stamp or the live
     // set, so a proof-RPC outage must not 500 an already-debited
-    // result — the existing row short-circuits admission.
-    const state: IdempotencyRowState = {
+    // result — the existing row short-circuits admission. Split
+    // clients (Phase 2): the owned row comes from the user
+    // client; the admin client fails only the proof RPC.
+    userSupabaseMockRef.current = buildSupabase({
       row: {
         key: VALID_KEY,
         vtu_transaction_id: 'vtu-tx-existing',
@@ -841,9 +843,12 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
       insertCalls: 0,
+    });
+    supabaseMockRef.current = buildSupabase({
+      row: null,
+      insertCalls: 0,
       admissionError: { message: 'proof rpc down' },
-    };
-    supabaseMockRef.current = buildSupabase(state);
+    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',

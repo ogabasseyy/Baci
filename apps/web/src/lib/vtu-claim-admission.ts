@@ -86,7 +86,11 @@ export async function admitVtuClaim(
     row && Array.isArray(row.live_transaction_ids)
       ? (row.live_transaction_ids as string[])
       : null;
-  if ((admittedAt === null || admissionLive === null) && !existing && !foreign) {
+  if (
+    (admittedAt === null || admissionLive === null) &&
+    !existing &&
+    !foreign
+  ) {
     throw new VtuAdmissionError(
       `Failed to admit VTU claim: ${proof.error?.message ?? 'no admission proof returned'}`
     );

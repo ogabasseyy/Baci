@@ -37,6 +37,19 @@ export async function prepareCartCheckout(
   };
   try {
     await operation();
+    if (replaced()) return { ready: false, reason: 'session_changed' };
+    const observed = getState();
+    if (
+      !initial.snapshot &&
+      observed.snapshot &&
+      !observed.metadataReady &&
+      observed.status !== 'choice_required' &&
+      ['active', 'checkout'].includes(observed.snapshot.state) &&
+      observed.refresh
+    ) {
+      // One hydration retry only; never loop, switch carts, or re-create.
+      await observed.refresh();
+    }
   } catch {
     if (replaced()) return { ready: false, reason: 'session_changed' };
     return {

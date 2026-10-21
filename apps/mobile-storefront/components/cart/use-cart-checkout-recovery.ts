@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { prepareCartCheckout } from '@/lib/cart/prepare-cart-checkout';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -6,7 +6,7 @@ import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 /** One shopper checkout intent at a time, including recovery and navigation. */
 export function useCartCheckoutRecovery(onReady: () => void) {
   const onReadyRef = useRef(onReady);
-  useEffect(() => {
+  useLayoutEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
   const pending = useRef(false);
@@ -33,7 +33,12 @@ export function useCartCheckoutRecovery(onReady: () => void) {
           'Choose your cart',
           'Choose whether to combine your carts or use the saved cart, then tap Checkout again.'
         );
-      else if (result.reason !== 'session_changed')
+      else if (result.reason === 'session_changed')
+        Alert.alert(
+          'Cart session changed',
+          'Your account or store changed. Tap Checkout again to continue with your current cart.'
+        );
+      else
         Alert.alert(
           'Could not sync cart',
           'Your items are still saved. Check your connection and tap Checkout to retry.'

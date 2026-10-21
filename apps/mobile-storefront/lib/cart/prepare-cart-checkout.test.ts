@@ -104,3 +104,30 @@ it('silently fences a rejected operation after controller replacement', async ()
     reason: 'session_changed',
   });
 });
+it('retries hydration once when prepare discovers the canonical cart', async () => {
+  let state: CheckoutCartState = { ...live };
+  state.prepare = jest.fn(async () => {
+    state = { ...state, snapshot: { state: 'active', lines: [{}] } };
+  });
+  state.refresh = jest.fn(async () => {
+    state = { ...state, metadataReady: true };
+  });
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: true,
+  });
+  expect(state.prepare).toHaveBeenCalledTimes(1);
+  expect(state.refresh).toHaveBeenCalledTimes(1);
+});
+it('stops after one unsuccessful hydration retry without recreating the cart', async () => {
+  let state: CheckoutCartState = { ...live };
+  state.prepare = jest.fn(async () => {
+    state = { ...state, snapshot: { state: 'active', lines: [{}] } };
+  });
+  state.refresh = jest.fn().mockResolvedValue(undefined);
+  await expect(prepareCartCheckout(() => state)).resolves.toEqual({
+    ready: false,
+    reason: 'unavailable',
+  });
+  expect(state.prepare).toHaveBeenCalledTimes(1);
+  expect(state.refresh).toHaveBeenCalledTimes(1);
+});

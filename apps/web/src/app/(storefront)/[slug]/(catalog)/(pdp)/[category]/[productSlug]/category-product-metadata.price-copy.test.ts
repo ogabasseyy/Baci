@@ -40,6 +40,22 @@ function input(product: Partial<Input['product']>): Input {
 }
 
 describe('categorized PDP search copy uses current price data', () => {
+  it('uses current pricing across social metadata when imported copy uses compact or encoded prices', () => {
+    const metadata = buildCategoryProductMetadata(
+      input({
+        meta_title: 'iPhone 13 Price – N350k',
+        meta_description: '<p>Buy iPhone 13 for ₦&nbsp;350,000.</p>',
+      })
+    );
+    expect(metadata.title).toEqual({
+      absolute: 'iPhone 13 Price in Nigeria | Ogabassey',
+    });
+    expect(metadata.description).toContain('₦390,500');
+    expect(metadata.description).not.toMatch(/350|nbsp/);
+    expect(metadata.openGraph?.description).toBe(metadata.description);
+    expect(metadata.twitter?.description).toBe(metadata.description);
+  });
+
   it('does not let the imported iPhone 13 boilerplate hide the current price range', () => {
     const metadata = buildCategoryProductMetadata(
       input({

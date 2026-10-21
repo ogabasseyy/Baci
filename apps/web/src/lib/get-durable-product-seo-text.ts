@@ -1,4 +1,8 @@
-import { CURRENCY_SYMBOLS } from './currency-meta';
+import { decodeHTML } from 'entities';
+import {
+  getProductSeoMoneyCandidates,
+  type ProductSeoMoneyCandidate,
+} from './get-product-seo-money-candidates';
 import { stripHtmlTags } from './sanitize-core';
 import { stripVolatileProductPriceSentences } from './storefront-product-description';
 import {
@@ -6,40 +10,113 @@ import {
   normalizeSeoProductText,
 } from './storefront-product-slug-disambiguation';
 
-// Share the storefront's display aliases and recognize foreign ISO amounts too.
-const isoCurrencies = new Set(Intl.supportedValuesOf('currency'));
-const currencyTokens = [
-  ...new Set([
-    ...isoCurrencies,
-    ...Object.keys(CURRENCY_SYMBOLS),
-    ...Object.values(CURRENCY_SYMBOLS),
-  ]),
-].sort((a, b) => b.length - a.length);
-const currencyPattern = currencyTokens
-  .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  .join('|');
-const moneyPattern = new RegExp(
-  `(?<![\\p{L}\\p{N}])(?:(${currencyPattern})\\s*(\\d[\\d.,]*)|(\\d[\\d.,]*)\\s*(${currencyPattern}))(?![\\p{L}\\p{N}])`,
-  'giu'
-);
-const denominationLabelPattern = new RegExp(
-  `^(?:\\s+(?:${currencyPattern}))?\\s+(?:value|credit|denomination|gift[- ]card)\\b`,
-  'iu'
-);
+const MAX_SOURCE_LENGTH = 20_000;
+const MAX_NAME_LENGTH = 1_000;
+const QUANTITY_UNIT =
+  /^\s*(?:photos?|songs?|files?|people|users?|models?|colou?rs?|options?|years?|mah|gb|tb|mb|hz|mp|watts?)\b/i;
 
-function moneyIdentity(match: RegExpMatchArray) {
-  const token = (match[1] || match[4]).toUpperCase();
+function retailRelation(text: string, start: number) {
+  const clause =
+    text
+      .slice(Math.max(0, start - 200), start)
+      .split(/[.!?;\n]/)
+      .at(-1) ?? '';
+  const cue =
+    /\b(prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
+      clause
+    )?.[1] ?? '';
   return {
-    amount: (match[2] || match[3])
-      .replace(/[.,]+$/, '')
-      .replace(/,/g, '')
-      .replace(/\.0+$/, ''),
-    currencies: isoCurrencies.has(token)
-      ? [token]
-      : Object.entries(CURRENCY_SYMBOLS)
-          .filter(([, symbol]) => symbol.toUpperCase() === token)
-          .map(([code]) => code),
+    cue,
+    strong: /^(?:price|cost|priced|start|pay|only)/i.test(cue),
+    purchase: /\b(?:buy|purchase)\b/i.test(clause),
   };
+}
+
+function isPrice(
+  candidate: ProductSeoMoneyCandidate,
+  text: string,
+  currency: string
+): boolean {
+  const relation = retailRelation(text, candidate.start);
+  const quantity = QUANTITY_UNIT.test(text.slice(candidate.end));
+  const rawAmount = candidate.rawAmount.replace(/[.,]+$/, '');
+  if (!candidate.marker) {
+    if (!relation.cue || quantity || candidate.amount === null) return false;
+    return (
+      relation.strong ||
+      relation.purchase ||
+      /[,km]/i.test(rawAmount) ||
+      rawAmount.replace(/\D/g, '').length >= 5
+    );
+  }
+  // Ordinary lower/title-case ISO homonyms require a direct financial cue.
+  if (
+    /^[a-z]{3}$/i.test(candidate.marker) &&
+    candidate.marker !== candidate.marker.toUpperCase()
+  ) {
+    const isIsoCode = candidate.currencies.includes(
+      candidate.marker.toUpperCase()
+    );
+    if (
+      isIsoCode &&
+      !relation.strong &&
+      !(relation.purchase && relation.cue === 'for' && !quantity)
+    )
+      return false;
+  }
+  // Compact single-letter aliases are also model prefixes. Spaced/explicit
+  // foreign prices remain monetary; unqualified compact N/R16 stays a model.
+  if (/^[nr]$/i.test(candidate.marker)) {
+    if (
+      candidate.marker.toUpperCase() === 'N' &&
+      !candidate.currencies.includes(currency.toUpperCase()) &&
+      !relation.cue
+    )
+      return false;
+    if (
+      !relation.cue &&
+      !/\s/.test(text.slice(candidate.start, candidate.end)) &&
+      !/[,km]/i.test(rawAmount) &&
+      rawAmount.replace(/\D/g, '').length < 5
+    )
+      return false;
+  }
+  return true;
+}
+
+function isDenomination(
+  candidate: ProductSeoMoneyCandidate,
+  text: string,
+  productName: string,
+  denominations: ProductSeoMoneyCandidate[]
+): boolean {
+  if (
+    !candidate.marker ||
+    candidate.amount === null ||
+    retailRelation(text, candidate.start).cue
+  )
+    return false;
+  if (
+    !denominations.some(
+      (value) =>
+        value.amount === candidate.amount &&
+        value.currencies.some((code) => candidate.currencies.includes(code))
+    )
+  )
+    return false;
+  const label =
+    /^\s+((?:[\p{L}][\p{L}\p{N}'-]{0,30}\s+){0,4})(?:gift[- ]card|value|credit|denomination)\b/iu.exec(
+      text.slice(candidate.end)
+    );
+  if (!label) return false;
+  const identityWords = new Set(
+    productName.toLowerCase().match(/[\p{L}\p{N}'-]+/gu) ?? []
+  );
+  return label[1]
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => identityWords.has(word.toLowerCase()));
 }
 
 /** Keeps useful editorial overrides; prices must come from current offer data. */
@@ -52,81 +129,42 @@ export function getDurableProductSeoText({
   product: { name: string; slug?: string | null };
   currency: string;
 }): string {
-  const productName = getSeoProductName(product);
+  if (
+    typeof text !== 'string' ||
+    text.length > MAX_SOURCE_LENGTH ||
+    product.name.length > MAX_NAME_LENGTH ||
+    (product.slug?.length ?? 0) > MAX_NAME_LENGTH
+  )
+    return '';
+  const productName = stripHtmlTags(decodeHTML(getSeoProductName(product)));
   const plainText = stripHtmlTags(
-    normalizeSeoProductText(stripVolatileProductPriceSentences(text), product)
+    decodeHTML(
+      normalizeSeoProductText(stripVolatileProductPriceSentences(text), product)
+    )
   )
     .replace(/\s+/g, ' ')
     .trim();
-  if (!plainText) return '';
-
   if (
+    !plainText ||
     /\bconfirm specs\W+condition\W+variants\W+(?:and\W+)?availability\b/i.test(
       plainText
     )
-  ) {
+  )
     return '';
-  }
-
-  // A gift-card denomination is identity, not its current retail price. Remove
-  // that exact identity before checking for other monetary amounts.
-  let monetaryText = productName.trim()
+  const monetaryText = productName.trim()
     ? plainText.replace(
         new RegExp(productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
         ''
       )
     : plainText;
-  if (/\bgift[- ]card\b/i.test(productName)) {
-    const denominations = [...productName.matchAll(moneyPattern)].map(
-      moneyIdentity
-    );
-    // Remove only a matching face value explicitly labelled as identity. A
-    // "buy for" amount remains a retail claim even if it equals the face value.
-    const identityMatches = [...monetaryText.matchAll(moneyPattern)].filter(
-      (match) => {
-        const claim = moneyIdentity(match);
-        return (
-          denominations.some(
-            (value) =>
-              value.amount === claim.amount &&
-              value.currencies.some((code) => claim.currencies.includes(code))
-          ) &&
-          denominationLabelPattern.test(
-            monetaryText.slice(match.index + match[0].length)
-          )
-        );
-      }
-    );
-    for (const match of identityMatches.reverse()) {
-      monetaryText = `${monetaryText.slice(0, match.index)} ${monetaryText.slice(match.index + match[0].length)}`;
-    }
-  }
-  const hasSymbolAmount = /\p{Sc}\s*\d|\d\s*\p{Sc}/u.test(monetaryText);
-  const hasCodeAmount = [...monetaryText.matchAll(moneyPattern)].some(
-    // A bare compact R16 is also a model token outside a rand storefront.
-    // Spaced rand amounts and every unambiguous currency remain monetary.
-    (match) => {
-      const token = match[1] || match[4];
-      const code = token.toUpperCase();
-      // ISO codes like ALL, TOP and TRY are ordinary words too: require
-      // ISO casing or explicit price language, including the local currency.
-      if (
-        isoCurrencies.has(code) &&
-        token !== code &&
-        !/\b(?:buy|price|pay|costs?|sale)\b/i.test(monetaryText)
-      )
-        return false;
-      return !/^r\d/i.test(match[0]) || currency.toUpperCase() === 'ZAR';
-    }
-  );
-  // Only grouped numbers in shopping/price context: model years, storage,
-  // RAM and quantities such as "storage for 4,000 photos" remain editorial.
-  const hasUnlabelledPrice =
-    /\b(?:price|from|starts?\s+at|costs?|(?:buy|shop|get|purchase)\b[^.!?]{0,200}\bfor)\s*[:–—-]?\s*\d{1,3}(?:,\d{3})+(?![\p{L}\p{N}])/iu.test(
-      monetaryText
-    );
-
-  return hasSymbolAmount || hasCodeAmount || hasUnlabelledPrice
+  const denominations = /\bgift[- ]card\b/i.test(productName)
+    ? getProductSeoMoneyCandidates(productName).filter((value) => value.marker)
+    : [];
+  return getProductSeoMoneyCandidates(monetaryText).some(
+    (candidate) =>
+      isPrice(candidate, monetaryText, currency) &&
+      !isDenomination(candidate, monetaryText, productName, denominations)
+  )
     ? ''
     : plainText;
 }

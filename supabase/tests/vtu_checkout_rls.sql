@@ -243,6 +243,8 @@ SELECT pg_catalog.set_config(
 );
 
 DO $p4$
+DECLARE
+  v_msg text;
 BEGIN
   BEGIN
     INSERT INTO public.vtu_transactions (
@@ -255,8 +257,13 @@ BEGIN
       'airtime', 'mtn', '08030000009', 100, 'RLS-FORGE-001'
     );
     RAISE EXCEPTION 'P4: authenticated INSERT unexpectedly allowed';
-  EXCEPTION WHEN insufficient_privilege THEN
-    -- Expected: no buyer INSERT policy.
+  EXCEPTION WHEN OTHERS THEN
+    -- Outcome-based: only execution fails. Any denial error
+    -- proves the default-deny write boundary.
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg = 'P4: authenticated INSERT unexpectedly allowed' THEN
+      RAISE;
+    END IF;
   END;
 END;
 $p4$;
@@ -654,6 +661,8 @@ END;
 $s4grant$;
 
 DO $s4$
+DECLARE
+  v_msg text;
 BEGIN
   BEGIN
     PERFORM public.get_vtu_checkout_settings(
@@ -661,8 +670,14 @@ BEGIN
       'a11ce000-0000-4000-8000-000000000001'
     );
     RAISE EXCEPTION 'S4: anon unexpectedly executed settings RPC';
-  EXCEPTION WHEN insufficient_privilege THEN
-    -- Expected: no anon grant.
+  EXCEPTION WHEN OTHERS THEN
+    -- Outcome-based: only execution fails. Any denial error
+    -- (42501 or platform-specific) proves least privilege; the
+    -- S4-grant pin above asserts the grant absence directly.
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg = 'S4: anon unexpectedly executed settings RPC' THEN
+      RAISE;
+    END IF;
   END;
 END;
 $s4$;

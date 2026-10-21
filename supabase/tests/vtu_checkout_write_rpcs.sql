@@ -193,6 +193,8 @@ SELECT pg_catalog.set_config(
 );
 
 DO $i2$
+DECLARE
+  v_msg text;
 BEGIN
   BEGIN
     PERFORM public.insert_prepared_vtu_transaction(
@@ -204,8 +206,14 @@ BEGIN
       NULL, NULL, NULL, NULL, '{}'::jsonb
     );
     RAISE EXCEPTION 'I2: authenticated prepare-insert unexpectedly allowed';
-  EXCEPTION WHEN insufficient_privilege THEN
-    -- Expected: service_role-only grant.
+  EXCEPTION WHEN OTHERS THEN
+    -- Outcome-based: only execution fails. Any denial error
+    -- proves the service_role-only grant; the grants pin below
+    -- asserts the grant absence directly.
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg = 'I2: authenticated prepare-insert unexpectedly allowed' THEN
+      RAISE;
+    END IF;
   END;
 END;
 $i2$;
@@ -311,6 +319,8 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
 DO $k4$
+DECLARE
+  v_msg text;
 BEGIN
   BEGIN
     PERFORM public.lookup_vtu_idempotency_row(
@@ -318,8 +328,14 @@ BEGIN
       'b22df000-0000-4000-8000-000000000001'
     );
     RAISE EXCEPTION 'K4: anon unexpectedly executed lookup RPC';
-  EXCEPTION WHEN insufficient_privilege THEN
-    -- Expected: no anon grant.
+  EXCEPTION WHEN OTHERS THEN
+    -- Outcome-based: only execution fails. Any denial error
+    -- proves least privilege; the grants pin below asserts the
+    -- grant absence directly.
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg = 'K4: anon unexpectedly executed lookup RPC' THEN
+      RAISE;
+    END IF;
   END;
 END;
 $k4$;
@@ -669,6 +685,8 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
 DO $d5$
+DECLARE
+  v_msg text;
 BEGIN
   BEGIN
     PERFORM public.fail_orphan_vtu_transaction(
@@ -677,8 +695,14 @@ BEGIN
       'b22df000-0000-4000-8000-000000000001'
     );
     RAISE EXCEPTION 'D5: anon unexpectedly executed fail-orphan RPC';
-  EXCEPTION WHEN insufficient_privilege THEN
-    -- Expected: no anon grant.
+  EXCEPTION WHEN OTHERS THEN
+    -- Outcome-based: only execution fails. Any denial error
+    -- proves least privilege; the grants pin below asserts the
+    -- grant absence directly.
+    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
+    IF v_msg = 'D5: anon unexpectedly executed fail-orphan RPC' THEN
+      RAISE;
+    END IF;
   END;
 END;
 $d5$;

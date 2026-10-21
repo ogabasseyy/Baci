@@ -191,6 +191,21 @@ describe('selectConditionOffer', () => {
     ).toEqual(offers[1]);
   });
 
+  it('still honors an explicit id under a supplied-but-unnormalizable condition', () => {
+    // Explicit picks win by design (deep-link fidelity: the URL names
+    // an exact offer): the unnormalizable-condition null only applies
+    // to the condition fallback, never to an explicit id. Checkout
+    // accepts the named live offer either way, so honoring agrees
+    // with enforcement while nulling would reprice the deep link.
+    const [only] = offers;
+    expect(
+      selectConditionOffer([only], {
+        selectedCondition: 'stale-spelling-xyz',
+        preferredOfferId: only.id,
+      })
+    ).toEqual(only);
+  });
+
   it('tries ordered advertised ids before the condition fallback', () => {
     const cheaper = { id: 'offer-used-cheaper', condition: 'used', price: 480 };
     const candidates = [...offers, cheaper];

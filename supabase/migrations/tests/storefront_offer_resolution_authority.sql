@@ -25,6 +25,13 @@ INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_q
 VALUES ('31000000-0000-4000-8000-000000000007','00000000-0000-4000-8000-000000000001','authority strict','active',100,5,5,true,false,true,'serialized_strict'),
 ('31000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','authority anchor strict','active',100,5,5,true,false,true,'off'),
 ('31000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000001','authority unlimited','active',100,0,0,true,false,true,'serialized_then_unlimited');
+-- Multi-anchor conflict (031): two anchors whose id order disagrees with
+-- creation order; lowest id must win (aligned with the PDP snapshot and
+-- base-inventory anchors). Strict zero-unit parent (033): no inventory
+-- rows at all; available_units must emit 0, never NULL.
+INSERT INTO public.products(id, merchant_id, name, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
+VALUES ('31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','authority multi anchor','active',100,5,5,true,false,true,'off'),
+('31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','authority strict zero','active',100,5,5,true,false,true,'serialized_strict');
 -- Chunk page: 201 live STRICT products of one merchant, so the scoped
 -- call must form the merchant slices and call the serialized-count
 -- page twice (200 + 1 ids) instead of tripping its
@@ -42,6 +49,9 @@ VALUES ('41000000-0000-4000-8000-000000000012','31000000-0000-4000-8000-00000000
 ('41000000-0000-4000-8000-000000000013','31000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','serialized_strict',true),
 ('41000000-0000-4000-8000-000000000014','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','inherit',true),
 ('41000000-0000-4000-8000-000000000015','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','inherit',true);
+INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor,created_at)
+VALUES ('41000000-0000-4000-8000-000000000016','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','serialized_strict',true,'2026-02-01T00:00:00Z'),
+('41000000-0000-4000-8000-000000000017','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','off',true,'2026-01-01T00:00:00Z');
 ALTER TABLE public.product_variants ENABLE TRIGGER USER;
 ALTER TABLE public.variant_inventory DISABLE TRIGGER USER;
 INSERT INTO public.variant_inventory(id,variant_id,merchant_id,identifier_type,identifier_value,status)
@@ -56,7 +66,9 @@ VALUES ('51000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-00000000
 ('51000000-0000-4000-8000-000000000009','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111119','available'),
 ('51000000-0000-4000-8000-000000000010','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111120','available'),
 ('51000000-0000-4000-8000-000000000011','41000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','imei','611111111111121','available'),
-('51000000-0000-4000-8000-000000000012','41000000-0000-4000-8000-000000000015','00000000-0000-4000-8000-000000000001','imei','611111111111122','available');
+('51000000-0000-4000-8000-000000000012','41000000-0000-4000-8000-000000000015','00000000-0000-4000-8000-000000000001','imei','611111111111122','available'),
+('51000000-0000-4000-8000-000000000013','41000000-0000-4000-8000-000000000016','00000000-0000-4000-8000-000000000001','imei','611111111111123','available'),
+('51000000-0000-4000-8000-000000000014','41000000-0000-4000-8000-000000000016','00000000-0000-4000-8000-000000000001','imei','611111111111124','available');
 ALTER TABLE public.variant_inventory ENABLE TRIGGER USER;
 ALTER TABLE public.product_offers DISABLE TRIGGER USER;
 INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
@@ -72,7 +84,9 @@ VALUES ('31000000-0000-4000-8000-000000000020','31000000-0000-4000-8000-00000000
 ('31000000-0000-4000-8000-000000000029','31000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001','used',90,2,'active'),
 ('31000000-0000-4000-8000-000000000030','31000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000001','used',90,4,'active'),
 ('32000001-0001-4000-8000-000000000001','31000001-0001-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
-('32000001-0201-4000-8000-000000000201','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','used',90,10,'active');
+('32000001-0201-4000-8000-000000000201','31000001-0201-4000-8000-000000000201','00000000-0000-4000-8000-000000000001','used',90,10,'active'),
+('31000000-0000-4000-8000-000000000032','31000000-0000-4000-8000-000000000031','00000000-0000-4000-8000-000000000001','used',90,5,'active'),
+('31000000-0000-4000-8000-000000000034','31000000-0000-4000-8000-000000000033','00000000-0000-4000-8000-000000000001','used',90,5,'active');
 ALTER TABLE public.product_offers ENABLE TRIGGER USER;
 SET ROLE anon;
 DO $$
@@ -146,5 +160,13 @@ BEGIN
  IF n <> 0 THEN RAISE EXCEPTION 'search must not advertise variant-parent offers'; END IF;
  SELECT count(*) INTO n FROM public.get_storefront_search_price_options('00000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000005') WHERE offer_id IS NOT NULL;
  IF n <> 0 THEN RAISE EXCEPTION 'search must not advertise stray-variant offers'; END IF;
+ -- Multi-anchor conflict resolves by lowest anchor id (aligned with the
+ -- PDP snapshot and base-inventory anchors), not creation order.
+ SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000031']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000032';
+ IF r.effective_policy <> 'serialized_strict' OR r.allocatable_stock <> 2 OR r.available_units <> 2 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'multi-anchor conflict must resolve by lowest anchor id'; END IF;
+ -- Strict zero-unit parents emit available_units = 0, never NULL, so
+ -- genuine sell-outs are distinguishable from projection outages.
+ SELECT * INTO r FROM public.get_storefront_offer_resolution('00000000-0000-4000-8000-000000000001', ARRAY['31000000-0000-4000-8000-000000000033']::uuid[]) WHERE offer_id = '31000000-0000-4000-8000-000000000034';
+ IF r.allocatable_stock <> 0 OR r.available_units IS NULL OR r.available_units <> 0 OR r.parent_eligible IS NOT TRUE THEN RAISE EXCEPTION 'strict zero-unit must emit zero units, not NULL'; END IF;
 END $$;
 RESET ROLE;

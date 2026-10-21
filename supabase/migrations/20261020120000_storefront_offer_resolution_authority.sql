@@ -163,7 +163,11 @@ BEGIN
     END AS allocatable_stock,
     a.parent_eligible,
     a.effective_policy,
-    CASE WHEN a.effective_policy = 'serialized_strict' THEN s.public_available_units END AS available_units,
+    -- Strict zero-unit products produce no GROUP BY row in the
+    -- serialized counts: coalesce so genuine sell-outs emit 0, never
+    -- NULL (NULL stays reserved for non-strict rows, and a strict
+    -- NULL from a partial projection still reads as a data outage).
+    CASE WHEN a.effective_policy = 'serialized_strict' THEN COALESCE(s.public_available_units, 0) END AS available_units,
     o.compare_at_price, o.grade, o.condition_notes, o.images
   FROM requested AS r
   JOIN anchor_policy AS a ON a.product_id = r.id

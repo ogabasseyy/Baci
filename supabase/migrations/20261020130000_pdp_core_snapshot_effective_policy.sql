@@ -9,6 +9,10 @@
 -- Backwards compatible: cached snapshots without the key read undefined
 -- and fall back to inventory_tracking_policy (current behavior).
 --
+-- Also aligns the anchor pick to lowest-id-first, matching the
+-- offer-resolution authority and base-inventory anchors (previously
+-- created_at-first here): single-anchor products are unaffected.
+--
 -- The function body below is otherwise byte-identical to the definition in
 -- 20260712101000_pdp_core_slug_case_insensitive.sql.
 
@@ -238,7 +242,10 @@ AS $$
       WHERE variant_row.product_id = product_row.id
         AND variant_row.merchant_id = product_row.merchant_id
         AND variant_row.is_inventory_anchor IS TRUE
-      ORDER BY variant_row.created_at, variant_row.id
+      -- Lowest anchor id wins (aligned with the offer-resolution
+      -- authority and base-inventory anchors): multi-anchor products
+      -- are a data anomaly, but every surface must pick the same one.
+      ORDER BY variant_row.id
       LIMIT 1
     ) AS anchor_variant ON true
     LEFT JOIN availability_counts AS availability

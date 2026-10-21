@@ -17,16 +17,26 @@ ALTER TABLE public.merchants ENABLE TRIGGER USER;
 ALTER TABLE public.products DISABLE TRIGGER USER;
 INSERT INTO public.products(id, merchant_id, name, slug, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
 VALUES ('33000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000009','pdp anchor strict','pdp-anchor-strict-phone','active',100,5,5,true,false,true,'off'),
-('33000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000009','pdp plain','pdp-plain-phone','active',100,5,5,true,false,true,'off');
+('33000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000009','pdp plain','pdp-plain-phone','active',100,5,5,true,false,true,'off'),
+-- Multi-anchor conflict: lowest anchor id must win even when created
+-- later (aligned with the offer-resolution authority and
+-- base-inventory anchors).
+INSERT INTO public.products(id, merchant_id, name, slug, status, price, stock, stock_quantity, manage_stock, has_variants, has_condition_offers, inventory_tracking_policy)
+VALUES ('33000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000009','pdp multi anchor','pdp-multi-anchor-phone','active',100,5,5,true,false,true,'off');
 ALTER TABLE public.products ENABLE TRIGGER USER;
 ALTER TABLE public.product_variants DISABLE TRIGGER USER;
 INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor)
 VALUES ('43000000-0000-4000-8000-000000000013','33000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000009','serialized_strict',true);
+INSERT INTO public.product_variants(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor,created_at)
+VALUES ('43000000-0000-4000-8000-000000000014','33000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000009','serialized_strict',true,'2026-02-01T00:00:00Z'),
+('43000000-0000-4000-8000-000000000015','33000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000009','off',true,'2026-01-01T00:00:00Z');
 ALTER TABLE public.product_variants ENABLE TRIGGER USER;
 ALTER TABLE public.variant_inventory DISABLE TRIGGER USER;
 INSERT INTO public.variant_inventory(id,variant_id,merchant_id,identifier_type,identifier_value,status)
 VALUES ('53000000-0000-4000-8000-000000000001','43000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000009','imei','611111111111131','available'),
-('53000000-0000-4000-8000-000000000002','43000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000009','imei','611111111111132','available');
+('53000000-0000-4000-8000-000000000002','43000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000009','imei','611111111111132','available'),
+('53000000-0000-4000-8000-000000000003','43000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000009','imei','611111111111133','available'),
+('53000000-0000-4000-8000-000000000004','43000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000009','imei','611111111111134','available');
 ALTER TABLE public.variant_inventory ENABLE TRIGGER USER;
 SET ROLE anon;
 DO $$
@@ -40,5 +50,9 @@ BEGIN
   SELECT * INTO r FROM public.get_storefront_pdp_core_v2('00000000-0000-4000-8000-000000000009', 'pdp-plain-phone');
   IF r.resolution_status <> 'found' THEN RAISE EXCEPTION 'plain product snapshot not found'; END IF;
   IF r.product_data->>'effective_policy' <> 'off' THEN RAISE EXCEPTION 'plain product must emit off policy'; END IF;
+
+  SELECT * INTO r FROM public.get_storefront_pdp_core_v2('00000000-0000-4000-8000-000000000009', 'pdp-multi-anchor-phone');
+  IF r.resolution_status <> 'found' THEN RAISE EXCEPTION 'multi-anchor product snapshot not found'; END IF;
+  IF r.product_data->>'effective_policy' <> 'serialized_strict' THEN RAISE EXCEPTION 'multi-anchor conflict must resolve by lowest anchor id'; END IF;
 END $$;
 RESET ROLE;

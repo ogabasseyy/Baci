@@ -33,6 +33,7 @@ async function flushPostHogMicrotasks() {
 }
 
 afterEach(() => {
+  delete (globalThis as { __next_s?: unknown }).__next_s;
   vi.clearAllMocks();
   vi.resetModules();
   vi.unstubAllGlobals();
@@ -123,5 +124,42 @@ describe('instrumentation-client', () => {
 
     expect(mocks.initializePostHogBrowser).not.toHaveBeenCalled();
     expect(mocks.capturePostHogPageview).not.toHaveBeenCalled();
+  });
+
+  it('registers a one-shot post-paint hydration gate when __next_s is empty', async () => {
+    vi.useFakeTimers();
+    try {
+      await importInstrumentationClient();
+
+      const queue = (
+        globalThis as {
+          __next_s?: {
+            length: number;
+            reduce: (
+              callback: () => Promise<void>,
+              initialValue: Promise<void>
+            ) => Promise<void>;
+          };
+        }
+      ).__next_s;
+      expect(queue).toBeDefined();
+      expect(queue?.length).toBe(1);
+
+      let hydrated = false;
+      const promise = queue
+        ?.reduce(() => Promise.resolve(), Promise.resolve())
+        .then(() => {
+          hydrated = true;
+        });
+
+      expect(queue?.length).toBe(0);
+      expect(hydrated).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await promise;
+      expect(hydrated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

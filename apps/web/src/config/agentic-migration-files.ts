@@ -1,2 +1,0 @@
-export const AGENTIC_DVA_GATEWAY_REFERENCE_MIGRATION =
-  '20260430144500_add_agentic_transactions_gateway_reference_unique_index.sql';

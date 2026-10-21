@@ -1,7 +1,7 @@
-import { resolveDefaultVariantSelection } from '@baci/shared/lib/product-default-variant';
 import type { Product } from '@/lib/products';
 import { generateCartItemId } from './cart-storage';
 import type { AddToCartOptions, CartItem } from './cart-types';
+import { resolveCartDefaultVariantSelection } from './gate-add-to-cart';
 
 /**
  * Index of the cart line `addToCart` would merge into for this
@@ -23,7 +23,7 @@ export function findMergingCartLineIndex(
 ): number {
   const defaultVariantSelection =
     product.has_variants && !options?.variantId
-      ? resolveDefaultVariantSelection(product)
+      ? resolveCartDefaultVariantSelection(product)
       : null;
   const normalizedOptions =
     defaultVariantSelection && !options?.variantId

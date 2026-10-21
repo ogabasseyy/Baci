@@ -107,64 +107,52 @@ export function createDeferredTemplateHome(
   return DeferredTemplateHome;
 }
 
-export const ElectronicsTemplateHome = createDeferredTemplateHome(async () => {
-  const { GadgetDefaultTemplate } = await import(
-    '@/components/storefront/templates/gadget-default-template'
-  );
-  return GadgetDefaultTemplate as ComponentType<TemplatePageProps>;
-});
+function createRegistryTemplateHome(
+  loaderKey: keyof typeof import('./registry-client-home-loaders')
+): ComponentType<TemplatePageProps> {
+  return createDeferredTemplateHome(async () => {
+    const loaders = await import('./registry-client-home-loaders');
+    return loaders[loaderKey]();
+  });
+}
 
-export const FashionTemplateHome = createDeferredTemplateHome(async () => {
-  const { PremiumDefaultTemplate } = await import(
-    '@/components/storefront/templates/premium-default'
-  );
-  return PremiumDefaultTemplate as ComponentType<TemplatePageProps>;
-});
-
-export const HomeGoodsTemplateHome = createDeferredTemplateHome(async () => {
-  const { HomeGoodsHome } = await import('./home-goods');
-  return HomeGoodsHome;
-});
-
-export const FoodBeverageTemplateHome = createDeferredTemplateHome(async () => {
-  const { FoodBeverageHome } = await import('./food-beverage');
-  return FoodBeverageHome;
-});
-
-export const HealthBeautyTemplateHome = createDeferredTemplateHome(async () => {
-  const { BeautyHome } = await import('./beauty');
-  return BeautyHome;
-});
-
-export const HairExtensionsTemplateHome = createDeferredTemplateHome(
-  async () => {
-    const { HairExtensionsHome } = await import('./hair-extensions');
-    return HairExtensionsHome;
-  }
+export const ElectronicsTemplateHome = createRegistryTemplateHome(
+  'loadElectronicsTemplateHome'
 );
 
-export const PharmaceuticalsTemplateHome = createDeferredTemplateHome(
-  async () => {
-    const { PharmaceuticalHome } = await import('./pharmaceutical');
-    return PharmaceuticalHome;
-  }
+export const FashionTemplateHome = createRegistryTemplateHome(
+  'loadFashionTemplateHome'
 );
 
-export const GadgetUniverseTemplateHome = createDeferredTemplateHome(
-  async () => {
-    const { GadgetUniverseTemplate } = await import(
-      '@/components/storefront/templates/gadget-universe'
-    );
-    return GadgetUniverseTemplate as unknown as ComponentType<TemplatePageProps>;
-  }
+export const HomeGoodsTemplateHome = createRegistryTemplateHome(
+  'loadHomeGoodsTemplateHome'
 );
 
-export const GadgetsProTemplateHome = createDeferredTemplateHome(async () => {
-  const { Home } = await import('@/components/storefront/new-template/home');
-  return Home as ComponentType<TemplatePageProps>;
-});
+export const FoodBeverageTemplateHome = createRegistryTemplateHome(
+  'loadFoodBeverageTemplateHome'
+);
 
-export const HandmadeTemplateHome = createDeferredTemplateHome(async () => {
-  const { HandmadeHome } = await import('./artisan');
-  return HandmadeHome;
-});
+export const HealthBeautyTemplateHome = createRegistryTemplateHome(
+  'loadHealthBeautyTemplateHome'
+);
+
+export const HairExtensionsTemplateHome = createRegistryTemplateHome(
+  'loadHairExtensionsTemplateHome'
+);
+
+export const PharmaceuticalsTemplateHome = createRegistryTemplateHome(
+  'loadPharmaceuticalsTemplateHome'
+);
+
+export const GadgetUniverseTemplateHome = createRegistryTemplateHome(
+  'loadGadgetUniverseTemplateHome'
+);
+
+export const GadgetsProTemplateHome = createRegistryTemplateHome(
+  'loadGadgetsProTemplateHome'
+);
+
+export const HandmadeTemplateHome = createRegistryTemplateHome(
+  'loadHandmadeTemplateHome'
+);
+

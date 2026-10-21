@@ -411,16 +411,6 @@ export function StorefrontPageSkeleton({ className }: { className?: string }) {
     >
       <StorefrontHeaderSkeleton />
       <StorefrontHeroSkeleton />
-      <div className="container mx-auto px-4 py-12 relative overflow-hidden">
-        {/* Shimmer for the grid section */}
-        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-linear-to-r from-transparent via-foreground/5 to-transparent z-10 pointer-events-none" />
-
-        <div className="text-center mb-8">
-          <div className="h-8 w-48 mx-auto mb-2 bg-muted rounded" />
-          <div className="h-4 w-64 mx-auto bg-muted rounded" />
-        </div>
-        <ProductGridSkeleton count={8} columns={4} />
-      </div>
     </div>
   );
 }

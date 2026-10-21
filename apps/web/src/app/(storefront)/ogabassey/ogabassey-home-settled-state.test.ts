@@ -3,6 +3,11 @@ import { createElement, isValidElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requestCacheStorage = new AsyncLocalStorage<Map<unknown, unknown>>();
+(
+  globalThis as typeof globalThis & {
+    AsyncLocalStorage?: typeof AsyncLocalStorage;
+  }
+).AsyncLocalStorage ??= AsyncLocalStorage;
 
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
@@ -206,5 +211,108 @@ describe('ogabassey-home-settled-state', () => {
     expect(staticContentElement).not.toBeInstanceOf(Promise);
     expect(isValidElement(pageContentElement)).toBe(true);
     expect(pageContentElement).not.toBeInstanceOf(Promise);
+  });
+
+  it('reuses Phase 1 published canonical state in Phase 2 within the same workAsyncStorage store without leaking across distinct workStores', async () => {
+    const { workAsyncStorage } = await import(
+      'next/dist/server/app-render/work-async-storage.external'
+    );
+    const {
+      getSettledCanonicalOgabasseyHomeStateBox,
+      hydrateSettledCanonicalOgabasseyHomeStateFromParams,
+      peekSettledCanonicalOgabasseyHomeState,
+      recordSettledCanonicalOgabasseyHomeState,
+      settleCanonicalOgabasseyHomeState,
+    } = await import('./ogabassey-home-settled-state');
+
+    const canonicalWorkStore = {} as never;
+    const otherWorkStore = {} as never;
+    const phase1Params = Promise.resolve({ slug: 'ogabassey.com' });
+    const phase2Params = Promise.resolve({ slug: 'ogabassey.com' });
+
+    let heroShellCalls = 0;
+    let merchantCalls = 0;
+    const resolveHeroShell = () => {
+      heroShellCalls += 1;
+      return Promise.resolve(null);
+    };
+    const getMerchant = () => {
+      merchantCalls += 1;
+      return Promise.resolve(null);
+    };
+
+    const phase2Settled = await workAsyncStorage.run(
+      canonicalWorkStore,
+      async () => {
+        await requestCacheStorage.run(new Map(), async () => {
+          recordSettledCanonicalOgabasseyHomeState({
+            heroShell: {
+              status: 'published',
+              merchantId: 'merchant-ogabassey',
+              slides: [],
+            },
+            merchant: {
+              id: 'merchant-ogabassey',
+              is_published: true,
+            } as never,
+            params: phase1Params,
+            slug: 'ogabassey.com',
+          });
+        });
+
+        return requestCacheStorage.run(new Map(), async () => {
+          const stateBox =
+            getSettledCanonicalOgabasseyHomeStateBox(phase2Params);
+          expect(
+            hydrateSettledCanonicalOgabasseyHomeStateFromParams(phase2Params)
+              ?.merchant?.id
+          ).toBe('merchant-ogabassey');
+          return settleCanonicalOgabasseyHomeState({
+            getMerchant,
+            params: phase2Params,
+            resolveHeroShell,
+            slug: 'ogabassey.com',
+            stateBox,
+          });
+        });
+      }
+    );
+
+    const otherStoreState = await workAsyncStorage.run(
+      otherWorkStore,
+      async () =>
+        requestCacheStorage.run(new Map(), async () => ({
+          hydrated: hydrateSettledCanonicalOgabasseyHomeStateFromParams(
+            Promise.resolve({ slug: 'other-store' })
+          ),
+          peeked: peekSettledCanonicalOgabasseyHomeState(),
+        }))
+    );
+
+    expect(heroShellCalls).toBe(0);
+    expect(merchantCalls).toBe(0);
+    expect(phase2Settled.heroShellSettled).toBe(true);
+    expect(phase2Settled.merchant?.id).toBe('merchant-ogabassey');
+    expect(otherStoreState.hydrated).toBeNull();
+    expect(otherStoreState.peeked).toBeNull();
+  });
+
+  it('does not mark failed or unpublished lookups as settled', async () => {
+    const {
+      hydrateSettledCanonicalOgabasseyHomeStateFromParams,
+      peekSettledCanonicalOgabasseyHomeState,
+      recordSettledCanonicalOgabasseyHomeState,
+    } = await import('./ogabassey-home-settled-state');
+
+    const params = Promise.resolve({ slug: 'ogabassey.com' });
+    recordSettledCanonicalOgabasseyHomeState({
+      heroShell: null,
+      merchant: null,
+      params,
+      slug: 'ogabassey.com',
+    });
+
+    expect(peekSettledCanonicalOgabasseyHomeState()).toBeNull();
+    expect(hydrateSettledCanonicalOgabasseyHomeStateFromParams(params)).toBeNull();
   });
 });

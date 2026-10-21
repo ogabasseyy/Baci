@@ -15,16 +15,6 @@ vi.mock('next/link', () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock('@/components/themed/themed-button', () => ({
-  ThemedButton: ({
-    asChild,
-    children,
-  }: {
-    asChild?: boolean;
-    children: React.ReactNode;
-  }) => (asChild ? children : <button type="button">{children}</button>),
-}));
-
 vi.mock('@/hooks/merchant/use-merchant', () => ({
   useMerchantSafe: () => mockUseMerchantSafe(),
 }));

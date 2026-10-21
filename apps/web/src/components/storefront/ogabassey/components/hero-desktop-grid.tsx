@@ -1,5 +1,6 @@
 import { getImageProps } from 'next/image';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import { asRoute } from '@/lib/routes';
@@ -9,7 +10,7 @@ import type { LaunchProductSlide } from './LaunchCarousel';
 interface HeroDesktopGridProps {
   /** Launch products, newest-first with pins applied. slides[0] is the big
    *  hero (its image is the eager desktop LCP element); slides[1]/[2] fill the
-   *  two side cards. All deep-link to their PDP. */
+   *  two side cards. All deep-links to their PDP. */
   slides: LaunchProductSlide[];
 }
 
@@ -90,29 +91,41 @@ function HeroBigCard({
   slide: LaunchProductSlide;
 }) {
   return (
-    <Link
-      href={asRoute(slide.href)}
-      prefetch={false}
-      aria-label={`${slide.name} — ${slide.ctaLabel}`}
-      className={`group relative ${hasSideCards ? 'lg:col-span-3' : 'lg:col-span-5'} h-[400px] lg:h-full overflow-hidden rounded-2xl ring-1 ring-store-border/70 shadow-lg hover:shadow-xl transition-all duration-300 grid grid-cols-5 ${CARD_SURFACE}`}
-    >
-      <div className="col-span-3 flex flex-col justify-center gap-3 px-10 lg:px-16 py-8">
-        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-store-primary">
-          Just launched
-        </span>
-        <h2 className="line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
-          {slide.name}
-        </h2>
-        <p className="text-xl font-semibold text-store-secondary-text">{slide.priceLabel}</p>
-        <div className="mt-1 h-1.5 w-16 rounded-full bg-store-primary" />
-        <span className="mt-3 inline-flex w-fit items-center rounded-full bg-store-primary px-7 py-3 text-base font-bold text-store-on-primary shadow-sm transition-all group-hover:scale-105 group-hover:shadow-lg group-active:scale-95">
-          {slide.ctaLabel}
-        </span>
-      </div>
-      <div className="relative col-span-2">
-        <HeroBigImage alt={slide.imageAlt} src={slide.imageUrl} />
-      </div>
-    </Link>
+    <Suspense fallback={null}>
+      <Link
+        href={asRoute(slide.href)}
+        prefetch={false}
+        aria-label={`${slide.name} — ${slide.ctaLabel}`}
+        className={`group relative ${hasSideCards ? 'lg:col-span-3' : 'lg:col-span-5'} h-[400px] lg:h-full overflow-hidden rounded-2xl ring-1 ring-store-border/70 shadow-lg hover:shadow-xl transition-all duration-300 grid grid-cols-5 ${CARD_SURFACE}`}
+      >
+        <Suspense fallback={null}>
+          <div className="col-span-3 flex flex-col justify-center gap-3 px-10 lg:px-16 py-8">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-store-primary">
+              Just launched
+            </span>
+            <Suspense fallback={null}>
+              <h2 className="line-clamp-3 text-4xl font-bold leading-tight text-store-secondary-text lg:text-5xl">
+                {slide.name}
+              </h2>
+              <p className="text-xl font-semibold text-store-secondary-text">
+                {slide.priceLabel}
+              </p>
+            </Suspense>
+            <div className="mt-1 h-1.5 w-16 rounded-full bg-store-primary" />
+            <Suspense fallback={null}>
+              <span className="mt-3 inline-flex w-fit items-center rounded-full bg-store-primary px-7 py-3 text-base font-bold text-store-on-primary shadow-sm transition-all group-hover:scale-105 group-hover:shadow-lg group-active:scale-95">
+                {slide.ctaLabel}
+              </span>
+            </Suspense>
+          </div>
+        </Suspense>
+        <div className="relative col-span-2">
+          <Suspense fallback={null}>
+            <HeroBigImage alt={slide.imageAlt} src={slide.imageUrl} />
+          </Suspense>
+        </div>
+      </Link>
+    </Suspense>
   );
 }
 
@@ -189,6 +202,23 @@ function HeroSideCard({ slide }: { slide: LaunchProductSlide }) {
   );
 }
 
+function HeroDesktopSideCardsReserve({ count }: { count: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="hidden lg:flex flex-col gap-4 h-full lg:col-span-2"
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          // biome-ignore lint/suspicious/noArrayIndexKey: static reserve slots
+          key={index}
+          className={`flex-1 rounded-2xl shadow-lg ring-1 ring-store-border/70 ${CARD_SURFACE}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
   const [big, ...rest] = slides;
   const sideCards = rest.slice(0, 2);
@@ -198,21 +228,30 @@ export function HeroDesktopGrid({ slides }: HeroDesktopGridProps) {
   }
 
   return (
-    <div
-      className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2"
-      aria-label="Featured products"
-      data-ogabassey-desktop-hero="true"
-      role="region"
-    >
-      <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
+    <Suspense fallback={null}>
+      <div
+        className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2"
+        aria-label="Featured products"
+        data-ogabassey-desktop-hero="true"
+        role="region"
+      >
+        <HeroBigCard hasSideCards={sideCards.length > 0} slide={big} />
 
-      {sideCards.length > 0 ? (
-        <div className="flex flex-col gap-4 h-full lg:col-span-2">
-          {sideCards.map((slide) => (
-            <HeroSideCard key={slide.id} slide={slide} />
-          ))}
-        </div>
-      ) : null}
-    </div>
+        {sideCards.length > 0 ? (
+          <Suspense fallback={null}>
+            <Suspense
+              fallback={<HeroDesktopSideCardsReserve count={sideCards.length} />}
+            >
+              <div className="flex flex-col gap-4 h-full lg:col-span-2">
+                {sideCards.map((slide) => (
+                  <HeroSideCard key={slide.id} slide={slide} />
+                ))}
+              </div>
+            </Suspense>
+          </Suspense>
+        ) : null}
+      </div>
+    </Suspense>
   );
 }
+

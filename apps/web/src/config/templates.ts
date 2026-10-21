@@ -1,4 +1,7 @@
 import type { Data } from '@puckeditor/core';
+import { OGABASSEY_TEMPLATE_ID } from '@/config/ogabassey';
+
+export { OGABASSEY_TEMPLATE_ID } from '@/config/ogabassey';
 
 export interface Template {
   id: string;
@@ -7,8 +10,6 @@ export interface Template {
   isPremium: boolean;
   previewImage?: string;
 }
-
-export const OGABASSEY_TEMPLATE_ID = 'ogabassey';
 
 export const TEMPLATES: Template[] = [
   {

@@ -10,9 +10,16 @@ export function OgabasseyStaticHomePage({
 }: {
   pathPrefix: string;
 }) {
+  const settled = peekSettledCanonicalOgabasseyHomeState();
+  const isDevelopment = process.env.NODE_ENV === 'development';
   const settledHeroShell =
     pathPrefix === '' &&
-    peekSettledCanonicalOgabasseyHomeState()?.heroShellSettled === true;
+    settled?.heroShellSettled === true &&
+    settled.heroShell?.status === 'published' &&
+    settled.merchantSettled === true &&
+    Boolean(settled.merchant) &&
+    (settled.merchant?.is_published === true || isDevelopment) &&
+    settled.heroShell.merchantId === settled.merchant?.id;
 
   return (
     <>

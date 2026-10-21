@@ -1,5 +1,5 @@
-import { sanitizePostHogProperties } from '@/lib/posthog/client-config';
 import { sanitizePostHogExceptionText } from '@/lib/posthog/exception-text';
+import { sanitizePostHogProperties } from '@/lib/posthog/property-sanitizer';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

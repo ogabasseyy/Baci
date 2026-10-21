@@ -2,10 +2,10 @@
 
 import { isChunkRecoveryReloadPending } from '@/lib/chunk-load-recovery';
 import { detectChunkFailureFromValue } from '@/lib/chunk-load-recovery/chunk-failure-detection';
-import { sanitizePostHogProperties } from '@/lib/posthog/client-config';
 import { sanitizePostHogException } from '@/lib/posthog/exception-sanitizer';
 import { pendingClientExceptionQueue } from '@/lib/posthog/pending-client-exception-queue';
 import { loadPostHogBrowserSdk } from '@/lib/posthog/posthog-sdk-loader';
+import { sanitizePostHogProperties } from '@/lib/posthog/property-sanitizer';
 
 /**
  * Reports a handled browser exception to PostHog.

@@ -5,7 +5,6 @@ import {
   getChunkLoadRecoveryOutcome,
   useChunkLoadRecoveryBoundary,
 } from '@/hooks/use-chunk-load-recovery-boundary';
-import { captureClientException } from '@/lib/posthog/client-exceptions';
 
 interface BoundaryErrorReportOptions {
   routeSurface: string;
@@ -41,15 +40,22 @@ export function useBoundaryErrorReport(
     // the actual commit outcome is recorded; fall back to the render-time
     // peek only when no outcome exists (non-object throws).
     const reloadScheduled = getChunkLoadRecoveryOutcome(error) ?? recovering;
-
-    captureClientException(error, {
+    const reportProperties = {
       ...options.properties,
       // Reserved reporting fields always win over caller-supplied properties.
       digest: error.digest,
       recovery_action: reloadScheduled ? 'reload-scheduled' : 'none',
       route_surface: options.routeSurface,
-    });
+    };
+
     console.error(`${options.logLabel}:`, error);
+    void import('@/lib/posthog/client-exceptions')
+      .then(({ captureClientException }) => {
+        captureClientException(error, reportProperties);
+      })
+      .catch(() => {
+        // Best-effort telemetry must never fail inside an error boundary.
+      });
   }, [error, recovering, options]);
 
   return recovering;

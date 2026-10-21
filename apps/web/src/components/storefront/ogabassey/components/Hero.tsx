@@ -1,7 +1,9 @@
 import type React from 'react';
+import { Suspense } from 'react';
 import { GadgetPattern } from './GadgetPattern';
 import { HeroDesktopGrid } from './hero-desktop-grid';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
+import { HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS } from './hero-mobile-geometry';
 import { HeroUtilityPanelGate } from './hero-utility-panel-gate';
 import { HeroUtilityPanelStatic } from './hero-utility-panel-static';
 import type { LaunchProductSlide } from './LaunchCarousel';
@@ -22,6 +24,26 @@ interface HeroProps {
    *  each viewport is the eager LCP element. An empty, published feed keeps the
    *  same viewport geometry with the baked product-agnostic banner. */
   slides: LaunchProductSlide[];
+}
+
+function HeroUtilityPanelStreamReserve() {
+  return (
+    <div
+      aria-hidden="true"
+      className="w-full bg-white mt-3 md:mt-8 mb-6 border-y border-gray-100 md:py-5"
+      data-ogabassey-hero-utility="true"
+    >
+      <div className="md:hidden px-4">
+        <div
+          className={`${HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS} bg-white rounded-3xl shadow-sm border border-gray-100 p-2`}
+          data-ogabassey-mobile-utility-panel="true"
+        />
+      </div>
+      <Suspense fallback={null}>
+        <div className="hidden md:flex max-w-[1400px] mx-auto px-4 md:px-6 min-h-[92px] flex-row items-center justify-between" />
+      </Suspense>
+    </div>
+  );
 }
 
 function HeroEmptyGeometry() {
@@ -59,42 +81,56 @@ export const Hero: React.FC<HeroProps> = ({
     prioritizeMobileHeroImage ?? !omitDocumentHeading;
 
   return (
-    <div className="w-full bg-store-background relative" data-ogabassey-hero="true">
-      {omitDocumentHeading ? null : (
-        <h1 className="sr-only">
-          OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later in
-          Nigeria
-        </h1>
-      )}
-
-      {omitMobileCarousel ? null : (
-        <div
-          id="hero-bg-extension"
-          className="absolute top-0 left-0 right-0 h-28 overflow-hidden bg-[var(--ogabassey-shell-background)] z-0 md:hidden"
-          data-ogabassey-mobile-hero-bg-extension="true"
-          aria-hidden="true"
-        >
-          <GadgetPattern opacity={0.1} />
-        </div>
-      )}
-
-      <section className="max-w-[1400px] mx-auto px-4 md:px-6 relative z-10 pt-4 md:pt-6 flex flex-col">
-        {slides.length > 0 ? (
-          <>
-            {omitMobileCarousel ? null : (
-              <HeroMobileCarousel
-                prioritizeFirstImage={shouldPrioritizeMobileHeroImage}
-                slides={slides}
-              />
-            )}
-            <HeroDesktopGrid slides={slides} />
-          </>
-        ) : (
-          <HeroEmptyGeometry />
+    <Suspense fallback={null}>
+      <div
+        className="w-full bg-store-background relative"
+        data-ogabassey-hero="true"
+      >
+        {omitDocumentHeading ? null : (
+          <h1 className="sr-only">
+            OgaBassey - Buy Phones, Laptops, Gaming Consoles & More. Pay Later
+            in Nigeria
+          </h1>
         )}
-      </section>
 
-      <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />} />
-    </div>
+        {omitMobileCarousel ? null : (
+          <Suspense fallback={null}>
+            <div
+              id="hero-bg-extension"
+              className="absolute top-0 left-0 right-0 h-28 overflow-hidden bg-[var(--ogabassey-shell-background)] z-0 md:hidden"
+              data-ogabassey-mobile-hero-bg-extension="true"
+              aria-hidden="true"
+            >
+              <Suspense fallback={null}>
+                <GadgetPattern opacity={0.1} />
+              </Suspense>
+            </div>
+          </Suspense>
+        )}
+
+        <section className="max-w-[1400px] mx-auto px-4 md:px-6 relative z-10 pt-4 md:pt-6 flex flex-col">
+          {slides.length > 0 ? (
+            <>
+              {omitMobileCarousel ? null : (
+                <HeroMobileCarousel
+                  prioritizeFirstImage={shouldPrioritizeMobileHeroImage}
+                  slides={slides}
+                />
+              )}
+              <HeroDesktopGrid slides={slides} />
+            </>
+          ) : (
+            <HeroEmptyGeometry />
+          )}
+        </section>
+
+        <Suspense fallback={null}>
+          <Suspense fallback={<HeroUtilityPanelStreamReserve />}>
+            <HeroUtilityPanelGate fallback={<HeroUtilityPanelStatic />} />
+          </Suspense>
+        </Suspense>
+      </div>
+    </Suspense>
   );
 };
+

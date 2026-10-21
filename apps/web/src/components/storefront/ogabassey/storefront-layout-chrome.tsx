@@ -3,12 +3,6 @@
 import { usePathname } from 'next/navigation';
 import { lazy, Suspense } from 'react';
 import type { MerchantData } from '@/hooks/merchant/types';
-import {
-  buildMerchantTrustProfile,
-  hasPublishableReturnsPolicy,
-  hasPublishableShippingPolicy,
-  hasPublishableWarrantyPolicy,
-} from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { DeferredShellFeature } from './components/deferred-shell-feature';
 import { GoogleAdManager } from './components/GoogleAdManager';
 import { MobileFooter } from './components/MobileFooter';
@@ -58,21 +52,66 @@ function buildFooterHref(basePath: string, path: string): string {
 
 type SemanticFooterLink = [label: string, path: string];
 
+function hasNonEmptyTrimmedString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isNonNegativeInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function hasFallbackPublishableReturnsPolicy(
+  merchant: MerchantData | undefined
+): boolean {
+  const policy = merchant?.trust_profile?.return_policy;
+  return Boolean(
+    policy &&
+      (hasNonEmptyTrimmedString(policy.summary) ||
+        isNonNegativeInteger(policy.window_days) ||
+        Boolean(policy.return_method) ||
+        Boolean(policy.return_fees))
+  );
+}
+
+function hasFallbackPublishableShippingPolicy(
+  merchant: MerchantData | undefined
+): boolean {
+  const policy = merchant?.trust_profile?.shipping_policy;
+  return Boolean(
+    policy &&
+      (hasNonEmptyTrimmedString(policy.summary) ||
+        (Array.isArray(policy.regions) &&
+          policy.regions.some(
+            (region) => typeof region === 'string' && region.length > 0
+          )) ||
+        isNonNegativeInteger(policy.handling_days_min) ||
+        isNonNegativeInteger(policy.handling_days_max) ||
+        isNonNegativeInteger(policy.transit_days_min) ||
+        isNonNegativeInteger(policy.transit_days_max) ||
+        Boolean(policy.shipping_fee_type))
+  );
+}
+
+function hasFallbackPublishableWarrantyPolicy(
+  merchant: MerchantData | undefined
+): boolean {
+  return hasNonEmptyTrimmedString(
+    merchant?.trust_profile?.warranty_policy?.summary
+  );
+}
+
 function buildSemanticFooterFallbackLinks(
-  basePath: string,
+  _basePath: string,
   merchant: MerchantData | undefined
 ): SemanticFooterLink[] {
-  const trustProfile = merchant
-    ? buildMerchantTrustProfile(merchant, normalizeFooterBasePath(basePath))
-    : null;
   const policyLinks: SemanticFooterLink[] = [
-    trustProfile && hasPublishableReturnsPolicy(trustProfile)
+    hasFallbackPublishableReturnsPolicy(merchant)
       ? ['Returns', '/returns']
       : null,
-    trustProfile && hasPublishableShippingPolicy(trustProfile)
+    hasFallbackPublishableShippingPolicy(merchant)
       ? ['Shipping', '/shipping']
       : null,
-    trustProfile && hasPublishableWarrantyPolicy(trustProfile)
+    hasFallbackPublishableWarrantyPolicy(merchant)
       ? ['Warranty', '/warranty']
       : null,
   ].filter((link): link is SemanticFooterLink => link !== null);

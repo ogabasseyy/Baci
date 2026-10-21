@@ -33,7 +33,7 @@ vi.mock('./twitter-pixel', () => ({
 }));
 
 describe('AnalyticsPixelProvider', () => {
-  it('renders merchant analytics pixels from an explicit merchant payload', () => {
+  it('renders merchant analytics pixels from an explicit merchant payload', async () => {
     render(
       <AnalyticsPixelProvider
         merchant={{
@@ -44,14 +44,14 @@ describe('AnalyticsPixelProvider', () => {
       />
     );
 
-    expect(screen.getByText('G-STORE')).toBeInTheDocument();
+    expect(await screen.findByText('G-STORE')).toBeInTheDocument();
     expect(screen.getByText('fb-1')).toBeInTheDocument();
     expect(screen.getByText('tt-1')).toBeInTheDocument();
     expect(screen.queryByText('snap-1')).not.toBeInTheDocument();
     expect(screen.queryByText('tw-1')).not.toBeInTheDocument();
   });
 
-  it('renders all supported merchant pixel types when all IDs are configured', () => {
+  it('renders all supported merchant pixel types when all IDs are configured', async () => {
     render(
       <AnalyticsPixelProvider
         merchant={{
@@ -64,7 +64,7 @@ describe('AnalyticsPixelProvider', () => {
       />
     );
 
-    expect(screen.getByText('G-STORE')).toBeInTheDocument();
+    expect(await screen.findByText('G-STORE')).toBeInTheDocument();
     expect(screen.getByText('fb-1')).toBeInTheDocument();
     expect(screen.getByText('tt-1')).toBeInTheDocument();
     expect(screen.getByText('snap-1')).toBeInTheDocument();

@@ -2,13 +2,14 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
-import { setGoogleAdManagerPath } from './google-ad-bootstrap';
 
 export const GoogleAdManager = () => {
   const pathname = usePathname();
 
   useEffect(() => {
-    setGoogleAdManagerPath(pathname);
+    void import('./google-ad-bootstrap').then(({ setGoogleAdManagerPath }) => {
+      setGoogleAdManagerPath(pathname);
+    });
   }, [pathname]);
 
   return null;

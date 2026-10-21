@@ -26,7 +26,7 @@ describe('useBoundaryErrorReport', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
-  it('returns false and captures the exception with recovery_action "none" for a non-chunk error', () => {
+  it('returns false and captures the exception with recovery_action "none" for a non-chunk error', async () => {
     const error = new Error('boom');
 
     const { result } = renderHook(() =>
@@ -37,7 +37,9 @@ describe('useBoundaryErrorReport', () => {
     );
 
     expect(result.current).toBe(false);
-    expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    });
     expect(mockCaptureClientException).toHaveBeenCalledWith(
       error,
       expect.objectContaining({
@@ -47,7 +49,7 @@ describe('useBoundaryErrorReport', () => {
     );
   });
 
-  it('does not capture a second time when re-rendered with the same error instance', () => {
+  it('does not capture a second time when re-rendered with the same error instance', async () => {
     const error = new Error('boom');
 
     const { rerender } = renderHook(
@@ -59,14 +61,17 @@ describe('useBoundaryErrorReport', () => {
       { initialProps: { currentError: error } }
     );
 
-    expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    });
 
     rerender({ currentError: error });
+    await Promise.resolve();
 
     expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
   });
 
-  it('captures again when a new error instance is passed', () => {
+  it('captures again when a new error instance is passed', async () => {
     const firstError = new Error('first');
     const secondError = new Error('second');
 
@@ -79,18 +84,22 @@ describe('useBoundaryErrorReport', () => {
       { initialProps: { currentError: firstError } }
     );
 
-    expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledTimes(1);
+    });
 
     rerender({ currentError: secondError });
 
-    expect(mockCaptureClientException).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledTimes(2);
+    });
     expect(mockCaptureClientException).toHaveBeenLastCalledWith(
       secondError,
       expect.objectContaining({ recovery_action: 'none' })
     );
   });
 
-  it('returns true, attempts recovery, and captures with recovery_action "reload-scheduled" for a pending chunk error', () => {
+  it('returns true, attempts recovery, and captures with recovery_action "reload-scheduled" for a pending chunk error', async () => {
     mockIsChunkLoadRecoveryPending.mockReturnValue(true);
     mockAttemptChunkLoadRecoveryFromBoundary.mockReturnValue(true);
     const error = new Error('Loading chunk 4 failed');
@@ -106,16 +115,18 @@ describe('useBoundaryErrorReport', () => {
     expect(mockAttemptChunkLoadRecoveryFromBoundary).toHaveBeenCalledWith(
       error
     );
-    expect(mockCaptureClientException).toHaveBeenCalledWith(
-      error,
-      expect.objectContaining({
-        recovery_action: 'reload-scheduled',
-        route_surface: 'checkout',
-      })
-    );
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledWith(
+        error,
+        expect.objectContaining({
+          recovery_action: 'reload-scheduled',
+          route_surface: 'checkout',
+        })
+      );
+    });
   });
 
-  it('captures with recovery_action "none" when the recovery attempt is declined', () => {
+  it('captures with recovery_action "none" when the recovery attempt is declined', async () => {
     mockIsChunkLoadRecoveryPending.mockReturnValue(true);
     mockAttemptChunkLoadRecoveryFromBoundary.mockReturnValue(false);
     const error = new Error('Loading chunk 5 failed');
@@ -128,10 +139,12 @@ describe('useBoundaryErrorReport', () => {
     );
 
     expect(result.current).toBe(false);
-    expect(mockCaptureClientException).toHaveBeenCalledWith(
-      error,
-      expect.objectContaining({ recovery_action: 'none' })
-    );
+    await vi.waitFor(() => {
+      expect(mockCaptureClientException).toHaveBeenCalledWith(
+        error,
+        expect.objectContaining({ recovery_action: 'none' })
+      );
+    });
   });
 
   it('logs the error to the console with the provided logLabel', () => {

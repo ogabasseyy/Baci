@@ -3,7 +3,6 @@
 import { ArrowLeft, Home, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect } from 'react';
-import { ThemedButton } from '@/components/themed/themed-button';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { asRoute } from '@/lib/routes';
 
@@ -122,29 +121,20 @@ export function StorefrontNotFoundContent() {
           className="flex flex-col sm:flex-row gap-4 justify-center pt-4"
           data-storefront-not-found-actions="true"
         >
-          <ThemedButton
-            asChild
-            colorRole="primary"
-            size="lg"
-            className="w-full sm:w-auto"
+          <Link
+            href={storefrontHomeHref}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-store-primary px-8 text-sm font-medium text-store-primary-text transition-colors hover:bg-store-primary/90 sm:w-auto"
           >
-            <Link href={storefrontHomeHref}>
-              <Home className="mr-2 size-4" />
-              Back to {storeName}
-            </Link>
-          </ThemedButton>
-          <ThemedButton
-            asChild
-            colorRole="accent"
-            variant="outline"
-            size="lg"
-            className="w-full sm:w-auto"
+            <Home className="mr-2 size-4" />
+            Back to {storeName}
+          </Link>
+          <Link
+            href={storefrontProductsHref}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-store-accent bg-transparent px-8 text-sm font-medium text-store-accent transition-colors hover:bg-store-accent/10 sm:w-auto"
           >
-            <Link href={storefrontProductsHref}>
-              <Search className="mr-2 size-4" />
-              Browse Products
-            </Link>
-          </ThemedButton>
+            <Search className="mr-2 size-4" />
+            Browse Products
+          </Link>
         </div>
 
         <div className="pt-8 border-t border-store-border mt-8">

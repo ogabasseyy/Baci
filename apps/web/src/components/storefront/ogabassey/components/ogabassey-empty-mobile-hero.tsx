@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import {
   OGABASSEY_SHELL_BANNER_INLINE_HEIGHT,
   OGABASSEY_SHELL_BANNER_INLINE_SRC,
@@ -16,7 +15,7 @@ export function OgabasseyEmptyMobileHero() {
     <div className="mb-4" aria-hidden="true">
       <div className="relative rounded-2xl overflow-hidden shadow-2xl h-48 ring-1 ring-store-border/70 bg-store-secondary">
         <div className="absolute inset-0 bg-store-secondary">
-          <Image
+          <img
             alt=""
             aria-hidden="true"
             className="absolute inset-0 h-full w-full object-cover"
@@ -25,7 +24,6 @@ export function OgabasseyEmptyMobileHero() {
             height={OGABASSEY_SHELL_BANNER_INLINE_HEIGHT}
             loading="eager"
             src={OGABASSEY_SHELL_BANNER_INLINE_SRC}
-            unoptimized
             width={OGABASSEY_SHELL_BANNER_INLINE_WIDTH}
           />
           <div className="relative z-10 flex h-full items-center px-6 py-5">

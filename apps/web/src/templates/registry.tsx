@@ -724,33 +724,4 @@ export function getAllTemplateIds(): string[] {
   return Object.keys(TEMPLATE_REGISTRY);
 }
 
-/**
- * Get the recommended template ID for a specific business type
- */
-export function getTemplateIdByBusinessType(businessType?: string): string {
-  if (!businessType) return 'electronics';
-
-  const normalized = businessType.toUpperCase();
-
-  switch (normalized) {
-    case 'ELECTRONICS':
-    case 'GADGETS':
-      return 'electronics';
-    case 'FASHION':
-      return 'fashion';
-    case 'HOME_GOODS':
-      return 'home-goods';
-    case 'FOOD_BEVERAGE':
-      return 'food-beverage';
-    case 'HEALTH_BEAUTY':
-      return 'health-beauty';
-    case 'HAIR_EXTENSIONS':
-      return 'hair-extensions';
-    case 'PHARMACEUTICALS':
-      return 'pharmaceuticals';
-    case 'HANDMADE':
-      return 'handmade';
-    default:
-      return 'electronics';
-  }
-}
+export { getTemplateIdByBusinessType } from '@/lib/storefront/resolve-storefront-template';

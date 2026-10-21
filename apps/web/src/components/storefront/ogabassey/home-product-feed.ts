@@ -122,17 +122,21 @@ export function mapStorefrontProductsToOgabasseyProducts(
         ? { rating: product.rating }
         : {}),
       category: category?.name || product.category || 'General',
-      category_id: product.category_id,
-      categorySlug: category?.slug || product.category_slug,
+      ...(product.category_id ? { category_id: product.category_id } : {}),
+      ...(category?.slug || product.category_slug
+        ? { categorySlug: category?.slug || product.category_slug }
+        : {}),
       condition,
       // The deferred home-card chrome uses this flag to route mixed-condition
       // products to PDP option selection instead of ambiguous quick-add.
       ...(product.has_condition_offers
         ? { has_condition_offers: true }
         : {}),
-      brand: product.brand,
-      colors: product.colors,
-      storage: product.storage_options?.[0],
+      ...(product.brand ? { brand: product.brand } : {}),
+      ...(product.colors ? { colors: product.colors } : {}),
+      ...(product.storage_options?.[0]
+        ? { storage: product.storage_options[0] }
+        : {}),
       images,
     };
   });

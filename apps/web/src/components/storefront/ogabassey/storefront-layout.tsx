@@ -83,7 +83,6 @@ export function OgabasseyStorefrontLayout({
             <StorefrontChromeRuntime
               basePath={basePath}
               hideNavigation={hideNavigation}
-              merchant={merchant}
               section="header"
             />
           </Suspense>
@@ -95,7 +94,6 @@ export function OgabasseyStorefrontLayout({
             <StorefrontChromeRuntime
               basePath={basePath}
               hideNavigation={hideNavigation}
-              merchant={merchant}
               section="overlay"
             />
           </Suspense>

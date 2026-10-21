@@ -1,4 +1,3 @@
-import { fetchWithCsrf } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import type { CartItem } from './cart-types';
 
@@ -50,6 +49,7 @@ export const validateStorefrontCart = async (
     variantId: item.variantId,
   }));
 
+  const { fetchWithCsrf } = await import('@/lib/api-client');
   const response = await fetchWithCsrf('/api/cart/validate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

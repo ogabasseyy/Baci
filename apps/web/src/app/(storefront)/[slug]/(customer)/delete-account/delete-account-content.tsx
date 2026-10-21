@@ -2,11 +2,8 @@ import type { Route } from 'next';
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import type { ComponentType } from 'react';
 import { getMerchantByIdentifier } from '@/lib/cached-data';
-import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
-import { getTemplate, type TemplatePageProps } from '@/templates/registry';
 import { OgabasseyDeletionPolicy } from './ogabassey-deletion-policy';
 
 interface PageProps {
@@ -22,38 +19,6 @@ export async function DeleteAccountContent({ params }: PageProps) {
   }
   const isOgabassey = merchant.slug === 'ogabassey';
   const privacyHref = `${getStorefrontPathPrefix(await headers(), merchant)}/privacy`;
-
-  // Resolve template component server-side for SEO (H1 in SSR HTML)
-  const templateId = merchant.template_id;
-  let DeleteAccountComponent: ComponentType<TemplatePageProps> | null = null;
-  if (templateId && templateId !== 'default' && templateId !== 'puck') {
-    const template = getTemplate(templateId);
-    if (template) {
-      // try/catch only guards the async component load; the JSX itself is
-      // constructed outside so render errors flow to the route error boundary.
-      try {
-        const components = await template.getComponents();
-        DeleteAccountComponent = components.DeleteAccount ?? null;
-      } catch (error) {
-        console.error(
-          'Failed to load DeleteAccount component for template',
-          templateId,
-          ':',
-          error
-        );
-      }
-    }
-  }
-
-  if (DeleteAccountComponent) {
-    return (
-      <DeleteAccountComponent
-        merchant={toTemplateMerchantData(merchant)}
-        storeSlug={merchant.slug}
-        isPreview={false}
-      />
-    );
-  }
 
   // Fallback: inline content
   return (

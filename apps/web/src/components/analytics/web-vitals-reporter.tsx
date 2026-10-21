@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-import { reportPostHogWebVital } from '@/lib/posthog/report-web-vital';
-import { armWebVitalsPageHideFlush } from '@/lib/posthog/web-vitals-pagehide-flush';
-import { extractWebVitalAttribution } from './web-vital-attribution';
-import { buildWebVitalEndpointPayload } from './web-vital-endpoint-payload';
+import type { reportPostHogWebVital as ReportPostHogWebVitalFn } from '@/lib/posthog/report-web-vital';
+import type { extractWebVitalAttribution as ExtractWebVitalAttributionFn } from './web-vital-attribution';
+import type { buildWebVitalEndpointPayload as BuildWebVitalEndpointPayloadFn } from './web-vital-endpoint-payload';
 
 /**
  * Web Vitals Reporter Component
@@ -68,18 +67,27 @@ interface WebVitalMetric {
   attribution?: unknown;
 }
 
+interface WebVitalHandlers {
+  buildWebVitalEndpointPayload: typeof BuildWebVitalEndpointPayloadFn;
+  extractWebVitalAttribution: typeof ExtractWebVitalAttributionFn;
+  reportPostHogWebVital: typeof ReportPostHogWebVitalFn;
+}
+
 /**
  * Forwards a metric report to PostHog through the queue-aware reporter. This
  * never boots PostHog or pulls the posthog-js chunk onto the critical path:
  * before boot the payload is buffered (recovering early TTFB/FCP metrics that
  * would otherwise be dropped) and flushed once the browser client initializes.
  */
-function reportWebVitalToPostHog(metric: WebVitalMetric): void {
+function reportWebVitalToPostHog(
+  metric: WebVitalMetric,
+  handlers: WebVitalHandlers
+): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  reportPostHogWebVital({
+  handlers.reportPostHogWebVital({
     metric: metric.name,
     value: metric.value,
     // Stable per-metric-instance id: hidden→visible round-trips re-emit
@@ -89,14 +97,15 @@ function reportWebVitalToPostHog(metric: WebVitalMetric): void {
     rating: metric.rating,
     navigationType: metric.navigationType,
     pathname: globalThis.location?.pathname ?? '',
-    ...extractWebVitalAttribution(metric),
+    ...handlers.extractWebVitalAttribution(metric),
   });
 }
 
 function handleWebVitalMetric(
   metric: WebVitalMetric,
   debug: boolean,
-  endpoint: string | undefined
+  endpoint: string | undefined,
+  handlers: WebVitalHandlers
 ): void {
   // Debug logging
   if (debug) {
@@ -133,16 +142,16 @@ function handleWebVitalMetric(
       metric_rating: metric.rating,
       navigation_type: metric.navigationType,
       non_interaction: true,
-      ...extractWebVitalAttribution(metric),
+      ...handlers.extractWebVitalAttribution(metric),
     });
   }
 
   // Send to PostHog. Buffered before boot, flushed after; never boots it.
-  reportWebVitalToPostHog(metric);
+  reportWebVitalToPostHog(metric, handlers);
 
   // Send to custom endpoint if provided
   if (endpoint) {
-    const body = JSON.stringify(buildWebVitalEndpointPayload(metric));
+    const body = JSON.stringify(handlers.buildWebVitalEndpointPayload(metric));
 
     if (navigator.sendBeacon) {
       navigator.sendBeacon(endpoint, body);
@@ -164,14 +173,29 @@ async function registerWebVitals(
   endpoint: string | undefined
 ): Promise<void> {
   try {
-    // Dynamic import to avoid Turbopack bundling issues
-    // Attribution build: emits metric.attribution (LCP element, CLS shift
-    // target, INP target) so the FIELD reveals WHICH node is slow/shifting.
-    const { onCLS, onFCP, onINP, onLCP, onTTFB } = await import(
-      'web-vitals/attribution'
-    );
+    // Dynamic import to avoid Turbopack bundling issues and keep web-vitals
+    // attribution + PostHog flush helpers off the critical head chunk.
+    const [
+      { onCLS, onFCP, onINP, onLCP, onTTFB },
+      { armWebVitalsPageHideFlush },
+      { reportPostHogWebVital },
+      { extractWebVitalAttribution },
+      { buildWebVitalEndpointPayload },
+    ] = await Promise.all([
+      import('web-vitals/attribution'),
+      import('@/lib/posthog/web-vitals-pagehide-flush'),
+      import('@/lib/posthog/report-web-vital'),
+      import('./web-vital-attribution'),
+      import('./web-vital-endpoint-payload'),
+    ]);
+    armWebVitalsPageHideFlush();
+    const handlers: WebVitalHandlers = {
+      buildWebVitalEndpointPayload,
+      extractWebVitalAttribution,
+      reportPostHogWebVital,
+    };
     const handleMetric = (metric: WebVitalMetric) =>
-      handleWebVitalMetric(metric, debug, endpoint);
+      handleWebVitalMetric(metric, debug, endpoint, handlers);
 
     // Register all web vitals observers
     onCLS(handleMetric);
@@ -193,9 +217,6 @@ export function WebVitalsReporter({
   endpoint,
 }: WebVitalsReporterProps = {}) {
   useEffect(() => {
-    // Beacon queued vitals on page-hide so bounce-before-PostHog-boot
-    // sessions (the slow cohort) stop dropping their metrics.
-    armWebVitalsPageHideFlush();
     void registerWebVitals(debug, endpoint);
   }, [debug, endpoint]);
 

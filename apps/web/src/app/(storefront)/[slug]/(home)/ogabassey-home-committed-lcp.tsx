@@ -1,10 +1,20 @@
 import { Suspense } from 'react';
 import { OgabasseyHomeCriticalShell } from '@/app/(storefront)/ogabassey/ogabassey-home-critical-shell';
+import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
 import {
+  getSettledCanonicalOgabasseyHomeStateBox,
   hydrateSettledCanonicalOgabasseyHomeStateFromParams,
+  isStorefrontPageParams,
+  markDeferredCommittedLcpToRoute,
   peekSettledCanonicalOgabasseyHomeState,
+  type SettledCanonicalOgabasseyHomeState,
+  settleCanonicalOgabasseyHomeState,
 } from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
-import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
+import { getRequestScopedMerchant } from '@/lib/cached-data';
+import {
+  isOgabasseyCanonicalDomainSlug,
+  isOgabasseyHomeIdentifier,
+} from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedSlideZeroPreload } from './ogabassey-home-committed-slide-zero-preload';
 
 function renderOgabasseyHomeCommittedLcpForSlug(slug: string) {
@@ -32,9 +42,21 @@ function renderOgabasseyHomeCommittedLcpForSlug(slug: string) {
 }
 
 async function renderOgabasseyHomeCommittedLcpAsync(
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>,
+  stateBox: SettledCanonicalOgabasseyHomeState
 ) {
   const { slug } = await params;
+  if (isStorefrontPageParams(params) && isOgabasseyCanonicalDomainSlug(slug)) {
+    await settleCanonicalOgabasseyHomeState({
+      getMerchant: getRequestScopedMerchant,
+      params,
+      resolveHeroShell: resolveOgabasseyHomeHeroShell,
+      slug,
+      stateBox,
+    });
+    markDeferredCommittedLcpToRoute(params);
+    return null;
+  }
   return renderOgabasseyHomeCommittedLcpForSlug(slug);
 }
 
@@ -52,10 +74,18 @@ export function OgabasseyHomeCommittedLcp({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  const stateBox = getSettledCanonicalOgabasseyHomeStateBox(params);
   const settled = hydrateSettledCanonicalOgabasseyHomeStateFromParams(params);
   if (settled?.slug) {
+    if (
+      isStorefrontPageParams(params) &&
+      isOgabasseyCanonicalDomainSlug(settled.slug)
+    ) {
+      markDeferredCommittedLcpToRoute(params);
+      return null;
+    }
     return renderOgabasseyHomeCommittedLcpForSlug(settled.slug);
   }
 
-  return renderOgabasseyHomeCommittedLcpAsync(params);
+  return renderOgabasseyHomeCommittedLcpAsync(params, stateBox);
 }

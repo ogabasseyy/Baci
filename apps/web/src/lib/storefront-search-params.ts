@@ -1,4 +1,4 @@
-import { sanitizeSearchQuery } from './sanitize-core';
+const SEARCH_QUERY_SANITIZATION_REGEX = /[<>'"`;\\,()|]/g;
 
 /**
  * Upper bound for the storefront `/search` page parameter. Keeps result
@@ -28,5 +28,8 @@ export function parseStorefrontSearchQueryParam(
     return '';
   }
 
-  return sanitizeSearchQuery(queryParam);
+  return queryParam
+    .replace(SEARCH_QUERY_SANITIZATION_REGEX, '')
+    .trim()
+    .substring(0, STOREFRONT_SEARCH_MAX_QUERY_LENGTH);
 }

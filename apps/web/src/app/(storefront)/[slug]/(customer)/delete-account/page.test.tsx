@@ -19,10 +19,6 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-vi.mock('@/templates/registry', () => ({
-  getTemplate: vi.fn(() => null),
-}));
-
 vi.mock('next/link', () => ({
   default: vi.fn(
     ({ children, href }: { children: React.ReactNode; href: string }) => (

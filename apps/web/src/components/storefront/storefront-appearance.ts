@@ -1,5 +1,4 @@
-import { OGABASSEY_DOMAIN } from '@/config/ogabassey';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+import { OGABASSEY_DOMAIN, OGABASSEY_TEMPLATE_ID } from '@/config/ogabassey';
 
 export type StorefrontAppearanceMode = 'light' | 'system';
 export type StorefrontAppearanceVariant = 'default' | 'ogabassey';

@@ -1,3 +1,4 @@
+import { workAsyncStorage } from 'next/dist/server/app-render/work-async-storage.external';
 import { cache } from 'react';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import type { OgabasseyHomeHeroShellResult } from './ogabassey-home-hero-shell-data';
@@ -14,7 +15,7 @@ export interface SettledCanonicalOgabasseyHomeState {
   slug: string | null;
 }
 
-function createEmptySettledState(): SettledCanonicalOgabasseyHomeState {
+function createSettledStateBox(): SettledCanonicalOgabasseyHomeState {
   return {
     heroShell: null,
     heroShellSettled: false,
@@ -24,12 +25,20 @@ function createEmptySettledState(): SettledCanonicalOgabasseyHomeState {
   };
 }
 
-const getRequestSettledStateBox = cache(createEmptySettledState);
+const getReactCacheSettledStateBox = cache(createSettledStateBox);
+
+const settledBoxByWorkStore = new WeakMap<
+  object,
+  SettledCanonicalOgabasseyHomeState
+>();
 
 const settledBoxesByParams = new WeakMap<
   object,
   Set<SettledCanonicalOgabasseyHomeState>
 >();
+
+const storefrontPageParams = new WeakSet<object>();
+const deferredCommittedLcpParams = new WeakSet<object>();
 
 function copySettledState(
   source: SettledCanonicalOgabasseyHomeState,
@@ -40,6 +49,67 @@ function copySettledState(
   target.merchant = source.merchant;
   target.merchantSettled = source.merchantSettled;
   target.slug = source.slug;
+}
+
+function getRequestSettledStateBox(): SettledCanonicalOgabasseyHomeState {
+  const workStore = workAsyncStorage.getStore();
+  if (workStore && typeof workStore === 'object') {
+    let workBox = settledBoxByWorkStore.get(workStore);
+    if (!workBox) {
+      workBox = createSettledStateBox();
+      settledBoxByWorkStore.set(workStore, workBox);
+    }
+    const reactBox = getReactCacheSettledStateBox();
+    if (
+      !workBox.heroShellSettled &&
+      !workBox.merchantSettled &&
+      (reactBox.heroShellSettled || reactBox.merchantSettled)
+    ) {
+      copySettledState(reactBox, workBox);
+    } else if (
+      (workBox.heroShellSettled || workBox.merchantSettled) &&
+      reactBox !== workBox
+    ) {
+      copySettledState(workBox, reactBox);
+    }
+    return workBox;
+  }
+
+  return getReactCacheSettledStateBox();
+}
+
+export function markStorefrontPageParams(
+  params?: Promise<{ slug: string }> | null
+): void {
+  if (params && typeof params === 'object') {
+    storefrontPageParams.add(params);
+  }
+}
+
+export function isStorefrontPageParams(
+  params?: Promise<{ slug: string }> | null
+): boolean {
+  return Boolean(
+    params && typeof params === 'object' && storefrontPageParams.has(params)
+  );
+}
+
+export function markDeferredCommittedLcpToRoute(
+  params?: Promise<{ slug: string }> | null
+): void {
+  if (params && typeof params === 'object') {
+    deferredCommittedLcpParams.add(params);
+  }
+}
+
+export function isDeferredCommittedLcpToRoute(
+  params?: Promise<{ slug: string }> | null
+): boolean {
+  return Boolean(
+    params &&
+      typeof params === 'object' &&
+      deferredCommittedLcpParams.has(params)
+  );
 }
 
 export function getSettledCanonicalOgabasseyHomeStateBox(
@@ -78,13 +148,22 @@ export function recordSettledCanonicalOgabasseyHomeState({
 }): SettledCanonicalOgabasseyHomeState {
   const requestBox = getRequestSettledStateBox();
   const box = providedBox ?? requestBox;
-  box.heroShell = heroShell;
-  box.heroShellSettled = true;
-  box.merchant = merchant ?? null;
-  box.merchantSettled = merchant !== undefined;
-  box.slug = slug;
+  const isPublishedCanonicalState =
+    Boolean(merchant) &&
+    merchant?.is_published === true &&
+    heroShell?.status === 'published' &&
+    heroShell.merchantId === merchant.id;
+  box.heroShell = isPublishedCanonicalState ? heroShell : null;
+  box.heroShellSettled = isPublishedCanonicalState;
+  box.merchant = isPublishedCanonicalState ? (merchant ?? null) : null;
+  box.merchantSettled = isPublishedCanonicalState;
+  box.slug = isPublishedCanonicalState ? slug : null;
   if (requestBox !== box) {
     copySettledState(box, requestBox);
+  }
+  const reactBox = getReactCacheSettledStateBox();
+  if (reactBox !== box) {
+    copySettledState(box, reactBox);
   }
 
   if (params && typeof params === 'object') {
@@ -95,6 +174,7 @@ export function recordSettledCanonicalOgabasseyHomeState({
     }
     boxes.add(box);
     boxes.add(requestBox);
+    boxes.add(reactBox);
     for (const boundBox of boxes) {
       if (boundBox !== box) {
         copySettledState(box, boundBox);
@@ -103,6 +183,41 @@ export function recordSettledCanonicalOgabasseyHomeState({
   }
 
   return box;
+}
+
+export async function settleCanonicalOgabasseyHomeState({
+  getMerchant,
+  params,
+  resolveHeroShell,
+  slug,
+  stateBox,
+}: {
+  getMerchant: (slug: string) => Promise<CanonicalOgabasseyHomeMerchant>;
+  params: Promise<{ slug: string }>;
+  resolveHeroShell: () => Promise<OgabasseyHomeHeroShellResult | null>;
+  slug: string;
+  stateBox: SettledCanonicalOgabasseyHomeState;
+}): Promise<SettledCanonicalOgabasseyHomeState> {
+  if (
+    stateBox.slug === slug &&
+    stateBox.heroShellSettled &&
+    stateBox.merchantSettled
+  ) {
+    return stateBox;
+  }
+
+  const [resolvedMerchant, heroShell] = await Promise.all([
+    Promise.resolve(getMerchant(slug)).catch(() => null),
+    Promise.resolve(resolveHeroShell()).catch(() => null),
+  ]);
+
+  return recordSettledCanonicalOgabasseyHomeState({
+    box: stateBox,
+    heroShell,
+    merchant: resolvedMerchant,
+    params,
+    slug,
+  });
 }
 
 export function hydrateSettledCanonicalOgabasseyHomeStateFromParams(

@@ -2,7 +2,7 @@
 export interface AdPlacement {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   width: number;
   height: number;
   mobileWidth: number;
@@ -28,7 +28,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
     // the GAM unit was created as `Header_Leaderboard` and already has
     // impressions, so the app aligns to it rather than recreating the unit.
     name: 'Header_Leaderboard',
-    description: 'High visibility top-of-page banner.',
     width: 728,
     height: 90,
     mobileWidth: 320,
@@ -42,7 +41,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   HOMEPAGE_STRIP: {
     id: 'div-gpt-ad-home-strip',
     name: 'homepage_large_strip',
-    description: 'Wide banner separating hero content from products.',
     width: 970,
     height: 90,
     mobileWidth: 320,
@@ -57,7 +55,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   SIDEBAR_HALF_PAGE: {
     id: 'div-gpt-ad-sidebar-large',
     name: 'sidebar_half_page',
-    description: 'Large vertical ad for product detail sidebars.',
     width: 300,
     height: 600,
     mobileWidth: 300,
@@ -72,7 +69,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   PRODUCT_GRID_MPU: {
     id: 'div-gpt-ad-grid-mpu',
     name: 'in_feed_mpu',
-    description: 'Square ad inserted naturally into product grids.',
     width: 300,
     height: 250,
     mobileWidth: 300,
@@ -86,7 +82,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   CONTENT_BREAK: {
     id: 'div-gpt-ad-content',
     name: 'content_section_break',
-    description: 'Horizontal divider before deep content areas.',
     width: 728,
     height: 90,
     mobileWidth: 320,
@@ -100,7 +95,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   CART_MPU: {
     id: 'div-gpt-ad-cart',
     name: 'cart_drawer_mpu',
-    description: 'Square ad visible during checkout flow.',
     width: 300,
     height: 250,
     mobileWidth: 300,
@@ -114,7 +108,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   QUIZ_QUESTION_MPU: {
     id: 'div-gpt-ad-quiz-question',
     name: 'quiz_question_mpu',
-    description: 'Question-level ad refreshed as shoppers advance in quizzes.',
     width: 300,
     height: 250,
     mobileWidth: 300,
@@ -128,7 +121,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   FOOTER_BANNER: {
     id: 'div-gpt-ad-footer',
     name: 'footer_banner',
-    description: 'Large footer placement for ending the user journey.',
     width: 970,
     height: 250,
     mobileWidth: 320,
@@ -142,7 +134,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   ORDER_SUCCESS_BANNER: {
     id: 'div-gpt-ad-success',
     name: 'order_success_banner',
-    description: 'Post-purchase placement for cross-selling or branding.',
     width: 728,
     height: 90,
     mobileWidth: 320,
@@ -156,7 +147,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   BLOG_SIDEBAR: {
     id: 'div-gpt-ad-blog-sidebar',
     name: 'blog_sidebar_mpu',
-    description: 'Square ad in the blog sidebar or between grid items.',
     width: 300,
     height: 250,
     mobileWidth: 300,
@@ -170,7 +160,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
   NATIVE_PRODUCT_CARD: {
     id: 'div-gpt-native-product',
     name: 'native_product_card',
-    description: 'Product-style native ad for seamless grid integration.',
     width: 300,
     height: 400,
     mobileWidth: 150,
@@ -186,7 +175,6 @@ export const AD_CONFIG: Record<string, AdPlacement> = {
     id: 'div-gpt-ad-category-carousel',
     // Must exactly match the Google Ad Manager ad unit code (case-sensitive).
     name: 'CATEGORY_CAROUSEL_BANNER',
-    description: 'Banner ad inside the category recently-added carousel.',
     width: 728,
     height: 90,
     mobileWidth: 320,

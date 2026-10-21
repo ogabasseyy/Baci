@@ -1,5 +1,6 @@
 import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 
+export const OGABASSEY_TEMPLATE_ID = 'ogabassey';
 export const OGABASSEY_DOMAIN = 'ogabassey.com';
 export const OGABASSEY_URL = `https://${OGABASSEY_DOMAIN}`;
 export const OGABASSEY_HOME_URL = `${OGABASSEY_URL}/`;

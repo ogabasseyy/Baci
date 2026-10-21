@@ -6,9 +6,14 @@ import {
   getPostHogUiHost,
   type PostHogEnv,
 } from '@/lib/posthog/config';
-import { sanitizePostHogExceptionText } from '@/lib/posthog/exception-text';
+import {
+  REDACTED_VALUE,
+  sanitizePostHogProperties,
+} from '@/lib/posthog/property-sanitizer';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 import { getPostHogTracingHeaderHostnames } from '@/lib/posthog/tracing-hostnames';
+
+export { sanitizePostHogProperties } from '@/lib/posthog/property-sanitizer';
 
 // Record replay for ~5% of eligible sessions (WEIGHT-B P1, owner-approved
 // 2026-07-10): rrweb's input serializer (`maskAllInputs` masking every
@@ -21,31 +26,6 @@ import { getPostHogTracingHeaderHostnames } from '@/lib/posthog/tracing-hostname
 // `SessionRecordingOptions.sampleRate` in posthog-js@1.393.5.
 const SESSION_RECORDING_SAMPLE_RATE = 0.05;
 
-const SENSITIVE_PROPERTY_TOKENS = new Set([
-  'password',
-  'passcode',
-  'token',
-  'secret',
-  'authorization',
-  'cookie',
-  'otp',
-  'pin',
-  'cvv',
-  'card',
-  'bvn',
-  'nin',
-  'email',
-  'phone',
-  'address',
-]);
-const URL_PROPERTY_PATTERN =
-  /(?:url|href|referrer|current_url|pathname|request_path)/i;
-const AUTOCAPTURE_TEXT_PROPERTY_PATTERN =
-  /^(?:\$el_text|\$elements_chain|text|attr__(?:aria-label|placeholder|title))$/i;
-const EMAIL_VALUE_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const REDACTED_VALUE = '[Filtered]';
-const QUERY_OR_HASH_PATTERN = /[?#]/;
-const EXCEPTION_LIST_PROPERTY_KEY = '$exception_list';
 // Both PostHog's autocapture `$web_vitals` event and our own flat `web_vitals`
 // event (see capturePostHogWebVitals in lib/posthog/browser.ts) must be dropped
 // on public blog/SEO surfaces. Matching only `$web_vitals` here would let the
@@ -147,19 +127,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function redactUrlQuery(value: string): string {
-  const markerIndex = value.search(QUERY_OR_HASH_PATTERN);
-  return markerIndex === -1 ? value : value.slice(0, markerIndex);
-}
-
-function isSensitivePropertyKey(key: string): boolean {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .some((token) => SENSITIVE_PROPERTY_TOKENS.has(token));
-}
-
 function normalizeHostname(hostname: string): string {
   return (
     hostname
@@ -232,61 +199,6 @@ export function resolvePostHogWebTenantContext(
 
   tenantContext.merchant_domain = hostname;
   return tenantContext;
-}
-
-function sanitizeExceptionListValue(value: unknown): unknown {
-  if (typeof value === 'string') {
-    return sanitizePostHogExceptionText(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeExceptionListValue(item));
-  }
-
-  if (isRecord(value)) {
-    const sanitized = Object.fromEntries(
-      Object.entries(value).map(([entryKey, entryValue]) => [
-        entryKey,
-        sanitizeExceptionListValue(entryValue),
-      ])
-    );
-
-    return sanitizePostHogProperties(sanitized);
-  }
-
-  return value;
-}
-
-function sanitizePropertyValue(key: string, value: unknown): unknown {
-  if (key === EXCEPTION_LIST_PROPERTY_KEY) {
-    return sanitizeExceptionListValue(value);
-  }
-
-  if (AUTOCAPTURE_TEXT_PROPERTY_PATTERN.test(key)) {
-    return REDACTED_VALUE;
-  }
-
-  if (isSensitivePropertyKey(key)) {
-    return REDACTED_VALUE;
-  }
-
-  if (typeof value === 'string') {
-    if (URL_PROPERTY_PATTERN.test(key)) {
-      return redactUrlQuery(value);
-    }
-
-    return value.replace(EMAIL_VALUE_PATTERN, REDACTED_VALUE);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizePropertyValue(key, item));
-  }
-
-  if (isRecord(value)) {
-    return sanitizePostHogProperties(value);
-  }
-
-  return value;
 }
 
 function getPublicPostHogProjectToken(): string | undefined {
@@ -480,21 +392,6 @@ function isPublicBlogWebVitalsEvent(properties: Properties): boolean {
   }
 
   return false;
-}
-
-export function sanitizePostHogProperties(
-  properties: Record<string, unknown> | undefined
-): Properties | undefined {
-  if (!properties) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Object.entries(properties).map(([key, value]) => [
-      key,
-      sanitizePropertyValue(key, value),
-    ])
-  ) as Properties;
 }
 
 export function sanitizePostHogCapture(

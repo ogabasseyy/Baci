@@ -1,5 +1,8 @@
-import { OGABASSEY_DOMAIN, OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
-import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
+import {
+  OGABASSEY_DOMAIN,
+  OGABASSEY_MERCHANT_ID,
+  OGABASSEY_TEMPLATE_ID,
+} from '@/config/ogabassey';
 
 export function getKnownOgaBasseyMerchantId(
   storeSlug: string

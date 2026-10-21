@@ -91,19 +91,7 @@ export const MobileFooter: React.FC<MobileFooterProps> = ({ storeSlug = '' }) =>
         className="ogabassey-mobile-footer__pattern"
         opacity={0.07}
         stroke="#ffffff"
-      >
-        <g transform="translate(20, 20) rotate(-15 6 10)">
-          <rect height="20" rx="2" width="12" x="0" y="0" />
-        </g>
-        <g transform="translate(120, 90) rotate(5 9 6)">
-          <rect height="12" rx="2" width="18" x="0" y="3" />
-        </g>
-        <g transform="translate(70, 50) rotate(-25 10 6)">
-          <circle cx="6" cy="6" r="2" />
-        </g>
-        <circle cx="140" cy="20" fill="#ffffff" r="2" stroke="none" />
-        <path d="M30 5 l3 3 m-3 0 l3 -3" strokeWidth="1" />
-      </GadgetPattern>
+      />
 
       <div className="ogabassey-mobile-footer__items">
         {navItems.map(({ path, icon: Icon, label, badge }) => {

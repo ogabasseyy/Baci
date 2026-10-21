@@ -33,6 +33,27 @@ const NAVBAR_SEARCH_MAX_LENGTH = STOREFRONT_SEARCH_MAX_QUERY_LENGTH;
  * navigate back to the misspelled search. Reads the route inside its own
  * Suspense boundary so static prerenders never touch useSearchParams.
  */
+function SearchRouteQueryReader({
+  onSync,
+}: {
+  onSync: (query: string) => void;
+}) {
+  const searchParams = useSearchParams();
+  // Mirror the route parser so repeated/missing `q` params yield empty and
+  // normalize to the navbar limit.
+  const routeQueries = searchParams.getAll('q');
+  const routeQuery = parseStorefrontSearchQueryParam(
+    routeQueries.length === 1 ? (routeQueries[0] ?? '') : undefined
+  ).slice(0, NAVBAR_SEARCH_MAX_LENGTH);
+
+  useEffect(() => {
+    // Sync only when the route query changes so in-progress edits are preserved.
+    onSync(routeQuery);
+  }, [routeQuery, onSync]);
+
+  return null;
+}
+
 function SearchRouteQuerySync({
   basePath,
   onSync,
@@ -41,34 +62,13 @@ function SearchRouteQuerySync({
   onSync: (query: string) => void;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  // The value mirrors the route parser exactly: repeated or missing `q`
-  // params yield the same empty query the results page renders (instead of
-  // the first raw value), and the result is normalized to the navbar
-  // limit so the displayed term always equals the submitted term. The
-  // route check is an exact match on `${basePath}/search`: a suffix match
-  // would misclassify non-results URLs that also end in `/search` (e.g.
-  // `/products/search`) and erase the persistent input on those pages.
-  const routeQueries =
-    pathname !== null && pathname === `${basePath}/search`
-      ? searchParams.getAll('q')
-      : null;
-  const routeQuery =
-    routeQueries === null
-      ? null
-      : parseStorefrontSearchQueryParam(
-          routeQueries.length === 1 ? (routeQueries[0] ?? '') : undefined
-        ).slice(0, NAVBAR_SEARCH_MAX_LENGTH);
+  // Exact match on `${basePath}/search` avoids misclassifying URLs like
+  // `/products/search` and keeps non-search routes free of search-param Suspense.
+  if (pathname === null || pathname !== `${basePath}/search`) {
+    return null;
+  }
 
-  useEffect(() => {
-    // Runs only when the route query changes, so in-progress edits are
-    // preserved while the route is unchanged; navigation always wins.
-    if (routeQuery !== null) {
-      onSync(routeQuery);
-    }
-  }, [routeQuery, onSync]);
-
-  return null;
+  return <SearchRouteQueryReader onSync={onSync} />;
 }
 
 type SearchAutocompleteComponent = React.ComponentType<SearchAutocompleteProps>;

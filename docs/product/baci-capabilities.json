@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-20T13:49:37.437247+00:00",
-  "source_revision": "3e20436fe110d109b5c158627288edb527e61ea9",
-  "evidence_digest": "ea89c910eed66c7873539ab881b75517efd2eb7568ba50f5d84d87116f535f80",
-  "claims_digest": "ff65cd232bdb424de5f6c558d1d031836f3d4d9192fc4a2ef8ddaf85f153521d",
-  "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs. Scoped re-review of the shopping MCP registration: Ogabassey buyer tools remain merchant-fixed; private text continuation is server-configured and defaults off. Live ChatGPT privacy and retention qualification and production activation are not established by this source review.",
+  "reviewed_at": "2026-10-21T11:38:42.987754+00:00",
+  "source_revision": "10f9f10ee7c1c5541ef13003b98123129a722395",
+  "evidence_digest": "4be123fc389f941d4ea20dde4e25405d7ae4968e112e2d4c994d0a953b28697e",
+  "claims_digest": "9172feb82825c7a9b0897d573e2f84758bcd114754ef13c0106f6e3138c625fd",
+  "review_scope": "Source audit; no prod verification claimed. Refs are reviewer evidence. MCP: buyer tools merchant-fixed; private continuation server-configured, off by default. ChatGPT privacy/retention/activation not established. Checkout offers via merchant-scoped get_storefront_offer_resolution (published/admin gate); scoping plus cart fall-through kept. RPC: one awaited factory, three sites. PDP snapshot emits anchor effective_policy; strict offer caps. Chunks 1000 scoped, 200 unscoped. Strict-null logs; outage throws retryable. Anchors lowest-id everywhere; strict zero-unit emits 0. Explicit picks win (pinned). Eligibility string false parses closed. MCP detail merchant-scoped. Duplicate-case ids hydrate all spellings.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

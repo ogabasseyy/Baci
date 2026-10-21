@@ -38,10 +38,10 @@ describe('catalog fixtures', () => {
       expect(await boundedOffers.json()).toEqual([expect.objectContaining({
         id: 'offer-condition-1', product_id: 'condition-offer-product', condition: 'used', price: 80000,
       })]);
-      const offers = await fetch(`${origin}/rest/v1/rpc/get_product_offers`, {
-        method: 'POST', body: JSON.stringify({ p_product_id: 'condition-offer-product' }),
+      const offers = await fetch(`${origin}/rest/v1/rpc/get_storefront_offer_resolution`, {
+        method: 'POST', body: JSON.stringify({ p_product_ids: ['condition-offer-product'] }),
       });
-      expect(await offers.json()).toEqual([expect.objectContaining({ condition: 'used', stock_quantity: 2 })]);
+      expect(await offers.json()).toEqual([expect.objectContaining({ condition: 'used', allocatable_stock: 2 })]);
       expect((await fetch(`${origin}/unknown`)).status).toBe(404);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

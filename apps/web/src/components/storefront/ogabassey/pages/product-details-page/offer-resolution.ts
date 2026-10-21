@@ -1,6 +1,9 @@
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { resolvePublicProductOption } from '@/lib/resolve-public-product-option';
-import type { ResolvedProductVariantSelection } from '@baci/shared/lib';
+import {
+  type ResolvedProductVariantSelection,
+  selectConditionOffer,
+} from '@baci/shared/lib';
 import { type ConditionType, normalizeConditionType } from './product-condition';
 import type { NormalizedProductDetails } from './product-normalization';
 
@@ -51,23 +54,15 @@ export function resolveCurrentOffer(
   // Canonical on both sides: a legacy-spelled parent (uk_used,
   // refurbished) is the selection's own family, so same-condition offer
   // rows stay parent-priced instead of replacing parent price and stock.
+  // Identity otherwise resolves through the shared authority: the
+  // routed advertised id wins (so two rows that canonicalize alike
+  // resolve the exact advertised offer), then the first canonical
+  // condition match.
   if (normalizeConditionType(productData.condition) !== selectedCondition) {
-    // Canonical comparison: stored rows use merchant spellings (refurbished,
-    // uk_used) that never equal the canonical selection raw, which silently
-    // fell back to the parent price for exactly those offers.
-    const idMatchedOffer =
-      routeOfferId != null
-        ? productData.offers?.find(
-            (item) =>
-              String(item.id) === routeOfferId &&
-              normalizeConditionType(item.condition) === selectedCondition
-          )
-        : undefined;
-    const offer =
-      idMatchedOffer ??
-      productData.offers?.find(
-        (item) => normalizeConditionType(item.condition) === selectedCondition
-      );
+    const offer = selectConditionOffer(productData.offers ?? null, {
+      selectedCondition,
+      preferredOfferId: routeOfferId,
+    });
 
     if (offer) {
       selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null };

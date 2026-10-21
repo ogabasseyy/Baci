@@ -1,3 +1,9 @@
+import {
+  fetchOfferResolutions,
+  isOfferAuthorityId,
+  type OfferAuthorityRpcCall,
+  type ResolvedOfferResolution,
+} from '@baci/shared/lib';
 import { withSupabaseRetry } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
@@ -15,27 +21,17 @@ export interface StorefrontProductConditionOfferRow {
   stock_quantity?: number | null;
 }
 
-interface ProductOfferRpcRow {
-  compare_at_price?: number | null;
-  condition?: string | null;
-  condition_notes?: string | null;
-  grade?: string | null;
-  images?: unknown;
-  offer_id?: unknown;
-  price?: number | null;
-  stock_quantity?: number | null;
-}
-
 /**
- * Active condition offers through the anon-executable get_product_offers
- * RPC. The nested product_offers table select its callers replace reads
- * empty for shoppers (staff-only SELECT policy), while this SECURITY
- * DEFINER RPC returns active rows only. Single-product RPC, so one call
- * per id in bounded batches of 10 (mirroring the web cart validator):
- * a large checkout-valid cart can name up to 200 distinct products and
- * one unbounded burst, multiplied by retries, would time out the
- * pre-checkout reprice. Same retry and fail-soft shape as the sibling
- * fetches.
+ * Active condition offers through the single offer-resolution
+ * authority (anon-executable, active rows only). Reads through the
+ * shared chunking client (200 ids per unscoped call, per the SQL
+ * batch cap) instead of one unbounded call — no per-product fan-out
+ * and no 201st-id cliff. Prices read the live basis and quantities
+ * the allocatable stock (policy-capped, parent-inherited): exactly
+ * what checkout enforces. Unbounded rows keep a null quantity
+ * (purchasable with no finite count). Same retry and fail-soft shape
+ * as the sibling fetches: null on failure so callers skip offer
+ * lines instead of corrupting prices.
  */
 export async function getStorefrontProductOffersByProductIds(
   productIds: string[]
@@ -48,33 +44,46 @@ export async function getStorefrontProductOffersByProductIds(
     return {} as Record<string, StorefrontProductConditionOfferRow[]>;
   }
 
-  const results: { data: unknown; error: unknown; productId: string }[] = [];
-  for (let index = 0; index < uniqueProductIds.length; index += 10) {
-    const batch = await Promise.all(
-      uniqueProductIds.slice(index, index + 10).map(async (productId) => {
-        const { data, error } = await withSupabaseRetry(
-          async () =>
-            await supabase.rpc('get_product_offers', {
-              p_product_id: productId,
-            }),
-          {
-            maxRetries: 3,
-            onRetry: (attempt, err) => {
-              log.warn(`Product offers rpc retry ${attempt}: ${err.message}`);
-            },
-          }
-        );
-        return { data, error, productId };
-      })
-    );
-    results.push(...batch);
-  }
+  // Malformed ids cannot join the batched authority call (it throws
+  // on any malformed id); they hydrate offerless individually so one
+  // stale id never poisons the whole batch (mirrors the blog path).
+  const validProductIds = uniqueProductIds.filter((id) =>
+    isOfferAuthorityId(id)
+  );
 
-  const failed = results.find((result) => result.error);
-  if (failed) {
+  // Retry lives inside the adapter so every 200-id chunk of a large
+  // set gets its own retries; a chunk failure still fails the whole
+  // lookup soft (null), exactly like the old single call.
+  const callRpc: OfferAuthorityRpcCall = (args) =>
+    withSupabaseRetry(
+      async () => {
+        const { data, error } = await supabase.rpc(
+          'get_storefront_offer_resolution',
+          args
+        );
+        return {
+          data,
+          error: error ? { message: error.message } : null,
+        };
+      },
+      {
+        maxRetries: 3,
+        onRetry: (attempt, err) => {
+          log.warn(`Product offers rpc retry ${attempt}: ${err.message}`);
+        },
+      }
+    );
+
+  let resolutions: Map<string, ResolvedOfferResolution>;
+  try {
+    resolutions = await fetchOfferResolutions(callRpc, {
+      merchantId: null,
+      productIds: validProductIds,
+    });
+  } catch (error) {
     log.error('Failed to fetch storefront product offers', {
-      error: failed.error,
-      productIds: uniqueProductIds,
+      error,
+      productIds: validProductIds,
     });
     return null;
   }
@@ -83,25 +92,43 @@ export async function getStorefrontProductOffersByProductIds(
     string,
     StorefrontProductConditionOfferRow[]
   > = {};
-  for (const result of results) {
-    offersByProductId[result.productId] = (
-      (result.data ?? []) as ProductOfferRpcRow[]
-    ).flatMap((row) =>
-      typeof row?.offer_id === 'string'
-        ? [
-            {
-              compare_at_price: row.compare_at_price ?? null,
-              condition: row.condition ?? null,
-              condition_notes: row.condition_notes ?? null,
-              grade: row.grade ?? null,
-              id: row.offer_id,
-              images: row.images,
-              price: row.price ?? null,
-              stock_quantity: row.stock_quantity ?? null,
-            },
-          ]
-        : []
-    );
+  // Caller-case keys (callers look up by their own id spelling);
+  // resolution ids are canonical lowercase, so push through a
+  // case-insensitive index instead of direct keying. Every spelling
+  // of a duplicate id gets the rows: a lowercase cached row and an
+  // uppercase cart row are the same product and must hydrate alike.
+  const keysByLowerId = new Map<string, string[]>();
+  for (const productId of uniqueProductIds) {
+    offersByProductId[productId] = [];
+    const bucket = keysByLowerId.get(productId.toLowerCase()) ?? [];
+    bucket.push(productId);
+    keysByLowerId.set(productId.toLowerCase(), bucket);
+  }
+  // Malformed ids keep their pre-initialized empty buckets above:
+  // offerless, without failing the valid ids' hydration.
+  for (const resolution of resolutions.values()) {
+    // Discovery-side ad-gate: unshaped parents never hydrate even
+    // though checkout would stage their rows (transactions accept
+    // all rows; only discovery filters on the flag). Rows without a
+    // finite price are skipped, never null-priced: same fail-closed
+    // guards as MCP/blog.
+    if (resolution.parentEligible !== true) continue;
+    if (resolution.priceBasis === null) continue;
+    const keys = keysByLowerId.get(resolution.productId);
+    if (keys === undefined) continue;
+    const offerRow = {
+      compare_at_price: resolution.compareAtPrice ?? null,
+      condition: resolution.condition,
+      condition_notes: resolution.conditionNotes ?? null,
+      grade: resolution.grade ?? null,
+      id: resolution.offerId,
+      images: resolution.images,
+      price: resolution.priceBasis,
+      stock_quantity: resolution.allocatableStock,
+    };
+    for (const key of keys) {
+      offersByProductId[key]?.push({ ...offerRow });
+    }
   }
 
   return offersByProductId;

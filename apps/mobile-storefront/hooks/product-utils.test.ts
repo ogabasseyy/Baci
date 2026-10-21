@@ -192,11 +192,15 @@ describe('product-utils', () => {
       if (fn === 'get_storefront_product_variants') {
         return Promise.resolve({ data: [], error: null });
       }
-      if (fn === 'get_product_offers') {
+      if (fn === 'get_storefront_offer_resolution') {
         return Promise.resolve({
           data: validProductRow.offers.map((offer) => ({
             ...offer,
+            product_id: validProductRow.id,
             offer_id: offer.id,
+            price_basis: offer.price,
+            allocatable_stock: offer.stock_quantity,
+            parent_eligible: true,
           })),
           error: null,
         });
@@ -249,8 +253,9 @@ describe('product-utils', () => {
 
     expect(result).toEqual(validProductRow);
     expect(mockRpc).toHaveBeenCalledTimes(2);
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: validProductRow.id,
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
     });
   });
 
@@ -300,7 +305,7 @@ describe('product-utils', () => {
           error: null,
         });
       }
-      if (fn === 'get_product_offers') {
+      if (fn === 'get_storefront_offer_resolution') {
         return Promise.resolve({ data: [], error: null });
       }
 
@@ -316,8 +321,9 @@ describe('product-utils', () => {
       { p_product_ids: [validProductRow.id] },
       { count: 'exact' }
     );
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: validProductRow.id,
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
     });
     expect(
       (result as { variants: Array<{ id: string }> }).variants.map(
@@ -358,8 +364,9 @@ describe('product-utils', () => {
         p_product_ids: [validProductRow.id],
       }
     );
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: validProductRow.id,
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
     });
   });
 
@@ -427,14 +434,16 @@ describe('product-utils', () => {
     const query = createQueryChain({ data: shopperRow, error: null });
     mockFrom.mockReturnValue(query);
     mockRpc.mockImplementation((...args: unknown[]) => {
-      if (args[0] === 'get_product_offers') {
+      if (args[0] === 'get_storefront_offer_resolution') {
         return Promise.resolve({
           data: [
             {
+              product_id: validProductRow.id,
               offer_id: 'offer-rpc',
               condition: 'used',
-              price: 510000,
-              stock_quantity: 2,
+              price_basis: 510000,
+              allocatable_stock: 2,
+              parent_eligible: true,
             },
           ],
           error: null,
@@ -456,8 +465,9 @@ describe('product-utils', () => {
         },
       ],
     });
-    expect(mockRpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: validProductRow.id,
+    expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [validProductRow.id],
     });
   });
 

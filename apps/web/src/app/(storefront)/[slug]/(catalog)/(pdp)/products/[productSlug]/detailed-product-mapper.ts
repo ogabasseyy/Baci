@@ -91,6 +91,9 @@ export interface DetailedCachedProduct {
   max_variant_price?: number | null;
   manage_stock?: boolean | null;
   inventory_tracking_policy?: string | null;
+  // Anchor-derived policy emitted by the PDP core snapshot (absent on
+  // stale cached snapshots — consumers fall back to the row policy).
+  effective_policy?: string | null;
   stock?: number | string | null;
   stock_quantity?: number | string | null;
   images?: RawProductImage[] | null;
@@ -213,6 +216,9 @@ export function mapDetailedCachedProductToProduct(
     // and order creation): only explicit false disables stock checks.
     manage_stock: detailedProduct.manage_stock ?? true,
     inventory_tracking_policy: effectiveInventoryPolicy ?? undefined,
+    // Snapshot-emitted anchor policy (preferred); the row-policy
+    // fallback lives with the consumer-side precedence.
+    effective_policy: detailedProduct.effective_policy ?? undefined,
     stock: getEffectiveStock(detailedProduct),
     // Strict-pool aggregate cap reads stock_quantity (offer adds
     // overwrite stock with the selected allocation): without the folded

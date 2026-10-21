@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RelatedBlogProduct } from '@/lib/related-blog-products';
 import { hydrateRelatedBlogProductAvailability } from './hydrate-related-blog-product-availability';
 
+const PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+
 function product(
   overrides: Partial<RelatedBlogProduct> = {}
 ): RelatedBlogProduct {
   return {
-    id: 'product-1',
+    id: PRODUCT_ID,
     name: 'iPhone 16',
     slug: 'iphone-16',
     category_slug: 'smartphones',
@@ -17,12 +19,27 @@ function product(
   };
 }
 
+function authorityRow(
+  offerId: string,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    product_id: PRODUCT_ID,
+    offer_id: offerId,
+    condition: 'used',
+    price_basis: 120000,
+    allocatable_stock: 2,
+    parent_eligible: true,
+    ...extra,
+  };
+}
+
 const VARIANT_PRODUCT_ID = '123e4567-e89b-12d3-a456-426614174000';
 
 describe('hydrateRelatedBlogProductAvailability', () => {
   it('marks an empty primary product as available when an active condition offer has stock', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [{ stock_quantity: 2 }],
+      data: [authorityRow('offer-1')],
       error: null,
     });
 
@@ -32,16 +49,25 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(true);
-    expect(rpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: 'product-1',
+    expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [PRODUCT_ID],
     });
   });
 
   it('ignores a stocked offer that carries the parent product condition', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [
-        { condition: 'New', price: 150000, stock_quantity: 2 },
-        { condition: 'used', price: 120000, stock_quantity: 0 },
+        authorityRow('offer-1', {
+          condition: 'New',
+          price_basis: 150000,
+          allocatable_stock: 2,
+        }),
+        authorityRow('offer-2', {
+          condition: 'used',
+          price_basis: 120000,
+          allocatable_stock: 0,
+        }),
       ],
       error: null,
     });
@@ -66,7 +92,13 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
   it('keeps a stocked offer with a different condition than the parent', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [{ condition: 'Used', price: 120000, stock_quantity: 2 }],
+      data: [
+        authorityRow('offer-1', {
+          condition: 'Used',
+          price_basis: 120000,
+          allocatable_stock: 2,
+        }),
+      ],
       error: null,
     });
 
@@ -88,7 +120,10 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
   it('marks an empty primary product unavailable when every active offer is empty', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [{ stock_quantity: 0 }, { stock_quantity: null }],
+      data: [
+        authorityRow('offer-1', { allocatable_stock: 0 }),
+        authorityRow('offer-2', { allocatable_stock: 0 }),
+      ],
       error: null,
     });
 
@@ -136,8 +171,9 @@ describe('hydrateRelatedBlogProductAvailability', () => {
       [stockedVariantProduct]
     );
 
-    expect(rpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: VARIANT_PRODUCT_ID,
+    expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [VARIANT_PRODUCT_ID],
     });
     expect(result[0]).toMatchObject({
       ...stockedVariantProduct,
@@ -148,7 +184,13 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
   it('hydrates condition-offer prices even while the parent stock is positive', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [{ price: 175000, stock_quantity: 2 }],
+      data: [
+        authorityRow('offer-1', {
+          condition: null,
+          price_basis: 175000,
+          allocatable_stock: 2,
+        }),
+      ],
       error: null,
     });
     const stockedProduct = product({
@@ -165,14 +207,21 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     expect(result[0]?.offers).toEqual([
       { price: 175000, status: 'active', stock_quantity: 2 },
     ]);
-    expect(rpc).toHaveBeenCalledWith('get_product_offers', {
-      p_product_id: 'product-1',
+    expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
+      p_merchant_id: null,
+      p_product_ids: [PRODUCT_ID],
     });
   });
 
   it('keeps the current purchasable offer price for the related rail', async () => {
     const rpc = vi.fn().mockResolvedValue({
-      data: [{ price: '175000', stock_quantity: '2' }],
+      data: [
+        authorityRow('offer-1', {
+          condition: null,
+          price_basis: '175000',
+          allocatable_stock: '2',
+        }),
+      ],
       error: null,
     });
 
@@ -209,13 +258,15 @@ describe('hydrateRelatedBlogProductAvailability', () => {
   });
 
   it('surfaces alternate lookup failures when the caller cannot cache degraded data', async () => {
-    const lookupError = { message: 'transient timeout' };
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: lookupError });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'transient timeout' },
+    });
 
     await expect(
       hydrateRelatedBlogProductAvailability({ rpc } as never, [product()], {
         throwOnError: true,
       })
-    ).rejects.toEqual(lookupError);
+    ).rejects.toThrow('transient timeout');
   });
 });

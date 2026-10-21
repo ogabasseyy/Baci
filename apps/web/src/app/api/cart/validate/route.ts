@@ -1,11 +1,10 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
 import { createClient } from '@/lib/supabase/server';
 import { cartValidateSchema } from '@/schemas/cart';
-import {
-  fetchCartOfferPrices,
-  type OfferQueryResult,
-} from './cart-offer-prices';
+import { fetchCartOfferPrices } from './cart-offer-prices';
 import {
   buildCartValidationCatalog,
   fetchAllStorefrontProductVariants,
@@ -18,7 +17,6 @@ import {
   buildSimpleProductQuantityTotals,
   getCartValidationKey,
   getInvalidOfferLineKey,
-  isOfferParentEligible,
   readOfferQuantityTotal,
   readSimpleProductQuantityTotal,
   resolveReportedLineStock,
@@ -104,11 +102,10 @@ export async function POST(request: NextRequest) {
     // Merchant-scoped price enforcement lives in the orders route
     // (computeOrderNegotiationDiscount + the order RPC), so validating a
     // foreign active ID here cannot discount or misprice an order.
-    // Offer lines need the variant list too: the parent gate rejects
-    // stale offers on products that gained live variants.
-    const needsVariantList =
-      validVariantIds.length > 0 ||
-      validationItems.some((item) => !item.variantId && item.offerId);
+    // The offer parent gate lives in the SQL authority (each row
+    // carries parent_eligible), so the variant list is only needed for
+    // variant lines themselves.
+    const needsVariantList = validVariantIds.length > 0;
     const [productsResult, variantsResult, offerMap] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
@@ -126,10 +123,7 @@ export async function POST(request: NextRequest) {
           })
         : Promise.resolve({ data: null, error: null }),
       fetchCartOfferPrices(
-        (productId) =>
-          supabase.rpc('get_product_offers', {
-            p_product_id: productId,
-          }) as unknown as Promise<OfferQueryResult>,
+        createOfferAuthorityRpcCall(supabase),
         validationItems
       ).catch((error: unknown) =>
         error instanceof Error ? error : new Error('Offer query failed')
@@ -149,8 +143,10 @@ export async function POST(request: NextRequest) {
     const products = productsResult.data || [];
     const variants = variantsResult.data || [];
 
-    const { productMap, variantMap, productsWithLiveVariants } =
-      buildCartValidationCatalog(products, variants);
+    const { productMap, variantMap } = buildCartValidationCatalog(
+      products,
+      variants
+    );
 
     const validProducts: {
       id: string;
@@ -214,7 +210,7 @@ export async function POST(request: NextRequest) {
       // replace the advertised offer price on every validation pass.
       const offer =
         !item.variantId && item.offerId
-          ? validatedOfferMap.get(`${strId}::${item.offerId}`)
+          ? validatedOfferMap.get(makeOfferLineKey(strId, String(item.offerId)))
           : undefined;
       const invalidOfferKey = getInvalidOfferLineKey({
         strId,
@@ -232,10 +228,6 @@ export async function POST(request: NextRequest) {
         strictPoolUnits: strictPoolUnits.get(strId),
         isQuizVoucherLine: item.isQuizVoucherLine,
         offer,
-        parentEligible: isOfferParentEligible(
-          product,
-          productsWithLiveVariants.has(strId)
-        ),
       });
       if (invalidOfferKey) {
         if (!invalidProductIds.includes(invalidOfferKey)) {

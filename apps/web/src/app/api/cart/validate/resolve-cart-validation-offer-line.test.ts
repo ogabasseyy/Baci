@@ -3,19 +3,12 @@ import {
   buildSimpleProductQuantityTotals,
   getCartValidationKey,
   getInvalidOfferLineKey,
-  isOfferParentEligible,
   readSimpleProductQuantityTotal,
   resolveReportedLineStock,
 } from './resolve-cart-validation-offer-line';
 
 const STR_ID = '11111111-1111-4111-8111-111111111111';
 const OFFER_ID = '55555555-5555-4555-8555-555555555555';
-
-const ELIGIBLE_PARENT = {
-  has_condition_offers: true,
-  has_variants: false,
-  variant_model: null,
-};
 
 describe('getCartValidationKey', () => {
   it('builds product, variant, and offer keys', () => {
@@ -27,49 +20,12 @@ describe('getCartValidationKey', () => {
   });
 });
 
-describe('isOfferParentEligible', () => {
-  it('accepts a flagged non-variant parent without live variants', () => {
-    expect(isOfferParentEligible(ELIGIBLE_PARENT, false)).toBe(true);
-  });
-
-  it.each([
-    {
-      name: 'flag off',
-      flags: { ...ELIGIBLE_PARENT, has_condition_offers: false },
-      hasLiveVariants: false,
-    },
-    {
-      name: 'flag null',
-      flags: { ...ELIGIBLE_PARENT, has_condition_offers: null },
-      hasLiveVariants: false,
-    },
-    {
-      name: 'variant bearing',
-      flags: { ...ELIGIBLE_PARENT, has_variants: true },
-      hasLiveVariants: false,
-    },
-    {
-      name: 'sku matrix',
-      flags: { ...ELIGIBLE_PARENT, variant_model: 'sku_matrix' },
-      hasLiveVariants: false,
-    },
-    {
-      name: 'live variants',
-      flags: ELIGIBLE_PARENT,
-      hasLiveVariants: true,
-    },
-  ])('rejects a parent with $name', ({ flags, hasLiveVariants }) => {
-    expect(isOfferParentEligible(flags, hasLiveVariants)).toBe(false);
-  });
-});
-
 describe('getInvalidOfferLineKey', () => {
   it('passes non-offer lines', () => {
     expect(
       getInvalidOfferLineKey({
         strId: STR_ID,
         offer: undefined,
-        parentEligible: false,
       })
     ).toBeNull();
   });
@@ -80,8 +36,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         submittedCondition: 'used',
-        offer: { condition: 'used' },
-        parentEligible: true,
+        offer: { condition: 'used', parent_eligible: true },
       })
     ).toBeNull();
   });
@@ -91,8 +46,7 @@ describe('getInvalidOfferLineKey', () => {
       getInvalidOfferLineKey({
         strId: STR_ID,
         offerId: OFFER_ID,
-        offer: { condition: 'used' },
-        parentEligible: true,
+        offer: { condition: 'used', parent_eligible: true },
       })
     ).toBeNull();
   });
@@ -103,20 +57,28 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         offer: undefined,
-        parentEligible: true,
       })
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
 
-  it('invalidates a live offer on an ineligible parent', () => {
+  it('accepts a live offer on an ineligible parent (checkout is ungated)', () => {
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        offer: { condition: 'used', parent_eligible: false },
+      })
+    ).toBeNull();
+  });
+
+  it('ignores a missing authority flag (transactions mirror checkout)', () => {
     expect(
       getInvalidOfferLineKey({
         strId: STR_ID,
         offerId: OFFER_ID,
         offer: { condition: 'used' },
-        parentEligible: false,
       })
-    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    ).toBeNull();
   });
 
   it('invalidates a drifted submitted condition', () => {
@@ -125,8 +87,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         submittedCondition: 'new',
-        offer: { condition: 'used' },
-        parentEligible: true,
+        offer: { condition: 'used', parent_eligible: true },
       })
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
@@ -137,8 +98,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         quantity: 3,
-        offer: { condition: 'used', stock_quantity: 2 },
-        parentEligible: true,
+        offer: { condition: 'used', stock_quantity: 2, parent_eligible: true },
       })
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
     expect(
@@ -146,8 +106,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         quantity: 1,
-        offer: { condition: 'used', stock_quantity: 0 },
-        parentEligible: true,
+        offer: { condition: 'used', stock_quantity: 0, parent_eligible: true },
       })
     ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
   });
@@ -161,8 +120,7 @@ describe('getInvalidOfferLineKey', () => {
       offerId: OFFER_ID,
       quantity: 1,
       aggregateOfferQuantity: 2,
-      offer: { condition: 'used', stock_quantity: 1 },
-      parentEligible: true,
+      offer: { condition: 'used', stock_quantity: 1, parent_eligible: true },
     };
     expect(getInvalidOfferLineKey(input)).toBe(`${STR_ID}::offer=${OFFER_ID}`);
     expect(
@@ -176,8 +134,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         quantity: 2,
-        offer: { condition: 'used', stock_quantity: 2 },
-        parentEligible: true,
+        offer: { condition: 'used', stock_quantity: 2, parent_eligible: true },
       })
     ).toBeNull();
     expect(
@@ -185,16 +142,18 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         offerId: OFFER_ID,
         quantity: 5,
-        offer: { condition: 'used', stock_quantity: null },
-        parentEligible: true,
+        offer: {
+          condition: 'used',
+          stock_quantity: null,
+          parent_eligible: true,
+        },
       })
     ).toBeNull();
     expect(
       getInvalidOfferLineKey({
         strId: STR_ID,
         offerId: OFFER_ID,
-        offer: { condition: 'used', stock_quantity: 0 },
-        parentEligible: true,
+        offer: { condition: 'used', stock_quantity: 0, parent_eligible: true },
       })
     ).toBeNull();
   });
@@ -205,8 +164,7 @@ describe('getInvalidOfferLineKey', () => {
         strId: STR_ID,
         variantId: 'v1',
         offerId: OFFER_ID,
-        offer: { condition: 'used' },
-        parentEligible: true,
+        offer: { condition: 'used', parent_eligible: true },
       })
     ).toBe(`${STR_ID}::v1::offer=${OFFER_ID}`);
   });

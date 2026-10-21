@@ -144,6 +144,18 @@ describe('createCriticalCartProduct', () => {
     expect(cartProduct.stock_quantity).toBe(2);
   });
 
+  it('retains the anchor-derived effective policy for the offer-stock helpers', () => {
+    const cartProduct = createCriticalCartProduct(
+      buildCriticalCartInput({
+        effective_policy: 'serialized_strict',
+        inventory_tracking_policy: 'off',
+      })
+    );
+
+    expect(cartProduct.effective_policy).toBe('serialized_strict');
+    expect(cartProduct.inventory_tracking_policy).toBe('off');
+  });
+
   it('falls back to the product id when slug and mpn are missing', () => {
     const cartProduct = createCriticalCartProduct({
       ...buildCriticalCartInput(),

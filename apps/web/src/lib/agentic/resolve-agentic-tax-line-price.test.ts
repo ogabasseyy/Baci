@@ -44,6 +44,17 @@ describe('resolveAgenticTaxLinePrice', () => {
     ).toBe(4000);
   });
 
+  it('meets lowercase live keys from an uppercase caller spelling', () => {
+    expect(
+      resolveAgenticTaxLinePrice({
+        candidateVariant: null,
+        item: { product_id: 'PROD-1', offer_id: 'OFFER-1' },
+        offerPrices: new Map([['prod-1::offer-1', 4000]]),
+        product: { price: 10000 },
+      })
+    ).toBe(4000);
+  });
+
   it('ignores cross-product variant and offer matches', () => {
     expect(
       resolveAgenticTaxLinePrice({

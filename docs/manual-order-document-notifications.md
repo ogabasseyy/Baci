@@ -24,6 +24,16 @@ lost after dispatch, accepted send with failed marker persistence or stale
 dispatched lease is terminalized as `delivery_outcome_unknown`, not automatically
 resent. A provider `client_reference` is an audit correlation, not an idempotency key.
 
+Activation backfill is bounded by construction, not by cap: pre-existing
+orders carry `manual_document_notification_eligible = false`, so the
+postdeploy backfill only sees staff-recorded orders created during the
+deploy's own predeploy-to-postdeploy window that never got an outbox row.
+Each scanned order runs the enqueue function (which re-validates and
+early-returns for ineligible rows), the `NOT EXISTS` anti-join makes
+retries idempotent, and the 120s statement timeout fails the migration
+loud rather than stalling postdeploy. A cap would strand rows past it
+with no future trigger fire, so none is set.
+
 ## Corrections and resend
 
 At most one invoice and one receipt row exist per order, and a claim token never

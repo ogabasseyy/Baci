@@ -3,7 +3,7 @@ import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipelin
 
 describe('eventPipelineManualOrderDocumentCredentialPaths', () => {
   it('allows only the audited manual-order document credential paths', () => {
-    expect(eventPipelineManualOrderDocumentCredentialPaths).toHaveLength(9);
+    expect(eventPipelineManualOrderDocumentCredentialPaths).toHaveLength(10);
     expect(eventPipelineManualOrderDocumentCredentialPaths).toContainEqual([
       'apps/web/src/app/api/cron/order-notifications/order-notification-outbox-worker.ts',
       'apps/web/src/lib/send-manual-order-document.ts',
@@ -13,6 +13,11 @@ describe('eventPipelineManualOrderDocumentCredentialPaths', () => {
     expect(eventPipelineManualOrderDocumentCredentialPaths).toContainEqual([
       'apps/web/src/lib/send-manual-order-document.ts',
       'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineManualOrderDocumentCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/env.ts',
     ]);

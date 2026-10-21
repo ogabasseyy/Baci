@@ -387,3 +387,66 @@ it('keeps legacy choice conflicts gated when dismissing a pairing sheet', async 
   fireEvent.press(close);
   expect(useNativeSharedCartStore.getState().mergeConflicts).toHaveLength(1);
 });
+it('marks checkout intent when dismissing clears pairing conflicts', async () => {
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair: jest.fn().mockResolvedValue(undefined),
+    mergeConflicts: [{ productId: '33333333-3333-4333-8333-333333333333' }],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const close = await waitFor(() =>
+    screen.getByRole('button', { name: 'Close cart link' })
+  );
+  const before = sharedCartWriteRevision();
+  fireEvent.press(close);
+  expect(useNativeSharedCartStore.getState().mergeConflicts).toEqual([]);
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('clears the pairing failure state after a successful retry sync', async () => {
+  mockPairingItems = [{ id: 'local-1' }];
+  const pair = jest.fn().mockRejectedValue(new Error('create failed'));
+  const refresh = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'ready',
+    pair,
+    refresh,
+    prepare: null,
+    snapshot: null,
+    mergeConflicts: [],
+  });
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' } })).toString('base64url')}.signature`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  const keep = await waitFor(() =>
+    screen.getByRole('button', { name: 'Keep my current cart' })
+  );
+  fireEvent.press(keep);
+  const retry = await waitFor(() =>
+    screen.getByRole('button', { name: 'Retry sync' })
+  );
+  fireEvent.press(retry);
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(
+      screen.queryByText(
+        'The cart has not finished syncing. Retry sync to check the saved attempt.'
+      )
+    ).toBeNull()
+  );
+});

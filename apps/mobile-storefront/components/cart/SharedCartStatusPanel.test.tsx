@@ -158,7 +158,7 @@ it('retries a failed initial cart creation using prepare rather than a read-only
     snapshot: null,
   });
   const view = render(<SharedCartStatusPanel />);
-  fireEvent.press(view.getByText('Retry sync'));
+  fireEvent.press(view.getByText('Connect cart'));
   expect(prepare).toHaveBeenCalledTimes(1);
   expect(refresh).not.toHaveBeenCalled();
 });

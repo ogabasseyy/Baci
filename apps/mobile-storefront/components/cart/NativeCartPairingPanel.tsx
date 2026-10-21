@@ -119,11 +119,13 @@ export function NativeCartPairingPanel() {
     // Pairing-published conflicts have no resolution path once the sheet
     // closes; legacy choice conflicts (status choice_required) stay gated.
     const state = useNativeSharedCartStore.getState();
-    if (state.status !== 'choice_required' && state.mergeConflicts.length)
+    if (state.status !== 'choice_required' && state.mergeConflicts.length) {
+      markSharedCartIntent();
       useNativeSharedCartStore.setState({
         mergeConflicts: [],
         mergeConflictReason: undefined,
       });
+    }
   }
   async function browser(): Promise<void> {
     const current = peekCartPairingLink();
@@ -285,6 +287,7 @@ export function NativeCartPairingPanel() {
                     const operation =
                       preferred ?? shared.prepare ?? shared.refresh;
                     await operation?.();
+                    setFailed(false);
                   } catch {
                     setFailed(true);
                   }

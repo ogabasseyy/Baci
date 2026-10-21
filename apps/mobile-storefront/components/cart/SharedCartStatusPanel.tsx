@@ -218,7 +218,7 @@ export function SharedCartStatusPanel() {
           }
         >
           <Text style={{ color: colors.primary }}>
-            {state.snapshot || items.length === 0 || state.status === 'error'
+            {state.snapshot || items.length === 0
               ? 'Retry sync'
               : 'Connect cart'}
           </Text>

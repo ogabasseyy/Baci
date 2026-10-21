@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
-import {
-  gateStorefrontPreflightStatus,
-  resetStorefrontPreflightRpcForTests,
-} from './storefront-preflight-rpc';
+import { resetStorefrontPreflightRpcForTests } from './storefront-preflight-rpc';
 import {
   callRpc,
   context,
@@ -47,7 +44,10 @@ describe('callStorefrontPreflightRpc', () => {
 
     const result = await callRpc('success_fn', { p_slug: 's' }, rpcImpl);
 
-    expect(result).toEqual({ storefront_status: 'published' });
+    expect(result).toEqual({
+      data: { storefront_status: 'published' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
     expect(rpcImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -64,8 +64,11 @@ describe('callStorefrontPreflightRpc', () => {
       surface: 'product-canonical',
     });
 
-    expect(first).toEqual({ ok: true });
-    expect(second).toEqual({ ok: true });
+    expect(first).toEqual({
+      data: { ok: true },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
+    expect(second).toEqual({ data: { ok: true }, attempt: null });
     expect(rpcImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -94,7 +97,10 @@ describe('callStorefrontPreflightRpc', () => {
     const second = await callRpc('retry_fn', args, rpcImpl);
 
     expect(first).toBeNull();
-    expect(second).toEqual({ ok: true });
+    expect(second).toEqual({
+      data: { ok: true },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
     expect(rpcImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -206,7 +212,10 @@ describe('callStorefrontPreflightRpc', () => {
 
     const result = await callRpc('prod_fn', { p_slug: 'prod-slug' }, rpcImpl);
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({
+      data: { ok: true },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
     expect(rpcImpl).toHaveBeenCalledTimes(1);
   });
 
@@ -232,45 +241,5 @@ describe('callStorefrontPreflightRpc', () => {
     expect(sixthResult).toBeNull();
     expect(rpcImpl).toHaveBeenCalledTimes(5);
     expectSkipReason(consoleWarnSpy, 'circuit-open');
-  });
-});
-
-describe('gateStorefrontPreflightStatus', () => {
-  beforeEach(() => {
-    resetStorefrontPreflightRpcForTests();
-    consoleWarnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('returns true and logs nothing for a published storefront', () => {
-    const result = gateStorefrontPreflightStatus('published', context());
-
-    expect(result).toBe(true);
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    'unknown',
-    'unpublished',
-  ])('returns false and logs a skip for %s status', (status) => {
-    const result = gateStorefrontPreflightStatus(status, context());
-
-    expect(result).toBe(false);
-    expectSkipReason(consoleWarnSpy, 'unknown-storefront');
-  });
-
-  it('returns false and captures a fail-open for any other status value', () => {
-    const result = gateStorefrontPreflightStatus(
-      'weird-future-value',
-      context()
-    );
-
-    expect(result).toBe(false);
-    expectFailOpenReason(consoleWarnSpy, 'has-error');
   });
 });

@@ -122,6 +122,46 @@ describe('storefront preflight RPC telemetry', () => {
     );
   });
 
+  it('returns the producing attempt on success and null on memoized hits', async () => {
+    const consoleInfoSpy = vi
+      .spyOn(console, 'info')
+      .mockImplementation(() => undefined);
+    const rpcImpl = vi
+      .fn()
+      .mockResolvedValue({ data: [{ ok: true }], error: null });
+    const options = {
+      failOpenContext: context({ surface: 'product-canonical' }),
+      rpcImpl,
+      timeoutMs: 4_000,
+    };
+    const args = { p_identifier: 'ogabassey.com', p_product_slug: 'phone' };
+
+    const fresh = await callStorefrontPreflightRpc(
+      'get_storefront_pdp_preflight',
+      args,
+      options
+    );
+    const memoized = await callStorefrontPreflightRpc(
+      'get_storefront_pdp_preflight',
+      args,
+      options
+    );
+
+    expect(fresh?.data).toEqual({ ok: true });
+    expect(fresh?.attempt).toEqual(
+      expect.objectContaining({
+        outcome: 'success',
+        rpcName: 'get_storefront_pdp_preflight',
+      })
+    );
+    const [, attemptProperties] = consoleInfoSpy.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(fresh?.attempt?.attemptId).toBe(attemptProperties.attempt_id);
+    expect(memoized).toEqual({ data: { ok: true }, attempt: null });
+  });
+
   it('classifies and records a Postgres statement-timeout separately', async () => {
     const consoleInfoSpy = vi
       .spyOn(console, 'info')

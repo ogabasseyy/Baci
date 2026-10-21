@@ -1,10 +1,10 @@
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import type { StorefrontSlugSafetyReason } from '@/lib/storefront-slug-safety';
-import {
-  getRpcAttemptProperties,
-  type StorefrontPreflightRpcAttempt,
-  type StorefrontPreflightRpcAttemptProperties,
-} from './storefront-preflight-rpc-telemetry';
+import type {
+  StorefrontPreflightRpcAttempt,
+  StorefrontPreflightRpcAttemptProperties,
+} from './storefront-preflight-rpc-attempt';
+import { getRpcAttemptProperties } from './storefront-preflight-rpc-attempt-properties';
 
 export type StorefrontInternalPreflightFailOpenReason =
   | 'no-secret'

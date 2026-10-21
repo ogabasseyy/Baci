@@ -117,6 +117,9 @@ describe('resolveStorefrontBlogPostStatus', () => {
   });
 
   it('fails open when the RPC row fails schema validation', async () => {
+    const consoleInfoSpy = vi
+      .spyOn(console, 'info')
+      .mockImplementation(() => undefined);
     const rpcImpl = rpcImplResolving(
       makeRow({ blog_enabled: 'false' as unknown as boolean })
     );
@@ -130,9 +133,18 @@ describe('resolveStorefrontBlogPostStatus', () => {
     });
 
     expect(result).toEqual({ kind: 'present-or-unknown' });
+    // The caller-side parse fail-open carries the producing attempt's ID,
+    // so it correlates with the transport's attempt record.
+    const [, attemptProperties] = consoleInfoSpy.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(console.warn).toHaveBeenCalledWith(
       '[storefront-internal-preflight] fail-open',
-      expect.objectContaining({ reason: 'parse' })
+      expect.objectContaining({
+        reason: 'parse',
+        attemptId: attemptProperties.attempt_id,
+      })
     );
   });
 

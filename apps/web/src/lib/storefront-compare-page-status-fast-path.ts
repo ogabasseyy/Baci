@@ -39,7 +39,7 @@ async function isPublishedStorefront(
   opts: ComparePageStatusFastPathOptions,
   failOpenContext: ComparePageStatusFastPathFailOpenContext
 ): Promise<boolean> {
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_AUTH_MERCHANT_RPC,
     { p_identifier: opts.identifier },
     {
@@ -51,16 +51,24 @@ async function isPublishedStorefront(
       emptyResult: 'unknown',
     }
   );
-  if (row === null) {
+  if (result === null) {
     return false;
   }
 
-  const parsed = storefrontAuthMerchantRowSchema.safeParse(row);
+  const parsed = storefrontAuthMerchantRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        result.attempt,
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return false;
   }
 

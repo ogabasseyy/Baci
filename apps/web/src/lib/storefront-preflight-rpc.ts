@@ -3,23 +3,21 @@ import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo'
 import { createPublicClient } from '@/lib/supabase/public';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
-import {
-  storefrontInternalPreflight,
-  UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
-} from './storefront-internal-preflight';
+import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import { createStorefrontPreflightCircuitBreaker } from './storefront-preflight-circuit-breaker';
+import {
+  createStorefrontPreflightRpcAttemptRecorder,
+  type StorefrontPreflightRpcAttempt,
+} from './storefront-preflight-rpc-attempt';
 import { classifyRpcErrorReason } from './storefront-preflight-rpc-error';
+import { boundedStorefrontPreflightRpcErrorDetail } from './storefront-preflight-rpc-error-detail';
 import {
   snapshotStorefrontPreflightRpcArgs,
   storefrontPreflightRpcFlightKey,
   storefrontPreflightRpcFlights,
 } from './storefront-preflight-rpc-flight';
-import {
-  boundedStorefrontPreflightRpcErrorDetail,
-  classifyStorefrontPreflightRpcOutcome,
-  createStorefrontPreflightRpcAttemptRecorder,
-  getStorefrontPreflightRpcThrownErrorDetail,
-} from './storefront-preflight-rpc-telemetry';
+import { classifyStorefrontPreflightRpcOutcome } from './storefront-preflight-rpc-outcome';
+import { getStorefrontPreflightRpcThrownErrorDetail } from './storefront-preflight-rpc-thrown-detail';
 
 /** Direct anon PostgREST transport for middleware storefront preflights.
  * A short verdict memo and consecutive-failure breaker bound repeat traffic.
@@ -31,6 +29,16 @@ export interface StorefrontPreflightRpcContext {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
   slug: string;
+}
+
+export interface StorefrontPreflightRpcSuccess {
+  /** Verdict row; callers must still schema-validate before trusting fields. */
+  data: unknown;
+  /**
+   * Attempt that produced this row, so caller-side schema validation can
+   * correlate its parse fail-open. Null for memoized hits — no RPC ran.
+   */
+  attempt: StorefrontPreflightRpcAttempt | null;
 }
 
 export type StorefrontPreflightRpcResult = {
@@ -84,12 +92,16 @@ function isAbortLikeError(error: unknown): boolean {
   );
 }
 
-/** Returns one verdict row, or null after logging a fail-open; never throws. */
+/**
+ * Returns one verdict row with its producing attempt, or null after logging
+ * a fail-open; never throws. `success` is transport-level: the caller still
+ * schema-validates `data` and correlates a parse fail-open via `attempt`.
+ */
 export async function callStorefrontPreflightRpc(
   fn: string,
   args: Record<string, string>,
   options: CallStorefrontPreflightRpcOptions
-): Promise<unknown | null> {
+): Promise<StorefrontPreflightRpcSuccess | null> {
   const failOpenContext = { ...options.failOpenContext };
   const emptyResult = options.emptyResult;
   const attemptOptions = { emptyResult, failOpenContext };
@@ -114,7 +126,7 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
   if (memoized !== undefined) {
-    return memoized;
+    return { data: memoized, attempt: null };
   }
 
   const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
@@ -145,7 +157,7 @@ async function runStorefrontPreflightRpcAttempt(
   options: CallStorefrontPreflightRpcOptions,
   rpcImpl: StorefrontPreflightRpcImpl,
   timeoutMs: number
-): Promise<unknown | null> {
+): Promise<StorefrontPreflightRpcSuccess | null> {
   const { failOpenContext } = options;
   if (breaker.isOpen()) {
     // Console-only: the transition itself was captured once below.
@@ -220,8 +232,8 @@ async function runStorefrontPreflightRpcAttempt(
   }
 
   storefrontPreflightRpcMemo.write(key, row);
-  recordAttempt('success');
-  return row;
+  const attempt = recordAttempt('success');
+  return { data: row, attempt };
 }
 
 function handleRpcFailure(
@@ -260,35 +272,6 @@ function captureBreakerOpenTransition(
       reason: 'circuit-open',
     });
   }
-}
-
-/**
- * Shared storefront-status gate for RPC verdict rows: true only for a
- * published storefront. Unknown/unpublished is the DESIGNED junk-traffic
- * fail-open (skip-logged, no capture — parity with the routes'
- * `failOpenReason: 'unknown-storefront'`); any future status value fails open
- * as a captured has-error.
- */
-export function gateStorefrontPreflightStatus(
-  status: string,
-  failOpenContext: StorefrontPreflightRpcContext
-): boolean {
-  if (status === 'published') {
-    return true;
-  }
-
-  if (status === 'unknown' || status === 'unpublished') {
-    storefrontInternalPreflight.warnSkip({
-      ...failOpenContext,
-      reason: UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
-    });
-  } else {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'has-error',
-    });
-  }
-  return false;
 }
 
 /** Test hook: clears the verdict memo, breaker state, and client singleton. */

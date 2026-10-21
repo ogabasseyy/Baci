@@ -33,17 +33,43 @@ interface StorefrontPreflightRpcAttemptOptions {
   surface: StorefrontInternalPreflightSurface;
 }
 
+let fallbackAttemptCounter = 0;
+
+function newAttemptId(): string {
+  try {
+    const uuid = globalThis.crypto?.randomUUID();
+    if (typeof uuid === 'string' && uuid.length > 0) {
+      return uuid;
+    }
+  } catch {
+    // Fall through to the counter fallback below.
+  }
+  fallbackAttemptCounter += 1;
+  return `preflight-fallback-${fallbackAttemptCounter}`;
+}
+
+function monotonicNow(): number {
+  try {
+    return performance.now();
+  } catch {
+    return Date.now();
+  }
+}
+
 export function createStorefrontPreflightRpcAttemptRecorder(
   options: StorefrontPreflightRpcAttemptOptions
 ) {
-  const attemptId = globalThis.crypto.randomUUID();
-  const startedAt = performance.now();
+  // Total by construction (never-throws fail-open contract): ID and
+  // clock each degrade instead of throwing when the runtime lacks
+  // crypto.randomUUID or performance.now.
+  const attemptId = newAttemptId();
+  const startedAt = monotonicNow();
 
   return (outcome: StorefrontPreflightRpcOutcome) => {
     const attempt: StorefrontPreflightRpcAttempt = {
       attemptId,
       deadlineMs: options.deadlineMs,
-      elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+      elapsedMs: Math.max(0, Math.round(monotonicNow() - startedAt)),
       outcome,
       rpcName: options.rpcName,
       surface: options.surface,
@@ -64,46 +90,4 @@ export function createStorefrontPreflightRpcAttemptRecorder(
 
     return attempt;
   };
-}
-
-export function getRpcAttemptProperties(
-  context: StorefrontPreflightRpcAttemptProperties
-): Record<string, unknown> {
-  return {
-    ...(context.attemptId ? { attempt_id: context.attemptId } : {}),
-    ...(context.deadlineMs === undefined
-      ? {}
-      : { deadline_ms: context.deadlineMs }),
-    ...(context.elapsedMs === undefined
-      ? {}
-      : { elapsed_ms: context.elapsedMs }),
-    ...(context.outcome ? { outcome: context.outcome } : {}),
-    ...(context.rpcName ? { rpc_name: context.rpcName } : {}),
-  };
-}
-
-export function classifyStorefrontPreflightRpcOutcome(
-  reason: 'timeout' | 'fetch-error' | 'has-error',
-  code?: string
-): StorefrontPreflightRpcOutcome {
-  if (code?.trim() === '57014') return 'database-timeout';
-  if (reason === 'timeout') return 'client-timeout';
-  if (reason === 'fetch-error') return 'fetch-error';
-  return 'rpc-error';
-}
-
-export function boundedStorefrontPreflightRpcErrorDetail(
-  code: string,
-  message: string
-): string | undefined {
-  return `${code} ${message}`.trim().slice(0, 160) || undefined;
-}
-
-export function getStorefrontPreflightRpcThrownErrorDetail(
-  error: unknown
-): string | undefined {
-  if (error instanceof Error || error instanceof DOMException) {
-    return boundedStorefrontPreflightRpcErrorDetail(error.name, error.message);
-  }
-  return undefined;
 }

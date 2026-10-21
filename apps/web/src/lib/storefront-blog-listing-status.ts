@@ -12,9 +12,9 @@ import {
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import {
   callStorefrontPreflightRpc,
-  gateStorefrontPreflightStatus,
   type StorefrontPreflightRpcImpl,
 } from './storefront-preflight-rpc';
+import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 export type { StorefrontBlogListingStatusResolution };
 
@@ -138,7 +138,7 @@ export async function resolveStorefrontBlogListingStatus(
     authorName = profile.name;
   }
 
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_BLOG_LISTING_STATUS_RPC,
     { p_identifier: opts.identifier, p_author_name: authorName },
     {
@@ -147,16 +147,24 @@ export async function resolveStorefrontBlogListingStatus(
       timeoutMs: opts.timeoutMs,
     }
   );
-  if (row === null) {
+  if (result === null) {
     return { kind: 'noop' };
   }
 
-  const parsed = storefrontBlogListingStatusRowSchema.safeParse(row);
+  const parsed = storefrontBlogListingStatusRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        result.attempt,
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return { kind: 'noop' };
   }
   const verdict = parsed.data;

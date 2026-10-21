@@ -11,9 +11,9 @@ import {
 } from './storefront-pdp-canonical-path';
 import {
   callStorefrontPreflightRpc,
-  gateStorefrontPreflightStatus,
   type StorefrontPreflightRpcImpl,
 } from './storefront-preflight-rpc';
+import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 // Production query stats show rare `get_storefront_pdp_preflight` tails just
 // below the anon role's 3s statement-timeout ceiling. PostgreSQL starts that
@@ -100,7 +100,7 @@ export async function getStorefrontProductCanonicalRedirectResult(
     return { kind: 'unknown' };
   }
 
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_PDP_PREFLIGHT_RPC,
     { p_identifier: opts.identifier, p_product_slug: opts.productSlug },
     {
@@ -109,16 +109,24 @@ export async function getStorefrontProductCanonicalRedirectResult(
       timeoutMs: opts.timeoutMs ?? PRODUCT_CANONICAL_DEFAULT_TIMEOUT_MS,
     }
   );
-  if (row === null) {
+  if (result === null) {
     return { kind: 'unknown' };
   }
 
-  const parsed = storefrontPdpPreflightRowSchema.safeParse(row);
+  const parsed = storefrontPdpPreflightRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        result.attempt,
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return { kind: 'unknown' };
   }
   const verdict = parsed.data;

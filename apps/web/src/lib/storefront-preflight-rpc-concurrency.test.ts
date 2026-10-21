@@ -74,7 +74,13 @@ describe('storefront preflight RPC concurrent transport', () => {
     expect(rpcImpl).toHaveBeenCalledTimes(1);
     first.resolve({ data: [{ kind: 'present-or-unknown' }], error: null });
     await expect(Promise.all(requests)).resolves.toEqual(
-      Array.from({ length: 10 }, () => ({ kind: 'present-or-unknown' }))
+      Array.from({ length: 10 }, () => ({
+        data: { kind: 'present-or-unknown' },
+        attempt: expect.objectContaining({
+          outcome: 'success',
+          rpcName: 'resolve_storefront',
+        }),
+      }))
     );
 
     await vi.advanceTimersByTimeAsync(3_001);
@@ -83,7 +89,10 @@ describe('storefront preflight RPC concurrent transport', () => {
     await Promise.resolve();
     expect(rpcImpl).toHaveBeenCalledTimes(2);
     second.resolve({ data: [{ kind: 'fresh' }], error: null });
-    await expect(fresh).resolves.toEqual({ kind: 'fresh' });
+    await expect(fresh).resolves.toEqual({
+      data: { kind: 'fresh' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
   });
 
   it('keeps different compatibility fields in independent flights', async () => {
@@ -134,7 +143,10 @@ describe('storefront preflight RPC concurrent transport', () => {
     ).resolves.toBeNull();
     expect(rpcImpl).toHaveBeenCalledTimes(1);
     pending.resolve({ data: [{ kind: 'production' }], error: null });
-    await expect(production).resolves.toEqual({ kind: 'production' });
+    await expect(production).resolves.toEqual({
+      data: { kind: 'production' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
   });
 
   it('gates preview before memo and does not borrow a production verdict', async () => {
@@ -143,7 +155,8 @@ describe('storefront preflight RPC concurrent transport', () => {
       .mockResolvedValue({ data: [{ kind: 'production' }], error: null });
     vi.stubEnv('VERCEL_ENV', 'production');
     await expect(call('env_fn', { p_slug: 'same' }, rpcImpl)).resolves.toEqual({
-      kind: 'production',
+      data: { kind: 'production' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
     });
 
     vi.stubEnv('VERCEL_ENV', 'preview');
@@ -171,7 +184,10 @@ describe('storefront preflight RPC concurrent transport', () => {
       expect.any(AbortSignal)
     );
     pending.resolve({ data: [{ kind: 'before' }], error: null });
-    await expect(request).resolves.toEqual({ kind: 'before' });
+    await expect(request).resolves.toEqual({
+      data: { kind: 'before' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
+    });
   });
 
   it('captures empty-result semantics before the flight owner is deferred', async () => {
@@ -248,7 +264,8 @@ describe('storefront preflight RPC concurrent transport', () => {
     expect(console.warn).toHaveBeenCalledTimes(1);
     rpcImpl.mockResolvedValue({ data: [{ kind: 'retry' }], error: null });
     await expect(call('retry_fn', args, rpcImpl)).resolves.toEqual({
-      kind: 'retry',
+      data: { kind: 'retry' },
+      attempt: expect.objectContaining({ outcome: 'success' }),
     });
     expect(rpcImpl).toHaveBeenCalledTimes(2);
   });

@@ -23,6 +23,7 @@ import {
   isPaystackCheckoutAvailable,
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
+import { getProductSchemaDescription } from './get-product-schema-description';
 import {
   type CollectionPageData,
   type CollectionPageJsonLdSchema,
@@ -53,7 +54,6 @@ import {
 } from './storefront-entity-id';
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
-import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -633,22 +633,11 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  // Product schema should describe the product itself, not repeat a short
-  // search-snippet template. Prefer the enriched visible description and use
-  // the meta description only when the visible description sanitizes empty.
-  const productDescription = product.description
-    ? generateMetaDescription(product.description, 500)
-    : '';
-  const metaDescription = product.meta_description
-    ? generateMetaDescription(product.meta_description, 500)
-    : '';
-  const visibleDescriptionSupported =
-    productDescription && !isUnsupportedSpecValue(productDescription);
-  const safeDescription = visibleDescriptionSupported
-    ? productDescription
-    : metaDescription
-      ? metaDescription
-      : `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`;
+  const safeDescription = getProductSchemaDescription(
+    product,
+    merchantName,
+    currency
+  );
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;

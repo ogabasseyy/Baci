@@ -67,10 +67,15 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     void loadPreview();
   }, []);
 
-  async function loadDestination(slug: string | null): Promise<void> {
+  async function loadDestination(
+    slug: string | null,
+    signal?: AbortSignal
+  ): Promise<void> {
     setDestChecked(false);
     setDestinationError(null);
-    const result = await fetchDestinationCart(slug);
+    const result = await fetchDestinationCart(slug, signal);
+    // A superseded refresh must not overwrite destination state.
+    if (signal?.aborted) return;
     if (result.status === 'error') {
       setDestinationError(
         'Could not check your existing cart. Please try again.'
@@ -117,7 +122,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       if (payload.merchant?.slug)
         recordActiveHandoff(token, handoffId, payload.merchant.slug);
       if (payload.status === 'pending') {
-        await loadDestination(payload.merchant?.slug ?? null);
+        await loadDestination(payload.merchant?.slug ?? null, signal);
       } else {
         setDestChecked(true);
         if (payload.status === 'expired') {

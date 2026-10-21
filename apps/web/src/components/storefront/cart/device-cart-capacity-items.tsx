@@ -54,16 +54,26 @@ export function DeviceCartCapacityItems({
         : new AbortController().signal;
     let applied = false;
     let removed = false;
-    void withCartCookieWrite(
-      undefined,
-      signal,
-      () => {
-        applied = true;
-        removed = applyRemoval(selected);
-        return Promise.resolve(undefined);
-      },
-      merchantSlug
-    )
+    let write: Promise<unknown>;
+    try {
+      write = withCartCookieWrite(
+        undefined,
+        signal,
+        () => {
+          applied = true;
+          removed = applyRemoval(selected);
+          return Promise.resolve(undefined);
+        },
+        merchantSlug
+      );
+    } catch {
+      // A secure browser without Web Locks throws synchronously from
+      // the lock manager: surface feedback instead of a dead click.
+      setItems(getCartFromStorage(merchantSlug));
+      setError('Could not save that change. Check storage access and retry.');
+      return;
+    }
+    void write
       .then(() => {
         if (!applied) {
           setItems(getCartFromStorage(merchantSlug));
@@ -143,12 +153,12 @@ export function DeviceCartCapacityItems({
     let remaining = current.filter(
       (_, currentIndex) => currentIndex !== targetIndex
     );
-    if (getCartWideNegotiationFromStorage(merchantSlug)) {
+    const hadGroupNegotiation = getCartWideNegotiationFromStorage(merchantSlug);
+    if (hadGroupNegotiation) {
       remaining = remaining.map(
         ({ negotiatedPrice: _price, negotiationStatus: _status, ...item }) =>
           item
       );
-      saveCartWideNegotiationToStorage(false, merchantSlug);
     }
     // Fence provisioning in every tab before rewriting the parked
     // cache: rotating the shared epoch bumps other tabs' session
@@ -171,6 +181,10 @@ export function DeviceCartCapacityItems({
       setError('Could not save that change. Check storage access and retry.');
       return false;
     }
+    // Clear the group-deal flag only once the stripped cache is known
+    // to be persisted; a failed write must keep it for the retry.
+    if (hadGroupNegotiation)
+      saveCartWideNegotiationToStorage(false, merchantSlug);
     setError(null);
     setItems(remaining);
     return true;

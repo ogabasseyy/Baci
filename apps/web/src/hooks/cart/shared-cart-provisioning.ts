@@ -1,11 +1,12 @@
 'use client';
 
-import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
+import type { CartSnapshot } from '@baci/shared/cart';
 import { reportCartCookieStorageFailure } from './cart-cookie-storage-failure';
 import { isCartCookieEpochCurrent } from './cart-cross-tab-lock';
 import { saveSharedCartImportReceipt } from './cart-storage';
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
+import { createImportFinisher } from './shared-cart-import-finish';
 import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
 import { planProvisioningImport } from './shared-cart-provisioning-plan';
 import { isTerminalCart } from './shared-cart-queue';
@@ -263,49 +264,6 @@ export function createCartProvisioning(
     return { ok: true };
   }
 
-  function finishImportOp(
-    operationId: string,
-    outcome: { ok: true } | { ok: false; code: CartErrorCode }
-  ): void {
-    const generation = generationRef.current;
-    if (!importOpIdsRef.current.has(operationId)) return;
-    importOpIdsRef.current.delete(operationId);
-    if (!outcome.ok) {
-      importOpIdsRef.current = new Set();
-      dispatch({
-        code: outcome.code,
-        generation,
-        type: 'import/failed',
-      });
-      return;
-    }
-    if (importOpIdsRef.current.size > 0) return;
-    const current = stateRef.current;
-    if (!current.confirmed) return;
-    dispatch({
-      generation,
-      lineCount: current.confirmed.lines.length,
-      snapshot: current.confirmed,
-      type: 'import/finished',
-    });
-    saveSharedCartImportReceipt(optionsRef.current.merchantSlug, {
-      cartId: current.confirmed.cartId,
-      importedAt: new Date().toISOString(),
-      lineCount: current.confirmed.lines.length,
-      ...(context.importSourceIdsRef?.current.length
-        ? {
-            consumedCartItemIds: context.importSourceIdsRef.current.map(
-              (line) => line.cartItemId
-            ),
-            consumedQuantities: Object.fromEntries(
-              context.importSourceIdsRef.current.map((line) => [
-                line.cartItemId,
-                line.quantity,
-              ])
-            ),
-          }
-        : {}),
-    });
-  }
+  const finishImportOp = createImportFinisher(context);
   return { ensureCart, finishImportOp };
 }

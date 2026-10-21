@@ -197,16 +197,29 @@ export function createCartRecovery(
       typeof AbortSignal.timeout === 'function'
         ? AbortSignal.timeout(5_000)
         : new AbortController().signal;
-    void withCartCookieWrite(
-      undefined,
-      signal,
-      () => {
-        rotateCartCookieEpoch(merchantSlug);
-        saveCartToStorage([], merchantSlug);
-        return Promise.resolve(undefined);
-      },
-      merchantSlug
-    )
+    let write: Promise<unknown>;
+    try {
+      write = withCartCookieWrite(
+        undefined,
+        signal,
+        () => {
+          rotateCartCookieEpoch(merchantSlug);
+          saveCartToStorage([], merchantSlug);
+          return Promise.resolve(undefined);
+        },
+        merchantSlug
+      );
+    } catch {
+      // A secure browser without Web Locks throws synchronously from
+      // the lock manager: keep the capacity recovery active.
+      dispatch({
+        code: 'temporarily_unavailable',
+        generation,
+        type: 'import/failed',
+      });
+      return;
+    }
+    void write
       .then(() => {
         if (generationRef.current !== generation) return;
         if (getCartFromStorage(merchantSlug).length === 0) {

@@ -277,6 +277,9 @@ export function createCartProvisioning(
       cartId: current.confirmed.cartId,
       importedAt: new Date().toISOString(),
       lineCount: current.confirmed.lines.length,
+      ...(context.importSourceIdsRef?.current.length
+        ? { consumedCartItemIds: [...context.importSourceIdsRef.current] }
+        : {}),
     });
   }
   return { ensureCart, finishImportOp };

@@ -72,6 +72,10 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   // import receipt so terminal recovery can identify them exactly.
   const createSourceIdsRef = useRef<string[]>([]);
 
+  // Device line IDs a merge import reconciles, recorded on the receipt
+  // when its operations finish (same purpose as the create list).
+  const importSourceIdsRef = useRef<string[]>([]);
+
   const createAttemptedRef = useRef(false);
   const retiredCartIdRef = useRef<string | null>(null);
 
@@ -116,6 +120,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     createOpRef,
     createRequestRef,
     createSourceIdsRef,
+    importSourceIdsRef,
     createAttemptedRef,
     retiredCartIdRef,
     bootstrappingRef,

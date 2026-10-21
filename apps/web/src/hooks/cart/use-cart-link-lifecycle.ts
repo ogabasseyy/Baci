@@ -89,6 +89,7 @@ export function useCartLinkLifecycle(
     createOpRef.current = null;
     createRequestRef.current = null;
     if (createSourceIdsRef) createSourceIdsRef.current = [];
+    if (context.importSourceIdsRef) context.importSourceIdsRef.current = [];
     createAttemptedRef.current = false;
     bootstrappingRef.current = false;
     // Reset hydration ownership so a restart cannot inherit stale work.

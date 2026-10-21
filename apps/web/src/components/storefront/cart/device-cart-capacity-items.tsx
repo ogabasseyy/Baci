@@ -26,6 +26,7 @@ export function DeviceCartCapacityItems({
   merchantSlug: string;
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setItems(getCartFromStorage(merchantSlug));
   }, [merchantSlug]);
@@ -69,26 +70,25 @@ export function DeviceCartCapacityItems({
         negotiationStatus: selected.negotiationStatus,
       });
     const candidates = current.filter(matchesSelected);
-    // A stable saved ID survives reordering and quantity edits. Without an
-    // ID, remove one equivalent legacy occurrence, preserving siblings whose
-    // quantity or assurance differs from the selected row.
+    // A stable saved ID survives reordering and quantity edits, but
+    // synthesized legacy IDs repeat across duplicate rows: an ID only
+    // identifies the row when it is unique in storage. Otherwise remove
+    // the occurrence matching the distinguishing quantity/assurance
+    // fields, preserving differently-configured siblings.
     const sameId = current.filter(
       (item) => item.cartItemId === selected.cartItemId
     );
-    const target = selected.cartItemId
+    const idIsAuthoritative =
+      Boolean(selected.cartItemId) && sameId.length === 1;
+    const target = idIsAuthoritative
       ? (candidates.find((item) => item.cartItemId === selected.cartItemId) ??
-        (sameId.length === 1 &&
-        items.filter((item) => item.cartItemId === selected.cartItemId)
-          .length === 1
-          ? sameId[0]
-          : undefined))
+        sameId[0])
       : candidates.length === 1 &&
           items.filter(matchesSelected).length === 1 &&
           !candidates[0].cartItemId
         ? candidates[0]
         : candidates.find(
             (item) =>
-              !item.cartItemId &&
               item.quantity === selected.quantity &&
               (item.hasAssurance ?? false) ===
                 (selected.hasAssurance ?? false) &&
@@ -115,22 +115,45 @@ export function DeviceCartCapacityItems({
     // instead of resurrecting the removed line.
     rotateCartCookieEpoch(merchantSlug);
     saveCartToStorage(remaining, merchantSlug);
+    // Storage writes can fail silently (quota/blocked): only hide the
+    // line once the persisted cache actually reflects the removal.
+    const persisted = getCartFromStorage(merchantSlug);
+    const persistedOk =
+      persisted.length === remaining.length &&
+      persisted.every(
+        (item, index) =>
+          item.cartItemId === remaining[index].cartItemId &&
+          item.quantity === remaining[index].quantity
+      );
+    if (!persistedOk) {
+      setItems(persisted);
+      setError('Could not save that change. Check storage access and retry.');
+      return;
+    }
+    setError(null);
     setItems(remaining);
   }
   return (
-    <ul aria-label="Saved device cart items">
-      {items.map((item, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: stateless rows may share product IDs; no offer credentials enter React keys.
-        <li key={`${item.cartItemId ?? item.id}-${index}`}>
-          <span>
-            {item.name} {item.selectedColor} {item.selectedStorage} ×{' '}
-            {item.quantity}
-          </span>
-          <Button type="button" variant="outline" onClick={() => remove(index)}>
-            Remove {item.name}
-          </Button>
-        </li>
-      ))}
-    </ul>
+    <>
+      {error ? <p role="alert">{error}</p> : null}
+      <ul aria-label="Saved device cart items">
+        {items.map((item, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: stateless rows may share product IDs; no offer credentials enter React keys.
+          <li key={`${item.cartItemId ?? item.id}-${index}`}>
+            <span>
+              {item.name} {item.selectedColor} {item.selectedStorage} ×{' '}
+              {item.quantity}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => remove(index)}
+            >
+              Remove {item.name}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

@@ -69,5 +69,9 @@ export function importInitialDeviceCart(
     return;
   }
   importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
+  if (context.importSourceIdsRef)
+    context.importSourceIdsRef.current = cached
+      .map((item) => item.cartItemId)
+      .filter(Boolean);
   dispatch({ entries, generation, type: 'import/enqueue' });
 }

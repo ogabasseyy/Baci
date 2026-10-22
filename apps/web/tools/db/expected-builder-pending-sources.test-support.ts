@@ -29,4 +29,34 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261022103000_builder_async_edits.sql',
     sha256: 'f01a779c3edb2864f1a05ed64a38b04140c761c362e81653396c6a2a515d89dd',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121000_builder_public_versions.sql',
+    sha256: '9383cd24e9e2eeae39531d54eec3c033f3ae39377aaf023fcee85df89ff127bf',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121100_builder_publication_receipts.sql',
+    sha256: '91fd2cc3d77a583c48b8ce7b5f1c819ab28d27f73a28fb760b2e4c01bf1a454b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121200_builder_publication_intents.sql',
+    sha256: '4708e516e317a4dc26dc5cfe0f9f2ed054c2ef07a78968c3743a8b405a1deb75',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121300_builder_publication_commit.sql',
+    sha256: '52de620fa7562c06950836f8e6efc45065a5665a625794e2f8c5dfeb75593af1',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121400_builder_publication_delivery.sql',
+    sha256: '6447f91fcb538153a03e780bee92f9de065f9c53e10488f669cb15a5ae1ffcc7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022121500_builder_publication_status.sql',
+    sha256: 'a2404ccc6be69ab21fff052b604a3554a49cfdf4bea3f722731667f8afc85fdf',
+  },
 ];

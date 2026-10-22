@@ -3,6 +3,15 @@ import {
   builderRevisionSchema,
 } from '@/schemas/builder-mcp-primitives';
 export const BUILDER_ERROR_MESSAGES = {
+  APPROVAL_EXPIRED:
+    'This approval expired. Request a new publication approval.',
+  APPROVAL_ALREADY_USED:
+    'This approval has already been used. Read the publication receipt.',
+  APPROVAL_MISMATCH:
+    'The publication approval does not match this revision or destination.',
+  PREVIEW_REQUIRED:
+    'A safe preview of this exact revision is required before publication.',
+
   RATE_LIMITED: 'Too many requests. Wait briefly before retrying.',
   INVALID_REQUEST: 'The request is invalid.',
   NOT_FOUND: 'Storefront not found.',

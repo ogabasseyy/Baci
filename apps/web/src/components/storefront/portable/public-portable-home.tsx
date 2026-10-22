@@ -9,6 +9,7 @@ import {
   portableHomeSchema,
   portableIdentitySchema,
 } from '@/schemas/portable-storefront';
+import { PublicationRevisionMarker } from '../publication-revision-marker';
 import { PortableHomeView } from './portable-home';
 
 /** The same published-catalog API already used by the legacy public ProductGrid. */
@@ -51,10 +52,12 @@ export function PublicPortableHome({
   config,
   merchant,
   basePath,
+  publishedVersion,
 }: {
   config: unknown;
   merchant: unknown;
   basePath: string;
+  publishedVersion?: string | null;
 }) {
   const identity = portableIdentitySchema.safeParse(merchant);
   const merchantId = identity.success ? identity.data.id : null;
@@ -62,6 +65,7 @@ export function PublicPortableHome({
     published: Awaited<ReturnType<typeof createPortablePublishedSnapshot>>;
     catalog: PortableCatalog;
     sourceConfig: unknown;
+    sourcePublishedVersion: string | null | undefined;
   } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -74,7 +78,13 @@ export function PublicPortableHome({
         loadPortablePublicCatalog(merchantId),
       ])
         .then(([published, catalog]) => {
-          if (active) setSnapshot({ published, catalog, sourceConfig: config });
+          if (active)
+            setSnapshot({
+              published,
+              catalog,
+              sourceConfig: config,
+              sourcePublishedVersion: publishedVersion,
+            });
         })
         .catch(() => {
           if (active) setFailed(true);
@@ -83,7 +93,7 @@ export function PublicPortableHome({
     return () => {
       active = false;
     };
-  }, [merchantId, config]);
+  }, [merchantId, config, publishedVersion]);
   if (failed)
     return (
       <div role="alert">
@@ -93,11 +103,15 @@ export function PublicPortableHome({
   if (
     !snapshot ||
     snapshot.catalog.merchantId !== merchantId ||
-    snapshot.sourceConfig !== config
+    snapshot.sourceConfig !== config ||
+    snapshot.sourcePublishedVersion !== publishedVersion
   )
     return <div role="status">Loading catalog</div>;
   return (
-    <div data-published-version={snapshot.published.publishedVersion}>
+    <PublicationRevisionMarker
+      version={snapshot.sourcePublishedVersion}
+      contentDigest={snapshot.published.publishedVersion}
+    >
       <PortableHomeView
         config={snapshot.published.config}
         merchant={merchant}
@@ -105,6 +119,6 @@ export function PublicPortableHome({
         inert={false}
         basePath={basePath}
       />
-    </div>
+    </PublicationRevisionMarker>
   );
 }

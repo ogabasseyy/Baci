@@ -191,6 +191,29 @@
       },
       "required": ["storefrontId", "pageSlug", "expectedVersion"],
       "additionalProperties": false
+    },
+    "publish_storefront": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "storefrontId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "expectedVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": ["storefrontId", "expectedVersion", "idempotencyKey"],
+      "additionalProperties": false
     }
   },
   "outputs": {
@@ -259,6 +282,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -639,6 +666,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -718,6 +749,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -798,6 +833,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -890,6 +929,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -969,6 +1012,10 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",
@@ -2372,6 +2419,277 @@
             "code": {
               "type": "string",
               "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "publish_storefront": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "storefrontId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "status": {
+                  "type": "string",
+                  "const": "approval_required"
+                },
+                "intentId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "approvalUrl": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "storefrontId",
+                "version",
+                "status",
+                "intentId",
+                "approvalUrl"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "storefrontId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "status": {
+                  "type": "string",
+                  "const": "blocked"
+                },
+                "missingItems": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              },
+              "required": ["storefrontId", "version", "status", "missingItems"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "storefrontId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "receiptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "publishedVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "status": {
+                  "type": "string",
+                  "const": "verifying"
+                },
+                "deliveryBlockedReason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "storefrontId",
+                "version",
+                "receiptId",
+                "publishedVersion",
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "storefrontId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "receiptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "publishedVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "status": {
+                  "type": "string",
+                  "const": "live"
+                },
+                "publicUrl": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "verifiedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "storefrontId",
+                "version",
+                "receiptId",
+                "publishedVersion",
+                "status",
+                "publicUrl",
+                "verifiedAt"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "storefrontId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "receiptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "publishedVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "status": {
+                  "type": "string",
+                  "const": "superseded"
+                },
+                "currentPublishedVersion": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "supersededByReceiptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                }
+              },
+              "required": [
+                "storefrontId",
+                "version",
+                "receiptId",
+                "publishedVersion",
+                "status",
+                "currentPublishedVersion"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "APPROVAL_EXPIRED",
+                "APPROVAL_ALREADY_USED",
+                "APPROVAL_MISMATCH",
+                "PREVIEW_REQUIRED",
                 "RATE_LIMITED",
                 "INVALID_REQUEST",
                 "NOT_FOUND",

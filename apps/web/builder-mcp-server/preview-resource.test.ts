@@ -13,7 +13,7 @@ it('advertises a tenant-neutral standard resource only on preview; never embeds 
   await client.connect(a);
   try {
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(8);
     for (const tool of tools)
       if (tool.name === 'preview_storefront')
         expect(tool._meta).toMatchObject({

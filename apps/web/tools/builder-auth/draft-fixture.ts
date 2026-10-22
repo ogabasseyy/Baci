@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import type { PoolClient } from 'pg';
 import { databaseFixture } from './test-fixtures.ts';
 export async function draftFixture(
-  options: { cutover?: boolean; asyncEdits?: boolean } = {}
+  options: { cutover?: boolean; asyncEdits?: boolean; local?: boolean } = {}
 ) {
-  const fixture = await databaseFixture();
+  const fixture = await databaseFixture({ local: options.local });
   try {
     await fixture.pool.query(`CREATE ROLE service_role BYPASSRLS;
  CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT current_setting('request.jwt.claims',true)::jsonb $$;

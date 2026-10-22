@@ -24,6 +24,10 @@ export function safeDatabaseFailure(error: {
   message?: string;
 }): never {
   const allowed = [
+    'APPROVAL_EXPIRED',
+    'APPROVAL_ALREADY_USED',
+    'APPROVAL_MISMATCH',
+    'PREVIEW_REQUIRED',
     'CONNECTION_REVOKED',
     'INSUFFICIENT_SCOPE',
     'NOT_FOUND',

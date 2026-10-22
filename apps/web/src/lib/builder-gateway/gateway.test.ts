@@ -56,7 +56,7 @@ describe('fixed builder gateway', () => {
     const r = await f.handler(request(), 'create_storefront_draft');
     expect(r.status).toBe(403);
     expect(r.headers.get('www-authenticate')).toContain('storefront.write');
-    expect((await f.handler(request(), 'publish_storefront')).status).toBe(404);
+    expect((await f.handler(request(), 'delete_storefront')).status).toBe(404);
     expect(f.execute).not.toHaveBeenCalled();
   });
   it('enforces strict/bounded JSON and safe output; audit drops payloads and tokens', async () => {

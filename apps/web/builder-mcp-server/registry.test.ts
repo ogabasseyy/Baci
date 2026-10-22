@@ -13,6 +13,7 @@ const names = [
   'get_storefront_operation',
   'apply_storefront_operation',
   'preview_storefront',
+  'publish_storefront',
 ];
 async function connected(
   token: string | undefined,
@@ -36,7 +37,7 @@ async function connected(
   };
 }
 describe('separate builder tool registry', () => {
-  it('advertises seven implemented strict tools, only preview has UI', async () => {
+  it('advertises eight implemented strict tools, only preview has UI', async () => {
     const f = await connected(undefined);
     try {
       const { tools } = await f.client.listTools();

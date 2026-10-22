@@ -13,6 +13,11 @@ export const builderProtectedResource = {
   bearer_methods_supported: ['header'],
 };
 export const builderToolDescriptions = {
+  publish_storefront: {
+    title: 'Request approval to publish a Baci homepage',
+    description:
+      'Request owner approval for this exact homepage revision and canonical destination. The owner must review and confirm in the signed-in Baci page. This call never confirms publication. Reuse the same retry key after uncertain responses to reconcile a committed receipt. Read current status for delivery; live requires public browser verification.',
+  },
   preview_storefront: {
     title: 'Preview a private Baci homepage',
     description:

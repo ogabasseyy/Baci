@@ -1,4 +1,4 @@
-/** Only implemented handlers are discoverable. Publication joins after Task8. */
+/** Only implemented handlers are discoverable. Publication requests require separate owner approval. */
 export const implementedBuilderTools = [
   'list_storefronts',
   'get_storefront_status',
@@ -7,6 +7,7 @@ export const implementedBuilderTools = [
   'get_storefront_operation',
   'apply_storefront_operation',
   'preview_storefront',
+  'publish_storefront',
 ] as const;
 export type ImplementedBuilderTool = (typeof implementedBuilderTools)[number];
 export function isImplementedBuilderTool(

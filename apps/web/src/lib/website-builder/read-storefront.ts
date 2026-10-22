@@ -29,6 +29,9 @@ const rowsSchema = z
       draft_config: z.unknown(),
       version: z.string().nullable(),
       is_published: z.boolean(),
+      publishedVersion: z.string().nullable().default(null),
+      latestReceipt: z.unknown().optional(),
+      missingItems: z.array(z.string()).max(50).optional(),
       pendingOperationIds: z.array(z.uuid()).max(20).default([]),
     })
   )
@@ -82,10 +85,12 @@ export async function getStorefrontStatus(ctx: BuilderContext) {
   return builderStatusResultSchema.parse({
     storefrontId: row.id,
     draftVersion: row.version,
-    publishedVersion: null,
+    publishedVersion: row.publishedVersion,
     isPublished: row.is_published,
-    latestReceipt: null,
-    missingItems: ['Launch readiness has not been assessed.'],
+    latestReceipt: row.latestReceipt ?? null,
+    missingItems: row.missingItems ?? [
+      'Launch readiness has not been assessed.',
+    ],
     pendingOperationIds: row.pendingOperationIds,
     supportedPageSlugs: ['home'],
     capabilities: supported

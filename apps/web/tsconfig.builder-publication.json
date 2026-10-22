@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": [],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "tools/builder-auth/publication*.ts",
+    "tools/builder-auth/verify-publication.ts",
+    "tools/builder-auth/verify-publication.test.tsx",
+    "tools/builder-auth/local-postgres*.ts",
+    "src/**/*.d.ts",
+    "src/lib/consent-mode.ts"
+  ],
+  "exclude": ["node_modules"]
+}

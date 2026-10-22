@@ -3,11 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Pool } from 'pg';
+import { Pool, type PoolConfig } from 'pg';
+import { startLocalPostgresFixture } from './local-postgres-fixture.ts';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createSessionVault } from './session-vault.ts';
 import { createAuthStorage } from './storage.ts';
-export async function databaseFixture() {
+export async function databaseFixture(options: { local?: boolean } = {}) {
+  let local: Awaited<ReturnType<typeof startLocalPostgresFixture>> | undefined;
   const name = `baci-builder-auth-${randomUUID().slice(0, 8)}`;
   const docker = (...args: string[]) =>
     execFileSync('docker', args, {
@@ -20,6 +22,10 @@ export async function databaseFixture() {
   const close = async () => {
     await providerPool?.end();
     await pool?.end();
+    if (local) {
+      await local.close();
+      return;
+    }
     try {
       docker('rm', '-f', name);
     } catch {
@@ -27,36 +33,51 @@ export async function databaseFixture() {
     }
   };
   try {
-    docker(
-      'run',
-      '--rm',
-      '-d',
-      '--name',
-      name,
-      '-p',
-      '127.0.0.1::5432',
-      '-e',
-      'POSTGRES_HOST_AUTH_METHOD=trust',
-      'postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
-    );
-    let ready = false;
-    for (let i = 0; i < 100; i++) {
-      try {
-        docker('exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres');
-        ready = true;
-        break;
-      } catch {
-        await delay(100);
+    let connection: PoolConfig;
+    if (options.local) {
+      local = await startLocalPostgresFixture();
+      connection = local.connection;
+    } else {
+      docker(
+        'run',
+        '--rm',
+        '-d',
+        '--name',
+        name,
+        '-p',
+        '127.0.0.1::5432',
+        '-e',
+        'POSTGRES_HOST_AUTH_METHOD=trust',
+        'postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
+      );
+      let ready = false;
+      for (let i = 0; i < 100; i++) {
+        try {
+          docker(
+            'exec',
+            name,
+            'pg_isready',
+            '-h',
+            '127.0.0.1',
+            '-U',
+            'postgres'
+          );
+          ready = true;
+          break;
+        } catch {
+          await delay(100);
+        }
       }
+      if (!ready) throw new Error('Database not ready');
+      const port = Number(docker('port', name, '5432/tcp').split(':').at(-1));
+      connection = {
+        host: '127.0.0.1',
+        port,
+        user: 'postgres',
+        database: 'postgres',
+      };
     }
-    if (!ready) throw new Error('Database not ready');
-    const port = Number(docker('port', name, '5432/tcp').split(':').at(-1));
-    pool = new Pool({
-      host: '127.0.0.1',
-      port,
-      user: 'postgres',
-      database: 'postgres',
-    });
+    pool = new Pool(connection);
     await pool.query(
       `CREATE ROLE anon;CREATE ROLE authenticated;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT COALESCE(nullif(current_setting('request.jwt.claim.sub',true),''),nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid $$;GRANT USAGE ON SCHEMA auth TO authenticated;GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;CREATE TABLE public.merchants(id uuid PRIMARY KEY,user_id uuid);ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY;CREATE POLICY owner ON public.merchants TO authenticated USING(user_id=auth.uid());GRANT SELECT ON public.merchants TO authenticated;`
     );
@@ -70,10 +91,7 @@ export async function databaseFixture() {
       )
     );
     providerPool = new Pool({
-      host: '127.0.0.1',
-      port,
-      user: 'postgres',
-      database: 'postgres',
+      ...connection,
       options: '-c role=baci_builder_auth_storage',
       max: 8,
     });

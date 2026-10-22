@@ -12,5 +12,6 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["./*.ts"]
+  "include": ["./*.ts"],
+  "exclude": ["publication*.ts", "verify-publication.ts", "local-postgres*.ts"]
 }

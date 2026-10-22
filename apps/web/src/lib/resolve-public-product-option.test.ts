@@ -88,6 +88,17 @@ describe('public option resolution', () => {
     });
     expect(option.stockQuantity).toBe(3);
     expect(option.purchasable).toBe(true);
+    const depleted = resolvePublicProductOption(
+      { ...parent, manage_stock: false, stock_quantity: 0 },
+      {
+        variant: {
+          inventory_tracking_policy: 'standard',
+          stock_quantity: 0,
+        },
+      }
+    );
+    expect(depleted.stockQuantity).toBe(0);
+    expect(depleted.purchasable).toBe(false);
   });
   it('keeps unlimited tracking enabled without a finite count', () => {
     const option = resolvePublicProductOption(parent, {
@@ -152,6 +163,20 @@ describe('public option resolution', () => {
     );
     expect(managedOption.stockQuantity).toBe(0);
     expect(managedOption.purchasable).toBe(false);
+  });
+  it('keeps standard-tracked child quantities finite under an unmanaged parent', () => {
+    const option = resolvePublicProductOption(
+      { ...parent, manage_stock: false, stock_quantity: 0 },
+      {
+        variant: {
+          inventory_tracking_policy: 'standard',
+          stock_quantity: 3,
+        },
+      }
+    );
+
+    expect(option.stockQuantity).toBe(3);
+    expect(option.purchasable).toBe(true);
   });
   it('keeps an unbounded offer allocation purchasable on a zero-stock parent', () => {
     const unlimitedParent = {

@@ -21,6 +21,14 @@ export function isPublicVariantPurchasable(
   if (serializedStock !== undefined) {
     return serializedStock > 0;
   }
+  if (
+    parent.manage_stock === false &&
+    (variant.effective_policy ?? variant.inventory_tracking_policy) ===
+      'standard' &&
+    variant.stock_quantity != null
+  ) {
+    return variant.stock_quantity > 0;
+  }
   // The categorized PDP normalizes legacy null manage_stock to managed
   // inventory before downstream evaluation; match it so a depleted child
   // under a null parent is unavailable everywhere. An ABSENT policy

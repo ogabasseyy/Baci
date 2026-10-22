@@ -3,6 +3,7 @@ import {
   resolveOfferAllocatableStock,
 } from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
+import { isUnmanagedVariantStock } from './is-unmanaged-variant-stock';
 import { getEffectiveStock } from './product-stock';
 import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
@@ -77,7 +78,7 @@ export function resolvePublicProductOption(
     : undefined;
   const stockQuantity = variant
     ? (serializedVariantStock ??
-      (parent.manage_stock === false
+      (isUnmanagedVariantStock(variant, parent.manage_stock)
         ? Number.POSITIVE_INFINITY
         : (variant.stock_quantity ?? getEffectiveStock(parent))))
     : offerStock === null

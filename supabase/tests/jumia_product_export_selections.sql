@@ -4,6 +4,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
 SELECT plan(8);
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $fixtures$
 DECLARE

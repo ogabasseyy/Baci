@@ -1,7 +1,19 @@
+// @vitest-environment node
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+const probeFiles = {
+  cimd: 'cimd.probe.mjs',
+  gateway: 'gateway.probe.test-support.mjs',
+  upstream: 'upstream.probe.test-support.mjs',
+} as const;
+
+it('keeps every opt-in probe entrypoint available even when execution is disabled', () => {
+  for (const file of Object.values(probeFiles))
+    expect(existsSync(new URL(`./${file}`, import.meta.url))).toBe(true);
+});
 
 const enabled = process.env.BACI_BUILDER_OAUTH_PROBE === '1';
 describe.skipIf(!enabled)('real local OAuth candidate', () => {
@@ -66,7 +78,7 @@ describe.skipIf(!enabled)('real local OAuth candidate', () => {
     it(`proves the ${file} boundary`, () => {
       const output = execFileSync(
         process.execPath,
-        [`tools/builder-oauth-spike/${file}.probe.test-support.mjs`],
+        [`tools/builder-oauth-spike/${probeFiles[file]}`],
         { encoding: 'utf8', timeout: 90_000 }
       );
       const report: { checks: string[] } = JSON.parse(

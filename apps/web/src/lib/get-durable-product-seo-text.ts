@@ -1,9 +1,7 @@
 import { decodeHTML } from 'entities';
-import {
-  isClearlyNonRetailSeoAmount,
-  isDurableSeoDenomination,
-  isDurableSeoPrice,
-} from './classify-durable-product-seo-price';
+import { isDurableSeoDenomination } from './classify-durable-product-seo-denomination';
+import { isClearlyNonRetailSeoAmount } from './classify-durable-product-seo-non-retail';
+import { isDurableSeoPrice } from './classify-durable-product-seo-price';
 import { getProductSeoMoneyCandidates } from './get-product-seo-money-candidates';
 import { stripHtmlTags } from './sanitize-core';
 import { stripVolatileProductPriceSentences } from './storefront-product-description';
@@ -93,7 +91,7 @@ export function getDurableProductSeoText({
         return removeIdentityIgnoringCase(result, identity);
       }, plainText)
     : plainText;
-  const denominations = /\bgift[- ]card\b/i.test(productName)
+  const denominations = /\b(?:gift[- ]cards?|vouchers?)\b/i.test(productName)
     ? getProductSeoMoneyCandidates(productName).filter((value) => value.marker)
     : [];
   return getProductSeoMoneyCandidates(monetaryText).some((candidate) => {

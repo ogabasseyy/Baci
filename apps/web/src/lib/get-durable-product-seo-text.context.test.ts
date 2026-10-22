@@ -112,6 +112,7 @@ describe('durable SEO monetary context', () => {
 
   it.each([
     'iPhone 13 – 350,000',
+    'iPhone 13 | 350,000',
     'iPhone 13 350000. Great camera.',
     'iPhone 13: 350000. Shop today.',
   ])('rejects separator-only prices after product identity: %s', (text) => {
@@ -254,6 +255,7 @@ describe('durable SEO monetary context', () => {
     'Deal: 999',
     'Flash sale: 999',
     "Today's deal: 999",
+    'Phone now at 999',
   ])('rejects low unlabelled amounts following explicit commerce headings: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -261,5 +263,33 @@ describe('durable SEO monetary context', () => {
         product: { name: 'Device' },
       })
     ).toBe('');
+  });
+
+  it.each([
+    'Available at 9:00 tomorrow',
+    'Available at 10:30 AM',
+    'Customer support available at 9:00 daily.',
+  ])('preserves clock times in availability copy: %s', (text) => {
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Device' },
+      })
+    ).toBe(text);
+  });
+
+  it('rejects comma-terminated tagged prices while preserving storage capacity lists', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Price: $50, buy today.',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+    expect(
+      getDurableProductSeoText({
+        text: 'Available in 64, 128 or 256GB storage.',
+        product: { name: 'Device' },
+      })
+    ).toBe('Available in 64, 128 or 256GB storage.');
   });
 });

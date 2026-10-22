@@ -1,11 +1,12 @@
+import { retailRelation } from './classify-durable-product-seo-retail-relation';
 import type { ProductSeoMoneyCandidate } from './get-product-seo-money-candidates';
 
 const QUANTITY_UNIT =
   /^\s*(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
 const STOCK_COUNT_CONTEXT =
   /^\s*(?:(?:items?|pieces?|units?|copies)\s+)?(?:left(?:\s+in\s+stock)?|in\s+stock|remaining)\b/i;
-const COMMERCE_HEADING =
-  /\b(?:(?:special|flash|clearance|limited[- ]time|today'?s|exclusive|hot|best|introductory|launch)\s+)?(?:sale|offer|deal|clearance)s?\s*[:–—-]\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i;
+const CLOCK_TIME_TAIL =
+  /^(?:[:.]\d{2}\s*(?:am|pm|gmt|utc|est|pst|cst|bst|cet)\b|:\d{2}\b|\s*(?:am|pm)\b)/i;
 const PIXEL_DIMENSION_PAIR = /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px)\b/i;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
@@ -25,54 +26,10 @@ const LEXICAL_CURRENCY_CODES = new Set([
   'BOB',
   'SOS',
 ]);
-const NON_RETAIL_AMOUNT_LABEL =
-  /^\s+(?:(?:gift[- ]card\s+)?bonus|cashback|cash\s+back|trade[- ]in\s+credit|store\s+credit|credit(?!\s+cards?\b)|rebate|reward|discount)\b/i;
 const MAGNITUDE_SPECIFICATION_UNIT =
   /^\s+(?:display|screen|resolution|video|recording|camera|photos?|pixels?)\b/i;
 const SHORT_RESOLUTION_CONTEXT =
   /\b(?:video|resolution|stream(?:ing)?|record(?:ing)?|shoot(?:ing)?|upscal\w*|frame\s+rate|fps)\b/i;
-
-function retailRelation(text: string, start: number) {
-  const clause =
-    text
-      .slice(Math.max(0, start - 200), start)
-      .split(/[.!?;\n]/)
-      .at(-1) ?? '';
-  const commerceHeading = COMMERCE_HEADING.test(clause);
-  const cue =
-    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
-      clause
-    )?.[1] ?? (commerceHeading ? 'heading' : '');
-  const predicate =
-    /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){1,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
-      clause
-    );
-  const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);
-  const identifierPredicate =
-    /\b(?:model\s+(?:number|no\.?)|sku|part\s+(?:number|no\.?)|serial(?:\s+(?:number|no\.?))?|imei|item\s+(?:number|no\.?)|product\s+code)\s+(?:is|was|are|were|:)\s*$/i.test(
-      clause
-    );
-  const commercial =
-    /\b(?:sell(?:s|ing)?|sold|available|offered|retail(?:s|ed|ing)?)\b(?:\s+[^.!?;\n]{0,60})?\s+(?:at|for)\s*$/i.test(
-      clause
-    );
-  return {
-    cue,
-    predicate,
-    copula,
-    identifierPredicate,
-    commercial,
-    separator: /^\s*[-:–—(]?\s*$/.test(clause),
-    strong:
-      commerceHeading ||
-      /^(?:msrp|rrp|price|cost|priced|start|pay|only)/i.test(cue),
-    purchase:
-      /\b(?:buy|purchase)\b/i.test(clause) ||
-      /\b(?:get(?!\s+(?:ready|prepared|started)\b)|shop)(?:\s+[^.!?;\n]{1,80})?\s+for\s*$/i.test(
-        clause
-      ),
-  };
-}
 
 export function isDurableSeoPrice(
   candidate: ProductSeoMoneyCandidate,
@@ -112,6 +69,8 @@ export function isDurableSeoPrice(
     /^(?:19|20)\d{2}$/.test(rawAmount) &&
     /^\s*\)\s*[.!?]?\s*$/.test(tail);
   if (parenthesizedProductYear) return false;
+  const clockTime = !candidate.marker && CLOCK_TIME_TAIL.test(tail);
+  if (clockTime) return false;
   const quantity =
     QUANTITY_UNIT.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
@@ -213,76 +172,4 @@ export function isDurableSeoPrice(
       return false;
   }
   return true;
-}
-
-export function isClearlyNonRetailSeoAmount(
-  candidate: ProductSeoMoneyCandidate,
-  text: string
-): boolean {
-  const relation = retailRelation(text, candidate.start);
-  return (
-    !relation.strong &&
-    !relation.predicate &&
-    !relation.purchase &&
-    !relation.commercial &&
-    NON_RETAIL_AMOUNT_LABEL.test(text.slice(candidate.end))
-  );
-}
-
-export function isDurableSeoDenomination(
-  candidate: ProductSeoMoneyCandidate,
-  text: string,
-  productName: string,
-  denominations: ProductSeoMoneyCandidate[]
-): boolean {
-  if (
-    !candidate.marker ||
-    retailRelation(text, candidate.start).cue ||
-    retailRelation(text, candidate.start).predicate
-  )
-    return false;
-  if (
-    !denominations.some(
-      (value) =>
-        (value.amount !== null && candidate.amount !== null
-          ? value.amount === candidate.amount
-          : value.amount === null &&
-            candidate.amount === null &&
-            value.rawAmount.replace(/[.,]+$/, '').toLowerCase() ===
-              candidate.rawAmount.replace(/[.,]+$/, '').toLowerCase()) &&
-        value.currencies.some((code) => candidate.currencies.includes(code))
-    )
-  )
-    return false;
-  const followingLabel =
-    /^\s+((?:[\p{L}][\p{L}\p{N}'-]{0,30}\s+){0,4})(?:gift[- ]card|value|credit|denomination)\b/iu.exec(
-      text.slice(candidate.end)
-    );
-  const precedingLabel = /\b(?:gift[- ]cards?|voucher|denomination)\b/i.test(
-    text
-      .slice(Math.max(0, candidate.start - 120), candidate.start)
-      .split(/[.!?;\n]/)
-      .at(-1) ?? ''
-  );
-  if (!followingLabel && !precedingLabel) return false;
-  const identityWords = new Set(
-    productName.toLowerCase().match(/[\p{L}\p{N}'-]+/gu) ?? []
-  );
-  if (followingLabel) {
-    const matchesIdentity = followingLabel[1]
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .every((word) => identityWords.has(word.toLowerCase()));
-    if (matchesIdentity) return true;
-  }
-  if (precedingLabel) {
-    const hasGiftCardIdentity =
-      identityWords.has('gift') ||
-      identityWords.has('card') ||
-      identityWords.has('cards') ||
-      identityWords.has('voucher');
-    if (hasGiftCardIdentity) return true;
-  }
-  return false;
 }

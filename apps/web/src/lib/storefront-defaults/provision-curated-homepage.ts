@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { generateInitialTemplate } from '@/lib/initial-template-generator';
 import type { BrandColors } from '@/types';
 
@@ -11,6 +13,10 @@ export type CuratedHomepageProvisionResult =
 interface CuratedHomepageClient {
   auth: { getUser: () => Promise<{ data: { user: { id: string } | null } }> };
   from: (table: 'page_configs') => unknown;
+  rpc?: (
+    name: 'builder_private_onboard',
+    args: { p_merchant_id: string; p_config: unknown }
+  ) => PromiseLike<{ data: unknown; error: unknown }>;
 }
 
 interface ProvisionCuratedHomepageInput {
@@ -102,6 +108,34 @@ export async function provisionCuratedHomepage({
   }
 
   const pageConfigs = supabase.from('page_configs') as PageConfigQuery;
+  if (BUILDER_PRIVATE_STORAGE_ENABLED) {
+    if (!supabase.rpc) return { status: 'failed', stage: 'insert' };
+    const { data, error } = await supabase.rpc('builder_private_onboard', {
+      p_merchant_id: merchantId,
+      p_config: config,
+    });
+    if (error) {
+      logFailure(merchantId, 'insert', error);
+      return { status: 'failed', stage: 'insert' };
+    }
+    const receipt = z
+      .object({ updated_at: z.string().nullable() })
+      .safeParse(data);
+    if (receipt.success)
+      return { status: 'created', updatedAt: receipt.data.updated_at };
+    if (
+      z.object({ code: z.literal('already_exists') }).safeParse(data).success
+    ) {
+      const current = await pageConfigs
+        .select('updated_at')
+        .eq('merchant_id', merchantId)
+        .eq('page_slug', 'home')
+        .maybeSingle();
+      if (!current.error && current.data)
+        return { status: 'already_exists', updatedAt: current.data.updated_at };
+    }
+    return { status: 'failed', stage: 'insert' };
+  }
   const { data, error } = await pageConfigs
     .insert({
       merchant_id: merchantId,

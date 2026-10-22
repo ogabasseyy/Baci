@@ -13,6 +13,7 @@ export const BUILDER_ERROR_MESSAGES = {
     'This account already has a store. Select it to continue.',
   UNSUPPORTED_TEMPLATE: 'This storefront requires the Baci editor.',
   UNSUPPORTED_PAGE: 'Only the homepage is supported by this integration.',
+  SLUG_UNAVAILABLE: 'That store address is unavailable. Choose another.',
   SLUG_IMMUTABLE: 'An established store URL cannot be changed here.',
   PUBLISH_BLOCKED: 'Complete the launch requirements before publishing.',
   APPROVAL_REQUIRED: 'Approve this exact publication in Baci.',

@@ -5,6 +5,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
+import { runFullProvisioningChecks } from './full-provisioning-checks.mjs';
 import { runPrivateLifecycleChecks } from './private-lifecycle-checks.mjs';
 
 const suppliedWorkdir = process.env.BACI_TASK0_REPLAY_WORKDIR;
@@ -68,6 +69,7 @@ const secret =
 const password = randomUUID();
 const loginRole = `task0_api_${randomUUID().replaceAll('-', '')}`;
 const records = [];
+const productionSources = process.env.BACI_BUILDER_LIFECYCLE_SOURCES === '1';
 const resume = process.env.BACI_TASK0_REPLAY_RESUME === '1';
 if (resume) {
   assert.equal(
@@ -84,7 +86,7 @@ async function check(name, run) {
 function token(sub) {
   const encode = (value) =>
     Buffer.from(JSON.stringify(value)).toString('base64url');
-  const payload = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ role: 'authenticated', sub, exp: Math.floor(Date.now() / 1000) + 900 })}`;
+  const payload = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ role: 'authenticated', sub, email: `task4-${sub}@example.test`, exp: Math.floor(Date.now() / 1000) + 900 })}`;
   return `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
 }
 function cleanup() {
@@ -152,7 +154,7 @@ try {
     'PGRST_DB_SCHEMAS=public',
     '-e',
     `PGRST_JWT_SECRET=${secret}`,
-    'public.ecr.aws/supabase/postgrest:v16.2'
+    'public.ecr.aws/supabase/postgrest@sha256:85258123312dc496ad4c2ed832154a65e9746f84df0d6d09b44229ff9230c08e'
   );
   const address = docker('port', api, '3000/tcp');
   assert.match(address, /^127\.0\.0\.1:\d+$/);
@@ -196,16 +198,28 @@ try {
           assert.equal(r.body[0].draft_config.content, 'PRIVATE-DRAFT');
         }
       );
-    sql(
-      `BEGIN;\n${read('apps/web/tools/builder-preview-spike/private-storage.sql')}\n${read(
-        'apps/web/tools/builder-preview-spike/private-split.sql'
-      )
-        .replace(/^BEGIN;$/m, '')
-        .replace(
-          /^COMMIT;$/m,
-          ''
-        )}\n${read('apps/web/tools/builder-preview-spike/private-lifecycle.sql')}\nCOMMIT;`
-    );
+    if (productionSources) {
+      const sources = [
+        '20261022062133_builder_oauth_connections.sql',
+        '20261022071051_builder_private_draft_foundation.sql',
+        '20261022071353_builder_private_draft_adapters.sql',
+        '20261022071651_builder_draft_operations.sql',
+        '20261022072221_builder_private_draft_contract.sql',
+      ];
+      sql(
+        `BEGIN; SET LOCAL baci.builder_private_cutover='approved';\n${sources.map((name) => read(`supabase/migrations/${name}`)).join('\n')}\nCALL builder_authorization.cutover_private_drafts();\nCOMMIT;`
+      );
+    } else
+      sql(
+        `BEGIN;\n${read('apps/web/tools/builder-preview-spike/private-storage.sql')}\n${read(
+          'apps/web/tools/builder-preview-spike/private-split.sql'
+        )
+          .replace(/^BEGIN;$/m, '')
+          .replace(
+            /^COMMIT;$/m,
+            ''
+          )}\n${read('apps/web/tools/builder-preview-spike/private-lifecycle.sql')}\nCOMMIT;`
+      );
   }
   sql("NOTIFY pgrst,'reload schema';");
   for (let i = 0; i < 40; i++) {
@@ -290,6 +304,7 @@ try {
     other,
     merchant,
     sql,
+    productionSources,
   });
   await check(
     'real staff revocation is effective for an existing JWT',
@@ -323,11 +338,14 @@ try {
         else assert([401, 403, 404].includes(r.status), JSON.stringify(r));
       }
     });
+  if (productionSources)
+    await runFullProvisioningChecks({ request, check, sql });
   console.log(
     JSON.stringify(
       {
         scope:
           'Full frozen history + current-tree sources, real membership helpers, disposable private cutover',
+        productionSources,
         records,
         result: 'PASS',
         productionActivation: false,

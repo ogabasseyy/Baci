@@ -148,6 +148,8 @@ Final scope includes full monorepo lint/typecheck/test because provider dependen
 
 ### Task 4: Extract draft services and add atomic revisions/idempotency
 
+**Local execution 2026-10-22:** Private lifecycle services, canonical connection fencing, staged privacy contraction and compatible browser/native adapters are implemented. [Evidence, fixture boundaries and coordinated release gate](../../connectors/evidence/builder-private-draft-lifecycle.md). Local checks do not establish staging DNS, publication delivery or runtime activation; both submissions remain protected.
+
 **Files:** Create `src/lib/website-builder/{context,create-draft,read-storefront,private-drafts,revision,idempotency,mutation-audit,mutation-authorization}.ts` and tests; add fresh `*_builder_draft_operations.sql` and SQL regressions, including `builder_edit_operations`. Adapt existing builder services without changing browser response contracts. Consume Task 0's accepted private/public storage contract; add its fresh append-only privacy/backfill migration. Inventory browser/AI/onboarding writers and preserve existing route DTOs by assembling authorized private fields on the server. Reuse `ensure-onboarding-domain.ts` ownership/collision semantics inside the atomic provisioning RPC, not as an extra request after commit.
 
 **Interfaces:** `createStorefrontDraft(identity, input: CreateDraftInput): Promise<DraftResult>`; `listStorefronts(identity, input: ListInput): Promise<StorefrontListResult>`; `getStorefrontStatus(ctx): Promise<StorefrontStatusResult>`; `commitDraft(ctx, mutation: ValidatedDraftMutation): Promise<DraftResult>`. Result DTOs come from Task 2. A successful commit returns one new `DraftVersion`.

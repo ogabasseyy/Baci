@@ -11,6 +11,7 @@ export async function runPrivateLifecycleChecks({
   other,
   merchant,
   sql,
+  productionSources = false,
 }) {
   const rpc = (name, user, args) =>
     request(`rpc/builder_private_${name}`, user, {
@@ -188,6 +189,7 @@ export async function runPrivateLifecycleChecks({
     save,
     rpc,
     nextConfig,
+    productionSources,
   });
   return { nextConfig };
 }

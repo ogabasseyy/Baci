@@ -200,8 +200,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
       updated_at: string | null;
     }>();
 
+  if (applyError?.code === '40001')
+    return NextResponse.json(
+      { error: 'AI draft is stale', code: 'ai_draft_stale' },
+      { status: 409 }
+    );
   if (applyError) {
-    console.error('Failed to atomically apply AI draft', applyError);
+    console.error('Failed to atomically apply AI draft', {
+      code: applyError.code,
+    });
     return NextResponse.json(
       { error: 'Failed to apply AI draft' },
       { status: 500 }

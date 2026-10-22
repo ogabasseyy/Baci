@@ -12,6 +12,7 @@ export async function runPrivateLifecycleEdgeChecks({
   save,
   rpc,
   nextConfig,
+  productionSources = false,
 }) {
   await check(
     'concurrent owner and staff saves admit exactly one CAS winner',
@@ -22,14 +23,24 @@ export async function runPrivateLifecycleEdgeChecks({
         save(staff, before.updated_at, nextConfig),
       ]);
       assert(
-        replies.every((r) => r.status === 200),
+        replies.every(
+          (r) =>
+            r.status === 200 || (productionSources && r.body.code === '40001')
+        ),
         JSON.stringify(replies)
       );
       assert.equal(
-        replies.filter((r) => r.body.code === 'stale_builder_draft').length,
+        replies.filter((r) => r.status === 200 && !r.body.code).length,
         1
       );
-      assert.equal(replies.filter((r) => !r.body.code).length, 1);
+      assert.equal(
+        replies.filter(
+          (r) =>
+            r.body.code === 'stale_builder_draft' ||
+            (productionSources && r.body.code === '40001')
+        ).length,
+        1
+      );
     }
   );
   await check(
@@ -43,7 +54,9 @@ export async function runPrivateLifecycleEdgeChecks({
           merchant_id: merchant,
           type: 'storefront_layout_generation',
           status: 'completed',
-          input: {},
+          input: productionSources
+            ? { starterConfig: before.draft_config }
+            : {},
         }),
       });
       assert.equal(created.status, 201, JSON.stringify(created));

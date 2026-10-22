@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
+import { mutatePrivateBrowserDraft } from '@/lib/website-builder/browser-private-drafts';
 import type {
   BuilderConfigInput,
   BuilderCreateInput,
@@ -86,6 +88,8 @@ export async function saveBuilderDraft(
   merchantId: string,
   input: Omit<BuilderCreateInput, 'merchantId'>
 ): Promise<MutationResult> {
+  if (BUILDER_PRIVATE_STORAGE_ENABLED)
+    return mutatePrivateBrowserDraft(supabase, merchantId, input);
   const {
     slug,
     config,
@@ -195,6 +199,8 @@ export async function publishBuilderDraft(
   merchantId: string,
   input: Omit<BuilderPublishInput, 'merchantId'>
 ): Promise<MutationResult> {
+  if (BUILDER_PRIVATE_STORAGE_ENABLED)
+    return mutatePrivateBrowserDraft(supabase, merchantId, input);
   const { slug, expectedLastUpdated } = input;
   const publishedAt = new Date().toISOString();
 

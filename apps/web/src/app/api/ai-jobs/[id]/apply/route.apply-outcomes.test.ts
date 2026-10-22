@@ -130,4 +130,16 @@ describe('POST /api/ai-jobs/[id]/apply outcomes', () => {
       error: 'Failed to apply AI draft',
     });
   });
+  it('returns the safe stale 409 contract when a concurrent website writer owns the guard', async () => {
+    const supabase = createApplySupabaseMock({
+      rpcError: Object.assign(new Error('private SQL text'), { code: '40001' }),
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    const response = await POST(createApplyRequest(), routeContext());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'AI draft is stale',
+      code: 'ai_draft_stale',
+    });
+  });
 });

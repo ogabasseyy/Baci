@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import {
   getAiStorefrontDesignRationale,
   normalizeAiStorefrontLayout,
 } from '@/lib/ai-storefront/normalize-ai-storefront-layout';
 import { generateStorefrontLayoutWithOllama } from '@/lib/ai-storefront/ollama-storefront-client';
 import type { StorefrontLayoutJobInput } from '@/schemas/ai-jobs';
+import { storedStorefrontLayoutJobInputSchema } from '@/schemas/ai-jobs';
 import {
   type BuilderConfigInput,
   builderConfigSchema,
@@ -23,6 +25,20 @@ export async function processStorefrontLayoutJob({
   input,
   jobId,
 }: ProcessStorefrontLayoutJobArgs) {
+  if (BUILDER_PRIVATE_STORAGE_ENABLED) {
+    const stored = storedStorefrontLayoutJobInputSchema.parse(input);
+    const { starterConfig, ...semantic } = stored;
+    return processStorefrontLayoutSnapshot({
+      supabase,
+      merchantId,
+      input: semantic,
+      jobId,
+      starterSnapshot: {
+        config: starterConfig,
+        updatedAt: semantic.createdPageConfigUpdatedAt,
+      },
+    });
+  }
   const { data: pageConfig, error: pageError } = await supabase
     .from('page_configs')
     .select('id, draft_config, updated_at')

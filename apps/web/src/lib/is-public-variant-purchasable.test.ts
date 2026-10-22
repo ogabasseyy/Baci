@@ -3,8 +3,6 @@ import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 
 describe('isPublicVariantPurchasable', () => {
   it.each([
-    [false, 'off', 0, true],
-    [true, 'off', 0, false],
     [false, 'serialized_strict', 0, false],
     [false, 'serialized_strict', 1, true],
     [true, 'serialized_then_unlimited', 0, true],
@@ -18,6 +16,38 @@ describe('isPublicVariantPurchasable', () => {
         }
       )
     ).toBe(expected);
+  });
+
+  it('keeps off-policy variants stock-managed when the parent manages stock', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 0 },
+        { inventory_tracking_policy: 'off', stock_quantity: 0 }
+      )
+    ).toBe(false);
+  });
+
+  it('treats an off-policy variant as unlimited when parent stock is unmanaged', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: false, stock_quantity: 0 },
+        { inventory_tracking_policy: 'off', stock_quantity: 0 }
+      )
+    ).toBe(true);
+  });
+
+  it('lets effective policy override a row-local off policy', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: true, stock_quantity: 0 },
+        {
+          effective_policy: 'serialized_strict',
+          inventory_tracking_policy: 'off',
+          available_units: 0,
+          stock_quantity: 0,
+        }
+      )
+    ).toBe(false);
   });
 
   it('inherits parent stock for a nullable child under a managed parent', () => {

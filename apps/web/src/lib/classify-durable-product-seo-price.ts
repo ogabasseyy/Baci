@@ -145,7 +145,9 @@ export function isDurableSeoPrice(
         rawAmount.replace(/\D/g, '').length >= 3 &&
         (/^\s*$/.test(tail) || /^\s*\)\s*[.!?]?\s*$/.test(tail))) ||
       (relation.copula &&
-        (/[,. '\u2019\u00a0\u202f]/.test(rawAmount) ||
+        (/^\d{1,3}(?:[,. '\u2019\u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?$/.test(
+          rawAmount
+        ) ||
           rawAmount.replace(/\D/g, '').length >= 5)) ||
       /[,km]/i.test(rawAmount) ||
       rawAmount.replace(/\D/g, '').length >= 5

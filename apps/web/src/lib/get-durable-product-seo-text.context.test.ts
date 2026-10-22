@@ -1,7 +1,50 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getDurableProductSeoText } from './get-durable-product-seo-text';
 
 describe('durable SEO monetary context', () => {
+  it.each([
+    'missing',
+    'throws',
+  ] as const)('rejects explicit unmapped ISO currency prices when Intl.supportedValuesOf %s', async (mode) => {
+    vi.resetModules();
+    vi.stubGlobal('Intl', {
+      supportedValuesOf:
+        mode === 'missing'
+          ? undefined
+          : () => {
+              throw new Error('unsupported currency key');
+            },
+    });
+    try {
+      const { getDurableProductSeoText: classify } = await import(
+        './get-durable-product-seo-text'
+      );
+      expect(
+        classify({
+          text: 'Buy this phone for CHF 900.',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({
+          text: 'Buy iPhone 13 for 350,000 today',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({
+          text: 'Buy Pixel 10 for 999.99 today',
+          product: { name: 'Phone' },
+        })
+      ).toBe('');
+      expect(
+        classify({ text: 'RAM 16GB storage.', product: { name: 'Phone' } })
+      ).toBe('RAM 16GB storage.');
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
   it('preserves matching localized gift-card identity but rejects its retail price', () => {
     const text = 'Use this EUR 50,00 Amazon gift card';
     const product = { name: 'Amazon Gift Card EUR 50,00' };

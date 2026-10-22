@@ -20,6 +20,7 @@ export interface SelectionPricingVariant {
   price_override?: number | null;
   stock_quantity?: number | string | null;
   effective_policy?: string | null;
+  inventory_tracking_policy?: string | null;
   available_units?: number | null;
 }
 

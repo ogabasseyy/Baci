@@ -36,7 +36,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
+import { projectDefaultVariantProduct } from './cart/project-default-variant-product';
 
 interface CartProviderProps {
   children: ReactNode;
@@ -342,17 +342,7 @@ export const CartProvider = ({
         : options;
     const productForCart =
       defaultVariantSelection && !options?.variantId
-        ? {
-            ...product,
-            price: defaultVariantSelection.price,
-            compare_at_price:
-              defaultVariantSelection.compareAtPrice ??
-              product.compare_at_price,
-            stock:
-              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
-              defaultVariantSelection.variant.stock_quantity ??
-              product.stock,
-          }
+        ? projectDefaultVariantProduct(product, defaultVariantSelection)
         : product;
 
     // Stock validation: Prevent adding out-of-stock items

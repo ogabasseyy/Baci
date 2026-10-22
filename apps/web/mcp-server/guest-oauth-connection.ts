@@ -1,10 +1,9 @@
 import type { GuestOAuth } from './guest-oauth';
-import type { GuestCartStore } from './guest-cart-store';
 
 /** Every call revalidates connection authority; tool/model fields cannot select a cart. */
 export function createGuestOAuthConnection(
   auth: GuestOAuth,
-  store: Pick<GuestCartStore, 'initializeConnectionCart'>,
+  store: { initializeConnectionCart(token: string, expiresAt: string): Promise<void> },
   accessToken: string,
 ) {
   return {

@@ -105,12 +105,11 @@ it.each([
   }
 });
 it('uses verified connection authority across fresh request servers without model-carried tokens', async () => {
-  const store = new GuestCartStore(createFakeGuestCartSupabase().supabase);
+  const fake = createFakeGuestCartSupabase();
+  const store = new GuestCartStore(fake.supabase);
   const token = 'a'.repeat(64);
-  await store.initializeConnectionCart(
-    token,
-    new Date(Date.now() + 3600_000).toISOString(),
-  );
+  fake.rows.set(token, { items: [], version: 1,
+    expires_at: new Date(Date.now() + 3600_000).toISOString() });
   async function call(product_id: string, quantity: number) {
     const server = new McpServer({ name: 'oauth-cart-test', version: '1.0.0' });
     const client = new Client({ name: 'oauth-cart-client', version: '1.0.0' });

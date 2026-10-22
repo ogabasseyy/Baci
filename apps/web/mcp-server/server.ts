@@ -2543,7 +2543,7 @@ const httpServer = createServer(
     // degraded cart store must not flip the probe red, or catalog traffic
     // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
-      const carts = describeGuestCartStoreHealth(guestCartStore);
+      const carts = { ...describeGuestCartStoreHealth(guestCartStore), ...guestOAuth?.health() };
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {

@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { GuestOAuth } from './guest-oauth';
 import { createGuestOAuthConnection } from './guest-oauth-connection';
-import type { GuestCartStore } from './guest-cart-store';
 import type { OAuthRecordStore } from './guest-oauth-records';
 it('lets concurrent first calls share the initialized grant without a spurious failure', async () => {
   const rows = new Map<string, { value: unknown; revision: number; expiresAt: number }>();
@@ -44,7 +43,7 @@ it('lets concurrent first calls share the initialized grant without a spurious f
       if (++arrivals === 2) release?.();
       await barrier;
     }),
-  } as unknown as GuestCartStore;
+  };
   const first = createGuestOAuthConnection(auth, cartStore, tokens.access_token);
   const second = createGuestOAuthConnection(auth, cartStore, tokens.access_token);
   const result = await Promise.all([first.resolveToken(), second.resolveToken()]);

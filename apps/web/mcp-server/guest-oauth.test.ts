@@ -206,3 +206,49 @@ it('keeps grant expiry within the database cap when the app clock is slightly ah
   const token = await auth.exchange({ ...request, code, code_verifier: verifier });
   expect((await auth.verify(token.access_token)).expiresAt).toBeLessThanOrEqual(deadline);
 });
+
+it('revokes the token family when concurrent refreshes reuse one generation', async () => {
+  const { auth, options } = fixture();
+  const { code } = await auth.authorize(request);
+  const first = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const read = options.store.read.bind(options.store);
+  let arrivals = 0;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => { release = resolve; });
+  options.store.read = async (key) => {
+    const snapshot = await read(key);
+    if (key.startsWith('grant:') && arrivals < 2) {
+      if (++arrivals === 2) release();
+      await barrier;
+    }
+    return snapshot;
+  };
+  const results = await Promise.allSettled([
+    auth.refresh({ ...request, refresh_token: first.refresh_token }),
+    auth.refresh({ ...request, refresh_token: first.refresh_token }),
+  ]);
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  const winner = results.find((result) => result.status === 'fulfilled');
+  if (!winner || winner.status !== 'fulfilled') throw new Error('No refresh');
+  await expect(auth.verify(winner.value.access_token)).rejects.toThrow('invalid_grant');
+});
+it('retries a refresh after cart initialization changes only the grant revision', async () => {
+  const { auth, options, rows } = fixture();
+  const { code } = await auth.authorize(request);
+  const first = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const compare = options.store.compareAndSwap.bind(options.store);
+  let injected = false;
+  options.store.compareAndSwap = async (key, revision, value, expiresAt) => {
+    if (key.startsWith('grant:') && !injected) {
+      injected = true;
+      const row = rows.get(key);
+      if (!row) throw new Error('Missing grant');
+      rows.set(key, { ...row, revision: row.revision + 1,
+        value: { ...(row.value as Record<string, unknown>), cartInitialized: true } });
+      return false;
+    }
+    return compare(key, revision, value, expiresAt);
+  };
+  const next = await auth.refresh({ ...request, refresh_token: first.refresh_token });
+  expect((await auth.verify(next.access_token)).cartInitialized).toBe(true);
+});

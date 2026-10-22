@@ -19,6 +19,10 @@ const opaque = () => randomBytes(32).toString('hex');
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export type GuestOAuthGrant = z.infer<typeof guestOAuthGrantSchema>;
 
+class GrantRevisionConflict extends Error {
+  constructor() { super('invalid_grant'); }
+}
+
 /** Guest authorization server core. Never derives authority from model input. */
 export class GuestOAuth {
   readonly issuer: string;
@@ -141,7 +145,7 @@ export class GuestOAuth {
         grant.expiresAt,
       ))
     )
-      throw new Error('invalid_grant');
+      throw new GrantRevisionConflict();
     return {
       access_token: access,
       refresh_token: refresh,
@@ -210,12 +214,21 @@ export class GuestOAuth {
     this.client(request.client_id, request.resource);
     const row = await this.read(`refresh:${hash(request.refresh_token)}`);
     const token = guestOAuthTokenRecordSchema.parse(row.value);
-    const { row: current, grant } = await this.grant(token.grantId);
-    if (grant.refreshHash !== hash(request.refresh_token)) {
-      await this.revokeGrant(grant.id);
-      throw new Error('invalid_grant');
+    for (let retry = 0; retry < 3; retry++) {
+      const { row: current, grant } = await this.grant(token.grantId);
+      if (grant.refreshHash !== hash(request.refresh_token)) {
+        await this.revokeGrant(grant.id);
+        throw new Error('invalid_grant');
+      }
+      try {
+        return await this.issue(grant, current.revision);
+      } catch (error) {
+        // Re-read the generation: a consumed refresh revokes the family,
+        // while unrelated grant updates can safely retry with their new state.
+        if (!(error instanceof GrantRevisionConflict)) throw error;
+      }
     }
-    return this.issue(grant, current.revision);
+    throw new Error('temporarily_unavailable');
   }
   private async revokeGrant(id: string) {
     for (let retry = 0; retry < 3; retry++) {

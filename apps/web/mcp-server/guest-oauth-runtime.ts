@@ -88,6 +88,14 @@ export function createGuestOAuthRuntime(options: {
   }
   return {
     ready: getAuth,
+    /** Dynamic, token-free rotation signal; catalog health remains independent. */
+    health() {
+      const remaining = Math.max(0, Math.floor(claims.exp - Date.now() / 1000));
+      return {
+        guestOAuthWorker: remaining === 0 ? 'expired' : remaining < 86400 ? 'rotation_required' : 'ok',
+        guestOAuthWorkerSecondsRemaining: remaining,
+      };
+    },
     async handleHttp(req: IncomingMessage, res: ServerResponse, url: URL, clientIp: string) {
       if (!url.pathname.startsWith('/oauth/') && !url.pathname.startsWith('/.well-known/oauth-'))
         return false;

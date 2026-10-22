@@ -39,6 +39,7 @@ test('gate-only changes set pilot=true', async () => {
     'apps/web/src/components/storefront/product-card.test.tsx',
     'apps/web/src/lib/storefront-product-href.ts',
     'apps/web/src/lib/storefront-product-href.test.ts',
+    'apps/web/src/config/product-schema.ts',
     'apps/web/package.json',
     'apps/web/public/__pilot/fillers/grid-filler-600x400-a.png',
     '.github/scripts/pilot-change-detection-contract.test.mjs',
@@ -120,6 +121,32 @@ test('core pilot paths still set pilot=true', async () => {
   ];
   for (const name of core) {
     assert.equal(detected(pattern, [name]), true, name);
+  }
+});
+
+test('product SEO metadata and its regressions keep the pilot suite enabled', async () => {
+  const pattern = await pilotPattern();
+  const productSeoPaths = [
+    'apps/web/src/lib/classify-durable-product-seo-price.ts',
+    'apps/web/src/lib/classify-durable-product-seo-price.test.ts',
+    'apps/web/src/lib/classify-durable-product-seo-retail-relation.ts',
+    'apps/web/src/lib/classify-durable-product-seo-retail-relation.test.ts',
+    'apps/web/src/lib/classify-durable-product-seo-non-retail.ts',
+    'apps/web/src/lib/classify-durable-product-seo-non-retail.test.ts',
+    'apps/web/src/lib/classify-durable-product-seo-denomination.ts',
+    'apps/web/src/lib/classify-durable-product-seo-denomination.test.ts',
+    'apps/web/src/lib/get-durable-product-seo-text.ts',
+    'apps/web/src/lib/get-durable-product-seo-text.test.ts',
+    'apps/web/src/lib/get-durable-product-seo-text.context.test.ts',
+    'apps/web/src/lib/get-durable-product-seo-text.gift-card.test.ts',
+    'apps/web/src/lib/get-product-seo-money-candidates.ts',
+    'apps/web/src/lib/get-product-seo-money-candidates.test.ts',
+    'apps/web/src/lib/get-product-schema-description.ts',
+    'apps/web/src/lib/get-product-schema-description.test.ts',
+    'apps/web/src/lib/generate-storefront-product-schema.ts',
+  ];
+  for (const path of productSeoPaths) {
+    assert.equal(detected(pattern, [path]), true, path);
   }
 });
 

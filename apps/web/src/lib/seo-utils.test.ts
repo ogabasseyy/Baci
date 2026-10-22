@@ -751,36 +751,6 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     );
   });
 
-  it('strips HTML tags from structured product descriptions', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        description:
-          '<p>The <strong>best</strong> gaming laptop for creators.</p>',
-      }),
-      'TestStore',
-      'USD',
-      'NG'
-    );
-
-    expect(schema.description).toBe('The best gaming laptop for creators.');
-  });
-
-  it('removes stale absolute listed-price sentences from structured product descriptions', () => {
-    const schema = generateProductSchema(
-      makeProduct({
-        description:
-          'Premium foldable phone. Current listed price is NGN 2,500,000. Confirm selected variant price before checkout.',
-      }),
-      'TestStore',
-      'NGN',
-      'NG'
-    );
-
-    expect(schema.description).toBe(
-      'Premium foldable phone. Confirm selected variant price before checkout.'
-    );
-  });
-
   it('does not let custom schema markup reintroduce stale listed prices or empty aggregate ratings', () => {
     const schema = generateProductSchema(
       makeProduct({

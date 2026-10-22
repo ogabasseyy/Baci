@@ -4,91 +4,89 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
 SELECT plan(9);
-SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
-RESET request.jwt.claim.sub;
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"service_role","sub":"00000000-0000-0000-0000-000000000000"}',
+  true
+);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub', '00000000-0000-0000-0000-000000000000', true
+);
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 SELECT ok(
-  auth.uid() IS NULL AND auth.jwt()->>'role' = 'service_role',
+  auth.uid() = '00000000-0000-0000-0000-000000000000'::uuid
+  AND auth.jwt()->>'role' = 'service_role',
   'fixture writes start with a deterministic service-role JWT context'
 );
 
-DO $fixtures$
-DECLARE
-  v_owner uuid := '11111111-1111-4111-8111-111111111101';
-  v_stranger uuid := '11111111-1111-4111-8111-111111111102';
-  v_staff uuid := '11111111-1111-4111-8111-111111111103';
-  v_limited_staff uuid := '11111111-1111-4111-8111-111111111104';
-  v_merchant uuid := '22222222-2222-4222-8222-222222222201';
-  v_other_merchant uuid := '22222222-2222-4222-8222-222222222202';
-BEGIN
-  INSERT INTO auth.users (
-    id, instance_id, aud, role, email, encrypted_password,
-    email_confirmed_at, created_at, updated_at, raw_app_meta_data,
-    raw_user_meta_data
-  ) VALUES
-    (v_owner, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-owner@example.test', 'test', now(), now(), now(), '{}', '{}'),
-    (v_stranger, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-stranger@example.test', 'test', now(), now(), now(), '{}', '{}'),
-    (v_staff, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-staff@example.test', 'test', now(), now(), now(), '{}', '{}'),
-    (v_limited_staff, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-limited-staff@example.test', 'test', now(), now(), now(), '{}', '{}');
+-- Keep fixture writes as separate statements so replay failures identify the
+-- exact audited table operation instead of only the end of a large DO block.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data,
+  raw_user_meta_data
+) VALUES
+  ('11111111-1111-4111-8111-111111111101', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-owner@example.test', 'test', now(), now(), now(), '{}', '{}'),
+  ('11111111-1111-4111-8111-111111111102', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-stranger@example.test', 'test', now(), now(), now(), '{}', '{}'),
+  ('11111111-1111-4111-8111-111111111103', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-staff@example.test', 'test', now(), now(), now(), '{}', '{}'),
+  ('11111111-1111-4111-8111-111111111104', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jumia-selection-limited-staff@example.test', 'test', now(), now(), now(), '{}', '{}');
 
-  INSERT INTO public.merchants (
-    id, user_id, email, business_name, slug, plan_tier, premium_features
-  ) VALUES
-    (v_merchant, v_owner, 'jumia-selection-merchant@example.test', 'Selection Merchant', 'jumia-selection-merchant', 'pro', '[]'),
-    (v_other_merchant, v_stranger, 'jumia-selection-other@example.test', 'Other Merchant', 'jumia-selection-other', 'free', '[]');
+INSERT INTO public.merchants (
+  id, user_id, email, business_name, slug, plan_tier, premium_features
+) VALUES
+  ('22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111101', 'jumia-selection-merchant@example.test', 'Selection Merchant', 'jumia-selection-merchant', 'pro', '[]'),
+  ('22222222-2222-4222-8222-222222222202', '11111111-1111-4111-8111-111111111102', 'jumia-selection-other@example.test', 'Other Merchant', 'jumia-selection-other', 'free', '[]');
 
-  INSERT INTO public.staff_members (
-    merchant_id, user_id, email, name, role, permissions, status
-  ) VALUES (
-    v_merchant, v_staff, 'jumia-selection-staff@example.test', 'Selection Staff',
-    'manager', '{"integrations":{"manage":true}}', 'active'
-  );
-  INSERT INTO public.staff_members (
-    merchant_id, user_id, email, name, role, permissions, status
-  ) VALUES (
-    v_merchant, v_limited_staff, 'jumia-selection-limited-staff@example.test',
-    'Limited Staff', 'staff', '{"catalog":{"read":true}}', 'active'
-  );
+INSERT INTO public.staff_members (
+  merchant_id, user_id, email, name, role, permissions, status
+) VALUES (
+  '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111103', 'jumia-selection-staff@example.test', 'Selection Staff',
+  'manager', '{"integrations":{"manage":true}}', 'active'
+);
+INSERT INTO public.staff_members (
+  merchant_id, user_id, email, name, role, permissions, status
+) VALUES (
+  '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111104', 'jumia-selection-limited-staff@example.test',
+  'Limited Staff', 'staff', '{"catalog":{"read":true}}', 'active'
+);
 
-  INSERT INTO public.categories (id, merchant_id, name, slug, is_active) VALUES
-    ('33333333-3333-4333-8333-333333333301', v_merchant, 'Gaming', 'gaming', true),
-    ('33333333-3333-4333-8333-333333333302', v_merchant, 'Electronics', 'electronics', true),
-    ('33333333-3333-4333-8333-333333333303', v_other_merchant, 'Gaming', 'gaming', true);
+INSERT INTO public.categories (id, merchant_id, name, slug, is_active) VALUES
+  ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222201', 'Gaming', 'gaming', true),
+  ('33333333-3333-4333-8333-333333333302', '22222222-2222-4222-8222-222222222201', 'Electronics', 'electronics', true),
+  ('33333333-3333-4333-8333-333333333303', '22222222-2222-4222-8222-222222222202', 'Gaming', 'gaming', true);
 
-  INSERT INTO public.products (
-    id, merchant_id, name, description, price, status, sku, stock,
-    stock_quantity, manage_stock, has_variants, category, category_id, images
-  ) VALUES
-    ('44444444-4444-4444-8444-444444444401', v_merchant, 'Direct controller', 'Controller', 12000, 'active', 'CTRL-1', 5, 5, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
-    ('44444444-4444-4444-8444-444444444402', v_merchant, 'Linked headset', 'Headset', 22000, 'active', 'HEAD-1', 7, 7, true, false, 'Audio', NULL, '[]'::jsonb),
-    ('44444444-4444-4444-8444-444444444403', v_merchant, 'Dual listed console', 'Console', 90000, 'active', 'CONSOLE-1', 3, 3, true, true, 'Gaming', '33333333-3333-4333-8333-333333333301', '["https://assets.example.test/export.jpg"]'::jsonb),
-    ('44444444-4444-4444-8444-444444444404', v_merchant, 'Draft console', 'Draft', 50000, 'draft', 'DRAFT-1', 1, 1, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
-    ('44444444-4444-4444-8444-444444444405', v_merchant, 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb);
+INSERT INTO public.products (
+  id, merchant_id, name, description, price, status, sku, stock,
+  stock_quantity, manage_stock, has_variants, category, category_id, images
+) VALUES
+  ('44444444-4444-4444-8444-444444444401', '22222222-2222-4222-8222-222222222201', 'Direct controller', 'Controller', 12000, 'active', 'CTRL-1', 5, 5, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
+  ('44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222201', 'Linked headset', 'Headset', 22000, 'active', 'HEAD-1', 7, 7, true, false, 'Audio', NULL, '[]'::jsonb),
+  ('44444444-4444-4444-8444-444444444403', '22222222-2222-4222-8222-222222222201', 'Dual listed console', 'Console', 90000, 'active', 'CONSOLE-1', 3, 3, true, true, 'Gaming', '33333333-3333-4333-8333-333333333301', '["https://assets.example.test/export.jpg"]'::jsonb),
+  ('44444444-4444-4444-8444-444444444404', '22222222-2222-4222-8222-222222222201', 'Draft console', 'Draft', 50000, 'draft', 'DRAFT-1', 1, 1, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
+  ('44444444-4444-4444-8444-444444444405', '22222222-2222-4222-8222-222222222201', 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb);
 
-  INSERT INTO public.product_categories (id, product_id, category_id, is_primary) VALUES
-    ('55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444402', '33333333-3333-4333-8333-333333333301', true),
-    ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444403', '33333333-3333-4333-8333-333333333301', false);
+INSERT INTO public.product_categories (id, product_id, category_id, is_primary) VALUES
+  ('55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444402', '33333333-3333-4333-8333-333333333301', true),
+  ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444403', '33333333-3333-4333-8333-333333333301', false);
 
-  INSERT INTO public.product_variants (
-    id, product_id, merchant_id, attributes, sku, stock_quantity, price_override,
-    is_inventory_anchor
-  ) VALUES (
-    '66666666-6666-4666-8666-666666666601',
-    '44444444-4444-4444-8444-444444444403', v_merchant,
-    '{"color":"black"}', 'CONSOLE-BLK', 3, 95000, true
-  );
+INSERT INTO public.product_variants (
+  id, product_id, merchant_id, attributes, sku, stock_quantity, price_override,
+  is_inventory_anchor
+) VALUES (
+  '66666666-6666-4666-8666-666666666601',
+  '44444444-4444-4444-8444-444444444403', '22222222-2222-4222-8222-222222222201',
+  '{"color":"black"}', 'CONSOLE-BLK', 3, 95000, true
+);
 
-  INSERT INTO public.product_feed_images (
-    id, merchant_id, product_id, source_url, verified_url, verified_format,
-    status, is_primary, position
-  ) VALUES (
-    '77777777-7777-4777-8777-777777777701', v_merchant,
-    '44444444-4444-4444-8444-444444444403',
-    'https://assets.example.test/source.jpg', 'https://assets.example.test/verified.jpg',
-    'jpeg', 'verified', true, 0
-  );
-END;
-$fixtures$;
+INSERT INTO public.product_feed_images (
+  id, merchant_id, product_id, source_url, verified_url, verified_format,
+  status, is_primary, position
+) VALUES (
+  '77777777-7777-4777-8777-777777777701', '22222222-2222-4222-8222-222222222201',
+  '44444444-4444-4444-8444-444444444403',
+  'https://assets.example.test/source.jpg', 'https://assets.example.test/verified.jpg',
+  'jpeg', 'verified', true, 0
+);
 
 SELECT ok(
   has_table_privilege('authenticated', 'public.jumia_product_export_selections', 'SELECT')

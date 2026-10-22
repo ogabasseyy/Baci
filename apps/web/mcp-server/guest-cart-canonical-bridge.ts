@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   GuestCartCanonicalError,
@@ -181,7 +182,7 @@ export function createGuestCanonicalBridge(
       canonical_cart_id: reply.state.cartId, version: reply.state.version };
   }
   return {
-    async read(token) { return cartReply(token, await send(token, { handoff: true })); },
+    async read(token) { return cartReply(token, await send(token, { handoff: true, operationId: randomUUID() })); },
     async update(token, input) {
       const reply = await send(token, {
         productId: input.product_id,

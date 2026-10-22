@@ -1,3 +1,4 @@
+import { withOAuthReadinessTimeout } from './guest-oauth-startup';
 import { createGuestOAuthRuntime } from './guest-oauth-runtime';
 import { getConfirmedStockLabel } from './confirmed-stock-label';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
@@ -2745,7 +2746,7 @@ gateStartupOnGuestCartCapability({
   client: guestCartClient,
   onReady: () => {
     if (!guestOAuth) { httpServer.listen(PORT, onListening); return; }
-    guestOAuth.ready().then(() => httpServer.listen(PORT, onListening)).catch(() => {
+    withOAuthReadinessTimeout(() => guestOAuth.ready()).then(() => httpServer.listen(PORT, onListening)).catch(() => {
       console.error('FATAL: Guest OAuth capability probe failed'); process.exit(1);
     });
   },

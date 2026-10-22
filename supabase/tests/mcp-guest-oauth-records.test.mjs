@@ -55,6 +55,24 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
       ('${other}','grant:expired',repeat('x',64),1,now()-interval '2 days',now()-interval '1 day');`);
     assert.equal(query(worker + `SELECT public.mcp_guest_oauth_purge_expired('${tenant}');`), '1');
     assert.equal(query(`SELECT count(*) FROM public.mcp_guest_oauth_records WHERE merchant_id='${other}';`), '1');
+    const scopeMigration = readFileSync(new URL('../migrations/20261022060000_mcp_guest_oauth_request_scope.sql', import.meta.url), 'utf8');
+    const capacityMigration = readFileSync(new URL('../migrations/20261022060100_mcp_guest_oauth_capacity.sql', import.meta.url), 'utf8');
+    query(`CREATE SCHEMA auth; CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('request.jwt.claims',true)::jsonb ->> 'role' $$; ${scopeMigration} ${capacityMigration}`);
+    assert.equal(query("SELECT pg_has_role('authenticator','mcp_guest_oauth_worker','member');"), 'f');
+    const hook = "SELECT public.enforce_gigl_tracking_worker_request_scope();";
+    for (const path of ['mcp_guest_oauth_read','mcp_guest_oauth_cas','mcp_guest_oauth_purge_expired','mcp_guest_oauth_seed_cart']) {
+      assert.doesNotThrow(() => query(worker + `SET request.method='POST'; SET request.path='/rpc/${path}';` + hook));
+    }
+    for (const path of ['/rpc/public_rpc','/merchants','/rpc/mcp_guest_oauth_read/']) {
+      assert.throws(() => query(worker + `SET request.method='POST'; SET request.path='${path}';` + hook), /outside its capability scope/);
+    }
+    assert.throws(() => query(worker + "SET request.method='GET'; SET request.path='/rpc/mcp_guest_oauth_read';" + hook), /outside its capability scope/);
+    assert.throws(() => query("SET ROLE anon; SET request.jwt.claims='{\"role\":\"anon\"}'; SET request.method='POST'; SET request.path='/rpc/__guest_oauth_hook_reload_canary__';" + hook), /GUEST OAUTH hook reload canary observed/);
+    query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at)
+      SELECT '${tenant}','consent:capacity'||g,repeat('x',64),1,now()+interval '1 day'
+      FROM generate_series(1,10000-(SELECT count(*)::int FROM public.mcp_guest_oauth_records WHERE merchant_id='${tenant}')) g;`);
+    assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','refresh:excess',0,repeat('x',64),now()+interval '1 day');`), /oauth_capacity_exceeded/);
+    assert.equal(query(worker + cas(2)), 't');
     assert.equal(query('SELECT relrowsecurity FROM pg_class WHERE oid=\'public.mcp_guest_oauth_records\'::regclass;'), 't');
   } finally {
     if (started) execFileSync(join(bin, 'pg_ctl'), ['-D', `${dir}/data`, '-m', 'immediate', '-w', 'stop'], { stdio: 'pipe' });

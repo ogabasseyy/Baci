@@ -30,6 +30,7 @@ export const guestOAuthGrantSchema = z.object({
   expiresAt: z.number(),
   revoked: z.boolean(),
   refreshHash: z.string(),
+  tokenGenerations: z.number().int().min(0).max(1024).default(0),
   cartToken: z.string().regex(/^[a-f0-9]{64}$/),
   cartInitialized: z.boolean(),
 });

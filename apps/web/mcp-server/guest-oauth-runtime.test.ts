@@ -47,3 +47,20 @@ it('reports worker rotation and expiry using the current clock', () => {
   vi.setSystemTime(start.getTime() + 4 * 86400_000);
   expect(runtime?.health()).toEqual({ guestOAuthWorker: 'expired', guestOAuthWorkerSecondsRemaining: 0 });
 });
+
+it('bounds a stalled OAuth merchant lookup before the listener starts', async () => {
+  vi.useFakeTimers();
+  const { withOAuthReadinessTimeout } = await import('./guest-oauth-startup');
+  const ready = withOAuthReadinessTimeout(() => new Promise<never>(() => {}));
+  const assertion = expect(ready).rejects.toThrow('OAuth readiness timeout');
+  await vi.advanceTimersByTimeAsync(10000);
+  await assertion;
+  expect(vi.getTimerCount()).toBe(0);
+});
+it('clears the OAuth readiness timer on success and rejection', async () => {
+  vi.useFakeTimers();
+  const { withOAuthReadinessTimeout } = await import('./guest-oauth-startup');
+  await expect(withOAuthReadinessTimeout(async () => 'ready')).resolves.toBe('ready');
+  await expect(withOAuthReadinessTimeout(async () => { throw new Error('failed'); })).rejects.toThrow('failed');
+  expect(vi.getTimerCount()).toBe(0);
+});

@@ -252,3 +252,18 @@ it('retries a refresh after cart initialization changes only the grant revision'
   const next = await auth.refresh({ ...request, refresh_token: first.refresh_token });
   expect((await auth.verify(next.access_token)).cartInitialized).toBe(true);
 });
+
+it('caps refresh history without losing reuse detection', async () => {
+  const { auth, rows } = fixture();
+  const { code } = await auth.authorize(request);
+  let token = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const grant = await auth.verify(token.access_token);
+  const key = `grant:${grant.id}`;
+  const row = rows.get(key)!;
+  rows.set(key, { ...row, value: { ...grant, tokenGenerations: 1023 } });
+  token = await auth.refresh({ ...request, refresh_token: token.refresh_token });
+  const size = rows.size;
+  await expect(auth.refresh({ ...request, refresh_token: token.refresh_token })).rejects.toThrow('invalid_grant');
+  expect(rows.size).toBe(size);
+  await expect(auth.verify(token.access_token)).rejects.toThrow();
+});

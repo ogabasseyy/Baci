@@ -121,10 +121,16 @@ export class GuestOAuth {
     };
   }
   private async issue(grant: GuestOAuthGrant, revision: number) {
+    // 1024 generations covers seven days of normal 15-minute rotation.
+    // Retained hashes remain available for reuse detection until grant expiry.
+    if (grant.tokenGenerations >= 1024) {
+      await this.revokeGrant(grant.id);
+      throw new Error('invalid_grant');
+    }
     const access = opaque();
     const refresh = opaque();
     const expiresAt = Math.min(this.now() + ACCESS_TTL, grant.expiresAt);
-    const next = { ...grant, refreshHash: hash(refresh) };
+    const next = { ...grant, refreshHash: hash(refresh), tokenGenerations: grant.tokenGenerations + 1 };
     // Token indices precede grant CAS: partial writes never authorize a token
     // with a refresh hash other than the committed generation.
     await this.put(
@@ -187,6 +193,7 @@ export class GuestOAuth {
         expiresAt: this.now() + TTL - 5 * 60_000,
         revoked: false,
         refreshHash: '',
+        tokenGenerations: 0,
         cartToken: opaque(),
         cartInitialized: false,
       },

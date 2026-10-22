@@ -429,4 +429,14 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261022010357_mcp_guest_oauth_cart_ownership.sql',
     sha256: '8345827fda4473ba394f7dedf1bf57ef5fe164ed6b3f60e093dbc402b0516b5b',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022060000_mcp_guest_oauth_request_scope.sql',
+    sha256: '51314f504550d5de548995e6a889001aea8355fb7515b652aec05efe452f7650',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022060100_mcp_guest_oauth_capacity.sql',
+    sha256: '9db3b090e5fec157850512442dc3d4ac6cb6f8a93f9a7db471f6b0da10451516',
+  },
 ] as const;

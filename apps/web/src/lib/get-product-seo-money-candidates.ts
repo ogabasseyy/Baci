@@ -63,6 +63,7 @@ for (const [code, symbol] of Object.entries(CURRENCY_SYMBOLS)) {
   aliases[key].push(code);
 }
 aliases.N = ['NGN'];
+aliases.US$ = ['USD'];
 const escapePattern = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const isoPattern = [...isoCurrencies].join('|');

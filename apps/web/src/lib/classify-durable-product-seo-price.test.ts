@@ -8,6 +8,8 @@ describe('isDurableSeoPrice', () => {
     'The brightness is 1,200 lumens.',
     'The bottle holds 1.5 liters.',
     'The temperature is 23.5 degrees.',
+    'The weight was 900, now 800 grams',
+    '1,920 x 1,080 display with HDR',
   ])('does not classify physical measurements as prices: %s', (text) => {
     const candidate = getProductSeoMoneyCandidates(text)[0];
     expect(candidate).toBeDefined();
@@ -23,6 +25,41 @@ describe('isDurableSeoPrice', () => {
     expect(candidate).toBeDefined();
     if (!candidate) throw new Error('Expected a monetary-looking candidate');
     expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it('preserves COP efficiency specifications', () => {
+    const text = 'COP 4.5 efficiency';
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it.each([
+    'Sale: COP 4500 cooling fan',
+    'Price: COP 900 heating system',
+    'For COP 4500 cooling fan',
+    'COP 250000 cooling fan',
+    'Price range: 900–1,200',
+  ])('retains explicit retail meaning for Colombian-peso prices: %s', (text) => {
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    if (!candidate) throw new Error('Expected candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
+
+  it.each([
+    'The SKU was 999, now 799',
+    'SKU: was 999, now 799',
+    'SKU:was 999, now 799',
+  ])('does not interpret paired SKU updates as sale prices: %s', (text) => {
+    const candidates = getProductSeoMoneyCandidates(text);
+    // Tokenization already excludes the first value governed by the SKU label.
+    expect(candidates.map(({ start, end }) => text.slice(start, end))).toEqual([
+      '799',
+    ]);
+    for (const candidate of candidates) {
+      expect(isDurableSeoPrice(candidate, text)).toBe(false);
+    }
   });
 
   it('still classifies an explicit pound-denominated sale as a price', () => {

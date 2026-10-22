@@ -40,6 +40,7 @@ describe('getProductSeoMoneyCandidates', () => {
     ['NGN 1.5m', 1_500_000, ['NGN']],
     ['NGN:350,000', 350_000, ['NGN']],
     ['USD: 900', 900, ['USD']],
+    ['US$900', 900, ['USD']],
     ['₦: 350,000', 350_000, ['NGN']],
     ['350,000 naira', 350_000, ['NGN']],
     ['900 US dollars', 900, ['USD']],

@@ -115,19 +115,11 @@ describe('durable SEO monetary context', () => {
     'iPhone 13 | 350,000',
     'iPhone 13 350000. Great camera.',
     'iPhone 13: 350000. Shop today.',
+    'iPhone 13 – 999',
   ])('rejects separator-only prices after product identity: %s', (text) => {
     expect(
       getDurableProductSeoText({
         text,
-        product: { name: 'iPhone 13' },
-      })
-    ).toBe('');
-  });
-
-  it('rejects a short separator-only amount after the product identity', () => {
-    expect(
-      getDurableProductSeoText({
-        text: 'iPhone 13 – 999',
         product: { name: 'iPhone 13' },
       })
     ).toBe('');
@@ -215,6 +207,10 @@ describe('durable SEO monetary context', () => {
     'SKU is 999.',
     'Model 999 with 5G.',
     'SAR 1.2 W/kg with compliant exposure limits.',
+    'COP 4.5 efficiency',
+    '1,920 x 1,080 display with HDR',
+    'The weight was 900, now 800 grams',
+    'Includes cashback of $50 on selected plans.',
   ])('preserves numeric specifications despite nearby price vocabulary: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -256,6 +252,10 @@ describe('durable SEO monetary context', () => {
     'Flash sale: 999',
     "Today's deal: 999",
     'Phone now at 999',
+    'Was 999, now 799',
+    'Price range: 900–1,200',
+    'Laptop US$900',
+    'This phone has a price of 999',
   ])('rejects low unlabelled amounts following explicit commerce headings: %s', (text) => {
     expect(
       getDurableProductSeoText({

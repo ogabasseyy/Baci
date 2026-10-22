@@ -1,3 +1,5 @@
+import { EXPECTED_JUMIA_PRODUCT_EXPORT_SELECTION_PENDING_SOURCES } from './expected-jumia-product-export-selection-pending-sources.test-fixture';
+
 export const EXPECTED_JUMIA_PENDING_SOURCES = [
   {
     repositoryPath:
@@ -199,4 +201,5 @@ export const EXPECTED_JUMIA_PENDING_SOURCES = [
       'supabase/migrations/20260926090000_apply_jumia_submitted_price_updates_atomically.sql',
     sha256: '75f00aadd41e720fa515b2915f3a2f9a326a904c2f70be127b1e42c7628592a1',
   },
+  ...EXPECTED_JUMIA_PRODUCT_EXPORT_SELECTION_PENDING_SOURCES,
 ];

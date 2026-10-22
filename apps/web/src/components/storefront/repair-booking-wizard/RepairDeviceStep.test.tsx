@@ -117,23 +117,24 @@ describe('RepairDeviceStep', () => {
       </Harness>
     );
 
-    await user.type(screen.getByLabelText('Device Model'), 'iPhone 15');
+    const input = screen.getByRole('combobox', { name: 'Device Model' });
+    await user.type(input, 'iPhone 15');
     await waitFor(() =>
       expect(mocks.apiGet).toHaveBeenLastCalledWith(
         '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
         expect.anything()
       )
     );
-    const suggestion = await screen.findByRole('button', {
+    const suggestion = await screen.findByRole('option', {
       name: 'Apple iPhone 15 Smartphone',
     });
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(input).toHaveAttribute('aria-controls', 'repair-device-suggestions');
     expect(
       screen.getByRole('img', { name: 'Apple iPhone 15' })
     ).toHaveAttribute('src', expect.stringContaining('iphone-15.jpg'));
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    await user.tab();
-    expect(suggestion).toHaveFocus();
-    await user.keyboard('{Enter}');
+    expect(screen.getByRole('listbox')).toContainElement(suggestion);
+    await user.keyboard('{ArrowDown}{Enter}');
 
     await waitFor(() =>
       expect(mocks.apiGet).toHaveBeenCalledWith(
@@ -147,7 +148,7 @@ describe('RepairDeviceStep', () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole('button', { name: /apple iphone 15/i })
+        screen.queryByRole('option', { name: /apple iphone 15/i })
       ).not.toBeInTheDocument()
     );
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
@@ -191,7 +192,7 @@ describe('RepairDeviceStep', () => {
     );
 
     await user.type(screen.getByLabelText('Device Model'), 'iPhone 15');
-    const suggestion = await screen.findByRole('button', {
+    const suggestion = await screen.findByRole('option', {
       name: 'Apple iPhone 15 Smartphone',
     });
     expect(
@@ -211,7 +212,7 @@ describe('RepairDeviceStep', () => {
     );
     expect(mocks.apiGet).toHaveBeenNthCalledWith(
       2,
-      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=8&compact=true&has_images=true',
+      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&compact=true',
       expect.anything()
     );
   });
@@ -219,6 +220,11 @@ describe('RepairDeviceStep', () => {
   it('suggests phones and iPhones categories but excludes phone accessories', async () => {
     mocks.apiGet.mockResolvedValueOnce({ groups: [] }).mockResolvedValueOnce({
       products: [
+        ...Array.from({ length: 8 }, (_, index) => ({
+          category: 'Phone Accessories',
+          id: `case-product-${index}`,
+          name: `Acme Phone Case ${index}`,
+        })),
         {
           category: 'Phones',
           id: 'phone-product',
@@ -228,11 +234,6 @@ describe('RepairDeviceStep', () => {
           category: 'iPhones',
           id: 'iphone-product',
           name: 'Apple iPhone 15',
-        },
-        {
-          category: 'Phone Accessories',
-          id: 'case-product',
-          name: 'Acme Phone Case',
         },
       ],
     });
@@ -259,13 +260,13 @@ describe('RepairDeviceStep', () => {
     });
 
     expect(
-      await screen.findByRole('button', { name: 'Acme Phone One Smartphone' })
+      await screen.findByRole('option', { name: 'Acme Phone One Smartphone' })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Apple iPhone 15 Smartphone' })
+      screen.getByRole('option', { name: 'Apple iPhone 15 Smartphone' })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /phone case/i })
+      screen.queryByRole('option', { name: /phone case/i })
     ).not.toBeInTheDocument();
   });
 
@@ -324,13 +325,13 @@ describe('RepairDeviceStep', () => {
 
     await user.type(screen.getByLabelText('Device Model'), 'iPhone 15');
     expect(
-      await screen.findByRole('button', {
+      await screen.findByRole('option', {
         name: 'Apple iPhone 15 Smartphone',
       })
     ).toBeInTheDocument();
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
     expect(mocks.apiGet).toHaveBeenCalledWith(
-      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=8&compact=true&has_images=true',
+      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&compact=true',
       expect.anything()
     );
   });

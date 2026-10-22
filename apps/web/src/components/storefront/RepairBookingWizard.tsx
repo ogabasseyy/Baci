@@ -15,7 +15,6 @@ import {
 } from '@/lib/validations/repair';
 import { RepairBookingSuccess } from './repair-booking-wizard/RepairBookingSuccess';
 import { RepairContactStep } from './repair-booking-wizard/RepairContactStep';
-import type { RepairDeviceSelection } from './repair-booking-wizard/RepairDeviceModelField';
 import { RepairDeviceStep } from './repair-booking-wizard/RepairDeviceStep';
 import { RepairPickupPaymentReady } from './repair-booking-wizard/RepairPickupPaymentReady';
 import { RepairReviewStep } from './repair-booking-wizard/RepairReviewStep';
@@ -25,6 +24,7 @@ import {
   REPAIR_WIZARD_STEPS,
   type RepairBookingPreselection,
 } from './repair-booking-wizard/repair-booking-wizard-constants';
+import type { RepairDeviceSelection } from './repair-booking-wizard/repair-device-suggestions';
 import { useRepairBookingSubmit } from './repair-booking-wizard/use-repair-booking-submit';
 import { useRepairShippingQuote } from './repair-booking-wizard/use-repair-shipping-quote';
 

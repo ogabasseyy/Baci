@@ -48,6 +48,8 @@ describe('getProductSeoMoneyCandidates', () => {
     ["350'000", 350_000, []],
     ['1.234,56 EUR', 1_234.56, ['EUR']],
     ['$50 CAD', 50, ['CAD']],
+    ['900 dirhams', 900, ['AED']],
+    ['900 shillings', 900, ['KES', 'TZS', 'UGX']],
     ['CAD $50', 50, ['CAD']],
     ['USD $50 CAD', 50, []],
     ['USD 50.00', 50, ['USD']],

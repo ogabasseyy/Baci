@@ -35,7 +35,7 @@ describe('changed analytics runtime review regressions', () => {
     expect(
       analyzeChangedRuntimeContracts(
         [path],
-        new Map([[path, 'export const provider = true;']])
+        new Map([[path, 'export const provider = () => true;']])
       )
     ).toEqual([
       `${path}: changed runtime is missing colocated test apps/web/src/lib/analytics/provider.test.${extension}`,
@@ -47,7 +47,7 @@ describe('changed analytics runtime review regressions', () => {
     expect(
       analyzeChangedRuntimeContracts(
         [path],
-        new Map([[path, 'export const provider = true;']])
+        new Map([[path, 'export const provider = () => true;']])
       )
     ).toEqual([
       `${path}: changed runtime is missing colocated test apps/web/src/lib/analytics/provider.d.test.js`,

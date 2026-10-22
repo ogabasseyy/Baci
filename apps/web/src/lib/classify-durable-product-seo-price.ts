@@ -1,7 +1,11 @@
 import type { ProductSeoMoneyCandidate } from './get-product-seo-money-candidates';
 
 const QUANTITY_UNIT =
-  /^\s*(?:units?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
+  /^\s*(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|gb|tb|mb|hz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
+const STOCK_COUNT_CONTEXT =
+  /^\s*(?:(?:items?|pieces?|units?|copies)\s+)?(?:left(?:\s+in\s+stock)?|in\s+stock|remaining)\b/i;
+const COMMERCE_HEADING =
+  /\b(?:(?:special|flash|clearance|limited[- ]time|today'?s|exclusive|hot|best|introductory|launch)\s+)?(?:sale|offer|deal|clearance)s?\s*[:–—-]\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i;
 const PIXEL_DIMENSION_PAIR = /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px)\b/i;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
@@ -34,10 +38,11 @@ function retailRelation(text: string, start: number) {
       .slice(Math.max(0, start - 200), start)
       .split(/[.!?;\n]/)
       .at(-1) ?? '';
+  const commerceHeading = COMMERCE_HEADING.test(clause);
   const cue =
     /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
-    )?.[1] ?? '';
+    )?.[1] ?? (commerceHeading ? 'heading' : '');
   const predicate =
     /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){1,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
       clause
@@ -58,7 +63,9 @@ function retailRelation(text: string, start: number) {
     identifierPredicate,
     commercial,
     separator: /^\s*[-:–—(]?\s*$/.test(clause),
-    strong: /^(?:msrp|rrp|price|cost|priced|start|pay|only)/i.test(cue),
+    strong:
+      commerceHeading ||
+      /^(?:msrp|rrp|price|cost|priced|start|pay|only)/i.test(cue),
     purchase:
       /\b(?:buy|purchase)\b/i.test(clause) ||
       /\b(?:get(?!\s+(?:ready|prepared|started)\b)|shop)(?:\s+[^.!?;\n]{1,80})?\s+for\s*$/i.test(
@@ -108,6 +115,7 @@ export function isDurableSeoPrice(
   const quantity =
     QUANTITY_UNIT.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
+    STOCK_COUNT_CONTEXT.test(tail) ||
     (LIFESPAN_QUANTITY_UNIT.test(tail) &&
       !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
@@ -182,7 +190,7 @@ export function isDurableSeoPrice(
   // AMD is both a currency and a hardware brand; the following noun disambiguates.
   if (
     candidate.marker.toUpperCase() === 'AMD' &&
-    !relation.cue &&
+    (!relation.cue || relation.cue === 'heading') &&
     !relation.predicate &&
     (/^\s+(?:(?:XT|XTX|GRE|G|X|PRO)\s+)?(?:processors?|cpus?|gpus?|graphics)\b/i.test(
       tail
@@ -196,7 +204,7 @@ export function isDurableSeoPrice(
   // foreign prices remain monetary; unqualified compact N/R16 stays a model.
   if (/^[nr]$/i.test(candidate.marker)) {
     if (
-      !relation.cue &&
+      (!relation.cue || relation.cue === 'heading') &&
       !relation.predicate &&
       !/\s/.test(text.slice(candidate.start, candidate.end)) &&
       !/[,km]/i.test(rawAmount) &&

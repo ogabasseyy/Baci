@@ -194,6 +194,7 @@ describe('durable SEO monetary context', () => {
     'Our price guide for 2025 includes storage advice.',
     'An amd 7900 processor with 16GB RAM.',
     'Powered by amd 7900 with 16GB RAM.',
+    'Sale: AMD 7900 processor',
     'Choose from ALL 3 colours',
     'TRY 2 sizes',
     'TOP 3 picks',
@@ -204,6 +205,8 @@ describe('durable SEO monetary context', () => {
     'The price guide edition is 2025.',
     'Compare the price of models whose release year is 2025.',
     'Compare an N350 processor with an R16 processor.',
+    'Sale: N350 processor',
+    'Sale: R16 processor',
     'The display resolution is 1,920 × 1,080 pixels.',
     'The display resolution is 1,920 by 1,080 pixels.',
     'The model number is 12,345.',
@@ -229,5 +232,34 @@ describe('durable SEO monetary context', () => {
     expect(
       getDurableProductSeoText({ text, product: { name: 'Device' } })
     ).toBe(text);
+  });
+
+  it.each([
+    'Only 3 left in stock. Order now.',
+    'Only 3 left.',
+    'Only 1 left.',
+    'Only 5 remaining.',
+  ])('preserves scarcity stock counts introduced by only: %s', (text) => {
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Device' },
+      })
+    ).toBe(text);
+  });
+
+  it.each([
+    'Sale: 999',
+    'Special offer: 999',
+    'Deal: 999',
+    'Flash sale: 999',
+    "Today's deal: 999",
+  ])('rejects low unlabelled amounts following explicit commerce headings: %s', (text) => {
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Device' },
+      })
+    ).toBe('');
   });
 });

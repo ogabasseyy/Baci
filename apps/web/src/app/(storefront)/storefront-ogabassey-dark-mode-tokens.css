@@ -46,9 +46,14 @@
   }
 
   @media (prefers-color-scheme: dark) {
-    /* The server-rendered scope exists before the provider mirrors its classes
-       onto body. Paint the document canvas correctly during that interval. */
+    /* The server-rendered theme scope exists before the provider mirrors its
+       classes onto body. Paint the document canvas during that interval on
+       every OgaBassey route, not only the home hero. */
+    body:has(.storefront-variant-ogabassey.storefront-mode-system),
     body:has([data-ogabassey-home-lcp-shell]),
+    .storefront-ppr-static-shell:has(
+        .storefront-variant-ogabassey.storefront-mode-system
+      ),
     .storefront-ppr-static-shell:has([data-ogabassey-home-lcp-shell]) {
       background-color: #0a0a0a;
     }

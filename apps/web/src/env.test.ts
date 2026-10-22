@@ -61,6 +61,11 @@ describe('env validation', () => {
   it('includes normalized autocomplete credentials in the validated server environment', async () => {
     vi.stubEnv('GEOAPIFY_API_KEY', ' geo-test-key ');
     vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
+      ' https://address-kv.example.com '
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', ' address-kv-token ');
+    vi.stubEnv(
       'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
       ' https://redis.example.com '
     );
@@ -68,9 +73,25 @@ describe('env validation', () => {
     const { env } = await loadEnvModule();
     expect(env).toMatchObject({
       GEOAPIFY_API_KEY: 'geo-test-key',
+      ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: 'https://address-kv.example.com',
+      ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: 'address-kv-token',
       ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: 'https://redis.example.com',
       ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: 'counter-test-token',
     });
+  });
+
+  it.each([
+    ['https://address-kv.example.com', ''],
+    ['', 'address-kv-token'],
+  ])('rejects a partial address KV pair %s/%s', async (url, token) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_URL', url);
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', token);
+    await expect(loadEnvModule()).rejects.toThrow(
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API'
+    );
   });
 
   it('rejects malformed autocomplete Redis URLs during production validation', async () => {
@@ -102,6 +123,11 @@ describe('env validation', () => {
     vi.stubGlobal('window', {});
     vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');
     vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
+      'https://redis.example.com'
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', 'private-counter-key');
+    vi.stubEnv(
       'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
       'https://redis.example.com'
     );
@@ -111,6 +137,8 @@ describe('env validation', () => {
     );
     const { env } = await loadEnvModule();
     expect(env.GEOAPIFY_API_KEY).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN).toBeUndefined();
     expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL).toBeUndefined();
     expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN).toBeUndefined();
   });

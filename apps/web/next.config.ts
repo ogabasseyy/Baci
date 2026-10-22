@@ -118,6 +118,7 @@ function getPostHogRewriteRules() {
 
 const nextConfig: NextConfig = {
   ...getHostedDraftStandaloneOutput(process.env),
+  allowedDevOrigins: ['127.0.0.1'],
   deploymentId: NEXT_DEPLOYMENT_ID,
   env: POSTHOG_PUBLIC_BUILD_ENV,
 

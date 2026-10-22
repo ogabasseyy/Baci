@@ -15,6 +15,7 @@ import {
 } from '@/lib/validations/repair';
 import { RepairBookingSuccess } from './repair-booking-wizard/RepairBookingSuccess';
 import { RepairContactStep } from './repair-booking-wizard/RepairContactStep';
+import type { RepairDeviceSelection } from './repair-booking-wizard/RepairDeviceModelField';
 import { RepairDeviceStep } from './repair-booking-wizard/RepairDeviceStep';
 import { RepairPickupPaymentReady } from './repair-booking-wizard/RepairPickupPaymentReady';
 import { RepairReviewStep } from './repair-booking-wizard/RepairReviewStep';
@@ -33,6 +34,7 @@ interface RepairBookingWizardProps {
   merchantId: string;
   merchantSlug: string;
   merchantName: string;
+  repairsCatalogEnabled?: boolean;
   preselection?: RepairBookingPreselection;
 }
 
@@ -40,6 +42,7 @@ export function RepairBookingWizard({
   merchantId,
   merchantSlug,
   merchantName,
+  repairsCatalogEnabled = false,
   preselection,
 }: RepairBookingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -98,6 +101,37 @@ export function RepairBookingWizard({
     form.setValue('issueDescription', '');
   };
 
+  const handleSelectCatalogDevice = (device: RepairDeviceSelection) => {
+    if ('kind' in device) {
+      form.setValue('deviceId', undefined, { shouldDirty: true });
+      form.setValue('quoteId', undefined, { shouldDirty: true });
+      form.setValue('deviceType', device.deviceType, { shouldDirty: true });
+      form.setValue('deviceModel', device.displayName, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      return;
+    }
+
+    form.setValue('deviceId', device.id, { shouldDirty: true });
+    form.setValue(
+      'deviceType',
+      device.deviceType ?? form.getValues('deviceType'),
+      {
+        shouldDirty: true,
+      }
+    );
+    form.setValue('deviceModel', `${device.brand} ${device.model}`.trim(), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const handleDeviceModelChange = () => {
+    form.setValue('deviceId', undefined, { shouldDirty: true });
+    form.setValue('quoteId', undefined, { shouldDirty: true });
+  };
+
   const nextStep = async () => {
     let fieldsToValidate: (keyof RepairBookingInput)[] = [];
     if (currentStep === 0) {
@@ -148,13 +182,19 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-0"
                 transition={{ duration: 0.3 }}
               >
                 <RepairDeviceStep
+                  catalogEnabled={repairsCatalogEnabled || Boolean(merchantId)}
                   control={control}
+                  merchantId={merchantId}
+                  merchantSlug={merchantSlug}
+                  repairCatalogEnabled={repairsCatalogEnabled}
+                  onDeviceChange={handleDeviceModelChange}
                   onChangeDevice={handleChangeDevice}
+                  onSelectDevice={handleSelectCatalogDevice}
                   preselection={preselection}
                   showConfirmation={showCatalogConfirmation}
                 />
@@ -165,7 +205,7 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-1"
                 transition={{ duration: 0.3 }}
               >
@@ -187,7 +227,7 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-2"
                 transition={{ duration: 0.3 }}
               >

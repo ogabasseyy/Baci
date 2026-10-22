@@ -41,10 +41,20 @@ return 1
 `;
 
 let budgetRedis: Redis | null = null;
+export type GoogleBudgetReservation =
+  | { reserved: true }
+  | { reserved: false; reason: 'limit_reached' | 'unavailable' };
+
+const developmentGoogleRequests = new Map<string, number>();
+
 function getBudgetRedis(): Redis | null {
   if (budgetRedis) return budgetRedis;
   // Prefer an isolated counter database without changing unrelated KV consumers.
   const configurations = [
+    [
+      process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
+      process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
+    ],
     [
       process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
       process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN,
@@ -77,6 +87,27 @@ function getBudgetRedis(): Redis | null {
   return budgetRedis;
 }
 
+function reserveDevelopmentGoogleRequest(
+  kind: 'autocomplete' | 'details'
+): GoogleBudgetReservation {
+  if (process.env.NODE_ENV !== 'development')
+    return { reserved: false, reason: 'unavailable' };
+
+  try {
+    const key = googleBudgetKey();
+    const count = developmentGoogleRequests.get(key) ?? 0;
+    const limit =
+      kind === 'autocomplete'
+        ? GOOGLE_PREDICTION_REQUEST_LIMIT
+        : GOOGLE_MONTHLY_REQUEST_LIMIT;
+    if (count >= limit) return { reserved: false, reason: 'limit_reached' };
+    developmentGoogleRequests.set(key, count + 1);
+    return { reserved: true };
+  } catch {
+    return { reserved: false, reason: 'unavailable' };
+  }
+}
+
 export function googleBudgetKey(date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -92,26 +123,29 @@ export function googleBudgetKey(date = new Date()): string {
 
 export async function reserveGooglePlacesRequest(
   kind: 'autocomplete' | 'details'
-): Promise<boolean> {
+): Promise<GoogleBudgetReservation> {
   try {
     const redis = getBudgetRedis();
-    if (!redis) return false;
-    return (
-      (await redis.eval<unknown[], number>(
-        GOOGLE_BUDGET_SCRIPT,
-        [googleBudgetKey()],
-        [
-          kind === 'autocomplete'
-            ? GOOGLE_PREDICTION_REQUEST_LIMIT
-            : GOOGLE_MONTHLY_REQUEST_LIMIT,
-          MONTH_COUNTER_TTL_SECONDS,
-        ]
-      )) === 1
+    if (!redis) return reserveDevelopmentGoogleRequest(kind);
+
+    const result = await redis.eval<unknown[], number>(
+      GOOGLE_BUDGET_SCRIPT,
+      [googleBudgetKey()],
+      [
+        kind === 'autocomplete'
+          ? GOOGLE_PREDICTION_REQUEST_LIMIT
+          : GOOGLE_MONTHLY_REQUEST_LIMIT,
+        MONTH_COUNTER_TTL_SECONDS,
+      ]
     );
+    if (result === 1) return { reserved: true };
+    if (result === 0) return { reserved: false, reason: 'limit_reached' };
+    return reserveDevelopmentGoogleRequest(kind);
   } catch {
-    // No in-memory fallback: serverless restarts must not reset paid usage.
+    // Production stays fail-closed: serverless restarts must not reset its
+    // paid-usage budget. Development can safely use a bounded process-local cap.
     console.warn('[Address API] Google budget unavailable');
-    return false;
+    return reserveDevelopmentGoogleRequest(kind);
   }
 }
 

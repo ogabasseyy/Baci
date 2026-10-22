@@ -34,10 +34,13 @@ afterAll(() => {
   globalThis.ResizeObserver = OriginalResizeObserver;
 });
 
-const { mockCreateRepair, mockToast } = vi.hoisted(() => ({
-  mockCreateRepair: vi.fn(),
-  mockToast: vi.fn(),
-}));
+const { mockCreateRepair, mockToast, mockMotionInitialValues } = vi.hoisted(
+  () => ({
+    mockCreateRepair: vi.fn(),
+    mockToast: vi.fn(),
+    mockMotionInitialValues: [] as unknown[],
+  })
+);
 
 vi.mock('@/app/actions/repair', () => ({
   calculateRepairShipping: vi.fn(),
@@ -58,6 +61,7 @@ vi.mock('framer-motion', () => {
       transition: _transition,
       ...rest
     } = propsRecord;
+    mockMotionInitialValues.push(_initial);
     return rest as T;
   };
 
@@ -101,6 +105,7 @@ async function fillContactStep(user: ReturnType<typeof userEvent.setup>) {
 describe('RepairBookingWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMotionInitialValues.length = 0;
   });
 
   it('renders the free-text device form by default (no preselection)', () => {
@@ -114,6 +119,7 @@ describe('RepairBookingWizard', () => {
 
     expect(screen.getByText(/what device needs repair/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Device Model')).toBeInTheDocument();
+    expect(mockMotionInitialValues).toContain(false);
   });
 
   it('shows a confirmation panel with the device and quoted price when preselected', () => {

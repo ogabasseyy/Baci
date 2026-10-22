@@ -9,13 +9,16 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import type {
   RepairBookingInput,
   repairBookingSchema,
 } from '@/lib/validations/repair';
+import {
+  RepairDeviceModelField,
+  type RepairDeviceSelection,
+} from './RepairDeviceModelField';
 import {
   REPAIR_DEVICE_TYPE_OPTIONS,
   type RepairBookingPreselection,
@@ -27,6 +30,12 @@ interface RepairDeviceStepProps {
     unknown,
     RepairBookingInput
   >;
+  catalogEnabled?: boolean;
+  repairCatalogEnabled?: boolean;
+  merchantId?: string;
+  merchantSlug?: string;
+  onDeviceChange?: () => void;
+  onSelectDevice?: (device: RepairDeviceSelection) => void;
   preselection?: RepairBookingPreselection;
   showConfirmation: boolean;
   onChangeDevice: () => void;
@@ -48,6 +57,12 @@ function formatQuotePrice(preselection: RepairBookingPreselection) {
  */
 export function RepairDeviceStep({
   control,
+  catalogEnabled = false,
+  repairCatalogEnabled = catalogEnabled,
+  merchantId,
+  merchantSlug = '',
+  onDeviceChange = () => undefined,
+  onSelectDevice = () => undefined,
   onChangeDevice,
   preselection,
   showConfirmation,
@@ -111,8 +126,8 @@ export function RepairDeviceStep({
             <FormControl>
               <RadioGroup
                 className="grid grid-cols-2 gap-4 sm:grid-cols-3"
-                defaultValue={field.value}
                 onValueChange={field.onChange}
+                value={field.value}
               >
                 {REPAIR_DEVICE_TYPE_OPTIONS.map((type) => (
                   <FormItem key={type.id}>
@@ -142,8 +157,22 @@ export function RepairDeviceStep({
           <FormItem>
             <FormLabel>Device Model</FormLabel>
             <FormControl>
-              <Input placeholder="e.g. iPhone 13 Pro Max" {...field} />
+              <RepairDeviceModelField
+                catalogEnabled={catalogEnabled}
+                field={field}
+                merchantId={merchantId}
+                merchantSlug={merchantSlug}
+                repairCatalogEnabled={repairCatalogEnabled}
+                onDeviceChange={onDeviceChange}
+                onSelectDevice={onSelectDevice}
+              />
             </FormControl>
+            {catalogEnabled && (
+              <p className="text-xs text-muted-foreground">
+                Search repairable devices and matching store products. You can
+                still enter a model that is not listed.
+              </p>
+            )}
             <FormMessage />
           </FormItem>
         )}

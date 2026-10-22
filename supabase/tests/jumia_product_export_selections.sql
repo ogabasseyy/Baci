@@ -3,8 +3,14 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
-SELECT plan(8);
+SELECT plan(9);
+SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+SELECT ok(
+  auth.uid() IS NULL AND auth.jwt()->>'role' = 'service_role',
+  'fixture writes start with a deterministic service-role JWT context'
+);
 
 DO $fixtures$
 DECLARE

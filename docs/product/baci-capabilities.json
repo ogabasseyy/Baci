@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-21T23:26:13.433570+00:00",
-  "source_revision": "e6a3dc49e587116271acd6cb941573cd7ef34359",
-  "evidence_digest": "8dfee38022ac57c4c20f25591f7464bee97e4ecf761da1dbbc019100478f114d",
-  "claims_digest": "e31ff0cb05100216119bb458714478d18a6ae4423fa6d99113d8d346408b045e",
-  "review_scope": "Source audit; no prod verification claimed. Refs are reviewer evidence. MCP: guest OAuth candidate uses PKCE, encrypted merchant-scoped grants and connection-bound cart authority; disabled by default, remote migration and isolated ChatGPT OAuth QA pending owner approval. No production OAuth activation or live OAuth interoperability claim. Buyer tools merchant-fixed; private continuation server-configured, off by default. ChatGPT privacy/retention/activation not established. Checkout offers via merchant-scoped get_storefront_offer_resolution (published/admin gate); scoping plus cart fall-through kept. RPC: one awaited factory, three sites. PDP snapshot emits anchor effective_policy; strict offer caps. Chunks 1000 scoped, 200 unscoped. Strict-null logs; outage throws retryable. Anchors lowest-id everywhere; strict zero-unit emits 0. Explicit picks win (pinned). Eligibility string false parses closed. MCP detail merchant-scoped. Duplicate-case ids hydrate all spellings.",
+  "reviewed_at": "2026-10-22T01:14:17.254950+00:00",
+  "source_revision": "77ebd72b5828f47932d224d8eb92e171f1085ce5",
+  "evidence_digest": "fa1cee851d04490e2ff88ab88ed504dd875767d149fb83cd336aa25cfcabe996",
+  "claims_digest": "0f0a88d18c60cd4ef2fd7bc86af4da9c794a00e0aa7e4e6ab6f2df2867e1eb59",
+  "review_scope": "Source audit; no prod verification claimed. Refs are reviewer evidence. MCP: guest OAuth candidate uses PKCE, encrypted merchant-scoped grants and connection-bound cart authority; disabled in production; owner-approved isolated QA storage and worker are provisioned. QA verified browser consent, authenticated discovery, two-item mutations across fresh sessions and one-item handoff issuance; conversational and browser/native handoff acceptance remains pending. No production OAuth activation or live OAuth interoperability claim. Buyer tools merchant-fixed; private continuation server-configured, off by default. ChatGPT privacy/retention/activation not established. Checkout offers via merchant-scoped get_storefront_offer_resolution (published/admin gate); scoping plus cart fall-through kept. RPC: one awaited factory, three sites. PDP snapshot emits anchor effective_policy; strict offer caps. Chunks 1000 scoped, 200 unscoped. Strict-null logs; outage throws retryable. Anchors lowest-id everywhere; strict zero-unit emits 0. Explicit picks win (pinned). Eligibility string false parses closed. MCP detail merchant-scoped. Duplicate-case ids hydrate all spellings.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

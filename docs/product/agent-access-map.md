@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
-Reviewed 21 October 2026 against source revision
-`e6a3dc49e587116271acd6cb941573cd7ef34359`. This is a navigation map, not
+Reviewed 22 October 2026 against source revision
+`77ebd72b5828f47932d224d8eb92e171f1085ce5`. This is a navigation map, not
 authorization or proof of current deployment. Check the current implementation,
 live tool discovery and merchant entitlement before calling or claiming a tool.
 
@@ -39,7 +39,7 @@ does not prove a complete supported workflow.
 
 | Surface | Evidence | Current boundary |
 | --- | --- | --- |
-| Shopping MCP | `apps/web/mcp-server/server.ts`, `apps/web/mcp-server/agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. Guest OAuth candidate (`apps/web/mcp-server/guest-oauth-runtime.ts`, `apps/web/mcp-server/guest-oauth-http.ts`, `apps/web/mcp-server/register-connected-cart-read.ts`) binds cart authority to a guest connection without a shopper account. It defaults off; its remote storage migration, isolated OAuth ChatGPT QA and production activation are pending, not established by local tests. The private cart text-continuation candidate defaults off; activation requires separate owner-approved configuration and live client privacy/retention qualification. Not a multi-tenant Baci admin connector. |
+| Shopping MCP | `apps/web/mcp-server/server.ts`, `apps/web/mcp-server/agentic-ucp-tools.ts` | Ogabassey buyer-facing catalog, cart and checkout tools; `OGABASSEY_SLUG` is fixed. Conditional registration depends on runtime configuration. Guest OAuth candidate (`apps/web/mcp-server/guest-oauth-runtime.ts`, `apps/web/mcp-server/guest-oauth-http.ts`, `apps/web/mcp-server/register-connected-cart-read.ts`) binds cart authority to a guest connection without a shopper account. Production defaults off. Owner-approved isolated QA has storage and scoped credentials; real browser consent, authenticated discovery and fresh-session cart mutations pass. Conversational ChatGPT and website/native handoff acceptance remains pending; production activation is not authorized. The private cart text-continuation candidate defaults off; activation requires separate owner-approved configuration and live client privacy/retention qualification. Not a multi-tenant Baci admin connector. |
 | Merchant storefront protocols | `apps/web/src/app/.well-known/acp.json/route.ts`, `apps/web/src/app/.well-known/ucp/route.ts`, `apps/web/src/lib/agentic/` | Merchant-scoped ACP/UCP discovery, catalog, carts, checkout and orders; enabled capabilities/auth/payment readiness apply. A REST interface is not automatically an MCP tool. |
 | Browser tools | `apps/web/src/components/storefront/webmcp-storefront-tools-builder.ts` | Browser-bound storefront tools. Inspect current registrations and browser session authority. |
 | Merchant connector gateway | `apps/web/src/lib/connector/manifest.ts`, `apps/web/tools/connector-gateway/` | R0 manifest names (version `r0.4`, data-only, no routes) for four read-only tools planned for the R1 pilot: `orders.list`, `orders.get`, `inventory.levels`, `analytics.summary`. The gateway implementation — scoped owner grants, branch selection, tool-time permission checks and revocation — lives in `apps/web/tools/connector-gateway/`, but the R1 pilot runtime is unverified; do not treat these tools as pilot-callable. REST/OpenAPI, not a ChatGPT MCP server. |

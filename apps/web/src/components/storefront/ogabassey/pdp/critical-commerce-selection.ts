@@ -6,6 +6,7 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-con
 import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isDisplayOnlyVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
+import { isUnmanagedVariantStock } from '@/lib/serialized-variant-stock';
 import {
   COMPACT_OPTIONS,
   type CurrencyConfig,
@@ -68,6 +69,10 @@ function getVariantStock(
     return cartProduct.stock;
   }
 
+  if (isUnmanagedVariantStock(selection.variant)) {
+    return cartProduct.stock;
+  }
+
   return typeof selection.variant.stock_quantity === 'number'
     ? selection.variant.stock_quantity
     : cartProduct.stock;
@@ -83,6 +88,7 @@ export function buildVariantCartProduct(
 
   const variantImage =
     selection.variant.primary_image || selection.variant.images?.[0];
+  const variantIsUnmanaged = isUnmanagedVariantStock(selection.variant);
 
   return {
     ...cartProduct,
@@ -92,8 +98,10 @@ export function buildVariantCartProduct(
       cartProduct.condition,
     image: variantImage ?? cartProduct.image,
     imageLarge: variantImage ?? cartProduct.imageLarge,
+    manage_stock: variantIsUnmanaged ? false : cartProduct.manage_stock,
     price: selection.price,
     stock: getVariantStock(cartProduct, selection),
+    variants: cartProduct.variants,
   };
 }
 

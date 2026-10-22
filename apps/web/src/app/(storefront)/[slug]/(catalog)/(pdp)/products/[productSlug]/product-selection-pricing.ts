@@ -4,7 +4,10 @@ import {
 } from '@baci/shared/lib';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
+import {
+  isUnmanagedVariantStock,
+  resolveSerializedVariantStock,
+} from '@/lib/serialized-variant-stock';
 
 export interface SelectionPricingOffer {
   price: number | string;
@@ -20,6 +23,7 @@ export interface SelectionPricingVariant {
   price_override?: number | null;
   stock_quantity?: number | string | null;
   effective_policy?: string | null;
+  inventory_tracking_policy?: string | null;
   available_units?: number | null;
 }
 
@@ -64,6 +68,8 @@ export function resolveSelectionPricing({
   const serializedVariantStock = effectiveVariant
     ? resolveSerializedVariantStock(effectiveVariant)
     : undefined;
+  const variantIsUnmanaged =
+    effectiveVariant != null && isUnmanagedVariantStock(effectiveVariant);
   // Offer selections resolve their allocatable stock through the
   // authority — ahead of the unmanaged short-circuit, since order
   // creation checks the offer allocation even on unmanaged parents, so
@@ -102,12 +108,13 @@ export function resolveSelectionPricing({
         ));
   // An unbounded offer allocation (unlimited policy) stays purchasable
   // with no finite count, like unmanaged stock.
-  const currentStock =
-    offerStock === undefined
+  const currentStock = variantIsUnmanaged
+    ? Number.POSITIVE_INFINITY
+    : offerStock === undefined
       ? managedStock
       : (offerStock ?? Number.POSITIVE_INFINITY);
   // A zero allocation disables purchase even when the snapshot folds the
   // product unmanaged (unlimited offers still bind their scalar).
-  const isOutOfStock = currentStock === 0;
+  const isOutOfStock = !variantIsUnmanaged && currentStock === 0;
   return { currentPrice, currentCompareAtPrice, currentStock, isOutOfStock };
 }

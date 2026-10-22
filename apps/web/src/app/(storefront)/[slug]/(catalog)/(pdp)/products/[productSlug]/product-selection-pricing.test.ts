@@ -117,6 +117,26 @@ describe('resolveSelectionPricing', () => {
     });
   });
 
+  it('treats an off-policy selected variant as unlimited despite zero stock', () => {
+    expect(
+      resolveSelectionPricing({
+        product: { ...product, manage_stock: true, stock: 0 },
+        selectedOffer: null,
+        displaySelection: null,
+        effectiveVariant: {
+          effective_policy: 'off',
+          stock_quantity: 0,
+        },
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 100,
+      currentCompareAtPrice: 120,
+      currentStock: Number.POSITIVE_INFINITY,
+      isOutOfStock: false,
+    });
+  });
+
   it('inherits parent stock for a null-quantity selected offer', () => {
     expect(
       resolveSelectionPricing({

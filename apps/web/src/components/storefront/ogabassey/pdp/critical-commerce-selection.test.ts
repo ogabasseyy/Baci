@@ -67,6 +67,31 @@ describe('critical commerce selection helpers', () => {
     });
   });
 
+  it('keeps an off-policy zero-stock variant purchasable in the cart', () => {
+    const selectedCartProduct = buildVariantCartProduct(
+      { ...cartProduct, manage_stock: true, stock: 0 },
+      {
+        attributes: { storage: '512GB' },
+        price: 2_343_000,
+        variant: {
+          attributes: { storage: '512GB' },
+          effective_policy: 'off',
+          id: 'iphone17pm-512-esim',
+          inventory_tracking_policy: 'off',
+          merchant_id: 'merchant-1',
+          product_id: 'product-1',
+          stock_quantity: 0,
+        },
+      }
+    );
+
+    expect(selectedCartProduct).toMatchObject({
+      manage_stock: false,
+      price: 2_343_000,
+    });
+    expect(selectedCartProduct.stock).toBe(0);
+  });
+
   it('returns the original cart product when no variant selection exists', () => {
     expect(buildVariantCartProduct(cartProduct, null)).toBe(cartProduct);
   });

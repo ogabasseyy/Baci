@@ -1,6 +1,9 @@
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { ProductVariant } from '@/lib/products';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
+import {
+  isUnmanagedVariantStock,
+  resolveSerializedVariantStock,
+} from '@/lib/serialized-variant-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 /**
@@ -37,7 +40,11 @@ export function isVariantAvailable(
       // button enables a zero-unit strict variant the purchase checks
       // then reject.
       const serializedStock = resolveSerializedVariantStock(variant);
-      return serializedStock == null || serializedStock > 0;
+      return (
+        isUnmanagedVariantStock(variant) ||
+        serializedStock == null ||
+        serializedStock > 0
+      );
     });
   }
 
@@ -50,14 +57,16 @@ export function isVariantAvailable(
       ([key, value]) => variant.attributes[key] === value
     );
     const serializedStock = resolveSerializedVariantStock(variant);
+    const variantIsUnmanaged = isUnmanagedVariantStock(variant);
     return (
       conditionMatches &&
       matches &&
-      (serializedStock ??
-        getEffectiveStock({
-          stock: variant.stock_quantity ?? fallbackStock,
-          stock_quantity: variant.stock_quantity ?? fallbackStock,
-        })) > 0
+      (variantIsUnmanaged ||
+        (serializedStock ??
+          getEffectiveStock({
+            stock: variant.stock_quantity ?? fallbackStock,
+            stock_quantity: variant.stock_quantity ?? fallbackStock,
+          })) > 0)
     );
   });
 }

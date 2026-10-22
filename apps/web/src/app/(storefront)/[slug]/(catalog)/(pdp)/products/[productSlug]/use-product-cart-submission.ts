@@ -2,10 +2,8 @@ import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
-import {
-  isExplicitlyTrackedVariantStock,
-  isUnmanagedVariantStock,
-} from '@/lib/is-unmanaged-variant-stock';
+import { isExplicitlyTrackedVariantStock } from '@/lib/is-explicitly-tracked-variant-stock';
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';

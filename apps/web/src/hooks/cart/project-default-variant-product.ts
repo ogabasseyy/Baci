@@ -1,8 +1,6 @@
 import type { ResolvedProductVariantSelection } from '@baci/shared/lib/product-default-variant';
-import {
-  isExplicitlyTrackedVariantStock,
-  isUnmanagedVariantStock,
-} from '@/lib/is-unmanaged-variant-stock';
+import { isExplicitlyTrackedVariantStock } from '@/lib/is-explicitly-tracked-variant-stock';
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 

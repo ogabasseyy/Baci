@@ -6,10 +6,8 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-con
 import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isDisplayOnlyVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
-import {
-  isExplicitlyTrackedVariantStock,
-  isUnmanagedVariantStock,
-} from '@/lib/is-unmanaged-variant-stock';
+import { isExplicitlyTrackedVariantStock } from '@/lib/is-explicitly-tracked-variant-stock';
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import {
   COMPACT_OPTIONS,

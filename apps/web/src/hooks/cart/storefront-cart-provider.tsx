@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { Product } from '@/lib/products';
 import { CartContext } from './cart-context';
@@ -138,16 +138,10 @@ export function StorefrontCartProvider({
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
     const merchantCartState = getMerchantCartState(slugToUse);
     merchantSlugRef.current = slugToUse;
-    // Storage restoration is background work. An urgent context update can
-    // replace already-streamed results with their loading fallback while a
-    // cart consumer's client module is still hydrating. Keep that content
-    // visible until restoration can commit; explicit cart actions stay urgent.
-    startTransition(() => {
-      setCart(merchantCartState.cart);
-      setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
-      setMerchantSlugState(slugToUse);
-      setIsHydrated(true);
-    });
+    setCart(merchantCartState.cart);
+    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
+    setMerchantSlugState(slugToUse);
+    setIsHydrated(true);
   }, []);
 
   useDeferredValidationActivation({
@@ -243,6 +237,11 @@ export function StorefrontCartProvider({
     return total + itemTotal + assuranceCost;
   }, 0);
 
+  // Defer presentation readiness, never the command-accepting cart state.
+  // A suspending hydrated view keeps its streamed content while bootstrap,
+  // persistence, and explicit cart commands continue to commit immediately.
+  const hydrated = delegated ? shared.isHydrated : isHydrated;
+  const deferredHydrated = useDeferredValue(hydrated);
   const value: CartContextType = {
     cart: delegated ? shared.cart : cart,
     merchantSlug,
@@ -268,7 +267,8 @@ export function StorefrontCartProvider({
     showUpsell: enableSmartCartPro ? showUpsell : false,
     dismissUpsell,
     hasSmartCartPro: enableSmartCartPro,
-    isHydrated: delegated ? shared.isHydrated : isHydrated,
+    // Revocation/reset must still fence readiness immediately.
+    isHydrated: hydrated && deferredHydrated,
     sharedCartEnabled: delegated,
     sharedCartAccountsEnabled: delegated && sharedCartAccountsEnabled,
     ...(delegated

@@ -1,9 +1,32 @@
 import { render } from '@testing-library/react';
 import postcss, { type AnyNode } from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { OgabasseyHomeCriticalShell } from './ogabassey/ogabassey-home-critical-shell';
+import { OgabasseyPublicationSafeHeroFallback } from './ogabassey/ogabassey-publication-safe-hero-fallback';
 import { StorefrontLcpCopyStyle } from './storefront-lcp-copy-style';
 
 describe('StorefrontLcpCopyStyle', () => {
+  it.each([
+    OgabasseyHomeCriticalShell,
+    OgabasseyPublicationSafeHeroFallback,
+  ])('emits the shared header rules only once with %s', (HomeShell) => {
+    render(
+      <>
+        <StorefrontLcpCopyStyle />
+        <HomeShell />
+      </>
+    );
+    let widths = 0;
+    for (const style of document.querySelectorAll('style'))
+      postcss
+        .parse(style.textContent ?? '')
+        .walkRules('.ogabassey-navbar-search__icon', (rule) => {
+          rule.walkDecls('width', () => {
+            widths++;
+          });
+        });
+    expect(widths).toBe(1);
+  });
   it('sizes and positions the shared header before streamed route CSS arrives', () => {
     render(<StorefrontLcpCopyStyle />);
     const style = document.querySelector(

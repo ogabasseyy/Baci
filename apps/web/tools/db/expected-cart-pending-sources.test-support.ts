@@ -431,7 +431,7 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261022060000_mcp_guest_oauth_request_scope.sql',
+      'supabase/migrations/20261022060000_mcp_guest_oauth_gigl_request_scope.sql',
     sha256: '51314f504550d5de548995e6a889001aea8355fb7515b652aec05efe452f7650',
   },
   {

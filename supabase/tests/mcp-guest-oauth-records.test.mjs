@@ -55,7 +55,7 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
       ('${other}','grant:expired',repeat('x',64),1,now()-interval '2 days',now()-interval '1 day');`);
     assert.equal(query(worker + `SELECT public.mcp_guest_oauth_purge_expired('${tenant}');`), '1');
     assert.equal(query(`SELECT count(*) FROM public.mcp_guest_oauth_records WHERE merchant_id='${other}';`), '1');
-    const scopeMigration = readFileSync(new URL('../migrations/20261022060000_mcp_guest_oauth_request_scope.sql', import.meta.url), 'utf8');
+    const scopeMigration = readFileSync(new URL('../migrations/20261022060000_mcp_guest_oauth_gigl_request_scope.sql', import.meta.url), 'utf8');
     const capacityMigration = readFileSync(new URL('../migrations/20261022060100_mcp_guest_oauth_capacity.sql', import.meta.url), 'utf8');
     query(`CREATE SCHEMA auth; CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('request.jwt.claims',true)::jsonb ->> 'role' $$; ${scopeMigration} ${capacityMigration}`);
     assert.equal(query("SELECT pg_has_role('authenticator','mcp_guest_oauth_worker','member');"), 'f');

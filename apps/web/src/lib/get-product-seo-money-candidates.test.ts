@@ -57,6 +57,13 @@ describe('getProductSeoMoneyCandidates', () => {
     ['£50 USD', 50, []],
     ['N350,000', 350_000, ['NGN']],
     ['350000', 350_000, []],
+    ['د.إ ٩٠٠', 900, ['AED']],
+    ['د.إ ٩٠٠٫٥٠', 900.5, ['AED']],
+    ['AED ٩٬٠٠٠٫٥٠', 9_000.5, ['AED']],
+    ['PKR ۱۲٬۳۴٬۵۶۷٫۸۹', 1_234_567.89, ['PKR']],
+    ['KWD ٩٫٥٠٠', 9.5, ['KWD']],
+    ['AED ٩٬٠٠٠', 9_000, ['AED']],
+    ['د.إ ۹۰۰', 900, ['AED']],
   ])('parses a complete amount and explicit currency: %s', (text, amount, currencies) => {
     const candidates = getProductSeoMoneyCandidates(text);
     expect(candidates).toHaveLength(1);
@@ -66,6 +73,11 @@ describe('getProductSeoMoneyCandidates', () => {
       amount,
       currencies,
     });
+  });
+
+  it('rejects an Arabic decimal with excess fractional digits instead of parsing a prefix', () => {
+    expect(getProductSeoMoneyCandidates('KWD ٩٫٥٠٠٠')).toEqual([]);
+    expect(getProductSeoMoneyCandidates('٩٫٥٠٠٠ AED')).toEqual([]);
   });
 
   it('does not split amounts into model/specification suffixes', () => {

@@ -13,6 +13,7 @@ import type {
   ReturnMethodEnumeration,
   WithContext,
 } from 'schema-dts';
+import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '@/config/product-schema';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
@@ -45,6 +46,7 @@ import { sanitizeSchemaMarkup, sanitizeSchemaUrl } from './sanitize-json-ld';
 import { normalizeSocialUrl } from './social';
 import { resolveStorefrontProductCategoryName } from './storefront-product-category-name';
 import { getValidatedProductUrl as getSerializedValidatedProductUrl } from './storefront-product-url-serialization';
+import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
 import type {
   MerchantTrustProfile,
   MerchantTrustProfileReturnFee,
@@ -639,11 +641,34 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
+  // Preserve the generic schema contract for non-storefront callers. PDPs use
+  // generateStorefrontProductSchema to supply price-free durable copy.
+  const productDescription = product.description
+    ? generateMetaDescription(
+        product.description,
+        PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+      )
+    : '';
+  const metaDescription = product.meta_description
+    ? generateMetaDescription(
+        product.meta_description,
+        PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+      )
+    : '';
+  const visibleDescriptionSupported =
+    Boolean(productDescription) && !isUnsupportedSpecValue(productDescription);
+  const metaDescriptionSupported =
+    Boolean(metaDescription) && !isUnsupportedSpecValue(metaDescription);
   const safeDescription =
     options.description ??
-    product.description ??
-    product.meta_description ??
-    '';
+    (visibleDescriptionSupported
+      ? productDescription
+      : metaDescriptionSupported
+        ? metaDescription
+        : generateMetaDescription(
+            `Buy ${safeName} from ${merchantName}. Best prices, fast delivery, and secure payments.`,
+            PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+          ));
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;

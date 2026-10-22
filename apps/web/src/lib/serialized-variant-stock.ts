@@ -38,23 +38,3 @@ export function resolveSerializedVariantStock(
   }
   return undefined;
 }
-
-/**
- * Resolve whether a selected variant has an independent unmanaged policy.
- * Effective policy takes precedence because it includes inherited product
- * policy; row policy is the fallback for older projections.
- */
-export function isUnmanagedVariantStock(
-  variant:
-    | Pick<
-        SerializedVariantStockLike,
-        'effective_policy' | 'inventory_tracking_policy'
-      >
-    | null
-    | undefined
-): boolean {
-  return (
-    variant != null &&
-    (variant.effective_policy ?? variant.inventory_tracking_policy) === 'off'
-  );
-}

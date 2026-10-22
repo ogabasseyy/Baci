@@ -142,7 +142,7 @@ describe('useProductCartSubmission', () => {
       useProductCartSubmission(
         input({
           currentVariantSelection: { variant: selected },
-          product: simpleProduct({ has_variants: true }),
+          product: simpleProduct({ has_variants: true, manage_stock: false }),
         })
       )
     );

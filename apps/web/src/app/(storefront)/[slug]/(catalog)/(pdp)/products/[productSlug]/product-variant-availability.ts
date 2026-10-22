@@ -1,9 +1,6 @@
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { ProductVariant } from '@/lib/products';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from '@/lib/serialized-variant-stock';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 /**
@@ -53,16 +50,14 @@ export function isVariantAvailable(
       ([key, value]) => variant.attributes[key] === value
     );
     const serializedStock = resolveSerializedVariantStock(variant);
-    const variantIsUnmanaged = isUnmanagedVariantStock(variant);
     return (
       conditionMatches &&
       matches &&
-      (variantIsUnmanaged ||
-        (serializedStock ??
-          getEffectiveStock({
-            stock: variant.stock_quantity ?? fallbackStock,
-            stock_quantity: variant.stock_quantity ?? fallbackStock,
-          })) > 0)
+      (serializedStock ??
+        getEffectiveStock({
+          stock: variant.stock_quantity ?? fallbackStock,
+          stock_quantity: variant.stock_quantity ?? fallbackStock,
+        })) > 0
     );
   });
 }

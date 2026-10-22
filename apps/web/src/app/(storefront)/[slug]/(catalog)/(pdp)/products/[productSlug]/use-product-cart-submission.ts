@@ -2,12 +2,10 @@ import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from '@/lib/serialized-variant-stock';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 export type ProductOfferSelection = NonNullable<Product['offers']>[number];
@@ -50,7 +48,8 @@ export function useProductCartSubmission({
     // availability (serialized units or offer quantity) so a stocked
     // selection on a zero-parent-stock product is not silently rejected.
     const selectedVariantIsUnmanaged = Boolean(
-      variantForCart && isUnmanagedVariantStock(variantForCart)
+      variantForCart &&
+        isUnmanagedVariantStock(variantForCart, product.manage_stock)
     );
     const selectedOptionStock = variantForCart
       ? selectedVariantIsUnmanaged

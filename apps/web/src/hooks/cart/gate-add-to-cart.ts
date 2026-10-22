@@ -1,9 +1,7 @@
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from '@/lib/serialized-variant-stock';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
 import type { AddToCartOptions } from './cart-types';
 
@@ -43,10 +41,16 @@ export function gateAddToCart(
           price: defaultVariantSelection.price,
           compare_at_price:
             defaultVariantSelection.compareAtPrice ?? product.compare_at_price,
-          manage_stock: isUnmanagedVariantStock(defaultVariantSelection.variant)
+          manage_stock: isUnmanagedVariantStock(
+            defaultVariantSelection.variant,
+            product.manage_stock
+          )
             ? false
             : product.manage_stock,
-          stock: isUnmanagedVariantStock(defaultVariantSelection.variant)
+          stock: isUnmanagedVariantStock(
+            defaultVariantSelection.variant,
+            product.manage_stock
+          )
             ? product.stock
             : (resolveSerializedVariantStock(defaultVariantSelection.variant) ??
               defaultVariantSelection.variant.stock_quantity ??

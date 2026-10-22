@@ -18,10 +18,19 @@ describe('isPublicVariantPurchasable', () => {
     ).toBe(expected);
   });
 
-  it('treats an off-policy variant as unlimited under a managed parent', () => {
+  it('keeps off-policy variants stock-managed when the parent manages stock', () => {
     expect(
       isPublicVariantPurchasable(
         { manage_stock: true, stock_quantity: 0 },
+        { inventory_tracking_policy: 'off', stock_quantity: 0 }
+      )
+    ).toBe(false);
+  });
+
+  it('treats an off-policy variant as unlimited when parent stock is unmanaged', () => {
+    expect(
+      isPublicVariantPurchasable(
+        { manage_stock: false, stock_quantity: 0 },
         { inventory_tracking_policy: 'off', stock_quantity: 0 }
       )
     ).toBe(true);

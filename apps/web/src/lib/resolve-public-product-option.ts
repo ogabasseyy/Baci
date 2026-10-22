@@ -4,10 +4,7 @@ import {
 } from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from './serialized-variant-stock';
+import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 type Parent = {
   price?: number | null;
@@ -75,12 +72,14 @@ export function resolvePublicProductOption(
   // An unbounded offer allocation (serialized_then_unlimited with no
   // scalar) stays purchasable with no finite count — the PDP pricing
   // path maps it to Infinity, never to the parent stock.
+  const serializedVariantStock = variant
+    ? resolveSerializedVariantStock(variant)
+    : undefined;
   const stockQuantity = variant
-    ? isUnmanagedVariantStock(variant)
-      ? Number.POSITIVE_INFINITY
-      : (resolveSerializedVariantStock(variant) ??
-        variant.stock_quantity ??
-        getEffectiveStock(parent))
+    ? (serializedVariantStock ??
+      (parent.manage_stock === false
+        ? Number.POSITIVE_INFINITY
+        : (variant.stock_quantity ?? getEffectiveStock(parent))))
     : offerStock === null
       ? Number.POSITIVE_INFINITY
       : (offerStock ?? getEffectiveStock(parent));

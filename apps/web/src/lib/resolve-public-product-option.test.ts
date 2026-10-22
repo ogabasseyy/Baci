@@ -128,6 +128,31 @@ describe('public option resolution', () => {
     expect(option.stockQuantity).toBe(0);
     expect(option.purchasable).toBe(false);
   });
+  it('returns infinite variant stock only when parent stock is unmanaged', () => {
+    const option = resolvePublicProductOption(
+      { ...parent, manage_stock: false, stock_quantity: 0 },
+      {
+        variant: {
+          inventory_tracking_policy: 'off',
+          stock_quantity: 0,
+        },
+      }
+    );
+    expect(option.stockQuantity).toBe(Number.POSITIVE_INFINITY);
+    expect(option.purchasable).toBe(true);
+
+    const managedOption = resolvePublicProductOption(
+      { ...parent, manage_stock: true, stock_quantity: 0 },
+      {
+        variant: {
+          inventory_tracking_policy: 'off',
+          stock_quantity: 0,
+        },
+      }
+    );
+    expect(managedOption.stockQuantity).toBe(0);
+    expect(managedOption.purchasable).toBe(false);
+  });
   it('keeps an unbounded offer allocation purchasable on a zero-stock parent', () => {
     const unlimitedParent = {
       ...parent,

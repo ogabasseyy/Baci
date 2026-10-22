@@ -34,12 +34,10 @@ import {
 } from '@baci/shared/lib';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from '@/lib/serialized-variant-stock';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 
 interface CartProviderProps {
   children: ReactNode;
@@ -352,11 +350,15 @@ export const CartProvider = ({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             manage_stock: isUnmanagedVariantStock(
-              defaultVariantSelection.variant
+              defaultVariantSelection.variant,
+              product.manage_stock
             )
               ? false
               : product.manage_stock,
-            stock: isUnmanagedVariantStock(defaultVariantSelection.variant)
+            stock: isUnmanagedVariantStock(
+              defaultVariantSelection.variant,
+              product.manage_stock
+            )
               ? product.stock
               : (resolveSerializedVariantStock(
                   defaultVariantSelection.variant

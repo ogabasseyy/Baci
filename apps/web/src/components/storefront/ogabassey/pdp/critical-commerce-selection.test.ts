@@ -69,7 +69,7 @@ describe('critical commerce selection helpers', () => {
 
   it('keeps an off-policy zero-stock variant purchasable in the cart', () => {
     const selectedCartProduct = buildVariantCartProduct(
-      { ...cartProduct, manage_stock: true, stock: 0 },
+      { ...cartProduct, manage_stock: false, stock: 0 },
       {
         attributes: { storage: '512GB' },
         price: 2_343_000,

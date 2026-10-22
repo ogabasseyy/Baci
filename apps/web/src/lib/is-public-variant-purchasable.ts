@@ -1,8 +1,5 @@
 import { getEffectiveStock } from './product-stock';
-import {
-  isUnmanagedVariantStock,
-  resolveSerializedVariantStock,
-} from './serialized-variant-stock';
+import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 /** Evaluate hydrated public units before applying the parent stock policy. */
 export function isPublicVariantPurchasable(
@@ -23,9 +20,6 @@ export function isPublicVariantPurchasable(
   const serializedStock = resolveSerializedVariantStock(variant);
   if (serializedStock !== undefined) {
     return serializedStock > 0;
-  }
-  if (isUnmanagedVariantStock(variant)) {
-    return true;
   }
   // The categorized PDP normalizes legacy null manage_stock to managed
   // inventory before downstream evaluation; match it so a depleted child

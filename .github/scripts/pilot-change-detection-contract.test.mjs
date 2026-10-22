@@ -39,6 +39,7 @@ test('gate-only changes set pilot=true', async () => {
     'apps/web/src/components/storefront/product-card.test.tsx',
     'apps/web/src/lib/storefront-product-href.ts',
     'apps/web/src/lib/storefront-product-href.test.ts',
+    'apps/web/src/config/product-schema.ts',
     'apps/web/package.json',
     'apps/web/public/__pilot/fillers/grid-filler-600x400-a.png',
     '.github/scripts/pilot-change-detection-contract.test.mjs',

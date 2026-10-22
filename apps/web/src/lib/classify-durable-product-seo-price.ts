@@ -11,6 +11,8 @@ const PIXEL_DIMENSION_PAIR =
   /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px|display|screen|resolution)\b/i;
 const UNITLESS_PIXEL_DIMENSION_PAIR =
   /^\s*(?:[×x]|by)\s*(\d[\d,.]*)\s*[.,;)!?]?\s*$/i;
+const UNLABELLED_PRICE_RANGE =
+  /^\s*[–—-]?\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[–—-]\s*((?:[0-9٠-٩۰-۹]{3,}|[0-9٠-٩۰-۹]{1,3}(?:[,٬][0-9٠-٩۰-۹]{3})+))\s*[.!?]?\s*$/;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
 const MODIFIED_COUNT_UNIT =
@@ -33,6 +35,39 @@ const MAGNITUDE_SPECIFICATION_UNIT =
   /^\s+(?:display|screen|resolution|video|recording|camera|photos?|pixels?)\b/i;
 const SHORT_RESOLUTION_CONTEXT =
   /\b(?:video|resolution|stream(?:ing)?|record(?:ing)?|shoot(?:ing)?|upscal\w*|frame\s+rate|fps)\b/i;
+const STANDARD_DISPLAY_RESOLUTION_RANGES = new Set([
+  '1024x768',
+  '1280x720',
+  '1280x800',
+  '1280x1024',
+  '1366x768',
+  '1440x900',
+  '1600x900',
+  '1600x1200',
+  '1680x1050',
+  '1920x1080',
+  '1920x1200',
+  '2560x1080',
+  '2560x1440',
+  '2560x1600',
+  '2880x1800',
+  '3440x1440',
+  '3840x2160',
+  '4096x2160',
+  '5120x1440',
+  '5120x2880',
+  '7680x4320',
+]);
+
+function normalizeLocalizedDigits(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (digit) =>
+      String(digit.charCodeAt(0) - '٠'.charCodeAt(0))
+    )
+    .replace(/[۰-۹]/g, (digit) =>
+      String(digit.charCodeAt(0) - '۰'.charCodeAt(0))
+    );
+}
 
 export function isDurableSeoPrice(
   candidate: ProductSeoMoneyCandidate,
@@ -40,6 +75,7 @@ export function isDurableSeoPrice(
 ): boolean {
   const relation = retailRelation(text, candidate.start);
   const rawAmount = candidate.rawAmount.replace(/[.,]+$/, '');
+  const rawAmountDigitCount = rawAmount.match(/[0-9٠-٩۰-۹]/g)?.length ?? 0;
   const tail = text.slice(candidate.end);
   const nearbyPrefix = text.slice(
     Math.max(0, candidate.start - 80),
@@ -98,6 +134,34 @@ export function isDurableSeoPrice(
     (LIFESPAN_QUANTITY_UNIT.test(tail) &&
       !/^\s+per\s+(?:hours?|cycles?|washes|uses)\b/i.test(tail)) ||
     (/^\d{1,2}$/.test(rawAmount) && MODIFIED_COUNT_UNIT.test(tail));
+  const unlabelledRange = UNLABELLED_PRICE_RANGE.exec(text);
+  const normalizedRange = unlabelledRange
+    ?.slice(1)
+    .map((value) => normalizeLocalizedDigits(value).replace(/[,٬]/g, ''));
+  const isProductYearRange = normalizedRange?.every((value) =>
+    /^(?:19|20)\d{2}$/.test(value)
+  );
+  const rangeValues = normalizedRange?.map(Number);
+  const [firstRangeValue = 0, secondRangeValue = 0] = rangeValues ?? [];
+  const rangeMin = Math.min(firstRangeValue, secondRangeValue);
+  const rangeMax = Math.max(firstRangeValue, secondRangeValue);
+  const aspectRatio = rangeMax / rangeMin;
+  const isResolutionRange =
+    rangeValues?.length === 2 &&
+    (STANDARD_DISPLAY_RESOLUTION_RANGES.has(`${rangeMax}x${rangeMin}`) ||
+      (firstRangeValue > secondRangeValue &&
+        rangeMax >= 2000 &&
+        rangeMin >= 720 &&
+        aspectRatio >= 1.3 &&
+        aspectRatio <= 2.5));
+  if (
+    !candidate.marker &&
+    !quantity &&
+    !isProductYearRange &&
+    !isResolutionRange &&
+    unlabelledRange
+  )
+    return true;
   if (candidate.fallbackIsoCode) {
     if (quantity) return false;
     if (
@@ -129,15 +193,15 @@ export function isDurableSeoPrice(
       relation.purchase ||
       relation.commercial ||
       (relation.separator &&
-        rawAmount.replace(/\D/g, '').length >= 3 &&
+        rawAmountDigitCount >= 3 &&
         (/^\s*$/.test(tail) || /^\s*\)\s*[.!?]?\s*$/.test(tail))) ||
       (relation.copula &&
         (/^\d{1,3}(?:[,. '\u2019\u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?$/.test(
           rawAmount
         ) ||
-          rawAmount.replace(/\D/g, '').length >= 5)) ||
+          rawAmountDigitCount >= 5)) ||
       /[,km]/i.test(rawAmount) ||
-      rawAmount.replace(/\D/g, '').length >= 5
+      rawAmountDigitCount >= 5
     );
   }
   if (
@@ -199,7 +263,7 @@ export function isDurableSeoPrice(
       !relation.predicate &&
       !/\s/.test(text.slice(candidate.start, candidate.end)) &&
       !/[,km]/i.test(rawAmount) &&
-      rawAmount.replace(/\D/g, '').length < 5
+      rawAmountDigitCount < 5
     )
       return false;
   }

@@ -126,6 +126,11 @@ test('core pilot paths still set pilot=true', async () => {
 test('product SEO metadata and its regressions keep the pilot suite enabled', async () => {
   const pattern = await pilotPattern();
   const productSeoPaths = [
+    'apps/web/src/lib/classify-durable-product-seo-price.ts',
+    'apps/web/src/lib/classify-durable-product-seo-price.test.ts',
+    'apps/web/src/lib/classify-durable-product-seo-retail-relation.ts',
+    'apps/web/src/lib/classify-durable-product-seo-non-retail.ts',
+    'apps/web/src/lib/classify-durable-product-seo-denomination.ts',
     'apps/web/src/lib/get-durable-product-seo-text.ts',
     'apps/web/src/lib/get-durable-product-seo-text.test.ts',
     'apps/web/src/lib/get-durable-product-seo-text.context.test.ts',

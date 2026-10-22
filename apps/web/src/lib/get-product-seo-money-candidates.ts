@@ -46,8 +46,13 @@ const namedCurrencyAliases: Record<string, string[]> = {
   RUPEE: ['INR'],
   RUPEES: ['INR'],
   RAND: ['ZAR'],
+  RANDS: ['ZAR'],
   CEDI: ['GHS'],
   CEDIS: ['GHS'],
+  DIRHAM: ['AED'],
+  DIRHAMS: ['AED'],
+  SHILLING: ['KES', 'TZS', 'UGX'],
+  SHILLINGS: ['KES', 'TZS', 'UGX'],
   PESO: ['currency-name:PESO'],
   PESOS: ['currency-name:PESO'],
 };

@@ -129,6 +129,7 @@ test('product SEO metadata and its regressions keep the pilot suite enabled', as
     'apps/web/src/lib/get-durable-product-seo-text.ts',
     'apps/web/src/lib/get-durable-product-seo-text.test.ts',
     'apps/web/src/lib/get-durable-product-seo-text.context.test.ts',
+    'apps/web/src/lib/get-durable-product-seo-text.gift-card.test.ts',
     'apps/web/src/lib/get-product-seo-money-candidates.ts',
     'apps/web/src/lib/get-product-seo-money-candidates.test.ts',
     'apps/web/src/lib/get-product-schema-description.ts',

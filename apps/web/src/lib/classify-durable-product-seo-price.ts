@@ -22,7 +22,7 @@ const LEXICAL_CURRENCY_CODES = new Set([
   'SOS',
 ]);
 const NON_RETAIL_AMOUNT_LABEL =
-  /^\s+(?:(?:gift[- ]card\s+)?bonus|cashback|cash\s+back|trade[- ]in\s+credit|credit|rebate|reward|discount)\b/i;
+  /^\s+(?:(?:gift[- ]card\s+)?bonus|cashback|cash\s+back|trade[- ]in\s+credit|store\s+credit|credit(?!\s+cards?\b)|rebate|reward|discount)\b/i;
 const MAGNITUDE_SPECIFICATION_UNIT =
   /^\s+(?:display|screen|resolution|video|recording|camera|photos?|pixels?)\b/i;
 const SHORT_RESOLUTION_CONTEXT =
@@ -215,6 +215,8 @@ export function isClearlyNonRetailSeoAmount(
   return (
     !relation.strong &&
     !relation.predicate &&
+    !relation.purchase &&
+    !relation.commercial &&
     NON_RETAIL_AMOUNT_LABEL.test(text.slice(candidate.end))
   );
 }
@@ -244,17 +246,35 @@ export function isDurableSeoDenomination(
     )
   )
     return false;
-  const label =
+  const followingLabel =
     /^\s+((?:[\p{L}][\p{L}\p{N}'-]{0,30}\s+){0,4})(?:gift[- ]card|value|credit|denomination)\b/iu.exec(
       text.slice(candidate.end)
     );
-  if (!label) return false;
+  const precedingLabel = /\b(?:gift[- ]cards?|voucher|denomination)\b/i.test(
+    text
+      .slice(Math.max(0, candidate.start - 120), candidate.start)
+      .split(/[.!?;\n]/)
+      .at(-1) ?? ''
+  );
+  if (!followingLabel && !precedingLabel) return false;
   const identityWords = new Set(
     productName.toLowerCase().match(/[\p{L}\p{N}'-]+/gu) ?? []
   );
-  return label[1]
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((word) => identityWords.has(word.toLowerCase()));
+  if (followingLabel) {
+    const matchesIdentity = followingLabel[1]
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .every((word) => identityWords.has(word.toLowerCase()));
+    if (matchesIdentity) return true;
+  }
+  if (precedingLabel) {
+    const hasGiftCardIdentity =
+      identityWords.has('gift') ||
+      identityWords.has('card') ||
+      identityWords.has('cards') ||
+      identityWords.has('voucher');
+    if (hasGiftCardIdentity) return true;
+  }
+  return false;
 }

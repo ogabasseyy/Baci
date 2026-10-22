@@ -15,3 +15,5 @@ export const builderReadinessSchema = z
 export const BUILDER_EDITOR_URL = 'https://usebaci.com/builder' as const;
 export const BUILDER_POLICY_NAMESPACE = 'baci.website-builder' as const;
 export const BUILDER_POLICY_VERSION = 1;
+
+export const BUILDER_REQUEST_BYTES = 65536;

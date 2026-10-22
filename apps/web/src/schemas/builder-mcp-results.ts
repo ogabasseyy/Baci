@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BUILDER_ERROR_MESSAGES } from '@/lib/builder-connector/errors';
+import { builderFailureSchema } from './builder-mcp-failure';
 import {
   BUILDER_EDITOR_URL,
   builderHttpsUrlSchema as https,
@@ -174,30 +174,8 @@ export const builderPreviewResultSchema = z
       value.projection.identity.id === value.storefrontId,
     'Catalog must belong to this storefront'
   );
-export const builderFailureSchema = z
-  .object({
-    status: z.literal('error'),
-    code: z.enum(
-      Object.keys(BUILDER_ERROR_MESSAGES) as [
-        keyof typeof BUILDER_ERROR_MESSAGES,
-        ...(keyof typeof BUILDER_ERROR_MESSAGES)[],
-      ]
-    ),
-    error: z.string().max(500),
-    currentVersion: revision.optional(),
-    editorUrl: z.literal(BUILDER_EDITOR_URL).optional(),
-  })
-  .strict()
-  .refine(
-    (value) =>
-      (value.code === 'STALE_DRAFT'
-        ? value.currentVersion !== undefined
-        : value.currentVersion === undefined) &&
-      (value.code === 'UNSUPPORTED_TEMPLATE'
-        ? value.editorUrl === BUILDER_EDITOR_URL
-        : value.editorUrl === undefined),
-    'Error details must match the error code'
-  );
+export { builderFailureSchema } from './builder-mcp-failure';
+
 const result = <T extends z.ZodType>(schema: T) =>
   z.union([schema, builderFailureSchema]);
 export const builderOutputSchemas = {

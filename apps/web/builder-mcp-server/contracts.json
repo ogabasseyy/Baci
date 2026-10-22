@@ -1,0 +1,987 @@
+{
+  "inputs": {
+    "list_storefronts": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "pageSize": {
+          "default": 20,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "additionalProperties": false
+    },
+    "get_storefront_status": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "storefrontId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": ["storefrontId"],
+      "additionalProperties": false
+    },
+    "create_storefront_draft": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "businessName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "businessType": {
+          "type": "string",
+          "enum": [
+            "fashion",
+            "electronics",
+            "home-goods",
+            "health-beauty",
+            "handmade",
+            "food-beverage",
+            "hair-extensions",
+            "pharmaceuticals"
+          ]
+        },
+        "country": {
+          "type": "string"
+        },
+        "requestedSlug": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 63,
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        },
+        "brandBrief": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "businessName",
+        "businessType",
+        "country",
+        "requestedSlug",
+        "idempotencyKey"
+      ],
+      "additionalProperties": false
+    },
+    "update_storefront_draft": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "storefrontId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "expectedVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "pageSlug": {
+          "type": "string",
+          "const": "home"
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "storefrontId",
+        "expectedVersion",
+        "idempotencyKey",
+        "pageSlug",
+        "instructions"
+      ],
+      "additionalProperties": false
+    },
+    "get_storefront_operation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "storefrontId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": ["storefrontId", "operationId"],
+      "additionalProperties": false
+    },
+    "apply_storefront_operation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "storefrontId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "expectedVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "operationId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "storefrontId",
+        "expectedVersion",
+        "idempotencyKey",
+        "operationId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "outputs": {
+    "list_storefronts": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "stores": {
+              "maxItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "storefrontId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 63
+                  },
+                  "onboardingComplete": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "storefrontId",
+                  "name",
+                  "slug",
+                  "onboardingComplete"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "nextCursor": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": ["stores", "nextCursor"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "get_storefront_status": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storefrontId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "draftVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "publishedVersion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "isPublished": {
+              "type": "boolean"
+            },
+            "latestReceipt": {
+              "anyOf": [
+                {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "storefrontId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "receiptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "publishedVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "status": {
+                          "type": "string",
+                          "const": "verifying"
+                        },
+                        "deliveryBlockedReason": {
+                          "type": "string",
+                          "maxLength": 500
+                        }
+                      },
+                      "required": [
+                        "storefrontId",
+                        "version",
+                        "receiptId",
+                        "publishedVersion",
+                        "status"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "storefrontId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "receiptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "publishedVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "status": {
+                          "type": "string",
+                          "const": "live"
+                        },
+                        "publicUrl": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "verifiedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        }
+                      },
+                      "required": [
+                        "storefrontId",
+                        "version",
+                        "receiptId",
+                        "publishedVersion",
+                        "status",
+                        "publicUrl",
+                        "verifiedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "storefrontId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "receiptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "publishedVersion": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "status": {
+                          "type": "string",
+                          "const": "superseded"
+                        },
+                        "currentPublishedVersion": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "supersededByReceiptId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "storefrontId",
+                        "version",
+                        "receiptId",
+                        "publishedVersion",
+                        "status",
+                        "currentPublishedVersion"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "missingItems": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "pendingOperationIds": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "supportedPageSlugs": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "string",
+                  "const": "home"
+                }
+              ]
+            },
+            "capabilities": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "supported": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "templateId": {
+                      "type": "string",
+                      "const": "puck"
+                    },
+                    "rendererVersion": {
+                      "type": "string",
+                      "const": "baci-home-six-v1"
+                    },
+                    "canEdit": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "canPreview": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "canPublish": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "editorUrl": {
+                      "type": "string",
+                      "const": "https://usebaci.com/builder"
+                    }
+                  },
+                  "required": [
+                    "supported",
+                    "templateId",
+                    "rendererVersion",
+                    "canEdit",
+                    "canPreview",
+                    "canPublish",
+                    "editorUrl"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "supported": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "templateId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "rendererVersion": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "canEdit": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "canPreview": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "canPublish": {
+                      "type": "boolean",
+                      "const": false
+                    },
+                    "reason": {
+                      "type": "string",
+                      "const": "UNSUPPORTED_TEMPLATE"
+                    },
+                    "editorUrl": {
+                      "type": "string",
+                      "const": "https://usebaci.com/builder"
+                    }
+                  },
+                  "required": [
+                    "supported",
+                    "templateId",
+                    "rendererVersion",
+                    "canEdit",
+                    "canPreview",
+                    "canPublish",
+                    "reason",
+                    "editorUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "storefrontId",
+            "draftVersion",
+            "publishedVersion",
+            "isPublished",
+            "latestReceipt",
+            "missingItems",
+            "pendingOperationIds",
+            "supportedPageSlugs",
+            "capabilities"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "create_storefront_draft": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storefrontId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "changedPages": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "string",
+                  "const": "home"
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "const": "draft"
+            }
+          },
+          "required": ["storefrontId", "version", "changedPages", "status"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "update_storefront_draft": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storefrontId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "operationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "sourceVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "status": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "required": [
+            "storefrontId",
+            "operationId",
+            "sourceVersion",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "get_storefront_operation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storefrontId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "operationId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "sourceVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "ready",
+                "applied",
+                "failed",
+                "conflict"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "storefrontId",
+            "operationId",
+            "sourceVersion",
+            "status",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "apply_storefront_operation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storefrontId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "changedPages": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "string",
+                  "const": "home"
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "const": "draft"
+            }
+          },
+          "required": ["storefrontId", "version", "changedPages", "status"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "const": "error"
+            },
+            "code": {
+              "type": "string",
+              "enum": [
+                "RATE_LIMITED",
+                "INVALID_REQUEST",
+                "NOT_FOUND",
+                "STALE_DRAFT",
+                "IDEMPOTENCY_CONFLICT",
+                "CONNECTION_REVOKED",
+                "INSUFFICIENT_SCOPE",
+                "STORE_ALREADY_EXISTS",
+                "UNSUPPORTED_TEMPLATE",
+                "UNSUPPORTED_PAGE",
+                "SLUG_UNAVAILABLE",
+                "SLUG_IMMUTABLE",
+                "PUBLISH_BLOCKED",
+                "APPROVAL_REQUIRED",
+                "OPERATION_FAILED"
+              ]
+            },
+            "error": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "currentVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "editorUrl": {
+              "type": "string",
+              "const": "https://usebaci.com/builder"
+            }
+          },
+          "required": ["status", "code", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

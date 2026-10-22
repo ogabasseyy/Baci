@@ -3,6 +3,7 @@ import {
   builderRevisionSchema,
 } from '@/schemas/builder-mcp-primitives';
 export const BUILDER_ERROR_MESSAGES = {
+  RATE_LIMITED: 'Too many requests. Wait briefly before retrying.',
   INVALID_REQUEST: 'The request is invalid.',
   NOT_FOUND: 'Storefront not found.',
   STALE_DRAFT: 'The draft changed. Read the current revision and try again.',

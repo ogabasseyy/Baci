@@ -1,8 +1,10 @@
-import type { BuilderToolName } from '@/schemas/builder-mcp';
 import { BUILDER_EDITOR_URL } from '@/schemas/builder-mcp-primitives';
+import type {
+  BuilderScope,
+  BuilderToolName,
+} from '@/schemas/builder-tool-names';
 import { PORTABLE_RENDERER_VERSION } from '@/schemas/portable-storefront';
 import { type BuilderErrorCode, builderError } from './errors';
-import type { BuilderScope } from './types';
 
 function policy(scope: BuilderScope, mutation = false, publish = false) {
   const scopes: BuilderScope[] =
@@ -57,7 +59,7 @@ export function builderAuthChallenge(
   tool: BuilderToolName
 ) {
   const error = builderError(code);
-  const challenge = `Bearer resource_metadata="https://mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp", error="${code === 'INSUFFICIENT_SCOPE' ? 'insufficient_scope' : 'invalid_token'}", scope="${builderToolPolicy[tool].scopes.join(' ')}"`;
+  const challenge = `Bearer resource_metadata="https://mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp", error_description="Reconnect Baci or authorize the requested permissions.", error="${code === 'INSUFFICIENT_SCOPE' ? 'insufficient_scope' : 'invalid_token'}", scope="${builderToolPolicy[tool].scopes.join(' ')}"`;
   return {
     isError: true as const,
     content: [{ type: 'text' as const, text: error.error }],

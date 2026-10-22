@@ -181,6 +181,8 @@ Final scope includes full monorepo lint/typecheck/test because provider dependen
 
 ### Task 6: Register the separate MCP server
 
+**Local execution 2026-10-22:** Separate six-tool stateless MCP adapter, fixed inactive gateway, generated contract boundary, real SDK HTTP and Node-to-Next TLS probes implemented. [Evidence and remaining release gates](../../connectors/evidence/builder-mcp-transport-gateway.md). Both submissions remain unchanged; deployment/runtime bootstrap is not activated.
+
 **Files:** Create `apps/web/builder-mcp-server/{server,registry,metadata,tool-result,backend-client}.ts` and tests; isolated `tsconfig.builder-mcp.json`/bundle configuration and package scripts; fixed execution gateway `src/app/api/integrations/chatgpt/builder/[tool]/route.ts`. Reuse pure connector bounds/rate-limit/redaction helpers only. Do not modify Muse OpenAPI paths or the Ogabassey MCP resource registry.
 
 **Interfaces:** `createBuilderMcpServer(deps: BuilderMcpDependencies): McpServer`; `registerBuilderTools(server, deps): void`; `BuilderMcpDependencies` contains `executeBuilderTool(bearerToken, toolName, input): Promise<BuilderToolResult>` and static resource/metadata helpers. Its fixed-origin backend client calls the Next execution gateway, which owns Task 3 authentication and Tasks 4–5/7–8 services. Task 6 advertises the first six implemented tools; Task 7 adds preview and Task 8 adds publication. No unimplemented tool gets a fake success handler.

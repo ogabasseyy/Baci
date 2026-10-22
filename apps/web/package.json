@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp",
+    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp",
     "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",
@@ -49,7 +49,10 @@
     "mcp": "tsx mcp-server/server.ts",
     "test:checkout:build": "tsc --project tsconfig.checkout-browser.json && next build tests/checkout-browser/harness",
     "test:checkout:browser": "playwright test",
-    "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js"
+    "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js",
+    "typecheck:builder-mcp": "tsc --noEmit -p tsconfig.builder-mcp.json",
+    "build:builder-mcp": "esbuild builder-mcp-server/serve.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=builder-mcp-server/dist/server.mjs",
+    "mcp:builder": "tsx builder-mcp-server/serve.ts"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",

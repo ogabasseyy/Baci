@@ -3,6 +3,7 @@ import { getAllBusinessTypeIds } from '@/config/business-types';
 import { builderError } from '@/lib/builder-connector/errors';
 import { isReservedMerchantSlug } from '@/lib/validation';
 import {
+  BUILDER_REQUEST_BYTES,
   builderIdSchema as id,
   builderRevisionSchema as revision,
 } from './builder-mcp-primitives';
@@ -92,7 +93,7 @@ export type PublishInput = z.infer<typeof requestSchemas.publish_storefront>;
 export type BuilderToolInput<T extends BuilderToolName> = z.infer<
   (typeof requestSchemas)[T]
 >;
-export const BUILDER_REQUEST_BYTES = 65536;
+export { BUILDER_REQUEST_BYTES } from './builder-mcp-primitives';
 /** Run at ingress before enqueueing or invoking any business service. */
 export function parseBuilderRequest<T extends BuilderToolName>(
   tool: T,

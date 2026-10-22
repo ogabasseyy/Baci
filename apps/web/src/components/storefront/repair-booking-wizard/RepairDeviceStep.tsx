@@ -15,14 +15,12 @@ import type {
   RepairBookingInput,
   repairBookingSchema,
 } from '@/lib/validations/repair';
-import {
-  RepairDeviceModelField,
-  type RepairDeviceSelection,
-} from './RepairDeviceModelField';
+import { RepairDeviceModelField } from './RepairDeviceModelField';
 import {
   REPAIR_DEVICE_TYPE_OPTIONS,
   type RepairBookingPreselection,
 } from './repair-booking-wizard-constants';
+import type { RepairDeviceSelection } from './repair-device-suggestions';
 
 interface RepairDeviceStepProps {
   control: Control<

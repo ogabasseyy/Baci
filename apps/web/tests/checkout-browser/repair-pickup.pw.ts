@@ -26,7 +26,7 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
 
   await page.goto('/repair');
   await page.getByLabel('Device Model').fill('iPhone 15');
-  const suggestion = page.getByRole('button', {
+  const suggestion = page.getByRole('option', {
     name: 'Apple iPhone 15 Smartphone',
   });
   const productImage = suggestion.getByRole('img', { name: 'Apple iPhone 15' });
@@ -37,7 +37,7 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
     )
     .toBeGreaterThan(0);
   await page
-    .getByRole('button', { name: 'Apple iPhone 15 Smartphone' })
+    .getByRole('option', { name: 'Apple iPhone 15 Smartphone' })
     .click();
   await expect(page.getByLabel('Device Model')).toHaveValue('Apple iPhone 15');
   await expect(page.getByText('Choose a device')).toHaveCount(0);

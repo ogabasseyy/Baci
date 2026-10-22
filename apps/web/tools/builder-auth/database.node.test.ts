@@ -1,80 +1,29 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createSessionVault } from './session-vault.ts';
 import { createAuthStorage } from './storage.ts';
+import { databaseFixture } from './test-fixtures.ts';
 
 const actor = '10000000-0000-4000-8000-000000000001';
 const other = '10000000-0000-4000-8000-000000000002';
 const connection = '20000000-0000-4000-8000-000000000001';
 const merchant = '30000000-0000-4000-8000-000000000001';
-const docker = (...args: string[]) =>
-  execFileSync('docker', args, {
-    encoding: 'utf8',
-    timeout: 20000,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  }).trim();
 test('private SQL permissions, single-use records, durable refresh lock and canonical revocation', {
   timeout: 90000,
 }, async () => {
-  const name = `baci-builder-auth-${randomUUID().slice(0, 8)}`;
-  let pool: Pool | undefined;
+  const fixture = await databaseFixture();
+  const pool = fixture.pool;
   try {
-    docker(
-      'run',
-      '--rm',
-      '-d',
-      '--name',
-      name,
-      '-p',
-      '127.0.0.1::5432',
-      '-e',
-      'POSTGRES_HOST_AUTH_METHOD=trust',
-      'postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24'
-    );
-    for (let i = 0; i < 80; i++) {
-      try {
-        docker('exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres');
-        break;
-      } catch {
-        await delay(100);
-      }
-    }
-    const port = Number(docker('port', name, '5432/tcp').split(':').at(-1));
-    pool = new Pool({
-      host: '127.0.0.1',
-      port,
-      user: 'postgres',
-      database: 'postgres',
-      max: 8,
-    });
-    await pool.query(
-      `CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY); CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$; GRANT USAGE ON SCHEMA auth TO authenticated; GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated; CREATE TABLE public.merchants(id uuid PRIMARY KEY,user_id uuid); ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY; CREATE POLICY owner ON public.merchants TO authenticated USING(user_id=auth.uid()); GRANT SELECT ON public.merchants TO authenticated;`
-    );
-    await pool.query(
-      readFileSync(
-        new URL(
-          '../../../../supabase/migrations/20261022062133_builder_oauth_connections.sql',
-          import.meta.url
-        ),
-        'utf8'
-      )
-    );
     await pool.query('INSERT INTO auth.users VALUES($1),($2)', [actor, other]);
     await pool.query('INSERT INTO public.merchants VALUES($1,$2)', [
       merchant,
       actor,
     ]);
     const rolePool = new Pool({
-      host: '127.0.0.1',
-      port,
-      user: 'postgres',
-      database: 'postgres',
+      ...pool.options,
       options: '-c role=baci_builder_auth_storage',
       max: 8,
     });
@@ -272,11 +221,6 @@ test('private SQL permissions, single-use records, durable refresh lock and cano
       await rolePool.end();
     }
   } finally {
-    if (pool) await pool.end();
-    try {
-      docker('rm', '-f', name);
-    } catch {
-      /* already removed */
-    }
+    await fixture.close();
   }
 });

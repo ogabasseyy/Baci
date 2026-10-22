@@ -44,7 +44,8 @@ it('same signed builder token: empty consent → real RLS create → fresh targe
       () =>
         db.pool.query(
           'CREATE ROLE builder_draft_rest_fixture LOGIN NOINHERIT;GRANT anon,authenticated TO builder_draft_rest_fixture;'
-        )
+        ),
+      db.localDatabase
     );
     const upstreamToken = await new SignJWT({
       role: 'authenticated',

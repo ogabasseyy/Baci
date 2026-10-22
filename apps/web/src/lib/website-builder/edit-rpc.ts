@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { z } from 'zod';
+import { z } from 'zod';
+import { builderError } from '@/lib/builder-connector/errors';
 import type { BuilderContext } from '@/lib/builder-connector/types';
+import { builderRevisionSchema } from '@/schemas/builder-mcp-primitives';
 import { builderFailureSchema } from '@/schemas/builder-mcp-results';
 import {
   DraftServiceError,
@@ -31,6 +33,18 @@ export async function editRpc(
   return data as unknown;
 }
 export function editResult<T extends z.ZodType>(schema: T, data: unknown) {
+  const stale = z
+    .object({
+      status: z.literal('error'),
+      code: z.literal('STALE_DRAFT'),
+      currentVersion: builderRevisionSchema,
+    })
+    .strict()
+    .safeParse(data);
+  if (stale.success)
+    return builderFailureSchema.parse(
+      builderError('STALE_DRAFT', stale.data.currentVersion)
+    );
   const failure = builderFailureSchema.safeParse(data);
   return failure.success ? failure.data : schema.parse(data);
 }

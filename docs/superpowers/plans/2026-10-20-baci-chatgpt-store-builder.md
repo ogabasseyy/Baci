@@ -245,6 +245,10 @@ Local implementation evidence: [Task 8 publication evidence](../specs/2026-10-22
 - [ ] Write the production runbook: disk/readiness preflight, separate process/port and credential identity, scoped migration order, exact SHA/artifact verification, staged promotion, public metadata/tool scans for the new plugin, health checks, rollback image and migration compatibility. Use only an owner-authorized VPS flow; never insert `vercel build` or a cloud build into this plan as implied permission.
 - [ ] Complete CodeRabbit/current-head PR review gates and document an explicit production go/no-go. Review/commit as `test: prove Baci ChatGPT website lifecycle in staging`.
 
+### Task 9 local execution update — 2026-10-22
+
+The owner declined the quoted hosted staging cost and selected a local database. Local preparation uses isolated PostgreSQL17.11 and native PostgREST16.4; neither existing submission is changed. Source package, deployment-disabled contracts, release checklist and runbook are prepared. Local RLS lifecycle/negative journeys and the signed-token HTTP create/edit journey pass; upstream Auth is simulated in that HTTP fixture. Independent Codex rereview found no actionable issue in the local database/API delta. The full staging, real Auth, privacy cutover, real ChatGPT host and verified-public-revision requirements remain pending. No upload-ready ZIP or qualified staged release is claimed. Production remains NO-GO. See the runbook for the evidence boundary.
+
 ## Completion and execution handoff
 
 This plan is complete when its source map and document links are valid, each required behavior has an owning task/test, and unresolved provider/runtime assumptions are explicit go/no-go gates. Implementation is complete only after Task 9 evidence exists. Submission, approval, publication and production customer verification remain separate states.

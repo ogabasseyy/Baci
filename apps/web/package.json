@@ -53,7 +53,9 @@
     "typecheck:builder-mcp": "tsc --noEmit -p tsconfig.builder-mcp.json",
     "build:builder-mcp": "pnpm --filter @baci/builder-preview-widget build && esbuild builder-mcp-server/serve.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=builder-mcp-server/dist/server.mjs && cp builder-mcp-server/preview.html builder-mcp-server/dist/preview.html",
     "mcp:builder": "tsx builder-mcp-server/serve.ts",
-    "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json"
+    "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json",
+    "verify:builder-release": "vitest run tests/builder-chatgpt builder-mcp-server --maxWorkers=1",
+    "verify:builder-provider": "pnpm --dir tools/builder-auth test"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",

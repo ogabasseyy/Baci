@@ -4,17 +4,26 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Pool } from 'pg';
-export async function startLocalPostgresFixture() {
+export async function startLocalPostgresFixture(
+  options: { binDirectory?: string; major?: 17 | 18 } = {}
+) {
+  const major = options.major ?? 18;
+  if (options.binDirectory && !path.isAbsolute(options.binDirectory))
+    throw Error('PostgreSQL binary directory must be absolute');
   const root = mkdtempSync(path.join(tmpdir(), 'baci-builder-task8-'));
   const data = path.join(root, 'data');
   const socket = path.join(root, 'socket');
   mkdirSync(socket, { mode: 0o700 });
   const command = (name: string, args: string[]) =>
-    execFileSync(name, args, {
-      encoding: 'utf8',
-      timeout: 30000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    execFileSync(
+      options.binDirectory ? path.join(options.binDirectory, name) : name,
+      args,
+      {
+        encoding: 'utf8',
+        timeout: 30000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
   let running = false;
   let pool: Pool | undefined;
   const close = async () => {
@@ -27,9 +36,9 @@ export async function startLocalPostgresFixture() {
   };
   try {
     const version = command('postgres', ['--version']);
-    if (!/^postgres \(PostgreSQL\) 18\./.test(version))
+    if (!new RegExp(`^postgres \\(PostgreSQL\\) ${major}\\.`).test(version))
       throw Error(
-        'Expected explicitly tested local PostgreSQL 18; pinned PostgreSQL17 replay is separate.'
+        `Expected explicitly selected local PostgreSQL ${major}; pinned Supabase replay is separate.`
       );
     command('initdb', [
       '-D',

@@ -34,8 +34,14 @@ export async function databaseFixture(options: { local?: boolean } = {}) {
   };
   try {
     let connection: PoolConfig;
-    if (options.local) {
-      local = await startLocalPostgresFixture();
+    if (options.local ?? process.env.BACI_BUILDER_LOCAL_PG === '1') {
+      const major = process.env.BACI_BUILDER_LOCAL_PG_MAJOR;
+      if (major !== undefined && major !== '17' && major !== '18')
+        throw Error('Unsupported local PostgreSQL major');
+      local = await startLocalPostgresFixture({
+        binDirectory: process.env.BACI_BUILDER_LOCAL_PG_BIN,
+        major: major === '17' ? 17 : 18,
+      });
       connection = local.connection;
     } else {
       docker(
@@ -97,6 +103,9 @@ export async function databaseFixture(options: { local?: boolean } = {}) {
     });
     const keys = new Map([['fixture', randomBytes(32)]]);
     return {
+      localDatabase: local
+        ? { socketDirectory: local.connection.host }
+        : undefined,
       pool,
       containerName: name,
       providerPool,

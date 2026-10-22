@@ -11,7 +11,9 @@
     "tools/builder-auth/verify-publication.test.tsx",
     "tools/builder-auth/local-postgres*.ts",
     "src/**/*.d.ts",
-    "src/lib/consent-mode.ts"
+    "src/lib/consent-mode.ts",
+    "tests/builder-chatgpt/**/*.ts",
+    "tools/builder-release/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

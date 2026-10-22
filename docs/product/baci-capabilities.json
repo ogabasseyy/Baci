@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-22T01:14:17.254950+00:00",
+  "reviewed_at": "2026-10-22T01:22:00.419867+00:00",
   "source_revision": "77ebd72b5828f47932d224d8eb92e171f1085ce5",
-  "evidence_digest": "69e46ae5dc1980f0c7386f03f5bec4d43d1ff0afd79f1e62edea8583e74150f1",
-  "claims_digest": "0c3d76e5d04666fa468a801ef893fa690b94c2335ab87b4eefb3fb9a4c626a76",
-  "review_scope": "Source audit; no production proof. Refs are reviewer evidence. MCP guest OAuth uses PKCE, encrypted merchant-scoped grants and connection-bound cart authority. Production off. Owner-approved isolated QA storage/worker provisioned; browser consent, authenticated discovery and fresh-session two-item add/remove pass. Conversational and website/native handoff acceptance pending. No production activation. Private text continuation defaults off; host privacy/retention unqualified. Checkout offers use merchant-scoped get_storefront_offer_resolution with published/admin gate; cart fall-through retained. One awaited RPC factory, three sites. PDP anchor effective_policy and strict offer caps. Scoped chunks 1000, unscoped 200. Outage retryable; strict-null logged. Lowest-id anchors; strict zero emits 0. Explicit picks win. String false parses closed. MCP detail merchant-scoped; duplicate-case ids hydrate all spellings.",
+  "evidence_digest": "a397559a8458a1659747fe02fff86ba7700e27aea79b939e066eb6e3b61a1e43",
+  "claims_digest": "71109fd3bdfee28741066fc8a4e14fda0415418a4666dd00db8ba732095ab73b",
+  "review_scope": "Source audit; no production proof. Refs are reviewer evidence. MCP guest OAuth uses PKCE, encrypted merchant-scoped grants and connection-bound cart authority. Production off. Owner-approved isolated QA storage/worker provisioned; browser consent, authenticated discovery and fresh-session two-item add/remove pass. Conversational add/remove and empty-Incognito guest checkout handoff pass; native-app acceptance pending. No production activation. Private text continuation defaults off; host privacy/retention unqualified. Checkout offers use merchant-scoped get_storefront_offer_resolution with published/admin gate; cart fall-through retained. One awaited RPC factory, three sites. PDP anchor effective_policy and strict offer caps. Scoped chunks 1000, unscoped 200. Outage retryable; strict-null logged. Lowest-id anchors; strict zero emits 0. Explicit picks win. String false parses closed. MCP detail merchant-scoped; duplicate-case ids hydrate all spellings.",
   "capabilities": [
     {
       "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",

@@ -36,7 +36,7 @@ const cartProduct: CartProduct = {
   stock: 10,
   variants: [
     {
-      attributes: { color: 'Black', storage: '128GB' },
+      attributes: { connectivity: 'WiFi', storage: '128GB' },
       id: 'variant-black-128',
       merchant_id: 'merchant-1',
       price_override: 237_674.42,
@@ -44,7 +44,7 @@ const cartProduct: CartProduct = {
       stock_quantity: 4,
     },
     {
-      attributes: { color: 'Blue', storage: '256GB' },
+      attributes: { connectivity: '5G', storage: '256GB' },
       id: 'variant-blue-256',
       merchant_id: 'merchant-1',
       price_override: 278_418.6,
@@ -60,7 +60,9 @@ function CriticalCommerceStateProbe() {
   return (
     <>
       <p>{commerce.canAddToCart ? 'ready' : 'blocked'}</p>
-      <p>selected color:{commerce.selectedAttributes.color || ''}</p>
+      <p>
+        selected connectivity:{commerce.selectedAttributes.connectivity || ''}
+      </p>
       <button
         onClick={() => commerce.handleAttributeSelection('storage', '256GB')}
         type="button"
@@ -84,12 +86,12 @@ beforeEach(() => {
 });
 
 describe('OgabasseyPdpCriticalCommerceProvider hidden-axis recovery', () => {
-  it('recovers a pruned hidden color axis from the uniquely matching SKU', () => {
+  it('recovers a pruned hidden connectivity axis from the uniquely matching SKU', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
         cartProduct={cartProduct}
         initialVariantSelection={{
-          attributes: { color: 'Black', storage: '128GB' },
+          attributes: { connectivity: 'WiFi', storage: '128GB' },
           variantId: 'variant-black-128',
         }}
         variantAxes={['storage']}
@@ -105,7 +107,7 @@ describe('OgabasseyPdpCriticalCommerceProvider hidden-axis recovery', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByText('selected color:Blue')).toBeInTheDocument();
+    expect(screen.getByText('selected connectivity:5G')).toBeInTheDocument();
     expect(screen.getByText('ready')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));

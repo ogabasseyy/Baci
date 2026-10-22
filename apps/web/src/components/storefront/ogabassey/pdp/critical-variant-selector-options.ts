@@ -103,7 +103,10 @@ function isRenderableCriticalVariantAxis(
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
   const options = getVariantAxisOptions(variants, axis, fallbackAxisOptions);
-  return isRenderableVariantAxis(axis, options.length);
+  // Colour is a SKU choice here: this panel has no separate swatch picker.
+  return axis === 'color'
+    ? options.length > 1
+    : isRenderableVariantAxis(axis, options.length);
 }
 
 export function getRenderableCriticalVariantAxes(
@@ -113,7 +116,16 @@ export function getRenderableCriticalVariantAxes(
 ) {
   return Array.from(
     new Set(
-      axes
+      [
+        ...axes,
+        ...((variants || []).some((variant) =>
+          Object.keys(variant.attributes || {}).some(
+            (axis) => canonicalizeCommerceVariantAxis(axis) === 'color'
+          )
+        )
+          ? ['color']
+          : []),
+      ]
         .map((axis) => canonicalizeCommerceVariantAxis(axis))
         .filter((axis): axis is string => Boolean(axis))
     )

@@ -100,6 +100,7 @@ SELECT ok(
   NOT has_function_privilege('anon', 'public.create_jumia_product_export_selection(uuid,uuid)', 'EXECUTE')
   AND has_function_privilege('authenticated', 'public.create_jumia_product_export_selection(uuid,uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'private.jumia_product_export_source_projection_v1(uuid,uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'private.jumia_product_export_source_version_v1(uuid,uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'private.merchant_has_marketplace_sync_v1(uuid,timestamp with time zone)', 'EXECUTE'),
   'only authenticated callers can invoke the guarded snapshot RPC, not private helpers'
 );

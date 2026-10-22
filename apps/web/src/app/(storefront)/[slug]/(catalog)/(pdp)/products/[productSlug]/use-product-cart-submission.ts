@@ -2,7 +2,10 @@ import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
-import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
+import {
+  isExplicitlyTrackedVariantStock,
+  isUnmanagedVariantStock,
+} from '@/lib/is-unmanaged-variant-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
@@ -68,7 +71,9 @@ export function useProductCartSubmission({
             ...product,
             manage_stock: selectedVariantIsUnmanaged
               ? false
-              : product.manage_stock,
+              : isExplicitlyTrackedVariantStock(variantForCart)
+                ? true
+                : product.manage_stock,
             price: currentPrice,
             stock: selectedOptionStock,
           }

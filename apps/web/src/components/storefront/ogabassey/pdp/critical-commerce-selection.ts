@@ -6,7 +6,10 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-con
 import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isDisplayOnlyVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
-import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
+import {
+  isExplicitlyTrackedVariantStock,
+  isUnmanagedVariantStock,
+} from '@/lib/is-unmanaged-variant-stock';
 import {
   COMPACT_OPTIONS,
   type CurrencyConfig,
@@ -101,7 +104,11 @@ export function buildVariantCartProduct(
       cartProduct.condition,
     image: variantImage ?? cartProduct.image,
     imageLarge: variantImage ?? cartProduct.imageLarge,
-    manage_stock: variantIsUnmanaged ? false : cartProduct.manage_stock,
+    manage_stock: variantIsUnmanaged
+      ? false
+      : isExplicitlyTrackedVariantStock(selection.variant)
+        ? true
+        : cartProduct.manage_stock,
     price: selection.price,
     stock: getVariantStock(cartProduct, selection),
     variants: cartProduct.variants,

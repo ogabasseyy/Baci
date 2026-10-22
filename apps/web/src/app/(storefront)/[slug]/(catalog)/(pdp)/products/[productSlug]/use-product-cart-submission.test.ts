@@ -158,6 +158,32 @@ describe('useProductCartSubmission', () => {
     );
   });
 
+  it('keeps standard-tracked variant stock managed on an unmanaged parent', () => {
+    const selected = variant({
+      effective_policy: 'standard',
+      inventory_tracking_policy: 'standard',
+      stock_quantity: 3,
+    });
+    const { result } = renderHook(() =>
+      useProductCartSubmission(
+        input({
+          currentVariantSelection: { variant: selected },
+          product: simpleProduct({ has_variants: true, manage_stock: false }),
+        })
+      )
+    );
+
+    act(() => {
+      result.current();
+    });
+
+    expect(mockAddToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ manage_stock: true, stock: 3 }),
+      1,
+      expect.objectContaining({ variantId: 'variant-1' })
+    );
+  });
+
   it('submits an offer selection with the offer id', () => {
     const selectedOffer = {
       condition: 'open_box',

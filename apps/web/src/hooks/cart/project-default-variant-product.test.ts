@@ -59,6 +59,18 @@ describe('projectDefaultVariantProduct', () => {
     });
   });
 
+  it('enforces standard-tracked child stock under an unmanaged parent', () => {
+    const result = projectDefaultVariantProduct(
+      createProduct({ manage_stock: false, stock: 0 }),
+      createSelection({
+        inventory_tracking_policy: 'standard',
+        stock_quantity: 3,
+      })
+    );
+
+    expect(result).toMatchObject({ manage_stock: true, stock: 3 });
+  });
+
   it('uses a depleted scalar for managed off variants', () => {
     const result = projectDefaultVariantProduct(
       createProduct({ manage_stock: true, stock: 8 }),

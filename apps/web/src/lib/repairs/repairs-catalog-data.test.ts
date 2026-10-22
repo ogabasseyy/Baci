@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getRepairDeviceDetailBySlug,
   getRepairDevicesForMerchant,
@@ -14,13 +14,19 @@ vi.mock('@/lib/cached-data', () => ({
   getPublicSupabaseClient: mocks.getPublicSupabaseClient,
 }));
 
-function makeBuilder(result: QueryResult) {
+function makeBuilder(
+  result: QueryResult,
+  onIn?: (column: string, values: string[]) => void
+) {
   const builder: Record<string, unknown> = {};
   const chain = () => builder;
   builder.select = chain;
   builder.eq = chain;
   builder.order = chain;
-  builder.in = chain;
+  builder.in = (column: string, values: string[]) => {
+    onIn?.(column, values);
+    return builder;
+  };
   builder.maybeSingle = () => Promise.resolve(result);
   // biome-ignore lint/suspicious/noThenProperty: intentional thenable mocking a Supabase query builder awaited without a terminal method
   builder.then = (
@@ -30,14 +36,24 @@ function makeBuilder(result: QueryResult) {
   return builder;
 }
 
-function makeClient(results: Record<string, QueryResult>) {
+function makeClient(
+  results: Record<string, QueryResult>,
+  onProductLookup?: (column: string, values: string[]) => void
+) {
   return {
     from: (table: string) =>
-      makeBuilder(results[table] ?? { data: null, error: null }),
+      makeBuilder(
+        results[table] ?? { data: null, error: null },
+        table === 'products' ? onProductLookup : undefined
+      ),
   };
 }
 
 describe('getRepairDevicesForMerchant', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -106,6 +122,102 @@ describe('getRepairDevicesForMerchant', () => {
     expect(groups[0]?.devices[0]?.imageUrl).toBe(
       'https://cdn.example.com/iphone-15.jpg'
     );
+  });
+
+  it('filters matching devices before looking up linked product images', async () => {
+    const productLookups: string[][] = [];
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient(
+        {
+          repair_devices: {
+            data: [
+              {
+                id: 'd1',
+                brand: 'Apple',
+                model: 'iPhone 15',
+                slug: 'iphone-15',
+                product_id: 'p1',
+                image_url: null,
+              },
+              {
+                id: 'd2',
+                brand: 'Samsung',
+                model: 'Galaxy S23',
+                slug: 'galaxy-s23',
+                product_id: 'p2',
+                image_url: null,
+              },
+            ],
+            error: null,
+          },
+          products: { data: [], error: null },
+        },
+        (_column, values) => productLookups.push(values)
+      )
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+
+    expect(
+      groups.flatMap((group) => group.devices.map((device) => device.id))
+    ).toEqual(['d1']);
+    expect(productLookups).toEqual([['p1']]);
+  });
+
+  it('returns devices without fallback images when product lookup fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient({
+        repair_devices: {
+          data: [
+            {
+              id: 'd1',
+              brand: 'Apple',
+              model: 'iPhone 15',
+              slug: 'iphone-15',
+              product_id: 'p1',
+              image_url: null,
+            },
+          ],
+          error: null,
+        },
+        products: { data: null, error: { message: 'lookup failed' } },
+      })
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1');
+
+    expect(groups[0]?.devices[0]).toMatchObject({
+      id: 'd1',
+      imageUrl: null,
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('chunks unfiltered linked product image lookups', async () => {
+    const productLookups: string[][] = [];
+    const devices = Array.from({ length: 101 }, (_, index) => ({
+      id: `d${index}`,
+      brand: 'Apple',
+      model: `iPhone ${index}`,
+      slug: `iphone-${index}`,
+      product_id: `p${index}`,
+      image_url: null,
+    }));
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient(
+        {
+          repair_devices: { data: devices, error: null },
+          products: { data: [], error: null },
+        },
+        (_column, values) => productLookups.push(values)
+      )
+    );
+
+    await getRepairDevicesForMerchant('merchant-1');
+
+    expect(productLookups.map((lookup) => lookup.length)).toEqual([100, 1]);
   });
 
   it('filters by query across brand, model, and aliases', async () => {

@@ -126,7 +126,12 @@ export function RepairDeviceStep({
             <FormControl>
               <RadioGroup
                 className="grid grid-cols-2 gap-4 sm:grid-cols-3"
-                onValueChange={field.onChange}
+                onValueChange={(value) => {
+                  if (value !== field.value) {
+                    onDeviceChange();
+                  }
+                  field.onChange(value);
+                }}
                 value={field.value}
               >
                 {REPAIR_DEVICE_TYPE_OPTIONS.map((type) => (

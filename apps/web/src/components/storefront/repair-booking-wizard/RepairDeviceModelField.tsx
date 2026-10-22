@@ -63,7 +63,7 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
   deviceType: RepairDeviceType;
 }> = [
   {
-    pattern: /\b(smartphones?|mobile phones?|cell phones?)\b/i,
+    pattern: /\b(smartphones?|mobile phones?|cell phones?|iphones?|phones?)\b/i,
     deviceType: 'Smartphone',
   },
   { pattern: /\b(laptops?|notebooks?)\b/i, deviceType: 'Laptop' },
@@ -78,8 +78,12 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
 function toStoreProductSuggestion(
   product: StorefrontProductsResponse['products'][number]
 ): StoreProductDeviceSuggestion | null {
+  const category = product.category ?? '';
+  if (/\baccessories\b/i.test(category)) {
+    return null;
+  }
   const deviceType = DEVICE_CATEGORY_TYPES.find(({ pattern }) =>
-    pattern.test(product.category ?? '')
+    pattern.test(category)
   )?.deviceType;
   if (!deviceType) {
     return null;

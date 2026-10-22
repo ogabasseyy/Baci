@@ -253,7 +253,10 @@ export function RepairBookingWizard({
             {currentStep < REPAIR_WIZARD_STEPS.length - 1 ? (
               <button
                 className="inline-flex items-center rounded-md px-6 py-2.5 font-medium text-white transition-colors"
-                onClick={nextStep}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void nextStep();
+                }}
                 style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
                 type="button"
               >

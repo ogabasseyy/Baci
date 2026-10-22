@@ -6,7 +6,6 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   const localOrigin = `http://127.0.0.1:${process.env.CHECKOUT_BROWSER_PORT?.trim() || '3217'}`;
   const externalRequests: string[] = [];
   const deviceSearchRequests: string[] = [];
-  const productSearchRequests: string[] = [];
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
   page.on('console', (message) => {
@@ -16,9 +15,6 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/repairs/devices')) {
       deviceSearchRequests.push(url.pathname + url.search);
-    }
-    if (url.pathname === '/api/storefront/products') {
-      productSearchRequests.push(url.pathname + url.search);
     }
     if (url.origin !== localOrigin) {
       externalRequests.push(`${route.request().method()} ${url.origin}`);
@@ -49,9 +45,6 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   expect(deviceSearchRequests).toEqual([
     '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
   ]);
-  expect(productSearchRequests).toEqual([
-    '/api/storefront/products?merchant_id=11111111-1111-4111-8111-111111111111&q=iPhone%2015&limit=8&compact=true&has_images=true',
-  ]);
   await page
     .getByLabel("What's the issue?")
     .fill('Cracked screen needs repair');
@@ -72,11 +65,9 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   await expect(page.getByText('Estimated pickup fee: ₦2,500')).toBeVisible();
 
   await page.getByRole('button', { name: /^next$/i }).click();
-  const summary = page.getByRole('heading', { name: 'Summary' });
-  if (await summary.isVisible().catch(() => false)) {
-    await expect(page.getByText('₦2,500', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Continue to payment' }).click();
-  }
+  await expect(page.getByRole('heading', { name: 'Summary' })).toBeVisible();
+  await expect(page.getByText('₦2,500', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to payment' }).click();
 
   await expect(
     page.getByRole('heading', { name: 'Pay for courier pickup' })

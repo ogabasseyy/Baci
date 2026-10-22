@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
@@ -214,6 +214,80 @@ describe('RepairDeviceStep', () => {
       '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=8&compact=true&has_images=true',
       expect.anything()
     );
+  });
+
+  it('suggests phones and iPhones categories but excludes phone accessories', async () => {
+    mocks.apiGet.mockResolvedValueOnce({ groups: [] }).mockResolvedValueOnce({
+      products: [
+        {
+          category: 'Phones',
+          id: 'phone-product',
+          name: 'Acme Phone One',
+        },
+        {
+          category: 'iPhones',
+          id: 'iphone-product',
+          name: 'Apple iPhone 15',
+        },
+        {
+          category: 'Phone Accessories',
+          id: 'case-product',
+          name: 'Acme Phone Case',
+        },
+      ],
+    });
+
+    render(
+      <Harness>
+        {(form) => (
+          <RepairDeviceStep
+            catalogEnabled
+            control={form.control}
+            merchantId="merchant-1"
+            merchantSlug="ogabassey"
+            onChangeDevice={vi.fn()}
+            onDeviceChange={vi.fn()}
+            onSelectDevice={vi.fn()}
+            showConfirmation={false}
+          />
+        )}
+      </Harness>
+    );
+
+    fireEvent.change(screen.getByLabelText('Device Model'), {
+      target: { value: 'phone' },
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Acme Phone One Smartphone' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Apple iPhone 15 Smartphone' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /phone case/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('clears catalog linkage when the customer changes device type', async () => {
+    const user = userEvent.setup();
+    const onDeviceChange = vi.fn();
+    render(
+      <Harness>
+        {(form) => (
+          <RepairDeviceStep
+            control={form.control}
+            onChangeDevice={vi.fn()}
+            onDeviceChange={onDeviceChange}
+            showConfirmation={false}
+          />
+        )}
+      </Harness>
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Laptop' }));
+
+    expect(onDeviceChange).toHaveBeenCalledOnce();
   });
 
   it('uses the real store catalog when the merchant repair catalog is disabled', async () => {

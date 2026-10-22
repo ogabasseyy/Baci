@@ -61,11 +61,12 @@ BEGIN
     ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444403', '33333333-3333-4333-8333-333333333301', false);
 
   INSERT INTO public.product_variants (
-    id, product_id, merchant_id, attributes, sku, stock_quantity, price_override
+    id, product_id, merchant_id, attributes, sku, stock_quantity, price_override,
+    is_inventory_anchor
   ) VALUES (
     '66666666-6666-4666-8666-666666666601',
     '44444444-4444-4444-8444-444444444403', v_merchant,
-    '{"color":"black"}', 'CONSOLE-BLK', 3, 95000
+    '{"color":"black"}', 'CONSOLE-BLK', 3, 95000, true
   );
 
   INSERT INTO public.product_feed_images (
@@ -124,6 +125,15 @@ BEGIN
   IF NOT private.merchant_has_marketplace_sync_v1('22222222-2222-4222-8222-222222222201', '2026-10-22 12:00:00+00') THEN
     RAISE EXCEPTION 'normalized all_features override must be honored';
   END IF;
+  UPDATE public.merchants
+  SET plan_tier = 'free', premium_features = jsonb_build_array(E'\tMarketplace_Sync\n'),
+      plan_expires_at = '2020-01-01 00:00:00+00'
+  WHERE id = '22222222-2222-4222-8222-222222222201';
+  IF NOT private.merchant_has_marketplace_sync_v1('22222222-2222-4222-8222-222222222201', '2026-10-22 12:00:00+00') THEN
+    RAISE EXCEPTION 'JavaScript-trimmed tab/newline feature override must be honored';
+  END IF;
+  UPDATE public.merchants SET plan_tier = 'pro', premium_features = '[]', plan_expires_at = NULL
+  WHERE id = '22222222-2222-4222-8222-222222222201';
 END;
 $entitlement_fixtures$;
 SELECT ok(true, 'SQL entitlement matches normalized explicit overrides and strict expiry boundaries');
@@ -195,10 +205,21 @@ BEGIN
     '22222222-2222-4222-8222-222222222201',
     '44444444-4444-4444-8444-444444444403'
   ) INTO v_projection;
-  IF v_projection->'variants'->0->>'isInventoryAnchor' IS DISTINCT FROM 'false'
+  IF v_projection->'variants'->0->>'isInventoryAnchor' IS DISTINCT FROM 'true'
+    OR v_projection->'product'->>'inventoryAnchorVariantId' IS NOT NULL
     OR v_projection->'images'->0->>'verifiedUrl' IS DISTINCT FROM 'https://assets.example.test/verified.jpg' THEN
-    RAISE EXCEPTION 'source projection omitted the variant anchor or verified image input';
+    RAISE EXCEPTION 'source projection omitted the canonical variant anchor flag, pointer, or verified image input';
   END IF;
+  UPDATE public.product_variants SET is_inventory_anchor = false
+  WHERE id = '66666666-6666-4666-8666-666666666601';
+  IF private.jumia_product_export_source_version_v1(
+    '22222222-2222-4222-8222-222222222201',
+    '44444444-4444-4444-8444-444444444403'
+  ) = v_source_version THEN
+    RAISE EXCEPTION 'canonical variant anchor flag change did not alter source version';
+  END IF;
+  UPDATE public.product_variants SET is_inventory_anchor = true
+  WHERE id = '66666666-6666-4666-8666-666666666601';
   DELETE FROM public.product_categories WHERE product_id = '44444444-4444-4444-8444-444444444403';
   UPDATE public.products SET category_id = '33333333-3333-4333-8333-333333333302'
   WHERE id = '44444444-4444-4444-8444-444444444403';

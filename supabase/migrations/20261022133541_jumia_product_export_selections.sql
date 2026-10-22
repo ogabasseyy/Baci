@@ -112,7 +112,10 @@ AS $$
           END
         ) AS feature(value)
         WHERE pg_catalog.jsonb_typeof(feature.value) = 'string'
-          AND pg_catalog.lower(pg_catalog.btrim(feature.value #>> '{}'))
+          AND pg_catalog.lower(pg_catalog.btrim(
+            feature.value #>> '{}',
+            U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'
+          ))
             IN ('marketplace_sync', 'all_features')
       )
       OR (
@@ -197,10 +200,7 @@ AS $$
           'inventoryTrackingPolicy', variant.inventory_tracking_policy,
           'condition', variant.condition,
           'updatedAt', variant.updated_at,
-          'isInventoryAnchor', COALESCE(
-            product.inventory_anchor_variant_id = variant.id,
-            false
-          )
+          'isInventoryAnchor', COALESCE(variant.is_inventory_anchor, false)
         ) ORDER BY variant.id
       )
       FROM public.product_variants AS variant

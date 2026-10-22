@@ -10,6 +10,7 @@ import {
   isExplicitlyTrackedVariantStock,
   isUnmanagedVariantStock,
 } from '@/lib/is-unmanaged-variant-stock';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import {
   COMPACT_OPTIONS,
   type CurrencyConfig,
@@ -76,9 +77,12 @@ function getVariantStock(
     return cartProduct.stock;
   }
 
-  return typeof selection.variant.stock_quantity === 'number'
+  return (
+    resolveSerializedVariantStock(selection.variant) ??
+    (typeof selection.variant.stock_quantity === 'number'
     ? selection.variant.stock_quantity
-    : cartProduct.stock;
+      : cartProduct.stock)
+  );
 }
 
 export function buildVariantCartProduct(

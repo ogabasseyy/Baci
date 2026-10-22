@@ -99,6 +99,12 @@ was rerun with one worker: the four feed tests and four checkout tests pass.
 The Cloudflare process-isolation test reports exactly `tooling worktree is not
 clean`, enforcing its existing clean-tree contract against the uncommitted fix.
 Its post-commit recheck is recorded separately in local verification evidence.
+The prior CI shard-4 failure was separately reproduced: the Task 1A repository
+snapshot had a stale route-tree hash. Regeneration against the committed fix
+updates only the source identity, route-tree hash and enclosing digest; all
+584 classifications and the proxy-input hash remain unchanged. Its asserted
+snapshot digest is updated with it. This is repository consistency metadata,
+not new operational release evidence or authorization.
 No merge or deployment is claimed here. No field p75 or blanket regression-free
 claim follows from these functional captures.
 

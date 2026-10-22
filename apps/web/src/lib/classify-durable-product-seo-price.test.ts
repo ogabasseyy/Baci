@@ -10,11 +10,14 @@ describe('isDurableSeoPrice', () => {
     'The temperature is 23.5 degrees.',
     'The weight was 900, now 800 grams',
     '1,920 x 1,080 display with HDR',
+    'The resolution is 3,840 × 2,160.',
+    'Displays at 2,560 x 1,440',
   ])('does not classify physical measurements as prices: %s', (text) => {
-    const candidate = getProductSeoMoneyCandidates(text)[0];
-    expect(candidate).toBeDefined();
-    if (!candidate) throw new Error('Expected a monetary-looking candidate');
-    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+    const candidates = getProductSeoMoneyCandidates(text);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(isDurableSeoPrice(candidate, text)).toBe(false);
+    }
   });
 
   it.each([
@@ -45,6 +48,18 @@ describe('isDurableSeoPrice', () => {
     const candidate = getProductSeoMoneyCandidates(text)[0];
     if (!candidate) throw new Error('Expected candidate');
     expect(isDurableSeoPrice(candidate, text)).toBe(true);
+  });
+
+  it('keeps an explicit price from being mistaken for a unitless dimension pair', () => {
+    for (const text of [
+      'Price: 1,200 x 2',
+      'Price: 1,200 x 500',
+      'Price: 1,200 x 3.20',
+    ]) {
+      const candidate = getProductSeoMoneyCandidates(text)[0];
+      if (!candidate) throw new Error('Expected candidate');
+      expect(isDurableSeoPrice(candidate, text)).toBe(true);
+    }
   });
 
   it.each([

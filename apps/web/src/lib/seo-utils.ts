@@ -23,7 +23,7 @@ import {
   isPaystackCheckoutAvailable,
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
-import { getProductSchemaDescription } from './get-product-schema-description';
+
 import {
   type CollectionPageData,
   type CollectionPageJsonLdSchema,
@@ -424,6 +424,7 @@ function buildMerchantReturnPolicyFromTrustProfile(
 
 export interface ProductSchemaOptions {
   acceptedPaymentMethods?: readonly string[];
+  description?: string;
   merchantBaseUrl?: string;
   productUrl?: string;
 }
@@ -633,7 +634,11 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  const safeDescription = getProductSchemaDescription(product, merchantName);
+  const safeDescription =
+    options.description ??
+    product.description ??
+    product.meta_description ??
+    '';
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;

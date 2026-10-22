@@ -9,6 +9,8 @@ const CLOCK_TIME_TAIL =
   /^(?:[:.]\d{2}\s*(?:am|pm|gmt|utc|est|pst|cst|bst|cet)\b|:\d{2}\b|\s*(?:am|pm)\b)/i;
 const PIXEL_DIMENSION_PAIR =
   /^\s*(?:[×x]|by)\s*\d[\d,.]*\s*(?:pixels?|px|display|screen|resolution)\b/i;
+const UNITLESS_PIXEL_DIMENSION_PAIR =
+  /^\s*(?:[×x]|by)\s*(\d[\d,.]*)\s*[.,;)!?]?\s*$/i;
 const LIFESPAN_QUANTITY_UNIT =
   /^\s+(?:[\p{L}-]+\s+){0,2}(?:hours?|cycles?|washes|uses)\b/iu;
 const MODIFIED_COUNT_UNIT =
@@ -56,6 +58,20 @@ export function isDurableSeoPrice(
   if (physicalPounds && !relation.cue && !relation.predicate) return false;
   const nearbyClause = nearbyPrefix.split(/[.!?;\n]/).at(-1) ?? '';
   const followingClause = tail.split(/[.!?;\n]/)[0] ?? '';
+  const unitlessDimension = UNITLESS_PIXEL_DIMENSION_PAIR.exec(tail);
+  const unitlessDimensionValue = unitlessDimension?.[1]
+    ? Number(unitlessDimension[1].replace(/,/g, ''))
+    : 0;
+  const hasExplicitRetailContext =
+    relation.strong ||
+    relation.predicate ||
+    relation.purchase ||
+    relation.commercial;
+  const hasUnitlessPixelDimension =
+    Boolean(unitlessDimension) &&
+    !hasExplicitRetailContext &&
+    (unitlessDimensionValue >= 320 ||
+      /\b(?:display|screen|resolution)\b/i.test(nearbyClause));
   const shortResolution =
     !candidate.marker &&
     /^\d{1,2}k$/i.test(rawAmount) &&
@@ -75,6 +91,7 @@ export function isDurableSeoPrice(
   const quantity =
     QUANTITY_UNIT.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
+    hasUnitlessPixelDimension ||
     (/\d[\d,.]*\s*(?:[×x]|by)\s*$/i.test(nearbyPrefix) &&
       /^\s*(?:pixels?|px|display|screen|resolution)\b/i.test(tail)) ||
     STOCK_COUNT_CONTEXT.test(tail) ||

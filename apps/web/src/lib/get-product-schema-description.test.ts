@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateProductSchema } from './seo-utils';
+import { generateStorefrontProductSchema } from './generate-storefront-product-schema';
 import { makeSeoProduct } from './seo-utils-product-schema-test-helper';
 
 describe('getProductSchemaDescription through Product JSON-LD', () => {
@@ -10,7 +10,7 @@ describe('getProductSchemaDescription through Product JSON-LD', () => {
     },
     { description: '', meta_description: '<p>Buy for ₦&nbsp;350,000</p>' },
   ])('does not publish stored prices in schema descriptions: %j', (copy) => {
-    const schema = generateProductSchema(
+    const schema = generateStorefrontProductSchema(
       makeSeoProduct({ name: 'iPhone 13', price: 390500, ...copy }),
       'Ogabassey',
       'NGN'
@@ -25,7 +25,7 @@ describe('getProductSchemaDescription through Product JSON-LD', () => {
   });
 
   it('falls back to useful price-free meta copy when visible copy has a price', () => {
-    const schema = generateProductSchema(
+    const schema = generateStorefrontProductSchema(
       makeSeoProduct({
         name: 'iPhone 13',
         description: 'Buy for ₦350,000',
@@ -38,7 +38,7 @@ describe('getProductSchemaDescription through Product JSON-LD', () => {
   });
 
   it('preserves visible specifications and gift-card identity', () => {
-    const schema = generateProductSchema(
+    const schema = generateStorefrontProductSchema(
       makeSeoProduct({
         name: 'Amazon Gift Card 50 USD',
         description: 'Use this 50 USD Amazon gift card for purchases.',
@@ -49,5 +49,18 @@ describe('getProductSchemaDescription through Product JSON-LD', () => {
     expect(schema.description).toBe(
       'Use this 50 USD Amazon gift card for purchases.'
     );
+  });
+
+  it('strips HTML from durable schema descriptions', () => {
+    const schema = generateStorefrontProductSchema(
+      makeSeoProduct({
+        name: 'Gaming laptop',
+        description:
+          '<p>The <strong>best</strong> gaming laptop for creators.</p>',
+      }),
+      'Ogabassey',
+      'NGN'
+    );
+    expect(schema.description).toBe('The best gaming laptop for creators.');
   });
 });

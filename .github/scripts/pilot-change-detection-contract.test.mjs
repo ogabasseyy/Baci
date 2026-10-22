@@ -129,8 +129,11 @@ test('product SEO metadata and its regressions keep the pilot suite enabled', as
     'apps/web/src/lib/classify-durable-product-seo-price.ts',
     'apps/web/src/lib/classify-durable-product-seo-price.test.ts',
     'apps/web/src/lib/classify-durable-product-seo-retail-relation.ts',
+    'apps/web/src/lib/classify-durable-product-seo-retail-relation.test.ts',
     'apps/web/src/lib/classify-durable-product-seo-non-retail.ts',
+    'apps/web/src/lib/classify-durable-product-seo-non-retail.test.ts',
     'apps/web/src/lib/classify-durable-product-seo-denomination.ts',
+    'apps/web/src/lib/classify-durable-product-seo-denomination.test.ts',
     'apps/web/src/lib/get-durable-product-seo-text.ts',
     'apps/web/src/lib/get-durable-product-seo-text.test.ts',
     'apps/web/src/lib/get-durable-product-seo-text.context.test.ts',
@@ -139,6 +142,7 @@ test('product SEO metadata and its regressions keep the pilot suite enabled', as
     'apps/web/src/lib/get-product-seo-money-candidates.test.ts',
     'apps/web/src/lib/get-product-schema-description.ts',
     'apps/web/src/lib/get-product-schema-description.test.ts',
+    'apps/web/src/lib/generate-storefront-product-schema.ts',
   ];
   for (const path of productSeoPaths) {
     assert.equal(detected(pattern, [path]), true, path);

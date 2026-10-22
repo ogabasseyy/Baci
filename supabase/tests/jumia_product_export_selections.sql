@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
 SELECT plan(9);
 SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
-SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
+RESET request.jwt.claim.sub;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 SELECT ok(
   auth.uid() IS NULL AND auth.jwt()->>'role' = 'service_role',
@@ -57,13 +57,13 @@ BEGIN
 
   INSERT INTO public.products (
     id, merchant_id, name, description, price, status, sku, stock,
-    stock_quantity, manage_stock, has_variants, category, category_id
+    stock_quantity, manage_stock, has_variants, category, category_id, images
   ) VALUES
-    ('44444444-4444-4444-8444-444444444401', v_merchant, 'Direct controller', 'Controller', 12000, 'active', 'CTRL-1', 5, 5, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301'),
-    ('44444444-4444-4444-8444-444444444402', v_merchant, 'Linked headset', 'Headset', 22000, 'active', 'HEAD-1', 7, 7, true, false, 'Audio', NULL),
-    ('44444444-4444-4444-8444-444444444403', v_merchant, 'Dual listed console', 'Console', 90000, 'active', 'CONSOLE-1', 3, 3, true, true, 'Gaming', '33333333-3333-4333-8333-333333333301'),
-    ('44444444-4444-4444-8444-444444444404', v_merchant, 'Draft console', 'Draft', 50000, 'draft', 'DRAFT-1', 1, 1, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301'),
-    ('44444444-4444-4444-8444-444444444405', v_merchant, 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL);
+    ('44444444-4444-4444-8444-444444444401', v_merchant, 'Direct controller', 'Controller', 12000, 'active', 'CTRL-1', 5, 5, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
+    ('44444444-4444-4444-8444-444444444402', v_merchant, 'Linked headset', 'Headset', 22000, 'active', 'HEAD-1', 7, 7, true, false, 'Audio', NULL, '[]'::jsonb),
+    ('44444444-4444-4444-8444-444444444403', v_merchant, 'Dual listed console', 'Console', 90000, 'active', 'CONSOLE-1', 3, 3, true, true, 'Gaming', '33333333-3333-4333-8333-333333333301', '["https://assets.example.test/export.jpg"]'::jsonb),
+    ('44444444-4444-4444-8444-444444444404', v_merchant, 'Draft console', 'Draft', 50000, 'draft', 'DRAFT-1', 1, 1, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
+    ('44444444-4444-4444-8444-444444444405', v_merchant, 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb);
 
   INSERT INTO public.product_categories (id, product_id, category_id, is_primary) VALUES
     ('55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444402', '33333333-3333-4333-8333-333333333301', true),
@@ -216,8 +216,9 @@ BEGIN
   ) INTO v_projection;
   IF v_projection->'variants'->0->>'isInventoryAnchor' IS DISTINCT FROM 'true'
     OR v_projection->'product'->>'inventoryAnchorVariantId' IS NOT NULL
+    OR v_projection->'product'->'exportImages' IS DISTINCT FROM '["https://assets.example.test/export.jpg"]'::jsonb
     OR v_projection->'images'->0->>'verifiedUrl' IS DISTINCT FROM 'https://assets.example.test/verified.jpg' THEN
-    RAISE EXCEPTION 'source projection omitted the canonical variant anchor flag, pointer, or verified image input';
+    RAISE EXCEPTION 'source projection omitted the canonical variant anchor flag, pointer, product export images, or verified image input';
   END IF;
   UPDATE public.product_variants SET is_inventory_anchor = false
   WHERE id = '66666666-6666-4666-8666-666666666601';
@@ -258,6 +259,19 @@ BEGIN
     '44444444-4444-4444-8444-444444444403'
   ) = v_version THEN
     RAISE EXCEPTION 'verified image change did not alter source version';
+  END IF;
+  v_version := private.jumia_product_export_source_version_v1(
+    '22222222-2222-4222-8222-222222222201',
+    '44444444-4444-4444-8444-444444444403'
+  );
+  UPDATE public.products
+  SET images = '["https://assets.example.test/export-v2.jpg"]'::jsonb
+  WHERE id = '44444444-4444-4444-8444-444444444403';
+  IF private.jumia_product_export_source_version_v1(
+    '22222222-2222-4222-8222-222222222201',
+    '44444444-4444-4444-8444-444444444403'
+  ) = v_version THEN
+    RAISE EXCEPTION 'product export image change did not alter source version';
   END IF;
   INSERT INTO public.products (
     id, merchant_id, name, description, price, status, sku, stock,

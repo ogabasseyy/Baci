@@ -156,6 +156,7 @@ AS $$
       'name', product.name,
       'description', product.description,
       'sku', product.sku,
+      'exportImages', product.images,
       'price', product.price,
       'stock', product.stock,
       'stockQuantity', product.stock_quantity,

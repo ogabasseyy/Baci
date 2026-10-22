@@ -24,14 +24,14 @@ There is no real credential: its signing secret is disposable fixture data.
 ## Real Next runtime probe
 
 Generate a local-only self-signed TLS key/certificate in the ignored per-plan
-workspace. Start `next dev tools/builder-preview-spike/next-runtime --webpack
+workspace. Start `next dev tools/builder-preview-spike/test-fixtures --webpack
 --hostname 127.0.0.1 --port 31987 --experimental-https
 --experimental-https-key <absolute fixture key path>
 --experimental-https-cert <absolute fixture certificate path>` through
 `pnpm --filter @baci/web exec`. Then run:
 
 ```sh
-node apps/web/tools/builder-preview-spike/runtime-probe.mjs
+node apps/web/tools/builder-preview-spike/runtime-probe.test-support.mjs
 ```
 
 Stop only that fixture server afterward. TLS verification is disabled only in
@@ -47,5 +47,5 @@ remaining production gates. Prototype SQL remains outside the migration registry
 Forced timeout cleanup regression (owns only its uniquely named resources):
 
 ```sh
-node --test apps/web/tools/builder-preview-spike/privacy-timeout.probe.mjs
+node --test apps/web/tools/builder-preview-spike/privacy-timeout.probe.test-support.mjs
 ```

@@ -88,7 +88,7 @@ const child = spawn(
   [
     require.resolve('next/dist/bin/next'),
     'dev',
-    'tools/builder-preview-spike/next-runtime',
+    'tools/builder-preview-spike/test-fixtures',
     '--webpack',
     '--hostname',
     '127.0.0.1',

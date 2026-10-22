@@ -5,7 +5,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { runFullProvisioningChecks } from './full-provisioning-checks.mjs';
+import { runFullProvisioningChecks } from './full-provisioning-checks.test-support.mjs';
 import { runPrivateLifecycleChecks } from './private-lifecycle-checks.mjs';
 
 const suppliedWorkdir = process.env.BACI_TASK0_REPLAY_WORKDIR;

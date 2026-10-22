@@ -6,7 +6,7 @@ import test from 'node:test';
 test('SIGTERM removes owned Docker resources', { timeout: 30000 }, async () => {
   const child = spawn(
     process.execPath,
-    ['apps/web/tools/builder-preview-spike/privacy-probe.mjs'],
+    ['apps/web/tools/builder-preview-spike/privacy-probe.test-support.mjs'],
     {
       env: { ...process.env, BACI_BUILDER_PROBE_ABORT_CHECK: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],

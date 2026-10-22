@@ -14,7 +14,7 @@ describe.skipIf(process.env.BACI_BUILDER_DATABASE_PROBE !== '1')(
     it('preserves an existing newer private revision during cutover', () => {
       const output = execFileSync(
         process.execPath,
-        ['tools/builder-preview-spike/privacy-probe.mjs'],
+        ['tools/builder-preview-spike/privacy-probe.test-support.mjs'],
         {
           encoding: 'utf8',
           timeout: 60_000,
@@ -30,7 +30,7 @@ describe.skipIf(process.env.BACI_BUILDER_DATABASE_PROBE !== '1')(
     it('proves isolated private lifecycle contracts and keeps legacy activation gated', () => {
       const output = execFileSync(
         process.execPath,
-        ['tools/builder-preview-spike/privacy-probe.mjs'],
+        ['tools/builder-preview-spike/privacy-probe.test-support.mjs'],
         { encoding: 'utf8', timeout: 60_000 }
       );
       const report = JSON.parse(output) as ProbeReport;

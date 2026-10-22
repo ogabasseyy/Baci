@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, request } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadCandidate } from './candidate-runtime.mjs';
+import { loadCandidate } from './candidate-runtime.test-support.mjs';
 import { onTermination, startChild, stopChild } from './child-lifecycle.mjs';
 
 const { createLocalJWKSet, jwtVerify, SignJWT } = await loadCandidate('jose');
@@ -171,7 +171,7 @@ try {
   await new Promise((resolve) => gateway.listen(0, '127.0.0.1', resolve));
   const gatewayUrl = `https://127.0.0.1:${gateway.address().port}/execute`;
   const launched = startChild(
-    new URL('./adapter-worker.mjs', import.meta.url),
+    new URL('./adapter-worker.test-support.mjs', import.meta.url),
     [
       JSON.stringify({
         gateway: gatewayUrl,

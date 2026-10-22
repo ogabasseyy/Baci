@@ -66,7 +66,7 @@ describe.skipIf(!enabled)('real local OAuth candidate', () => {
     it(`proves the ${file} boundary`, () => {
       const output = execFileSync(
         process.execPath,
-        [`tools/builder-oauth-spike/${file}.probe.mjs`],
+        [`tools/builder-oauth-spike/${file}.probe.test-support.mjs`],
         { encoding: 'utf8', timeout: 90_000 }
       );
       const report: { checks: string[] } = JSON.parse(

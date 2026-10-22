@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, request } from 'node:https';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
-import { loadCandidate } from './candidate-runtime.mjs';
+import { loadCandidate } from './candidate-runtime.test-support.mjs';
 
 const { createLocalJWKSet, jwtVerify } = await loadCandidate('jose');
 

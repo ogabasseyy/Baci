@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { createUpstreamClient } from './upstream-client.mjs';
+import { createUpstreamClient } from './upstream-client.test-support.mjs';
 import { startUpstreamFixture } from './upstream-fixture.mjs';
 
 const checks = [];

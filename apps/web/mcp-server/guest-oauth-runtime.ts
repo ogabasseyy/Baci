@@ -1,3 +1,4 @@
+import { seedOAuthGuestCart } from './guest-oauth-cart-seed';
 import { GuestOAuthStorageError } from './guest-oauth-records';
 import { createGuestOAuthConnection } from './guest-oauth-connection';
 import { createClient } from '@supabase/supabase-js';
@@ -99,7 +100,10 @@ export function createGuestOAuthRuntime(options: {
       try {
         if (!token) throw new Error('invalid_token');
         await auth.verify(token);
-        return createGuestOAuthConnection(auth, options.cartStore, token);
+        return createGuestOAuthConnection(auth, {
+          initializeConnectionCart: (cartToken, expiresAt) =>
+            seedOAuthGuestCart(client, claims.merchant_id, cartToken, expiresAt),
+        }, token);
       } catch (error) {
         if (error instanceof GuestOAuthStorageError) {
           res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

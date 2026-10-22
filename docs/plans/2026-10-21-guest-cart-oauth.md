@@ -2,7 +2,7 @@
 
 ## Authorized scope
 
-Implement guest OAuth after the isolated assistant-text continuation failed across ChatGPT messages. No shopper account is required. No order or payment is authorized. Production OAuth credentials, migration provisioning and activation remain gated. PR #3752 merged; its text-continuation flag remains off in production.
+Implement guest OAuth after the isolated assistant-text continuation failed across ChatGPT messages. No shopper account is required. No order or payment is authorized. The owner approved OAuth storage migrations and merchant-scoped credentials for isolated QA on 22 October 2026. Production OAuth credentials and activation remain gated. PR #3752 merged; its text-continuation flag remains off in production.
 
 ## Contract
 
@@ -23,8 +23,14 @@ Implement guest OAuth after the isolated assistant-text continuation failed acro
 
 ## Release inputs and acceptance gates
 
-`BACI_MCP_GUEST_OAUTH_ENABLED` defaults to `false`. Enabling requires a private worker JWT with role `mcp_guest_oauth_worker`, the trusted merchant ID and sufficient expiry; a 32-byte base64 `MCP_GUEST_OAUTH_ENCRYPTION_KEY`; and `MCP_GUEST_OAUTH_REDIRECT_URIS` containing the exact management-page redirect URI(s). These are runtime-only values, not public web variables. No values are committed. The new migration has not been applied to production by this work.
+`BACI_MCP_GUEST_OAUTH_ENABLED` defaults to `false`. Enabling requires a private worker JWT with role `mcp_guest_oauth_worker`, the trusted merchant ID and sufficient expiry; a 32-byte base64 `MCP_GUEST_OAUTH_ENCRYPTION_KEY`; and `MCP_GUEST_OAUTH_REDIRECT_URIS` containing the exact management-page redirect URI(s). These are runtime-only values, not public web variables. No values are committed. The OAuth storage and empty-cart ownership migrations were applied to the existing database under the isolated QA authorization. Application production OAuth remains off. QA uses a separate container, encryption key, worker credential and private test apps; no orders or payments are permitted.
 
 Before activation: verify RPC capability and worker tenant scope against the target database; record key backup/rotation procedures (rotating the encryption key without an old-key window requires reconnecting affected guests); verify TLS, proxy token redaction and request limits; complete actual host QA. Approval or tests do not prove publication, app-store delivery, or website deployment.
 
 References: [OpenAI authentication contract](https://developers.openai.com/plugins/build/auth), [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
+
+## Isolated QA findings (22 October 2026)
+
+- A live empty-cart test proved the historical legacy owner inference rejects empty ownerless rows. The OAuth worker now atomically seeds an empty row bound to its trusted merchant before canonical migration. Retries preserve items; foreign and historical ownerless handles are rejected.
+- Real Chrome consent submitted `Origin: null` under `no-referrer`. Consent now uses `same-origin`, preserving the strict Origin check and suppressing cross-origin referrers. The browser reached the real ChatGPT OAuth callback and Platform discovered the authenticated tools.
+- Direct live OAuth/MCP tests added two products, removed one across fresh HTTP sessions and returned only the remaining item with a fresh handoff. This is distinct from the still-pending conversational ChatGPT and website/native acceptance matrix.

@@ -53,6 +53,8 @@ it('performs browser consent, code exchange, bearer verification and revocation 
   });
   const consent = await fetch(`${local}/oauth/authorize?${params}`);
   expect(consent.status).toBe(200);
+  // no-referrer makes real Chrome form POSTs send Origin: null.
+  expect(consent.headers.get('referrer-policy')).toBe('same-origin');
   expect(consent.headers.get('content-security-policy')).toContain(
     "form-action 'self' https://chatgpt.com;",
   );
@@ -74,6 +76,10 @@ it('performs browser consent, code exchange, bearer verification and revocation 
     headers: { ...submission.headers, Origin: 'https://evil.example' },
   });
   expect(csrf.status).toBe(400);
+  const opaqueOrigin = await fetch(`${local}/oauth/consent`, {
+    ...submission, headers: { ...submission.headers, Origin: 'null' },
+  });
+  expect(opaqueOrigin.status).toBe(400);
   const approved = await fetch(`${local}/oauth/consent`, submission);
   expect(approved.status).toBe(303);
   const target = new URL(approved.headers.get('location') ?? '');

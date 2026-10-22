@@ -51,7 +51,8 @@ export async function handleGuestOAuthHttp(
   if (!url.pathname.startsWith('/oauth/') && !url.pathname.startsWith('/.well-known/oauth-'))
     return false;
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Referrer-Policy', 'no-referrer');
+  // Preserve Origin on same-origin browser form POSTs; suppress cross-origin referrers.
+  res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader(
     'Content-Security-Policy',

@@ -4,7 +4,7 @@ import type { GuestCartStore } from './guest-cart-store';
 /** Every call revalidates connection authority; tool/model fields cannot select a cart. */
 export function createGuestOAuthConnection(
   auth: GuestOAuth,
-  store: GuestCartStore,
+  store: Pick<GuestCartStore, 'initializeConnectionCart'>,
   accessToken: string,
 ) {
   return {

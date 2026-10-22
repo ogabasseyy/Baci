@@ -50,6 +50,50 @@ describe('isDurableSeoPrice', () => {
     expect(isDurableSeoPrice(candidate, text)).toBe(true);
   });
 
+  it('classifies a short unlabelled price range after product-name removal', () => {
+    for (const text of [
+      '– 999–1299',
+      '– 999–1299.',
+      '– 1,200–1,500',
+      '– ٩٠٠–١٢٠٠',
+    ]) {
+      const candidates = getProductSeoMoneyCandidates(text);
+      expect(candidates).toHaveLength(2);
+      for (const candidate of candidates) {
+        expect(isDurableSeoPrice(candidate, text)).toBe(true);
+      }
+    }
+  });
+
+  it('preserves localized product-year ranges instead of treating them as prices', () => {
+    for (const text of ['٢٠٢٠–٢٠٢٤', '۲۰۲۰–۲۰۲۴']) {
+      const candidates = getProductSeoMoneyCandidates(text);
+      expect(candidates).toHaveLength(2);
+      for (const candidate of candidates) {
+        expect(isDurableSeoPrice(candidate, text)).toBe(false);
+      }
+    }
+  });
+
+  it('does not classify common display-resolution pairs as prices', () => {
+    for (const text of ['3840–2160', '1024–768', '1080–1920', '– 1366–768']) {
+      const candidates = getProductSeoMoneyCandidates(text);
+      expect(candidates).toHaveLength(2);
+      for (const candidate of candidates) {
+        expect(isDurableSeoPrice(candidate, text)).toBe(false);
+      }
+    }
+  });
+
+  it('keeps short ascending unlabelled ranges classified as prices', () => {
+    const text = '999–1299';
+    const candidates = getProductSeoMoneyCandidates(text);
+    expect(candidates).toHaveLength(2);
+    for (const candidate of candidates) {
+      expect(isDurableSeoPrice(candidate, text)).toBe(true);
+    }
+  });
+
   it('keeps an explicit price from being mistaken for a unitless dimension pair', () => {
     for (const text of [
       'Price: 1,200 x 2',

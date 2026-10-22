@@ -73,27 +73,52 @@ const markerPattern = [...new Set([...isoCurrencies, ...Object.keys(aliases)])]
   .map(escapePattern)
   .join('|');
 // Bounded token grammar: no rescanning arbitrarily long numeric/comma runs.
-const amountPattern =
-  "(?:\\d{1,3}(?:,\\d{3})+|\\d{1,3}(?:\\.\\d{3})+|\\d{1,2}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:[ '\\u2019\\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?(?:[kKmM])?";
+// Arabic-Indic and Eastern Arabic-Indic digits are supported alongside ASCII.
+const digitPattern = '[0-9\\u0660-\\u0669\\u06f0-\\u06f9]';
+const amountPattern = `(?:${digitPattern}{1,3}(?:[,\\u066c]${digitPattern}{3})+|${digitPattern}{1,3}(?:\\.${digitPattern}{3})+|${digitPattern}{1,2}(?:[,\\u066c]${digitPattern}{2})*[,\\u066c]${digitPattern}{3}|${digitPattern}{1,3}(?:[ '\\u2019\\u00a0\\u202f]${digitPattern}{3})+|${digitPattern}+)(?:(?:[.,]${digitPattern}{1,2})|(?:\\u066b${digitPattern}{1,3}))?(?:[kKmM])?`;
 const taggedPattern = new RegExp(
-  `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N}]|,(?=[\\p{N}]))`,
+  `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N}]|[.,\\u066b\\u066c](?=[\\p{N}]))`,
   'giu'
 );
 const fallbackTaggedPattern = useBoundedIsoFallback
   ? new RegExp(
-      `(?<![\\p{L}\\p{N},.])(?:([A-Z]{3})\\s*[:–—-]?\\s*(${amountPattern})|(${amountPattern})\\s*[:–—-]?\\s*([A-Z]{3}))(?![\\p{L}\\p{N}]|,(?=[\\p{N}]))`,
+      `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(?:([A-Z]{3})\\s*[:–—-]?\\s*(${amountPattern})|(${amountPattern})\\s*[:–—-]?\\s*([A-Z]{3}))(?![\\p{L}\\p{N}]|[.,\\u066b\\u066c](?=[\\p{N}]))`,
       'gu'
     )
   : null;
 const barePattern = new RegExp(
-  `(?<![\\p{L}\\p{N},.])(${amountPattern})(?![\\p{L}\\p{N},])`,
+  `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(${amountPattern})(?![\\p{L}\\p{N},]|[.\\u066b\\u066c](?=[\\p{N}]))`,
   'giu'
 );
 
 function parseAmount(raw: string): number | null {
-  const normalized = raw.replace(/[.,]+$/, '').toLowerCase();
+  const usesArabicDecimalSeparator = raw.includes('٫');
+  const normalized = raw
+    .replace(/[٠-٩]/g, (digit) =>
+      String(digit.charCodeAt(0) - '٠'.charCodeAt(0))
+    )
+    .replace(/[۰-۹]/g, (digit) =>
+      String(digit.charCodeAt(0) - '۰'.charCodeAt(0))
+    )
+    .replace(/٬/g, ',')
+    .replace(/٫/g, '.')
+    .replace(/[.,]+$/, '')
+    .toLowerCase();
   const suffix = normalized.match(/[km]$/)?.[0] ?? '';
   const amount = suffix ? normalized.slice(0, -1) : normalized;
+  if (usesArabicDecimalSeparator) {
+    const parts = amount.split('.');
+    if (parts.length !== 2) return null;
+    const [integer = '', fraction = ''] = parts;
+    const groupedInteger = /^\d{1,3}(?:,\d{3})+$/.test(integer);
+    const indianGroupedInteger = /^\d{1,2}(?:,\d{2})*,\d{3}$/.test(integer);
+    if (!/^\d+$/.test(integer) && !groupedInteger && !indianGroupedInteger)
+      return null;
+    if (!/^\d{1,3}$/.test(fraction)) return null;
+    const decimal = `${integer.replace(/,/g, '')}.${fraction}`;
+    const magnitude = suffix === 'm' ? 1_000_000 : suffix === 'k' ? 1_000 : 1;
+    return Number(decimal) * magnitude;
+  }
   const spaceGrouped =
     /^\d{1,3}([ '\u2019\u00a0\u202f])\d{3}(?:\1\d{3})*(?:[.,]\d{1,2})?$/.test(
       amount

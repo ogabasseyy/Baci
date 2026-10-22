@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { Product } from '@/lib/products';
 import { CartContext } from './cart-context';
@@ -138,10 +138,16 @@ export function StorefrontCartProvider({
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
     const merchantCartState = getMerchantCartState(slugToUse);
     merchantSlugRef.current = slugToUse;
-    setCart(merchantCartState.cart);
-    setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
-    setMerchantSlugState(slugToUse);
-    setIsHydrated(true);
+    // Storage restoration is background work. An urgent context update can
+    // replace already-streamed results with their loading fallback while a
+    // cart consumer's client module is still hydrating. Keep that content
+    // visible until restoration can commit; explicit cart actions stay urgent.
+    startTransition(() => {
+      setCart(merchantCartState.cart);
+      setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
+      setMerchantSlugState(slugToUse);
+      setIsHydrated(true);
+    });
   }, []);
 
   useDeferredValidationActivation({

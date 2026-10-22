@@ -1,7 +1,7 @@
 'use client';
 
 import type { CartSnapshot } from '@baci/shared/cart';
-import { useEffect } from 'react';
+import { startTransition, useEffect } from 'react';
 import { buildImportEntries } from './build-import-entries';
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import type { CartItem } from './cart-types';
@@ -40,6 +40,7 @@ export function useCartLinkLifecycle(
     surfaceActive,
     state,
     dispatch,
+    hydrated,
     setHydrated,
     setLinkPhase,
     stateRef,
@@ -66,13 +67,21 @@ export function useCartLinkLifecycle(
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrateMissing closes over refs and stable dispatch only; listing it would relink every render.
   useEffect(() => {
     linkRunRef.current += 1;
+    // Only first-mount display-cache restoration may wait for hydration.
+    // Later merchant/session changes must retain their urgent authority fence.
+    const restoreInitialDisplay = (update: () => void) => {
+      if (hydrated) update();
+      else startTransition(update);
+    };
     if (!enabled) {
       retireDeEnrolledCartDeviceSession?.(merchantSlug, {
         hasCartId: stateRef.current.cartId !== null,
         hasImportReceipt: getSharedCartImportReceipt(merchantSlug) !== null,
       });
-      setHydrated(true);
-      setLinkPhase('ready');
+      restoreInitialDisplay(() => {
+        setHydrated(true);
+        setLinkPhase('ready');
+      });
       return;
     }
     if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
@@ -92,17 +101,18 @@ export function useCartLinkLifecycle(
     hydratingRef.current = false;
     pendingHydrationRef.current = new Set();
     latestSnapshotRef.current = null;
-    setLinkPhase('adopting');
-
     const cached = getCartFromStorage(merchantSlug);
-    dispatch({
-      cached,
-      generation,
-      merchantId,
-      products: seedProducts(cached),
-      type: 'link/start',
+    restoreInitialDisplay(() => {
+      setLinkPhase('adopting');
+      dispatch({
+        cached,
+        generation,
+        merchantId,
+        products: seedProducts(cached),
+        type: 'link/start',
+      });
+      setHydrated(true);
     });
-    setHydrated(true);
 
     async function adopt(attempt: number): Promise<void> {
       if (cancelled || generationRef.current !== generation) return;

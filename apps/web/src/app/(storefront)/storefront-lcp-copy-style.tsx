@@ -1,3 +1,4 @@
+import { OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS } from './ogabassey/ogabassey-home-chrome-critical-css';
 import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 
 // Full route styles can wait until first input; this geometry cannot.
@@ -15,7 +16,7 @@ const STOREFRONT_MAIN_RESERVE_CSS = `
 export function StorefrontLcpCopyStyle() {
   return (
     <style href="storefront-lcp-copy" precedence="high">
-      {`${STOREFRONT_MAIN_RESERVE_CSS}\n${STOREFRONT_LCP_COPY_CSS}`}
+      {`${OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS}\n${STOREFRONT_MAIN_RESERVE_CSS}\n${STOREFRONT_LCP_COPY_CSS}`}
     </style>
   );
 }

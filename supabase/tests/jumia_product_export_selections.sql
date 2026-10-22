@@ -148,12 +148,18 @@ SELECT ok(true, 'SQL entitlement matches normalized explicit overrides and stric
 SELECT set_config('request.jwt.claims', jsonb_build_object(
   'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
 )::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SET LOCAL ROLE authenticated;
 DO $capture$
 DECLARE
   v_selection record;
   v_version text;
 BEGIN
+  IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111101'::uuid
+    OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'owner capture fixture has inconsistent JWT claim settings';
+  END IF;
   SELECT * INTO v_selection FROM public.create_jumia_product_export_selection(
     '22222222-2222-4222-8222-222222222201',
     '33333333-3333-4333-8333-333333333301'
@@ -179,6 +185,12 @@ BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111103'
   )::text, true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111103', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111103'::uuid
+    OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'manager capture fixture has inconsistent JWT claim settings';
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.create_jumia_product_export_selection(
       '22222222-2222-4222-8222-222222222201',
@@ -190,6 +202,12 @@ BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
   )::text, true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111101'::uuid
+    OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'restored owner fixture has inconsistent JWT claim settings';
+  END IF;
   SELECT source_version INTO v_version FROM public.jumia_product_export_selection_items
   WHERE selection_id = v_selection.selection_id AND product_id = '44444444-4444-4444-8444-444444444403';
   IF v_version !~ '^[0-9a-f]{64}$' THEN
@@ -297,6 +315,8 @@ SELECT ok(true, 'capture freezes exact membership and source versions while late
 SELECT set_config('request.jwt.claims', jsonb_build_object(
   'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111102'
 )::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111102', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 SET LOCAL ROLE authenticated;
 SELECT is(
   (SELECT count(*)::integer FROM public.jumia_product_export_selections)
@@ -306,6 +326,10 @@ SELECT is(
 );
 DO $denials$
 BEGIN
+  IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111102'::uuid
+    OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'stranger fixture has inconsistent JWT claim settings';
+  END IF;
   BEGIN
     PERFORM public.create_jumia_product_export_selection(
       '22222222-2222-4222-8222-222222222201',
@@ -325,6 +349,12 @@ BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111104'
   )::text, true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111104', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+  IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111104'::uuid
+    OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'limited staff fixture has inconsistent JWT claim settings';
+  END IF;
   BEGIN
     PERFORM public.create_jumia_product_export_selection(
       '22222222-2222-4222-8222-222222222201',

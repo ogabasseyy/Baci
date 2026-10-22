@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (
+    !BUILDER_PRIVATE_STORAGE_ENABLED &&
     !parsedRequest.data.force &&
     pageConfig.updated_at !== generatedAgainstUpdatedAt
   ) {

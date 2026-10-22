@@ -25,7 +25,6 @@ import {
 } from './checkout/payment-gateway-availability';
 import { collectProductSchemaSpecProperties } from './collect-product-schema-spec-properties';
 import { generateStorefrontSlug } from './generate-storefront-slug';
-import { getProductSchemaDescription } from './get-product-schema-description';
 import {
   isExternalPlaceholderImageUrl,
   PLACEHOLDER_IMAGE,
@@ -416,6 +415,7 @@ function buildMerchantReturnPolicyFromTrustProfile(
 
 interface ProductSchemaOptions {
   acceptedPaymentMethods?: readonly string[];
+  description?: string;
   productUrl?: string;
 }
 
@@ -639,7 +639,11 @@ export function generateProductSchema(
   // at serialization time so structured-data parsers receive unmodified values.
   const safeName = product.name;
 
-  const safeDescription = getProductSchemaDescription(product, merchantName);
+  const safeDescription =
+    options.description ??
+    product.description ??
+    product.meta_description ??
+    '';
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;

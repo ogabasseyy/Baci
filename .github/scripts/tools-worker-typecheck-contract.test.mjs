@@ -36,9 +36,16 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.equal(pkg.scripts['typecheck:mcp'], 'tsc --noEmit -p tsconfig.mcp.json');
+  for (const project of ['builder-mcp', 'builder-publication']) {
+    assert.equal(pkg.scripts[`typecheck:${project}`], `tsc --noEmit -p tsconfig.${project}.json`);
+    const config = JSON.parse(await readFile(`apps/web/tsconfig.${project}.json`, 'utf8'));
+    assert.equal(config.extends, './tsconfig.json');
+    assert.notEqual(config.compilerOptions.strict, false);
+    assert.ok(config.include.length > 0);
+  }
   assert.equal(mcpTsconfig.extends, './tsconfig.json');
   assert.equal(webTsconfig.compilerOptions.strict, true);
   assert.notEqual(mcpTsconfig.compilerOptions.strict, false);

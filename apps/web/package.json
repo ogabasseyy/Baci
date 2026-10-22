@@ -51,7 +51,7 @@
     "test:checkout:browser": "playwright test",
     "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js",
     "typecheck:builder-mcp": "tsc --noEmit -p tsconfig.builder-mcp.json",
-    "build:builder-mcp": "esbuild builder-mcp-server/serve.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=builder-mcp-server/dist/server.mjs",
+    "build:builder-mcp": "pnpm --filter @baci/builder-preview-widget build && esbuild builder-mcp-server/serve.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=builder-mcp-server/dist/server.mjs && cp builder-mcp-server/preview.html builder-mcp-server/dist/preview.html",
     "mcp:builder": "tsx builder-mcp-server/serve.ts"
   },
   "dependencies": {

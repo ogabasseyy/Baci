@@ -1337,6 +1337,37 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(happy-dom@20.10.3)(jsdom@27.4.0(@noble/hashes@2.4.0))(vite@8.0.16(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(tsx@4.22.4)(yaml@2.9.0))
 
+  apps/web/builder-mcp-server/widgets:
+    dependencies:
+      '@modelcontextprotocol/ext-apps':
+        specifier: ^2.0.3
+        version: 2.0.3(@modelcontextprotocol/client@2.3.1)(@modelcontextprotocol/core@2.3.1)(@modelcontextprotocol/server@2.3.1)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@4.6.5)
+      react:
+        specifier: 19.2.3
+        version: 19.2.3
+      react-dom:
+        specifier: 19.2.3
+        version: 19.2.3(react@19.2.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.6.5
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.0
+        version: 2.5.0
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
+      typescript:
+        specifier: npm:@typescript/typescript6@~6.0.2
+        version: '@typescript/typescript6@6.0.2'
+
   apps/web/mcp-server/widgets:
     dependencies:
       '@modelcontextprotocol/ext-apps':

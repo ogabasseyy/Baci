@@ -52,7 +52,7 @@ HTTP SDK clients verify this behavior.
 ## Gateway and release gates
 
 `createBuilderGatewayRuntime` composes Task 3 authentication/session dependencies
-with Tasks 4–5 services. A release bootstrap must explicitly install it in the
+with Tasks 4–7 services. A release bootstrap must explicitly install it in the
 Next process using `installBuilderGateway`. The production route also requires
 both existing release flags; they remain false. Unconfigured/disabled routes return
 503. No auth-storage credential, private key, environment variable or runtime
@@ -72,3 +72,31 @@ were changed.
 Actual provisioning, canonical DNS/TLS, private gateway/session bootstrap, staged
 HTTP/owner QA, real ChatGPT linking and separate deployment remain Task 9 release
 gates. Both existing submissions remain protected.
+
+## Private homepage preview (Task 7)
+
+Seven tools are now discoverable. Only `preview_storefront` owns UI metadata. It
+requires the exact current homepage revision and returns a safe real-identity /
+active-catalog projection, launch readiness, and inert rendering controls. Other
+pages and unsupported layouts require the authenticated Baci editor. Publication
+is not implemented. The service checks canonical consent and revision both before
+and after projection reads using the normal linked-user client.
+
+The explicit workspace package `@baci/builder-preview-widget` has independent
+build, test, lint and typecheck scripts discovered by Turbo. `build:builder-mcp`
+builds its self-contained HTML and copies it beside the standalone server. The
+source CLI likewise requires building the widget first. A missing artifact fails
+resource reading, never falls back to a stale buyer widget.
+
+Resource `ui://baci-builder/home-preview-v1.html` is tenant-neutral code with
+`text/html;profile=mcp-app`. Use a new URI for incompatible changes. Its CSP has
+no API connections or embedded frames; images are restricted to the checked static
+origins in `builder-preview-assets.ts`, with only public Supabase object paths
+accepted by the projection. Signed/query-bearing URLs are rejected. No token,
+customer data, persistent browser storage, or native `window.openai` bridge is used.
+
+The bridge uses the installed MCP Apps 2.0.3 SDK, negotiates inline/fullscreen,
+uses host theme, clears snapshots on input/error/cancellation/teardown, and reports
+height after DOM changes and late connection even without ResizeObserver. The
+only external action opens the fixed authenticated Baci editor through the host.
+Production gateway activation and real ChatGPT host QA remain Task 9 gates.

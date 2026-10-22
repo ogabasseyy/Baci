@@ -13,6 +13,11 @@ export const builderProtectedResource = {
   bearer_methods_supported: ['header'],
 };
 export const builderToolDescriptions = {
+  preview_storefront: {
+    title: 'Preview a private Baci homepage',
+    description:
+      'Render the exact current homepage draft revision for a linked store. First read its draftVersion. Returns real display identity and published catalog fields with inert shopping controls; does not edit or publish. Other pages require the authenticated Baci editor.',
+  },
   list_storefronts: {
     title: 'List Baci stores',
     description:

@@ -1,4 +1,4 @@
-/** Task6 exports only implemented handlers; preview/publication join after their gates pass. */
+/** Only implemented handlers are discoverable. Publication joins after Task8. */
 export const implementedBuilderTools = [
   'list_storefronts',
   'get_storefront_status',
@@ -6,6 +6,7 @@ export const implementedBuilderTools = [
   'update_storefront_draft',
   'get_storefront_operation',
   'apply_storefront_operation',
+  'preview_storefront',
 ] as const;
 export type ImplementedBuilderTool = (typeof implementedBuilderTools)[number];
 export function isImplementedBuilderTool(

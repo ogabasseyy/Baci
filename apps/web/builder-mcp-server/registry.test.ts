@@ -12,6 +12,7 @@ const names = [
   'update_storefront_draft',
   'get_storefront_operation',
   'apply_storefront_operation',
+  'preview_storefront',
 ];
 async function connected(
   token: string | undefined,
@@ -35,7 +36,7 @@ async function connected(
   };
 }
 describe('separate builder tool registry', () => {
-  it('advertises only six implemented strict tools with per-tool OAuth and no UI', async () => {
+  it('advertises seven implemented strict tools, only preview has UI', async () => {
     const f = await connected(undefined);
     try {
       const { tools } = await f.client.listTools();
@@ -49,7 +50,9 @@ describe('separate builder tool registry', () => {
           annotations: policy.annotations,
           _meta: { securitySchemes: policy.securitySchemes },
         });
-        expect(tool._meta).not.toHaveProperty('ui');
+        if (tool.name === 'preview_storefront')
+          expect(tool._meta).toHaveProperty('ui.resourceUri');
+        else expect(tool._meta).not.toHaveProperty('ui');
         expect(tool._meta).not.toHaveProperty('openai/outputTemplate');
       }
       expect(f.executeBuilderTool).not.toHaveBeenCalled();

@@ -11,6 +11,7 @@ import {
   listedBuilderSchemas,
 } from './contracts';
 import { builderToolDescriptions } from './metadata';
+import { builderPreviewToolMeta } from './preview-resource';
 import { builderToolResult } from './tool-result';
 export interface BuilderMcpDependencies {
   /** Request-local outer resource token. Never an upstream Supabase token or MCP session ID. */
@@ -36,7 +37,10 @@ export function registerBuilderTools(
         inputSchema: builderWireInputs[name],
         outputSchema: builderSdkOutputSchema(name),
         annotations: policy.annotations,
-        _meta: { securitySchemes: policy.securitySchemes },
+        _meta: {
+          securitySchemes: policy.securitySchemes,
+          ...(name === 'preview_storefront' ? builderPreviewToolMeta : {}),
+        },
       },
       async (input: unknown) => {
         if (!deps.bearerToken)
@@ -66,7 +70,10 @@ export function registerBuilderTools(
       ...listedBuilderSchemas(name),
       annotations: builderToolPolicy[name].annotations,
       securitySchemes: builderToolPolicy[name].securitySchemes,
-      _meta: { securitySchemes: builderToolPolicy[name].securitySchemes },
+      _meta: {
+        securitySchemes: builderToolPolicy[name].securitySchemes,
+        ...(name === 'preview_storefront' ? builderPreviewToolMeta : {}),
+      },
     })),
   }));
 }

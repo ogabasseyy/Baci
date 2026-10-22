@@ -7,6 +7,7 @@ import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import { applyStorefrontOperation } from '@/lib/website-builder/apply-edit';
 import { createStorefrontDraftService } from '@/lib/website-builder/create-draft';
 import { DraftServiceError } from '@/lib/website-builder/mutation-authorization';
+import { previewStorefront } from '@/lib/website-builder/preview';
 import { queueStorefrontEdit } from '@/lib/website-builder/queue-edit';
 import { getStorefrontOperation } from '@/lib/website-builder/read-operation';
 import {
@@ -57,6 +58,11 @@ export function createBuilderServiceDispatcher(
       return getStorefrontOperation(
         ctx,
         builderInputSchemas.get_storefront_operation.parse(input).operationId
+      );
+    if (tool === 'preview_storefront')
+      return previewStorefront(
+        ctx,
+        builderInputSchemas.preview_storefront.parse(input)
       );
     // Do not silently adapt custom/registry templates or unsupported private blocks.
     if (!(await getStorefrontStatus(ctx)).capabilities.supported)

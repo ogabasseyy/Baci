@@ -10,6 +10,7 @@ import {
   builderListResultSchema,
   builderStatusResultSchema,
 } from '@/schemas/builder-mcp-results';
+import { hasSafeBuilderPreviewAssets } from '@/schemas/builder-preview-assets';
 import { portableHomeSchema } from '@/schemas/portable-storefront';
 import type { DraftServiceDependencies } from './context';
 import {
@@ -32,7 +33,7 @@ const rowsSchema = z
     })
   )
   .max(1);
-async function read(
+export async function readBuilderStorefronts(
   client: SupabaseClient,
   identity: BuilderIdentity,
   merchantId?: string
@@ -49,7 +50,10 @@ async function read(
 export function createListStorefrontsService(deps: DraftServiceDependencies) {
   return async (identity: BuilderIdentity, input: ListInput) => {
     if (input.cursor) throw new DraftServiceError('INVALID_REQUEST');
-    const rows = await read(await deps.resolveUserClient(identity), identity);
+    const rows = await readBuilderStorefronts(
+      await deps.resolveUserClient(identity),
+      identity
+    );
     return builderListResultSchema.parse({
       stores: rows
         .filter((row) => row.slug && row.business_name)
@@ -64,10 +68,17 @@ export function createListStorefrontsService(deps: DraftServiceDependencies) {
   };
 }
 export async function getStorefrontStatus(ctx: BuilderContext) {
-  const [row] = await read(ctx.supabase, ctx.identity, ctx.merchantId);
+  const [row] = await readBuilderStorefronts(
+    ctx.supabase,
+    ctx.identity,
+    ctx.merchantId
+  );
   if (!row?.version) throw new DraftServiceError('NOT_FOUND');
   const portable = portableHomeSchema.safeParse(row.draft_config);
-  const supported = row.template_id === 'puck' && portable.success;
+  const supported =
+    row.template_id === 'puck' &&
+    portable.success &&
+    hasSafeBuilderPreviewAssets(portable.data);
   return builderStatusResultSchema.parse({
     storefrontId: row.id,
     draftVersion: row.version,

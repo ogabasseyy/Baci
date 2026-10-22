@@ -196,6 +196,8 @@ Final scope includes full monorepo lint/typecheck/test because provider dependen
 
 ### Task 7: Render the real private website preview in ChatGPT
 
+**Local execution, 22 October 2026:** See [Task 7 evidence](../../connectors/evidence/builder-private-preview.md). The source preview resource and gateway are implemented locally; production activation, actual ChatGPT host QA and both submissions remain outside this task.
+
 **Files:** Create `src/lib/website-builder/preview.ts` and `src/components/storefront/preview-renderer-core.tsx` using Task 0's shared presentational extraction while retaining existing web/editor wrappers. Create `builder-mcp-server/widgets/{package.json,build.mjs,src/index.tsx,src/StorefrontPreview.tsx,src/mcp-app-bridge.ts}` and tests; add that package explicitly to `pnpm-workspace.yaml` and its typecheck/build scripts to CI. Add versioned resource registration only in the new server.
 
 **Interfaces:** `previewStorefront(ctx, input: PreviewInput): Promise<PreviewResult>` contains the exact version, normalized safe rendering projection, merchant display identity and readiness. `StorefrontPreview({ preview: PreviewResult })` consumes that projection. The bridge exposes typed result subscription, display mode, height and external-link operations, with no business state persistence in host globals.

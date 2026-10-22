@@ -278,9 +278,10 @@ SELECT set_config('request.jwt.claims', jsonb_build_object(
 )::text, true);
 SET LOCAL ROLE authenticated;
 SELECT is(
-  (SELECT count(*)::integer FROM public.jumia_product_export_selections),
+  (SELECT count(*)::integer FROM public.jumia_product_export_selections)
+    + (SELECT count(*)::integer FROM public.jumia_product_export_selection_items),
   0,
-  'another merchant cannot read the selection header'
+  'another merchant cannot read selection headers or item snapshots'
 );
 DO $denials$
 BEGIN

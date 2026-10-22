@@ -1,3 +1,4 @@
+import { formatSupabaseErrorLog } from '@baci/shared/lib';
 import {
   REPAIR_DEVICE_TYPES,
   type RepairDeviceBrandGroup,
@@ -14,6 +15,7 @@ const DEVICE_COLUMNS =
   'id, brand, model, slug, device_type, product_id, image_url, aliases, sort_order';
 const QUOTE_COLUMNS =
   'id, service_type_id, price, is_from_price, part_quality, turnaround, warranty_days, description';
+const PRODUCT_IMAGE_LOOKUP_CHUNK_SIZE = 100;
 
 type Row = Record<string, unknown>;
 
@@ -129,9 +131,13 @@ export async function getRepairDevicesForMerchant(
   }
 
   const rows = (data ?? []) as Row[];
+  const normalizedQuery = query?.trim().toLowerCase();
+  const filteredRows = normalizedQuery
+    ? rows.filter((row) => matchesQuery(row, normalizedQuery))
+    : rows;
   const linkedProductIds = Array.from(
     new Set(
-      rows
+      filteredRows
         .filter((row) => !asNullableString(row.image_url))
         .map((row) => asNullableString(row.product_id))
         .filter((id): id is string => id !== null)
@@ -139,15 +145,27 @@ export async function getRepairDevicesForMerchant(
   );
   const productImages = new Map<string, string>();
 
-  if (linkedProductIds.length > 0) {
+  for (
+    let offset = 0;
+    offset < linkedProductIds.length;
+    offset += PRODUCT_IMAGE_LOOKUP_CHUNK_SIZE
+  ) {
+    const productIdChunk = linkedProductIds.slice(
+      offset,
+      offset + PRODUCT_IMAGE_LOOKUP_CHUNK_SIZE
+    );
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, images')
       .eq('merchant_id', merchantId)
-      .in('id', linkedProductIds);
+      .in('id', productIdChunk);
 
     if (productsError) {
-      throw productsError;
+      console.warn(
+        'Optional repair device image lookup failed',
+        formatSupabaseErrorLog(productsError)
+      );
+      continue;
     }
 
     for (const product of (products ?? []) as Row[]) {
@@ -159,19 +177,14 @@ export async function getRepairDevicesForMerchant(
     }
   }
 
-  const rowsWithProductImages = rows.map((row) => ({
+  const rowsWithProductImages = filteredRows.map((row) => ({
     ...row,
     image_url:
       asNullableString(row.image_url) ??
       productImages.get(asString(row.product_id)) ??
       null,
   }));
-  const normalizedQuery = query?.trim().toLowerCase();
-  const filtered = normalizedQuery
-    ? rowsWithProductImages.filter((row) => matchesQuery(row, normalizedQuery))
-    : rowsWithProductImages;
-
-  return groupByBrand(filtered);
+  return groupByBrand(rowsWithProductImages);
 }
 
 function mapQuote(row: Row, serviceTypeName: string): RepairQuoteSummary {

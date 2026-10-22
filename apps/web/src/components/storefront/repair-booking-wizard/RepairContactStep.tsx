@@ -10,6 +10,7 @@ import {
 } from '@/components/address-autocomplete';
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -171,7 +172,6 @@ export function RepairContactStep({
               <FormLabel>Pickup Address</FormLabel>
               <FormControl>
                 <AddressAutocomplete
-                  aria-describedby="repair-pickup-address-help"
                   country="ng"
                   onChange={field.onChange}
                   onSelect={onAddressSelect}
@@ -180,14 +180,11 @@ export function RepairContactStep({
                   value={field.value}
                 />
               </FormControl>
-              <p
-                className="text-xs text-muted-foreground"
-                id="repair-pickup-address-help"
-              >
+              <FormDescription className="text-xs text-muted-foreground">
                 Select an address suggestion to calculate the GIG Logistics
                 pickup fee. Typing an address without selecting a suggestion
                 cannot be quoted.
-              </p>
+              </FormDescription>
               {isCalculatingShipping && (
                 <div className="mt-2 flex items-center text-sm text-muted-foreground">
                   <Loader2 className="mr-2 size-3 animate-spin" /> Calculating

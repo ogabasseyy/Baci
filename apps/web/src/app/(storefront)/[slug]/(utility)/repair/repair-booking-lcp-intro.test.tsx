@@ -25,5 +25,8 @@ describe('RepairBookingLcpIntro', () => {
     expect(
       screen.queryByRole('heading', { name: 'Before you book a repair' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Ogabassey repair support')
+    ).not.toBeInTheDocument();
   });
 });

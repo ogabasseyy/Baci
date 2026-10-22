@@ -40,11 +40,7 @@ export function isVariantAvailable(
       // button enables a zero-unit strict variant the purchase checks
       // then reject.
       const serializedStock = resolveSerializedVariantStock(variant);
-      return (
-        isUnmanagedVariantStock(variant) ||
-        serializedStock == null ||
-        serializedStock > 0
-      );
+      return serializedStock == null || serializedStock > 0;
     });
   }
 

@@ -53,9 +53,11 @@ export function useProductCartSubmission({
       variantForCart && isUnmanagedVariantStock(variantForCart)
     );
     const selectedOptionStock = variantForCart
-      ? (resolveSerializedVariantStock(variantForCart) ??
-        variantForCart.stock_quantity ??
-        product.stock)
+      ? selectedVariantIsUnmanaged
+        ? product.stock
+        : (resolveSerializedVariantStock(variantForCart) ??
+          variantForCart.stock_quantity ??
+          product.stock)
       : selectedOffer
         ? (resolveSerializedOfferStock(selectedOffer, product) ??
           selectedOffer.stock_quantity ??

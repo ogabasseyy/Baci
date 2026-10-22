@@ -45,12 +45,16 @@ export function resolveSerializedVariantStock(
  * policy; row policy is the fallback for older projections.
  */
 export function isUnmanagedVariantStock(
-  variant: Pick<
-    SerializedVariantStockLike,
-    'effective_policy' | 'inventory_tracking_policy'
-  >
+  variant:
+    | Pick<
+        SerializedVariantStockLike,
+        'effective_policy' | 'inventory_tracking_policy'
+      >
+    | null
+    | undefined
 ): boolean {
   return (
+    variant != null &&
     (variant.effective_policy ?? variant.inventory_tracking_policy) === 'off'
   );
 }

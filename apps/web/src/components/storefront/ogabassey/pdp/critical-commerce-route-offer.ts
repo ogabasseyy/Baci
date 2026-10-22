@@ -71,7 +71,7 @@ export function applyCriticalRouteOfferToCartProduct(
 ): CartProduct {
   return {
     ...baseProduct,
-    manage_stock: baseProduct.manage_stock,
+    manage_stock: true,
     price: offer.price,
     condition: offer.condition,
     stock:

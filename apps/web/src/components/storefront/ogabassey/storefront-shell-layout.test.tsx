@@ -10,8 +10,12 @@ vi.mock('./storefront-layout-utils', () => ({
   getOgabasseyLayoutStyle: () => ({}),
 }));
 
-it('lets the flex shell reserve the viewport below the streamed header', () => {
-  render(<StorefrontShellLayout footerChrome={<footer>Footer</footer>}>{null}</StorefrontShellLayout>);
+it('keeps the footer below the viewport while a streamed route temporarily has no content', () => {
+  render(
+    <StorefrontShellLayout footerChrome={<footer>Footer</footer>}>
+      {null}
+    </StorefrontShellLayout>
+  );
   expect(screen.getByRole('main')).toHaveClass('ogabassey-storefront-main');
   expect(screen.getByRole('main')).not.toHaveStyle({ minHeight: '100svh' });
 });

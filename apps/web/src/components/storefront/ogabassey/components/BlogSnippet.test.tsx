@@ -8,6 +8,10 @@ const mockExplicitLinkLimit = vi.fn();
 const mockExplicitLinkNot = vi.fn();
 const mockProductMaybeSingle = vi.fn();
 const mockRpc = vi.fn();
+const mockLcpWindow = vi.fn<() => Promise<void>>();
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForLcpWindowEnd: () => mockLcpWindow(),
+}));
 const EXPECTED_FALLBACK_FILTER_CALLS = 2;
 const blogQuery = {
   eq: vi.fn(() => blogQuery),
@@ -67,20 +71,18 @@ vi.mock('@/components/storefront/cdn-format-image', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-  }: {
-    children: ReactNode;
-    href: string;
-  }) => <a href={href}>{children}</a>,
+  default: ({ children, href }: { children: ReactNode; href: string }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 import { BlogSnippet } from '@/components/storefront/ogabassey/components/BlogSnippet';
+import { createClient } from '@/lib/supabase/client';
 
 describe('BlogSnippet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLcpWindow.mockResolvedValue(undefined);
     mockNot.mockReturnValue(blogQuery);
     mockLimit.mockResolvedValue({ data: [], error: null });
     mockExplicitLinkLimit.mockResolvedValue({ data: [], error: null });
@@ -89,13 +91,31 @@ describe('BlogSnippet', () => {
     mockRpc.mockResolvedValue({ data: [], error: null });
   });
 
-  it('excludes fallback blog posts without a published_at timestamp and renders no snippet when none exists', async () => {
-    render(
-      <BlogSnippet
-        category="Smartphones"
-        merchantId="merchant-1"
-      />
+  it('keeps the below-fold database client out of the pending LCP window', async () => {
+    const gate = Promise.withResolvers<void>();
+    mockLcpWindow.mockReturnValue(gate.promise);
+    render(<BlogSnippet category="Smartphones" merchantId="merchant-1" />);
+    await waitFor(() => expect(mockLcpWindow).toHaveBeenCalledOnce());
+    expect(createClient).not.toHaveBeenCalled();
+    gate.resolve();
+    await waitFor(() => expect(createClient).toHaveBeenCalledOnce());
+  });
+
+  it('does not load the database client if navigation unmounts the pending snippet', async () => {
+    const gate = Promise.withResolvers<void>();
+    mockLcpWindow.mockReturnValue(gate.promise);
+    const { unmount } = render(
+      <BlogSnippet category="Smartphones" merchantId="merchant-1" />
     );
+    await waitFor(() => expect(mockLcpWindow).toHaveBeenCalledOnce());
+    unmount();
+    gate.resolve();
+    await Promise.resolve();
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('excludes fallback blog posts without a published_at timestamp and renders no snippet when none exists', async () => {
+    render(<BlogSnippet category="Smartphones" merchantId="merchant-1" />);
 
     await waitFor(() =>
       expect(mockLimit).toHaveBeenCalledTimes(EXPECTED_FALLBACK_FILTER_CALLS)
@@ -190,12 +210,7 @@ describe('BlogSnippet', () => {
       error: null,
     });
 
-    render(
-      <BlogSnippet
-        category="Smartphones"
-        merchantId="merchant-1"
-      />
-    );
+    render(<BlogSnippet category="Smartphones" merchantId="merchant-1" />);
 
     await screen.findByRole('heading', { name: /from the blog/i });
     expect(

@@ -205,18 +205,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
             </section>
           )}
 
-          {showMaintainedLinkModules && (
-            <Suspense fallback={null}>
-              <ProductsPageDeferredLinkModules
-                baseUrl={baseUrl}
-                categories={displayCategories}
-                merchantId={merchant.id}
-                pathPrefix={pathPrefix}
-                productTotalPages={totalPages}
-              />
-            </Suspense>
-          )}
-
           {currentProductIndex.products.length === 0 ? (
             <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
               <h2 className="text-xl font-semibold text-store-background-text">
@@ -282,6 +270,19 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 totalPages={totalPages}
               />
             </>
+          )}
+          {/* These links are independently streamed SEO enrichment. Keep them
+              after the catalog so their late arrival cannot push painted cards. */}
+          {showMaintainedLinkModules && (
+            <Suspense fallback={null}>
+              <ProductsPageDeferredLinkModules
+                baseUrl={baseUrl}
+                categories={displayCategories}
+                merchantId={merchant.id}
+                pathPrefix={pathPrefix}
+                productTotalPages={totalPages}
+              />
+            </Suspense>
           )}
         </div>
       </div>

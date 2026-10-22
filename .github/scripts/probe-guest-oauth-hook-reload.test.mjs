@@ -57,3 +57,23 @@ for (const acknowledged of [true, false]) {
     }
   });
 }
+
+for (const url of ['https://wrong.supabase.co', 'https://test.supabase.co:443@wrong.example']) {
+  test(`rejects a substituted project destination: ${url}`, async () => {
+    const result = await new Promise((resolve, reject) => {
+      const child = spawn('bash', [new URL('./probe-guest-oauth-hook-reload.sh', import.meta.url).pathname], {
+        env: { ...process.env, SUPABASE_ACCESS_TOKEN: 'test-only', SUPABASE_PROJECT_REF: 'test',
+          NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-only',
+          GUEST_OAUTH_HOOK_PROBE_ALLOW_UNBOUND_URL: '', },
+      });
+      let output = '';
+      child.stdout.on('data', (chunk) => { output += chunk; });
+      child.stderr.on('data', (chunk) => { output += chunk; });
+      child.on('error', reject);
+      child.on('close', (code) => resolve({ code, output }));
+    });
+    assert.equal(result.code, 1, result.output);
+    assert.match(result.output, /Invalid guest OAuth probe URL|does not match project ref/);
+    assert.doesNotMatch(result.output, /acknowledged fleet-wide/);
+  });
+}

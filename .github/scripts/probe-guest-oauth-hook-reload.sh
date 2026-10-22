@@ -16,7 +16,13 @@ set -euo pipefail
 # requires the explicit escape hatch below (test/local use only — the
 # deploy workflow never sets it). This check intentionally diverges from
 # the GIGL/blog-media probe mirror.
-canary_host="$(printf '%s' "$NEXT_PUBLIC_SUPABASE_URL" | sed -e 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##' -e 's#/.*##' -e 's#:.*##')"
+canary_host="$(node -e '
+try {
+  const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  if (url.username || url.password || !["http:", "https:"].includes(url.protocol)) process.exit(1);
+  process.stdout.write(url.hostname);
+} catch { process.exit(1); }
+')" || { echo '::error::Invalid guest OAuth probe URL; refusing to probe.' >&2; exit 1; }
 expected_host="${SUPABASE_PROJECT_REF}.supabase.co"
 case "$canary_host" in
   *.supabase.co)

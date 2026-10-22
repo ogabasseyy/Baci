@@ -89,12 +89,15 @@ export async function handleGuestOAuthHttp(
     } else if (req.method === 'POST' && url.pathname === '/oauth/register') {
       if (req.headers['content-type']?.split(';')[0] !== 'application/json')
         throw new Error('invalid_request');
-      let text = '';
+      const chunks: Buffer[] = [];
+      let length = 0;
       for await (const chunk of req) {
-        text += chunk.toString();
-        if (Buffer.byteLength(text) > 8192) throw new Error('invalid_request');
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        length += bytes.length;
+        if (length > 8192) throw new Error('invalid_request');
+        chunks.push(bytes);
       }
-      const input = guestOAuthRegistrationSchema.parse(JSON.parse(text));
+      const input = guestOAuthRegistrationSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
       // Validate registered redirect using the same exact allowlist as authorize.
       auth.validateAuthorization({
         client_id: 'ogabassey-guest-chatgpt',

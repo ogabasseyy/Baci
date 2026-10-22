@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { GuestOAuthStorageError } from './guest-oauth-records';
 import { createOAuthRecordStore } from './guest-oauth-postgres';
 it('encrypts values with tenant and record-key binding and decrypts after restart', async () => {
   let saved: Record<string, unknown> = {};
@@ -41,8 +42,9 @@ it('encrypts values with tenant and record-key binding and decrypts after restar
       ...args,
       merchantId: '22222222-2222-4222-8222-222222222222',
     }).read('grant:test'),
-  ).rejects.toThrow();
-  await expect(store.read('grant:other')).rejects.toThrow();
+  ).rejects.toBeInstanceOf(GuestOAuthStorageError);
+  await expect(store.read('grant:other')).rejects.toBeInstanceOf(GuestOAuthStorageError);
+  await expect(createOAuthRecordStore({ ...args, encryptionKey: Buffer.alloc(32, 8) }).read('grant:test')).rejects.toBeInstanceOf(GuestOAuthStorageError);
 });
 it('fails closed on query failure and rejects weak encryption keys', async () => {
   const args = {

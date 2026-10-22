@@ -1,3 +1,4 @@
+import { readConnectedCart } from './guest-cart-connected-read';
 import {
   readGuestCartMigration,
   updateGuestCartWithCanonical,
@@ -154,10 +155,7 @@ export class GuestCartStore {
     }
   }
 
-  async readConnectionCart(token: string) {
-    if (!TOKEN_PATTERN.test(token) || !this.canonical?.read) throw new GuestCartStorageUnavailableError('Connected cart unavailable');
-    return this.canonical.read(token);
-  }
+  readConnectionCart = (token: string) => readConnectedCart(this.canonical, token);
 
   async update(
     token: string | undefined,

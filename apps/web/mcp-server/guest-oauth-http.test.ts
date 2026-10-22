@@ -167,3 +167,24 @@ it('preserves the existing guest-cart creation quota for new OAuth connections',
   expect(response.status).toBe(429);
   expect(await response.json()).toEqual({ error: 'quota_exceeded' });
 });
+it('decodes registration UTF-8 only after collecting split byte chunks', async () => {
+  const { Readable } = await import('node:stream');
+  const redirect = 'https://chatgpt.com/callback?q=é';
+  const auth = new GuestOAuth({
+    store: { read: async () => null, compareAndSwap: async () => true },
+    issuer: 'https://qa.example.com', resource: 'https://qa.example.com/mcp', redirects: [redirect],
+  });
+  const bytes = Buffer.from(JSON.stringify({ redirect_uris: [redirect] }));
+  const split = bytes.indexOf(Buffer.from('é')) + 1;
+  const req = Object.assign(Readable.from([bytes.subarray(0, split), bytes.subarray(split)]), {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+  }) as import('node:http').IncomingMessage;
+  let status = 0;
+  let output = '';
+  const res = {
+    setHeader() {}, writeHead(code: number) { status = code; }, end(value: string) { output = value; },
+  } as unknown as import('node:http').ServerResponse;
+  await handleGuestOAuthHttp(req, res, new URL('https://qa.example.com/oauth/register'), auth);
+  expect(status).toBe(201);
+  expect(JSON.parse(output).redirect_uris).toEqual([redirect]);
+});

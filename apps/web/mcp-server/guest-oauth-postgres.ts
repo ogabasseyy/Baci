@@ -27,18 +27,23 @@ export function createOAuthRecordStore(options: {
       if (error) throw new GuestOAuthStorageError();
       const record = guestOAuthCipherRecordSchema.parse(data)[0];
       if (!record) return null;
-      const bytes = Buffer.from(record.ciphertext, 'base64');
-      if (bytes.length < 29) throw new Error('Invalid OAuth record');
-      const decipher = createDecipheriv(
-        'aes-256-gcm',
-        options.encryptionKey,
-        bytes.subarray(0, 12),
-      );
-      decipher.setAAD(aad(key));
-      decipher.setAuthTag(bytes.subarray(12, 28));
-      const value: unknown = JSON.parse(
-        Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8'),
-      );
+      let value: unknown;
+      try {
+        const bytes = Buffer.from(record.ciphertext, 'base64');
+        if (bytes.length < 29) throw new Error('Invalid OAuth record');
+        const decipher = createDecipheriv(
+          'aes-256-gcm',
+          options.encryptionKey,
+          bytes.subarray(0, 12),
+        );
+        decipher.setAAD(aad(key));
+        decipher.setAuthTag(bytes.subarray(12, 28));
+        value = JSON.parse(
+          Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]).toString('utf8'),
+        );
+      } catch {
+        throw new GuestOAuthStorageError();
+      }
       return {
         value,
         revision: record.revision,

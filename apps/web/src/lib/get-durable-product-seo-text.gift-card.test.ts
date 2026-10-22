@@ -121,4 +121,15 @@ describe('getDurableProductSeoText gift-card identity', () => {
       getDurableProductSeoText({ ...args, text: `${text} Buy from ₦80,000.` })
     ).toBe('');
   });
+
+  it('preserves matching voucher product denominations but rejects a separate retail price', () => {
+    const args = {
+      product: { name: 'Amazon Voucher USD 50' },
+    };
+    const text = 'Redeem this Amazon voucher, denomination USD 50';
+    expect(getDurableProductSeoText({ ...args, text })).toBe(text);
+    expect(
+      getDurableProductSeoText({ ...args, text: `${text}. Buy for USD 50.` })
+    ).toBe('');
+  });
 });

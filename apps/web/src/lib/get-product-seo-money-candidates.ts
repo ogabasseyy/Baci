@@ -75,12 +75,12 @@ const markerPattern = [...new Set([...isoCurrencies, ...Object.keys(aliases)])]
 const amountPattern =
   "(?:\\d{1,3}(?:,\\d{3})+|\\d{1,3}(?:\\.\\d{3})+|\\d{1,2}(?:,\\d{2})*,\\d{3}|\\d{1,3}(?:[ '\\u2019\\u00a0\\u202f]\\d{3})+|\\d+)(?:[.,]\\d{1,2})?(?:[kKmM])?";
 const taggedPattern = new RegExp(
-  `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N},])`,
+  `(?<![\\p{L}\\p{N},.])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N}]|,(?=[\\p{N}]))`,
   'giu'
 );
 const fallbackTaggedPattern = useBoundedIsoFallback
   ? new RegExp(
-      `(?<![\\p{L}\\p{N},.])(?:([A-Z]{3})\\s*[:–—-]?\\s*(${amountPattern})|(${amountPattern})\\s*[:–—-]?\\s*([A-Z]{3}))(?![\\p{L}\\p{N},])`,
+      `(?<![\\p{L}\\p{N},.])(?:([A-Z]{3})\\s*[:–—-]?\\s*(${amountPattern})|(${amountPattern})\\s*[:–—-]?\\s*([A-Z]{3}))(?![\\p{L}\\p{N}]|,(?=[\\p{N}]))`,
       'gu'
     )
   : null;

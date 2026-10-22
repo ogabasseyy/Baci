@@ -136,6 +136,8 @@ describe('durable SEO monetary context', () => {
     'Battery life is 1.5 days.',
     'The weight is 1,200 g.',
     'Screen size is 6,1 inches.',
+    'The version is 2.5.',
+    'The rating is 4.8.',
   ])('preserves unit-bearing dimensions and quantities: %s', (text) => {
     expect(
       getDurableProductSeoText({ text, product: { name: 'Device' } })

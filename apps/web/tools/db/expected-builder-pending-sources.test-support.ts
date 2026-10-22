@@ -24,4 +24,9 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261022072221_builder_private_draft_contract.sql',
     sha256: 'db3b4832322ecb47fc194b98443186a633fb0dd01fbd64bcb85fedce487b6b24',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022103000_builder_async_edits.sql',
+    sha256: 'f01a779c3edb2864f1a05ed64a38b04140c761c362e81653396c6a2a515d89dd',
+  },
 ];

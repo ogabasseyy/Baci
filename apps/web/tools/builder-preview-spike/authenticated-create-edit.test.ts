@@ -13,9 +13,10 @@ import { commitDraft } from '@/lib/website-builder/private-drafts';
 import { getStorefrontStatus } from '@/lib/website-builder/read-storefront';
 import { startDraftApi } from '../builder-auth/draft-api-fixture.ts';
 import { draftFixture } from '../builder-auth/draft-fixture.ts';
+import { verifyAuthenticatedAsyncEdit } from './authenticated-async-edit.test-support';
 
 it('same signed builder token: empty consent → real RLS create → fresh target → authenticated status/edit', async () => {
-  const db = await draftFixture();
+  const db = await draftFixture({ asyncEdits: true });
   let api: Awaited<ReturnType<typeof startDraftApi>> | undefined;
   try {
     const actor = randomUUID();
@@ -174,6 +175,7 @@ it('same signed builder token: empty consent → real RLS create → fresh targe
         )
       ).rows[0]
     ).toEqual({ published_config: null, is_published: false });
+    await verifyAuthenticatedAsyncEdit(ctx, api.url, upstreamToken);
     await db.providerPool.query(
       "UPDATE builder_authorization.connections SET status='revoked',revoked_at=now(),grant_version=2 WHERE id=$1",
       [connection]

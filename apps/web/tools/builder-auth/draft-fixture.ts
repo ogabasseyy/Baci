@@ -2,7 +2,9 @@
 import { readFileSync } from 'node:fs';
 import type { PoolClient } from 'pg';
 import { databaseFixture } from './test-fixtures.ts';
-export async function draftFixture(options: { cutover?: boolean } = {}) {
+export async function draftFixture(
+  options: { cutover?: boolean; asyncEdits?: boolean } = {}
+) {
   const fixture = await databaseFixture();
   try {
     await fixture.pool.query(`CREATE ROLE service_role BYPASSRLS;
@@ -61,6 +63,7 @@ export async function draftFixture(options: { cutover?: boolean } = {}) {
       '20261022071353_builder_private_draft_adapters.sql',
       '20261022071651_builder_draft_operations.sql',
       '20261022072221_builder_private_draft_contract.sql',
+      ...(options.asyncEdits ? ['20261022103000_builder_async_edits.sql'] : []),
     ])
       await fixture.pool.query(
         readFileSync(

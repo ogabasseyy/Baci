@@ -102,6 +102,16 @@ export function createAuthStorage(
   return {
     providerAdapter,
     readConnection,
+    async listActiveEditConnections(after: string | null, limit: number) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 20)
+        throw new Error('Invalid connection limit');
+      if (after !== null) z.uuid().parse(after);
+      const rows = await pool.query<{ id: string }>(
+        "SELECT id FROM builder_authorization.connections WHERE status='active' AND revoked_at IS NULL AND expires_at>clock_timestamp() AND 'storefront.write'=ANY(scopes) AND ($1::uuid IS NULL OR id>$1) ORDER BY id LIMIT $2",
+        [after, limit]
+      );
+      return rows.rows.map((row) => row.id);
+    },
     async readByGrant(grantId: string) {
       const r = await pool.query(
         `SELECT ${projection} FROM builder_authorization.connections WHERE provider_grant_id=$1`,

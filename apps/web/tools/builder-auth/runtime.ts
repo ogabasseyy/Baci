@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Pool } from 'pg';
+import { createLinkedEditRunner } from './edit-runner.ts';
 import { createOpaqueVault } from './opaque-vault.ts';
 import { createBuilderProvider, type ProviderSettings } from './provider.ts';
 import { createBuilderAuthHandler } from './server.ts';
@@ -81,5 +82,11 @@ export async function createBuilderAuthRuntime(settings: {
     handler,
     readConnection: storage.readConnection,
     resolveLinkedAccessToken,
+    editRunner: createLinkedEditRunner({
+      listConnections: storage.listActiveEditConnections,
+      readConnection: storage.readConnection,
+      resolveLinkedAccessToken,
+      resolveUser: (token) => getLinkedUser(settings.supabase, token),
+    }),
   };
 }

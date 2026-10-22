@@ -167,6 +167,8 @@ Final scope includes full monorepo lint/typecheck/test because provider dependen
 
 ### Task 5: Adapt existing AI edits and async jobs
 
+**Local execution 2026-10-22:** Private linked-user queue/lease/generate/apply services, fixed inactive execution route and bounded runner implemented. [Evidence and release limits](../../connectors/evidence/builder-asynchronous-editing.md). Neither submission changed. Scheduler/deployment and real ChatGPT QA remain release gates.
+
 **Files:** Create `src/lib/website-builder/{queue-edit,read-operation,claim-edit,run-edit,apply-edit}.ts`, a linked-user runner at `tools/builder-auth/edit-runner.ts`, a fixed Node-runtime execution route `src/app/api/integrations/chatgpt/builder-operations/[operationId]/run/route.ts`, and tests. Reuse only computation/validation from `src/lib/builder-ai/` and the shared edit contract; do not enqueue into the service-role `process-ai-storefront-jobs.ts` dispatcher or invoke its trigger.
 
 **Interfaces:** `queueStorefrontEdit(ctx, input: UpdateDraftInput): Promise<QueuedEditResult>`; `getStorefrontOperation(ctx, operationId): Promise<OperationResult>`; `claimStorefrontEdit(ctx, operationId): Promise<EditLease>`; `runStorefrontEdit(ctx, lease: EditLease): Promise<OperationResult>`; `applyStorefrontOperation(ctx, input: ApplyOperationInput): Promise<DraftResult>`. `EditLease` binds operation ID, connection, initiating grant version, source revision, random lease ID and expiry. Getters never execute/apply candidates; every state transition uses Task 4's transactional authorization.

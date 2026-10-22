@@ -28,6 +28,7 @@ const rowsSchema = z
       draft_config: z.unknown(),
       version: z.string().nullable(),
       is_published: z.boolean(),
+      pendingOperationIds: z.array(z.uuid()).max(20).default([]),
     })
   )
   .max(1);
@@ -74,7 +75,7 @@ export async function getStorefrontStatus(ctx: BuilderContext) {
     isPublished: row.is_published,
     latestReceipt: null,
     missingItems: ['Launch readiness has not been assessed.'],
-    pendingOperationIds: [],
+    pendingOperationIds: row.pendingOperationIds,
     supportedPageSlugs: ['home'],
     capabilities: supported
       ? {

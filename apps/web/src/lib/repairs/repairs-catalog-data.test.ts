@@ -20,6 +20,7 @@ function makeBuilder(result: QueryResult) {
   builder.select = chain;
   builder.eq = chain;
   builder.order = chain;
+  builder.in = chain;
   builder.maybeSingle = () => Promise.resolve(result);
   // biome-ignore lint/suspicious/noThenProperty: intentional thenable mocking a Supabase query builder awaited without a terminal method
   builder.then = (
@@ -70,6 +71,41 @@ describe('getRepairDevicesForMerchant', () => {
         devices: [expect.objectContaining({ id: 'd3', model: 'S23' })],
       },
     ]);
+  });
+
+  it('uses the linked storefront product image when a device image is missing', async () => {
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient({
+        repair_devices: {
+          data: [
+            {
+              id: 'd1',
+              brand: 'Apple',
+              model: 'iPhone 15',
+              slug: 'iphone-15',
+              product_id: 'p1',
+              image_url: null,
+            },
+          ],
+          error: null,
+        },
+        products: {
+          data: [
+            {
+              id: 'p1',
+              images: [{ url: 'https://cdn.example.com/iphone-15.jpg' }],
+            },
+          ],
+          error: null,
+        },
+      })
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+
+    expect(groups[0]?.devices[0]?.imageUrl).toBe(
+      'https://cdn.example.com/iphone-15.jpg'
+    );
   });
 
   it('filters by query across brand, model, and aliases', async () => {

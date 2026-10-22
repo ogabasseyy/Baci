@@ -266,6 +266,8 @@ const serverSchema = z
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
     GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: optionalTrimmedUrlSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: optionalTrimmedStringSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
@@ -408,6 +410,30 @@ const serverSchema = z
     ),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL &&
+      !value.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN is required when ADDRESS_AUTOCOMPLETE_KV_REST_API_URL is set',
+        path: ['ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN'],
+      });
+    }
+    if (
+      value.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN &&
+      !value.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL is required when ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN is set',
+        path: ['ADDRESS_AUTOCOMPLETE_KV_REST_API_URL'],
+      });
+    }
+  })
   .superRefine((value, ctx) => {
     const isGitHubActionsBuild =
       process.env.GITHUB_ACTIONS === 'true' &&
@@ -744,6 +770,10 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
         GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_URL:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_URL:
           process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN:

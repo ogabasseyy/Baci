@@ -20,6 +20,8 @@ describe('distributed address provider budgets', () => {
     for (const key of [
       'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
       'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN',
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN',
       'UPSTASH_REDIS_REST_URL',
       'UPSTASH_REDIS_REST_TOKEN',
       'KV_REST_API_URL',
@@ -36,7 +38,10 @@ describe('distributed address provider budgets', () => {
 
   it('denies all provider calls when distributed storage is missing', async () => {
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: false,
+      reason: 'unavailable',
+    });
     expect(await budget.reserveGeoapifyRequest()).toBe(false);
     expect(evalMock).not.toHaveBeenCalled();
   });
@@ -44,8 +49,12 @@ describe('distributed address provider budgets', () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-test-token');
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(true);
-    expect(await budget.reserveGooglePlacesRequest('details')).toBe(true);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: true,
+    });
+    expect(await budget.reserveGooglePlacesRequest('details')).toEqual({
+      reserved: true,
+    });
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://kv.test',
       token: 'kv-test-token',
@@ -54,6 +63,57 @@ describe('distributed address provider budgets', () => {
     expect(evalMock.mock.calls[0][1]).toEqual(evalMock.mock.calls[1][1]);
     expect(evalMock.mock.calls[0][2][0]).toBe(4400);
     expect(evalMock.mock.calls[1][2][0]).toBe(4500);
+  });
+  it('uses the deployed address-autocomplete KV variable names', async () => {
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
+      'https://address-kv.test'
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', 'address-kv-token');
+    const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: true,
+    });
+    expect(redisConstructor).toHaveBeenCalledWith({
+      url: 'https://address-kv.test',
+      token: 'address-kv-token',
+      signal: expect.any(Function),
+    });
+  });
+  it('uses a process-local Google budget in development when Redis is unavailable', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: true,
+    });
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+  it('keeps the development-only Google budget bounded', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    const budget = await import('./provider-budget');
+    let reservation = await budget.reserveGooglePlacesRequest('autocomplete');
+    for (let attempt = 1; attempt < 4400; attempt += 1)
+      reservation = await budget.reserveGooglePlacesRequest('autocomplete');
+    expect(reservation).toEqual({ reserved: true });
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: false,
+      reason: 'limit_reached',
+    });
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+  it('reports an exhausted Google budget separately from an unavailable store', async () => {
+    vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
+    vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
+    evalMock.mockResolvedValueOnce(0).mockRejectedValueOnce(new Error('down'));
+    const budget = await import('./provider-budget');
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: false,
+      reason: 'limit_reached',
+    });
+    expect(await budget.reserveGooglePlacesRequest('details')).toEqual({
+      reserved: false,
+      reason: 'unavailable',
+    });
   });
   it('uses the Pacific billing month at the UTC month boundary', async () => {
     const { googleBudgetKey } = await import('./provider-budget');
@@ -70,7 +130,9 @@ describe('distributed address provider budgets', () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('details')).toBe(true);
+    expect(await budget.reserveGooglePlacesRequest('details')).toEqual({
+      reserved: true,
+    });
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://address.test',
       token: 'address-token',
@@ -84,7 +146,9 @@ describe('distributed address provider budgets', () => {
     );
     vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', ' address-token ');
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(true);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: true,
+    });
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://address.test',
       token: 'address-token',
@@ -97,7 +161,9 @@ describe('distributed address provider budgets', () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(true);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: true,
+    });
     expect(redisConstructor).toHaveBeenCalledWith({
       url: 'https://kv.test',
       token: 'kv-token',
@@ -112,7 +178,10 @@ describe('distributed address provider budgets', () => {
     );
     const budget = await import('./provider-budget');
     expect(() => budget.googleBudgetKey()).toThrow('billing month unavailable');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: false,
+      reason: 'unavailable',
+    });
     expect(evalMock).not.toHaveBeenCalled();
   });
   it.each([
@@ -124,7 +193,10 @@ describe('distributed address provider budgets', () => {
     vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
     vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
     const budget = await import('./provider-budget');
-    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(false);
+    expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+      reserved: false,
+      reason: 'unavailable',
+    });
     expect(await budget.reserveGeoapifyRequest()).toBe(false);
     expect(redisConstructor).not.toHaveBeenCalled();
     expect(evalMock).not.toHaveBeenCalled();
@@ -135,9 +207,9 @@ describe('distributed address provider budgets', () => {
       vi.stubEnv('KV_REST_API_URL', 'https://kv.test');
       vi.stubEnv('KV_REST_API_TOKEN', 'kv-token');
       const budget = await import('./provider-budget');
-      expect(await budget.reserveGooglePlacesRequest('autocomplete')).toBe(
-        true
-      );
+      expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({
+        reserved: true,
+      });
       const factory = redisConstructor.mock.calls[0][0].signal;
       const first = factory();
       const second = factory();
@@ -181,7 +253,10 @@ describe('distributed address provider budgets', () => {
     evalMock
       .mockResolvedValueOnce(0)
       .mockRejectedValueOnce(new Error('unavailable'));
-    expect(await budget.reserveGooglePlacesRequest('details')).toBe(false);
+    expect(await budget.reserveGooglePlacesRequest('details')).toEqual({
+      reserved: false,
+      reason: 'limit_reached',
+    });
     expect(await budget.reserveGeoapifyRequest()).toBe(false);
   });
   it('paces a concurrent Geoapify request and retries its reservation once', async () => {

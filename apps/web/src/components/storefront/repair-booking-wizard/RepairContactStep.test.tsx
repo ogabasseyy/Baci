@@ -132,6 +132,11 @@ describe('RepairContactStep', () => {
 
     expect(screen.getByLabelText('Pickup Address')).toBeInTheDocument();
     expect(
+      screen.getByText(
+        /select an address suggestion to calculate the GIG Logistics pickup fee/i
+      )
+    ).toBeInTheDocument();
+    expect(
       screen.getByText('Free pickup available in Lagos!')
     ).toBeInTheDocument();
   });

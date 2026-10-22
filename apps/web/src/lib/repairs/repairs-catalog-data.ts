@@ -129,10 +129,47 @@ export async function getRepairDevicesForMerchant(
   }
 
   const rows = (data ?? []) as Row[];
+  const linkedProductIds = Array.from(
+    new Set(
+      rows
+        .filter((row) => !asNullableString(row.image_url))
+        .map((row) => asNullableString(row.product_id))
+        .filter((id): id is string => id !== null)
+    )
+  );
+  const productImages = new Map<string, string>();
+
+  if (linkedProductIds.length > 0) {
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('id, images')
+      .eq('merchant_id', merchantId)
+      .in('id', linkedProductIds);
+
+    if (productsError) {
+      throw productsError;
+    }
+
+    for (const product of (products ?? []) as Row[]) {
+      const id = asString(product.id);
+      const imageUrl = extractPrimaryImage(product.images);
+      if (id && imageUrl) {
+        productImages.set(id, imageUrl);
+      }
+    }
+  }
+
+  const rowsWithProductImages = rows.map((row) => ({
+    ...row,
+    image_url:
+      asNullableString(row.image_url) ??
+      productImages.get(asString(row.product_id)) ??
+      null,
+  }));
   const normalizedQuery = query?.trim().toLowerCase();
   const filtered = normalizedQuery
-    ? rows.filter((row) => matchesQuery(row, normalizedQuery))
-    : rows;
+    ? rowsWithProductImages.filter((row) => matchesQuery(row, normalizedQuery))
+    : rowsWithProductImages;
 
   return groupByBrand(filtered);
 }

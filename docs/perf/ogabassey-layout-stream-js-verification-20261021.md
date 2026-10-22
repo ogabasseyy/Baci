@@ -99,3 +99,60 @@ The next streaming investigation must address the shared layout's request-time
 boundary while preserving tenant/publication checks, persistent providers and
 generic-store PPR behavior. Protected proxy changes require explicit approval.
 No sub-2.5s, field improvement, merge or deployment claim is made.
+
+## Review follow-up: initial mobile listing reserve (2026-10-22)
+
+Codex's ready-for-review pass identified a delivery gap in the retained reserve:
+products/search/category can reach storefront-core.css through the deferred full
+style loader. Testing a settled page or parsing that stylesheet did not prove
+the reserve existed during the initial streamed state. The earlier all-route
+reservation claim must be read with this correction.
+
+StorefrontLcpCopyStyle now includes the small responsive main-height rule in its
+existing inline, high-precedence shell resource, outside the tenant-resolution
+Suspense boundary. It retains calc(100svh - 132px) on mobile and100svh on desktop.
+The full stylesheet's delivery, guards, hero routing and image quality are
+unchanged. The initial-style regression test failed before this change and passes
+after it; it inspects the component's delivered CSS, not storefront-core.css.
+
+A local production build and foreground Chrome155.0.8059.86 browser checks covered:
+
+- Three cold mobile contexts each for `/products`, `/search?q=iphone` and
+  `/smartphones` (9 visits, 412x823, DPR2). Every visit had 691px from the first
+  observed visible main frame, with the reserve present in the inline resource.
+- One cold desktop context per listing route (3 visits, 1350x940), with 940px from
+  the first observed visible main frame.
+- One cold mobile context each for home, blog and
+  `/smartphones/iphone-11-pro-max` (3 adjacent-route visits), with 691px reserved.
+
+All 15 visits returned 200, recorded zero pointer/touch/key input and
+`navigator.userActivation.hasBeenActive === false`, and were foreground-visible.
+Each context had browser cache disabled and service workers blocked. Probe reads
+used CDP Runtime.evaluate with userGesture:false: ordinary automation evaluation
+had activated a discarded preliminary capture and could load deferred styles.
+React merges the inline resource into a data-href token list, which the corrected
+probe checks. Earlier predicate-only failures are not application failures.
+
+The pre-change cold search diagnostic caught min-height 0px at its first visible
+frame, later changing to 691px without input. Full core styles did ultimately
+load in the diagnostic browser paths; the fix does not depend on exactly which
+other path caused that later load. A raw served response independently places
+the reserve in the head's inline style resource, before body/main parsing.
+
+Three mobile videos and their contact sheets cover initial paint through the
+bounded capture. Product-image loading and some existing style settling remain;
+this is not a blanket no-flash or full-session CWV clearance. The known anonymous
+cart401/events403 remain, so these are targeted geometry checks, not clean
+performance passes. No LCP or comparative speed claim is made.
+
+Validation: 31 focused tests across 8 suites (including 2 inventory snapshot
+tests), local production build and app typecheck pass. App lint passes with 6 existing warnings;
+touched files are Biome-clean. The route inventory's authority inputs did not
+change and its snapshot was not re-pinned. Private evidence, harness source,
+recordings and source receipt are under
+`/Users/mac/.codex/cwv-lab-builds/20261021-live-psi/r2-reserve/`.
+
+CodeRabbit completed with 2 trivial test issues, both addressed: scope CSSOM
+assertions to the delivered component resource and narrow rule types without
+casts. No critical/high issue was reported. This local review does not replace
+the required fresh current-head Codex review after pushing.

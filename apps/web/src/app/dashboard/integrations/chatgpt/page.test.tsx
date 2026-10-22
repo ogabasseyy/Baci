@@ -66,3 +66,7 @@ it('disconnect action delegates to authenticated owner management', async () => 
     '20000000-0000-4000-8000-000000000001'
   );
 });
+
+it('does not export dynamic segment config rejected by Cache Components', async () => {
+  expect(await import('./page')).not.toHaveProperty('dynamic');
+});

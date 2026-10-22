@@ -64,3 +64,9 @@ it('passes the operation binding to the handler and runs only a claimed lease', 
     })
   );
 });
+
+it('keeps the duration limit without a Cache Components-incompatible runtime export', async () => {
+  const route = await import('./route');
+  expect(route).not.toHaveProperty('runtime');
+  expect(route.maxDuration).toBe(60);
+});

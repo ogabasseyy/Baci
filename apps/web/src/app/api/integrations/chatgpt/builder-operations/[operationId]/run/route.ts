@@ -5,7 +5,6 @@ import { createEditExecutionHandler } from '@/lib/website-builder/edit-execution
 import { authenticateEditUser } from '@/lib/website-builder/edit-user';
 import { generateStorefrontEdit } from '@/lib/website-builder/generate-edit';
 import { runStorefrontEdit } from '@/lib/website-builder/run-edit';
-export const runtime = 'nodejs';
 export const maxDuration = 60;
 export async function POST(
   request: Request,

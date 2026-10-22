@@ -3,7 +3,6 @@ import { BUILDER_ACCOUNT_LINKING_ENABLED } from '@/config/builder-linking';
 import { listBuilderConnections } from '@/lib/builder-connector/management';
 import { createClient } from '@/lib/supabase/server';
 import { disconnectBuilderAction } from './actions';
-export const dynamic = 'force-dynamic';
 export default async function ChatGptConnectionsPage() {
   if (!BUILDER_ACCOUNT_LINKING_ENABLED) notFound();
   const connections = await listBuilderConnections(await createClient());

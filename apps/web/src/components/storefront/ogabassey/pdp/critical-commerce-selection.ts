@@ -1,3 +1,4 @@
+import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import {
   canonicalizeCommerceVariantAxis,
   normalizeCommerceVariantOption,
@@ -6,9 +7,6 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-con
 import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isDisplayOnlyVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
-import { isExplicitlyTrackedVariantStock } from '@/lib/is-explicitly-tracked-variant-stock';
-import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import {
   COMPACT_OPTIONS,
   type CurrencyConfig,
@@ -63,26 +61,6 @@ export function formatCriticalPrice(
   return formatCurrencyWithConfig(price, currency, COMPACT_OPTIONS);
 }
 
-function getVariantStock(
-  cartProduct: CartProduct,
-  selection: ResolvedCriticalVariantSelection | null
-) {
-  if (!selection) {
-    return cartProduct.stock;
-  }
-
-  if (isUnmanagedVariantStock(selection.variant, cartProduct.manage_stock)) {
-    return cartProduct.stock;
-  }
-
-  return (
-    resolveSerializedVariantStock(selection.variant) ??
-    (typeof selection.variant.stock_quantity === 'number'
-    ? selection.variant.stock_quantity
-      : cartProduct.stock)
-  );
-}
-
 export function buildVariantCartProduct(
   cartProduct: CartProduct,
   selection: ResolvedCriticalVariantSelection | null
@@ -93,10 +71,7 @@ export function buildVariantCartProduct(
 
   const variantImage =
     selection.variant.primary_image || selection.variant.images?.[0];
-  const variantIsUnmanaged = isUnmanagedVariantStock(
-    selection.variant,
-    cartProduct.manage_stock
-  );
+  const inventory = resolveVariantInventory(cartProduct, selection.variant);
 
   return {
     ...cartProduct,
@@ -106,13 +81,9 @@ export function buildVariantCartProduct(
       cartProduct.condition,
     image: variantImage ?? cartProduct.image,
     imageLarge: variantImage ?? cartProduct.imageLarge,
-    manage_stock: variantIsUnmanaged
-      ? false
-      : isExplicitlyTrackedVariantStock(selection.variant)
-        ? true
-        : cartProduct.manage_stock,
+    manage_stock: inventory.manageStock,
     price: selection.price,
-    stock: getVariantStock(cartProduct, selection),
+    stock: inventory.stock,
     variants: cartProduct.variants,
   };
 }

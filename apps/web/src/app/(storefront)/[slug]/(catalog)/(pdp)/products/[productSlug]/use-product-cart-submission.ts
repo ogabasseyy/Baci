@@ -2,11 +2,9 @@ import { useCart } from '@/hooks/cart';
 import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
-import { isExplicitlyTrackedVariantStock } from '@/lib/is-explicitly-tracked-variant-stock';
-import { isUnmanagedVariantStock } from '@/lib/is-unmanaged-variant-stock';
 import type { Product, ProductVariant } from '@/lib/products';
+import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 export type ProductOfferSelection = NonNullable<Product['offers']>[number];
@@ -48,16 +46,11 @@ export function useProductCartSubmission({
     // The cart guard reads product stock: carry the exact option
     // availability (serialized units or offer quantity) so a stocked
     // selection on a zero-parent-stock product is not silently rejected.
-    const selectedVariantIsUnmanaged = Boolean(
-      variantForCart &&
-        isUnmanagedVariantStock(variantForCart, product.manage_stock)
-    );
-    const selectedOptionStock = variantForCart
-      ? selectedVariantIsUnmanaged
-        ? product.stock
-        : (resolveSerializedVariantStock(variantForCart) ??
-          variantForCart.stock_quantity ??
-          product.stock)
+    const inventory = variantForCart
+      ? resolveVariantInventory(product, variantForCart)
+      : undefined;
+    const selectedOptionStock = inventory
+      ? inventory.stock
       : selectedOffer
         ? (resolveSerializedOfferStock(selectedOffer, product) ??
           selectedOffer.stock_quantity ??
@@ -67,11 +60,9 @@ export function useProductCartSubmission({
       variantForCart || selectedOffer
         ? {
             ...product,
-            manage_stock: selectedVariantIsUnmanaged
-              ? false
-              : isExplicitlyTrackedVariantStock(variantForCart)
-                ? true
-                : product.manage_stock,
+            manage_stock: inventory
+              ? inventory.manageStock
+              : product.manage_stock,
             price: currentPrice,
             stock: selectedOptionStock,
           }

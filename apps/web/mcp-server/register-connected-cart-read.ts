@@ -24,7 +24,7 @@ export function registerConnectedCartRead(
         readOnlyHint: false,
         destructiveHint: false,
         openWorldHint: false,
-        idempotentHint: true,
+        idempotentHint: false,
       },
       _meta: {
         securitySchemes: [{ type: 'oauth2', scopes: ['cart:write'] }],

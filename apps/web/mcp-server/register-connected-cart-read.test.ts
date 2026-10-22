@@ -26,6 +26,8 @@ it('refreshes the verified connection cart without exposing its capability', asy
   await server.connect(st);
   await client.connect(ct);
   try {
+    const tools = await client.listTools();
+    expect(tools.tools.find((tool) => tool.name === 'get_ogabassey_guest_cart')?.annotations?.idempotentHint).toBe(false);
     const result = await client.callTool({ name: 'get_ogabassey_guest_cart', arguments: {} });
     expect(read).toHaveBeenCalledWith(token);
     expect(result.structuredContent).toMatchObject({

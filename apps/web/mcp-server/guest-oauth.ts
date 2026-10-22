@@ -1,3 +1,4 @@
+import { authenticRefreshToken, mintRefreshToken, refreshGrantId } from './guest-oauth-refresh-token';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { z } from 'zod';
 import {
@@ -121,27 +122,23 @@ export class GuestOAuth {
     };
   }
   private async issue(grant: GuestOAuthGrant, revision: number) {
-    // 1024 generations covers seven days of normal 15-minute rotation.
-    // Retained hashes remain available for reuse detection until grant expiry.
+    // Bound rotation attempts; replay proof itself occupies only the grant.
+    // Legacy refresh indices expire naturally after their existing deadline.
     if (grant.tokenGenerations >= 1024) {
       await this.revokeGrant(grant.id);
       throw new Error('invalid_grant');
     }
     const access = opaque();
-    const refresh = opaque();
+    const refreshSigningKey = grant.refreshSigningKey ?? opaque();
+    const refresh = mintRefreshToken(grant.id, grant.tokenGenerations + 1, refreshSigningKey);
     const expiresAt = Math.min(this.now() + ACCESS_TTL, grant.expiresAt);
-    const next = { ...grant, refreshHash: hash(refresh), tokenGenerations: grant.tokenGenerations + 1 };
+    const next = { ...grant, refreshSigningKey, refreshHash: hash(refresh), tokenGenerations: grant.tokenGenerations + 1 };
     // Token indices precede grant CAS: partial writes never authorize a token
     // with a refresh hash other than the committed generation.
     await this.put(
       `access:${hash(access)}`,
       { grantId: grant.id, expiresAt, generation: next.refreshHash },
       expiresAt,
-    );
-    await this.put(
-      `refresh:${hash(refresh)}`,
-      { grantId: grant.id, expiresAt: grant.expiresAt },
-      grant.expiresAt,
     );
     if (
       !(await this.options.store.compareAndSwap(
@@ -219,10 +216,15 @@ export class GuestOAuth {
   async refresh(input: unknown) {
     const request = guestOAuthRefreshSchema.parse(input);
     this.client(request.client_id, request.resource);
-    const row = await this.read(`refresh:${hash(request.refresh_token)}`);
-    const token = guestOAuthTokenRecordSchema.parse(row.value);
+    const compactId = refreshGrantId(request.refresh_token);
+    // Existing opaque QA tokens migrate on their next successful rotation.
+    const grantId = compactId ?? guestOAuthTokenRecordSchema.parse(
+      (await this.read(`refresh:${hash(request.refresh_token)}`)).value,
+    ).grantId;
     for (let retry = 0; retry < 3; retry++) {
-      const { row: current, grant } = await this.grant(token.grantId);
+      const { row: current, grant } = await this.grant(grantId);
+      if (compactId && !authenticRefreshToken(request.refresh_token, grant.id, grant.refreshSigningKey))
+        throw new Error('invalid_grant');
       if (grant.refreshHash !== hash(request.refresh_token)) {
         await this.revokeGrant(grant.id);
         throw new Error('invalid_grant');
@@ -256,7 +258,18 @@ export class GuestOAuth {
     throw new Error('temporarily_unavailable');
   }
   async revoke(token: string, clientId: string) {
-    if (clientId !== CLIENT || !/^[a-f0-9]{64}$/.test(token)) return;
+    if (clientId !== CLIENT) return;
+    const compactId = refreshGrantId(token);
+    if (compactId) {
+      const row = await this.options.store.read(`grant:${compactId}`);
+      if (!row || row.expiresAt <= this.now()) return;
+      const grant = guestOAuthGrantSchema.parse(row.value);
+      this.client(grant.clientId, grant.resource);
+      if (authenticRefreshToken(token, grant.id, grant.refreshSigningKey))
+        await this.revokeGrant(grant.id);
+      return;
+    }
+    if (!/^[a-f0-9]{64}$/.test(token)) return;
     for (const prefix of ['refresh', 'access']) {
       const row = await this.options.store.read(`${prefix}:${hash(token)}`);
       if (!row || row.expiresAt <= this.now()) continue;

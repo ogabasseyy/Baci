@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -77,3 +78,9 @@ for (const url of ['https://wrong.supabase.co', 'https://test.supabase.co:443@wr
     assert.doesNotMatch(result.output, /acknowledged fleet-wide/);
   });
 }
+
+test('CI executes the OAuth reload probe regression suite', () => {
+  const workflow = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8');
+  const invocation = workflow.match(/node --test[^\n]*\n(?:[ \t]+\.github\/scripts\/[^\n]+\n)+/g) ?? [];
+  assert.ok(invocation.some((command) => command.includes('.github/scripts/probe-guest-oauth-hook-reload.test.mjs')));
+});

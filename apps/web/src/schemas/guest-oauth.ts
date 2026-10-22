@@ -20,7 +20,7 @@ export const guestOAuthExchangeSchema = guestOAuthAuthorizationSchema
 export const guestOAuthRefreshSchema = z.object({
   client_id: z.string().min(1).max(256),
   resource: z.string().url().max(2048),
-  refresh_token: z.string().regex(/^[a-f0-9]{64}$/),
+  refresh_token: z.string().regex(/^(?:[a-f0-9]{64}|[a-f0-9]{104})$/),
   scope: z.literal('cart:write').optional(),
 });
 export const guestOAuthGrantSchema = z.object({
@@ -30,6 +30,10 @@ export const guestOAuthGrantSchema = z.object({
   expiresAt: z.number(),
   revoked: z.boolean(),
   refreshHash: z.string(),
+  refreshSigningKey: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   tokenGenerations: z.number().int().min(0).max(1024).default(0),
   cartToken: z.string().regex(/^[a-f0-9]{64}$/),
   cartInitialized: z.boolean(),

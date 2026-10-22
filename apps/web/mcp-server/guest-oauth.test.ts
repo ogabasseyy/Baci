@@ -267,3 +267,54 @@ it('caps refresh history without losing reuse detection', async () => {
   expect(rows.size).toBe(size);
   await expect(auth.verify(token.access_token)).rejects.toThrow();
 });
+
+it('keeps fifteen active grants compact through a normal seven-day refresh workload', async () => {
+  const { auth, rows, options, advance } = fixture();
+  const compare = options.store.compareAndSwap.bind(options.store);
+  let now = 1700000000000;
+  options.store.compareAndSwap = async (...args) => {
+    for (const [key, row] of rows) if (row.expiresAt <= now) rows.delete(key);
+    return compare(...args);
+  };
+  const tokens = [];
+  for (let i = 0; i < 15; i++) {
+    const { code } = await auth.authorize(request);
+    tokens.push(await auth.exchange({ ...request, code, code_verifier: verifier }));
+  }
+  for (let cycle = 0; cycle < 670; cycle++) {
+    advance(15 * 60_000); now += 15 * 60_000;
+    for (let i = 0; i < tokens.length; i++)
+      tokens[i] = await auth.refresh({ ...request, refresh_token: tokens[i].refresh_token });
+  }
+  expect([...rows.keys()].filter((key) => key.startsWith('refresh:'))).toHaveLength(0);
+  expect(rows.size).toBeLessThanOrEqual(45);
+  for (const token of tokens) await expect(auth.verify(token.access_token)).resolves.toBeDefined();
+});
+it('rejects forged compact refreshes without revoking the legitimate grant', async () => {
+  const { auth } = fixture();
+  const { code } = await auth.authorize(request);
+  const token = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const forged = token.refresh_token.slice(0, -1) + (token.refresh_token.endsWith('a') ? 'b' : 'a');
+  await expect(auth.refresh({ ...request, refresh_token: forged })).rejects.toThrow();
+  await auth.revoke(forged, request.client_id);
+  await expect(auth.verify(token.access_token)).resolves.toBeDefined();
+});
+it('upgrades existing opaque refresh tokens and preserves their replay revocation', async () => {
+  const { auth, rows, options } = fixture();
+  const { code } = await auth.authorize(request);
+  const first = await auth.exchange({ ...request, code, code_verifier: verifier });
+  const grant = await auth.verify(first.access_token);
+  const legacy = 'e'.repeat(64);
+  const legacyHash = createHash('sha256').update(legacy).digest('hex');
+  const key = `grant:${grant.id}`;
+  const row = rows.get(key)!;
+  rows.set(key, { ...row, value: { ...grant, refreshSigningKey: undefined, refreshHash: legacyHash } });
+  rows.set(`refresh:${legacyHash}`, { revision: 1, expiresAt: grant.expiresAt,
+    value: { grantId: grant.id, expiresAt: grant.expiresAt } });
+  const restarted = new GuestOAuth(options);
+  const next = await restarted.refresh({ ...request, refresh_token: legacy });
+  expect(next.refresh_token).toHaveLength(104);
+  expect((await restarted.verify(next.access_token)).cartToken).toBe(grant.cartToken);
+  await expect(restarted.refresh({ ...request, refresh_token: legacy })).rejects.toThrow();
+  await expect(restarted.verify(next.access_token)).rejects.toThrow();
+});

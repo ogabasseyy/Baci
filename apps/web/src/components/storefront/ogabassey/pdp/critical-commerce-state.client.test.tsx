@@ -620,7 +620,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
     expect(screen.getByText('blocked')).toBeInTheDocument();
   });
 
-  it('keeps required color-only axes hidden until explicitly selected', () => {
+  it('exposes required color-only axes without preselecting a colour', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
         cartProduct={{
@@ -651,7 +651,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       </OgabasseyPdpCriticalCommerceProvider>
     );
 
-    expect(screen.getByText('axes:')).toBeInTheDocument();
+    expect(screen.getByText('axes:color')).toBeInTheDocument();
     expect(screen.getByText('blocked')).toBeInTheDocument();
   });
 
@@ -667,7 +667,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
           ...variantCartProduct,
           variants: [
             {
-              attributes: { color: 'Black' },
+              attributes: { connectivity: 'Black' },
               id: 'variant-black',
               merchant_id: 'merchant-1',
               price_override: 237_674.42,
@@ -675,7 +675,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
               stock_quantity: 4,
             },
             {
-              attributes: { color: 'Blue' },
+              attributes: { connectivity: 'Blue' },
               id: 'variant-blue',
               merchant_id: 'merchant-1',
               price_override: 278_418.6,
@@ -696,7 +696,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       expect(warnSpy).toHaveBeenCalledWith(
         '[Ogabassey PDP] Missing hidden required variant selection.',
         {
-          axes: ['color'],
+          axes: ['connectivity'],
           productId: 'redmi-pad-2',
         }
       );
@@ -734,7 +734,7 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       </OgabasseyPdpCriticalCommerceProvider>
     );
 
-    expect(screen.getByText('axes:')).toBeInTheDocument();
+    expect(screen.getByText('axes:color')).toBeInTheDocument();
     expect(screen.getByText('selected storage:')).toBeInTheDocument();
     expect(screen.getByText('blocked')).toBeInTheDocument();
   });

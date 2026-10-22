@@ -254,7 +254,8 @@ export function pickInitialSelectedAttributes({
 
   return Object.fromEntries(
     Object.entries(initialAttributes).filter(([axis]) =>
-      selectableAxes.has(axis)
+      selectableAxes.has(axis) &&
+      (axis !== 'color' || Boolean(normalizedExplicitAttributes.color))
     )
   );
 }

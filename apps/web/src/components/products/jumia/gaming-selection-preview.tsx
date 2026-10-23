@@ -9,6 +9,8 @@ type EligibleItem = {
   id: string;
   available: boolean;
   unavailableReason: string | null;
+  capturedSourceVersion: string;
+  currentSourceVersion: string | null;
   product: { product?: { name?: string | null } } | null;
 };
 
@@ -17,8 +19,30 @@ type EligiblePage = {
   total: number;
   page: number;
   totalPages: number;
+  legacyUnmappedCount: number;
   products: EligibleItem[];
 };
+
+const UPGRADE_REQUIRED_MESSAGE =
+  'Marketplace sync requires an upgraded plan. Upgrade your plan to preview Jumia products.';
+
+async function requestErrorMessage(response: Response, fallback: string) {
+  if (response.status !== 402) return fallback;
+  try {
+    const payload: unknown = await response.json();
+    if (
+      payload &&
+      typeof payload === 'object' &&
+      'code' in payload &&
+      payload.code === 'requires_upgrade'
+    ) {
+      return UPGRADE_REQUIRED_MESSAGE;
+    }
+  } catch {
+    // Keep the user-facing fallback generic when the error body is malformed.
+  }
+  return fallback;
+}
 
 function parseEligiblePage(value: unknown): EligiblePage | null {
   if (!value || typeof value !== 'object') return null;
@@ -31,6 +55,8 @@ function parseEligiblePage(value: unknown): EligiblePage | null {
     typeof value.page !== 'number' ||
     !('totalPages' in value) ||
     typeof value.totalPages !== 'number' ||
+    !('legacyUnmappedCount' in value) ||
+    typeof value.legacyUnmappedCount !== 'number' ||
     !('products' in value) ||
     !Array.isArray(value.products)
   )
@@ -47,6 +73,11 @@ function parseEligiblePage(value: unknown): EligiblePage | null {
       !('unavailableReason' in item) ||
       (item.unavailableReason !== null &&
         typeof item.unavailableReason !== 'string') ||
+      !('capturedSourceVersion' in item) ||
+      typeof item.capturedSourceVersion !== 'string' ||
+      !('currentSourceVersion' in item) ||
+      (item.currentSourceVersion !== null &&
+        typeof item.currentSourceVersion !== 'string') ||
       !('product' in item) ||
       (item.product !== null && typeof item.product !== 'object')
     ) {
@@ -56,6 +87,8 @@ function parseEligiblePage(value: unknown): EligiblePage | null {
       id: item.id,
       available: item.available,
       unavailableReason: item.unavailableReason,
+      capturedSourceVersion: item.capturedSourceVersion,
+      currentSourceVersion: item.currentSourceVersion,
       product: item.product,
     });
   }
@@ -64,6 +97,7 @@ function parseEligiblePage(value: unknown): EligiblePage | null {
     total: value.total,
     page: value.page,
     totalPages: value.totalPages,
+    legacyUnmappedCount: value.legacyUnmappedCount,
     products,
   };
 }
@@ -77,8 +111,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     const response = await fetch(
       `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, page: String(page) })}`
     );
-    if (!response.ok)
-      throw new Error('Unable to load this Gaming preview. Please retry.');
+    if (!response.ok) {
+      throw new Error(
+        await requestErrorMessage(
+          response,
+          'Unable to load this Gaming preview. Please retry.'
+        )
+      );
+    }
     const parsed = parseEligiblePage(await response.json());
     if (!parsed)
       throw new Error(
@@ -91,27 +131,39 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const { data: category, error: categoryError } = await createClient()
+      const { data: categories, error: categoryError } = await createClient()
         .from('categories')
         .select('id')
         .eq('merchant_id', merchantId)
         .eq('is_active', true)
         .ilike('name', 'Gaming')
-        .maybeSingle();
-      if (categoryError || !category) {
+        .order('id', { ascending: true })
+        .limit(2);
+      if (categoryError || !categories?.length) {
         throw new Error(
           'An active Gaming category was not found for this store.'
+        );
+      }
+      if (categories.length > 1) {
+        throw new Error(
+          'More than one active category is named Gaming. Keep one active Gaming category before creating a preview.'
         );
       }
       const response = await fetchWithCsrf(
         '/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: category.id }),
+          body: JSON.stringify({ sourceCategoryId: categories[0].id }),
         }
       );
-      if (!response.ok)
-        throw new Error('Unable to create a Gaming preview. Please retry.');
+      if (!response.ok) {
+        throw new Error(
+          await requestErrorMessage(
+            response,
+            'Unable to create a Gaming preview. Please retry.'
+          )
+        );
+      }
       const result: unknown = await response.json();
       if (
         !result ||
@@ -182,6 +234,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
           <p className="text-xs text-muted-foreground">
             {snapshot.total} products in this frozen selection
           </p>
+          {snapshot.legacyUnmappedCount > 0 ? (
+            <p className="text-sm text-amber-700" role="status">
+              {snapshot.legacyUnmappedCount} active product
+              {snapshot.legacyUnmappedCount === 1 ? ' uses' : 's use'} legacy
+              Gaming labels and are not included. Assign them to the active
+              Gaming category, then create a new preview.
+            </p>
+          ) : null}
           {loading ? (
             <p role="status" className="text-sm text-muted-foreground">
               Loading products…
@@ -192,7 +252,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
               No products in this Gaming selection.
             </p>
           ) : null}
-          <ul className="grid gap-1">
+          <ul className="grid max-h-[40vh] gap-1 overflow-y-auto">
             {snapshot.products.map((item) => {
               const name =
                 item.product?.product?.name?.trim() ||
@@ -208,6 +268,11 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
                   <span>{name}</span>
                   {!item.available ? (
                     <span className="text-xs text-destructive">{reason}</span>
+                  ) : null}
+                  {item.capturedSourceVersion !== item.currentSourceVersion ? (
+                    <span className="text-xs text-amber-700">
+                      Changed since preview; showing current details.
+                    </span>
                   ) : null}
                 </li>
               );

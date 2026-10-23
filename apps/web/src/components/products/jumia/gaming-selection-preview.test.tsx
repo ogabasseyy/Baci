@@ -3,6 +3,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GamingSelectionPreview } from './gaming-selection-preview';
 
 const mockFrom = vi.fn();
+function setupGamingCategories(categories = [{ id: 'gaming-category' }]) {
+  mockFrom.mockReturnValue({
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          ilike: () => ({
+            order: () => ({
+              limit: async () => ({ data: categories, error: null }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  });
+}
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({ from: mockFrom }),
 }));
@@ -14,20 +29,7 @@ describe('GamingSelectionPreview', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('creates and pages a preview only, without presenting selection or submit controls', async () => {
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            ilike: () => ({
-              maybeSingle: async () => ({
-                data: { id: 'gaming-category' },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
+    setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockImplementation(async (url) => {
       if (url.endsWith('/selections')) {
@@ -51,6 +53,7 @@ describe('GamingSelectionPreview', () => {
         total: 51,
         page: Number(page),
         totalPages: 2,
+        legacyUnmappedCount: 3,
         products:
           page === '1'
             ? [
@@ -58,6 +61,8 @@ describe('GamingSelectionPreview', () => {
                   id: 'p1',
                   available: true,
                   unavailableReason: null,
+                  capturedSourceVersion: 'captured-version',
+                  currentSourceVersion: 'current-version',
                   product: { product: { name: 'Controller' } },
                 },
               ]
@@ -66,6 +71,8 @@ describe('GamingSelectionPreview', () => {
                   id: 'p2',
                   available: false,
                   unavailableReason: 'inactive',
+                  capturedSourceVersion: 'version-2',
+                  currentSourceVersion: 'version-2',
                   product: null,
                 },
               ],
@@ -81,11 +88,19 @@ describe('GamingSelectionPreview', () => {
       screen.getByRole('button', { name: 'Create Gaming preview' })
     );
     expect(await screen.findByText('Controller')).toBeInTheDocument();
+    expect(
+      screen.getByText(/3 active products use legacy Gaming labels/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Changed since preview; showing current details.')
+    ).toBeInTheDocument();
+    expect(preview.querySelector('ul')).toHaveClass(
+      'max-h-[40vh]',
+      'overflow-y-auto'
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Loading products…'
-    );
+    expect(await screen.findByText('Loading products…')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
     resolveSecondPage(
       Response.json({
@@ -93,11 +108,14 @@ describe('GamingSelectionPreview', () => {
         total: 51,
         page: 2,
         totalPages: 2,
+        legacyUnmappedCount: 3,
         products: [
           {
             id: 'p2',
             available: false,
             unavailableReason: 'inactive',
+            capturedSourceVersion: 'version-2',
+            currentSourceVersion: 'version-2',
             product: null,
           },
         ],
@@ -105,7 +123,7 @@ describe('GamingSelectionPreview', () => {
     );
     expect(await screen.findByText('inactive')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(screen.queryByText('Loading products…')).not.toBeInTheDocument()
     );
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
@@ -127,20 +145,7 @@ describe('GamingSelectionPreview', () => {
   });
 
   it('shows an actionable safe error when selection creation fails', async () => {
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            ilike: () => ({
-              maybeSingle: async () => ({
-                data: { id: 'gaming-category' },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
+    setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
       Response.json({ error: 'sensitive database detail' }, { status: 500 })
@@ -159,21 +164,49 @@ describe('GamingSelectionPreview', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('explains that duplicate active Gaming categories must be resolved', async () => {
+    setupGamingCategories([
+      { id: 'gaming-category-a' },
+      { id: 'gaming-category-b' },
+    ]);
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'More than one active category is named Gaming.'
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('shows the upgrade requirement for a marketplace entitlement response', async () => {
+    setupGamingCategories();
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        { code: 'requires_upgrade', error: 'private upgrade details' },
+        { status: 402 }
+      )
+    );
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Marketplace sync requires an upgraded plan.'
+    );
+    expect(
+      screen.queryByText('private upgrade details')
+    ).not.toBeInTheDocument();
+  });
+
   it('shows an empty state when the frozen selection contains no products', async () => {
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            ilike: () => ({
-              maybeSingle: async () => ({
-                data: { id: 'gaming-category' },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
+    setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
       Response.json({ selectionId: 'selection-empty' }, { status: 201 })
@@ -186,6 +219,7 @@ describe('GamingSelectionPreview', () => {
           total: 0,
           page: 1,
           totalPages: 0,
+          legacyUnmappedCount: 0,
           products: [],
         })
       )

@@ -96,6 +96,36 @@ describe('GET /api/storefront/products ranked search basics', () => {
     expect(body.count).toBe(2);
   });
 
+  it('forwards a bounded search offset to the ranked catalog lookup', async () => {
+    storefrontProductsRouteTestHarness.mockSearchRpc.current.mockResolvedValueOnce(
+      {
+        data: [{ product_id: 'product-51', total_count: 51 }],
+        error: null,
+      }
+    );
+    storefrontProductsRouteTestHarness.mockProductsByIdsResult.current = {
+      data: [
+        storefrontProductsRouteTestHarness.createRawProduct({
+          id: 'product-51',
+          name: 'iPhone 15',
+        }),
+      ],
+      error: null,
+    };
+
+    const response = await GET(
+      new NextRequest(createRequestUrl('q=iphone&limit=50&offset=50'))
+    );
+
+    expect(
+      storefrontProductsRouteTestHarness.mockSearchRpc.current
+    ).toHaveBeenCalledWith(
+      'search_products_v2',
+      expect.objectContaining({ result_limit: 50, result_offset: 50 })
+    );
+    expect((await response.json()).products).toHaveLength(1);
+  });
+
   it('chunks ranked search hydration IDs to avoid oversized PostgREST URLs', async () => {
     const rankedIds = Array.from(
       { length: 150 },

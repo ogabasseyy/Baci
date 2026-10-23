@@ -49,6 +49,7 @@ export function RepairDeviceModelField({
     hasSearched,
     isLoading,
     lookupFailed,
+    refreshSuggestions,
     suggestions,
   } = useRepairDeviceSuggestions({
     catalogEnabled,
@@ -108,6 +109,7 @@ export function RepairDeviceModelField({
         aria-invalid={ariaInvalid}
         autoComplete="off"
         id={id}
+        onFocus={refreshSuggestions}
         onBlur={() => {
           field.onBlur();
         }}

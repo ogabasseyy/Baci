@@ -77,7 +77,7 @@ describe('GamingSelectionPreview', () => {
     fetcher.mockResolvedValue(
       Response.json(
         {
-          selectionId: 'selection-trimmed',
+          selectionId: '00000000-0000-4000-8000-000000000021',
           total: 0,
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
@@ -88,7 +88,7 @@ describe('GamingSelectionPreview', () => {
       'fetch',
       vi.fn(async () =>
         Response.json({
-          selectionId: 'selection-trimmed',
+          selectionId: '00000000-0000-4000-8000-000000000021',
           total: 0,
           page: 1,
           totalPages: 0,
@@ -141,13 +141,16 @@ describe('GamingSelectionPreview', () => {
     setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
-      Response.json({ selectionId: 'selection-empty' }, { status: 201 })
+      Response.json(
+        { selectionId: '00000000-0000-4000-8000-000000000022' },
+        { status: 201 }
+      )
     );
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
         Response.json({
-          selectionId: 'selection-empty',
+          selectionId: '00000000-0000-4000-8000-000000000022',
           total: 0,
           page: 1,
           totalPages: 0,
@@ -173,7 +176,7 @@ describe('GamingSelectionPreview', () => {
     fetcher.mockResolvedValue(
       Response.json(
         {
-          selectionId: 'selection-malformed',
+          selectionId: '00000000-0000-4000-8000-000000000023',
           total: 1,
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
@@ -184,7 +187,7 @@ describe('GamingSelectionPreview', () => {
       'fetch',
       vi.fn(async () =>
         Response.json({
-          selectionId: 'selection-malformed',
+          selectionId: '00000000-0000-4000-8000-000000000023',
           total: 1,
           page: 1,
           totalPages: 1,

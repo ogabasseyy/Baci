@@ -11,7 +11,7 @@ const validItem = {
 };
 
 const validPage = {
-  selectionId: 'selection-1',
+  selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
   total: 1,
   page: 1,
   totalPages: 1,
@@ -100,6 +100,15 @@ describe('jumiaProductExportEligiblePageSchema', () => {
       jumiaProductExportEligiblePageSchema.safeParse({
         ...validPage,
         products: [null],
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects a non-UUID selection identifier', () => {
+    expect(
+      jumiaProductExportEligiblePageSchema.safeParse({
+        ...validPage,
+        selectionId: 'selection-1',
       }).success
     ).toBe(false);
   });

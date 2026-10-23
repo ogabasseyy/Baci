@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { createClient } from '@/lib/supabase/client';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
-import { UNREADABLE_GAMING_PREVIEW_CREATION_MESSAGE } from './constants';
+import { jumiaPreviewMessages } from './constants';
 import { eligiblePreviewRequest } from './eligible-preview-request';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
@@ -29,7 +29,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     retryAfterUnreadableResponse = false
   ) => {
     if (creationOutcomeUnknown && !retryAfterUnreadableResponse) {
-      setError(UNREADABLE_GAMING_PREVIEW_CREATION_MESSAGE);
+      setError(jumiaPreviewMessages.unreadableCreation);
       return;
     }
     setLoading(true);
@@ -115,14 +115,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         result = await response.json();
       } catch {
         setCreationOutcomeUnknown(true);
-        throw new Error(UNREADABLE_GAMING_PREVIEW_CREATION_MESSAGE);
+        throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       if (
         !gamingSelectionPreviewCache.isRecord(result) ||
         !gamingSelectionPreviewCache.isSelectionId(result.selectionId)
       ) {
         setCreationOutcomeUnknown(true);
-        throw new Error(UNREADABLE_GAMING_PREVIEW_CREATION_MESSAGE);
+        throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       setCreationOutcomeUnknown(false);
       if (

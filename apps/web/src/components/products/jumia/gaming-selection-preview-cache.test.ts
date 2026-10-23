@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 describe('Gaming selection preview cache helpers', () => {
   beforeEach(() => localStorage.clear());
+  afterEach(() => vi.useRealTimers());
 
   it('reads an unexpired selection', () => {
     localStorage.setItem(
@@ -30,10 +31,10 @@ describe('Gaming selection preview cache helpers', () => {
       JSON.stringify({ selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd' }),
     ],
     [
-      'expired entry',
+      'invalid expiry',
       JSON.stringify({
-        selectionId: 'selection-1',
-        expiresAt: '2000-01-01T00:00:00.000Z',
+        selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
+        expiresAt: 'not-a-date',
       }),
     ],
   ])('removes %s entries', (_label, value) => {
@@ -42,6 +43,20 @@ describe('Gaming selection preview cache helpers', () => {
 
     expect(gamingSelectionPreviewCache.read(key)).toBeNull();
     expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it('keeps a server-valid selection when the client clock is ahead of expiry', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2040-01-01T00:00:00.000Z'));
+    const key = 'jumia-gaming-preview:merchant-1:category-1';
+    const selection = {
+      selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
+      expiresAt: '2039-12-31T23:59:59.000Z',
+    };
+    localStorage.setItem(key, JSON.stringify(selection));
+
+    expect(gamingSelectionPreviewCache.read(key)).toEqual(selection);
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(selection));
   });
 
   it.each([
@@ -81,12 +96,15 @@ describe('Gaming selection preview cache helpers', () => {
     expect(gamingSelectionPreviewCache.find('merchant-2')).toBeNull();
   });
 
-  it('does not skip a valid cache after removing an expired entry', () => {
+  it('continues to the next snapshot after the server rejects an expired one', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2100-01-01T00:00:00.000Z'));
+    const expiredKey = 'jumia-gaming-preview:merchant-1:expired-category';
     localStorage.setItem(
-      'jumia-gaming-preview:merchant-1:expired-category',
+      expiredKey,
       JSON.stringify({
-        selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
-        expiresAt: '2000-01-01T00:00:00.000Z',
+        selectionId: '2b2c50d8-40b7-44b1-9054-f7fa6d96ce20',
+        expiresAt: '2099-02-01T00:00:00.000Z',
       })
     );
     const validKey = 'jumia-gaming-preview:merchant-1:valid-category';
@@ -98,6 +116,17 @@ describe('Gaming selection preview cache helpers', () => {
       })
     );
 
+    const load = vi.fn(async (selectionId: string) => {
+      if (selectionId === '2b2c50d8-40b7-44b1-9054-f7fa6d96ce20') {
+        throw gamingSelectionPreviewCache.makeRequestError(410, 'expired');
+      }
+    });
+
+    await expect(
+      gamingSelectionPreviewCache.loadFirstValid('merchant-1', load)
+    ).resolves.toBe(true);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem(expiredKey)).toBeNull();
     expect(gamingSelectionPreviewCache.find('merchant-1')).toEqual({
       cacheKey: validKey,
       selection: {
@@ -107,7 +136,7 @@ describe('Gaming selection preview cache helpers', () => {
     });
   });
 
-  it('chooses the newest unexpired merchant snapshot', () => {
+  it('chooses the newest merchant snapshot for server validation', () => {
     localStorage.setItem(
       'jumia-gaming-preview:merchant-1:older-category',
       JSON.stringify({

@@ -2,7 +2,7 @@ import {
   type JumiaProductExportEligiblePage,
   jumiaProductExportEligiblePageSchema,
 } from '@/schemas/jumia/eligible-page';
-import { UPGRADE_REQUIRED_MESSAGE } from './constants';
+import { jumiaPreviewMessages } from './constants';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 async function requestErrorMessage(response: Response, fallback: string) {
@@ -10,7 +10,7 @@ async function requestErrorMessage(response: Response, fallback: string) {
   const payload: unknown = await response.json().catch(() => null);
   return gamingSelectionPreviewCache.isRecord(payload) &&
     payload.code === 'requires_upgrade'
-    ? UPGRADE_REQUIRED_MESSAGE
+    ? jumiaPreviewMessages.upgradeRequired
     : fallback;
 }
 
@@ -38,6 +38,9 @@ async function requestEligiblePreviewPage(
   }
   const parsed = jumiaProductExportEligiblePageSchema.safeParse(body);
   if (!parsed.success) {
+    throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
+  }
+  if (parsed.data.selectionId !== selectionId) {
     throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
   }
   return parsed.data;

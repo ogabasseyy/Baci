@@ -23,7 +23,7 @@ function readCachedSelection(cacheKey: string): CachedSelection | null {
       typeof value.selectionId === 'string' &&
       UUID_PATTERN.test(value.selectionId) &&
       typeof value.expiresAt === 'string' &&
-      Date.parse(value.expiresAt) > Date.now()
+      Number.isFinite(Date.parse(value.expiresAt))
     ) {
       return { selectionId: value.selectionId, expiresAt: value.expiresAt };
     }

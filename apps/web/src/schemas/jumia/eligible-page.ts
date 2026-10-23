@@ -3,7 +3,7 @@ import { jumiaProductExportEligibleItemSchema } from './eligible-item';
 
 export const jumiaProductExportEligiblePageSchema = z
   .object({
-    selectionId: z.string().min(1),
+    selectionId: z.uuid(),
     total: z.number().int().min(0),
     page: z.number().int().min(1),
     totalPages: z.number().int().min(0),

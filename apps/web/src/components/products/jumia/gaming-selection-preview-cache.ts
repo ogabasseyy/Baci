@@ -1,3 +1,4 @@
+import { acquireGamingPreviewCreationLock } from './gaming-preview-creation-lock';
 import { gamingSelectionPreviewErrors } from './gaming-selection-preview-errors';
 
 type CachedSelection = { selectionId: string; expiresAt: string };
@@ -104,9 +105,23 @@ function clearUncertainCreation(merchantId: string) {
   }
 }
 
-function beginCreation(merchantId: string) {
+async function beginCreation(
+  merchantId: string,
+  allowUncertainCreation = false
+) {
   if (inFlightCreations.has(merchantId) || hasActiveCreationLease(merchantId))
     return null;
+  const releaseCrossTabLock =
+    await acquireGamingPreviewCreationLock(merchantId);
+  if (!releaseCrossTabLock) return null;
+  if (inFlightCreations.has(merchantId) || hasActiveCreationLease(merchantId)) {
+    releaseCrossTabLock();
+    return null;
+  }
+  if (!allowUncertainCreation && hasUncertainCreation(merchantId)) {
+    releaseCrossTabLock();
+    return null;
+  }
   inFlightCreations.add(merchantId);
   const key = uncertainCreationKey(merchantId);
   const leaseToken = crypto.randomUUID();
@@ -139,6 +154,8 @@ function beginCreation(merchantId: string) {
       }
     } catch {
       // The in-memory guard is released even when storage is unavailable.
+    } finally {
+      releaseCrossTabLock();
     }
   };
 }

@@ -109,10 +109,11 @@ describe('Gaming selection preview cache helpers', () => {
   });
 
   it('shares and releases an in-flight creation guard by merchant', async () => {
-    const finish = gamingSelectionPreviewCache.beginCreation('merchant-flight');
+    const finish =
+      await gamingSelectionPreviewCache.beginCreation('merchant-flight');
     expect(finish).not.toBeNull();
     expect(
-      gamingSelectionPreviewCache.beginCreation('merchant-flight')
+      await gamingSelectionPreviewCache.beginCreation('merchant-flight')
     ).toBeNull();
     expect(
       gamingSelectionPreviewCache.hasCreationInFlight('merchant-flight')
@@ -123,13 +124,15 @@ describe('Gaming selection preview cache helpers', () => {
     expect(
       gamingSelectionPreviewCache.hasCreationInFlight('merchant-flight')
     ).toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
     const nextFinish =
-      gamingSelectionPreviewCache.beginCreation('merchant-flight');
+      await gamingSelectionPreviewCache.beginCreation('merchant-flight');
     expect(nextFinish).not.toBeNull();
     nextFinish?.();
   });
 
-  it('preserves a live cross-tab creation lease without exposing a retry', () => {
+  it('preserves a live cross-tab creation lease without exposing a retry', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
     const key = 'jumia-gaming-preview-uncertain:merchant-cross-tab';
@@ -143,16 +146,16 @@ describe('Gaming selection preview cache helpers', () => {
     ).toBe(true);
     expect(localStorage.getItem(key)).toBe(`in-flight:${Date.now() + 60_000}`);
     expect(
-      gamingSelectionPreviewCache.beginCreation('merchant-cross-tab')
+      await gamingSelectionPreviewCache.beginCreation('merchant-cross-tab')
     ).toBeNull();
   });
 
-  it('renews the active tab lease until its request completes', () => {
+  it('renews the active tab lease until its request completes', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
     const key = 'jumia-gaming-preview-uncertain:merchant-renewed';
     const finish =
-      gamingSelectionPreviewCache.beginCreation('merchant-renewed');
+      await gamingSelectionPreviewCache.beginCreation('merchant-renewed');
     const initialLease = Number(
       localStorage.getItem(key)?.slice(10).split(':', 1)[0]
     );
@@ -176,25 +179,38 @@ describe('Gaming selection preview cache helpers', () => {
     const merchantId = 'merchant-lease-recovery';
     const key = `jumia-gaming-preview-uncertain:${merchantId}`;
     const finishOriginal =
-      gamingSelectionPreviewCache.beginCreation(merchantId);
+      await gamingSelectionPreviewCache.beginCreation(merchantId);
     expect(finishOriginal).not.toBeNull();
 
-    localStorage.setItem(key, 'in-flight:0:expired-owner');
-    vi.resetModules();
-    const { gamingSelectionPreviewCache: recoveredTabCache } = await import(
-      './gaming-selection-preview-cache'
-    );
-    const finishRecovered = recoveredTabCache.beginCreation(merchantId);
-    const recoveredLease = localStorage.getItem(key);
-    const recoveredToken = recoveredLease?.split(':')[2];
-    expect(finishRecovered).not.toBeNull();
+    localStorage.setItem(key, 'in-flight:9999999999999:recovered-token');
+    const recoveredToken = 'recovered-token';
 
     vi.advanceTimersByTime(30_000);
     finishOriginal?.();
 
     expect(localStorage.getItem(key)?.split(':')[2]).toBe(recoveredToken);
-    finishRecovered?.();
-    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it('uses the browser lock when storage cannot coordinate separate tabs', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+    const first =
+      await gamingSelectionPreviewCache.beginCreation('merchant-lock-only');
+    expect(first).not.toBeNull();
+
+    vi.resetModules();
+    const { gamingSelectionPreviewCache: secondTabCache } = await import(
+      './gaming-selection-preview-cache'
+    );
+    await expect(
+      secondTabCache.beginCreation('merchant-lock-only')
+    ).resolves.toBeNull();
+
+    first?.();
   });
 
   it('recovers an expired cross-tab creation lease as uncertain', () => {

@@ -190,15 +190,26 @@ export function useGamingSelectionPreview(merchantId: string) {
         }
       }
       if (!isCurrentMerchant(owner, generation)) return;
-      finishCreation = gamingSelectionPreviewCache.beginCreation(owner);
+      finishCreation = await gamingSelectionPreviewCache.beginCreation(
+        owner,
+        retryAfterUnreadableResponse
+      );
       if (!finishCreation) {
+        const uncertain =
+          gamingSelectionPreviewCache.hasUncertainCreation(owner);
+        if (uncertain && isCurrentMerchant(owner, generation)) {
+          setCreationState({ merchantId: owner, value: true });
+        }
         setErrorForMerchant(
           owner,
           generation,
-          jumiaPreviewMessages.creationInFlight
+          uncertain
+            ? jumiaPreviewMessages.unreadableCreation
+            : jumiaPreviewMessages.creationInFlight
         );
         return;
       }
+      if (!isCurrentMerchant(owner, generation)) return;
       let response: Response;
       try {
         response = await fetchWithCsrf(

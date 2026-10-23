@@ -55,6 +55,17 @@ export function useGamingSelectionPreviewState(merchantId: string) {
     creationOutcomeUnknown,
     isCurrentMerchant,
     setCreationState,
+    updateCreationOutcome: (
+      owner: string,
+      generation: number,
+      unknown: boolean
+    ) => {
+      if (unknown) gamingSelectionPreviewCache.markUncertainCreation(owner);
+      else gamingSelectionPreviewCache.clearUncertainCreation(owner);
+      if (isCurrentMerchant(owner, generation)) {
+        setCreationState({ merchantId: owner, value: unknown });
+      }
+    },
     setSnapshotForMerchant: (
       owner: string,
       generation: number,

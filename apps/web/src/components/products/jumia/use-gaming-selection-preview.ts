@@ -1,9 +1,10 @@
 'use client';
 
 import { jumiaPreviewMessages } from './constants';
-import { eligiblePreviewRequest } from './eligible-preview-request';
 import { fetchMatchingGamingCategories } from './fetch-matching-gaming-categories';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
+import { recoverKnownSuccessfulPreview } from './gaming-selection-preview-known-success';
+import { createGamingPreviewPageLoader } from './gaming-selection-preview-page-loader';
 import {
   createGamingSelection,
   UnreadableSelectionCreationError,
@@ -21,30 +22,16 @@ export function useGamingSelectionPreview(merchantId: string) {
     creationOutcomeUnknown,
     isCurrentMerchant,
     setCreationState,
+    updateCreationOutcome,
     setSnapshotForMerchant,
     setLoadingForMerchant,
     setErrorForMerchant,
   } = useGamingSelectionPreviewState(merchantId);
 
-  const loadPage = async (
-    owner: string,
-    generation: number,
-    selectionId: string,
-    page: number,
-    signal: AbortSignal
-  ) => {
-    if (signal.aborted) throw signal.reason;
-    const result = await eligiblePreviewRequest.page(
-      owner,
-      selectionId,
-      page,
-      signal
-    );
-    if (!isCurrentMerchant(owner, generation)) {
-      throw new Error('Gaming preview merchant changed while loading.');
-    }
-    setSnapshotForMerchant(owner, generation, result);
-  };
+  const loadPage = createGamingPreviewPageLoader(
+    isCurrentMerchant,
+    setSnapshotForMerchant
+  );
   const loadAnyCachedPreview = (
     owner: string,
     generation: number,
@@ -53,18 +40,6 @@ export function useGamingSelectionPreview(merchantId: string) {
     gamingSelectionPreviewCache.loadFirstValid(owner, (selectionId) =>
       loadPage(owner, generation, selectionId, 1, signal)
     );
-
-  const updateCreationOutcome = (
-    owner: string,
-    generation: number,
-    unknown: boolean
-  ) => {
-    if (unknown) gamingSelectionPreviewCache.markUncertainCreation(owner);
-    else gamingSelectionPreviewCache.clearUncertainCreation(owner);
-    if (isCurrentMerchant(owner, generation)) {
-      setCreationState({ merchantId: owner, value: unknown });
-    }
-  };
 
   const createPreview = async (action: PreviewCreationAction = 'create') => {
     const owner = merchantId;
@@ -75,6 +50,20 @@ export function useGamingSelectionPreview(merchantId: string) {
     const uncertainCreation =
       creationOutcomeUnknown ||
       gamingSelectionPreviewCache.hasUncertainCreation(owner);
+    if (
+      retryAfterUnreadableResponse &&
+      gamingSelectionPreviewCache.findKnownSuccessfulSelection(owner)
+    ) {
+      const recovery = await recoverKnownSuccessfulPreview({
+        loadPage: (selectionId) =>
+          loadPage(owner, generation, selectionId, 1, requestSignal),
+        merchantId: owner,
+        generation,
+        setError: setErrorForMerchant,
+        setLoading: setLoadingForMerchant,
+      });
+      if (recovery !== 'missing') return;
+    }
     if (gamingSelectionPreviewCache.hasCreationInFlight(owner)) {
       setErrorForMerchant(
         owner,
@@ -163,11 +152,14 @@ export function useGamingSelectionPreview(merchantId: string) {
       finishCreation = await gamingSelectionPreviewCache.beginCreation(
         owner,
         retryAfterUnreadableResponse,
-        refresh || retryAfterUnreadableResponse
+        refresh
           ? undefined
           : async () => {
-              const cachedSelection =
-                gamingSelectionPreviewCache.read(cacheKey);
+              const cachedSelection = retryAfterUnreadableResponse
+                ? gamingSelectionPreviewCache.findKnownSuccessfulSelection(
+                    owner
+                  )?.selection
+                : gamingSelectionPreviewCache.read(cacheKey);
               if (!cachedSelection) return false;
               try {
                 await loadPage(
@@ -182,6 +174,11 @@ export function useGamingSelectionPreview(merchantId: string) {
               } catch (cause) {
                 if (!isCurrentMerchant(owner, generation)) return true;
                 if (!gamingSelectionPreviewCache.isRejected(cause)) throw cause;
+                if (retryAfterUnreadableResponse) {
+                  gamingSelectionPreviewCache.clearKnownSuccessfulSelection(
+                    owner
+                  );
+                }
                 gamingSelectionPreviewCache.removeIfMatches(
                   cacheKey,
                   cachedSelection.selectionId
@@ -214,6 +211,7 @@ export function useGamingSelectionPreview(merchantId: string) {
         return;
       }
       if (!isCurrentMerchant(owner, generation)) return;
+      gamingSelectionPreviewCache.clearKnownSuccessfulSelection(owner);
       let createdSelection: Awaited<ReturnType<typeof createGamingSelection>>;
       try {
         createdSelection = await createGamingSelection(owner, categoryId);
@@ -227,6 +225,13 @@ export function useGamingSelectionPreview(merchantId: string) {
         selectionId: createdSelection.selectionId,
         expiresAt: createdSelection.expiresAt,
       });
+      if (!persisted) {
+        gamingSelectionPreviewCache.rememberKnownSuccessfulSelection(
+          owner,
+          cacheKey,
+          createdSelection
+        );
+      }
       updateCreationOutcome(owner, generation, !persisted);
       finishCreation();
       finishCreation = null;

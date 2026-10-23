@@ -44,4 +44,33 @@ describe('Gaming selection preview persistence', () => {
     expect(gamingSelectionPreviewPersistence.write(key, newer)).toBe(false);
     expect(gamingSelectionPreviewPersistence.read(key)).toEqual(newer);
   });
+
+  it('separates acknowledged unpersisted success from an older cache entry', () => {
+    gamingSelectionPreviewPersistence.write(key, older);
+
+    expect(
+      gamingSelectionPreviewPersistence.findKnownSuccessfulSelection(
+        'merchant-persistence'
+      )
+    ).toBeNull();
+    gamingSelectionPreviewPersistence.rememberKnownSuccessfulSelection(
+      'merchant-persistence',
+      key,
+      newer
+    );
+
+    expect(
+      gamingSelectionPreviewPersistence.findKnownSuccessfulSelection(
+        'merchant-persistence'
+      )
+    ).toEqual({ cacheKey: key, selection: newer });
+    gamingSelectionPreviewPersistence.clearKnownSuccessfulSelection(
+      'merchant-persistence'
+    );
+    expect(
+      gamingSelectionPreviewPersistence.findKnownSuccessfulSelection(
+        'merchant-persistence'
+      )
+    ).toBeNull();
+  });
 });

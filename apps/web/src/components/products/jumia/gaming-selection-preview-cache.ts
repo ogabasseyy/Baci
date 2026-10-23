@@ -173,6 +173,39 @@ async function beginCreation(
   };
 }
 
+async function loadKnownSuccessfulSelection(
+  merchantId: string,
+  load: (selectionId: string) => Promise<void>
+) {
+  if (inFlightCreations.has(merchantId)) return false;
+  const releaseLock = await acquireGamingPreviewCreationLock(merchantId);
+  if (!releaseLock) return false;
+  try {
+    if (inFlightCreations.has(merchantId)) return false;
+    const entry =
+      gamingSelectionPreviewPersistence.findKnownSuccessfulSelection(
+        merchantId
+      );
+    if (!entry) return false;
+    try {
+      await load(entry.selection.selectionId);
+      return true;
+    } catch (cause) {
+      if (!gamingSelectionPreviewErrors.isRejected(cause)) throw cause;
+      gamingSelectionPreviewPersistence.clearKnownSuccessfulSelection(
+        merchantId
+      );
+      gamingSelectionPreviewPersistence.removeIfMatches(
+        entry.cacheKey,
+        entry.selection.selectionId
+      );
+      return false;
+    }
+  } finally {
+    releaseLock();
+  }
+}
+
 async function loadFirstValid(
   merchantId: string,
   load: (selectionId: string) => Promise<void>
@@ -220,6 +253,7 @@ export const gamingSelectionPreviewCache = {
   clearUncertainCreation,
   hasCreationInFlight,
   hasUncertainCreation,
+  loadKnownSuccessfulSelection,
   loadFirstValid,
   loadFirstValidForCategories,
   markUncertainCreation,

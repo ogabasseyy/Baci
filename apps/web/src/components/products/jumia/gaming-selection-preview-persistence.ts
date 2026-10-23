@@ -8,6 +8,7 @@ type CachedSelection = { selectionId: string; expiresAt: string };
 type CacheEntry = { cacheKey: string; selection: CachedSelection };
 
 const memorySelections = new Map<string, CachedSelection>();
+const knownSuccessfulSelections = new Map<string, CacheEntry>();
 function key(merchantId: string, categoryId: string) {
   return `${jumiaPreviewCacheConstants.cachePrefix}${merchantId}:${categoryId}`;
 }
@@ -121,6 +122,28 @@ function find(merchantId: string): CacheEntry | null {
   return findAll(merchantId)[0] ?? null;
 }
 
+function rememberKnownSuccessfulSelection(
+  merchantId: string,
+  cacheKey: string,
+  selection: CachedSelection
+) {
+  knownSuccessfulSelections.set(merchantId, { cacheKey, selection });
+}
+
+function findKnownSuccessfulSelection(merchantId: string): CacheEntry | null {
+  const entry = knownSuccessfulSelections.get(merchantId);
+  if (!entry) return null;
+  if (Date.parse(entry.selection.expiresAt) <= Date.now()) {
+    knownSuccessfulSelections.delete(merchantId);
+    return null;
+  }
+  return entry;
+}
+
+function clearKnownSuccessfulSelection(merchantId: string) {
+  knownSuccessfulSelections.delete(merchantId);
+}
+
 function remove(cacheKey: string) {
   memorySelections.delete(cacheKey);
   try {
@@ -147,6 +170,8 @@ function write(cacheKey: string, selection: CachedSelection) {
 }
 
 export const gamingSelectionPreviewPersistence = {
+  clearKnownSuccessfulSelection,
+  findKnownSuccessfulSelection,
   find,
   key,
   loadFirstValid,
@@ -154,5 +179,6 @@ export const gamingSelectionPreviewPersistence = {
   read,
   remove,
   removeIfMatches,
+  rememberKnownSuccessfulSelection,
   write,
 };

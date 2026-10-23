@@ -428,6 +428,7 @@ jobs:
           --sql-check supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
           --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
           --sql-check supabase/tests/jumia_product_export_selections.sql
+          --sql-check supabase/tests/jumia_product_export_selection_merchant_page.sql
           --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
           --sql-check supabase/tests/mcp_search_option_windows.sql
           --sql-check supabase/tests/mcp_search_option_windows_guard.sql --sql-check supabase/migrations/tests/connector_owner_creation_limit.sql

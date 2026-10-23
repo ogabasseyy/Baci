@@ -52,7 +52,7 @@ function readCreationLease(merchantId: string) {
   try {
     const value = localStorage.getItem(uncertainCreationKey(merchantId));
     if (!value?.startsWith('in-flight:')) return null;
-    const expiresAt = Number(value.slice('in-flight:'.length));
+    const expiresAt = Number(value.slice('in-flight:'.length).split(':', 1)[0]);
     return Number.isFinite(expiresAt) ? expiresAt : null;
   } catch {
     return null;
@@ -108,11 +108,14 @@ function beginCreation(merchantId: string) {
   if (inFlightCreations.has(merchantId) || hasActiveCreationLease(merchantId))
     return null;
   inFlightCreations.add(merchantId);
-  let lease = `in-flight:${Date.now() + CREATION_LEASE_MS}`;
+  const key = uncertainCreationKey(merchantId);
+  const leaseToken = crypto.randomUUID();
+  let lease = `in-flight:${Date.now() + CREATION_LEASE_MS}:${leaseToken}`;
   const renewLease = () => {
-    lease = `in-flight:${Date.now() + CREATION_LEASE_MS}`;
     try {
-      localStorage.setItem(uncertainCreationKey(merchantId), lease);
+      if (localStorage.getItem(key) !== lease) return;
+      lease = `in-flight:${Date.now() + CREATION_LEASE_MS}:${leaseToken}`;
+      localStorage.setItem(key, lease);
     } catch {
       // The in-memory guard remains available for this browser session.
     }
@@ -127,7 +130,6 @@ function beginCreation(merchantId: string) {
     clearInterval(leaseRenewal);
     inFlightCreations.delete(merchantId);
     try {
-      const key = uncertainCreationKey(merchantId);
       if (localStorage.getItem(key) === lease) {
         if (uncertainCreations.has(merchantId)) {
           localStorage.setItem(key, 'pending');

@@ -153,16 +153,47 @@ describe('Gaming selection preview cache helpers', () => {
     const key = 'jumia-gaming-preview-uncertain:merchant-renewed';
     const finish =
       gamingSelectionPreviewCache.beginCreation('merchant-renewed');
-    const initialLease = Number(localStorage.getItem(key)?.slice(10));
+    const initialLease = Number(
+      localStorage.getItem(key)?.slice(10).split(':', 1)[0]
+    );
 
     vi.advanceTimersByTime(30_000);
 
-    const renewedLease = Number(localStorage.getItem(key)?.slice(10));
+    const renewedLease = Number(
+      localStorage.getItem(key)?.slice(10).split(':', 1)[0]
+    );
     expect(renewedLease).toBeGreaterThan(initialLease);
     expect(
       gamingSelectionPreviewCache.hasCreationInFlight('merchant-renewed')
     ).toBe(true);
     finish?.();
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it('does not overwrite a newer cross-tab lease when a stale request resumes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
+    const merchantId = 'merchant-lease-recovery';
+    const key = `jumia-gaming-preview-uncertain:${merchantId}`;
+    const finishOriginal =
+      gamingSelectionPreviewCache.beginCreation(merchantId);
+    expect(finishOriginal).not.toBeNull();
+
+    localStorage.setItem(key, 'in-flight:0:expired-owner');
+    vi.resetModules();
+    const { gamingSelectionPreviewCache: recoveredTabCache } = await import(
+      './gaming-selection-preview-cache'
+    );
+    const finishRecovered = recoveredTabCache.beginCreation(merchantId);
+    const recoveredLease = localStorage.getItem(key);
+    const recoveredToken = recoveredLease?.split(':')[2];
+    expect(finishRecovered).not.toBeNull();
+
+    vi.advanceTimersByTime(30_000);
+    finishOriginal?.();
+
+    expect(localStorage.getItem(key)?.split(':')[2]).toBe(recoveredToken);
+    finishRecovered?.();
     expect(localStorage.getItem(key)).toBeNull();
   });
 

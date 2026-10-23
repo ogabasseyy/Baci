@@ -63,7 +63,7 @@ export async function handleGuestOAuthHttp(
       req.method === 'GET' &&
       [
         '/.well-known/oauth-protected-resource',
-        '/.well-known/oauth-protected-resource/mcp',
+        `/.well-known/oauth-protected-resource${new URL(auth.resource).pathname}`,
       ].includes(url.pathname)
     ) {
       json(res, 200, {

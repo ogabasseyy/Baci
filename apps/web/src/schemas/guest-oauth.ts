@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { mcpGuestCartOutputSchema } from './mcp-guest-cart';
 
+export const guestOAuthResourceUrlSchema = z.string().url().max(2048);
+
 export const guestOAuthAuthorizationSchema = z.object({
   client_id: z.string().min(1).max(256),
   redirect_uri: z.string().url().max(2048),
-  resource: z.string().url().max(2048),
+  resource: guestOAuthResourceUrlSchema,
   scope: z.literal('cart:write'),
   response_type: z.literal('code'),
   code_challenge_method: z.literal('S256'),
@@ -19,7 +21,7 @@ export const guestOAuthExchangeSchema = guestOAuthAuthorizationSchema
   });
 export const guestOAuthRefreshSchema = z.object({
   client_id: z.string().min(1).max(256),
-  resource: z.string().url().max(2048),
+  resource: guestOAuthResourceUrlSchema,
   refresh_token: z.string().regex(/^(?:[a-f0-9]{64}|[a-f0-9]{104})$/),
   scope: z.literal('cart:write').optional(),
 });

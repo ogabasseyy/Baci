@@ -44,3 +44,9 @@ References: [OpenAI authentication contract](https://developers.openai.com/plugi
 - OAuth startup has a ten-second deadline covering merchant lookup and RPC readiness. Deliberate connected-cart reads create distinct Review operation IDs, including after a previous link was consumed.
 
 These changes are local/PR fixes; they do not authorize applying corrective migrations, restoring membership, or activating production OAuth.
+
+### Scoped submission endpoint approval — 2026-10-23
+
+The owner authorized finishing the review fixes, obtaining clean current-head review/CI, merging, and activating guest OAuth only for the new submission endpoint `https://mcp.ogabassey.com/submission/mcp`. Preserve the original MCP connection and all old app configurations. Do not place orders or initiate payments. Deployment and successful ChatGPT tests remain separate gates; this approval is not evidence of either.
+
+`MCP_GUEST_OAUTH_RESOURCE_URL` optionally sets the canonical protected resource for a path-specific endpoint. It defaults to the existing issuer plus `/mcp`. An override must be an HTTPS URL on the exact issuer origin without credentials, query or fragment. Discovery advertises that exact resource, and authorization/token exchange retain exact resource binding. Use a separate service instance for the submission endpoint to preserve the original anonymous connection; proxy only the new MCP path and its OAuth discovery/authorization routes to that instance.

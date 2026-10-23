@@ -7,6 +7,7 @@ import {
   guestOAuthWorkerClaimsSchema,
   guestOAuthWorkerHeaderSchema,
   guestOAuthRedirectListSchema,
+  guestOAuthResourceUrlSchema,
 } from '../src/schemas/guest-oauth';
 import { GuestOAuth } from './guest-oauth';
 import { createOAuthRecordStore } from './guest-oauth-postgres';
@@ -32,6 +33,7 @@ export function createGuestOAuthRuntime(options: {
   const redirectsText = process.env.MCP_GUEST_OAUTH_REDIRECT_URIS ?? '';
   let claims: { role: string; merchant_id: string; exp: number };
   let redirects: string[];
+  let resource: string;
   try {
     claims = guestOAuthWorkerClaimsSchema.parse(
       JSON.parse(Buffer.from(worker.split('.')[1] ?? '', 'base64url').toString('utf8')),
@@ -43,6 +45,13 @@ export function createGuestOAuthRuntime(options: {
     if (worker.split('.').length !== 3 || !header.alg || !/^[A-Za-z0-9+/]{43}=$/.test(keyText))
       throw new Error('invalid');
     redirects = guestOAuthRedirectListSchema.parse(JSON.parse(redirectsText));
+    const resourceUrl = new URL(guestOAuthResourceUrlSchema.parse(
+      process.env.MCP_GUEST_OAUTH_RESOURCE_URL || `${options.issuer}/mcp`,
+    ));
+    if (resourceUrl.protocol !== 'https:' || resourceUrl.origin !== options.issuer ||
+      resourceUrl.username || resourceUrl.password || resourceUrl.search || resourceUrl.hash)
+      throw new Error('invalid');
+    resource = resourceUrl.href;
   } catch {
     throw new Error('Guest OAuth configuration is missing or invalid');
   }
@@ -80,7 +89,7 @@ export function createGuestOAuthRuntime(options: {
       return new GuestOAuth({
         store,
         issuer: options.issuer,
-        resource: `${options.issuer}/mcp`,
+        resource,
         redirects,
       });
     })();

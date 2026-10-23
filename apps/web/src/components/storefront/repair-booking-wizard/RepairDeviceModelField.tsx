@@ -125,17 +125,16 @@ export function RepairDeviceModelField({
             { signal: controller.signal }
           );
           if (controller.signal.aborted) return;
-          setSuggestions(
-            products
-              .map(toStoreProductSuggestion)
-              .filter(
-                (product): product is StoreProductDeviceSuggestion =>
-                  product !== null
-              )
-              .slice(0, 8)
-          );
+          const storeSuggestions = products
+            .map(toStoreProductSuggestion)
+            .filter(
+              (product): product is StoreProductDeviceSuggestion =>
+                product !== null
+            )
+            .slice(0, 8);
+          setSuggestions(storeSuggestions);
           setHasSearched(true);
-          setLookupFailed(false);
+          setLookupFailed(repairLookupFailed && storeSuggestions.length === 0);
         } catch {
           if (controller.signal.aborted) return;
           setSuggestions([]);
@@ -159,6 +158,15 @@ export function RepairDeviceModelField({
     repairCatalogEnabled,
     selectedModel,
   ]);
+
+  useEffect(() => {
+    if (activeSuggestionIndex < 0 || !hasSuggestionOptions) return;
+    document
+      .getElementById(
+        `${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${activeSuggestionIndex}`
+      )
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [activeSuggestionIndex, hasSuggestionOptions]);
 
   return (
     <div className="space-y-2">
@@ -246,7 +254,11 @@ export function RepairDeviceModelField({
                     <button
                       aria-label={`${displayName} ${device.deviceType ?? ''}`.trim()}
                       aria-selected={activeSuggestionIndex === index}
-                      className="flex w-full items-center justify-between gap-3 rounded-lg border bg-background px-3 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        activeSuggestionIndex === index
+                          ? 'border-primary/50 bg-accent'
+                          : 'bg-background'
+                      }`}
                       id={`${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${index}`}
                       key={suggestionKey}
                       onClick={() => selectSuggestion(device)}

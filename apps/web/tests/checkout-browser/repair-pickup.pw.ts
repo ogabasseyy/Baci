@@ -41,10 +41,6 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
     .click();
   await expect(page.getByLabel('Device Model')).toHaveValue('Apple iPhone 15');
   await expect(page.getByText('Choose a device')).toHaveCount(0);
-  await page.waitForTimeout(300);
-  expect(deviceSearchRequests).toEqual([
-    '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
-  ]);
   await page
     .getByLabel("What's the issue?")
     .fill('Cracked screen needs repair');
@@ -67,6 +63,9 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   await page.getByRole('button', { name: /^next$/i }).click();
   await expect(page.getByRole('heading', { name: 'Summary' })).toBeVisible();
   await expect(page.getByText('₦2,500', { exact: true })).toBeVisible();
+  expect(deviceSearchRequests).toEqual([
+    '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
+  ]);
   await page.getByRole('button', { name: 'Continue to payment' }).click();
 
   await expect(

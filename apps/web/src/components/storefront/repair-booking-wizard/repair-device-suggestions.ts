@@ -48,7 +48,11 @@ export function toStoreProductSuggestion(
   product: StorefrontProductDeviceCandidate
 ): StoreProductDeviceSuggestion | null {
   const category = product.category ?? '';
-  if (/\baccessories\b/i.test(category)) {
+  if (
+    /\b(accessor(?:y|ies)|cases?|chargers?|covers?|cables?|screen protectors?|tempered glass)\b/i.test(
+      category
+    )
+  ) {
     return null;
   }
   const deviceType = DEVICE_CATEGORY_TYPES.find(({ pattern }) =>

@@ -65,3 +65,9 @@ it('serves path-specific discovery only for the configured resource', async () =
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+it.each(['/', '/health', '/oauth/token', '/.well-known/oauth-protected-resource',
+  '/mcp/render/catalog', '/images/catalog.png', '/.well-known/openai-apps-challenge', '/%68ealth'])
+('rejects resource paths reserved by HTTP routes or proxy normalization: %s', (path) => {
+  expect(() => configuredRuntime(`https://qa.example.com${path}`)).toThrow('Guest OAuth configuration');
+});

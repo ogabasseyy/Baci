@@ -51,6 +51,10 @@ export function createGuestOAuthRuntime(options: {
     if (resourceUrl.protocol !== 'https:' || resourceUrl.origin !== options.issuer ||
       resourceUrl.username || resourceUrl.password || resourceUrl.search || resourceUrl.hash)
       throw new Error('invalid');
+    const path = resourceUrl.pathname;
+    if (['/', '/health', '/.well-known/openai-apps-challenge'].includes(path) ||
+      ['/images/', '/oauth/', '/.well-known/oauth-', '/mcp/render/'].some((prefix) => path.startsWith(prefix)) ||
+      path.includes('%') || path.includes('//')) throw new Error('invalid');
     resource = resourceUrl.href;
   } catch {
     throw new Error('Guest OAuth configuration is missing or invalid');

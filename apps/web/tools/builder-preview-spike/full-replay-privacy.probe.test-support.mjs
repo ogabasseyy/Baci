@@ -154,7 +154,7 @@ try {
     'PGRST_DB_SCHEMAS=public',
     '-e',
     `PGRST_JWT_SECRET=${secret}`,
-    'public.ecr.aws/supabase/postgrest@sha256:85258123312dc496ad4c2ed832154a65e9746f84df0d6d09b44229ff9230c08e'
+    'postgrest/postgrest@sha256:85258123312dc496ad4c2ed832154a65e9746f84df0d6d09b44229ff9230c08e'
   );
   const address = docker('port', api, '3000/tcp');
   assert.match(address, /^127\.0\.0\.1:\d+$/);

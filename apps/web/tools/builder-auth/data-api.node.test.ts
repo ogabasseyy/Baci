@@ -99,7 +99,7 @@ test('Data API accepts normal upstream authority but rejects a builder token and
         'PGRST_JWT_AUD=authenticated',
         '-e',
         `PGRST_JWT_SECRET=${jwks}`,
-        'public.ecr.aws/supabase/postgrest@sha256:85258123312dc496ad4c2ed832154a65e9746f84df0d6d09b44229ff9230c08e'
+        'postgrest/postgrest@sha256:85258123312dc496ad4c2ed832154a65e9746f84df0d6d09b44229ff9230c08e'
       );
       address = docker('port', api, '3000/tcp');
       assert.match(address, /^127\.0\.0\.1:\d+$/);

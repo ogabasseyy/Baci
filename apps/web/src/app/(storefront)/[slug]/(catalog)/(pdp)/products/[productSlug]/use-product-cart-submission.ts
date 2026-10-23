@@ -3,8 +3,8 @@ import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
 import type { Product, ProductVariant } from '@/lib/products';
+import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 export type ProductOfferSelection = NonNullable<Product['offers']>[number];
@@ -46,10 +46,11 @@ export function useProductCartSubmission({
     // The cart guard reads product stock: carry the exact option
     // availability (serialized units or offer quantity) so a stocked
     // selection on a zero-parent-stock product is not silently rejected.
-    const selectedOptionStock = variantForCart
-      ? (resolveSerializedVariantStock(variantForCart) ??
-        variantForCart.stock_quantity ??
-        product.stock)
+    const inventory = variantForCart
+      ? resolveVariantInventory(product, variantForCart)
+      : undefined;
+    const selectedOptionStock = inventory
+      ? inventory.stock
       : selectedOffer
         ? (resolveSerializedOfferStock(selectedOffer, product) ??
           selectedOffer.stock_quantity ??
@@ -57,7 +58,14 @@ export function useProductCartSubmission({
         : product.stock;
     const productToAdd =
       variantForCart || selectedOffer
-        ? { ...product, price: currentPrice, stock: selectedOptionStock }
+        ? {
+            ...product,
+            manage_stock: inventory
+              ? inventory.manageStock
+              : product.manage_stock,
+            price: currentPrice,
+            stock: selectedOptionStock,
+          }
         : product;
 
     // Store merchant slug for checkout

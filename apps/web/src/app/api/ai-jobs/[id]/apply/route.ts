@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (
+    !BUILDER_PRIVATE_STORAGE_ENABLED &&
     !parsedRequest.data.force &&
     pageConfig.updated_at !== generatedAgainstUpdatedAt
   ) {
@@ -200,8 +202,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       updated_at: string | null;
     }>();
 
+  if (applyError?.code === '40001')
+    return NextResponse.json(
+      {
+        error: 'Website is busy. Please retry.',
+        code: 'website_busy',
+        retryable: true,
+      },
+      { status: 409, headers: { 'Retry-After': '1' } }
+    );
   if (applyError) {
-    console.error('Failed to atomically apply AI draft', applyError);
+    console.error('Failed to atomically apply AI draft', {
+      code: applyError.code,
+    });
     return NextResponse.json(
       { error: 'Failed to apply AI draft' },
       { status: 500 }

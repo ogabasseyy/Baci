@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import ts from '@typescript/typescript6';
 import { analyzeAnalyticsDeliveryAuthoritySources } from './analytics-delivery-authority-analysis';
 import { analyticsDeliveryAuthorityManifest as manifest } from './analytics-delivery-authority-manifest';
 import { analyzeCredentialProjectionSets } from './analytics-delivery-credential-projection-analysis';
@@ -12,27 +11,15 @@ import { readQueueOnlyDeliveryCutover } from './event-pipeline-authority-cutover
 import { readGitSourceSnapshot } from './event-pipeline-git-source-snapshot';
 import { eventPipelineSourceFilePolicy } from './event-pipeline-source-file-policy';
 import { isTestSourcePath } from './event-pipeline-source-path';
-
-const sourceExtension = '(cjs|cts|js|jsx|mjs|mts|ts|tsx)';
-function colocatedTestPath(path: string): string {
-  return path.replace(
-    new RegExp(`\\.${sourceExtension}$`),
-    (_match, extension: string) => `.test.${extension}`
-  );
-}
-function runtimePathForColocatedTest(path: string): string | undefined {
-  const runtimePath = path.replace(
-    new RegExp(`\\.test\\.${sourceExtension}$`),
-    (_match, extension: string) => `.${extension}`
-  );
-  return runtimePath === path ? undefined : runtimePath;
-}
-
-// biome-ignore format: compact parser preserves the 300-line verifier gate.
-function ast(path: string, source: string) {
-  const scriptKind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : path.endsWith('.jsx') ? ts.ScriptKind.JSX : /\.(?:cjs|js|mjs)$/.test(path) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  return ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind);
-}
+import { hasRuntimeIntegrationCoverage } from './runtime-contract-integration-coverage';
+import { runtimeIntegrationSuites } from './runtime-contract-integration-suites';
+import {
+  associatedRuntimeTests,
+  colocatedTestPath,
+  hasRuntimeBehavior,
+  runtimeContractPaths,
+  runtimePathForColocatedTest,
+} from './runtime-contract-test-coverage';
 
 export function analyzeChangedRuntimeContracts(
   paths: readonly string[],
@@ -41,7 +28,17 @@ export function analyzeChangedRuntimeContracts(
 ): string[] {
   const findings: string[] = [];
   const runtimePaths = [
-    ...new Set(paths.map((path) => runtimePathForColocatedTest(path) ?? path)),
+    ...new Set(
+      runtimeContractPaths(
+        [
+          ...paths,
+          ...Object.keys(runtimeIntegrationSuites).filter((path) =>
+            paths.includes(runtimeIntegrationSuites[path])
+          ),
+        ],
+        sources
+      ).map((path) => runtimePathForColocatedTest(path) ?? path)
+    ),
   ];
   for (const path of runtimePaths.filter(
     (value) =>
@@ -62,25 +59,21 @@ export function analyzeChangedRuntimeContracts(
     if (lineCount > 300 && baselineLineCount <= 300) {
       findings.push(`${path}: changed runtime exceeds 300 lines`);
     }
-    const runtime = ast(path, source).statements.some(
-      (statement) =>
-        !ts.isImportDeclaration(statement) &&
-        !ts.isInterfaceDeclaration(statement) &&
-        !ts.isTypeAliasDeclaration(statement) &&
-        !ts.isExportDeclaration(statement)
-    );
+    const runtime = hasRuntimeBehavior(path, source);
     const testPath = colocatedTestPath(path);
     const baselineRuntime = baselineSource
-      ? ast(path, baselineSource).statements.some(
-          (statement) =>
-            !ts.isImportDeclaration(statement) &&
-            !ts.isInterfaceDeclaration(statement) &&
-            !ts.isTypeAliasDeclaration(statement) &&
-            !ts.isExportDeclaration(statement)
-        )
+      ? hasRuntimeBehavior(path, baselineSource)
       : false;
-    const legacyMissingTest = baselineRuntime && !baselineSources.has(testPath);
-    if (runtime && !sources.has(testPath) && !legacyMissingTest) {
+    const legacyMissingTest =
+      baselineRuntime &&
+      associatedRuntimeTests(path, baselineSources).length === 0 &&
+      !baselineSources.has(runtimeIntegrationSuites[path]);
+    if (
+      runtime &&
+      associatedRuntimeTests(path, sources).length === 0 &&
+      !hasRuntimeIntegrationCoverage(path, sources) &&
+      !legacyMissingTest
+    ) {
       findings.push(
         `${path}: changed runtime is missing colocated test ${testPath}`
       );
@@ -247,12 +240,20 @@ function sameSources(left: ReadonlyMap<string, string>, right: ReadonlyMap<strin
 export function verifyAnalyticsDeliveryAuthority(root: string): string[] {
   const snapshot = readGitSourceSnapshot(root);
   const paths = changedPaths(root);
-  const runtimeContractSnapshotPaths = paths.flatMap((path) => {
+  const runtimeContractSnapshotPaths = runtimeContractPaths(
+    [
+      ...paths,
+      ...Object.keys(runtimeIntegrationSuites).filter((path) =>
+        paths.includes(runtimeIntegrationSuites[path])
+      ),
+    ],
+    snapshot.filesystemSources
+  ).flatMap((path) => {
     const runtimePath = runtimePathForColocatedTest(path) ?? path;
     return [runtimePath, colocatedTestPath(runtimePath)];
   });
   // biome-ignore format: compact baseline call preserves the 300-line verifier gate.
-  const runtimeContractBaseline = baselineSources(root, runtimeContractSnapshotPaths);
+  const runtimeContractBaseline = baselineSources(root, [...runtimeContractSnapshotPaths, ...Object.values(runtimeIntegrationSuites)]);
   const now = new Date();
   const findings = snapshot.missingStagedPaths.map(
     (path) => `${path}: staged analytics authority source is unresolved`

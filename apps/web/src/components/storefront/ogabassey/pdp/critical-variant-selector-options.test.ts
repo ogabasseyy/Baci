@@ -86,7 +86,7 @@ describe('critical variant selector options', () => {
     ).toEqual(['storage']);
   });
 
-  it('does not render an axis when it has no choice to make', () => {
+  it('renders colour choices even when storage has a single option', () => {
     expect(
       getRenderableCriticalVariantAxes(['storage', 'color'], [
         {
@@ -104,7 +104,7 @@ describe('critical variant selector options', () => {
           stock_quantity: 2,
         },
       ])
-    ).toEqual([]);
+    ).toEqual(['color']);
   });
 
   it('canonicalizes variant attribute keys before deciding visible axes', () => {

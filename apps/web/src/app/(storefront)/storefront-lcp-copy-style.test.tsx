@@ -1,11 +1,24 @@
 import { render } from '@testing-library/react';
 import postcss, { type AnyNode } from 'postcss';
 import { describe, expect, it } from 'vitest';
+import { OgabasseyHeaderCriticalStyle } from '@/components/storefront/ogabassey/storefront-header-critical-style';
 import { OgabasseyHomeCriticalShell } from './ogabassey/ogabassey-home-critical-shell';
 import { OgabasseyPublicationSafeHeroFallback } from './ogabassey/ogabassey-publication-safe-hero-fallback';
 import { StorefrontLcpCopyStyle } from './storefront-lcp-copy-style';
 
 describe('StorefrontLcpCopyStyle', () => {
+  it('does not ship template-specific header rules in the tenant-neutral shell', () => {
+    render(<StorefrontLcpCopyStyle />);
+    const css = [...document.querySelectorAll('style')]
+      .map((style) => style.textContent)
+      .join('\n');
+    const headerRules: string[] = [];
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes('.ogabassey-navbar'))
+        headerRules.push(rule.selector);
+    });
+    expect(headerRules).toEqual([]);
+  });
   it.each([
     OgabasseyHomeCriticalShell,
     OgabasseyPublicationSafeHeroFallback,
@@ -13,6 +26,7 @@ describe('StorefrontLcpCopyStyle', () => {
     render(
       <>
         <StorefrontLcpCopyStyle />
+        <OgabasseyHeaderCriticalStyle />
         <HomeShell />
       </>
     );
@@ -28,9 +42,9 @@ describe('StorefrontLcpCopyStyle', () => {
     expect(widths).toBe(1);
   });
   it('sizes and positions the shared header before streamed route CSS arrives', () => {
-    render(<StorefrontLcpCopyStyle />);
+    render(<OgabasseyHeaderCriticalStyle />);
     const style = document.querySelector(
-      'style[data-href~="storefront-lcp-copy"], style[href="storefront-lcp-copy"]'
+      'style[data-href~="ogabassey-header-critical"], style[href="ogabassey-header-critical"]'
     );
     const rules = postcss.parse(style?.textContent ?? '');
     const values: Record<string, string> = {};

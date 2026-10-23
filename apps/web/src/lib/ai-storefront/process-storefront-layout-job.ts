@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import {
   getAiStorefrontDesignRationale,
   normalizeAiStorefrontLayout,
 } from '@/lib/ai-storefront/normalize-ai-storefront-layout';
 import { generateStorefrontLayoutWithOllama } from '@/lib/ai-storefront/ollama-storefront-client';
 import type { StorefrontLayoutJobInput } from '@/schemas/ai-jobs';
+import { storedStorefrontLayoutJobInputSchema } from '@/schemas/ai-jobs';
 import {
   type BuilderConfigInput,
   builderConfigSchema,
@@ -21,7 +23,22 @@ export async function processStorefrontLayoutJob({
   supabase,
   merchantId,
   input,
+  jobId,
 }: ProcessStorefrontLayoutJobArgs) {
+  if (BUILDER_PRIVATE_STORAGE_ENABLED) {
+    const stored = storedStorefrontLayoutJobInputSchema.parse(input);
+    const { starterConfig, ...semantic } = stored;
+    return processStorefrontLayoutSnapshot({
+      supabase,
+      merchantId,
+      input: semantic,
+      jobId,
+      starterSnapshot: {
+        config: starterConfig,
+        updatedAt: semantic.createdPageConfigUpdatedAt,
+      },
+    });
+  }
   const { data: pageConfig, error: pageError } = await supabase
     .from('page_configs')
     .select('id, draft_config, updated_at')
@@ -36,7 +53,31 @@ export async function processStorefrontLayoutJob({
     throw new Error('Starter page config is missing');
   }
 
-  const parsedStarter = builderConfigSchema.safeParse(pageConfig.draft_config);
+  return processStorefrontLayoutSnapshot({
+    supabase,
+    merchantId,
+    input,
+    jobId,
+    starterSnapshot: {
+      config: pageConfig.draft_config,
+      updatedAt: pageConfig.updated_at,
+    },
+  });
+}
+
+/** Uses only the starter captured by a normal-client enqueue transaction.
+ * The caller must load this from the already owner-protected ai_jobs row.
+ * It grants the worker no access to builder_page_drafts.
+ */
+export async function processStorefrontLayoutSnapshot({
+  supabase,
+  merchantId,
+  input,
+  starterSnapshot,
+}: ProcessStorefrontLayoutJobArgs & {
+  starterSnapshot: { config: unknown; updatedAt: string | null };
+}) {
+  const parsedStarter = builderConfigSchema.safeParse(starterSnapshot.config);
   if (!parsedStarter.success) {
     throw new Error('Starter page config failed validation');
   }
@@ -75,10 +116,10 @@ export async function processStorefrontLayoutJob({
     generatedConfig: parsedGenerated.data,
     designRationale: getAiStorefrontDesignRationale(layout),
     pageSlug: input.pageSlug,
-    generatedAgainstUpdatedAt: pageConfig.updated_at,
+    generatedAgainstUpdatedAt: starterSnapshot.updatedAt,
     applied: false,
     skippedAutoApplyReason:
-      pageConfig.updated_at !== input.createdPageConfigUpdatedAt
+      starterSnapshot.updatedAt !== input.createdPageConfigUpdatedAt
         ? 'page_config_changed_after_job_created'
         : null,
   };

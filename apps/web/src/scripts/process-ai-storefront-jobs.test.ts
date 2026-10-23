@@ -2,11 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { processAiStorefrontJobs } from './process-ai-storefront-jobs';
 const mocks = vi.hoisted(() => ({
   processStorefrontLayoutJob: vi.fn(),
+  privateStorage: false,
 }));
 
 vi.mock('@/lib/ai-storefront/process-storefront-layout-job', () => ({
   processStorefrontLayoutJob: mocks.processStorefrontLayoutJob,
 }));
+
+vi.mock('@/config/builder-private-storage', () => ({ get BUILDER_PRIVATE_STORAGE_ENABLED() { return mocks.privateStorage; } }));
 
 vi.mock('@/env', () => ({
   getOllamaStorefrontModel: () => 'gemma4:e4b',
@@ -20,6 +23,7 @@ interface RunnerSupabaseMockOptions {
   failLostLease?: boolean;
   initialAttempts?: number;
   initialError?: string | null;
+  privateSnapshot?: unknown;
   initialStatus?: 'pending' | 'processing';
 }
 
@@ -40,6 +44,7 @@ function createRunnerSupabaseMock(options: RunnerSupabaseMockOptions = {}) {
       businessType: 'electronics',
       brandColors: null,
       createdPageConfigUpdatedAt: null,
+      ...(options.privateSnapshot === undefined ? {} : { starterConfig: options.privateSnapshot }),
     },
     attempts: options.initialAttempts ?? 0,
     max_attempts: 3,
@@ -132,6 +137,7 @@ function createRunnerSupabaseMock(options: RunnerSupabaseMockOptions = {}) {
 describe('processAiStorefrontJobs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.privateStorage = false;
     mocks.processStorefrontLayoutJob.mockResolvedValue({
       generatedConfig: { content: [], root: { title: 'Home' }, zones: {} },
       applied: false,
@@ -141,6 +147,17 @@ describe('processAiStorefrontJobs', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it('preserves server-captured private snapshots only with private storage enabled', async () => {
+    const snapshot = { content: [], root: { title: 'Private' } };
+    mocks.privateStorage = true;
+    await processAiStorefrontJobs({ supabase: createRunnerSupabaseMock({ privateSnapshot: snapshot }), workerId: 'private-worker' });
+    expect(mocks.processStorefrontLayoutJob).toHaveBeenCalledWith(expect.objectContaining({ input: expect.objectContaining({ starterConfig: snapshot }) }));
+    mocks.processStorefrontLayoutJob.mockClear();
+    mocks.privateStorage = false;
+    await processAiStorefrontJobs({ supabase: createRunnerSupabaseMock({ privateSnapshot: snapshot }), workerId: 'private-worker' });
+    expect(mocks.processStorefrontLayoutJob).not.toHaveBeenCalled();
   });
 
   it('claims only storefront generation jobs with the default batch size', async () => {

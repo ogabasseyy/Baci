@@ -180,7 +180,7 @@ describe('OgabasseyPdpCriticalCommerceClient variant routing', () => {
     );
   });
 
-  it('requires an explicit hidden color selection before adding color-only variants', () => {
+  it('requires an explicit visible color selection before adding color-only variants', () => {
     const colorVariantProduct: CartProduct = {
       ...variantCartProduct,
       variants: [

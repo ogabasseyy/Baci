@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { getContrastRatio } from '@/lib/color-utils';
 import { buildCuratedCopy } from './build-curated-copy';
 import { buildCuratedHero } from './build-curated-hero';
+import { getCuratedThemeTokenProjection } from './curated-theme-token-projection';
 import { deriveCuratedTheme } from './derive-curated-theme';
 
 vi.mock('next/link', () => ({
@@ -59,12 +60,13 @@ it.each([
   ).toHaveAttribute('href', '#products');
 });
 
-const blackScrimmed = (color: string) => {
+const scrimmed = (color: string, overlay: string) => {
   const rgb = colord(color).toRgb();
+  const scrim = colord(overlay).toRgb();
   return colord({
-    r: Math.round(rgb.r * 0.4),
-    g: Math.round(rgb.g * 0.4),
-    b: Math.round(rgb.b * 0.4),
+    r: Math.round(rgb.r * 0.4 + scrim.r * 0.6),
+    g: Math.round(rgb.g * 0.4 + scrim.g * 0.6),
+    b: Math.round(rgb.b * 0.4 + scrim.b * 0.6),
   }).toHex();
 };
 
@@ -141,10 +143,12 @@ it.each(
   const heroProps = { ...hero, puck } satisfies BuilderRenderProps<
     typeof builderConfig.components.Hero
   >;
+  const tokens = getCuratedThemeTokenProjection(theme);
   const { container } = render(
     <div
       style={
         {
+          ...tokens,
           '--store-primary': theme.colors.primary,
           '--store-accent': theme.colors.accent,
           '--store-background': theme.colors.background,
@@ -155,9 +159,10 @@ it.each(
     </div>
   );
 
-  expect(container.querySelector('[aria-hidden="true"]')).toHaveClass(
-    'bg-black/60'
-  );
+  expect(container.querySelector('[aria-hidden="true"]')).toHaveStyle({
+    backgroundColor: 'var(--theme-hero-overlay, var(--theme-foreground))',
+    opacity: '0.6',
+  });
   expect(container.firstElementChild).toHaveStyle({
     '--store-primary': theme.colors.primary,
     '--store-accent': theme.colors.accent,
@@ -166,12 +171,15 @@ it.each(
   expect(container.querySelector('section')).toHaveStyle({
     backgroundImage: hero.backgroundGradient,
   });
-  expect(screen.getByRole('heading', { level: 1 }).parentElement).toHaveClass(
-    'text-white'
-  );
+  expect(screen.getByRole('heading', { level: 1 }).parentElement).toHaveStyle({
+    color: 'var(--theme-hero-foreground, var(--theme-background))',
+  });
   for (const endpointName of endpointNames)
     expect(
-      getContrastRatio('#FFFFFF', blackScrimmed(theme.colors[endpointName]))
+      getContrastRatio(
+        tokens['--theme-hero-foreground'],
+        scrimmed(theme.colors[endpointName], tokens['--theme-hero-overlay'])
+      )
     ).toBeGreaterThanOrEqual(4.5);
 });
 

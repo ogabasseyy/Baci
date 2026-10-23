@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { generateDefaultConfig } from '@/lib/builder-defaults';
 import type {
   BuilderConfigInput,
@@ -23,6 +25,17 @@ interface MerchantTemplateData extends Record<string, unknown> {
   hero_image_ids: string[] | null;
 }
 
+const privatePageConfigSchema = z
+  .object({
+    draft_config: builderConfigSchema.nullable(),
+    published_config: builderConfigSchema.nullable(),
+    draft_seo: z.unknown(),
+    draft_store_settings: z.unknown(),
+    draft_setup_settings: z.unknown(),
+    is_published: z.boolean().nullable(),
+    updated_at: z.string().nullable(),
+  })
+  .nullable();
 interface PageConfigRecord {
   draft_config: BuilderConfigInput | null;
   published_config: BuilderConfigInput | null;
@@ -102,6 +115,25 @@ function getPageConfig(
   merchantId: string,
   pageSlug: string
 ) {
+  if (BUILDER_PRIVATE_STORAGE_ENABLED)
+    return supabase
+      .rpc('builder_private_load', {
+        p_merchant_id: merchantId,
+        p_slug: pageSlug,
+      })
+      .then(({ data, error }) => {
+        if (error) return { data: null, error };
+        const parsed = privatePageConfigSchema.safeParse(data);
+        return parsed.success
+          ? { data: parsed.data, error: null }
+          : {
+              data: null,
+              error: {
+                code: 'INVALID_PRIVATE_DRAFT',
+                message: 'Private draft failed validation',
+              },
+            };
+      });
   return supabase
     .from('page_configs')
     .select(

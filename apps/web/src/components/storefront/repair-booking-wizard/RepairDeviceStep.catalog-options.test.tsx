@@ -192,18 +192,22 @@ describe('RepairDeviceStep catalog behavior', () => {
         name: 'Apple iPhone 15 Smartphone',
       })
     ).toBeInTheDocument();
-    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
-    expect(mocks.apiGet).toHaveBeenCalledWith(
-      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&compact=true',
-      expect.anything()
-    );
+    expect(
+      mocks.apiGet.mock.calls.some(
+        ([url]) =>
+          url ===
+          '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&offset=0&compact=true'
+      )
+    ).toBe(true);
   });
 
   it('keeps the catalog unavailable message when repair lookup fails and product fallback has no device', async () => {
     const user = userEvent.setup();
-    mocks.apiGet
-      .mockRejectedValueOnce(new Error('repair catalog unavailable'))
-      .mockResolvedValueOnce({ products: [] });
+    mocks.apiGet.mockImplementation((url: string) =>
+      url.includes('/repairs/devices')
+        ? Promise.reject(new Error('repair catalog unavailable'))
+        : Promise.resolve({ products: [] })
+    );
 
     render(
       <Harness>

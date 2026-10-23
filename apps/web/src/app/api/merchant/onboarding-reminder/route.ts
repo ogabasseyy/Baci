@@ -69,6 +69,13 @@ export async function GET(request: NextRequest) {
     ) {
       return suppressed();
     }
+    const published = await supabase
+      .from('merchants')
+      .select('is_published')
+      .eq('id', merchantId)
+      .maybeSingle();
+    if (published.error) return failure('Could not load reminder', 500);
+    if (published.data?.is_published === true) return suppressed();
     const readiness = await loadStoreReadiness({
       supabase,
       merchantId,

@@ -24,18 +24,25 @@ test('onboarding CLI runs from the worker launcher with a disabled empty queue',
   const address = server.address();
   try {
     const child = spawn(
-      process.execPath,
-      [
-        join(root, 'node_modules/tsx/dist/cli.mjs'),
-        'src/scripts/process-merchant-onboarding-emails.ts',
-      ],
+      'bash',
+      [join(root, 'vps-workers/bin/process-merchant-onboarding-emails.sh')],
       {
         cwd: join(root, 'apps/web'),
         env: {
           ...process.env,
           NODE_OPTIONS: '--conditions=react-server',
           DOTENV_CONFIG_PATH: '/dev/null',
-          NEXT_PUBLIC_APP_URL: 'https://usebaci.test',
+          NODE_ENV: 'production',
+          GITHUB_ACTIONS: 'false',
+          BACI_WORKER_PROFILE: '',
+          BACI_REPO_DIR: root,
+          BACI_WORKER_ENV: '/dev/null',
+          BACI_WEB_BASE_URL: 'https://usebaci.test',
+          NEXT_PUBLIC_APP_URL: '',
+          SUPABASE_AGENTIC_JWT_PRIVATE_JWK: '',
+          SUPABASE_JWT_SECRET: '',
+          QUIZ_PHASE: '1a',
+          QUIZ_RPC_SERVER_SECRET: '',
           NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${address.port}`,
           NEXT_PUBLIC_SUPABASE_ANON_KEY: 'local-fixture-anon',
           SUPABASE_SERVICE_ROLE_KEY: 'local-fixture-worker',

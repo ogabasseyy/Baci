@@ -8,8 +8,13 @@ import { sendEmail } from '@/lib/zeptomail';
 
 export async function runMerchantOnboardingEmailsCli(): Promise<number> {
   try {
-    const appUrl = getConfiguredAppUrl();
-    if (!appUrl) throw new Error('Configured app origin is required');
+    const configuredUrl = getConfiguredAppUrl() || process.env.BACI_WEB_BASE_URL?.trim();
+    if (!configuredUrl) throw new Error('Configured app origin is required');
+    const parsedUrl = new URL(configuredUrl);
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password) {
+      throw new Error('Credential-free HTTPS app origin is required');
+    }
+    const appUrl = parsedUrl.origin;
     const counts = await processOnboardingEmailBatch(
       createJourneyRepository(createServiceClient()),
       sendEmail,

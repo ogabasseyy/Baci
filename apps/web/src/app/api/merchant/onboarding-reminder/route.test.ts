@@ -130,6 +130,32 @@ describe('owner onboarding reminder API', () => {
       reminder: { id: 'first_product' },
     });
   });
+  it('skips the full readiness load for a published store', async () => {
+    const { GET } = await import('./route');
+    read.mockResolvedValueOnce({ data: null, error: null });
+    read.mockResolvedValueOnce({ data: null, error: null });
+    read.mockResolvedValueOnce({ data: { is_published: true }, error: null });
+    expect(await (await GET(request())).json()).toEqual({
+      merchantId,
+      reminder: null,
+    });
+    expect(mocks.readiness).not.toHaveBeenCalled();
+  });
+  it('fails closed when publication status cannot be read', async () => {
+    const { GET } = await import('./route');
+    read.mockResolvedValueOnce({ data: null, error: null });
+    read.mockResolvedValueOnce({ data: null, error: null });
+    read.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'private publication error' },
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toContain(
+      'private publication error'
+    );
+    expect(mocks.readiness).not.toHaveBeenCalled();
+  });
   it('honors durable snooze and fails closed on database errors', async () => {
     const { GET } = await import('./route');
     read.mockResolvedValueOnce({ data: preferences, error: null });

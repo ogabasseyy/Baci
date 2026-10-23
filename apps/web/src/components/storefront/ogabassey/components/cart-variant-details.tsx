@@ -20,24 +20,53 @@ export function CartVariantDetails({
   const attributes: Record<string, string> = {};
   for (const [key, value] of Object.entries(item.variantAttributes ?? {})) {
     const axis = canonicalizeCommerceVariantAxis(key);
-    if (axis && typeof value === 'string' && value.trim()) attributes[axis] = value.trim();
+    if (axis && typeof value === 'string' && value.trim())
+      attributes[axis] = value.trim();
   }
-  const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
+  const text = (value: unknown) =>
+    typeof value === 'string' ? value.trim() : '';
   const condition = text(item.condition) || attributes.condition;
+  const conditionLabel = condition
+    ? formatCanonicalProductConditionLabel(condition) || condition
+    : '';
   const details = [
     ['Storage', attributes.storage || text(item.selectedStorage)],
     ['SIM type', attributes.sim_type],
-    [
-      'Condition',
-      condition
-        ? formatCanonicalProductConditionLabel(condition) || condition
-        : undefined,
-    ],
+    ['Condition', conditionLabel],
     ['Colour', attributes.color || text(item.selectedColor)],
     ...Object.entries(attributes)
-      .filter(([axis]) => !['storage', 'sim_type', 'condition', 'color'].includes(axis))
-      .map(([axis, value]) => [axis === 'ram' ? 'RAM' : axis.replaceAll('_', ' ').replace(/^./, (letter) => letter.toUpperCase()), value]),
-    ['Second colour preference', text(item.secondaryColor)],
+      .filter(
+        ([axis]) =>
+          ![
+            'storage',
+            'sim_type',
+            'condition',
+            'color',
+            'color_value',
+            'secondary_color',
+            'secondary_color_value',
+          ].includes(axis)
+      )
+      .filter(
+        ([axis, value]) =>
+          axis !== 'variant' ||
+          !conditionLabel ||
+          (
+            formatCanonicalProductConditionLabel(value) || value
+          ).toLowerCase() !== conditionLabel.toLowerCase()
+      )
+      .map(([axis, value]) => [
+        axis === 'ram'
+          ? 'RAM'
+          : axis
+              .replaceAll('_', ' ')
+              .replace(/^./, (letter) => letter.toUpperCase()),
+        value,
+      ]),
+    [
+      'Second colour preference',
+      attributes.secondary_color || text(item.secondaryColor),
+    ],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   if (!details.length) return null;

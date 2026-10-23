@@ -72,11 +72,59 @@ describe('CartVariantDetails', () => {
 
 it('uses the storefront theme for variant text', () => {
   render(<CartVariantDetails item={{ selectedStorage: '512GB' }} />);
-  expect(screen.getByLabelText('Selected variant')).toHaveClass('text-store-background-text/70');
+  expect(screen.getByLabelText('Selected variant')).toHaveClass(
+    'text-store-background-text/70'
+  );
 });
 
 it('shows additional SKU axes and ignores malformed saved values', () => {
-  render(<CartVariantDetails item={{ variantAttributes: JSON.parse('{"storage":null,"ram":"8GB","size":"L","material":"Cotton"}') }} />);
-  for (const text of ['RAM:', '8GB', 'Size:', 'L', 'Material:', 'Cotton']) expect(screen.getByText(text)).toBeVisible();
+  render(
+    <CartVariantDetails
+      item={{
+        variantAttributes: JSON.parse(
+          '{"storage":null,"ram":"8GB","size":"L","material":"Cotton"}'
+        ),
+      }}
+    />
+  );
+  for (const text of ['RAM:', '8GB', 'Size:', 'L', 'Material:', 'Cotton'])
+    expect(screen.getByText(text)).toBeVisible();
   expect(screen.queryByText('Storage:')).not.toBeInTheDocument();
+});
+
+it('hides shared-cart compatibility metadata and shows one second colour preference', () => {
+  render(
+    <CartVariantDetails
+      item={{
+        secondaryColor: 'Blue',
+        variantAttributes: {
+          color: 'Silver',
+          colorValue: '#eee',
+          secondaryColor: 'Blue',
+          secondaryColorValue: '#00f',
+          ram: '8GB',
+        },
+      }}
+    />
+  );
+  expect(screen.getByText('Silver')).toBeVisible();
+  expect(screen.getAllByText('Blue')).toHaveLength(1);
+  expect(screen.getByText('8GB')).toBeVisible();
+  expect(
+    screen.queryByText(/#eee|#00f|Color value:|Secondary color:/)
+  ).not.toBeInTheDocument();
+});
+it.each([
+  'used',
+  'open_box',
+  'new',
+])('omits a synthesized variant repeating condition %s', (condition) => {
+  const variant = { used: 'Used', open_box: 'Open Box', new: 'New' }[
+    condition
+  ]!;
+  render(
+    <CartVariantDetails item={{ variantAttributes: { condition, variant } }} />
+  );
+  expect(screen.getByText(variant)).toBeVisible();
+  expect(screen.queryByText('Variant:')).not.toBeInTheDocument();
 });

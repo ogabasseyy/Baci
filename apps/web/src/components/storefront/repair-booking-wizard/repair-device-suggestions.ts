@@ -38,7 +38,7 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
   { pattern: /\b(laptops?|notebooks?)\b/i, deviceType: 'Laptop' },
   { pattern: /\b(tablets?|ipads?)\b/i, deviceType: 'Tablet' },
   {
-    pattern: /\b((game|gaming)\s+)?consoles?\b/i,
+    pattern: /^(gaming)$|\b((game|gaming)\s+)?consoles?\b/i,
     deviceType: 'Console',
   },
   {

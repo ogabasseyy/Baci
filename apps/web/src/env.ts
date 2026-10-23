@@ -1,5 +1,6 @@
 // src/env.ts
 import z from 'zod';
+import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
@@ -411,26 +412,12 @@ const serverSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    if (
-      value.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL &&
-      !value.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN
-    ) {
+    const credentialIssue = getAddressAutocompleteKvCredentialIssue(value);
+    if (credentialIssue) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          'ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN is required when ADDRESS_AUTOCOMPLETE_KV_REST_API_URL is set',
-        path: ['ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN'],
-      });
-    }
-    if (
-      value.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN &&
-      !value.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL is required when ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN is set',
-        path: ['ADDRESS_AUTOCOMPLETE_KV_REST_API_URL'],
+        message: credentialIssue.message,
+        path: [credentialIssue.field],
       });
     }
   })

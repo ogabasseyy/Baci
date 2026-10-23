@@ -106,3 +106,27 @@ it('warns when a review refresh contains unseen chat items and clears the notice
   await act(async () => { await result.current.handleViewCart(); });
   expect(result.current.cartNotice).toBeNull();
 });
+
+it('loads an existing connected quantity before adding from a fresh catalog', async () => {
+  const content = { success: true, connection_bound: true, canonical_cart_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    cart_url: 'https://ogabassey.com/cart#handoff=ch1.fixture.signature&hid=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+  const reply = (quantity: number, version: number) => ({ structuredContent: { ...content, version,
+    items: [{ product_id: product.id, quantity }] } });
+  const callTool = vi.fn().mockResolvedValueOnce(reply(3, 5)).mockResolvedValueOnce(reply(4, 6));
+  window.openai = { callTool, toolResponseMetadata: { connection_bound: true }, openExternal: vi.fn(), setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => { await result.current.handleAddToCart(product); });
+  expect(callTool).toHaveBeenNthCalledWith(1, 'get_ogabassey_guest_cart', {});
+  expect(callTool).toHaveBeenNthCalledWith(2, 'update_ogabassey_guest_cart', expect.objectContaining({ quantity: 4, expectedVersion: 5 }));
+  expect(callTool.mock.calls[1]?.[1]).not.toHaveProperty('cart_token');
+  expect(result.current.cart[0]?.quantity).toBe(4);
+});
+it('does not write when the first connected cart read fails', async () => {
+  const callTool = vi.fn().mockRejectedValue(new Error('offline'));
+  window.openai = { callTool, toolResponseMetadata: { connection_bound: true }, openExternal: vi.fn(), setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => { await result.current.handleAddToCart(product); });
+  expect(callTool).toHaveBeenCalledTimes(1);
+  expect(callTool).toHaveBeenCalledWith('get_ogabassey_guest_cart', {});
+  expect(result.current.cartError).not.toBeNull();
+});

@@ -43,8 +43,8 @@ it('does not consume a code on an incorrect PKCE verifier', async () => {
     (await auth.exchange({ ...request, code, code_verifier: verifier })).access_token,
   ).toBeTypeOf('string');
 });
-it('rotates refresh tokens and revokes the grant when an old refresh is reused', async () => {
-  const { auth } = fixture();
+it('rotates refresh tokens and revokes old reuse after the response-recovery grace', async () => {
+  const { auth, advance } = fixture();
   const { code } = await auth.authorize(request);
   const first = await auth.exchange({
     ...request,
@@ -56,6 +56,7 @@ it('rotates refresh tokens and revokes the grant when an old refresh is reused',
     refresh_token: first.refresh_token,
   });
   expect((await auth.verify(next.access_token)).id).toBeTypeOf('string');
+  advance(31_000);
   await expect(auth.refresh({ ...request, refresh_token: first.refresh_token })).rejects.toThrow();
   await expect(auth.verify(next.access_token)).rejects.toThrow();
 });
@@ -164,7 +165,7 @@ it('keeps grant expiry within the database cap when the app clock is slightly ah
   expect((await auth.verify(token.access_token)).expiresAt).toBeLessThanOrEqual(deadline);
 });
 
-it('revokes the token family when concurrent refreshes reuse one generation', async () => {
+it('returns one committed rotation to concurrent refresh retries', async () => {
   const { auth, options } = fixture();
   const { code } = await auth.authorize(request);
   const first = await auth.exchange({ ...request, code, code_verifier: verifier });
@@ -184,10 +185,11 @@ it('revokes the token family when concurrent refreshes reuse one generation', as
     auth.refresh({ ...request, refresh_token: first.refresh_token }),
     auth.refresh({ ...request, refresh_token: first.refresh_token }),
   ]);
-  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
   const winner = results.find((result) => result.status === 'fulfilled');
   if (!winner || winner.status !== 'fulfilled') throw new Error('No refresh');
-  await expect(auth.verify(winner.value.access_token)).rejects.toThrow('invalid_grant');
+  await expect(auth.verify(winner.value.access_token)).resolves.toHaveProperty('id');
+  expect(results[0]).toEqual(results[1]);
 });
 it('retries a refresh after cart initialization changes only the grant revision', async () => {
   const { auth, options, rows } = fixture();
@@ -257,7 +259,7 @@ it('rejects forged compact refreshes without revoking the legitimate grant', asy
   await expect(auth.verify(token.access_token)).resolves.toBeDefined();
 });
 it('upgrades existing opaque refresh tokens and preserves their replay revocation', async () => {
-  const { auth, rows, options } = fixture();
+  const { auth, rows, options, advance } = fixture();
   const { code } = await auth.authorize(request);
   const first = await auth.exchange({ ...request, code, code_verifier: verifier });
   const grant = await auth.verify(first.access_token);
@@ -272,6 +274,7 @@ it('upgrades existing opaque refresh tokens and preserves their replay revocatio
   const next = await restarted.refresh({ ...request, refresh_token: legacy });
   expect(next.refresh_token).toHaveLength(104);
   expect((await restarted.verify(next.access_token)).cartToken).toBe(grant.cartToken);
+  advance(31_000);
   await expect(restarted.refresh({ ...request, refresh_token: legacy })).rejects.toThrow();
   await expect(restarted.verify(next.access_token)).rejects.toThrow();
 });

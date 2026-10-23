@@ -96,6 +96,7 @@ export function createGuestOAuthRuntime(options: {
     return pending;
   }
   return {
+    resourcePath: new URL(resource).pathname,
     ready: getAuth,
     /** Dynamic, token-free rotation signal; catalog health remains independent. */
     health() {

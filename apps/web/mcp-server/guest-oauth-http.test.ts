@@ -188,3 +188,32 @@ it('decodes registration UTF-8 only after collecting split byte chunks', async (
   expect(status).toBe(201);
   expect(JSON.parse(output).redirect_uris).toEqual([redirect]);
 });
+
+it('keeps two concurrent browser consent bindings independent', async () => {
+  const { fixture, request } = await import('./guest-oauth.test-support');
+  const { auth } = fixture();
+  const server = createServer((req, res) => {
+    void handleGuestOAuthHttp(req, res, new URL(req.url ?? '/', auth.issuer), auth);
+  });
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No listener');
+  const local = `http://127.0.0.1:${address.port}`;
+  const flows = [];
+  for (const state of ['first', 'second']) {
+    const response = await fetch(`${local}/oauth/authorize?${new URLSearchParams({ ...request, state })}`);
+    flows.push({ cookie: response.headers.get('set-cookie')!.split(';')[0],
+      id: (await response.text()).match(/name="consent" value="([a-f0-9]+)"/)![1] });
+  }
+  expect(flows[0].cookie.split('=')[0]).not.toBe(flows[1].cookie.split('=')[0]);
+  const cookie = flows.map((flow) => flow.cookie).join('; ');
+  for (const [index, flow] of flows.entries()) {
+    const response = await fetch(`${local}/oauth/consent`, { method: 'POST', redirect: 'manual',
+      headers: { Origin: auth.issuer, Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ consent: flow.id, allow: 'yes' }) });
+    expect(response.status).toBe(303);
+    expect(new URL(response.headers.get('location')!).searchParams.get('state')).toBe(index === 0 ? 'first' : 'second');
+    expect(response.headers.get('set-cookie')).toContain(`${flow.cookie.split('=')[0]}=;`);
+  }
+});

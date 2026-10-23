@@ -1,3 +1,4 @@
+import { mcpReadiness } from './mcp-readiness';
 import { withOAuthReadinessTimeout } from './guest-oauth-startup';
 import { createGuestOAuthRuntime } from './guest-oauth-runtime';
 import { getConfirmedStockLabel } from './confirmed-stock-label';
@@ -93,7 +94,6 @@ const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
-const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
 const MCP_ALLOWED_HEADERS = 'content-type, authorization, mcp-protocol-version, mcp-session-id';
 const MCP_ALLOWED_METHODS = 'POST, GET, OPTIONS, DELETE, HEAD';
@@ -1239,6 +1239,9 @@ const guestOAuth = createGuestOAuthRuntime({
   issuer: MCP_PUBLIC_ORIGIN, supabaseUrl: SUPABASE_URL!, anonKey: SUPABASE_ANON_KEY!,
   getMerchantId, cartStore: guestCartStore,
 });
+// The dedicated OAuth service listens at its advertised resource path.
+// Default-off/original instances retain /mcp.
+const MCP_PATH = guestOAuth?.resourcePath ?? '/mcp';
 
 function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { resolveToken: () => Promise<string> } } = {}) {
   const server = new McpServer({
@@ -1768,7 +1771,8 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
       return projection.manageStock && projection.stockQuantity <= 0
         ? 'out_of_stock'
         : 'in_stock';
-    }
+    },
+    Boolean(options.connectionCart),
   );
 
   if (ORDER_PAYMENT_TOOLS_ENABLED) {
@@ -2548,10 +2552,11 @@ const httpServer = createServer(
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
-          res.writeHead(200, { 'content-type': 'application/json' });
+          const readiness = mcpReadiness(true, guestOAuth?.health().guestOAuthWorker);
+          res.writeHead(readiness.statusCode, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
-              status: 'healthy',
+              status: readiness.status,
               database: 'connected',
               ...carts,
             })

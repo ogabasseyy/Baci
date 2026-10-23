@@ -29,6 +29,7 @@ function configuredRuntime(resource?: string) {
 
 it('binds the new endpoint resource instead of the original MCP URL', async () => {
   const runtime = configuredRuntime('https://qa.example.com/submission/mcp');
+  expect(runtime!.resourcePath).toBe('/submission/mcp');
   expect((await runtime!.ready()).resource).toBe('https://qa.example.com/submission/mcp');
 });
 it('preserves the original resource when no override is configured', async () => {

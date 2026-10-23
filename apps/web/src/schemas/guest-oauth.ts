@@ -36,6 +36,16 @@ export const guestOAuthGrantSchema = z.object({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
+  refreshReceipt: z
+    .object({
+      previousHash: z.string().regex(/^[a-f0-9]{64}$/),
+      nextHash: z.string().regex(/^[a-f0-9]{64}$/),
+      accessToken: z.string().regex(/^[a-f0-9]{64}$/),
+      refreshToken: z.string().regex(/^[a-f0-9]{104}$/),
+      accessExpiresAt: z.number(),
+      recoverUntil: z.number(),
+    })
+    .optional(),
   tokenGenerations: z.number().int().min(0).max(1024).default(0),
   cartToken: z.string().regex(/^[a-f0-9]{64}$/),
   cartInitialized: z.boolean(),

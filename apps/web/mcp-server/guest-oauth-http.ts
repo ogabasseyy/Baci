@@ -5,7 +5,10 @@ import { GuestOAuthStorageError } from './guest-oauth-records';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GuestOAuth } from './guest-oauth';
 
-const cookieName = '__Host-baci_guest_oauth';
+function consentCookieName(id: string) {
+  if (!/^[a-f0-9]{64}$/.test(id)) throw new Error('invalid_request');
+  return `__Host-baci_guest_oauth_${id}`;
+}
 function values(params: URLSearchParams) {
   const output: Record<string, string> = {};
   for (const [key, value] of params) {
@@ -120,7 +123,7 @@ export async function handleGuestOAuthHttp(
       const consent = await auth.beginConsent(values(url.searchParams));
       res.setHeader(
         'Set-Cookie',
-        `${cookieName}=${consent.cookie}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=300`,
+        `${consentCookieName(consent.id)}=${consent.cookie}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=300`,
       );
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
@@ -130,6 +133,7 @@ export async function handleGuestOAuthHttp(
       if (req.headers.origin !== auth.issuer) throw new Error('invalid_request');
       const input = await body(req);
       if (input.allow !== 'yes' && input.allow !== 'no') throw new Error('invalid_request');
+      const cookieName = consentCookieName(input.consent ?? '');
       const cookie =
         req.headers.cookie
           ?.split(';')

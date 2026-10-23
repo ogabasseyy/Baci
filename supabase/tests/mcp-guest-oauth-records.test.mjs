@@ -59,6 +59,7 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     const capacityMigration = readFileSync(new URL('../migrations/20261022060100_mcp_guest_oauth_capacity.sql', import.meta.url), 'utf8');
     query(`CREATE SCHEMA auth; CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('request.jwt.claims',true)::jsonb ->> 'role' $$; ${scopeMigration} ${capacityMigration}`);
     assert.equal(query("SELECT pg_has_role('authenticator','mcp_guest_oauth_worker','member');"), 'f');
+    query(readFileSync(new URL('../migrations/20261023115000_mcp_guest_oauth_grant_admission.sql', import.meta.url), 'utf8'));
     const hook = "SELECT public.enforce_gigl_tracking_worker_request_scope();";
     for (const path of ['mcp_guest_oauth_read','mcp_guest_oauth_cas','mcp_guest_oauth_purge_expired','mcp_guest_oauth_seed_cart']) {
       assert.doesNotThrow(() => query(worker + `SET request.method='POST'; SET request.path='/rpc/${path}';` + hook));
@@ -68,11 +69,19 @@ test('OAuth CAS enforces tenant, lifetime and worker-only access in PostgreSQL',
     }
     assert.throws(() => query(worker + "SET request.method='GET'; SET request.path='/rpc/mcp_guest_oauth_read';" + hook), /outside its capability scope/);
     assert.throws(() => query("SET ROLE anon; SET request.jwt.claims='{\"role\":\"anon\"}'; SET request.method='POST'; SET request.path='/rpc/__guest_oauth_hook_reload_canary__';" + hook), /GUEST OAUTH hook reload canary observed/);
+    // Seven-day grants must stop before consuming the entire shared record store.
+    query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at)
+      SELECT '${tenant}','grant:retained'||g,repeat('x',64),1,now()+interval '6 days'
+      FROM generate_series(1,1999) g;`);
+    assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','grant:overflow',0,repeat('x',64),now()+interval '6 days');`), /oauth_grant_capacity_exceeded/);
+    assert.equal(query(worker + cas(2)), 't');
+    assert.equal(query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','access:existingconnection',0,repeat('x',64),now()+interval '15 minutes');`), 't');
+    assert.equal(query(worker.replace(tenant, other) + `SELECT public.mcp_guest_oauth_cas('${other}','grant:independent',0,repeat('x',64),now()+interval '6 days');`), 't');
     query(`INSERT INTO public.mcp_guest_oauth_records(merchant_id,record_key,ciphertext,revision,expires_at)
       SELECT '${tenant}','consent:capacity'||g,repeat('x',64),1,now()+interval '1 day'
       FROM generate_series(1,10000-(SELECT count(*)::int FROM public.mcp_guest_oauth_records WHERE merchant_id='${tenant}')) g;`);
     assert.throws(() => query(worker + `SELECT public.mcp_guest_oauth_cas('${tenant}','refresh:excess',0,repeat('x',64),now()+interval '1 day');`), /oauth_capacity_exceeded/);
-    assert.equal(query(worker + cas(2)), 't');
+    assert.equal(query(worker + cas(3)), 't');
     assert.equal(query('SELECT relrowsecurity FROM pg_class WHERE oid=\'public.mcp_guest_oauth_records\'::regclass;'), 't');
   } finally {
     if (started) execFileSync(join(bin, 'pg_ctl'), ['-D', `${dir}/data`, '-m', 'immediate', '-w', 'stop'], { stdio: 'pipe' });

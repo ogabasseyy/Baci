@@ -1,3 +1,4 @@
+import { refreshReceipt, recoverRefresh } from './guest-oauth-refresh-receipt';
 import { createGuestConsent } from './guest-oauth-consent';
 import { authenticRefreshToken, mintRefreshToken, refreshGrantId } from './guest-oauth-refresh-token';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -122,11 +123,18 @@ export class GuestOAuth {
       await this.revokeGrant(grant.id);
       throw new Error('invalid_grant');
     }
+    if (revision === 0) {
+      if (!(await this.options.store.compareAndSwap(`grant:${grant.id}`, 0, grant, grant.expiresAt)))
+        throw new GrantRevisionConflict();
+      revision = 1;
+    }
     const access = opaque();
     const refreshSigningKey = grant.refreshSigningKey ?? opaque();
     const refresh = mintRefreshToken(grant.id, grant.tokenGenerations + 1, refreshSigningKey);
     const expiresAt = Math.min(this.now() + ACCESS_TTL, grant.expiresAt);
     const next = { ...grant, refreshSigningKey, refreshHash: hash(refresh), tokenGenerations: grant.tokenGenerations + 1 };
+    const receipt = refreshReceipt(grant, access, refresh, expiresAt, this.now());
+    if (receipt) next.refreshReceipt = { ...receipt, nextHash: next.refreshHash };
     // Token indices precede grant CAS: partial writes never authorize a token
     // with a refresh hash other than the committed generation.
     await this.put(
@@ -219,6 +227,8 @@ export class GuestOAuth {
       const { row: current, grant } = await this.grant(grantId);
       if (compactId && !authenticRefreshToken(request.refresh_token, grant.id, grant.refreshSigningKey))
         throw new Error('invalid_grant');
+      const recovered = recoverRefresh(grant, hash(request.refresh_token), this.now());
+      if (recovered) return recovered;
       if (grant.refreshHash !== hash(request.refresh_token)) {
         await this.revokeGrant(grant.id);
         throw new Error('invalid_grant');
@@ -226,8 +236,7 @@ export class GuestOAuth {
       try {
         return await this.issue(grant, current.revision);
       } catch (error) {
-        // Re-read the generation: a consumed refresh revokes the family,
-        // while unrelated grant updates can safely retry with their new state.
+        // Re-read committed receipts or unrelated grant updates before retrying.
         if (!(error instanceof GrantRevisionConflict)) throw error;
       }
     }

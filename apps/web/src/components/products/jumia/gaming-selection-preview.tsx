@@ -4,106 +4,31 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { createClient } from '@/lib/supabase/client';
+import {
+  type JumiaProductExportEligiblePage,
+  jumiaProductExportEligiblePageSchema,
+} from '@/schemas/jumia/eligible-page';
 
-type EligibleItem = {
-  id: string;
-  available: boolean;
-  unavailableReason: string | null;
-  capturedSourceVersion: string;
-  currentSourceVersion: string | null;
-  product: { product?: { name?: string | null } } | null;
-};
+type CachedSelection = { selectionId: string; expiresAt: string };
 
-type EligiblePage = {
-  selectionId: string;
-  total: number;
-  page: number;
-  totalPages: number;
-  legacyUnmappedCount: number;
-  products: EligibleItem[];
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 const UPGRADE_REQUIRED_MESSAGE =
   'Marketplace sync requires an upgraded plan. Upgrade your plan to preview Jumia products.';
 
 async function requestErrorMessage(response: Response, fallback: string) {
   if (response.status !== 402) return fallback;
-  try {
-    const payload: unknown = await response.json();
-    if (
-      payload &&
-      typeof payload === 'object' &&
-      'code' in payload &&
-      payload.code === 'requires_upgrade'
-    ) {
-      return UPGRADE_REQUIRED_MESSAGE;
-    }
-  } catch {
-    // Keep the user-facing fallback generic when the error body is malformed.
-  }
-  return fallback;
-}
-
-function parseEligiblePage(value: unknown): EligiblePage | null {
-  if (!value || typeof value !== 'object') return null;
-  if (
-    !('selectionId' in value) ||
-    typeof value.selectionId !== 'string' ||
-    !('total' in value) ||
-    typeof value.total !== 'number' ||
-    !('page' in value) ||
-    typeof value.page !== 'number' ||
-    !('totalPages' in value) ||
-    typeof value.totalPages !== 'number' ||
-    !('legacyUnmappedCount' in value) ||
-    typeof value.legacyUnmappedCount !== 'number' ||
-    !('products' in value) ||
-    !Array.isArray(value.products)
-  )
-    return null;
-  const products: EligibleItem[] = [];
-  for (const item of value.products) {
-    if (
-      !item ||
-      typeof item !== 'object' ||
-      !('id' in item) ||
-      typeof item.id !== 'string' ||
-      !('available' in item) ||
-      typeof item.available !== 'boolean' ||
-      !('unavailableReason' in item) ||
-      (item.unavailableReason !== null &&
-        typeof item.unavailableReason !== 'string') ||
-      !('capturedSourceVersion' in item) ||
-      typeof item.capturedSourceVersion !== 'string' ||
-      !('currentSourceVersion' in item) ||
-      (item.currentSourceVersion !== null &&
-        typeof item.currentSourceVersion !== 'string') ||
-      !('product' in item) ||
-      (item.product !== null && typeof item.product !== 'object')
-    ) {
-      return null;
-    }
-    products.push({
-      id: item.id,
-      available: item.available,
-      unavailableReason: item.unavailableReason,
-      capturedSourceVersion: item.capturedSourceVersion,
-      currentSourceVersion: item.currentSourceVersion,
-      product: item.product,
-    });
-  }
-  return {
-    selectionId: value.selectionId,
-    total: value.total,
-    page: value.page,
-    totalPages: value.totalPages,
-    legacyUnmappedCount: value.legacyUnmappedCount,
-    products,
-  };
+  const payload: unknown = await response.json().catch(() => null);
+  return isRecord(payload) && payload.code === 'requires_upgrade'
+    ? UPGRADE_REQUIRED_MESSAGE
+    : fallback;
 }
 
 export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
-  const [snapshot, setSnapshot] = useState<EligiblePage | null>(null);
+  const [snapshot, setSnapshot] =
+    useState<JumiaProductExportEligiblePage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,12 +44,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         )
       );
     }
-    const parsed = parseEligiblePage(await response.json());
-    if (!parsed)
+    const parsed = jumiaProductExportEligiblePageSchema.safeParse(
+      await response.json()
+    );
+    if (!parsed.success)
       throw new Error(
         'Unable to read the Gaming preview. Please create it again.'
       );
-    setSnapshot(parsed);
+    setSnapshot(parsed.data);
   };
 
   const createPreview = async () => {
@@ -133,27 +60,57 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     try {
       const { data: categories, error: categoryError } = await createClient()
         .from('categories')
-        .select('id')
+        .select('id, name')
         .eq('merchant_id', merchantId)
         .eq('is_active', true)
-        .ilike('name', 'Gaming')
+        .ilike('name', '%Gaming%')
         .order('id', { ascending: true })
-        .limit(2);
-      if (categoryError || !categories?.length) {
+        .limit(1000);
+      const gamingCategories = categories?.filter(
+        (category) => category.name?.trim().toLowerCase() === 'gaming'
+      );
+      if (categoryError || !gamingCategories?.length) {
         throw new Error(
           'An active Gaming category was not found for this store.'
         );
       }
-      if (categories.length > 1) {
+      if (gamingCategories.length > 1) {
         throw new Error(
           'More than one active category is named Gaming. Keep one active Gaming category before creating a preview.'
         );
+      }
+      const categoryId = gamingCategories[0].id;
+      const cacheKey = `jumia-gaming-preview:${merchantId}:${categoryId}`;
+      let cachedSelection: CachedSelection | null = null;
+      try {
+        const value: unknown = JSON.parse(
+          localStorage.getItem(cacheKey) ?? 'null'
+        );
+        if (
+          isRecord(value) &&
+          typeof value.selectionId === 'string' &&
+          typeof value.expiresAt === 'string' &&
+          Date.parse(value.expiresAt) > Date.now()
+        ) {
+          cachedSelection = {
+            selectionId: value.selectionId,
+            expiresAt: value.expiresAt,
+          };
+        } else {
+          localStorage.removeItem(cacheKey);
+        }
+      } catch {
+        // Ignore unavailable storage or malformed cached values.
+      }
+      if (cachedSelection) {
+        await loadPage(cachedSelection.selectionId, 1);
+        return;
       }
       const response = await fetchWithCsrf(
         '/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: categories[0].id }),
+          body: JSON.stringify({ sourceCategoryId: categoryId }),
         }
       );
       if (!response.ok) {
@@ -165,13 +122,24 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         );
       }
       const result: unknown = await response.json();
-      if (
-        !result ||
-        typeof result !== 'object' ||
-        !('selectionId' in result) ||
-        typeof result.selectionId !== 'string'
-      ) {
+      if (!isRecord(result) || typeof result.selectionId !== 'string') {
         throw new Error('Unable to read the Gaming preview. Please retry.');
+      }
+      if (
+        typeof result.expiresAt === 'string' &&
+        Number.isFinite(Date.parse(result.expiresAt))
+      ) {
+        try {
+          localStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              selectionId: result.selectionId,
+              expiresAt: result.expiresAt,
+            })
+          );
+        } catch {
+          // Preview creation still works without local storage.
+        }
       }
       await loadPage(result.selectionId, 1);
     } catch (cause) {

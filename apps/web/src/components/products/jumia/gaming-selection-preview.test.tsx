@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GamingSelectionPreview } from './gaming-selection-preview';
 
 const mockFrom = vi.fn();
-function setupGamingCategories(categories = [{ id: 'gaming-category' }]) {
+function setupGamingCategories(
+  categories = [{ id: 'gaming-category', name: 'Gaming' }]
+) {
   mockFrom.mockReturnValue({
     select: () => ({
       eq: () => ({
@@ -26,7 +28,10 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 describe('GamingSelectionPreview', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
 
   it('creates and pages a preview only, without presenting selection or submit controls', async () => {
     setupGamingCategories();
@@ -34,7 +39,11 @@ describe('GamingSelectionPreview', () => {
     fetcher.mockImplementation(async (url) => {
       if (url.endsWith('/selections')) {
         return Response.json(
-          { selectionId: 'selection-1', total: 51 },
+          {
+            selectionId: 'selection-1',
+            total: 51,
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
           { status: 201 }
         );
       }
@@ -166,8 +175,8 @@ describe('GamingSelectionPreview', () => {
 
   it('explains that duplicate active Gaming categories must be resolved', async () => {
     setupGamingCategories([
-      { id: 'gaming-category-a' },
-      { id: 'gaming-category-b' },
+      { id: 'gaming-category-a', name: 'Gaming' },
+      { id: 'gaming-category-b', name: 'gaming ' },
     ]);
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     render(<GamingSelectionPreview merchantId="merchant-1" />);
@@ -180,6 +189,97 @@ describe('GamingSelectionPreview', () => {
       'More than one active category is named Gaming.'
     );
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('matches the server Gaming rule when the category name has surrounding whitespace', async () => {
+    setupGamingCategories([{ id: 'gaming-category', name: ' Gaming ' }]);
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        {
+          selectionId: 'selection-trimmed',
+          total: 0,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          selectionId: 'selection-trimmed',
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      )
+    );
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/marketplace/jumia/products/selections',
+      expect.objectContaining({
+        body: JSON.stringify({ sourceCategoryId: 'gaming-category' }),
+      })
+    );
+  });
+
+  it('reuses an unexpired frozen preview after the component is reopened', async () => {
+    setupGamingCategories();
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        {
+          selectionId: 'selection-cached',
+          total: 0,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 }
+      )
+    );
+    const pageFetch = vi.fn(async () =>
+      Response.json({
+        selectionId: 'selection-cached',
+        total: 0,
+        page: 1,
+        totalPages: 0,
+        legacyUnmappedCount: 0,
+        products: [],
+      })
+    );
+    vi.stubGlobal('fetch', pageFetch);
+
+    const firstRender = render(
+      <GamingSelectionPreview merchantId="merchant-1" />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    firstRender.unmount();
+
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(pageFetch).toHaveBeenCalledTimes(2);
   });
 
   it('shows the upgrade requirement for a marketplace entitlement response', async () => {
@@ -233,5 +333,42 @@ describe('GamingSelectionPreview', () => {
     expect(
       await screen.findByText('No products in this Gaming selection.')
     ).toBeInTheDocument();
+  });
+
+  it('shows a safe error when the eligible page violates its response schema', async () => {
+    setupGamingCategories();
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        {
+          selectionId: 'selection-malformed',
+          total: 1,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          selectionId: 'selection-malformed',
+          total: 1,
+          page: 1,
+          totalPages: 1,
+          legacyUnmappedCount: 0,
+          products: [{ id: 'p1', available: 'yes' }],
+        })
+      )
+    );
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to read the Gaming preview. Please create it again.'
+    );
   });
 });

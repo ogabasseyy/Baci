@@ -65,6 +65,8 @@ describe('repair device product suggestions', () => {
       'DualSense Wireless Controller',
       'Gaming Headset',
       'FIFA 25 Game',
+      'Xbox Wireless Controller',
+      'PlayStation 5 DualSense Controller',
     ]) {
       expect(
         toStoreProductSuggestion({

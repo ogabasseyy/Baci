@@ -78,6 +78,9 @@ export function toStoreProductSuggestion(
   if (
     !deviceType &&
     categories.some((category) => /^gaming$/i.test(category.trim())) &&
+    !/\b(controllers?|headsets?|games?|game cards?|charging docks?|stands?|cases?|cables?|chargers?)\b/i.test(
+      product.name
+    ) &&
     /\b(playstation|ps\s?\d|xbox|nintendo\s+switch|gaming\s+console)\b/i.test(
       product.name
     )

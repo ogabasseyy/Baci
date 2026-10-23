@@ -13,6 +13,19 @@ const inFlightCreations = new Set<string>();
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (
+      event.newValue !== null ||
+      !event.key?.startsWith(UNCERTAIN_CREATION_PREFIX)
+    )
+      return;
+    uncertainCreations.delete(
+      event.key.slice(UNCERTAIN_CREATION_PREFIX.length)
+    );
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

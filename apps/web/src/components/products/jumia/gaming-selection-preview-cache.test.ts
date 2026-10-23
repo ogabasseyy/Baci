@@ -92,6 +92,22 @@ describe('Gaming selection preview cache helpers', () => {
     ).toBe(false);
   });
 
+  it('clears an uncertain retry guard when another tab completes creation', () => {
+    const merchantId = 'merchant-cross-tab-retry';
+    const key = `jumia-gaming-preview-uncertain:${merchantId}`;
+    gamingSelectionPreviewCache.markUncertainCreation(merchantId);
+    expect(gamingSelectionPreviewCache.hasUncertainCreation(merchantId)).toBe(
+      true
+    );
+
+    localStorage.removeItem(key);
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue: null }));
+
+    expect(gamingSelectionPreviewCache.hasUncertainCreation(merchantId)).toBe(
+      false
+    );
+  });
+
   it('shares and releases an in-flight creation guard by merchant', async () => {
     const finish = gamingSelectionPreviewCache.beginCreation('merchant-flight');
     expect(finish).not.toBeNull();

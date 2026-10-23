@@ -79,7 +79,19 @@ export function RepairDeviceModelField({
   }, [activeSuggestionIndex, hasSuggestionOptions]);
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      onBlurCapture={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        clearSuggestions();
+        setActiveSuggestionIndex(-1);
+      }}
+    >
       <Input
         {...field}
         aria-describedby={ariaDescribedBy}
@@ -135,14 +147,14 @@ export function RepairDeviceModelField({
         <div className="space-y-2">
           {isLoading ? (
             <p
-              className="rounded-md border px-3 py-2 text-sm text-muted-foreground"
+              className="rounded-md border px-3 py-2 text-sm text-store-background-text/70"
               role="status"
             >
               Searching repair devices and store products…
             </p>
           ) : suggestions.length > 0 ? (
             <>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-medium uppercase tracking-wide text-store-background-text/70">
                 Choose a device
               </p>
               <div
@@ -162,10 +174,10 @@ export function RepairDeviceModelField({
                     <button
                       aria-label={`${displayName} ${device.deviceType ?? ''}`.trim()}
                       aria-selected={activeSuggestionIndex === index}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border border-store-border px-3 py-3 text-left text-sm transition-colors hover:border-store-primary/50 hover:bg-store-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary ${
                         activeSuggestionIndex === index
-                          ? 'border-primary/50 bg-accent'
-                          : 'bg-background'
+                          ? 'border-store-primary/50 bg-store-primary/10'
+                          : 'bg-store-background'
                       }`}
                       id={`${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${index}`}
                       key={suggestionKey}
@@ -184,12 +196,12 @@ export function RepairDeviceModelField({
                           {displayName}
                         </span>
                         {device.deviceType && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                          <span className="mt-0.5 block text-xs text-store-background-text/70">
                             {device.deviceType}
                           </span>
                         )}
                       </span>
-                      <span className="shrink-0 text-xs font-medium text-primary">
+                      <span className="shrink-0 text-xs font-medium text-store-primary">
                         Select
                       </span>
                     </button>
@@ -197,7 +209,7 @@ export function RepairDeviceModelField({
                 })}
               </div>
               {suggestions.some((device) => 'kind' in device) && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-store-background-text/70">
                   Store products fill in the device model; repair pricing may
                   need confirmation.
                 </p>
@@ -205,7 +217,7 @@ export function RepairDeviceModelField({
             </>
           ) : (
             <p
-              className="rounded-md border px-3 py-2 text-sm text-muted-foreground"
+              className="rounded-md border px-3 py-2 text-sm text-store-background-text/70"
               role="status"
             >
               {lookupFailed

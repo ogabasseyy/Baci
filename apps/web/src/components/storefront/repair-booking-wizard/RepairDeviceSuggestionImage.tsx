@@ -23,7 +23,7 @@ export function RepairDeviceSuggestionImage({
     REPAIR_DEVICE_FALLBACK_ICON;
 
   return (
-    <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground">
+    <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-store-secondary text-store-background-text/60">
       {imageUrl && !hasLoadError ? (
         <Image
           alt={label}

@@ -54,25 +54,32 @@ export function useRepairDeviceSuggestions({
       setIsLoading(true);
       setLookupFailed(false);
       void (async () => {
-        let repairDevices: RepairDeviceSummary[] = [];
-        let repairLookupFailed = false;
-
-        if (repairCatalogEnabled) {
-          try {
-            const { groups } = await apiGet<RepairDevicesResponse>(
-              `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}`,
-              { signal: controller.signal }
-            );
-            repairDevices = groups
-              .flatMap((group) => group.devices)
-              .slice(0, 8);
-          } catch {
-            if (controller.signal.aborted) return;
-            repairLookupFailed = true;
-          }
-        }
+        const repairRequest: Promise<RepairDeviceSummary[]> =
+          repairCatalogEnabled
+            ? apiGet<RepairDevicesResponse>(
+                `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}`,
+                { signal: controller.signal }
+              ).then(({ groups }) =>
+                groups.flatMap((group) => group.devices).slice(0, 8)
+              )
+            : Promise.resolve([]);
+        const productsRequest: Promise<StorefrontProductDeviceCandidate[]> =
+          merchantId
+            ? apiGet<{
+                products: StorefrontProductDeviceCandidate[];
+              }>(
+                `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_CANDIDATE_LIMIT}&compact=true`,
+                { signal: controller.signal }
+              ).then(({ products }) => products)
+            : Promise.resolve([]);
+        const [repairResult, productsResult] = await Promise.allSettled([
+          repairRequest,
+          productsRequest,
+        ]);
 
         if (controller.signal.aborted) return;
+        const repairDevices =
+          repairResult.status === 'fulfilled' ? repairResult.value : [];
         if (repairDevices.length > 0) {
           setSuggestions(repairDevices);
           setHasSearched(true);
@@ -81,43 +88,24 @@ export function useRepairDeviceSuggestions({
           return;
         }
 
-        if (!merchantId) {
-          setSuggestions([]);
-          setHasSearched(true);
-          setSettledQuery(query);
-          setIsLoading(false);
-          setLookupFailed(repairLookupFailed);
-          return;
-        }
-
-        try {
-          const { products } = await apiGet<{
-            products: StorefrontProductDeviceCandidate[];
-          }>(
-            `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_CANDIDATE_LIMIT}&compact=true`,
-            { signal: controller.signal }
-          );
-          if (controller.signal.aborted) return;
-          const storeSuggestions = products
-            .map(toStoreProductSuggestion)
-            .filter(
-              (product): product is StoreProductDeviceSuggestion =>
-                product !== null
-            )
-            .slice(0, 8);
-          setSuggestions(storeSuggestions);
-          setHasSearched(true);
-          setSettledQuery(query);
-          setLookupFailed(repairLookupFailed && storeSuggestions.length === 0);
-        } catch {
-          if (controller.signal.aborted) return;
-          setSuggestions([]);
-          setHasSearched(true);
-          setSettledQuery(query);
-          setLookupFailed(true);
-        } finally {
-          if (!controller.signal.aborted) setIsLoading(false);
-        }
+        const storeSuggestions =
+          productsResult.status === 'fulfilled'
+            ? productsResult.value
+                .map(toStoreProductSuggestion)
+                .filter(
+                  (product): product is StoreProductDeviceSuggestion =>
+                    product !== null
+                )
+                .slice(0, 8)
+            : [];
+        setSuggestions(storeSuggestions);
+        setHasSearched(true);
+        setSettledQuery(query);
+        setLookupFailed(
+          (repairCatalogEnabled && repairResult.status === 'rejected') ||
+            (merchantId !== undefined && productsResult.status === 'rejected')
+        );
+        setIsLoading(false);
       })();
     }, 250);
 

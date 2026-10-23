@@ -36,6 +36,7 @@ export function useRepairDeviceSuggestions({
   const [lookupFailed, setLookupFailed] = useState(false);
   const [settledQuery, setSettledQuery] = useState<string | null>(null);
   const activeControllerRef = useRef<AbortController | null>(null);
+  const debounceTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setSuggestions([]);
@@ -51,6 +52,7 @@ export function useRepairDeviceSuggestions({
     const controller = new AbortController();
     activeControllerRef.current = controller;
     const timer = window.setTimeout(() => {
+      debounceTimerRef.current = null;
       setIsLoading(true);
       setLookupFailed(false);
       void (async () => {
@@ -112,9 +114,13 @@ export function useRepairDeviceSuggestions({
         setIsLoading(false);
       })();
     }, 250);
+    debounceTimerRef.current = timer;
 
     return () => {
       window.clearTimeout(timer);
+      if (debounceTimerRef.current === timer) {
+        debounceTimerRef.current = null;
+      }
       controller.abort();
       if (activeControllerRef.current === controller) {
         activeControllerRef.current = null;
@@ -130,6 +136,10 @@ export function useRepairDeviceSuggestions({
   ]);
 
   const clearSuggestions = () => {
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     activeControllerRef.current?.abort();
     activeControllerRef.current = null;
     setSuggestions([]);

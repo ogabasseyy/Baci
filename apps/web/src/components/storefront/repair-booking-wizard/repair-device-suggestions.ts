@@ -22,6 +22,7 @@ export interface RepairDevicesResponse {
 export interface StorefrontProductDeviceCandidate {
   brand?: string | null;
   category?: string | null;
+  category_names?: string[];
   id: string;
   image?: string | null;
   name: string;
@@ -50,17 +51,24 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
 export function toStoreProductSuggestion(
   product: StorefrontProductDeviceCandidate
 ): StoreProductDeviceSuggestion | null {
-  const category = product.category ?? '';
+  const categories = [
+    product.category,
+    ...(product.category_names ?? []),
+  ].filter((category): category is string => Boolean(category?.trim()));
   if (
-    /\b(accessor(?:y|ies)|cases?|chargers?|covers?|cables?|screen protectors?|tempered glass)\b/i.test(
-      category
+    categories.some((category) =>
+      /\b(accessor(?:y|ies)|cases?|chargers?|covers?|cables?|screen protectors?|tempered glass)\b/i.test(
+        category
+      )
     )
   ) {
     return null;
   }
-  const deviceType = DEVICE_CATEGORY_TYPES.find(({ pattern }) =>
-    pattern.test(category)
-  )?.deviceType;
+  const deviceType = categories
+    .flatMap((category) =>
+      DEVICE_CATEGORY_TYPES.filter(({ pattern }) => pattern.test(category))
+    )
+    .at(0)?.deviceType;
   if (!deviceType) {
     return null;
   }

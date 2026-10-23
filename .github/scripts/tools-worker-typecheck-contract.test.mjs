@@ -140,6 +140,9 @@ test('full web shards install the isolated builder auth lockfile before fixture 
   assert.ok(shard.indexOf(install) < shard.indexOf('Run web vitest shard'));
   assert.ok(typecheck.indexOf(install) >= 0);
   assert.ok(typecheck.indexOf(install) < typecheck.indexOf('Run Typecheck'));
+  const authTests = 'pnpm --dir apps/web/tools/builder-auth test';
+  assert.ok(typecheck.indexOf(authTests) > typecheck.indexOf(install));
+  assert.ok(typecheck.indexOf(authTests) < typecheck.indexOf('Run Typecheck'));
   const pkg = JSON.parse(await readFile('apps/web/tools/builder-auth/package.json', 'utf8'));
   assert.ok(pkg.dependencies['oidc-provider']);
   assert.match(await readFile('apps/web/tools/builder-auth/pnpm-lock.yaml', 'utf8'), /oidc-provider:/);

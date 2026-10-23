@@ -36,7 +36,8 @@ export async function loadPreviewData(
       .select('id,merchant_id,name,price,images,slug')
       .eq('merchant_id', ctx.merchantId)
       .eq('status', 'active')
-      .order('id')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
       .limit(24),
     loadStoreLaunchReadiness({
       supabase: ctx.supabase,

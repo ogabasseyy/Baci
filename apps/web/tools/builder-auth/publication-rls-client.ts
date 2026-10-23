@@ -37,7 +37,7 @@ export function publicationRlsClient(
       let head = false;
       let count = false;
       let limit: number | undefined;
-      let order: string | undefined;
+      const orders: string[] = [];
       const filters: [string, unknown][] = [];
       const run = async (single = false) => {
         const selected = columns
@@ -54,7 +54,7 @@ export function publicationRlsClient(
           : '';
         const query = head
           ? `SELECT count(*)::int count FROM public.${safe(table)}${predicate}`
-          : `SELECT to_jsonb(x) item FROM (SELECT ${selected} FROM public.${safe(table)}${predicate}${order ? ` ORDER BY ${safe(order)}` : ''}${limit ? ` LIMIT ${Math.floor(limit)}` : ''}) x`;
+          : `SELECT to_jsonb(x) item FROM (SELECT ${selected} FROM public.${safe(table)}${predicate}${orders.length ? ` ORDER BY ${orders.join(',')}` : ''}${limit ? ` LIMIT ${Math.floor(limit)}` : ''}) x`;
         const result = await execute(
           query,
           filters.map(([, value]) => value)
@@ -83,8 +83,10 @@ export function publicationRlsClient(
           filters.push([key, value]);
           return chain;
         },
-        order: (key: string) => {
-          order = key;
+        order: (key: string, options?: { ascending?: boolean }) => {
+          orders.push(
+            `${safe(key)} ${options?.ascending === false ? 'DESC' : 'ASC'}`
+          );
           return chain;
         },
         limit: (n: number) => {

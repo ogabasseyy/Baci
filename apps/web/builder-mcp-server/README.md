@@ -100,3 +100,5 @@ uses host theme, clears snapshots on input/error/cancellation/teardown, and repo
 height after DOM changes and late connection even without ResizeObserver. The
 only external action opens the fixed authenticated Baci editor through the host.
 Production gateway activation and real ChatGPT host QA remain Task 9 gates.
+
+The loopback listener trusts only the local reverse proxy (`127.0.0.1`/`::1`) for client-IP rate limits. Configure that proxy to **overwrite** `X-Forwarded-For` with the connecting client address (`proxy_set_header X-Forwarded-For $remote_addr`), never append a caller-controlled header. Other socket peers cannot select their limiter identity through forwarded headers.

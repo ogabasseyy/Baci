@@ -163,6 +163,8 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Install isolated builder auth typecheck dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
+      - name: Run isolated builder auth tests
+        run: pnpm --dir apps/web/tools/builder-auth test
       - name: Run Typecheck
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

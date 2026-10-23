@@ -20,7 +20,9 @@ it('keeps isolated native broker tests out of Vitest discovery', () => {
   const manifest = JSON.parse(
     readFileSync(new URL('package.json', dir), 'utf8')
   );
-  expect(manifest.scripts.test).toBe('node --test *.node.test.ts');
+  expect(manifest.scripts.test).toBe(
+    'node --test --test-concurrency=1 *.node.test.ts'
+  );
 });
 
 it('forwards and fingerprints the explicit local database selection through Turbo', () => {

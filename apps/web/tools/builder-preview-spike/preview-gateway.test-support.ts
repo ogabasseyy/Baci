@@ -8,10 +8,10 @@ export async function installPreviewProjectionFixture(pool: Pool) {
   await pool.query(`
  ALTER TABLE merchants ADD COLUMN phone text,ADD COLUMN support_email text,ADD COLUMN support_phone text,ADD COLUMN bank_code text,ADD COLUMN bank_account_number text;
  GRANT SELECT(phone,support_email,support_phone,bank_code,bank_account_number) ON merchants TO authenticated;
- CREATE TABLE products(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),merchant_id uuid NOT NULL REFERENCES merchants(id),name text NOT NULL,price numeric NOT NULL,slug text NOT NULL,status text NOT NULL,images jsonb,private_notes text);
+ CREATE TABLE products(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),merchant_id uuid NOT NULL REFERENCES merchants(id),name text NOT NULL,price numeric NOT NULL,slug text NOT NULL,status text NOT NULL,images jsonb,private_notes text,created_at timestamptz NOT NULL DEFAULT now());
  ALTER TABLE products ENABLE ROW LEVEL SECURITY;
  CREATE POLICY preview_fixture_products ON products FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM merchants m WHERE m.id=merchant_id AND m.user_id=auth.uid()));
- GRANT SELECT(id,merchant_id,name,price,slug,status,images) ON products TO authenticated;
+ GRANT SELECT(id,merchant_id,name,price,slug,status,images,created_at) ON products TO authenticated;
  CREATE TABLE merchant_feature_settings(merchant_id uuid PRIMARY KEY REFERENCES merchants(id),paystack_enabled boolean,korapay_enabled boolean,pay_on_delivery_enabled boolean);
  ALTER TABLE merchant_feature_settings ENABLE ROW LEVEL SECURITY;
  CREATE POLICY preview_fixture_features ON merchant_feature_settings FOR SELECT TO authenticated USING(EXISTS(SELECT 1 FROM merchants m WHERE m.id=merchant_id AND m.user_id=auth.uid()));

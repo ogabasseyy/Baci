@@ -38,3 +38,7 @@ export const builderConnectionViewsSchema = z
       .strict()
   )
   .max(50);
+
+export const builderDisconnectInputSchema = z
+  .object({ connectionId: z.uuid() })
+  .strict();

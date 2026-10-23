@@ -4,7 +4,10 @@ import {
   NodeStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/node';
 import { builderAuthChallenge } from '../src/lib/builder-connector/tool-policy';
-import { createRateLimiter } from '../tools/connector-gateway/rate-limit';
+import {
+  createRateLimiter,
+  resolveClientIp,
+} from '../tools/connector-gateway/rate-limit';
 import {
   BUILDER_METADATA_PATH,
   BUILDER_RESOURCE,
@@ -21,6 +24,7 @@ const allowedOrigins = new Set([
 export function createBuilderMcpHttpHandler(
   deps: Pick<BuilderMcpDependencies, 'executeBuilderTool'> & {
     verifyAccessToken: (token: string) => Promise<void>;
+    trustedProxies?: readonly string[];
   }
 ) {
   let closing = false;
@@ -71,8 +75,14 @@ export function createBuilderMcpHttpHandler(
         return;
       }
       if (
-        !rate.check({ keyId: null, ip: req.socket.remoteAddress ?? 'unknown' })
-          .allowed
+        !rate.check({
+          keyId: null,
+          ip: resolveClientIp({
+            socketAddress: req.socket.remoteAddress ?? 'unknown',
+            forwardedFor: req.headers['x-forwarded-for'],
+            trustedProxies: deps.trustedProxies ?? [],
+          }),
+        }).allowed
       ) {
         reply(res, 429, 'Too many requests');
         return;

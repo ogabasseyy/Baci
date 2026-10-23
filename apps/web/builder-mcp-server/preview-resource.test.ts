@@ -1,11 +1,15 @@
 // @vitest-environment node
+import { writeFile } from 'node:fs/promises';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vitest';
 import { BUILDER_PREVIEW_URI } from './preview-resource';
 import { createBuilderMcpServer } from './server';
+import { createPreviewHtml } from './widgets/build.mjs';
 
 it('advertises a tenant-neutral standard resource only on preview; never embeds merchant data', async () => {
+  const bundle = await createPreviewHtml();
+  await writeFile(new URL('./preview.html', import.meta.url), bundle.html);
   const server = createBuilderMcpServer({ executeBuilderTool: vi.fn() });
   const client = new Client({ name: 'fixture', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();

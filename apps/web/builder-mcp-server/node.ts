@@ -7,6 +7,8 @@ import { createBuilderTransportVerifier } from './token-verifier';
 /** Public JWKS + outer-token HTTPS forwarder only. No vault, database, cookies or admin client. */
 export function createBuilderMcpNodeServer() {
   const handler = createBuilderMcpHttpHandler({
+    // The listener is loopback-only; the local proxy overwrites X-Forwarded-For.
+    trustedProxies: ['127.0.0.1', '::1'],
     verifyAccessToken: createBuilderTransportVerifier(
       createRemoteJWKSet(new URL(`${BUILDER_ISSUER}/jwks`))
     ),

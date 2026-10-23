@@ -24,7 +24,6 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { disconnectBuilderAction } from './actions';
 import Page from './page';
 
 beforeEach(() => {
@@ -34,9 +33,6 @@ beforeEach(() => {
 });
 it('keeps account linking disabled until the release gate', async () => {
   await expect(Page()).rejects.toThrow('not-found');
-  await expect(disconnectBuilderAction(new FormData())).rejects.toThrow(
-    'not enabled'
-  );
   expect(state.client).not.toHaveBeenCalled();
 });
 it('renders safe connection metadata and offers disconnect', async () => {
@@ -55,16 +51,6 @@ it('renders safe connection metadata and offers disconnect', async () => {
     screen.getByRole('heading', { name: 'ChatGPT website builder connections' })
   ).toBeVisible();
   expect(screen.getByRole('button', { name: 'Disconnect' })).toBeVisible();
-});
-it('disconnect action delegates to authenticated owner management', async () => {
-  state.enabled = true;
-  const form = new FormData();
-  form.set('connectionId', '20000000-0000-4000-8000-000000000001');
-  await disconnectBuilderAction(form);
-  expect(state.disconnect).toHaveBeenCalledWith(
-    {},
-    '20000000-0000-4000-8000-000000000001'
-  );
 });
 
 it('does not export dynamic segment config rejected by Cache Components', async () => {

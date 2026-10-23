@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-23T13:00:12.300902+00:00",
-  "source_revision": "7f4e40919acb7f27e3bb26d35676d7f02d996c0a",
-  "evidence_digest": "94ac7291684d87045ca82c1bca3b4d0d79b21b29a08380fe1b257a3641e4dde1",
-  "claims_digest": "a2d52d9fa78df94df52e7b0eff7f03c05f0ad08711f3a8e0ce087db02dea9823",
-  "review_scope": "Source audit only; not deployment proof. OAuth retains PKCE and encrypted tenant grants; 30s immediate-generation refresh receipts recover lost responses. Connected catalogs read current quantity before first add; expired workers fail readiness. Resource-specific HTTPS transport/discovery rejects reserved paths; independent consent cookies tested. Shared 600/5min consent admission and tenant-wide 2,000 retained-grant cap preserve storage headroom. New-endpoint activation authorized, not deployed; original MCP preserved. Historical isolated ChatGPT add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh fleet probe required before restoring worker membership. Text continuation off; host privacy/retention unqualified. Checkout offers remain merchant-scoped, publication-gated, selected and capped; PDP policy, RPC factory, chunking/outage recovery audited. MCP detail IDs remain merchant-scoped and case-normalized.",
+  "reviewed_at": "2026-10-23T15:47:25.415148+00:00",
+  "source_revision": "7f09a2b8b7352148969a68b2812958d5363b3bad",
+  "evidence_digest": "37da97cb30698c627ef725a3819210d40e2f2b0b71cca830b07b7ef905dcf263",
+  "claims_digest": "b75fa666e457ab2d5287f2405127c943765e12e0ac022143b9aac6d7867c4931",
+  "review_scope": "Source evidence only. OAuth registration omits stateless cart-link tools for connected shoppers and preserves anonymous compatibility. PKCE, encrypted grants, 30s refresh receipts, resource-specific transport, consent admission and tenant grant capacity are unchanged. New /submission/mcp OAuth authorization and discovery observed; conversational removal and handoff remain pending on that exact app. Original connection preserved. Text continuation off; native acceptance pending. Other capability claims unchanged by this registration patch.",
   "capabilities": [
     {
       "id": "payments",

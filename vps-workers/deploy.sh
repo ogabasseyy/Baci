@@ -43,6 +43,9 @@ check_deploy_workflow_inflight
 
 prepare_worker_release
 
+REMEDIATION_STATE=$(ssh "$VPS" "if [ -e /home/bassey/.config/baci/remediation.disabled ] || [ -L /home/bassey/.config/baci/remediation.disabled ]; then printf disabled; else printf enabled; fi")
+[[ "$REMEDIATION_STATE" == disabled || "$REMEDIATION_STATE" == enabled ]]
+if [ "$REMEDIATION_STATE" = enabled ]; then
 CODEX_CONTAINER_BIN=$(ssh "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
 CODEX_READONLY_SECCOMP_PROFILE="$REMOTE_DIR/config/codex-readonly-seccomp.json"
 
@@ -53,6 +56,11 @@ fi
 
 echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
+else
+  CODEX_CONTAINER_BIN=''
+  CODEX_READONLY_SECCOMP_PROFILE=''
+  echo "==> Remediation disabled by operator; skipping its image build"
+fi
 
 # Final refusal BEFORE anything below mutates live state: staging and
 # the image build take minutes, and a workflow that started in that
@@ -105,7 +113,9 @@ ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
 # it against everything else. Its candidates stage from STAGING_DIR
 # (still present; cleanup runs on EXIT), so placement after the sync
 # changes nothing it installs.
-install_remediation_cron_transition
+if [ "$REMEDIATION_STATE" = enabled ]; then
+  install_remediation_cron_transition
+fi
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
@@ -166,7 +176,7 @@ $CRON_BLOCK_START
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA'" <<'REMOTE_SH'
+ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE'" <<'REMOTE_SH'
 set -euo pipefail
 
 fragment_path="$1"
@@ -174,6 +184,7 @@ remote_dir="$2"
 cron_block_start="$3"
 cron_block_end="$4"
 expected_sha="${5:-}"
+if [ "${6:-enabled}" = disabled ] && [ ! -e "$(dirname "$remote_dir")/.config/baci/remediation.disabled" ] && [ ! -L "$(dirname "$remote_dir")/.config/baci/remediation.disabled" ]; then echo "Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image." >&2; exit 1; fi
 # The crontab carries this deployment's identity (the pinned remediator
 # image tag): installing it after a concurrent promote would point live
 # cron at this deployment's image under another deployment's marker.
@@ -211,6 +222,13 @@ fragment = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 remote_dir = sys.argv[2]
 block_start = sys.argv[3]
 block_end = sys.argv[4]
+disabled = pathlib.Path(remote_dir).parent / '.config/baci/remediation.disabled'
+if disabled.exists() or disabled.is_symlink():
+    jobs = ('vercel-error-remediator.mjs', 'sentry-mobile-error-remediator.mjs',
+            'posthog-error-remediator.mjs', 'remediation-codex-canary.mjs',
+            'cleanup-remediation-storage.mjs')
+    fragment = '\n'.join(line for line in fragment.splitlines()
+                         if not any(f'{remote_dir}/jobs/{job}' in line for job in jobs))
 
 existing = subprocess.run(
     ['crontab', '-l'],

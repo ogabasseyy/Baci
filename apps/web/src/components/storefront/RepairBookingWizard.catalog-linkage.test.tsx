@@ -77,6 +77,23 @@ vi.mock('@/components/ui/phone-input', () => ({
 }));
 
 describe('RepairBookingWizard catalog linkage', () => {
+  it('keeps a manually entered model when the device type changes', async () => {
+    const user = userEvent.setup();
+    render(
+      <RepairBookingWizard
+        merchantId="merchant-1"
+        merchantSlug="ogabassey"
+        merchantName="Ogabassey"
+      />
+    );
+
+    const modelField = screen.getByLabelText('Device Model');
+    await user.type(modelField, 'MacBook Pro');
+    await user.click(screen.getByRole('radio', { name: 'Laptop' }));
+
+    expect(modelField).toHaveValue('MacBook Pro');
+  });
+
   it('clears the selected catalog device and quote when device type changes', async () => {
     mockApiGet.mockResolvedValue({
       groups: [
@@ -116,6 +133,9 @@ describe('RepairBookingWizard catalog linkage', () => {
       })
     );
     await user.click(screen.getByRole('radio', { name: 'Laptop' }));
+    const modelField = screen.getByLabelText('Device Model');
+    expect(modelField).toHaveValue('');
+    await user.type(modelField, 'MacBook Pro');
     await user.type(
       screen.getByLabelText("What's the issue?"),
       'The screen is damaged.'
@@ -130,6 +150,7 @@ describe('RepairBookingWizard catalog linkage', () => {
     await waitFor(() => expect(mockCreateRepair).toHaveBeenCalledOnce());
     const [data] = mockCreateRepair.mock.calls[0];
     expect(data.deviceType).toBe('Laptop');
+    expect(data.deviceModel).toBe('MacBook Pro');
     expect(data.deviceId).toBeUndefined();
     expect(data.quoteId).toBeUndefined();
   });

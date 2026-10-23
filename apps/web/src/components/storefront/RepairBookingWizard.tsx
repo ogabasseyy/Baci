@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -91,6 +91,7 @@ export function RepairBookingWizard({
 
   const { control, trigger } = form;
   const formData = useWatch({ control });
+  const catalogSuggestionSelectedRef = useRef(false);
 
   const handleChangeDevice = () => {
     setShowCatalogConfirmation(false);
@@ -102,6 +103,7 @@ export function RepairBookingWizard({
   };
 
   const handleSelectCatalogDevice = (device: RepairDeviceSelection) => {
+    catalogSuggestionSelectedRef.current = true;
     if ('kind' in device) {
       form.setValue('deviceId', undefined, { shouldDirty: true });
       form.setValue('quoteId', undefined, { shouldDirty: true });
@@ -128,8 +130,21 @@ export function RepairBookingWizard({
   };
 
   const handleDeviceModelChange = () => {
+    catalogSuggestionSelectedRef.current = false;
     form.setValue('deviceId', undefined, { shouldDirty: true });
     form.setValue('quoteId', undefined, { shouldDirty: true });
+  };
+
+  const handleDeviceTypeChange = () => {
+    const hadCatalogSuggestion = catalogSuggestionSelectedRef.current;
+    handleDeviceModelChange();
+    if (hadCatalogSuggestion) {
+      form.setValue('deviceModel', '', {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      catalogSuggestionSelectedRef.current = false;
+    }
   };
 
   const nextStep = async () => {
@@ -193,6 +208,7 @@ export function RepairBookingWizard({
                   merchantSlug={merchantSlug}
                   repairCatalogEnabled={repairsCatalogEnabled}
                   onDeviceChange={handleDeviceModelChange}
+                  onDeviceTypeChange={handleDeviceTypeChange}
                   onChangeDevice={handleChangeDevice}
                   onSelectDevice={handleSelectCatalogDevice}
                   preselection={preselection}

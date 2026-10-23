@@ -133,6 +133,7 @@ describe('RepairDeviceStep catalog behavior', () => {
   it('clears catalog linkage when the customer changes device type', async () => {
     const user = userEvent.setup();
     const onDeviceChange = vi.fn();
+    const onDeviceTypeChange = vi.fn();
     render(
       <Harness>
         {(form) => (
@@ -140,6 +141,7 @@ describe('RepairDeviceStep catalog behavior', () => {
             control={form.control}
             onChangeDevice={vi.fn()}
             onDeviceChange={onDeviceChange}
+            onDeviceTypeChange={onDeviceTypeChange}
             showConfirmation={false}
           />
         )}
@@ -148,7 +150,8 @@ describe('RepairDeviceStep catalog behavior', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Laptop' }));
 
-    expect(onDeviceChange).toHaveBeenCalledOnce();
+    expect(onDeviceTypeChange).toHaveBeenCalledOnce();
+    expect(onDeviceChange).not.toHaveBeenCalled();
   });
 
   it('uses the real store catalog when the merchant repair catalog is disabled', async () => {

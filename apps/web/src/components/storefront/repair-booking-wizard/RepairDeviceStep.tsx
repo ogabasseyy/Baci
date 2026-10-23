@@ -33,6 +33,7 @@ interface RepairDeviceStepProps {
   merchantId?: string;
   merchantSlug?: string;
   onDeviceChange?: () => void;
+  onDeviceTypeChange?: () => void;
   onSelectDevice?: (device: RepairDeviceSelection) => void;
   preselection?: RepairBookingPreselection;
   showConfirmation: boolean;
@@ -60,6 +61,7 @@ export function RepairDeviceStep({
   merchantId,
   merchantSlug = '',
   onDeviceChange = () => undefined,
+  onDeviceTypeChange = onDeviceChange,
   onSelectDevice = () => undefined,
   onChangeDevice,
   preselection,
@@ -126,7 +128,7 @@ export function RepairDeviceStep({
                 className="grid grid-cols-2 gap-4 sm:grid-cols-3"
                 onValueChange={(value) => {
                   if (value !== field.value) {
-                    onDeviceChange();
+                    onDeviceTypeChange();
                   }
                   field.onChange(value);
                 }}

@@ -44,7 +44,7 @@ describe('repair device product suggestions', () => {
   });
 
   it('maps console and wearable catalog categories to repair device types', () => {
-    for (const category of ['Console', 'Consoles', 'Game Consoles']) {
+    for (const category of ['Console', 'Consoles', 'Game Consoles', 'Gaming']) {
       expect(
         toStoreProductSuggestion({
           id: category,

@@ -42,6 +42,57 @@ describe('useRepairDeviceSuggestions', () => {
     expect(mocks.apiGet).toHaveBeenCalledTimes(2);
   });
 
+  it('shows repair matches without waiting for the concurrent product fallback', async () => {
+    vi.useFakeTimers();
+    let resolveProducts: ((value: { products: [] }) => void) | undefined;
+    mocks.apiGet.mockImplementation((url: unknown) => {
+      if (typeof url === 'string' && url.includes('/repairs/devices')) {
+        return Promise.resolve({
+          groups: [
+            {
+              brand: 'Apple',
+              devices: [
+                {
+                  id: 'device-1',
+                  brand: 'Apple',
+                  model: 'iPhone 15',
+                  slug: 'iphone-15',
+                  deviceType: 'Smartphone',
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return new Promise((resolve) => {
+        resolveProducts = resolve;
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useRepairDeviceSuggestions({
+        catalogEnabled: true,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        query: 'iPhone 15',
+        repairCatalogEnabled: true,
+        selectedModel: null,
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(result.current).toMatchObject({
+      hasSearched: true,
+      isLoading: false,
+      suggestions: [{ id: 'device-1' }],
+    });
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    resolveProducts?.({ products: [] });
+  });
+
   it('hides results from the previous query immediately while the next query debounces', async () => {
     vi.useFakeTimers();
     mocks.apiGet

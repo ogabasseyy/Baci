@@ -15,31 +15,39 @@ import { fileURLToPath } from 'node:url';
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CODEX_JOB_COUNT = 4;
 
-// Replicates the runbook emergency-rollback extraction: sed the
-// REMOTE_SH merge block out of deploy.sh (dropping the ssh opener
-// and the close delimiter, like `sed '1d;$d'`), then invoke it the
-// way the rollback does — four args, marker from the fragment's own
-// first/last lines — against a stub crontab.
-function runRollbackExtractedMerge({ extraArgs = [], markerSha = null } = {}) {
+function runRollbackExtractedMerge({
+  extraArgs = [],
+  markerSha = null,
+  remediationDisabled = false,
+} = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-cron-merge-'));
   try {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const lines = deployScript.split('\n');
-    const openIndex = lines.findIndex((line) =>
-      line.includes("<<'REMOTE_SH'")
-    );
+    const openIndex = lines.findIndex((line) => line.includes("<<'REMOTE_SH'"));
     const closeIndex = lines.findIndex((line) => line === 'REMOTE_SH');
     assert.ok(openIndex >= 0 && closeIndex > openIndex);
     const mergePath = join(directory, 'merge.sh');
-    writeFileSync(join(directory, 'merge.sh'), `${lines.slice(openIndex + 1, closeIndex).join('\n')}\n`);
+    writeFileSync(
+      join(directory, 'merge.sh'),
+      `${lines.slice(openIndex + 1, closeIndex).join('\n')}\n`
+    );
     const remoteDir = join(directory, 'remote');
     const fragmentPath = join(directory, 'fragment');
     const start = '# >>> baci-workers >>>';
     const end = '# <<< baci-workers <<<';
     writeFileSync(
       fragmentPath,
-      `${start}\n* * * * * echo rollback-merge-probe\n${end}\n`
+      `${start}\n* * * * * echo rollback-merge-probe\n* * * * * node ${remoteDir}/jobs/vercel-error-remediator.mjs\n${end}\n`
     );
+    if (remediationDisabled) {
+      const policyDirectory = join(directory, '.config', 'baci');
+      mkdirSync(policyDirectory, { recursive: true });
+      writeFileSync(
+        join(policyDirectory, 'remediation.disabled'),
+        'owner-disabled\n'
+      );
+    }
     if (markerSha !== null) {
       mkdirSync(remoteDir, { recursive: true });
       writeFileSync(join(remoteDir, 'app-checkout.sha'), markerSha);
@@ -73,6 +81,20 @@ function runRollbackExtractedMerge({ extraArgs = [], markerSha = null } = {}) {
 }
 
 describe('remediation deploy crontab', () => {
+  it('does not reinstate remediation after an operator disables it outside the release tree', () => {
+    const { result, installed } = runRollbackExtractedMerge({
+      remediationDisabled: true,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(installed, /rollback-merge-probe/);
+    assert.doesNotMatch(installed, /vercel-error-remediator\.mjs/);
+    const reenabled = runRollbackExtractedMerge({
+      extraArgs: ['', 'disabled'],
+    });
+    assert.notEqual(reenabled.result.status, 0);
+    assert.match(reenabled.result.stderr, /re-enabled during deployment/);
+    assert.equal(reenabled.installed, '');
+  });
   it('installs the remediation lock handoff after the recorded promotion', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const transitionScript = readFileSync(
@@ -136,7 +158,10 @@ describe('remediation deploy crontab', () => {
     // The crontab carries this deployment's pinned image tag: the
     // locked, marker-checked install refuses a stale write after a
     // concurrent promote instead of mixing schedules under B's marker.
-    assert.match(cronBlock, /flock -x \/tmp\/baci-workers-deploy\.lock bash -s/);
+    assert.match(
+      cronBlock,
+      /flock -x \/tmp\/baci-workers-deploy\.lock bash -s/
+    );
     assert.match(cronBlock, /expected_sha="\$\{5:-\}"/);
     assert.match(cronBlock, /cat "\$remote_dir\/app-checkout\.sha"/);
     assert.ok(

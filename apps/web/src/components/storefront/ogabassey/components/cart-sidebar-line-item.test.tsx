@@ -192,3 +192,26 @@ describe('CartSidebarLineItem', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 });
+
+it('shows all saved variant details in the cart drawer', () => {
+  setup(
+    makeItem({
+      condition: 'new',
+      variantAttributes: {
+        storage: '512GB',
+        sim_type: 'Physical + eSIM',
+        color: 'Silver',
+      },
+    })
+  );
+  for (const value of [
+    'Storage:',
+    '512GB',
+    'SIM type:',
+    'Physical + eSIM',
+    'Condition:',
+    'Colour:',
+    'Silver',
+  ])
+    expect(screen.getByText(value)).toBeVisible();
+});

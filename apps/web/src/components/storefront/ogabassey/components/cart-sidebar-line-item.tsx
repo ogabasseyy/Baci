@@ -1,5 +1,7 @@
 'use client';
 
+import { CartVariantDetails } from './cart-variant-details';
+
 import Link from 'next/link';
 import { isProductNegotiable } from '@baci/shared/lib';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
@@ -98,37 +100,7 @@ export function CartSidebarLineItem({
             </button>
           </div>
 
-          {/* Item Details: Color & Storage */}
-          <div className="flex flex-wrap items-center gap-2 mt-1.5">
-            {/* Removed Condition from here, moved to image overlay */}
-
-            {/* Color & Storage */}
-            <div className="text-xs text-gray-500 flex items-center gap-1">
-              {item.selectedColor && (
-                <span className="flex items-center gap-1">
-                  <span
-                    className="size-2.5 rounded-full border border-gray-300 shadow-sm"
-                    style={{
-                      backgroundColor:
-                        item.selectedColorValue || item.selectedColor,
-                    }}
-                  />
-                  {item.selectedColor}
-                </span>
-              )}
-              {item.secondaryColor && (
-                <span className="text-[10px] text-blue-500">
-                  (Pref 2: {item.secondaryColor})
-                </span>
-              )}
-              {item.selectedStorage && (
-                <>
-                  <span>•</span>
-                  <span>{item.selectedStorage}</span>
-                </>
-              )}
-            </div>
-          </div>
+          <CartVariantDetails item={item} />
         </div>
 
         {/* BOTTOM ROW: Quantity/Negotiate (Left) | Price (Right) */}

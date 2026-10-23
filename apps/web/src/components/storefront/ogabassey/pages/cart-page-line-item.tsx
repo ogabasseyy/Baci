@@ -1,3 +1,4 @@
+import { CartVariantDetails } from '../components/cart-variant-details';
 import { isProductNegotiable } from '@baci/shared/lib';
 import { Check, Minus, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -76,46 +77,7 @@ export function CartPageLineItem({
             </h3>
           </Link>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span
-              className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${
-                item.condition?.toLowerCase() === 'new'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                  : 'bg-amber-50 text-amber-700 border-amber-100'
-              }`}
-            >
-              {item.condition}
-            </span>
-            {item.selectedColor && (
-              <div className="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">
-                <span
-                  className="size-2 rounded-full border border-gray-300"
-                  style={{
-                    backgroundColor:
-                      item.selectedColorValue || item.selectedColor,
-                  }}
-                />
-                <span className="text-[10px] text-gray-600">
-                  {item.selectedColor}
-                </span>
-              </div>
-            )}
-            {item.secondaryColor && (
-              <div className="flex items-center gap-1 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
-                <span className="text-[9px] text-blue-600 font-bold">
-                  Pref 2:
-                </span>
-                <span className="text-[10px] text-gray-600">
-                  {item.secondaryColor}
-                </span>
-              </div>
-            )}
-            {item.selectedStorage && (
-              <div className="bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5 text-[10px] text-gray-600">
-                {item.selectedStorage}
-              </div>
-            )}
-          </div>
+          <CartVariantDetails item={item} />
         </div>
 
         <button

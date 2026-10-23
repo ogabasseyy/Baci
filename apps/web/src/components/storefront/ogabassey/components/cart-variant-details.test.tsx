@@ -1,0 +1,71 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { CartVariantDetails } from './cart-variant-details';
+
+describe('CartVariantDetails', () => {
+  it('shows the exact iPhone SKU with labelled storage, SIM type, condition and colour', () => {
+    render(
+      <CartVariantDetails
+        item={{
+          condition: 'new',
+          variantAttributes: {
+            storage: '512GB',
+            sim_type: 'Physical + eSIM',
+            color: 'Silver',
+            color_hex: '#eee',
+          },
+        }}
+      />
+    );
+    for (const text of [
+      'Storage:',
+      '512GB',
+      'SIM type:',
+      'Physical + eSIM',
+      'Condition:',
+      'New',
+      'Colour:',
+      'Silver',
+    ]) {
+      expect(screen.getByText(text)).toBeVisible();
+    }
+    expect(screen.queryByText('#eee')).not.toBeInTheDocument();
+  });
+  it('canonicalizes saved attribute aliases and prefers them to stale legacy fields', () => {
+    render(
+      <CartVariantDetails
+        item={{
+          selectedColor: 'Blue',
+          selectedStorage: '256GB',
+          variantAttributes: {
+            'SIM Type': 'Physical + eSIM',
+            colour: 'Silver',
+            storage_capacity: '512GB',
+            condition: 'open_box',
+          },
+        }}
+      />
+    );
+    for (const text of ['Physical + eSIM', 'Silver', '512GB', 'Open Box'])
+      expect(screen.getByText(text)).toBeVisible();
+    expect(screen.queryByText('Blue')).not.toBeInTheDocument();
+  });
+  it('supports legacy cart fields without inventing missing SIM details', () => {
+    render(
+      <CartVariantDetails
+        item={{
+          selectedColor: 'Silver',
+          selectedStorage: '512GB',
+          condition: 'used',
+        }}
+      />
+    );
+    expect(screen.getByText('Used')).toBeVisible();
+    expect(screen.getByText('Silver')).toBeVisible();
+    expect(screen.queryByText('SIM type:')).not.toBeInTheDocument();
+  });
+  it('renders nothing for an item without variant details', () => {
+    const { container } = render(<CartVariantDetails item={{}} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});

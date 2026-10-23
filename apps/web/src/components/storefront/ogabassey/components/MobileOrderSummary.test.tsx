@@ -158,3 +158,34 @@ describe('bugfix: duplicate keys for legacy non-variant cart lines', () => {
     }
   });
 });
+
+it('shows saved variant details beside the checkout item price', () => {
+  render(
+    <MobileOrderSummary
+      {...summaryProps}
+      cart={[
+        {
+          ...cartItem,
+          condition: 'new',
+          variantAttributes: {
+            storage: '512GB',
+            sim_type: 'Physical + eSIM',
+            color: 'Silver',
+          },
+        },
+      ]}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: /show order summary/i }));
+  for (const value of [
+    'Storage:',
+    '512GB',
+    'SIM type:',
+    'Physical + eSIM',
+    'Condition:',
+    'New',
+    'Colour:',
+    'Silver',
+  ])
+    expect(screen.getByText(value)).toBeVisible();
+});

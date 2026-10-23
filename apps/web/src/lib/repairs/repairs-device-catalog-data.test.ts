@@ -159,6 +159,36 @@ describe('getRepairDevicesForMerchant', () => {
     expect(productLookups).toEqual([['p1']]);
   });
 
+  it('hydrates images only for the first eight query suggestions', async () => {
+    const productLookups: string[][] = [];
+    const devices = Array.from({ length: 12 }, (_, index) => ({
+      id: `d${index}`,
+      brand: 'Apple',
+      model: `iPhone 15 ${index}`,
+      slug: `iphone-15-${index}`,
+      product_id: `p${index}`,
+      image_url: null,
+    }));
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient(
+        {
+          repair_devices: { data: devices, error: null },
+          products: { data: [], error: null },
+        },
+        (_column, values) => productLookups.push(values)
+      )
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+
+    expect(
+      groups.flatMap((group) => group.devices.map(({ id }) => id))
+    ).toEqual(devices.slice(0, 8).map(({ id }) => id));
+    expect(productLookups).toEqual([
+      devices.slice(0, 8).map(({ product_id }) => product_id),
+    ]);
+  });
+
   it('returns devices without fallback images when product lookup fails', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.getPublicSupabaseClient.mockReturnValue(

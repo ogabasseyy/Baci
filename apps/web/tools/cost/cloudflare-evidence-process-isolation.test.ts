@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, readFile, writeFile } from 'node:fs/promises';
+import { lstat, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,7 +10,6 @@ import {
   makePrivateTempDir,
   writeProtectedMergeIdentity,
 } from './cloudflare-evidence-process-isolation.test-fixtures';
-import { holdCloudflareEvidenceWorkspaceTestLock } from './cloudflare-evidence-process-isolation-workspace-lock.test-support';
 
 const runnerModulePathFor = (workspaceRoot: string) =>
   resolve(
@@ -18,8 +17,9 @@ const runnerModulePathFor = (workspaceRoot: string) =>
     'apps/web/tools/cost/cloudflare-evidence-authenticated-runner.test-fixture.ts'
   );
 
-const workspaceRoot = resolve(import.meta.dirname, '../../../..');
-let releaseWorkspaceLock: (() => Promise<void>) | undefined;
+const sourceWorkspaceRoot = resolve(import.meta.dirname, '../../../..');
+let workspaceRoot: string;
+let checkoutParent: string;
 
 describe('spawnIsolatedCloudflareEvidenceProcess', () => {
   const runId = 'b'.repeat(32);
@@ -38,16 +38,37 @@ describe('spawnIsolatedCloudflareEvidenceProcess', () => {
     expectedProbeCount: 2,
   };
   beforeEach(async () => {
-    releaseWorkspaceLock =
-      await holdCloudflareEvidenceWorkspaceTestLock(workspaceRoot);
-    // The credentialed isolation suite shares this cross-process lock and can
-    // spend about a minute verifying its private dependency closures.
+    checkoutParent = await makePrivateTempDir('baci-evidence-checkout-');
+    workspaceRoot = join(checkoutParent, 'repo');
+    await promisify(execFile)(
+      'git',
+      ['worktree', 'add', '--detach', workspaceRoot, 'HEAD'],
+      { cwd: sourceWorkspaceRoot }
+    );
+    // Dependencies stay read-only and ignored; source and Git status are isolated
+    // from suites that intentionally create dirty-worktree guard fixtures.
+    await symlink(
+      join(sourceWorkspaceRoot, 'node_modules'),
+      join(workspaceRoot, 'node_modules'),
+      'dir'
+    );
+    await symlink(
+      join(sourceWorkspaceRoot, 'apps/web/node_modules'),
+      join(workspaceRoot, 'apps/web/node_modules'),
+      'dir'
+    );
   }, 120_000);
   afterEach(async () => {
     try {
-      await releaseWorkspaceLock?.();
+      if (workspaceRoot)
+        await promisify(execFile)(
+          'git',
+          ['worktree', 'remove', '--force', workspaceRoot],
+          { cwd: sourceWorkspaceRoot }
+        );
     } finally {
-      releaseWorkspaceLock = undefined;
+      if (checkoutParent)
+        await rm(checkoutParent, { recursive: true, force: true });
     }
   });
   it('creates a private initial journal and prints only its bounded handoff', async () => {
@@ -67,8 +88,8 @@ describe('spawnIsolatedCloudflareEvidenceProcess', () => {
       .update(await readFile(runnerModulePath))
       .digest('hex');
     const authorityModulePath = resolve(
-      import.meta.dirname,
-      'cloudflare-evidence-process-isolation.test-fixtures.ts'
+      workspaceRoot,
+      'apps/web/tools/cost/cloudflare-evidence-process-isolation.test-fixtures.ts'
     );
     const authorityModuleSha256 = createHash('sha256')
       .update(await readFile(authorityModulePath))

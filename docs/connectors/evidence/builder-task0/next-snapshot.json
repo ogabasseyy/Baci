@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "revisions": 2,
+  "versions": [
+    "home-v1:54c7bedf827136242c8538b47a8be966808962cf7e6b017ec5d68653f259bfd1",
+    "home-v1:edc54ec9b2b619c0304ed705a4222d51605226f60b6e0c25b7e0d43d7a8599cc"
+  ],
+  "blocks": 6,
+  "host": "real Next HTTPS client-loaded public renderer"
+}

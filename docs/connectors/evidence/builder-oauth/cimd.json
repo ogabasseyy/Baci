@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "plural methods and compatible singular preference",
+    "exact document and callback validation",
+    "provider resolves normalized CIMD",
+    "private and unknown client URLs rejected before fetch",
+    "redirecting metadata rejected"
+  ],
+  "scope": "synthetic CIMD with explicit metadata selection adapter; no live registration"
+}

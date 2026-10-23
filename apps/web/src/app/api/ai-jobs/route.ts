@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { triggerAiStorefrontWorker } from '@/lib/ai-storefront/trigger-storefront-worker';
 import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -9,6 +10,7 @@ import {
 } from '@/lib/get-merchant-for-api-request';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
+import { enqueueNativeLayout } from '@/lib/website-builder/enqueue-native-layout';
 import { createAiJobSchema } from '@/schemas/ai-jobs';
 
 // POST /api/ai-jobs - Create a new AI job
@@ -80,20 +82,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Create job
-    const { data: job, error: jobError } = await supabase
-      .from('ai_jobs')
-      .insert({
-        merchant_id: merchantId,
-        type,
-        input,
-        status: 'pending',
-      })
-      .select('id, merchant_id, type, status, input, created_at')
-      .single();
+    // Private layout starters are captured under caller RLS in the enqueue transaction.
+    const queued =
+      BUILDER_PRIVATE_STORAGE_ENABLED && type === 'storefront_layout_generation'
+        ? await enqueueNativeLayout(supabase, merchantId, input)
+        : await supabase
+            .from('ai_jobs')
+            .insert({ merchant_id: merchantId, type, input, status: 'pending' })
+            .select('id, merchant_id, type, status, input, created_at')
+            .single();
+    const jobError = queued.error;
+    const job = queued.data;
 
-    if (jobError) {
-      console.error('Error creating AI job:', jobError);
+    if (jobError || !job) {
+      console.error('Error creating AI job:', {
+        code: jobError?.code ?? 'MISSING_JOB_RECEIPT',
+      });
       return NextResponse.json(
         { error: 'Failed to create job' },
         { status: 500 }

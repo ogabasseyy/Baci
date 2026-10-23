@@ -1,5 +1,6 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
 import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
+import { EXPECTED_BUILDER_PENDING_SOURCES } from './expected-builder-pending-sources.test-support';
 import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
 import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
@@ -38,6 +39,7 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
+  ...EXPECTED_BUILDER_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
   ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,

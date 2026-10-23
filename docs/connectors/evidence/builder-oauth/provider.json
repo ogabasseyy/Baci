@@ -1,0 +1,23 @@
+{
+  "provider": "oidc-provider@9.12.2",
+  "node": "v24.11.1",
+  "checks": [
+    "HTTPS discovery and S256",
+    "missing PKCE rejected",
+    "plain PKCE rejected",
+    "unknown redirect rejected",
+    "wrong authorization resource rejected",
+    "wrong exchange resource rejected",
+    "builder token claim contract",
+    "valid code exchange",
+    "two provider processes consume code once",
+    "rotation and family reuse revocation",
+    "offline access requires granted scope and consent",
+    "outer verified email UserInfo",
+    "safe reauthorization with ID token hint",
+    "restart persistence",
+    "revocation survives restart",
+    "predefined client survives restart"
+  ],
+  "scope": "local outer provider and persistent fixture adapter"
+}

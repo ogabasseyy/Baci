@@ -26,6 +26,20 @@ function makeBuilder(result: QueryResult) {
 
 function mockCatalog(productImages: unknown[]) {
   mocks.getPublicSupabaseClient.mockReturnValue({
+    rpc: () =>
+      Promise.resolve({
+        data: [
+          {
+            id: 'd1',
+            brand: 'Apple',
+            model: 'iPhone 15',
+            slug: 'iphone-15',
+            product_id: 'p1',
+            image_url: null,
+          },
+        ],
+        error: null,
+      }),
     from: (table: string) =>
       makeBuilder(
         table === 'repair_devices'

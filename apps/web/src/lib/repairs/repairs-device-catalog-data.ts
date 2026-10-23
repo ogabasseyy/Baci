@@ -11,7 +11,6 @@ import { getPrimaryProductImage } from '@/lib/product-image';
 const DEVICE_COLUMNS =
   'id, brand, model, slug, device_type, product_id, image_url, aliases, sort_order';
 const PRODUCT_IMAGE_LOOKUP_CHUNK_SIZE = 100;
-const REPAIR_DEVICE_SUGGESTION_LIMIT = 8;
 const REPAIR_DEVICE_TYPE_SET: ReadonlySet<string> = new Set(
   REPAIR_DEVICE_TYPES
 );
@@ -57,23 +56,6 @@ function mapDevice(row: Row): RepairDeviceSummary {
   };
 }
 
-function deviceAliases(row: Row): string[] {
-  return Array.isArray(row.aliases)
-    ? row.aliases.filter((entry): entry is string => typeof entry === 'string')
-    : [];
-}
-
-function matchesQuery(row: Row, query: string): boolean {
-  const haystack = [
-    asString(row.brand),
-    asString(row.model),
-    ...deviceAliases(row),
-  ]
-    .join(' ')
-    .toLowerCase();
-  return haystack.includes(query);
-}
-
 function groupByBrand(rows: Row[]): RepairDeviceBrandGroup[] {
   const groups = new Map<string, RepairDeviceSummary[]>();
   for (const row of rows) {
@@ -96,30 +78,29 @@ export async function getRepairDevicesForMerchant(
   query?: string
 ): Promise<RepairDeviceBrandGroup[]> {
   const supabase = getPublicSupabaseClient();
-  const { data, error } = await supabase
-    .from('repair_devices')
-    .select(DEVICE_COLUMNS)
-    .eq('merchant_id', merchantId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('brand', { ascending: true })
-    .order('model', { ascending: true });
+  const normalizedQuery = query?.trim();
+  const { data, error } = normalizedQuery
+    ? await supabase.rpc('search_repair_devices', {
+        p_merchant_id: merchantId,
+        p_query: normalizedQuery,
+      })
+    : await supabase
+        .from('repair_devices')
+        .select(DEVICE_COLUMNS)
+        .eq('merchant_id', merchantId)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .order('brand', { ascending: true })
+        .order('model', { ascending: true });
 
   if (error) {
     throw error;
   }
 
   const rows = (data ?? []) as Row[];
-  const normalizedQuery = query?.trim().toLowerCase();
-  const filteredRows = normalizedQuery
-    ? rows.filter((row) => matchesQuery(row, normalizedQuery))
-    : rows;
-  const displayedRows = normalizedQuery
-    ? filteredRows.slice(0, REPAIR_DEVICE_SUGGESTION_LIMIT)
-    : filteredRows;
   const linkedProductIds = Array.from(
     new Set(
-      displayedRows
+      rows
         .filter((row) => !asNullableString(row.image_url))
         .map((row) => asNullableString(row.product_id))
         .filter((id): id is string => id !== null)
@@ -159,7 +140,7 @@ export async function getRepairDevicesForMerchant(
     }
   }
 
-  const rowsWithProductImages = displayedRows.map((row) => ({
+  const rowsWithProductImages = rows.map((row) => ({
     ...row,
     image_url:
       asNullableString(row.image_url) ??

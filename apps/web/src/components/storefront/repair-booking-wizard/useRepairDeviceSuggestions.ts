@@ -63,23 +63,31 @@ export function useRepairDeviceSuggestions({
                 groups.flatMap((group) => group.devices).slice(0, 8)
               )
             : Promise.resolve([]);
-        const productsRequest: Promise<StorefrontProductDeviceCandidate[]> =
-          merchantId
-            ? apiGet<{
-                products: StorefrontProductDeviceCandidate[];
-              }>(
-                `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_CANDIDATE_LIMIT}&compact=true`,
-                { signal: controller.signal }
-              ).then(({ products }) => products)
-            : Promise.resolve([]);
-        const [repairResult, productsResult] = await Promise.allSettled([
-          repairRequest,
-          productsRequest,
-        ]);
+        const productsRequest: Promise<{
+          failed: boolean;
+          products: StorefrontProductDeviceCandidate[];
+        }> = merchantId
+          ? apiGet<{
+              products: StorefrontProductDeviceCandidate[];
+            }>(
+              `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_CANDIDATE_LIMIT}&compact=true`,
+              { signal: controller.signal }
+            ).then(
+              ({ products }) => ({ failed: false, products }),
+              () => ({ failed: true, products: [] })
+            )
+          : Promise.resolve({ failed: false, products: [] });
+
+        let repairDevices: RepairDeviceSummary[] = [];
+        let repairLookupFailed = false;
+        try {
+          repairDevices = await repairRequest;
+        } catch {
+          if (controller.signal.aborted) return;
+          repairLookupFailed = true;
+        }
 
         if (controller.signal.aborted) return;
-        const repairDevices =
-          repairResult.status === 'fulfilled' ? repairResult.value : [];
         if (repairDevices.length > 0) {
           setSuggestions(repairDevices);
           setHasSearched(true);
@@ -88,23 +96,19 @@ export function useRepairDeviceSuggestions({
           return;
         }
 
-        const storeSuggestions =
-          productsResult.status === 'fulfilled'
-            ? productsResult.value
-                .map(toStoreProductSuggestion)
-                .filter(
-                  (product): product is StoreProductDeviceSuggestion =>
-                    product !== null
-                )
-                .slice(0, 8)
-            : [];
+        const productsResult = await productsRequest;
+        if (controller.signal.aborted) return;
+        const storeSuggestions = productsResult.products
+          .map(toStoreProductSuggestion)
+          .filter(
+            (product): product is StoreProductDeviceSuggestion =>
+              product !== null
+          )
+          .slice(0, 8);
         setSuggestions(storeSuggestions);
         setHasSearched(true);
         setSettledQuery(query);
-        setLookupFailed(
-          (repairCatalogEnabled && repairResult.status === 'rejected') ||
-            (merchantId !== undefined && productsResult.status === 'rejected')
-        );
+        setLookupFailed(repairLookupFailed || productsResult.failed);
         setIsLoading(false);
       })();
     }, 250);

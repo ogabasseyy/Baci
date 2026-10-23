@@ -133,6 +133,10 @@ describe('GamingSelectionPreview snapshot cache', () => {
     expect(
       await screen.findByText('No products in this Gaming selection.')
     ).toBeInTheDocument();
+    const refreshButton = screen.getByRole('button', {
+      name: 'Refresh preview',
+    });
+    expect(refreshButton.parentElement).toHaveClass('flex-wrap', 'w-full');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh preview' }));
 
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));

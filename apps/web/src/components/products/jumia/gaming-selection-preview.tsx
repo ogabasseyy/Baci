@@ -175,32 +175,36 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       aria-label="Gaming selection preview"
       className="grid gap-2 rounded-md border p-3"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Gaming selection preview</p>
           <p className="text-xs text-muted-foreground">
             Review a frozen selection. Previewing does not submit products to
             Jumia.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => createPreview()}
-          disabled={loading}
-        >
-          {loading ? 'Loading…' : 'Create Gaming preview'}
-        </Button>
-        {snapshot ? (
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button
             type="button"
             variant="outline"
-            onClick={() => createPreview(true)}
+            onClick={() => createPreview()}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
-            {loading ? 'Loading…' : 'Refresh preview'}
+            {loading ? 'Loading…' : 'Create Gaming preview'}
           </Button>
-        ) : null}
+          {snapshot ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => createPreview(true)}
+              disabled={loading}
+              className="w-full sm:w-auto"
+            >
+              {loading ? 'Loading…' : 'Refresh preview'}
+            </Button>
+          ) : null}
+        </div>
       </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">

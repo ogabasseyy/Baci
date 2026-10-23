@@ -74,10 +74,9 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
           </p>
           {snapshot.legacyUnmappedCount > 0 ? (
             <p className="text-sm text-amber-700" role="status">
-              {snapshot.legacyUnmappedCount} active product
-              {snapshot.legacyUnmappedCount === 1 ? ' uses' : 's use'} legacy
-              Gaming labels and are not included. Assign them to the active
-              Gaming category, then create a new preview.
+              {snapshot.legacyUnmappedCount === 1
+                ? '1 active product uses a legacy Gaming label and is not included. Assign it to the active Gaming category, then create a new preview.'
+                : `${snapshot.legacyUnmappedCount} active products use legacy Gaming labels and are not included. Assign them to the active Gaming category, then create a new preview.`}
             </p>
           ) : null}
           <GamingSelectionPreviewProducts

@@ -151,4 +151,43 @@ describe('GamingSelectionPreview rendering and pagination', () => {
       )
     );
   });
+
+  it('uses singular grammar for one legacy-labeled product', async () => {
+    setupGamingCategories();
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        {
+          selectionId: '00000000-0000-4000-8000-000000000027',
+          total: 1,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 }
+      )
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          selectionId: '00000000-0000-4000-8000-000000000027',
+          total: 1,
+          page: 1,
+          totalPages: 1,
+          legacyUnmappedCount: 1,
+          products: [],
+        })
+      )
+    );
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(
+      await screen.findByText(
+        '1 active product uses a legacy Gaming label and is not included. Assign it to the active Gaming category, then create a new preview.'
+      )
+    ).toBeInTheDocument();
+  });
 });

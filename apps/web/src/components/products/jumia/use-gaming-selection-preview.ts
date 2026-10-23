@@ -127,13 +127,19 @@ export function useGamingSelectionPreview(merchantId: string) {
           gamingSelectionPreviewCache.remove(cacheKey);
         }
       }
-      const response = await fetchWithCsrf(
-        '/api/marketplace/jumia/products/selections',
-        {
-          method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: categoryId }),
-        }
-      );
+      let response: Response;
+      try {
+        response = await fetchWithCsrf(
+          '/api/marketplace/jumia/products/selections',
+          {
+            method: 'POST',
+            body: JSON.stringify({ sourceCategoryId: categoryId }),
+          }
+        );
+      } catch {
+        markCreationOutcomeUnknown();
+        throw new Error(jumiaPreviewMessages.unreadableCreation);
+      }
       if (!response.ok) {
         throw new Error(
           await eligiblePreviewRequest.errorMessage(

@@ -123,6 +123,54 @@ describe('GamingSelectionPreview creation recovery', () => {
     expect(fetchWithCsrf).toHaveBeenCalledTimes(2);
   });
 
+  it('requires explicit retry when the creation request rejects after submission', async () => {
+    setupGamingCategories([{ id: 'gaming-category', name: 'Gaming' }]);
+    vi.mocked(fetchWithCsrf)
+      .mockRejectedValueOnce(new TypeError('connection reset'))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            selectionId: '00000000-0000-4000-8000-000000000026',
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          selectionId: '00000000-0000-4000-8000-000000000026',
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      )
+    );
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The server may have created this preview'
+    );
+    expect(
+      screen.getByRole('button', { name: 'Retry preview creation' })
+    ).toBeInTheDocument();
+    expect(fetchWithCsrf).toHaveBeenCalledOnce();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry preview creation' })
+    );
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    expect(fetchWithCsrf).toHaveBeenCalledTimes(2);
+  });
+
   it('tries the cached preview if category lookup fails for a normal create action', async () => {
     setupGamingCategories([], { message: 'temporary category read failure' });
     localStorage.setItem(

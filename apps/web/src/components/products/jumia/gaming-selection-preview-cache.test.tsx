@@ -197,7 +197,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh preview' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'An active Gaming category is required to refresh this preview.'
+      'An active Gaming category is required to refresh or retry this preview.'
     );
     expect(pageFetch).toHaveBeenCalledOnce();
   });

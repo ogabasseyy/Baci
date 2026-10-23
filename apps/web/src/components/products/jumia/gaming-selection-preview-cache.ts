@@ -11,6 +11,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isSelectionId(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
 function readCachedSelection(cacheKey: string): CachedSelection | null {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(cacheKey) ?? 'null');
@@ -116,6 +120,10 @@ function makeInvalidPageResponseError() {
   );
 }
 
+function errorMessage(cause: unknown, fallback: string) {
+  return cause instanceof Error ? cause.message : fallback;
+}
+
 function isRejectedCachedSelection(cause: unknown) {
   return (
     isRecord(cause) &&
@@ -128,7 +136,9 @@ export const gamingSelectionPreviewCache = {
   loadFirstValid: loadFirstValidCachedSelection,
   loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,
   isRecord,
+  isSelectionId,
   isRejected: isRejectedCachedSelection,
+  errorMessage,
   makeInvalidPageResponseError,
   makeRequestError: makePreviewRequestError,
   read: readCachedSelection,

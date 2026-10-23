@@ -5,10 +5,7 @@ import {
 import { UPGRADE_REQUIRED_MESSAGE } from './constants';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
-export async function requestErrorMessage(
-  response: Response,
-  fallback: string
-) {
+async function requestErrorMessage(response: Response, fallback: string) {
   if (response.status !== 402) return fallback;
   const payload: unknown = await response.json().catch(() => null);
   return gamingSelectionPreviewCache.isRecord(payload) &&
@@ -17,7 +14,7 @@ export async function requestErrorMessage(
     : fallback;
 }
 
-export async function requestEligiblePreviewPage(
+async function requestEligiblePreviewPage(
   selectionId: string,
   page: number
 ): Promise<JumiaProductExportEligiblePage> {
@@ -45,3 +42,8 @@ export async function requestEligiblePreviewPage(
   }
   return parsed.data;
 }
+
+export const eligiblePreviewRequest = {
+  errorMessage: requestErrorMessage,
+  page: requestEligiblePreviewPage,
+};

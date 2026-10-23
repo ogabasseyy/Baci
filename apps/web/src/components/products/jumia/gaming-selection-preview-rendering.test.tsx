@@ -38,7 +38,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     fetcher.mockResolvedValue(
       Response.json(
         {
-          selectionId: 'selection-1',
+          selectionId: '00000000-0000-4000-8000-000000000020',
           total: 51,
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
@@ -54,7 +54,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
         });
       }
       return Response.json({
-        selectionId: 'selection-1',
+        selectionId: '00000000-0000-4000-8000-000000000020',
         total: 51,
         page: Number(page),
         totalPages: 2,
@@ -97,7 +97,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
     resolveSecondPage(
       Response.json({
-        selectionId: 'selection-1',
+        selectionId: '00000000-0000-4000-8000-000000000020',
         total: 51,
         page: 2,
         totalPages: 2,
@@ -146,7 +146,9 @@ describe('GamingSelectionPreview rendering and pagination', () => {
       expect.objectContaining({ method: 'POST' })
     );
     expect(pageFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/eligible?selectionId=selection-1&page=2')
+      expect.stringContaining(
+        '/eligible?selectionId=00000000-0000-4000-8000-000000000020&page=2'
+      )
     );
   });
 });

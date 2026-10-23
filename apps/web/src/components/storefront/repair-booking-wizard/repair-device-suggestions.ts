@@ -41,7 +41,10 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
     pattern: /\b((game|gaming)\s+)?consoles?\b/i,
     deviceType: 'Console',
   },
-  { pattern: /\bsmart\s?watches?\b/i, deviceType: 'Smartwatch' },
+  {
+    pattern: /\b(smart\s?watches?|wearables?)\b/i,
+    deviceType: 'Smartwatch',
+  },
 ];
 
 export function toStoreProductSuggestion(

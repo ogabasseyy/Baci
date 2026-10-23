@@ -6,6 +6,7 @@ import {
   type RepairDeviceType,
 } from '@baci/shared/repairs';
 import { getPublicSupabaseClient } from '@/lib/cached-data';
+import { getPrimaryProductImage } from '@/lib/product-image';
 
 const DEVICE_COLUMNS =
   'id, brand, model, slug, device_type, product_id, image_url, aliases, sort_order';
@@ -32,14 +33,15 @@ function extractPrimaryImage(images: unknown): string | null {
   if (!Array.isArray(images) || images.length === 0) {
     return null;
   }
-  const first = images[0];
-  if (typeof first === 'string') {
-    return first || null;
-  }
-  if (first && typeof first === 'object' && 'url' in first) {
-    return asNullableString(first.url);
-  }
-  return null;
+  const productImages = images.filter(
+    (image): image is string | { url?: string | null } =>
+      typeof image === 'string' ||
+      (image !== null &&
+        typeof image === 'object' &&
+        'url' in image &&
+        (typeof image.url === 'string' || image.url === null))
+  );
+  return getPrimaryProductImage(productImages);
 }
 
 function mapDevice(row: Row): RepairDeviceSummary {

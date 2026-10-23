@@ -18,7 +18,11 @@ export const onboardingReminderResponseSchema = z.object({
       title: z.string(),
       action: z.string(),
       description: z.string(),
-      href: z.string().startsWith('/dashboard'),
+      href: z
+        .string()
+        .regex(
+          /^\/(?:dashboard(?:\/[a-z0-9-]+)*|builder)(?:\?onboarding=true)?$/
+        ),
     })
     .nullable(),
 });

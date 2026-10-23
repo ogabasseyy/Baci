@@ -12,12 +12,33 @@ Provider preflight on 23 October 2026:
 - The management OAuth token refresh works, but its granted scope is only
   `Zeptomail.Domains.All`. The documented agent-list read returned HTTP 401
   (`SERR_123`); the send-only token also cannot list agents.
-- Workflow/template inventory therefore remains unverified. Restore Campaigns
-  OAuth access and authorize read scopes for ZeptoMail agents/templates, or inspect
-  the existing consoles after sign-in. Do not interpret these failures as an empty
-  provider account. No new provider workflow or marketing list was created.
+- Browser inspection after the owner selected the correct account verified
+  ZeptoMail organization `907480120` (Baci Technologies Limited), with one
+  `mail_agent_1` created on 28 November 2025. Both `usebaci.com` and
+  `ogabassey.com` are associated; Baci's DKIM and bounce records are verified.
+  The agent has no saved email templates. Recent logs contain delivered
+  `Welcome to Baci - Your store is ready!` messages alongside Ogabassey
+  sign-in emails, confirming that the existing welcome path is still live.
+  Retire that path during the release before enabling the replacement journey.
+- The account dashboard reports 1,826 sent and 1,813 delivered over its last
+  seven days; these are account-wide email events, not merchant signup counts.
+  It displays one credit with 441 of 10,000 emails remaining and auto top-up
+  disabled. Confirm available sending capacity before activation; no credits
+  were purchased or billing settings changed during the audit.
+- Agent email tracking is disabled. Dashboard zero-open/zero-click counts are
+  not evidence of zero engagement. Measure onboarding task completion and store
+  publication separately; no tracking configuration was changed during audit.
+- Campaigns under the owner-selected Baci login stops at initial account setup. The earlier
+  Campaigns organization `907477262` showed no workflows with all active owners
+  and all statuses selected. These findings do not establish that every possible
+  Zoho login is empty. The inventory covers the accounts selected by the owner
+  during this audit. No new provider workflow, Campaigns
+  account setup, or marketing list was created by this audit.
 - The temporary credential export was removed after these checks. No credentials
   or recipient records are part of this implementation or its logs.
+- The owner selected the connected `support@usebaci.com` mailbox for onboarding
+  Reply-To. Use that address for the control's `support_reply_to` after completing
+  the controlled delivery and reply checks in the release order below.
 
 ## Operation
 

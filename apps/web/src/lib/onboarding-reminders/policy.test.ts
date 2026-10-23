@@ -1,5 +1,6 @@
 import type { WebStoreReadiness } from '@baci/shared';
 import { describe, expect, it } from 'vitest';
+import { onboardingReminderResponseSchema } from '@/schemas/onboarding-reminder';
 import { getOnboardingReminder } from './policy';
 
 const readiness = {
@@ -32,6 +33,40 @@ const readiness = {
 } satisfies WebStoreReadiness;
 
 describe('onboarding in-app reminders', () => {
+  it('accepts the store design reminder through the client response contract', () => {
+    const reminder = getOnboardingReminder({
+      ...readiness,
+      items: [{ ...readiness.items[0], id: 'hero_carousel' }],
+    });
+    expect(reminder?.href).toBe('/builder?onboarding=true');
+    expect(
+      onboardingReminderResponseSchema.safeParse({
+        merchantId: '11111111-1111-4111-8111-111111111111',
+        reminder,
+      }).success
+    ).toBe(true);
+  });
+  it.each([
+    'https://example.com/dashboard',
+    '//example.com/builder',
+    '/builder-other',
+    '/dashboard-other',
+    '/builder/../external',
+  ])('rejects unrelated reminder destination %s', (href) => {
+    const baseline = {
+      merchantId: '11111111-1111-4111-8111-111111111111',
+      reminder: getOnboardingReminder(readiness),
+    };
+    expect(onboardingReminderResponseSchema.safeParse(baseline).success).toBe(
+      true
+    );
+    expect(
+      onboardingReminderResponseSchema.safeParse({
+        ...baseline,
+        reminder: { ...baseline.reminder, href },
+      }).success
+    ).toBe(false);
+  });
   it('links directly to the next incomplete canonical setup requirement', () => {
     expect(getOnboardingReminder(readiness)).toEqual({
       id: 'first_product',

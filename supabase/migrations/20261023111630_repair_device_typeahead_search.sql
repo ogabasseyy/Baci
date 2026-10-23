@@ -38,6 +38,10 @@ AS $$
     AND (
       pg_catalog.strpos(pg_catalog.lower(d.brand), pg_catalog.lower(pg_catalog.btrim(p_query))) > 0
       OR pg_catalog.strpos(pg_catalog.lower(d.model), pg_catalog.lower(pg_catalog.btrim(p_query))) > 0
+      OR pg_catalog.strpos(
+        pg_catalog.lower(pg_catalog.concat_ws(' ', d.brand, d.model)),
+        pg_catalog.lower(pg_catalog.btrim(p_query))
+      ) > 0
       OR EXISTS (
         SELECT 1
         FROM pg_catalog.unnest(d.aliases) AS aliases(alias_value)

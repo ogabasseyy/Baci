@@ -96,4 +96,50 @@ describe('useRepairDeviceSuggestions', () => {
 
     expect(mocks.apiGet).toHaveBeenCalledTimes(3);
   });
+
+  it('aborts and clears an active lookup when suggestions are dismissed', async () => {
+    vi.useFakeTimers();
+    let resolveLookup: ((value: { groups: [] }) => void) | undefined;
+    mocks.apiGet.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLookup = resolve;
+        })
+    );
+
+    const { result } = renderHook(() =>
+      useRepairDeviceSuggestions({
+        catalogEnabled: true,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        query: 'PlayStation 5',
+        repairCatalogEnabled: true,
+        selectedModel: null,
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(result.current.isLoading).toBe(true);
+    const requestSignal = mocks.apiGet.mock.calls[0]?.[1]?.signal as
+      | AbortSignal
+      | undefined;
+
+    act(() => result.current.clearSuggestions());
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(result.current).toMatchObject({
+      hasSearched: false,
+      isLoading: false,
+      lookupFailed: false,
+      suggestions: [],
+    });
+
+    await act(async () => {
+      resolveLookup?.({ groups: [] });
+    });
+    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.hasSearched).toBe(false);
+  });
 });

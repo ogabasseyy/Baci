@@ -42,4 +42,16 @@ describe('repair device product suggestions', () => {
       ).toBeNull();
     }
   });
+
+  it('maps standalone console catalog categories to repair consoles', () => {
+    for (const category of ['Console', 'Consoles', 'Game Consoles']) {
+      expect(
+        toStoreProductSuggestion({
+          id: category,
+          name: 'PlayStation 5',
+          category,
+        })
+      ).toMatchObject({ deviceType: 'Console' });
+    }
+  });
 });

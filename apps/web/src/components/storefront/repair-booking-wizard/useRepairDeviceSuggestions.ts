@@ -1,7 +1,7 @@
 'use client';
 
 import type { RepairDeviceSummary } from '@baci/shared/repairs';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api-client';
 import {
   type RepairDeviceSelection,
@@ -35,6 +35,7 @@ export function useRepairDeviceSuggestions({
   const [hasSearched, setHasSearched] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [settledQuery, setSettledQuery] = useState<string | null>(null);
+  const activeControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setSuggestions([]);
@@ -48,6 +49,7 @@ export function useRepairDeviceSuggestions({
     }
 
     const controller = new AbortController();
+    activeControllerRef.current = controller;
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setLookupFailed(false);
@@ -122,6 +124,9 @@ export function useRepairDeviceSuggestions({
     return () => {
       window.clearTimeout(timer);
       controller.abort();
+      if (activeControllerRef.current === controller) {
+        activeControllerRef.current = null;
+      }
     };
   }, [
     catalogEnabled,
@@ -133,9 +138,13 @@ export function useRepairDeviceSuggestions({
   ]);
 
   const clearSuggestions = () => {
+    activeControllerRef.current?.abort();
+    activeControllerRef.current = null;
     setSuggestions([]);
+    setIsLoading(false);
     setHasSearched(false);
     setLookupFailed(false);
+    setSettledQuery(null);
   };
 
   return {

@@ -113,9 +113,7 @@ ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
 # it against everything else. Its candidates stage from STAGING_DIR
 # (still present; cleanup runs on EXIT), so placement after the sync
 # changes nothing it installs.
-if [ "$REMEDIATION_STATE" = enabled ]; then
-  install_remediation_cron_transition
-fi
+install_remediation_cron_transition
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
@@ -130,7 +128,7 @@ ssh "$VPS" "bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
 echo "==> Installing crontab entries on VPS (idempotent)"
 CRON_BLOCK_START="# >>> baci-workers >>>"
 CRON_BLOCK_END="# <<< baci-workers <<<"
-cat <<EOF | ssh "$VPS" "cat > $REMOTE_DIR/crontab.fragment"
+cat <<EOF | ssh "$VPS" "cat > $STAGING_DIR/crontab.fragment"
 $CRON_BLOCK_START
 0,30 * * * * flock -n $REMOTE_DIR/locks/push-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/push-receipts.mjs' >> $REMOTE_DIR/logs/push-receipts.log 2>&1
 10 *   * * * flock -n $REMOTE_DIR/locks/cleanup-agentic-request-records.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-agentic-request-records.mjs' >> $REMOTE_DIR/logs/cleanup-agentic-request-records.log 2>&1
@@ -176,7 +174,7 @@ $CRON_BLOCK_START
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE'" <<'REMOTE_SH'
+ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE'" <<'REMOTE_SH'
 set -euo pipefail
 
 fragment_path="$1"

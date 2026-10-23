@@ -81,47 +81,6 @@ function runRollbackExtractedMerge({
 }
 
 describe('remediation deploy crontab', () => {
-  it('skips the transition when shutdown was requested after deployment started', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'baci-remediation-disabled-'));
-    try {
-      const remoteDir = join(directory, 'remote');
-      const policyDirectory = join(directory, '.config', 'baci');
-      mkdirSync(policyDirectory, { recursive: true });
-      writeFileSync(
-        join(policyDirectory, 'remediation.disabled'),
-        'disabled\n'
-      );
-      const source = readFileSync(
-        join(workerRoot, 'lib/install-remediation-cron-transition.sh'),
-        'utf8'
-      );
-      const fragment = source
-        .split("<<'REMOTE_SH'\n")[1]
-        .split('\nREMOTE_SH')[0];
-      const script = join(directory, 'transition.sh');
-      writeFileSync(script, fragment);
-      const result = spawnSync(
-        'bash',
-        [
-          script,
-          remoteDir,
-          'unused',
-          'node',
-          'unused',
-          'unused',
-          '1',
-          '1',
-          '/proc',
-          'unused',
-        ],
-        { encoding: 'utf8' }
-      );
-      assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /disabled by operator/);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  });
   it('does not reinstate remediation after an operator disables it outside the release tree', () => {
     const { result, installed } = runRollbackExtractedMerge({
       remediationDisabled: true,

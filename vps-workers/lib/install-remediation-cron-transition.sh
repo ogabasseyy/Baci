@@ -16,11 +16,6 @@ lock_wait_seconds="$7"
 proc_root="$8"
 expected_sha="$9"
 lock_dir="$remote_dir/locks"
-disabled_marker="$(dirname "$remote_dir")/.config/baci/remediation.disabled"
-if [ -e "$disabled_marker" ] || [ -L "$disabled_marker" ]; then
-  echo "Remediation disabled by operator; skipping cron transition"
-  exit 0
-fi
 
 # The deploy lock above serializes but does not order: when two
 # operators deploy concurrently, B's promote can land between A's
@@ -33,6 +28,11 @@ live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
 if [ "$live_sha" != "$expected_sha" ]; then
   echo "Refusing remediation cron transition: live worker ${live_sha:-<missing>} is not this deployment ($expected_sha); a concurrent promote superseded it. Rerun deploy.sh from current main." >&2
   exit 1
+fi
+disabled_marker="$(dirname "$remote_dir")/.config/baci/remediation.disabled"
+if [ -e "$disabled_marker" ] || [ -L "$disabled_marker" ]; then
+  echo "Remediation disabled by operator; skipping cron transition"
+  exit 0
 fi
 
 # Single dotenv reader, shared with the checkout readers: every

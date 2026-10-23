@@ -12,7 +12,9 @@ If the marker is removed after a deployment skipped preparation, the final locke
 
 ## Current rollout boundary
 
-On 23 October 2026, the marker was installed and the existing five remediation schedules were disabled. The code change remains local and unreleased. Older deployment scripts do not honor this marker and can still recreate schedules until this change is released. No complete worker deployment, application reload, recording-account mutation or live payment activation was performed.
+On 23 October 2026, the marker was installed and the existing five remediation schedules were disabled. Worker release `47c90f79611f3f884a0962c668b74427bb0aa218` was then deployed with the existing guarded deployment process. The installed worker files match that commit and the final cron contains zero remediation schedules. The application code is unchanged from the preceding release. No recording-account mutation or live payment activation was performed.
+
+Older deployment scripts do not honor this marker and can still recreate schedules; upstream releases must include this safeguard. The notification delivery timer remains paused separately to protect the recording account.
 
 ## Verification
 

@@ -233,6 +233,10 @@ export function useGamingSelectionPreview(merchantId: string) {
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       if (!response.ok) {
+        if (response.status >= 500) {
+          markCreationOutcomeUnknown(owner, generation);
+          throw new Error(jumiaPreviewMessages.unreadableCreation);
+        }
         throw new Error(
           await eligiblePreviewRequest.errorMessage(
             response,

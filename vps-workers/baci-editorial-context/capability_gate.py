@@ -107,34 +107,15 @@ def _reviewed_moment(register):
     return moment
 
 
-def _revision_resolves(revision, cwd="."):
-    """Whether revision names a commit in this checkout's history."""
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(cwd), "cat-file", "-e", f"{revision}^{{commit}}"],
-            capture_output=True, text=True,
-        )
-    except Exception:
-        return False
-    return proc.returncode == 0
-
-
-def _replacement_revision_ok(new_rev, old_rev, cwd="."):
-    """The newly bound tree must descend from the previously bound one.
-
-    Mere existence proves nothing: an older ancestor predating the reviewed
-    change also resolves. Content validation stays with the binding test's
-    provenance check; here the tripwire is continuity — rebase onto current
-    history and re-point when it fails. When the old revision no longer
-    resolves (rewritten/squash-merged history), continuity is unestablishable:
-    accept an explicit re-point to a resolvable tree rather than deadlocking
-    every future re-review.
-    """
-    if not _revision_resolves(new_rev, cwd):
-        return False
-    if not _revision_resolves(old_rev, cwd):
-        return True
-    return _is_ancestor(old_rev, new_rev, cwd)
+# Load next to the gate so direct scripts and importlib-based tests agree.
+import importlib.util as _importlib_util
+_revision_spec = _importlib_util.spec_from_file_location(
+    "capability_gate_continuity", Path(__file__).with_name("capability_gate_continuity.py")
+)
+_revision_module = _importlib_util.module_from_spec(_revision_spec)
+_revision_spec.loader.exec_module(_revision_module)
+_revision_resolves = _revision_module.revision_resolves
+_replacement_revision_ok = _revision_module.replacement_revision_ok
 
 
 def _base_register(base, cwd="."):
@@ -251,7 +232,7 @@ def main(cwd="."):
             fork_register = _base_register(fork_base, cwd)
             tip_register = _base_register(base, cwd) if base != fork_base else None
             base_register = newer_base_register(tip_register, fork_register)
-        rev_ok = lambda new, old: _replacement_revision_ok(new, old, cwd)  # noqa: E731
+        rev_ok = lambda new, old: _replacement_revision_ok(new, old, cwd, base=base, base_register=base_register)  # noqa: E731
         try:
             map_text = Path(root, MAP_PATH).read_text()
         except OSError:

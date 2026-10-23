@@ -11,6 +11,7 @@ import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipe
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { onboardingEmailWorkerAuthority } from '@/lib/events/event-pipeline-onboarding-authority-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
@@ -132,7 +133,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   authority: {
     adminImporters: eventPipelineAdminImporters,
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths],
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -141,7 +142,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',
@@ -177,6 +178,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
+      onboardingEmailWorkerAuthority.worker,
     ],
     servicePaths: eventPipelineAuthorityServicePaths,
     operationalServiceImporters: [

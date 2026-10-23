@@ -209,3 +209,28 @@ export function getLaunchPaymentRequirement(
     completed: false,
   };
 }
+
+/** Shared readiness wording for a configured but disabled payment method. */
+export function getReadinessLaunchPaymentRequirement(
+  merchant: CheckoutPaymentMerchant
+): LaunchPaymentRequirement {
+  const requirement = getLaunchPaymentRequirement(merchant);
+  if (
+    requirement.id === 'bank_account' &&
+    !requirement.completed &&
+    merchant.bank_account_number?.trim() &&
+    merchant.bank_code?.trim() &&
+    (Boolean(merchant.paystack_subaccount_code?.trim()) ||
+      merchant.paystack_subaccount_configured === true) &&
+    readPaystackEnabled(merchant.feature_settings) === false &&
+    readPayOnDeliveryEnabled(merchant.feature_settings) !== true
+  ) {
+    return {
+      id: 'payment_method',
+      label: 'Enable a payment method',
+      description: 'Enable Paystack or Pay on Delivery for customer checkout',
+      completed: false,
+    };
+  }
+  return requirement;
+}

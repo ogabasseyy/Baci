@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-23T15:47:25.415148+00:00",
-  "source_revision": "7f09a2b8b7352148969a68b2812958d5363b3bad",
-  "evidence_digest": "37da97cb30698c627ef725a3819210d40e2f2b0b71cca830b07b7ef905dcf263",
-  "claims_digest": "b75fa666e457ab2d5287f2405127c943765e12e0ac022143b9aac6d7867c4931",
-  "review_scope": "Source evidence only. OAuth registration omits stateless cart-link tools for connected shoppers and preserves anonymous compatibility. PKCE, encrypted grants, 30s refresh receipts, resource-specific transport, consent admission and tenant grant capacity are unchanged. New /submission/mcp OAuth authorization and discovery observed; conversational removal and handoff remain pending on that exact app. Original connection preserved. Text continuation off; native acceptance pending. Other capability claims unchanged by this registration patch.",
+  "reviewed_at": "2026-10-23T15:49:27.178174+00:00",
+  "source_revision": "1d05c8fb24ec6be788ec50d370c3bdfa0e2fa0d3",
+  "evidence_digest": "2bc719a94ca3a04d9e3507a62469811d4e3410ada2174b818b81d296be8ac5e7",
+  "claims_digest": "c941a051fb83c4f1618279e5ffb0c55755f18e5b90d6afe7b37f7d48ecb37855",
+  "review_scope": "Source audit only; not deployment proof. OAuth PKCE, encrypted tenant grants and 30s refresh receipts; catalogs recheck quantity; expired workers fail readiness. Resource HTTPS discovery rejects reserved paths; independent consent cookies. Admission 600/5min; 2,000 retained grants/tenant. New endpoint authorized but undeployed; original MCP preserved. Historical isolated add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh probe required before fleet membership. Text continuation off; privacy/retention unqualified. Offers merchant-scoped, published, selected and capped; PDP policy, RPC factory, chunk/outage recovery and case-normalized detail IDs audited. Onboarding payment readiness recognizes raw subaccount or derived configuration when Paystack is disabled. Checkout eligibility and provider activation claims unchanged.",
   "capabilities": [
     {
       "id": "payments",

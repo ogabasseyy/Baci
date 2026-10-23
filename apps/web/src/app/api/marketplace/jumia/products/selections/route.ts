@@ -12,17 +12,17 @@ import {
 } from '@/schemas/jumia/product-export-selection';
 
 export async function POST(request: NextRequest) {
+  const auth = await authenticateApiRequest(request);
+  if (auth.error || !auth.user || !auth.supabase) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid) {
     return (
       csrf.response ??
       NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     );
-  }
-
-  const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let body: unknown;
@@ -61,7 +61,10 @@ export async function POST(request: NextRequest) {
   if (error || !Array.isArray(data) || !data[0]) {
     return NextResponse.json(
       { error: 'Unable to create Gaming product selection' },
-      { status: error?.code === '22023' ? 400 : 500 }
+      {
+        status:
+          error?.code === '22023' ? 400 : error?.code === '42501' ? 403 : 500,
+      }
     );
   }
 

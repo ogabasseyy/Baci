@@ -215,3 +215,10 @@ it('shows all saved variant details in the cart drawer', () => {
   ])
     expect(screen.getByText(value)).toBeVisible();
 });
+
+it('shows a conditioned drawer item exactly once with a formatted label', () => {
+  setup(makeItem({ condition: 'open_box' }));
+  expect(screen.getByText('Condition:')).toBeVisible();
+  expect(screen.getAllByText('Open Box')).toHaveLength(1);
+  expect(screen.queryByText('open_box')).not.toBeInTheDocument();
+});

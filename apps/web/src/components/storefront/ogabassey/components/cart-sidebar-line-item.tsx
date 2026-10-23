@@ -70,17 +70,6 @@ export function CartSidebarLineItem({
             e.currentTarget.src = '/placeholder.png';
           }}
         />
-        {/* Condition Badge - Bottom Center Overlay */}
-        {item.condition && (
-          <span
-            className={`absolute -bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-full border shadow-sm uppercase tracking-wider whitespace-nowrap z-10 ${item.condition?.toLowerCase() === 'new'
-              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-              : 'bg-amber-100 text-amber-800 border-amber-200'
-              }`}
-          >
-            {item.condition}
-          </span>
-        )}
       </Link>
       <div className="flex-1 flex flex-col justify-between min-h-[100px]">
         <div>

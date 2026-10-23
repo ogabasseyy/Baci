@@ -182,7 +182,6 @@ remote_dir="$2"
 cron_block_start="$3"
 cron_block_end="$4"
 expected_sha="${5:-}"
-if [ "${6:-enabled}" = disabled ] && [ ! -e "$(dirname "$remote_dir")/.config/baci/remediation.disabled" ] && [ ! -L "$(dirname "$remote_dir")/.config/baci/remediation.disabled" ]; then echo "Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image." >&2; exit 1; fi
 # The crontab carries this deployment's identity (the pinned remediator
 # image tag): installing it after a concurrent promote would point live
 # cron at this deployment's image under another deployment's marker.
@@ -211,7 +210,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" > "$tmp_file" <<'PY'
+python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" "${6:-enabled}" > "$tmp_file" <<'PY'
 import pathlib
 import subprocess
 import sys
@@ -221,7 +220,10 @@ remote_dir = sys.argv[2]
 block_start = sys.argv[3]
 block_end = sys.argv[4]
 disabled = pathlib.Path(remote_dir).parent / '.config/baci/remediation.disabled'
-if disabled.exists() or disabled.is_symlink():
+is_disabled = disabled.exists() or disabled.is_symlink()
+if sys.argv[5] == 'disabled' and not is_disabled:
+    raise SystemExit('Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image.')
+if is_disabled:
     jobs = ('vercel-error-remediator.mjs', 'sentry-mobile-error-remediator.mjs',
             'posthog-error-remediator.mjs', 'remediation-codex-canary.mjs',
             'cleanup-remediation-storage.mjs')

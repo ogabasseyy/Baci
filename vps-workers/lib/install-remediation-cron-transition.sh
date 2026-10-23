@@ -3,7 +3,7 @@
 install_remediation_cron_transition() {
   echo "==> Transactionally installing the remediation launch barrier"
   # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR' '$STAGING_DIR' '$NODE_BIN' '$CODEX_REMEDIATOR_IMAGE' '$CODEX_CONTAINER_BIN' '${BACI_REMEDIATION_LEGACY_DRAIN_TIMEOUT_SECONDS:-60}' '${BACI_REMEDIATION_LEGACY_LOCK_WAIT_SECONDS:-900}' '${BACI_REMEDIATION_PROC_ROOT:-/proc}' '$APP_SHA'" <<'REMOTE_SH'
+  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR' '$STAGING_DIR' '$NODE_BIN' '$CODEX_REMEDIATOR_IMAGE' '$CODEX_CONTAINER_BIN' '${BACI_REMEDIATION_LEGACY_DRAIN_TIMEOUT_SECONDS:-60}' '${BACI_REMEDIATION_LEGACY_LOCK_WAIT_SECONDS:-900}' '${BACI_REMEDIATION_PROC_ROOT:-/proc}' '$APP_SHA' '${REMEDIATION_STATE:-enabled}'" <<'REMOTE_SH'
 set -euo pipefail
 
 remote_dir="$1"
@@ -30,7 +30,15 @@ if [ "$live_sha" != "$expected_sha" ]; then
   exit 1
 fi
 disabled_marker="$(dirname "$remote_dir")/.config/baci/remediation.disabled"
+current_remediation_state=enabled
 if [ -e "$disabled_marker" ] || [ -L "$disabled_marker" ]; then
+  current_remediation_state=disabled
+fi
+if [ "${10:-enabled}" = disabled ] && [ "$current_remediation_state" = enabled ]; then
+  echo "Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image." >&2
+  exit 1
+fi
+if [ "$current_remediation_state" = disabled ]; then
   echo "Remediation disabled by operator; skipping cron transition"
   exit 0
 fi

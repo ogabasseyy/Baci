@@ -68,6 +68,29 @@ it('refuses a superseded release even when remediation is disabled', () => {
     );
     assert.equal(currentRelease.status, 0, currentRelease.stderr);
     assert.match(currentRelease.stdout, /disabled by operator/);
+    const initiallyDisabled = [
+      script,
+      remoteDir,
+      'unused',
+      'node',
+      'unused',
+      '',
+      '1',
+      '1',
+      '/proc',
+      'newer-release',
+      'disabled',
+    ];
+    const stillDisabled = spawnSync('bash', initiallyDisabled, {
+      encoding: 'utf8',
+    });
+    assert.equal(stillDisabled.status, 0, stillDisabled.stderr);
+    rmSync(join(policy, 'remediation.disabled'));
+    const reenabled = spawnSync('bash', initiallyDisabled, {
+      encoding: 'utf8',
+    });
+    assert.notEqual(reenabled.status, 0);
+    assert.match(reenabled.stderr, /re-enabled during deployment/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

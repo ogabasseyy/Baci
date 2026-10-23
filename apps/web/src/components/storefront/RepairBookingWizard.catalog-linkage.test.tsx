@@ -1,7 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps, ReactNode } from 'react';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { RepairBookingWizard } from './RepairBookingWizard';
 
 const { mockApiGet, mockCreateRepair, mockToast } = vi.hoisted(() => ({
@@ -77,23 +85,35 @@ vi.mock('@/components/ui/phone-input', () => ({
 }));
 
 describe('RepairBookingWizard catalog linkage', () => {
+  beforeEach(() => {
+    mockApiGet.mockReset();
+    mockCreateRepair.mockReset();
+    mockToast.mockReset();
+  });
+
   it('keeps a selected suggestion closed when navigating Back to device details', async () => {
-    mockApiGet.mockResolvedValue({
-      groups: [
-        {
-          brand: 'Apple',
-          devices: [
-            {
-              id: '11111111-1111-4111-8111-111111111111',
-              brand: 'Apple',
-              model: 'iPhone 13 Pro Max',
-              slug: 'iphone-13-pro-max',
-              deviceType: 'Smartphone',
-            },
-          ],
-        },
-      ],
-    });
+    mockApiGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes('/repairs/devices')
+          ? {
+              groups: [
+                {
+                  brand: 'Apple',
+                  devices: [
+                    {
+                      id: '11111111-1111-4111-8111-111111111111',
+                      brand: 'Apple',
+                      model: 'iPhone 13 Pro Max',
+                      slug: 'iphone-13-pro-max',
+                      deviceType: 'Smartphone',
+                    },
+                  ],
+                },
+              ],
+            }
+          : { products: [] }
+      )
+    );
     const user = userEvent.setup();
     render(
       <RepairBookingWizard
@@ -123,7 +143,13 @@ describe('RepairBookingWizard catalog linkage', () => {
       'Apple iPhone 13 Pro Max'
     );
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    expect(mockApiGet).toHaveBeenCalledOnce();
+    expect(mockApiGet).toHaveBeenCalledTimes(2);
+    expect(mockApiGet.mock.calls.map(([url]) => url)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('/repairs/devices'),
+        expect.stringContaining('/api/storefront/products'),
+      ])
+    );
   });
 
   it('keeps a manually entered model when the device type changes', async () => {

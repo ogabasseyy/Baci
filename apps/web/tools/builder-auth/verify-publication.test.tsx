@@ -50,6 +50,36 @@ it('verifies actual rendered revision plus changed content without credentials; 
   expect(await verifyPublication(input, { launch, fetchPublic: simple })).toBe(
     false
   );
+  const telemetry = vi.fn(async (_url: string) => ({
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+    body: Buffer.from(
+      html.replace(
+        '</head>',
+        '<script src="https://www.googletagmanager.com/gtag/js?id=fixture"></script></head>'
+      )
+    ),
+  }));
+  expect(
+    await verifyPublication(input, { launch, fetchPublic: telemetry })
+  ).toBe(true);
+  expect(
+    telemetry.mock.calls.every(([url]) => !url.includes('googletagmanager'))
+  ).toBe(true);
+  const required = vi.fn(async (url: string) => {
+    if (url.endsWith('/required.js'))
+      throw Error('required resource unavailable');
+    return {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      body: Buffer.from(
+        html.replace('</head>', '<script src="/required.js"></script></head>')
+      ),
+    };
+  });
+  expect(
+    await verifyPublication(input, { launch, fetchPublic: required })
+  ).toBe(false);
   expect(fetchPublic.mock.calls.every((args) => args.length === 1)).toBe(true);
 }, 60000);
 

@@ -77,6 +77,20 @@ export async function verifyPublication(
     });
     await context.route('**/*', async (route) => {
       const request = route.request();
+      // Optional telemetry is never fetched and cannot certify or invalidate content.
+      const requestUrl = new URL(request.url());
+      if (
+        requestUrl.protocol === 'https:' &&
+        [
+          'www.googletagmanager.com',
+          'www.google-analytics.com',
+          'region1.google-analytics.com',
+        ].includes(requestUrl.hostname) &&
+        ['script', 'fetch', 'xhr', 'ping'].includes(request.resourceType())
+      ) {
+        await route.abort();
+        return;
+      }
       const boundRpc = isBoundPublicHomeRpc(
         request.url(),
         deps.publicDatabase

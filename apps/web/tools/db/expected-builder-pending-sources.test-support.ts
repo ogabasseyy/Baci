@@ -69,4 +69,14 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261023004212_builder_revision_trigger_writer_compatibility.sql',
     sha256: 'c90d740f91afd8dd36b8874ed4c57479020843fd0093a27e3b13c7b8d697dc52',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023011500_builder_cutover_processing_drain.sql',
+    sha256: '41326b7053d3aa84ce07c3fdf1b523e12fb760f74ea1f7b161aaec0bcd281485',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023011501_builder_draft_country_currency.sql',
+    sha256: 'af5371bb03c63453c73a207c846d928617a231c99286ce2b518f3bc6c591c893',
+  },
 ];

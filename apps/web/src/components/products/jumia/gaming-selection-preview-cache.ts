@@ -70,6 +70,29 @@ async function loadFirstValidCachedSelection(
   return false;
 }
 
+async function loadFirstValidCachedSelectionForCategories(
+  merchantId: string,
+  categoryIds: string[],
+  load: (selectionId: string) => Promise<void>
+) {
+  const categoryKeys = new Set(
+    categoryIds.map(
+      (categoryId) => `${CACHE_PREFIX}${merchantId}:${categoryId}`
+    )
+  );
+  for (const entry of findCachedSelections(merchantId)) {
+    if (!categoryKeys.has(entry.cacheKey)) continue;
+    try {
+      await load(entry.selection.selectionId);
+      return true;
+    } catch (cause) {
+      if (!isRejectedCachedSelection(cause)) throw cause;
+      removeCachedSelection(entry.cacheKey);
+    }
+  }
+  return false;
+}
+
 function findCachedSelection(merchantId: string): CacheEntry | null {
   return findCachedSelections(merchantId)[0] ?? null;
 }
@@ -103,6 +126,7 @@ function isRejectedCachedSelection(cause: unknown) {
 export const gamingSelectionPreviewCache = {
   find: findCachedSelection,
   loadFirstValid: loadFirstValidCachedSelection,
+  loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,
   isRecord,
   isRejected: isRejectedCachedSelection,
   makeInvalidPageResponseError,

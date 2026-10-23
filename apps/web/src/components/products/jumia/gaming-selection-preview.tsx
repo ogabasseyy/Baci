@@ -4,55 +4,35 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { createClient } from '@/lib/supabase/client';
+import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
 import {
-  type JumiaProductExportEligiblePage,
-  jumiaProductExportEligiblePageSchema,
-} from '@/schemas/jumia/eligible-page';
-import { UPGRADE_REQUIRED_MESSAGE } from './constants';
+  requestEligiblePreviewPage,
+  requestErrorMessage,
+} from './eligible-preview-request';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
-async function requestErrorMessage(response: Response, fallback: string) {
-  if (response.status !== 402) return fallback;
-  const payload: unknown = await response.json().catch(() => null);
-  return gamingSelectionPreviewCache.isRecord(payload) &&
-    payload.code === 'requires_upgrade'
-    ? UPGRADE_REQUIRED_MESSAGE
-    : fallback;
-}
+const unreadableCreationMessage =
+  'The server may have created this preview, but the response could not be read. Use “Retry preview creation” only if you accept that it may create another snapshot.';
 
 export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
   const [snapshot, setSnapshot] =
     useState<JumiaProductExportEligiblePage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [creationOutcomeUnknown, setCreationOutcomeUnknown] = useState(false);
 
   const loadPage = async (selectionId: string, page: number) => {
-    const response = await fetch(
-      `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, page: String(page) })}`
-    );
-    if (!response.ok) {
-      throw gamingSelectionPreviewCache.makeRequestError(
-        response.status,
-        await requestErrorMessage(
-          response,
-          'Unable to load this Gaming preview. Please retry.'
-        )
-      );
-    }
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
-    }
-    const parsed = jumiaProductExportEligiblePageSchema.safeParse(body);
-    if (!parsed.success) {
-      throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
-    }
-    setSnapshot(parsed.data);
+    setSnapshot(await requestEligiblePreviewPage(selectionId, page));
   };
 
-  const createPreview = async (refresh = false) => {
+  const createPreview = async (
+    refresh = false,
+    retryAfterUnreadableResponse = false
+  ) => {
+    if (creationOutcomeUnknown && !retryAfterUnreadableResponse) {
+      setError(unreadableCreationMessage);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -89,6 +69,17 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         );
       }
       if (gamingCategories.length > 1) {
+        if (!refresh) {
+          const loadedCached =
+            await gamingSelectionPreviewCache.loadFirstValidForCategories(
+              merchantId,
+              gamingCategories.map((category) => category.id),
+              (selectionId) => loadPage(selectionId, 1)
+            );
+          if (loadedCached) {
+            return;
+          }
+        }
         throw new Error(
           'More than one active category is named Gaming. Keep one active Gaming category before creating a preview.'
         );
@@ -113,6 +104,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         }
       );
       if (!response.ok) {
+        if (retryAfterUnreadableResponse) setCreationOutcomeUnknown(false);
         throw new Error(
           await requestErrorMessage(
             response,
@@ -120,12 +112,20 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
           )
         );
       }
-      const result: unknown = await response.json();
+      if (retryAfterUnreadableResponse) setCreationOutcomeUnknown(false);
+      let result: unknown;
+      try {
+        result = await response.json();
+      } catch {
+        setCreationOutcomeUnknown(true);
+        throw new Error(unreadableCreationMessage);
+      }
       if (
         !gamingSelectionPreviewCache.isRecord(result) ||
         typeof result.selectionId !== 'string'
       ) {
-        throw new Error('Unable to read the Gaming preview. Please retry.');
+        setCreationOutcomeUnknown(true);
+        throw new Error(unreadableCreationMessage);
       }
       if (
         typeof result.expiresAt === 'string' &&
@@ -189,11 +189,15 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => createPreview()}
+            onClick={() => createPreview(false, creationOutcomeUnknown)}
             disabled={loading}
             className="w-full sm:w-auto"
           >
-            {loading ? 'Loading…' : 'Create Gaming preview'}
+            {loading
+              ? 'Loading…'
+              : creationOutcomeUnknown
+                ? 'Retry preview creation'
+                : 'Create Gaming preview'}
           </Button>
           {snapshot ? (
             <Button

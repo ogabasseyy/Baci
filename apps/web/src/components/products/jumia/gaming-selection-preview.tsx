@@ -8,14 +8,7 @@ import {
   type JumiaProductExportEligiblePage,
   jumiaProductExportEligiblePageSchema,
 } from '@/schemas/jumia/eligible-page';
-import {
-  findCachedSelection,
-  isRecord,
-  isRejectedCachedSelection,
-  makePreviewRequestError,
-  readCachedSelection,
-  removeCachedSelection,
-} from './gaming-selection-preview-cache';
+import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 const UPGRADE_REQUIRED_MESSAGE =
   'Marketplace sync requires an upgraded plan. Upgrade your plan to preview Jumia products.';
@@ -23,7 +16,8 @@ const UPGRADE_REQUIRED_MESSAGE =
 async function requestErrorMessage(response: Response, fallback: string) {
   if (response.status !== 402) return fallback;
   const payload: unknown = await response.json().catch(() => null);
-  return isRecord(payload) && payload.code === 'requires_upgrade'
+  return gamingSelectionPreviewCache.isRecord(payload) &&
+    payload.code === 'requires_upgrade'
     ? UPGRADE_REQUIRED_MESSAGE
     : fallback;
 }
@@ -39,7 +33,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, page: String(page) })}`
     );
     if (!response.ok) {
-      throw makePreviewRequestError(
+      throw gamingSelectionPreviewCache.makeRequestError(
         response.status,
         await requestErrorMessage(
           response,
@@ -76,14 +70,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         throw new Error('Unable to find the Gaming category. Please retry.');
       }
       if (!gamingCategories?.length) {
-        const cached = findCachedSelection(merchantId);
+        const cached = gamingSelectionPreviewCache.find(merchantId);
         if (cached) {
           try {
             await loadPage(cached.selection.selectionId, 1);
             return;
           } catch (cause) {
-            if (isRejectedCachedSelection(cause)) {
-              removeCachedSelection(cached.cacheKey);
+            if (gamingSelectionPreviewCache.isRejected(cause)) {
+              gamingSelectionPreviewCache.remove(cached.cacheKey);
             } else {
               throw cause;
             }
@@ -100,14 +94,14 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       }
       const categoryId = gamingCategories[0].id;
       const cacheKey = `jumia-gaming-preview:${merchantId}:${categoryId}`;
-      const cachedSelection = readCachedSelection(cacheKey);
+      const cachedSelection = gamingSelectionPreviewCache.read(cacheKey);
       if (cachedSelection && !refresh) {
         try {
           await loadPage(cachedSelection.selectionId, 1);
           return;
         } catch (cause) {
-          if (!isRejectedCachedSelection(cause)) throw cause;
-          removeCachedSelection(cacheKey);
+          if (!gamingSelectionPreviewCache.isRejected(cause)) throw cause;
+          gamingSelectionPreviewCache.remove(cacheKey);
         }
       }
       const response = await fetchWithCsrf(
@@ -126,7 +120,10 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         );
       }
       const result: unknown = await response.json();
-      if (!isRecord(result) || typeof result.selectionId !== 'string') {
+      if (
+        !gamingSelectionPreviewCache.isRecord(result) ||
+        typeof result.selectionId !== 'string'
+      ) {
         throw new Error('Unable to read the Gaming preview. Please retry.');
       }
       if (

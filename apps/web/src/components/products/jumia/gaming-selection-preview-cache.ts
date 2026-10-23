@@ -1,4 +1,4 @@
-export type CachedSelection = { selectionId: string; expiresAt: string };
+type CachedSelection = { selectionId: string; expiresAt: string };
 
 type CacheEntry = { cacheKey: string; selection: CachedSelection };
 type PreviewRequestError = Error & { status: number };
@@ -9,7 +9,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export function readCachedSelection(cacheKey: string): CachedSelection | null {
+function readCachedSelection(cacheKey: string): CachedSelection | null {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(cacheKey) ?? 'null');
     if (
@@ -28,11 +28,13 @@ export function readCachedSelection(cacheKey: string): CachedSelection | null {
   return null;
 }
 
-export function findCachedSelection(merchantId: string): CacheEntry | null {
+function findCachedSelection(merchantId: string): CacheEntry | null {
   try {
     const prefix = `${CACHE_PREFIX}${merchantId}:`;
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const cacheKey = localStorage.key(index);
+    const cacheKeys = Array.from({ length: localStorage.length }, (_, index) =>
+      localStorage.key(index)
+    );
+    for (const cacheKey of cacheKeys) {
       if (!cacheKey?.startsWith(prefix)) continue;
       const selection = readCachedSelection(cacheKey);
       if (selection) return { cacheKey, selection };
@@ -43,7 +45,7 @@ export function findCachedSelection(merchantId: string): CacheEntry | null {
   return null;
 }
 
-export function removeCachedSelection(cacheKey: string) {
+function removeCachedSelection(cacheKey: string) {
   try {
     localStorage.removeItem(cacheKey);
   } catch {
@@ -51,10 +53,19 @@ export function removeCachedSelection(cacheKey: string) {
   }
 }
 
-export function makePreviewRequestError(status: number, message: string) {
+function makePreviewRequestError(status: number, message: string) {
   return Object.assign(new Error(message), { status }) as PreviewRequestError;
 }
 
-export function isRejectedCachedSelection(cause: unknown) {
+function isRejectedCachedSelection(cause: unknown) {
   return isRecord(cause) && (cause.status === 404 || cause.status === 410);
 }
+
+export const gamingSelectionPreviewCache = {
+  find: findCachedSelection,
+  isRecord,
+  isRejected: isRejectedCachedSelection,
+  makeRequestError: makePreviewRequestError,
+  read: readCachedSelection,
+  remove: removeCachedSelection,
+};

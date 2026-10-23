@@ -1,4 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
@@ -53,6 +55,23 @@ describe('useGamingSelectionPreview', () => {
 
     expect(result.current.error).toMatch(/may have created this preview/i);
     expect(fetchWithCsrf).not.toHaveBeenCalled();
+  });
+
+  it('renders the initial uncertainty state consistently without reading storage', async () => {
+    gamingSelectionPreviewCache.markUncertainCreation('merchant-1');
+    function Probe() {
+      const { creationOutcomeUnknown } =
+        useGamingSelectionPreview('merchant-1');
+      return createElement('span', null, String(creationOutcomeUnknown));
+    }
+
+    expect(renderToString(createElement(Probe))).toContain('false');
+    const { result } = renderHook(() =>
+      useGamingSelectionPreview('merchant-1')
+    );
+    await waitFor(() => {
+      expect(result.current.creationOutcomeUnknown).toBe(true);
+    });
   });
 
   it('blocks a reopened dialog from posting while creation is still in flight', async () => {

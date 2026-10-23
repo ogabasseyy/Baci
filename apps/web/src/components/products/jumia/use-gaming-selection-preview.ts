@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
 import { jumiaProductExportSelectionCreateResponseSchema } from '@/schemas/jumia/product-export-selection-create-response';
@@ -13,12 +13,6 @@ type PreviewCreationAction = 'create' | 'refresh' | 'retry';
 
 export function useGamingSelectionPreview(merchantId: string) {
   const currentMerchantRef = useRef({ merchantId, generation: 0 });
-  if (currentMerchantRef.current.merchantId !== merchantId) {
-    currentMerchantRef.current = {
-      merchantId,
-      generation: currentMerchantRef.current.generation + 1,
-    };
-  }
   const [snapshotState, setSnapshotState] = useState<{
     merchantId: string;
     value: JumiaProductExportEligiblePage;
@@ -40,9 +34,16 @@ export function useGamingSelectionPreview(merchantId: string) {
   const loading = loadingState?.merchantId === merchantId && loadingState.value;
   const error = errorState?.merchantId === merchantId ? errorState.value : null;
   const creationOutcomeUnknown =
-    creationState?.merchantId === merchantId
-      ? creationState.value
-      : gamingSelectionPreviewCache.hasUncertainCreation(merchantId);
+    creationState?.merchantId === merchantId ? creationState.value : false;
+
+  useLayoutEffect(() => {
+    if (currentMerchantRef.current.merchantId !== merchantId) {
+      currentMerchantRef.current = {
+        merchantId,
+        generation: currentMerchantRef.current.generation + 1,
+      };
+    }
+  }, [merchantId]);
 
   const setSnapshotForMerchant = (
     owner: string,
@@ -132,7 +133,9 @@ export function useGamingSelectionPreview(merchantId: string) {
       currentMerchantRef.current.generation === generation;
     const refresh = action === 'refresh';
     const retryAfterUnreadableResponse = action === 'retry';
-    const uncertainCreation = creationOutcomeUnknown;
+    const uncertainCreation =
+      creationOutcomeUnknown ||
+      gamingSelectionPreviewCache.hasUncertainCreation(owner);
     if (gamingSelectionPreviewCache.hasCreationInFlight(owner)) {
       setErrorForMerchant(
         owner,

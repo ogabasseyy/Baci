@@ -59,6 +59,9 @@ export function ChangeStoreUrl() {
 
   const currentSlug = merchant?.slug ?? '';
   const merchantId = merchant?.id ?? '';
+  // Dashboard context supplies only the primary active custom domain.
+  const customDomain = merchant?.custom_domain?.trim();
+  const baciAddress = `${currentSlug}.${ROOT_DOMAIN}`;
 
   const [nextSlug, setNextSlug] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
@@ -108,20 +111,29 @@ export function ChangeStoreUrl() {
           Store URL
         </CardTitle>
         <CardDescription>
-          Your storefront address. Changing it keeps the old link working — it
-          redirects to the new one automatically.
+          {customDomain
+            ? 'Your custom domain is active. Changing your Baci subdomain does not change your custom domain.'
+            : 'Your storefront address. Changing it keeps the old link working — it redirects to the new one automatically.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <span className="text-sm text-muted-foreground">Current URL</span>
-          <p className="font-medium break-all">
-            {currentSlug}.{ROOT_DOMAIN}
-          </p>
+          <p className="font-medium break-all">{customDomain || baciAddress}</p>
         </div>
+        {customDomain && (
+          <div className="space-y-1.5">
+            <span className="text-sm text-muted-foreground">
+              Baci subdomain
+            </span>
+            <p className="font-medium break-all">{baciAddress}</p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
-          <Label htmlFor="new-store-url">New URL</Label>
+          <Label htmlFor="new-store-url">
+            {customDomain ? 'New Baci subdomain' : 'New URL'}
+          </Label>
           <div className="flex items-stretch overflow-hidden rounded-md border focus-within:ring-1 focus-within:ring-ring">
             <Input
               id="new-store-url"
@@ -165,7 +177,9 @@ export function ChangeStoreUrl() {
             <AlertDialogHeader>
               <AlertDialogTitle>Change your store URL?</AlertDialogTitle>
               <AlertDialogDescription>
-                Your store will move from{' '}
+                {customDomain
+                  ? 'Your Baci subdomain will change from '
+                  : 'Your store will move from '}
                 <strong>
                   {currentSlug}.{ROOT_DOMAIN}
                 </strong>{' '}

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-23T11:59:32.139170+00:00",
-  "source_revision": "2e03690425a206d4a46c0cfbe8586b4749d05a77",
-  "evidence_digest": "2af7e04334336d1a5be2c4ee8d85181833545bb0933ebeebce19e0843a3f633d",
-  "claims_digest": "7ecdf9fcfde6ea0b8b1891d7bc7d59ba7ec8a1d91dcab06ae473083c8f9b8f03",
-  "review_scope": "Source audit only; not deployment proof. OAuth retains PKCE and encrypted tenant grants; 30s immediate-generation refresh receipts recover lost responses. Connected catalogs read current quantity before first add; expired workers fail readiness. Resource-specific HTTPS transport/discovery and independent consent cookies tested. Shared 600/5min consent admission and tenant-wide 2,000 retained-grant cap preserve storage headroom. New-endpoint activation authorized, not deployed; original MCP preserved. Historical isolated ChatGPT add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh fleet probe required before restoring worker membership. Text continuation off; host privacy/retention unqualified. Checkout offers remain merchant-scoped, publication-gated, selected and capped; PDP policy, RPC factory, chunking/outage recovery audited. MCP detail IDs remain merchant-scoped and case-normalized.",
+  "reviewed_at": "2026-10-23T13:00:12.300902+00:00",
+  "source_revision": "7f4e40919acb7f27e3bb26d35676d7f02d996c0a",
+  "evidence_digest": "94ac7291684d87045ca82c1bca3b4d0d79b21b29a08380fe1b257a3641e4dde1",
+  "claims_digest": "a2d52d9fa78df94df52e7b0eff7f03c05f0ad08711f3a8e0ce087db02dea9823",
+  "review_scope": "Source audit only; not deployment proof. OAuth retains PKCE and encrypted tenant grants; 30s immediate-generation refresh receipts recover lost responses. Connected catalogs read current quantity before first add; expired workers fail readiness. Resource-specific HTTPS transport/discovery rejects reserved paths; independent consent cookies tested. Shared 600/5min consent admission and tenant-wide 2,000 retained-grant cap preserve storage headroom. New-endpoint activation authorized, not deployed; original MCP preserved. Historical isolated ChatGPT add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh fleet probe required before restoring worker membership. Text continuation off; host privacy/retention unqualified. Checkout offers remain merchant-scoped, publication-gated, selected and capped; PDP policy, RPC factory, chunking/outage recovery audited. MCP detail IDs remain merchant-scoped and case-normalized.",
   "capabilities": [
     {
       "id": "payments",

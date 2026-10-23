@@ -146,6 +146,7 @@ describe('RepairDeviceStep catalog behavior', () => {
     const suggestion = await screen.findByRole('option', {
       name: 'Apple iPhone 15 Smartphone',
     });
+    expect(suggestion).toHaveAttribute('tabindex', '-1');
     expect(input).toHaveAttribute('aria-expanded', 'true');
     expect(input).toHaveAttribute('aria-controls', 'repair-device-suggestions');
     expect(
@@ -178,7 +179,7 @@ describe('RepairDeviceStep catalog behavior', () => {
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps suggestions available while focus is inside the picker and closes them on exit', async () => {
+  it('keeps options out of the tab order and closes suggestions when Tab leaves the combobox', async () => {
     const user = userEvent.setup();
     mocks.apiGet.mockResolvedValue({
       groups: [
@@ -218,10 +219,7 @@ describe('RepairDeviceStep catalog behavior', () => {
     const suggestion = await screen.findByRole('option', {
       name: 'Apple iPhone 15 Smartphone',
     });
-
-    await user.tab();
-    expect(suggestion).toHaveFocus();
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(suggestion).toHaveAttribute('tabindex', '-1');
 
     await user.tab();
     expect(

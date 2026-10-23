@@ -136,6 +136,20 @@ describe('RepairBookingWizard', () => {
     expect(mockMotionInitialValues).toContain(false);
   });
 
+  it('uses the merchant storefront primary color on the next button', () => {
+    render(
+      <RepairBookingWizard
+        merchantId="merchant-1"
+        merchantSlug="ogabassey"
+        merchantName="Ogabassey"
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /^next$/i })).toHaveStyle({
+      backgroundColor: 'var(--store-primary)',
+    });
+  });
+
   it('shows a confirmation panel with the device and quoted price when preselected', () => {
     render(
       <RepairBookingWizard

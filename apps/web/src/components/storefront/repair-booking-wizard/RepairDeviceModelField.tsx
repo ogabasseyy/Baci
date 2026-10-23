@@ -185,6 +185,7 @@ export function RepairDeviceModelField({
                       onMouseDown={(event) => event.preventDefault()}
                       onMouseEnter={() => setActiveSuggestionIndex(index)}
                       role="option"
+                      tabIndex={-1}
                       type="button"
                     >
                       <RepairDeviceSuggestionImage

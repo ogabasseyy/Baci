@@ -229,7 +229,7 @@ export function RepairBookingWizard({
                   event.preventDefault();
                   void nextStep();
                 }}
-                style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
+                style={{ backgroundColor: 'var(--store-primary)' }}
                 type="button"
               >
                 Next <ChevronRight className="ml-2 size-4" />
@@ -242,7 +242,7 @@ export function RepairBookingWizard({
                   (formData.serviceType === 'pickup' &&
                     (!shippingQuote?.price || Boolean(shippingQuote.error)))
                 }
-                style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
+                style={{ backgroundColor: 'var(--store-primary)' }}
                 type="submit"
               >
                 {isSubmitting ? (

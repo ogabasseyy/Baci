@@ -4,11 +4,11 @@ import { eligiblePreviewRequest } from './eligible-preview-request';
 const selectionId = 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd';
 const otherSelectionId = 'c5a0eb5e-ecc7-4142-ae9b-d7186c3d5c0b';
 
-function pageFixture(id = selectionId) {
+function pageFixture(id = selectionId, page = 1) {
   return {
     selectionId: id,
     total: 0,
-    page: 1,
+    page,
     totalPages: 0,
     legacyUnmappedCount: 0,
     products: [],
@@ -42,6 +42,16 @@ describe('eligiblePreviewRequest', () => {
     ).rejects.toMatchObject({
       status: 422,
     });
+  });
+
+  it('rejects a response that echoes a different page number', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(pageFixture(selectionId, 1)), { status: 200 })
+    );
+
+    await expect(
+      eligiblePreviewRequest.page(selectionId, 2)
+    ).rejects.toMatchObject({ status: 422 });
   });
 
   it('maps the standardized upgrade response to actionable guidance', async () => {

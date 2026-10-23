@@ -40,7 +40,7 @@ async function requestEligiblePreviewPage(
   if (!parsed.success) {
     throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
   }
-  if (parsed.data.selectionId !== selectionId) {
+  if (parsed.data.selectionId !== selectionId || parsed.data.page !== page) {
     throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
   }
   return parsed.data;

@@ -14,7 +14,7 @@ function setupGamingCategories(
         eq: () => ({
           ilike: () => ({
             order: () => ({
-              limit: async () => ({
+              range: async () => ({
                 data: categories,
                 error: null,
               }),

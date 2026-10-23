@@ -12,7 +12,7 @@ function setupGamingCategories(
         eq: () => ({
           ilike: () => ({
             order: () => ({
-              limit: async () => ({ data: categories, error: null }),
+              range: async () => ({ data: categories, error: null }),
             }),
           }),
         }),
@@ -142,7 +142,10 @@ describe('GamingSelectionPreview', () => {
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
       Response.json(
-        { selectionId: '00000000-0000-4000-8000-000000000022' },
+        {
+          selectionId: '00000000-0000-4000-8000-000000000022',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
         { status: 201 }
       )
     );

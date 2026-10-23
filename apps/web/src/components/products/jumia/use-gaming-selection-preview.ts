@@ -9,6 +9,27 @@ import { eligiblePreviewRequest } from './eligible-preview-request';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 type PreviewCreationAction = 'create' | 'refresh' | 'retry';
+const CATEGORY_PAGE_SIZE = 1000;
+
+async function fetchMatchingCategories(merchantId: string) {
+  const categories: { id: string; name: string | null }[] = [];
+  const client = createClient();
+  for (let start = 0; ; start += CATEGORY_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('categories')
+      .select('id, name')
+      .eq('merchant_id', merchantId)
+      .eq('is_active', true)
+      .ilike('name', '%Gaming%')
+      .order('id', { ascending: true })
+      .range(start, start + CATEGORY_PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    categories.push(...(data ?? []));
+    if (!data || data.length < CATEGORY_PAGE_SIZE) {
+      return { data: categories, error: null };
+    }
+  }
+}
 
 export function useGamingSelectionPreview(merchantId: string) {
   const [snapshot, setSnapshot] =
@@ -54,14 +75,8 @@ export function useGamingSelectionPreview(merchantId: string) {
     setLoading(true);
     setError(null);
     try {
-      const { data: categories, error: categoryError } = await createClient()
-        .from('categories')
-        .select('id, name')
-        .eq('merchant_id', merchantId)
-        .eq('is_active', true)
-        .ilike('name', '%Gaming%')
-        .order('id', { ascending: true })
-        .limit(1000);
+      const { data: categories, error: categoryError } =
+        await fetchMatchingCategories(merchantId);
       const gamingCategories = categories?.filter(
         (category) =>
           category.name?.replace(/^ +| +$/g, '').toLowerCase() === 'gaming'
@@ -136,27 +151,25 @@ export function useGamingSelectionPreview(merchantId: string) {
       }
       if (
         !gamingSelectionPreviewCache.isRecord(result) ||
-        !gamingSelectionPreviewCache.isSelectionId(result.selectionId)
+        !gamingSelectionPreviewCache.isSelectionId(result.selectionId) ||
+        typeof result.expiresAt !== 'string' ||
+        !Number.isFinite(Date.parse(result.expiresAt)) ||
+        Date.parse(result.expiresAt) <= Date.now()
       ) {
         markCreationOutcomeUnknown();
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       clearCreationOutcomeUnknown();
-      if (
-        typeof result.expiresAt === 'string' &&
-        Number.isFinite(Date.parse(result.expiresAt))
-      ) {
-        try {
-          localStorage.setItem(
-            cacheKey,
-            JSON.stringify({
-              selectionId: result.selectionId,
-              expiresAt: result.expiresAt,
-            })
-          );
-        } catch {
-          // Preview creation still works without local storage.
-        }
+      try {
+        localStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            selectionId: result.selectionId,
+            expiresAt: result.expiresAt,
+          })
+        );
+      } catch {
+        // Preview creation still works without local storage.
       }
       await loadPage(result.selectionId, 1);
     } catch (cause) {

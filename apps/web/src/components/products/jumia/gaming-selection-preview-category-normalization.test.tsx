@@ -16,7 +16,7 @@ function setupCategory(name: string) {
         eq: () => ({
           ilike: () => ({
             order: () => ({
-              limit: async () => ({
+              range: async () => ({
                 data: [{ id: 'gaming-category', name }],
                 error: null,
               }),

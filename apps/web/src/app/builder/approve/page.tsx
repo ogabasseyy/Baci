@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { loadInitialPublicationApproval } from '@/lib/website-builder/owner-publication-view';
 import { ApprovalClient } from './approval-client';
 export const metadata: Metadata = {
   title: 'Review homepage publication | Baci',
@@ -12,7 +13,11 @@ async function ApprovalContent({
   searchParams: Promise<{ intent?: string }>;
 }) {
   const params = await searchParams;
-  return <ApprovalClient intentId={params.intent ?? ''} />;
+  const intentId = params.intent ?? '';
+  const initial = await loadInitialPublicationApproval(intentId);
+  return (
+    <ApprovalClient key={intentId} intentId={intentId} initial={initial} />
+  );
 }
 export default function ApprovalPage({
   searchParams,

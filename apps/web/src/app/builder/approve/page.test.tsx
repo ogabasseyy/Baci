@@ -2,6 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import ApprovalPage, { metadata } from './page';
 
+const initial = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ view: null, error: null, signedOut: false })
+);
+vi.mock('@/lib/website-builder/owner-publication-view', () => ({
+  loadInitialPublicationApproval: initial,
+}));
 vi.mock('./approval-client', () => ({
   ApprovalClient: ({ intentId }: { intentId: string }) => (
     <p>Intent:{intentId || 'missing'}</p>
@@ -25,6 +31,9 @@ it('passes only the intent identifier, with an empty fallback', async () => {
         `Intent:${'intent' in params ? params.intent : 'missing'}`
       )
     ).toBeInTheDocument();
+    expect(initial).toHaveBeenLastCalledWith(
+      'intent' in params ? params.intent : ''
+    );
     view.unmount();
   }
 });

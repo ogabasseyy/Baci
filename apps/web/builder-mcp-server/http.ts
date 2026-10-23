@@ -144,6 +144,8 @@ export function createBuilderMcpHttpHandler(
           const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           size += bytes.length;
           if (size > 65536) {
+            // Returning from this for-await closes the Readable iterator, which
+            // destroys IncomingMessage by default (destroyOnReturn is not disabled).
             reply(res, 413, 'Request too large');
             return;
           }

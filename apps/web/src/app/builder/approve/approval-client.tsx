@@ -1,22 +1,30 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
+import type { InitialPublicationApproval } from '@/lib/website-builder/owner-publication-view';
 import {
   type PublicationConfirmationView,
   publicationConfirmationSchema,
 } from '@/schemas/builder-publication';
 import { ApprovalPreview } from './approval-preview';
-export function ApprovalClient({ intentId }: { intentId: string }) {
+export function ApprovalClient({
+  intentId,
+  initial,
+}: {
+  intentId: string;
+  initial?: InitialPublicationApproval;
+}) {
   const [loaded, setLoaded] = useState<{
     id: string;
     view: PublicationConfirmationView;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  } | null>(initial?.view ? { id: intentId, view: initial.view } : null);
+  const [error, setError] = useState<string | null>(initial?.error ?? null);
   const [pending, setPending] = useState(false);
   const [approved, setApproved] = useState(false);
-  const [signedOut, setSignedOut] = useState(false);
+  const [signedOut, setSignedOut] = useState(initial?.signedOut ?? false);
   const [reload, setReload] = useState(0);
   useEffect(() => {
+    if (reload === 0 && initial) return;
     const controller = new AbortController();
     setLoaded(null);
     setError(null);
@@ -49,7 +57,7 @@ export function ApprovalClient({ intentId }: { intentId: string }) {
           );
       });
     return () => controller.abort();
-  }, [intentId, reload]);
+  }, [intentId, reload, initial]);
   const view = loaded?.id === intentId ? loaded.view : null;
   const send = async (action: 'confirm' | 'retry', receiptId?: string) => {
     setPending(true);

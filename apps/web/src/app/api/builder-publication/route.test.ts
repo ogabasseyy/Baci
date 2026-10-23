@@ -3,9 +3,20 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { GET, POST } from './route';
 
 const state = vi.hoisted(() => ({
+  user: true,
   linking: true,
   storage: true,
   handler: vi.fn().mockResolvedValue(new Response('approved')),
+}));
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => ({
+    auth: {
+      getUser: async () => ({
+        data: { user: state.user ? { id: 'owner' } : null },
+        error: null,
+      }),
+    },
+  }),
 }));
 vi.mock('@/config/builder-linking', () => ({
   get BUILDER_ACCOUNT_LINKING_ENABLED() {
@@ -21,6 +32,7 @@ vi.mock('@/lib/website-builder/publication-runtime', () => ({
   getOwnerPublicationRuntime: () => state.handler,
 }));
 afterEach(() => {
+  state.user = true;
   state.linking = true;
   state.storage = true;
   state.handler.mockClear();
@@ -44,4 +56,13 @@ it('delegates both verbs to the installed owner handler', async () => {
   await POST(req);
   expect(state.handler).toHaveBeenNthCalledWith(1, req);
   expect(state.handler).toHaveBeenNthCalledWith(2, req);
+});
+
+it('rejects signed-out callers before the runtime handler', async () => {
+  state.user = false;
+  const r = await GET(
+    new NextRequest('https://usebaci.com/api/builder-publication')
+  );
+  expect(r.status).toBe(401);
+  expect(state.handler).not.toHaveBeenCalled();
 });

@@ -14,19 +14,25 @@ it('refreshes uncertain receipt status without replaying a confirmation', async 
       publishedVersion: `published:${id}`,
       status: 'verifying',
     },
-  };
+  } as const;
   const fetcher = vi
     .fn()
     .mockResolvedValue({ ok: true, status: 200, json: async () => receipt });
   vi.stubGlobal('fetch', fetcher);
-  render(<ApprovalClient intentId={id} />);
+  render(
+    <ApprovalClient
+      intentId={id}
+      initial={{ view: receipt, error: null, signedOut: false }}
+    />
+  );
   expect(
     await screen.findByRole('heading', {
       name: 'Publication committed; checking delivery',
     })
   ).toBeVisible();
+  expect(fetcher).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
-  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
   expect(
     fetcher.mock.calls.every(([, options]) => options.method === undefined)
   ).toBe(true);

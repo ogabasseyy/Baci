@@ -1,9 +1,23 @@
 import type { NextRequest } from 'next/server';
 import { BUILDER_ACCOUNT_LINKING_ENABLED } from '@/config/builder-linking';
 import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
+import { createClient } from '@/lib/supabase/server';
 import { getOwnerPublicationRuntime } from '@/lib/website-builder/publication-runtime';
 
-function handle(request: NextRequest) {
+async function handle(request: NextRequest) {
+  const client = await createClient();
+  const { data, error } = await client.auth.getUser();
+  if (error || !data.user)
+    return Response.json(
+      { error: 'Sign in to Baci to review this publication.' },
+      {
+        status: 401,
+        headers: {
+          'Cache-Control': 'private, no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      }
+    );
   const handler = getOwnerPublicationRuntime();
   if (
     !BUILDER_ACCOUNT_LINKING_ENABLED ||

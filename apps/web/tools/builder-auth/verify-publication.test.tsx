@@ -56,7 +56,7 @@ it('verifies actual rendered revision plus changed content without credentials; 
     body: Buffer.from(
       html.replace(
         '</head>',
-        '<script src="https://www.googletagmanager.com/gtag/js?id=fixture"></script></head>'
+        '<script src="https://www.googletagmanager.com/gtag/js?id=fixture"></script><script src="/baci-relay/static/recorder.js"></script><script>fetch("/baci-relay/decide?v=3").catch(()=>{});</script></head>'
       )
     ),
   }));
@@ -64,7 +64,10 @@ it('verifies actual rendered revision plus changed content without credentials; 
     await verifyPublication(input, { launch, fetchPublic: telemetry })
   ).toBe(true);
   expect(
-    telemetry.mock.calls.every(([url]) => !url.includes('googletagmanager'))
+    telemetry.mock.calls.every(
+      ([url]) =>
+        !url.includes('googletagmanager') && !url.includes('/baci-relay')
+    )
   ).toBe(true);
   const required = vi.fn(async (url: string) => {
     if (url.endsWith('/required.js'))

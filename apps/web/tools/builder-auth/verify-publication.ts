@@ -79,14 +79,20 @@ export async function verifyPublication(
       const request = route.request();
       // Optional telemetry is never fetched and cannot certify or invalidate content.
       const requestUrl = new URL(request.url());
+      const optionalRelay =
+        requestUrl.origin === url.origin &&
+        (requestUrl.pathname === '/baci-relay' ||
+          requestUrl.pathname.startsWith('/baci-relay/')) &&
+        !request.isNavigationRequest();
       if (
-        requestUrl.protocol === 'https:' &&
-        [
-          'www.googletagmanager.com',
-          'www.google-analytics.com',
-          'region1.google-analytics.com',
-        ].includes(requestUrl.hostname) &&
-        ['script', 'fetch', 'xhr', 'ping'].includes(request.resourceType())
+        optionalRelay ||
+        (requestUrl.protocol === 'https:' &&
+          [
+            'www.googletagmanager.com',
+            'www.google-analytics.com',
+            'region1.google-analytics.com',
+          ].includes(requestUrl.hostname) &&
+          ['script', 'fetch', 'xhr', 'ping'].includes(request.resourceType()))
       ) {
         await route.abort();
         return;

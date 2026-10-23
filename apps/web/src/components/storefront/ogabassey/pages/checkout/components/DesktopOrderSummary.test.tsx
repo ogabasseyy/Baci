@@ -101,10 +101,14 @@ describe('desktop checkout summary visibility', () => {
     const resumedHtml = renderToStaticMarkup(
       <DesktopOrderSummary
         {...props}
+        displayItems={[{ kind: 'resumed', id: 'line-1', product_id: 'phone', product_name: 'iPhone 17 Pro Max', quantity: 1, price: 2343000, condition: 'new', variant_name: '512GB / Physical + eSIM / Silver' }]}
         walletRedemptionAllowed={false}
         walletBalance={2500}
       />
     );
+    expect(resumedHtml).toContain('Condition:');
+    expect(resumedHtml).toContain('New');
+    expect(resumedHtml).toContain('512GB / Physical + eSIM / Silver');
     expect(resumedHtml).not.toContain('Wallet Credit');
     expect(resumedHtml).toContain('₦114');
   });

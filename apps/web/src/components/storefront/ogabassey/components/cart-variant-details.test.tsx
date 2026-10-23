@@ -74,3 +74,9 @@ it('uses the storefront theme for variant text', () => {
   render(<CartVariantDetails item={{ selectedStorage: '512GB' }} />);
   expect(screen.getByLabelText('Selected variant')).toHaveClass('text-store-background-text/70');
 });
+
+it('shows additional SKU axes and ignores malformed saved values', () => {
+  render(<CartVariantDetails item={{ variantAttributes: JSON.parse('{"storage":null,"ram":"8GB","size":"L","material":"Cotton"}') }} />);
+  for (const text of ['RAM:', '8GB', 'Size:', 'L', 'Material:', 'Cotton']) expect(screen.getByText(text)).toBeVisible();
+  expect(screen.queryByText('Storage:')).not.toBeInTheDocument();
+});

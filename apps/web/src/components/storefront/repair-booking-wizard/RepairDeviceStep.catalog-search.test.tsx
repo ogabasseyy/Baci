@@ -153,7 +153,10 @@ describe('RepairDeviceStep catalog behavior', () => {
     ).toHaveAttribute('src', expect.stringContaining('iphone-15.jpg'));
     expect(screen.getByRole('listbox')).toContainElement(suggestion);
     await user.keyboard('{ArrowDown}');
-    expect(suggestion).toHaveClass('border-primary/50', 'bg-accent');
+    expect(suggestion).toHaveClass(
+      'border-store-primary/50',
+      'bg-store-primary/10'
+    );
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
     await user.keyboard('{Enter}');
 
@@ -173,6 +176,59 @@ describe('RepairDeviceStep catalog behavior', () => {
       ).not.toBeInTheDocument()
     );
     expect(mocks.apiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps suggestions available while focus is inside the picker and closes them on exit', async () => {
+    const user = userEvent.setup();
+    mocks.apiGet.mockResolvedValue({
+      groups: [
+        {
+          brand: 'Apple',
+          devices: [
+            {
+              brand: 'Apple',
+              deviceType: 'Smartphone',
+              id: '11111111-1111-4111-8111-111111111111',
+              imageUrl: null,
+              model: 'iPhone 15',
+              productId: null,
+              slug: 'apple-iphone-15',
+            },
+          ],
+        },
+      ],
+    });
+
+    render(
+      <Harness>
+        {(form) => (
+          <RepairDeviceStep
+            catalogEnabled
+            control={form.control}
+            merchantSlug="ogabassey"
+            onChangeDevice={vi.fn()}
+            showConfirmation={false}
+          />
+        )}
+      </Harness>
+    );
+
+    const input = screen.getByRole('combobox', { name: 'Device Model' });
+    await user.type(input, 'iPhone 15');
+    const suggestion = await screen.findByRole('option', {
+      name: 'Apple iPhone 15 Smartphone',
+    });
+
+    await user.tab();
+    expect(suggestion).toHaveFocus();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    await user.tab();
+    expect(
+      screen.getByRole('textbox', { name: "What's the issue?" })
+    ).toHaveFocus();
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('falls back to matching published store products when no repair device is configured', async () => {

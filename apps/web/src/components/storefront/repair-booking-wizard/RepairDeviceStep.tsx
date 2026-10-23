@@ -74,19 +74,23 @@ export function RepairDeviceStep({
 
     return (
       <div className="space-y-6">
-        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-5">
-          <p className="text-sm text-muted-foreground">Selected device</p>
+        <div className="rounded-xl border-2 border-store-primary/20 bg-store-primary/5 p-5">
+          <p className="text-sm text-store-background-text/70">
+            Selected device
+          </p>
           <p className="text-lg font-semibold">{preselection.deviceLabel}</p>
           {preselection.quoteLabel && (
             <div className="mt-3 flex items-center justify-between border-t pt-3">
               <span className="font-medium">{preselection.quoteLabel}</span>
               {priceLabel && (
-                <span className="font-bold text-primary">{priceLabel}</span>
+                <span className="font-bold text-store-primary">
+                  {priceLabel}
+                </span>
               )}
             </div>
           )}
           <button
-            className="mt-4 text-sm font-medium text-primary underline-offset-2 hover:underline"
+            className="mt-4 text-sm font-medium text-store-primary underline-offset-2 hover:underline"
             onClick={onChangeDevice}
             type="button"
           >
@@ -144,7 +148,7 @@ export function RepairDeviceStep({
                         value={type.id}
                       />
                     </FormControl>
-                    <FormLabel className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 transition-all hover:bg-accent hover:text-accent-foreground has-data-[state=checked]:border-primary peer-data-[state=checked]:border-primary">
+                    <FormLabel className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary">
                       <type.icon className="mb-3 size-6" />
                       {type.label}
                     </FormLabel>
@@ -176,7 +180,7 @@ export function RepairDeviceStep({
               />
             </FormControl>
             {catalogEnabled && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-store-background-text/70">
                 Search repairable devices and matching store products. You can
                 still enter a model that is not listed.
               </p>

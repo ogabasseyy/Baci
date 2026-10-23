@@ -61,7 +61,9 @@ describe('useRepairDeviceSuggestions', () => {
           },
         ],
       })
-      .mockResolvedValueOnce({ groups: [] });
+      .mockResolvedValueOnce({ products: [] })
+      .mockResolvedValueOnce({ groups: [] })
+      .mockResolvedValueOnce({ products: [] });
 
     const { result, rerender } = renderHook(
       ({ query }) =>
@@ -88,13 +90,13 @@ describe('useRepairDeviceSuggestions', () => {
       hasSearched: false,
       suggestions: [],
     });
-    expect(mocks.apiGet).toHaveBeenCalledOnce();
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(mocks.apiGet).toHaveBeenCalledTimes(3);
+    expect(mocks.apiGet).toHaveBeenCalledTimes(4);
   });
 
   it('aborts and clears an active lookup when suggestions are dismissed', async () => {

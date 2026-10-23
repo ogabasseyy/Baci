@@ -65,7 +65,12 @@ export async function draftFixture(
       '20261022072221_builder_private_draft_contract.sql',
       '20261023011500_builder_cutover_processing_drain.sql',
       '20261023011501_builder_draft_country_currency.sql',
-      ...(options.asyncEdits ? ['20261022103000_builder_async_edits.sql'] : []),
+      ...(options.asyncEdits
+        ? [
+            '20261022103000_builder_async_edits.sql',
+            '20261023015800_builder_conflict_apply_replay.sql',
+          ]
+        : []),
     ])
       await fixture.pool.query(
         readFileSync(

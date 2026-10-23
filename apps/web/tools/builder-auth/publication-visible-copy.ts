@@ -2,6 +2,7 @@ import type { PortableHome } from '../../src/schemas/portable-storefront';
 export interface PublicationCopyRequirement {
   text: string;
   role?: 'heading' | 'link';
+  href?: string;
 }
 export function normalizePublicationCopy(text: string) {
   return text.replace(/\s+/gu, ' ').trim();
@@ -15,12 +16,13 @@ export function publicationVisibleCopy(
       return block.props.navigationLinks.map((link) => ({
         text: link.label,
         role: 'link',
+        href: link.url,
       }));
     case 'Hero':
       return [
         { text: block.props.title, role: 'heading' },
         { text: block.props.subtitle },
-        { text: block.props.ctaText, role: 'link' },
+        { text: block.props.ctaText, role: 'link', href: block.props.ctaLink },
       ];
     case 'Text':
       return [
@@ -28,7 +30,7 @@ export function publicationVisibleCopy(
         { text: block.props.content },
       ];
     case 'Button':
-      return [{ text: block.props.text, role: 'link' }];
+      return [{ text: block.props.text, role: 'link', href: block.props.link }];
     case 'Footer':
       return [
         { text: block.props.copyrightText },
@@ -38,6 +40,7 @@ export function publicationVisibleCopy(
               ...block.props.quickLinks.map((link) => ({
                 text: link.label,
                 role: 'link' as const,
+                href: link.url,
               })),
             ]
           : []),

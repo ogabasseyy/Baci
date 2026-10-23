@@ -79,4 +79,9 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261023011501_builder_draft_country_currency.sql',
     sha256: 'af5371bb03c63453c73a207c846d928617a231c99286ce2b518f3bc6c591c893',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023015800_builder_conflict_apply_replay.sql',
+    sha256: 'd26b61ceba9fe4b18670030c4adc95bed7aa5815ad5640b10029df27bbf81afc',
+  },
 ];

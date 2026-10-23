@@ -63,7 +63,9 @@ export function createSafePublicationFetcher(
       throw Error('Unsafe publication URL');
     const canonical =
       url.hostname === 'usebaci.com' ||
-      /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\.usebaci\.com$/.test(url.hostname);
+      /^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])\.usebaci\.com$/.test(
+        url.hostname
+      );
     const db = options.publicDatabase;
     const publicRpc = isBoundPublicHomeRpc(value, db);
     if (!canonical && !isBuilderPreviewAsset(url.href) && !publicRpc)

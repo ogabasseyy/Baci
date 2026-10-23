@@ -47,7 +47,9 @@ export async function verifyPublication(
     url.search ||
     url.hash ||
     url.pathname !== '/' ||
-    !/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\.usebaci\.com$/.test(url.hostname)
+    !/^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])\.usebaci\.com$/.test(
+      url.hostname
+    )
   )
     return false;
   if (
@@ -180,6 +182,24 @@ export async function verifyPublication(
             .isVisible())
         )
           return false;
+        if (requirement.href) {
+          const links = await rendered
+            .getByRole('link', { name: copy, exact: true })
+            .all();
+          let matches = false;
+          for (const link of links) {
+            const href = await link.getAttribute('href');
+            if (
+              href &&
+              new URL(href, url).href === new URL(requirement.href, url).href &&
+              (await link.isVisible())
+            ) {
+              matches = true;
+              break;
+            }
+          }
+          if (!matches) return false;
+        }
       }
     }
     // Force lazy product images to load in this isolated proof, then wait within the probe budget.

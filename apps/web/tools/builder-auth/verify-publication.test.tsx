@@ -16,7 +16,12 @@ it('verifies actual rendered revision plus changed content without credentials; 
       version={version}
       contentDigest={snapshot.publishedVersion}
     >
-      <PortableHomeView config={home} merchant={merchant} catalog={catalog} />
+      <PortableHomeView
+        config={home}
+        merchant={merchant}
+        catalog={catalog}
+        inert={false}
+      />
     </PublicationRevisionMarker>
   )}</body></html>`;
   const fetchPublic = vi.fn(async (_url: string) => ({
@@ -33,6 +38,13 @@ it('verifies actual rendered revision plus changed content without credentials; 
     config: home,
   };
   expect(await verifyPublication(input, { launch, fetchPublic })).toBe(true);
+  for (const slug of ['a', 'ab'])
+    expect(
+      await verifyPublication(
+        { ...input, url: `https://${slug}.usebaci.com` },
+        { launch, fetchPublic }
+      )
+    ).toBe(true);
   const changed = structuredClone(home);
   const hero = changed.content.find((block) => block.type === 'Hero');
   if (hero?.type === 'Hero') hero.props.title = 'Different approved copy';
@@ -98,7 +110,12 @@ it('waits for delayed below-fold lazy images before accepting delivery', async (
       version={version}
       contentDigest={snapshot.publishedVersion}
     >
-      <PortableHomeView config={home} merchant={merchant} catalog={catalog} />
+      <PortableHomeView
+        config={home}
+        merchant={merchant}
+        catalog={catalog}
+        inert={false}
+      />
       <div style={{ height: 10000 }} />
       <img
         loading="lazy"
@@ -152,13 +169,27 @@ it('rejects missing visible action, navigation, footer and catalog copy despite 
     'HeroPrefix',
     'TextPrefix',
     'FooterPrefix',
+    'HeaderHref',
+    'HeroHref',
+    'ButtonHref',
+    'FooterHref',
   ] as const) {
     const rendered = structuredClone(home);
     const block = rendered.content.find(
-      (block) => block.type === type.replace('Prefix', '')
+      (block) => block.type === type.replace('Prefix', '').replace('Href', '')
     );
     if (!block) throw Error('fixture');
-    if (type === 'HeroPrefix' && block.type === 'Hero')
+    if (type === 'HeaderHref' && block.type === 'Header') {
+      if (!block.props.navigationLinks?.[0]) throw Error('fixture');
+      block.props.navigationLinks[0].url = '/misrouted';
+    } else if (type === 'HeroHref' && block.type === 'Hero')
+      block.props.ctaLink = '/misrouted';
+    else if (type === 'ButtonHref' && block.type === 'Button')
+      block.props.link = '/misrouted';
+    else if (type === 'FooterHref' && block.type === 'Footer') {
+      if (!block.props.quickLinks?.[0]) throw Error('fixture');
+      block.props.quickLinks[0].url = '/misrouted';
+    } else if (type === 'HeroPrefix' && block.type === 'Hero')
       block.props.subtitle += ' unavailable';
     else if (type === 'TextPrefix' && block.type === 'Text')
       block.props.content += ' unavailable';
@@ -179,6 +210,7 @@ it('rejects missing visible action, navigation, footer and catalog copy despite 
           config={rendered}
           merchant={merchant}
           catalog={catalog}
+          inert={false}
         />
       </PublicationRevisionMarker>
     );

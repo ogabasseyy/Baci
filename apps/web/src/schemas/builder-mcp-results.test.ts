@@ -133,3 +133,20 @@ it('uses a bounded inert projection and rejects cross-store catalog data', () =>
     }).success
   ).toBe(false);
 });
+
+it('accepts canonical existing short slugs without weakening slug syntax', () => {
+  const list = (slug: string) => ({
+    stores: [
+      { storefrontId: store, name: 'Shop', slug, onboardingComplete: true },
+    ],
+    nextCursor: null,
+  });
+  for (const slug of ['a', 'ab', 'a-b'])
+    expect(
+      builderOutputSchemas.list_storefronts.safeParse(list(slug)).success
+    ).toBe(true);
+  for (const slug of ['', '-a', 'a-', 'a/b', 'A'])
+    expect(
+      builderOutputSchemas.list_storefronts.safeParse(list(slug)).success
+    ).toBe(false);
+});

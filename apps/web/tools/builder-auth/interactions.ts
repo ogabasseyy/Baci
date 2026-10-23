@@ -129,14 +129,30 @@ export function createInteractionHandler(deps: {
       )
     )
       throw new Error('Invalid builder scope');
-    if (req.method === 'GET' && !browserSecret(req)) {
-      const { url: location, transaction } = await upstream.begin();
-      await put(res, { uid: details.uid, transaction, stage: 'upstream' });
-      res.writeHead(303, { location: location.href });
-      res.end();
-      return true;
+    let pending: z.infer<typeof pendingSchema>;
+    if (req.method === 'GET') {
+      let existing: z.infer<typeof pendingSchema> | undefined;
+      try {
+        existing = await take(req);
+      } catch {
+        /* Expired or absent browser transaction: start fresh. */
+      }
+      if (
+        !existing ||
+        existing.uid !== details.uid ||
+        existing.stage !== 'consent'
+      ) {
+        const { url: location, transaction } = await upstream.begin();
+        await put(res, { uid: details.uid, transaction, stage: 'upstream' });
+        res.writeHead(303, { location: location.href });
+        res.end();
+        return true;
+      }
+      pending = existing;
+    } else {
+      // Never restart a mutation or accept consent belonging to another flow.
+      pending = await take(req);
     }
-    const pending = await take(req);
     if (
       pending.uid !== details.uid ||
       pending.stage !== 'consent' ||

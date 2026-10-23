@@ -51,3 +51,20 @@ it('bounds DNS resolution before opening a public request', async () => {
     vi.useRealTimers();
   }
 });
+
+it('accepts canonical short store hosts while keeping DNS and hostname bounds', async () => {
+  const resolve = vi
+    .fn()
+    .mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
+  const fetcher = createSafePublicationFetcher({ resolve });
+  for (const slug of ['a', 'ab', 'a'.repeat(63)])
+    await expect(fetcher(`https://${slug}.usebaci.com/`)).rejects.toThrow(
+      'Unsafe publication DNS'
+    );
+  expect(resolve).toHaveBeenCalledTimes(3);
+  for (const slug of ['-a', 'a-', 'a'.repeat(64)])
+    await expect(fetcher(`https://${slug}.usebaci.com/`)).rejects.toThrow(
+      'Unsafe publication resource'
+    );
+  expect(resolve).toHaveBeenCalledTimes(3);
+});

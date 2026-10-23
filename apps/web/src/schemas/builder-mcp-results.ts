@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VALID_SLUG_REGEX } from '@/lib/validation';
 import { builderFailureSchema } from './builder-mcp-failure';
 import {
   BUILDER_EDITOR_URL,
@@ -144,7 +145,7 @@ export const builderListResultSchema = z
           .object({
             storefrontId: id,
             name: z.string().min(1).max(200),
-            slug: z.string().min(3).max(63),
+            slug: z.string().min(1).max(63).regex(VALID_SLUG_REGEX),
             onboardingComplete: z.boolean(),
           })
           .strict()

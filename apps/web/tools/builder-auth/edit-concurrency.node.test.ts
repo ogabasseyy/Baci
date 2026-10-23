@@ -26,6 +26,7 @@ test('two replicas claim one lease; ready apply loses to concurrent edit', async
       "UPDATE merchants SET logo_url='https://example.test/logo.png' WHERE id=$1",
       [f.merchant]
     );
+    const retryKey = randomUUID();
     const result = (
       await f.call('builder_apply_operation', [
         f.connection,
@@ -33,10 +34,34 @@ test('two replicas claim one lease; ready apply loses to concurrent edit', async
         f.merchant,
         id,
         f.version,
-        randomUUID(),
+        retryKey,
       ])
     ).rows[0].result;
     assert.equal(result.code, 'STALE_DRAFT');
+    assert.deepEqual(
+      (
+        await f.call('builder_apply_operation', [
+          f.connection,
+          1,
+          f.merchant,
+          id,
+          f.version,
+          retryKey,
+        ])
+      ).rows[0].result,
+      result
+    );
+    await assert.rejects(
+      f.call('builder_apply_operation', [
+        f.connection,
+        1,
+        f.merchant,
+        id,
+        f.version,
+        randomUUID(),
+      ]),
+      /IDEMPOTENCY_CONFLICT/
+    );
     assert.equal(
       (await f.call('builder_get_operation', [f.connection, 1, f.merchant, id]))
         .rows[0].result.status,

@@ -255,3 +255,15 @@ it('normalizes network failure to retryable unavailability without provider deta
     message: 'Canonical cart request could not complete',
   });
 });
+it('reads current contents and a fresh handoff without submitting a cart mutation', async () => {
+  const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ok: true, state, continueUrl: 'https://ogabassey.com/cart#handoff=ch1.fixture.signature&hid=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })));
+  const bridge = createGuestCanonicalBridge(endpoint, fetcher);
+  if (!bridge?.read) throw new Error('Missing current-cart reader');
+  const result = await bridge.read(token);
+  expect(result.items).toEqual([{ product_id: state.lines[0].productId, quantity: 2 }]);
+  await bridge.read(token);
+  const first = JSON.parse(fetcher.mock.calls[0]?.[1]?.body);
+  const second = JSON.parse(fetcher.mock.calls[1]?.[1]?.body);
+  expect(first).toEqual({ handoff: true, operationId: expect.any(String) });
+  expect(second.operationId).not.toBe(first.operationId);
+});

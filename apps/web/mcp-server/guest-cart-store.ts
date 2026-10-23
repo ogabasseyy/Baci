@@ -1,3 +1,4 @@
+import { readConnectedCart } from './guest-cart-connected-read';
 import {
   readGuestCartMigration,
   updateGuestCartWithCanonical,
@@ -153,6 +154,8 @@ export class GuestCartStore {
       return false;
     }
   }
+
+  readConnectionCart = (token: string) => readConnectedCart(this.canonical, token);
 
   async update(
     token: string | undefined,

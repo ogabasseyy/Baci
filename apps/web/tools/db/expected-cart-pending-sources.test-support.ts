@@ -419,4 +419,29 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261020042734_storefront_shared_cart_public_hints.sql',
     sha256: 'bf95a8674a8e78572f9ccdb353cf52ad498833099cd9dbb97a01362a8b35f07b',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022001000_mcp_guest_oauth_records.sql',
+    sha256: '1933f6b25b8731fe2526a7832e8b78311faaff81c57c1d82e5f71bdccfe41a1b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022010357_mcp_guest_oauth_cart_ownership.sql',
+    sha256: '8345827fda4473ba394f7dedf1bf57ef5fe164ed6b3f60e093dbc402b0516b5b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022060000_mcp_guest_oauth_gigl_request_scope.sql',
+    sha256: '51314f504550d5de548995e6a889001aea8355fb7515b652aec05efe452f7650',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022060100_mcp_guest_oauth_capacity.sql',
+    sha256: '9db3b090e5fec157850512442dc3d4ac6cb6f8a93f9a7db471f6b0da10451516',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023115000_mcp_guest_oauth_grant_admission.sql',
+    sha256: '4c77dce32cfb6a9925d2f9f8d2a91605e0abb7ee05b7a4472bc790de20d63a61',
+  },
 ] as const;

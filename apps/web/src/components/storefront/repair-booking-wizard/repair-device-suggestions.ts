@@ -77,11 +77,3 @@ export function toStoreProductSuggestion(
     imageUrl: product.image || null,
   };
 }
-
-export function getRepairDeviceSuggestionLabel(
-  device: RepairDeviceSelection
-): string {
-  return 'kind' in device
-    ? device.displayName
-    : `${device.brand} ${device.model}`.trim();
-}

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getRepairDeviceSuggestionLabel,
-  toStoreProductSuggestion,
-} from './repair-device-suggestions';
+import { toStoreProductSuggestion } from './repair-device-suggestions';
 
 describe('repair device product suggestions', () => {
   it('maps supported phone catalog entries and filters accessories', () => {
@@ -19,9 +16,6 @@ describe('repair device product suggestions', () => {
       displayName: 'Apple iPhone 15',
       deviceType: 'Smartphone',
     });
-    expect(suggestion && getRepairDeviceSuggestionLabel(suggestion)).toBe(
-      'Apple iPhone 15'
-    );
     expect(
       toStoreProductSuggestion({
         id: 'accessory-1',

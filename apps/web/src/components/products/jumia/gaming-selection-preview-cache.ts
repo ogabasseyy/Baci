@@ -86,6 +86,13 @@ function makePreviewRequestError(status: number, message: string) {
   return Object.assign(new Error(message), { status }) as PreviewRequestError;
 }
 
+function makeInvalidPageResponseError() {
+  return makePreviewRequestError(
+    422,
+    'Unable to read the Gaming preview. Please create it again.'
+  );
+}
+
 function isRejectedCachedSelection(cause: unknown) {
   return (
     isRecord(cause) &&
@@ -98,6 +105,7 @@ export const gamingSelectionPreviewCache = {
   loadFirstValid: loadFirstValidCachedSelection,
   isRecord,
   isRejected: isRejectedCachedSelection,
+  makeInvalidPageResponseError,
   makeRequestError: makePreviewRequestError,
   read: readCachedSelection,
   remove: removeCachedSelection,

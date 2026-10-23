@@ -43,17 +43,11 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     try {
       body = await response.json();
     } catch {
-      throw gamingSelectionPreviewCache.makeRequestError(
-        422,
-        'Unable to read the Gaming preview. Please create it again.'
-      );
+      throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
     }
     const parsed = jumiaProductExportEligiblePageSchema.safeParse(body);
     if (!parsed.success) {
-      throw gamingSelectionPreviewCache.makeRequestError(
-        422,
-        'Unable to read the Gaming preview. Please create it again.'
-      );
+      throw gamingSelectionPreviewCache.makeInvalidPageResponseError();
     }
     setSnapshot(parsed.data);
   };
@@ -71,7 +65,8 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         .order('id', { ascending: true })
         .limit(1000);
       const gamingCategories = categories?.filter(
-        (category) => category.name?.trim().toLowerCase() === 'gaming'
+        (category) =>
+          category.name?.replace(/^ +| +$/g, '').toLowerCase() === 'gaming'
       );
       if (categoryError) {
         throw new Error('Unable to find the Gaming category. Please retry.');

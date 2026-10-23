@@ -3,6 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 import { Agent, fetch } from 'undici';
 import { isBuilderPreviewAsset } from '../../src/schemas/builder-preview-assets';
+import { isBoundPublicHomeRpc } from './publication-public-rpc';
 
 const blocked = new BlockList();
 for (const [net, prefix] of [
@@ -64,14 +65,7 @@ export function createSafePublicationFetcher(
       url.hostname === 'usebaci.com' ||
       /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\.usebaci\.com$/.test(url.hostname);
     const db = options.publicDatabase;
-    const publicRpc = Boolean(
-      db &&
-        /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(db.origin) &&
-        url.origin === db.origin &&
-        url.pathname === '/rest/v1/rpc/builder_public_home' &&
-        url.searchParams.size === 1 &&
-        url.searchParams.get('p_merchant') === db.merchantId
-    );
+    const publicRpc = isBoundPublicHomeRpc(value, db);
     if (!canonical && !isBuilderPreviewAsset(url.href) && !publicRpc)
       throw Error('Unsafe publication resource');
     if (++requests > 60) throw Error('Publication request bound exceeded');

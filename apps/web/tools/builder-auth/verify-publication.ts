@@ -9,6 +9,15 @@ import {
   createSafePublicationFetcher,
   type PublicationFetchOptions,
 } from './publication-fetch';
+import {
+  allowedPublicHomePreflight,
+  isBoundPublicHomeRpc,
+  publicHomeRpcCors,
+} from './publication-public-rpc';
+import {
+  normalizePublicationCopy,
+  publicationVisibleCopy,
+} from './publication-visible-copy';
 export interface PublicPublicationProbeInput {
   merchantId: string;
   url: string;
@@ -67,12 +76,43 @@ export async function verifyPublication(
       acceptDownloads: false,
     });
     await context.route('**/*', async (route) => {
-      if (route.request().method() !== 'GET') {
+      const request = route.request();
+      const boundRpc = isBoundPublicHomeRpc(
+        request.url(),
+        deps.publicDatabase
+          ? { ...deps.publicDatabase, merchantId: input.merchantId }
+          : undefined
+      );
+      if (
+        request.method() === 'OPTIONS' &&
+        boundRpc &&
+        allowedPublicHomePreflight(request.headers(), url.origin)
+      ) {
+        await route.fulfill({
+          status: 204,
+          headers: publicHomeRpcCors(url.origin),
+        });
+        return;
+      }
+      if (request.method() !== 'GET') {
         await route.abort();
         return;
       }
       try {
-        await route.fulfill(await fetchPublic(route.request().url()));
+        if (boundRpc && request.headers().origin !== url.origin)
+          throw Error('Unexpected public RPC origin');
+        const response = await fetchPublic(request.url());
+        await route.fulfill(
+          boundRpc
+            ? {
+                ...response,
+                headers: {
+                  ...response.headers,
+                  ...publicHomeRpcCors(url.origin),
+                },
+              }
+            : response
+        );
       } catch {
         healthy = false;
         await route.abort();
@@ -92,21 +132,32 @@ export async function verifyPublication(
       `[data-baci-published-version="${input.publishedVersion}"][data-baci-content-digest="${input.contentDigest}"]`
     );
     await marker.waitFor({ state: 'visible' });
-    const copy = config.data.content
-      .flatMap((block) =>
-        block.type === 'Hero'
-          ? [block.props.title, block.props.subtitle]
-          : block.type === 'Text'
-            ? [block.props.title, block.props.content]
-            : block.type === 'Button'
-              ? [block.props.text]
-              : block.type === 'Footer'
-                ? [block.props.copyrightText]
-                : []
-      )
-      .filter((text) => text.trim());
-    const text = await marker.innerText();
-    if (!copy.every((part) => text.includes(part))) return false;
+    const blocks = marker.locator('[data-baci-block]');
+    if ((await blocks.count()) !== config.data.content.length) return false;
+    for (const [index, block] of config.data.content.entries()) {
+      const rendered = blocks.nth(index);
+      if ((await rendered.getAttribute('data-baci-block')) !== block.type)
+        return false;
+      const text = normalizePublicationCopy(await rendered.innerText());
+      for (const requirement of publicationVisibleCopy(block)) {
+        const copy = normalizePublicationCopy(requirement.text);
+        if (!copy) continue;
+        if (!text.includes(copy)) return false;
+        if (
+          !requirement.role &&
+          !(await rendered.getByText(copy, { exact: true }).first().isVisible())
+        )
+          return false;
+        if (
+          requirement.role &&
+          !(await rendered
+            .getByRole(requirement.role, { name: copy, exact: true })
+            .first()
+            .isVisible())
+        )
+          return false;
+      }
+    }
     // Force lazy product images to load in this isolated proof, then wait within the probe budget.
     await marker.locator('img').evaluateAll((nodes) => {
       for (const node of nodes)

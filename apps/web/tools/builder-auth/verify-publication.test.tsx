@@ -44,7 +44,7 @@ it('verifies actual rendered revision plus changed content without credentials; 
   ).toBe(false);
   const simple = vi.fn(async (_url: string) => ({
     status: 200,
-    headers: { 'content-type': 'text/html' },
+    headers: { 'content-type': 'text/html; charset=utf-8' },
     body: Buffer.from('<p>OK</p>'),
   }));
   expect(await verifyPublication(input, { launch, fetchPublic: simple })).toBe(
@@ -85,7 +85,7 @@ it('waits for delayed below-fold lazy images before accepting delivery', async (
     }
     return {
       status: 200,
-      headers: { 'content-type': 'text/html' },
+      headers: { 'content-type': 'text/html; charset=utf-8' },
       body: Buffer.from(html),
     };
   };
@@ -105,3 +105,68 @@ it('waits for delayed below-fold lazy images before accepting delivery', async (
     )
   ).toBe(true);
 }, 30000);
+
+it('rejects missing visible action, navigation, footer and catalog copy despite a correct revision marker', async () => {
+  const snapshot = await createPortablePublishedSnapshot(home);
+  const version = `published:${merchant.id}`;
+  for (const type of [
+    'Header',
+    'Hero',
+    'Text',
+    'Button',
+    'Footer',
+    'ProductGrid',
+    'HeroPrefix',
+    'TextPrefix',
+    'FooterPrefix',
+  ] as const) {
+    const rendered = structuredClone(home);
+    const block = rendered.content.find(
+      (block) => block.type === type.replace('Prefix', '')
+    );
+    if (!block) throw Error('fixture');
+    if (type === 'HeroPrefix' && block.type === 'Hero')
+      block.props.subtitle += ' unavailable';
+    else if (type === 'TextPrefix' && block.type === 'Text')
+      block.props.content += ' unavailable';
+    else if (type === 'FooterPrefix' && block.type === 'Footer')
+      block.props.copyrightText += ' unavailable';
+    else if (block.type === 'Header') block.props.navigationLinks = [];
+    else if (block.type === 'Hero') block.props.ctaText = '';
+    else if (block.type === 'Text') block.props.content = '';
+    else if (block.type === 'Button') block.props.text = '';
+    else if (block.type === 'Footer') block.props.quickLinks = [];
+    else if (block.type === 'ProductGrid') block.props.title = '';
+    const html = renderToStaticMarkup(
+      <PublicationRevisionMarker
+        version={version}
+        contentDigest={snapshot.publishedVersion}
+      >
+        <PortableHomeView
+          config={rendered}
+          merchant={merchant}
+          catalog={catalog}
+        />
+      </PublicationRevisionMarker>
+    );
+    expect(
+      await verifyPublication(
+        {
+          merchantId: merchant.id,
+          url: 'https://approval-fixture.usebaci.com',
+          publishedVersion: version,
+          contentDigest: snapshot.publishedVersion,
+          config: home,
+        },
+        {
+          launch: () => chromium.launch({ headless: true, channel: 'chrome' }),
+          fetchPublic: async () => ({
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+            body: Buffer.from(html),
+          }),
+        }
+      )
+    ).toBe(false);
+  }
+}, 60000);

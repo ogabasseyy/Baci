@@ -42,17 +42,19 @@ export function HeroPresentation({
     >
       {shaded ? (
         <div
-          className={`absolute inset-0 baci-overlay ${gradient ? 'bg-black/60' : 'bg-black/40'}`}
+          className="absolute inset-0 baci-overlay"
           style={{
             position: 'absolute',
             inset: 0,
-            backgroundColor: gradient ? '#0009' : '#0006',
+            backgroundColor:
+              'var(--theme-hero-overlay, var(--theme-foreground))',
+            opacity: gradient ? 0.6 : 0.4,
           }}
           aria-hidden="true"
         />
       ) : null}
       <div
-        className={`container px-4 md:px-6 flex flex-col gap-4 relative z-10 baci-container baci-hero-content ${{ left: 'items-start text-left', center: 'items-center text-center', right: 'items-end text-right' }[align]} ${shaded ? 'text-white' : ''}`}
+        className={`container px-4 md:px-6 flex flex-col gap-4 relative z-10 baci-container baci-hero-content ${{ left: 'items-start text-left', center: 'items-center text-center', right: 'items-end text-right' }[align]}`}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -65,7 +67,9 @@ export function HeroPresentation({
             center: 'center',
             right: 'flex-end',
           }[align],
-          color: shaded ? '#fff' : undefined,
+          color: shaded
+            ? 'var(--theme-hero-foreground, var(--theme-background))'
+            : undefined,
         }}
       >
         <Heading className="text-4xl md:text-6xl font-bold tracking-tighter">

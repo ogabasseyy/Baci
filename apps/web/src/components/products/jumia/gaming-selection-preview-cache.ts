@@ -58,7 +58,10 @@ function makePreviewRequestError(status: number, message: string) {
 }
 
 function isRejectedCachedSelection(cause: unknown) {
-  return isRecord(cause) && (cause.status === 404 || cause.status === 410);
+  return (
+    isRecord(cause) &&
+    (cause.status === 404 || cause.status === 410 || cause.status === 422)
+  );
 }
 
 export const gamingSelectionPreviewCache = {

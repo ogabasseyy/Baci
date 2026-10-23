@@ -8,10 +8,8 @@ import {
   type JumiaProductExportEligiblePage,
   jumiaProductExportEligiblePageSchema,
 } from '@/schemas/jumia/eligible-page';
+import { UPGRADE_REQUIRED_MESSAGE } from './constants';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
-
-const UPGRADE_REQUIRED_MESSAGE =
-  'Marketplace sync requires an upgraded plan. Upgrade your plan to preview Jumia products.';
 
 async function requestErrorMessage(response: Response, fallback: string) {
   if (response.status !== 402) return fallback;
@@ -44,10 +42,12 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     const parsed = jumiaProductExportEligiblePageSchema.safeParse(
       await response.json()
     );
-    if (!parsed.success)
-      throw new Error(
+    if (!parsed.success) {
+      throw gamingSelectionPreviewCache.makeRequestError(
+        422,
         'Unable to read the Gaming preview. Please create it again.'
       );
+    }
     setSnapshot(parsed.data);
   };
 
@@ -70,6 +70,11 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         throw new Error('Unable to find the Gaming category. Please retry.');
       }
       if (!gamingCategories?.length) {
+        if (refresh) {
+          throw new Error(
+            'An active Gaming category is required to refresh this preview.'
+          );
+        }
         const cached = gamingSelectionPreviewCache.find(merchantId);
         if (cached) {
           try {
@@ -254,7 +259,8 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
                   {!item.available ? (
                     <span className="text-xs text-destructive">{reason}</span>
                   ) : null}
-                  {item.capturedSourceVersion !== item.currentSourceVersion ? (
+                  {item.available &&
+                  item.capturedSourceVersion !== item.currentSourceVersion ? (
                     <span className="text-xs text-amber-700">
                       Changed since preview; showing current details.
                     </span>

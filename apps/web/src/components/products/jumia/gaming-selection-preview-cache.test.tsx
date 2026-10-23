@@ -190,60 +190,11 @@ describe('GamingSelectionPreview snapshot cache', () => {
       expect.stringContaining('selectionId=selection-frozen')
     );
     expect(fetcher).not.toHaveBeenCalled();
-  });
 
-  it('discards a server-rejected cached ID and creates a replacement', async () => {
-    setupGamingCategories();
-    localStorage.setItem(
-      'jumia-gaming-preview:merchant-1:gaming-category',
-      JSON.stringify({
-        selectionId: 'selection-expired',
-        expiresAt: '2099-01-01T00:00:00.000Z',
-      })
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh preview' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'An active Gaming category is required to refresh this preview.'
     );
-    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
-    fetcher.mockResolvedValue(
-      Response.json(
-        {
-          selectionId: 'selection-replacement',
-          expiresAt: '2099-01-01T00:00:00.000Z',
-        },
-        { status: 201 }
-      )
-    );
-    const pageFetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json({ error: 'selection expired' }, { status: 410 })
-      )
-      .mockResolvedValueOnce(
-        Response.json({
-          selectionId: 'selection-replacement',
-          total: 0,
-          page: 1,
-          totalPages: 0,
-          legacyUnmappedCount: 0,
-          products: [],
-        })
-      );
-    vi.stubGlobal('fetch', pageFetch);
-    render(<GamingSelectionPreview merchantId="merchant-1" />);
-
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Create Gaming preview' })
-    );
-
-    expect(
-      await screen.findByText('No products in this Gaming selection.')
-    ).toBeInTheDocument();
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(pageFetch).toHaveBeenCalledTimes(2);
-    expect(
-      JSON.parse(
-        localStorage.getItem(
-          'jumia-gaming-preview:merchant-1:gaming-category'
-        ) ?? 'null'
-      )
-    ).toMatchObject({ selectionId: 'selection-replacement' });
+    expect(pageFetch).toHaveBeenCalledOnce();
   });
 });

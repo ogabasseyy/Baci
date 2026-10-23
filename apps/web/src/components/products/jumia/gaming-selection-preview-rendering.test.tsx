@@ -108,7 +108,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
             available: false,
             unavailableReason: 'inactive',
             capturedSourceVersion: 'version-2',
-            currentSourceVersion: 'version-2',
+            currentSourceVersion: null,
             product: null,
           },
         ],
@@ -118,6 +118,9 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     expect(
       await screen.findByText('Unavailable product (p2)')
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Changed since preview; showing current details.')
+    ).not.toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByText('Loading products…')).not.toBeInTheDocument()
     );

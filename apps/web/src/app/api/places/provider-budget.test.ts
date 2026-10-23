@@ -92,7 +92,7 @@ describe('distributed address provider budgets', () => {
     vi.stubEnv('NODE_ENV', 'development');
     const budget = await import('./provider-budget');
     let reservation = await budget.reserveGooglePlacesRequest('autocomplete');
-    for (let attempt = 1; attempt < 4400; attempt += 1)
+    for (let attempt = 1; attempt < 50; attempt += 1)
       reservation = await budget.reserveGooglePlacesRequest('autocomplete');
     expect(reservation).toEqual({ reserved: true });
     expect(await budget.reserveGooglePlacesRequest('autocomplete')).toEqual({

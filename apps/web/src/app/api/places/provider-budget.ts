@@ -6,6 +6,7 @@ import { Redis } from '@upstash/redis';
 // retries. These caps apply only to this address flow, not other Google products.
 export const GOOGLE_MONTHLY_REQUEST_LIMIT = 4500;
 const GOOGLE_PREDICTION_REQUEST_LIMIT = 4400; // Leave room for selections.
+const DEVELOPMENT_GOOGLE_REQUEST_LIMIT = 50;
 export const GEOAPIFY_DAILY_REQUEST_LIMIT = 2800;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTH_COUNTER_TTL_SECONDS = 40 * 24 * 60 * 60;
@@ -87,19 +88,16 @@ function getBudgetRedis(): Redis | null {
   return budgetRedis;
 }
 
-function reserveDevelopmentGoogleRequest(
-  kind: 'autocomplete' | 'details'
-): GoogleBudgetReservation {
+function reserveDevelopmentGoogleRequest(): GoogleBudgetReservation {
   if (process.env.NODE_ENV !== 'development')
     return { reserved: false, reason: 'unavailable' };
 
   try {
     const key = googleBudgetKey();
     const count = developmentGoogleRequests.get(key) ?? 0;
-    const limit =
-      kind === 'autocomplete'
-        ? GOOGLE_PREDICTION_REQUEST_LIMIT
-        : GOOGLE_MONTHLY_REQUEST_LIMIT;
+    // This fallback is process-local and resets with the dev server. Keep it
+    // intentionally small; production always requires the shared Redis budget.
+    const limit = DEVELOPMENT_GOOGLE_REQUEST_LIMIT;
     if (count >= limit) return { reserved: false, reason: 'limit_reached' };
     developmentGoogleRequests.set(key, count + 1);
     return { reserved: true };
@@ -126,7 +124,7 @@ export async function reserveGooglePlacesRequest(
 ): Promise<GoogleBudgetReservation> {
   try {
     const redis = getBudgetRedis();
-    if (!redis) return reserveDevelopmentGoogleRequest(kind);
+    if (!redis) return reserveDevelopmentGoogleRequest();
 
     const result = await redis.eval<unknown[], number>(
       GOOGLE_BUDGET_SCRIPT,
@@ -140,12 +138,12 @@ export async function reserveGooglePlacesRequest(
     );
     if (result === 1) return { reserved: true };
     if (result === 0) return { reserved: false, reason: 'limit_reached' };
-    return reserveDevelopmentGoogleRequest(kind);
+    return reserveDevelopmentGoogleRequest();
   } catch {
     // Production stays fail-closed: serverless restarts must not reset its
     // paid-usage budget. Development can safely use a bounded process-local cap.
     console.warn('[Address API] Google budget unavailable');
-    return reserveDevelopmentGoogleRequest(kind);
+    return reserveDevelopmentGoogleRequest();
   }
 }
 

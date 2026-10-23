@@ -11,6 +11,7 @@ import { getPrimaryProductImage } from '@/lib/product-image';
 const DEVICE_COLUMNS =
   'id, brand, model, slug, device_type, product_id, image_url, aliases, sort_order';
 const PRODUCT_IMAGE_LOOKUP_CHUNK_SIZE = 100;
+const REPAIR_DEVICE_SUGGESTION_LIMIT = 8;
 const REPAIR_DEVICE_TYPE_SET: ReadonlySet<string> = new Set(
   REPAIR_DEVICE_TYPES
 );
@@ -113,9 +114,12 @@ export async function getRepairDevicesForMerchant(
   const filteredRows = normalizedQuery
     ? rows.filter((row) => matchesQuery(row, normalizedQuery))
     : rows;
+  const displayedRows = normalizedQuery
+    ? filteredRows.slice(0, REPAIR_DEVICE_SUGGESTION_LIMIT)
+    : filteredRows;
   const linkedProductIds = Array.from(
     new Set(
-      filteredRows
+      displayedRows
         .filter((row) => !asNullableString(row.image_url))
         .map((row) => asNullableString(row.product_id))
         .filter((id): id is string => id !== null)
@@ -155,7 +159,7 @@ export async function getRepairDevicesForMerchant(
     }
   }
 
-  const rowsWithProductImages = filteredRows.map((row) => ({
+  const rowsWithProductImages = displayedRows.map((row) => ({
     ...row,
     image_url:
       asNullableString(row.image_url) ??

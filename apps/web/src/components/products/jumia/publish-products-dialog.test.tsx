@@ -38,6 +38,22 @@ vi.mock('./brand-selector', () => ({
 }));
 
 describe('PublishProductsDialog', () => {
+  it('keeps the dialog content within the viewport and scrollable', () => {
+    render(
+      <PublishProductsDialog
+        integrationId="int-1"
+        merchantId="merchant-1"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('dialog')).toHaveClass(
+      'max-h-[calc(100dvh-2rem)]',
+      'overflow-y-auto'
+    );
+  });
+
   it('loads products and submits the selected product for approval', async () => {
     vi.stubGlobal(
       'fetch',

@@ -144,6 +144,59 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
     ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000008' });
   });
 
+  it('invalidates a cached selection when its successful page is not JSON', async () => {
+    setupGamingCategories();
+    localStorage.setItem(
+      'jumia-gaming-preview:merchant-1:gaming-category',
+      JSON.stringify({
+        selectionId: '00000000-0000-4000-8000-000000000011',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      })
+    );
+    const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
+    fetcher.mockResolvedValue(
+      Response.json(
+        {
+          selectionId: '00000000-0000-4000-8000-000000000012',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 }
+      )
+    );
+    const pageFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('not-json', { status: 200 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          selectionId: '00000000-0000-4000-8000-000000000012',
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      );
+    vi.stubGlobal('fetch', pageFetch);
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(pageFetch).toHaveBeenCalledTimes(2);
+    expect(
+      JSON.parse(
+        localStorage.getItem(
+          'jumia-gaming-preview:merchant-1:gaming-category'
+        ) ?? 'null'
+      )
+    ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000012' });
+  });
+
   it('continues to an older cached selection when the newest is rejected without a category', async () => {
     setupGamingCategories([]);
     const olderKey = 'jumia-gaming-preview:merchant-1:older-category';

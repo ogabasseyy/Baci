@@ -58,7 +58,7 @@ export function PublishProductsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[680px]">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>Add products to Jumia</DialogTitle>
           <DialogDescription>

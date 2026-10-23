@@ -39,9 +39,16 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         )
       );
     }
-    const parsed = jumiaProductExportEligiblePageSchema.safeParse(
-      await response.json()
-    );
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw gamingSelectionPreviewCache.makeRequestError(
+        422,
+        'Unable to read the Gaming preview. Please create it again.'
+      );
+    }
+    const parsed = jumiaProductExportEligiblePageSchema.safeParse(body);
     if (!parsed.success) {
       throw gamingSelectionPreviewCache.makeRequestError(
         422,

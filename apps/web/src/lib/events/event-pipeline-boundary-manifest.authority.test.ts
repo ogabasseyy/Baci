@@ -80,6 +80,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
+      'apps/web/src/scripts/process-merchant-onboarding-emails.ts',
     ]);
     expect(manifest.authority.servicePaths).toEqual([
       ...eventPipelineAuthorityServicePaths,

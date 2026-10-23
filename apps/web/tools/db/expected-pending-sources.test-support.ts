@@ -37,6 +37,21 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  {
+    repositoryPath:
+      'supabase/migrations/20261023131010_merchant_onboarding_delivery_pause.sql',
+    sha256: 'd7fd07c62261403f3c8baabfbe2dba6426ddc026dd68173d4f39aa9e9650e796',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023110000_merchant_onboarding_in_app_reminders.sql',
+    sha256: '44fcab00b2e267aa4adf0ca1d4d1b76f58c2550cebd2c4d800ab590c9fc30aad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023080443_merchant_onboarding_email_journey.sql',
+    sha256: '33b2e892e78619c73e3e022fd98ea9eab1c3393eefdeb1cf8244e8d140c14f4b',
+  },
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BUILDER_PENDING_SOURCES,

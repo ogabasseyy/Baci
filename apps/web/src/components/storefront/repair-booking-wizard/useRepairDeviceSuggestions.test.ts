@@ -195,4 +195,30 @@ describe('useRepairDeviceSuggestions', () => {
     expect(result.current.suggestions).toEqual([]);
     expect(result.current.hasSearched).toBe(false);
   });
+
+  it('cancels a queued lookup when suggestions are dismissed before debounce', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() =>
+      useRepairDeviceSuggestions({
+        catalogEnabled: true,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        query: 'PlayStation 5',
+        repairCatalogEnabled: true,
+        selectedModel: null,
+      })
+    );
+
+    act(() => result.current.clearSuggestions());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({
+      hasSearched: false,
+      isLoading: false,
+      suggestions: [],
+    });
+  });
 });

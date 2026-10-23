@@ -64,4 +64,20 @@ describe('repair device product suggestions', () => {
       ).toMatchObject({ deviceType: 'Smartwatch' });
     }
   });
+
+  it('recognizes a device in a secondary product category', () => {
+    expect(
+      toStoreProductSuggestion({
+        id: 'product-secondary-category',
+        name: 'Galaxy S24',
+        brand: 'Samsung',
+        category: 'Featured',
+        category_names: ['Featured', 'Smartphones'],
+      })
+    ).toMatchObject({
+      kind: 'store-product',
+      displayName: 'Samsung Galaxy S24',
+      deviceType: 'Smartphone',
+    });
+  });
 });

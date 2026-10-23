@@ -77,6 +77,55 @@ vi.mock('@/components/ui/phone-input', () => ({
 }));
 
 describe('RepairBookingWizard catalog linkage', () => {
+  it('keeps a selected suggestion closed when navigating Back to device details', async () => {
+    mockApiGet.mockResolvedValue({
+      groups: [
+        {
+          brand: 'Apple',
+          devices: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              brand: 'Apple',
+              model: 'iPhone 13 Pro Max',
+              slug: 'iphone-13-pro-max',
+              deviceType: 'Smartphone',
+            },
+          ],
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(
+      <RepairBookingWizard
+        merchantId="merchant-1"
+        merchantSlug="ogabassey"
+        merchantName="Ogabassey"
+        repairsCatalogEnabled
+      />
+    );
+
+    await user.type(screen.getByLabelText('Device Model'), 'iPhone 13 Pro Max');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Apple iPhone 13 Pro Max Smartphone',
+      })
+    );
+    await user.type(
+      screen.getByLabelText("What's the issue?"),
+      'The screen is damaged.'
+    );
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByLabelText('Full Name')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    expect(screen.getByLabelText('Device Model')).toHaveValue(
+      'Apple iPhone 13 Pro Max'
+    );
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(mockApiGet).toHaveBeenCalledOnce();
+  });
+
   it('keeps a manually entered model when the device type changes', async () => {
     const user = userEvent.setup();
     render(

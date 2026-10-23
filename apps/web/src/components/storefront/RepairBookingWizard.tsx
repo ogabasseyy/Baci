@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -24,9 +24,9 @@ import {
   REPAIR_WIZARD_STEPS,
   type RepairBookingPreselection,
 } from './repair-booking-wizard/repair-booking-wizard-constants';
-import type { RepairDeviceSelection } from './repair-booking-wizard/repair-device-suggestions';
 import { useRepairBookingSubmit } from './repair-booking-wizard/use-repair-booking-submit';
 import { useRepairShippingQuote } from './repair-booking-wizard/use-repair-shipping-quote';
+import { useRepairDeviceCatalogSelection } from './repair-booking-wizard/useRepairDeviceCatalogSelection';
 
 export type { RepairBookingPreselection };
 
@@ -91,61 +91,16 @@ export function RepairBookingWizard({
 
   const { control, trigger } = form;
   const formData = useWatch({ control });
-  const catalogSuggestionSelectedRef = useRef(false);
-
-  const handleChangeDevice = () => {
-    setShowCatalogConfirmation(false);
-    form.setValue('deviceId', undefined);
-    form.setValue('quoteId', undefined);
-    form.setValue('deviceType', 'Smartphone');
-    form.setValue('deviceModel', '');
-    form.setValue('issueDescription', '');
-  };
-
-  const handleSelectCatalogDevice = (device: RepairDeviceSelection) => {
-    catalogSuggestionSelectedRef.current = true;
-    if ('kind' in device) {
-      form.setValue('deviceId', undefined, { shouldDirty: true });
-      form.setValue('quoteId', undefined, { shouldDirty: true });
-      form.setValue('deviceType', device.deviceType, { shouldDirty: true });
-      form.setValue('deviceModel', device.displayName, {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-      return;
-    }
-
-    form.setValue('deviceId', device.id, { shouldDirty: true });
-    form.setValue(
-      'deviceType',
-      device.deviceType ?? form.getValues('deviceType'),
-      {
-        shouldDirty: true,
-      }
-    );
-    form.setValue('deviceModel', `${device.brand} ${device.model}`.trim(), {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
-
-  const handleDeviceModelChange = () => {
-    catalogSuggestionSelectedRef.current = false;
-    form.setValue('deviceId', undefined, { shouldDirty: true });
-    form.setValue('quoteId', undefined, { shouldDirty: true });
-  };
-
-  const handleDeviceTypeChange = () => {
-    const hadCatalogSuggestion = catalogSuggestionSelectedRef.current;
-    handleDeviceModelChange();
-    if (hadCatalogSuggestion) {
-      form.setValue('deviceModel', '', {
-        shouldDirty: true,
-        shouldValidate: true,
-      });
-      catalogSuggestionSelectedRef.current = false;
-    }
-  };
+  const {
+    handleChangeDevice,
+    handleDeviceModelChange,
+    handleDeviceTypeChange,
+    handleSelectCatalogDevice,
+    selectedModel,
+  } = useRepairDeviceCatalogSelection({
+    form,
+    hideCatalogConfirmation: () => setShowCatalogConfirmation(false),
+  });
 
   const nextStep = async () => {
     let fieldsToValidate: (keyof RepairBookingInput)[] = [];
@@ -212,6 +167,7 @@ export function RepairBookingWizard({
                   onChangeDevice={handleChangeDevice}
                   onSelectDevice={handleSelectCatalogDevice}
                   preselection={preselection}
+                  selectedModel={selectedModel}
                   showConfirmation={showCatalogConfirmation}
                 />
               </motion.div>

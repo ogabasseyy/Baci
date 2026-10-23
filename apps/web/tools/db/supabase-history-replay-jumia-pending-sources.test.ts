@@ -18,7 +18,7 @@ describe('Jumia pending replay source rows', () => {
     expect(new Set(rows).size).toBe(rows.length);
     expect(versions).toEqual([...versions].sort());
     expect(rows.at(-1)).toContain(
-      '20261022133541_jumia_product_export_selections.sql'
+      '20261023140000_jumia_product_export_selection_pages.sql'
     );
   });
 });

@@ -110,3 +110,7 @@ export const guestOAuthRegistrationSchema = z.object({
 });
 
 export const guestOAuthReadCartInputSchema = z.object({});
+
+export const guestOAuthConsentQuotaSchema = z.object({
+  count: z.number().int().min(0).max(600),
+});

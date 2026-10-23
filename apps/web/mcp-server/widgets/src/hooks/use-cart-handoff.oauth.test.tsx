@@ -89,3 +89,20 @@ it('refreshes after a removal conflict so the next removal uses the current vers
   expect(callTool).toHaveBeenLastCalledWith('update_ogabassey_guest_cart', expect.objectContaining({ quantity: 0, expectedVersion: 4 }));
   expect(result.current.cart.map((line) => line.product.id)).toEqual([second.id]);
 });
+
+it('warns when a review refresh contains unseen chat items and clears the notice on a clean refresh', async () => {
+  const content = { success: true, connection_bound: true, canonical_cart_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    cart_url: 'https://ogabassey.com/cart#handoff=ch1.fixture.signature&hid=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+  const reply = (products: typeof product[], version: number) => ({ structuredContent: { ...content, version,
+    items: products.map((item) => ({ product_id: item.id, quantity: 1 })) } });
+  const callTool = vi.fn().mockResolvedValueOnce(reply([product], 1))
+    .mockResolvedValueOnce(reply([product, second], 2)).mockResolvedValueOnce(reply([product], 3));
+  window.openai = { callTool, openExternal: vi.fn(), setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => { await result.current.handleAddToCart(product); });
+  await act(async () => { await result.current.handleViewCart(); });
+  expect(result.current.cartNotice).toContain('items added in another chat');
+  expect(result.current.cart).toHaveLength(1);
+  await act(async () => { await result.current.handleViewCart(); });
+  expect(result.current.cartNotice).toBeNull();
+});

@@ -1,3 +1,4 @@
+import { GuestOAuthConsentBusy, GuestOAuthConsentQuotaExceeded } from './guest-oauth-consent';
 import { reserveGuestCartCreation, refundGuestCartCreation } from './guest-cart-creation-quota';
 import { guestOAuthRegistrationSchema } from '../src/schemas/guest-oauth';
 import { GuestOAuthStorageError } from './guest-oauth-records';
@@ -170,6 +171,16 @@ export async function handleGuestOAuthHttp(
       json(res, 200, {});
     } else json(res, 404, { error: 'not_found' });
   } catch (error) {
+    if (error instanceof GuestOAuthConsentBusy) {
+      res.setHeader('Retry-After', 1);
+      json(res, 429, { error: 'temporarily_unavailable' });
+      return true;
+    }
+    if (error instanceof GuestOAuthConsentQuotaExceeded) {
+      res.setHeader('Retry-After', error.retryAfterSeconds);
+      json(res, 429, { error: 'quota_exceeded' });
+      return true;
+    }
     // Never echo input, auth codes, tokens, SQL messages or cookies.
     const safeErrors = new Set([
       'invalid_grant',

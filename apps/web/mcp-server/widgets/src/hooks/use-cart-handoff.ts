@@ -31,7 +31,10 @@ export function useCartHandoff() {
     cart,
     cartUrl: widgetState?.cartUrl,
     connectionCartId: widgetState?.connectionCartId,
-    onConnectedRefresh: (reply) => setWidgetState((previous) => mergeConnectedCartReply(previous, reply)),
+    onConnectedRefresh: (reply) => {
+      setWidgetState((previous) => mergeConnectedCartReply(previous, reply));
+      syncCartNotice(reply.items, widgetState?.cart ?? [], '');
+    },
     busy,
     setCartError,
   });

@@ -1,3 +1,4 @@
+import { createGuestConsent } from './guest-oauth-consent';
 import { authenticRefreshToken, mintRefreshToken, refreshGrantId } from './guest-oauth-refresh-token';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { z } from 'zod';
@@ -72,14 +73,7 @@ export class GuestOAuth {
   }
   async beginConsent(input: unknown) {
     const request = this.validateAuthorization(input);
-    const id = opaque();
-    const cookie = opaque();
-    await this.put(
-      `consent:${hash(id)}`,
-      { request, cookieHash: hash(cookie), used: false },
-      this.now() + 5 * 60_000,
-    );
-    return { id, cookie };
+    return createGuestConsent(this.options.store, request, this.now(), this.issuer, this.resource);
   }
   async completeConsent(id: string, cookie: string, allowed: boolean) {
     if (!/^[a-f0-9]{64}$/.test(id) || !/^[a-f0-9]{64}$/.test(cookie))

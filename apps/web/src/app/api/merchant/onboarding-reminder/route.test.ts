@@ -115,6 +115,21 @@ describe('owner onboarding reminder API', () => {
     });
     expect(mocks.readiness).not.toHaveBeenCalled();
   });
+  it.each([
+    'in_app_enabled',
+    'banner_enabled',
+    'follow_up_notifications_enabled',
+  ])('uses enabled defaults for a legacy null %s', async (key) => {
+    const { GET } = await import('./route');
+    read.mockResolvedValueOnce({
+      data: { ...preferences, [key]: null },
+      error: null,
+    });
+    expect(await (await GET(request())).json()).toMatchObject({
+      merchantId,
+      reminder: { id: 'first_product' },
+    });
+  });
   it('honors durable snooze and fails closed on database errors', async () => {
     const { GET } = await import('./route');
     read.mockResolvedValueOnce({ data: preferences, error: null });

@@ -51,9 +51,9 @@ export async function GET(request: NextRequest) {
     if (preferences.error) return failure('Could not load reminder', 500);
     if (
       preferences.data &&
-      (!preferences.data.in_app_enabled ||
-        !preferences.data.banner_enabled ||
-        !preferences.data.follow_up_notifications_enabled)
+      (preferences.data.in_app_enabled === false ||
+        preferences.data.banner_enabled === false ||
+        preferences.data.follow_up_notifications_enabled === false)
     )
       return suppressed();
     const state = await supabase

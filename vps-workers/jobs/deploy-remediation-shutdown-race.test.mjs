@@ -91,6 +91,15 @@ it('refuses a superseded release even when remediation is disabled', () => {
     });
     assert.notEqual(reenabled.status, 0);
     assert.match(reenabled.stderr, /re-enabled during deployment/);
+    const operatorMarker = join(directory, 'operator-disabled');
+    writeFileSync(operatorMarker, 'disabled');
+    const configuredMarker = spawnSync(
+      'bash',
+      initiallyDisabled.concat(operatorMarker),
+      { encoding: 'utf8' }
+    );
+    assert.equal(configuredMarker.status, 0, configuredMarker.stderr);
+    assert.match(configuredMarker.stdout, /disabled by operator/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -101,6 +110,7 @@ it('writes and consumes the same deployment-private cron fragment', () => {
   assert.match(source, /cat > \$STAGING_DIR\/crontab\.fragment/);
   assert.match(source, /bash -s -- '\$STAGING_DIR\/crontab\.fragment'/);
   assert.doesNotMatch(source, /\$REMOTE_DIR\/crontab\.fragment/);
+  assert.match(source, /'\$REMEDIATION_STATE' '\$REMEDIATION_DISABLED_MARKER'/);
   assert.doesNotMatch(
     source,
     /if \[ "\$REMEDIATION_STATE" = enabled \]; then\s+install_remediation_cron_transition/

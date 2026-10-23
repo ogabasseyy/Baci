@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import {
-  authenticateApiRequest,
-  getUserAccess,
-  hasPermission,
-} from '@/lib/api-auth';
+  getMerchantForApiRequest,
+  toUserAccess,
+} from '@/lib/get-merchant-for-api-request';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { jumiaProductExportEligibleQuerySchema } from '@/schemas/jumia/product-export-selection';
 
@@ -23,10 +23,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const access = await getUserAccess(auth.supabase);
-  if (!access?.merchantId) {
+  const merchantContext = await getMerchantForApiRequest(
+    auth.supabase,
+    auth.user.id,
+    { requestedMerchantId: parsed.data.merchantId }
+  );
+  if (!merchantContext) {
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
   }
+  const access = toUserAccess(merchantContext);
   if (!hasPermission(access, 'integrations', 'manage')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -38,9 +43,10 @@ export async function GET(request: NextRequest) {
   if (featureGateResponse) return featureGateResponse;
 
   const { data, error } = await auth.supabase.rpc(
-    'get_jumia_product_export_selection_page',
+    'get_jumia_product_export_selection_page_for_merchant',
     {
       p_selection_id: parsed.data.selectionId,
+      p_merchant_id: merchantContext.merchantId,
       p_page: parsed.data.page,
       p_limit: parsed.data.limit,
     }

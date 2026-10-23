@@ -10,6 +10,7 @@ describe('Jumia product export selection schemas', () => {
     expect(
       createJumiaProductExportSelectionSchema.safeParse({
         sourceCategoryId: '00000000-0000-4000-8000-000000000001',
+        merchantId: '00000000-0000-4000-8000-000000000002',
       }).success
     ).toBe(true);
     expect(
@@ -20,7 +21,12 @@ describe('Jumia product export selection schemas', () => {
     expect(
       createJumiaProductExportSelectionSchema.safeParse({
         sourceCategoryId: '00000000-0000-4000-8000-000000000001',
-        merchantId: '00000000-0000-4000-8000-000000000002',
+      }).success
+    ).toBe(false);
+    expect(
+      createJumiaProductExportSelectionSchema.safeParse({
+        sourceCategoryId: '00000000-0000-4000-8000-000000000001',
+        merchantId: 'not-a-uuid',
       }).success
     ).toBe(false);
   });
@@ -29,6 +35,7 @@ describe('Jumia product export selection schemas', () => {
     expect(
       jumiaProductExportEligibleQuerySchema.safeParse({
         selectionId: '00000000-0000-4000-8000-000000000001',
+        merchantId: '00000000-0000-4000-8000-000000000002',
         page: '2',
         limit: '50',
       })
@@ -36,6 +43,7 @@ describe('Jumia product export selection schemas', () => {
       success: true,
       data: {
         selectionId: '00000000-0000-4000-8000-000000000001',
+        merchantId: '00000000-0000-4000-8000-000000000002',
         page: 2,
         limit: 50,
       },
@@ -43,13 +51,26 @@ describe('Jumia product export selection schemas', () => {
     expect(
       jumiaProductExportEligibleQuerySchema.safeParse({
         selectionId: '00000000-0000-4000-8000-000000000001',
+        merchantId: '00000000-0000-4000-8000-000000000002',
         page: '0',
       }).success
     ).toBe(false);
     expect(
       jumiaProductExportEligibleQuerySchema.safeParse({
         selectionId: '00000000-0000-4000-8000-000000000001',
+        merchantId: 'not-a-uuid',
+      }).success
+    ).toBe(false);
+    expect(
+      jumiaProductExportEligibleQuerySchema.safeParse({
+        selectionId: '00000000-0000-4000-8000-000000000001',
+        merchantId: '00000000-0000-4000-8000-000000000002',
         limit: '501',
+      }).success
+    ).toBe(false);
+    expect(
+      jumiaProductExportEligibleQuerySchema.safeParse({
+        selectionId: '00000000-0000-4000-8000-000000000001',
       }).success
     ).toBe(false);
   });

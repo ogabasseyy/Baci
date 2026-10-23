@@ -15,11 +15,12 @@ async function requestErrorMessage(response: Response, fallback: string) {
 }
 
 async function requestEligiblePreviewPage(
+  merchantId: string,
   selectionId: string,
   page: number
 ): Promise<JumiaProductExportEligiblePage> {
   const response = await fetch(
-    `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, page: String(page) })}`
+    `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, merchantId, page: String(page) })}`
   );
   if (!response.ok) {
     throw gamingSelectionPreviewCache.makeRequestError(

@@ -84,7 +84,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     selectionId: string,
     page: number
   ) => {
-    const result = await eligiblePreviewRequest.page(selectionId, page);
+    const result = await eligiblePreviewRequest.page(owner, selectionId, page);
     setSnapshotForMerchant(owner, generation, result);
   };
   const loadAnyCachedPreview = (owner: string, generation: number) =>
@@ -202,7 +202,10 @@ export function useGamingSelectionPreview(merchantId: string) {
           '/api/marketplace/jumia/products/selections',
           {
             method: 'POST',
-            body: JSON.stringify({ sourceCategoryId: categoryId }),
+            body: JSON.stringify({
+              sourceCategoryId: categoryId,
+              merchantId: owner,
+            }),
           }
         );
       } catch {

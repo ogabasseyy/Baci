@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockAuthenticate = vi.fn();
 const mockGetUserAccess = vi.fn();
 const mockHasPermission = vi.fn();
+const mockGetMerchant = vi.fn();
 const mockFeatureGate = vi.fn();
 const mockCsrf = vi.fn();
 const mockRpc = vi.fn();
@@ -12,6 +13,12 @@ vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: (...args: unknown[]) => mockAuthenticate(...args),
   getUserAccess: (...args: unknown[]) => mockGetUserAccess(...args),
   hasPermission: (...args: unknown[]) => mockHasPermission(...args),
+}));
+vi.mock('@/lib/get-merchant-for-api-request', () => ({
+  getMerchantForApiRequest: (...args: unknown[]) => mockGetMerchant(...args),
+  toUserAccess: (context: { merchantId: string }) => ({
+    merchantId: context.merchantId,
+  }),
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: (...args: unknown[]) => mockCsrf(...args),
@@ -24,6 +31,7 @@ vi.mock('@/lib/merchant-feature-gates', () => ({
 const { POST } = await import('./route');
 
 const MERCHANT_ID = '00000000-0000-4000-8000-000000000001';
+const SELECTED_MERCHANT_ID = '00000000-0000-4000-8000-000000000009';
 const CATEGORY_ID = '00000000-0000-4000-8000-000000000002';
 const SELECTION_ID = '00000000-0000-4000-8000-000000000003';
 
@@ -38,6 +46,7 @@ function setupAuthorizedUser() {
     error: null,
   });
   mockGetUserAccess.mockResolvedValue({ merchantId: MERCHANT_ID });
+  mockGetMerchant.mockResolvedValue({ merchantId: MERCHANT_ID });
   mockHasPermission.mockReturnValue(true);
   mockFeatureGate.mockResolvedValue(null);
   mockCsrf.mockResolvedValue({ valid: true });
@@ -50,6 +59,7 @@ describe('Jumia Gaming selection API', () => {
   });
 
   it('creates a frozen Gaming selection without provider calls', async () => {
+    mockGetMerchant.mockResolvedValueOnce({ merchantId: SELECTED_MERCHANT_ID });
     mockRpc.mockResolvedValueOnce({
       data: [
         {
@@ -67,7 +77,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: CATEGORY_ID }),
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: SELECTED_MERCHANT_ID,
+          }),
         }
       )
     );
@@ -80,12 +93,24 @@ describe('Jumia Gaming selection API', () => {
       1,
       'create_jumia_product_export_selection',
       {
-        p_merchant_id: MERCHANT_ID,
+        p_merchant_id: SELECTED_MERCHANT_ID,
         p_source_category_id: CATEGORY_ID,
       }
     );
 
-    expect(mockFeatureGate).toHaveBeenCalledOnce();
+    expect(mockFeatureGate).toHaveBeenCalledWith(
+      expect.anything(),
+      SELECTED_MERCHANT_ID,
+      'marketplace_sync'
+    );
+    expect(mockHasPermission).toHaveBeenCalledWith(
+      { merchantId: SELECTED_MERCHANT_ID },
+      'integrations',
+      'manage'
+    );
+    expect(mockGetMerchant).toHaveBeenCalledWith(expect.anything(), 'user-id', {
+      requestedMerchantId: SELECTED_MERCHANT_ID,
+    });
     expect(mockRpc).toHaveBeenCalledOnce();
   });
 
@@ -100,7 +125,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: CATEGORY_ID }),
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: MERCHANT_ID,
+          }),
         }
       )
     );
@@ -117,7 +145,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: CATEGORY_ID }),
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: MERCHANT_ID,
+          }),
         }
       )
     );
@@ -136,7 +167,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: CATEGORY_ID }),
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: MERCHANT_ID,
+          }),
         }
       )
     );
@@ -152,7 +186,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: 'Gaming' }),
+          body: JSON.stringify({
+            sourceCategoryId: 'Gaming',
+            merchantId: MERCHANT_ID,
+          }),
         }
       )
     );
@@ -171,7 +208,10 @@ describe('Jumia Gaming selection API', () => {
         'http://localhost/api/marketplace/jumia/products/selections',
         {
           method: 'POST',
-          body: JSON.stringify({ sourceCategoryId: CATEGORY_ID }),
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: MERCHANT_ID,
+          }),
         }
       )
     );
@@ -179,5 +219,24 @@ describe('Jumia Gaming selection API', () => {
     expect(await response.json()).toEqual({
       error: 'Unable to create Gaming product selection',
     });
+  });
+
+  it('rejects a merchant not resolved to the authenticated user before feature checks or RPC', async () => {
+    mockGetMerchant.mockResolvedValueOnce(null);
+    const response = await POST(
+      new NextRequest(
+        'http://localhost/api/marketplace/jumia/products/selections',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sourceCategoryId: CATEGORY_ID,
+            merchantId: '00000000-0000-4000-8000-000000000099',
+          }),
+        }
+      )
+    );
+    expect(response.status).toBe(404);
+    expect(mockFeatureGate).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });

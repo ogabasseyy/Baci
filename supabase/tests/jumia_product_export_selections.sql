@@ -49,6 +49,13 @@ INSERT INTO public.staff_members (
   '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111104', 'jumia-selection-limited-staff@example.test',
   'Limited Staff', 'sales_rep', '{"catalog":{"read":true}}', 'active'
 );
+INSERT INTO public.staff_members (
+  merchant_id, user_id, email, name, role, permissions, status
+) VALUES (
+  '22222222-2222-4222-8222-222222222202', '11111111-1111-4111-8111-111111111103',
+  'jumia-selection-staff@example.test', 'Selection Staff', 'manager',
+  '{"integrations":{"manage":true}}', 'active'
+);
 
 INSERT INTO public.categories (id, merchant_id, name, slug, is_active) VALUES
   ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222201', 'Gaming', 'gaming', true),
@@ -105,7 +112,9 @@ SELECT ok(
   AND NOT has_function_privilege('authenticated', 'private.jumia_product_export_source_version_v1(uuid,uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'private.merchant_has_marketplace_sync_v1(uuid,timestamp with time zone)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.get_jumia_product_export_selection_page(uuid,integer,integer)', 'EXECUTE')
-  AND has_function_privilege('authenticated', 'public.get_jumia_product_export_selection_page(uuid,integer,integer)', 'EXECUTE'),
+  AND has_function_privilege('authenticated', 'public.get_jumia_product_export_selection_page(uuid,integer,integer)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.get_jumia_product_export_selection_page_for_merchant(uuid,uuid,integer,integer)', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.get_jumia_product_export_selection_page_for_merchant(uuid,uuid,integer,integer)', 'EXECUTE'),
   'only authenticated callers can invoke guarded RPCs, not private projection helpers'
 );
 
@@ -160,6 +169,7 @@ DO $capture$
 DECLARE
   v_selection record;
   v_version text;
+  v_page jsonb;
 BEGIN
   IF auth.uid() IS DISTINCT FROM '11111111-1111-4111-8111-111111111101'::uuid
     OR auth.jwt()->>'role' IS DISTINCT FROM 'authenticated' THEN
@@ -193,6 +203,16 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'page RPC did not return the expected stable second page and canonical source projection';
   END IF;
+  v_page := public.get_jumia_product_export_selection_page_for_merchant(
+    v_selection.selection_id,
+    '22222222-2222-4222-8222-222222222201',
+    2,
+    2
+  );
+  IF v_page->>'selectionId' IS DISTINCT FROM v_selection.selection_id::text
+    OR v_page->>'page' IS DISTINCT FROM '2' THEN
+    RAISE EXCEPTION 'merchant-bound page RPC did not delegate the matching request';
+  END IF;
   PERFORM pg_catalog.set_config('test.jumia_selection_id', v_selection.selection_id::text, true);
   BEGIN
     PERFORM public.create_jumia_product_export_selection(
@@ -223,6 +243,16 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'active integrations.manage staff could not capture a snapshot';
   END IF;
+  BEGIN
+    PERFORM public.get_jumia_product_export_selection_page_for_merchant(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid,
+      '22222222-2222-4222-8222-222222222202',
+      1,
+      50
+    );
+    RAISE EXCEPTION 'staff authorized for both merchants could read a selection under the wrong merchant context';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
   )::text, true);

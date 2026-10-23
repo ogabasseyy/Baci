@@ -147,7 +147,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     );
     expect(pageFetch).toHaveBeenCalledWith(
       expect.stringContaining(
-        '/eligible?selectionId=00000000-0000-4000-8000-000000000020&page=2'
+        '/eligible?selectionId=00000000-0000-4000-8000-000000000020&merchantId=merchant-1&page=2'
       )
     );
   });

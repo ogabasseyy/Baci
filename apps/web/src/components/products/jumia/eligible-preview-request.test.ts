@@ -3,6 +3,7 @@ import { eligiblePreviewRequest } from './eligible-preview-request';
 
 const selectionId = 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd';
 const otherSelectionId = 'c5a0eb5e-ecc7-4142-ae9b-d7186c3d5c0b';
+const merchantId = '00000000-0000-4000-8000-000000000002';
 
 function pageFixture(id = selectionId, page = 1) {
   return {
@@ -25,8 +26,11 @@ describe('eligiblePreviewRequest', () => {
       new Response(JSON.stringify(pageFixture()), { status: 200 })
     );
 
-    await expect(eligiblePreviewRequest.page(selectionId, 1)).resolves.toEqual(
-      pageFixture()
+    await expect(
+      eligiblePreviewRequest.page(merchantId, selectionId, 1)
+    ).resolves.toEqual(pageFixture());
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/marketplace/jumia/products/eligible?selectionId=${selectionId}&merchantId=${merchantId}&page=1`
     );
   });
 
@@ -38,7 +42,7 @@ describe('eligiblePreviewRequest', () => {
     );
 
     await expect(
-      eligiblePreviewRequest.page(selectionId, 1)
+      eligiblePreviewRequest.page(merchantId, selectionId, 1)
     ).rejects.toMatchObject({
       status: 422,
     });
@@ -50,7 +54,7 @@ describe('eligiblePreviewRequest', () => {
     );
 
     await expect(
-      eligiblePreviewRequest.page(selectionId, 2)
+      eligiblePreviewRequest.page(merchantId, selectionId, 2)
     ).rejects.toMatchObject({ status: 422 });
   });
 
@@ -81,7 +85,7 @@ describe('eligiblePreviewRequest', () => {
     );
 
     await expect(
-      eligiblePreviewRequest.page(selectionId, 1)
+      eligiblePreviewRequest.page(merchantId, selectionId, 1)
     ).rejects.toMatchObject({
       status: 422,
     });

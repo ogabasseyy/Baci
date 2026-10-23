@@ -114,7 +114,10 @@ describe('GamingSelectionPreview', () => {
     expect(fetcher).toHaveBeenCalledWith(
       '/api/marketplace/jumia/products/selections',
       expect.objectContaining({
-        body: JSON.stringify({ sourceCategoryId: 'gaming-category' }),
+        body: JSON.stringify({
+          sourceCategoryId: 'gaming-category',
+          merchantId: 'merchant-1',
+        }),
       })
     );
   });

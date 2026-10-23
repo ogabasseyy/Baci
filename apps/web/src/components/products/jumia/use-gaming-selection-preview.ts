@@ -2,34 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { createClient } from '@/lib/supabase/client';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
+import { jumiaProductExportSelectionCreateResponseSchema } from '@/schemas/jumia/product-export-selection-create-response';
 import { jumiaPreviewMessages } from './constants';
 import { eligiblePreviewRequest } from './eligible-preview-request';
+import { fetchMatchingGamingCategories } from './fetch-matching-gaming-categories';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 type PreviewCreationAction = 'create' | 'refresh' | 'retry';
-
-async function fetchMatchingCategories(merchantId: string) {
-  const categories: { id: string; name: string | null }[] = [];
-  const client = createClient();
-  for (let start = 0; ; ) {
-    const { data, error } = await client
-      .from('categories')
-      .select('id, name')
-      .eq('merchant_id', merchantId)
-      .eq('is_active', true)
-      .ilike('name', '%Gaming%')
-      .order('id', { ascending: true })
-      .range(start, start + jumiaPreviewMessages.categoryPageSize - 1);
-    if (error) return { data: null, error };
-    categories.push(...(data ?? []));
-    if (!data || data.length < jumiaPreviewMessages.categoryPageSize) {
-      return { data: categories, error: null };
-    }
-    start += jumiaPreviewMessages.categoryPageSize;
-  }
-}
 
 export function useGamingSelectionPreview(merchantId: string) {
   const currentMerchantRef = useRef({ merchantId, generation: 0 });
@@ -166,7 +146,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     setErrorForMerchant(owner, generation, null);
     try {
       const { data: categories, error: categoryError } =
-        await fetchMatchingCategories(owner);
+        await fetchMatchingGamingCategories(owner);
       if (!isCurrentMerchant()) return;
       const gamingCategories = categories?.filter(
         (category) =>
@@ -251,21 +231,18 @@ export function useGamingSelectionPreview(merchantId: string) {
         markCreationOutcomeUnknown(owner, generation);
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
-      if (
-        !gamingSelectionPreviewCache.isRecord(result) ||
-        !gamingSelectionPreviewCache.isSelectionId(result.selectionId) ||
-        typeof result.expiresAt !== 'string' ||
-        !Number.isFinite(Date.parse(result.expiresAt))
-      ) {
+      const parsedCreation =
+        jumiaProductExportSelectionCreateResponseSchema.safeParse(result);
+      if (!parsedCreation.success) {
         markCreationOutcomeUnknown(owner, generation);
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       clearCreationOutcomeUnknown(owner, generation);
       gamingSelectionPreviewCache.write(cacheKey, {
-        selectionId: result.selectionId,
-        expiresAt: result.expiresAt,
+        selectionId: parsedCreation.data.selectionId,
+        expiresAt: parsedCreation.data.expiresAt,
       });
-      await loadPage(owner, generation, result.selectionId, 1);
+      await loadPage(owner, generation, parsedCreation.data.selectionId, 1);
     } catch (cause) {
       setErrorForMerchant(
         owner,

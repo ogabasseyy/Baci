@@ -33,7 +33,7 @@ describe('GamingSelectionPreview', () => {
     localStorage.clear();
   });
 
-  it('shows an actionable safe error when selection creation fails', async () => {
+  it('requires explicit retry after an ambiguous creation failure', async () => {
     setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
@@ -46,8 +46,11 @@ describe('GamingSelectionPreview', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Unable to create a Gaming preview. Please retry.'
+      'The server may have created this preview, but the response could not be read.'
     );
+    expect(
+      screen.getByRole('button', { name: 'Retry preview creation' })
+    ).toBeInTheDocument();
     expect(
       screen.queryByText('sensitive database detail')
     ).not.toBeInTheDocument();

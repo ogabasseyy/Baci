@@ -86,6 +86,33 @@ test('provisioning preserves placeholders and primary hosts; rejects collisions 
       (await create(bound, 'bound-placeholder')).storefrontId,
       boundMerchant
     );
+    for (const status of ['pending', 'inactive']) {
+      const unfinished = await owner();
+      const merchantId = randomUUID();
+      const slug = `owned-${status}`;
+      await f.pool.query(
+        'INSERT INTO merchants(id,user_id,slug) VALUES($1,$2,$3)',
+        [merchantId, unfinished.actor, slug]
+      );
+      await f.pool.query(
+        "INSERT INTO domains(merchant_id,domain,status,is_primary) VALUES($1,'custom-'||$2||'.example.test','active',true),($1,'  '||upper($2)||'.USEBACI.COM  ',$3,false)",
+        [merchantId, slug, status]
+      );
+      assert.equal((await create(unfinished, slug)).storefrontId, merchantId);
+      const rows = await f.pool.query(
+        'SELECT domain,status,is_primary,domain_type,tld FROM domains WHERE merchant_id=$1 ORDER BY is_primary DESC',
+        [merchantId]
+      );
+      assert.equal(rows.rows[0].is_primary, true);
+      assert.equal(rows.rows[0].domain, `custom-${slug}.example.test`);
+      assert.deepEqual(rows.rows[1], {
+        domain: `${slug}.usebaci.com`,
+        status: 'active',
+        is_primary: false,
+        domain_type: 'subdomain',
+        tld: '.usebaci.com',
+      });
+    }
     const immutable = await owner();
     await f.pool.query(
       'INSERT INTO merchants(id,user_id,slug) VALUES($1,$2,$3)',

@@ -89,4 +89,14 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261023032000_builder_publication_erasure.sql',
     sha256: 'cf63fb2326ea9e95dfe4ad57e22159f8444b3604613afa0042d3be2097053a81',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023034500_builder_owned_platform_domain.sql',
+    sha256: '1880a008fdf1bef83723e9a2530817c917b183d6e37baf2f8eca107b99085abf',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023034501_builder_canonical_publication_slug.sql',
+    sha256: 'ddd2190ba19a6bd455ab6e5d32ea36c5d76693a0479bf73e6c176bbcc4a0f78f',
+  },
 ];

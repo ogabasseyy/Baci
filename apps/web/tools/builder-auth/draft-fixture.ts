@@ -65,6 +65,7 @@ export async function draftFixture(
       '20261022072221_builder_private_draft_contract.sql',
       '20261023011500_builder_cutover_processing_drain.sql',
       '20261023011501_builder_draft_country_currency.sql',
+      '20261023034500_builder_owned_platform_domain.sql',
       ...(options.asyncEdits
         ? [
             '20261022103000_builder_async_edits.sql',

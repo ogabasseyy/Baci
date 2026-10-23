@@ -75,6 +75,19 @@ export function createOwnerPublicationHandler(
               deps.delivery,
               true
             );
+      if (parsed.data.action === 'confirm' && result.status === 'verifying') {
+        try {
+          // Only this committed receipt, using the normal owner and automatic
+          // lease mode. Replays respect leases; exhausted cycles need explicit retry.
+          return respond(
+            await retryCommittedDelivery(owner, result.receiptId, deps.delivery)
+          );
+        } catch {
+          // Publication already committed. Delivery uncertainty must not erase
+          // its receipt or encourage the owner to republish.
+          return respond(result);
+        }
+      }
       return respond(result);
     } catch (error) {
       const code =

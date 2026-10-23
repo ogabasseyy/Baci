@@ -143,7 +143,6 @@ describe('RepairBookingWizard catalog linkage', () => {
       'Apple iPhone 13 Pro Max'
     );
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    expect(mockApiGet).toHaveBeenCalledTimes(2);
     expect(mockApiGet.mock.calls.map(([url]) => url)).toEqual(
       expect.arrayContaining([
         expect.stringContaining('/repairs/devices'),

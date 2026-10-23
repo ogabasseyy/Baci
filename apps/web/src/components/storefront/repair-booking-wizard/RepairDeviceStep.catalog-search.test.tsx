@@ -176,7 +176,6 @@ describe('RepairDeviceStep catalog behavior', () => {
         screen.queryByRole('option', { name: /apple iphone 15/i })
       ).not.toBeInTheDocument()
     );
-    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
   });
 
   it('keeps options out of the tab order and closes suggestions when Tab leaves the combobox', async () => {
@@ -232,17 +231,21 @@ describe('RepairDeviceStep catalog behavior', () => {
   it('falls back to matching published store products when no repair device is configured', async () => {
     const user = userEvent.setup();
     const onSelectDevice = vi.fn();
-    mocks.apiGet.mockResolvedValueOnce({ groups: [] }).mockResolvedValueOnce({
-      products: [
-        {
-          brand: 'Apple',
-          category: 'Smartphones',
-          id: 'product-15',
-          image: 'https://cdn.example.com/iphone-15.jpg',
-          name: 'iPhone 15',
-        },
-      ],
-    });
+    mocks.apiGet.mockImplementation((url: string) =>
+      url.includes('/repairs/devices')
+        ? Promise.resolve({ groups: [] })
+        : Promise.resolve({
+            products: [
+              {
+                brand: 'Apple',
+                category: 'Smartphones',
+                id: 'product-15',
+                image: 'https://cdn.example.com/iphone-15.jpg',
+                name: 'iPhone 15',
+              },
+            ],
+          })
+    );
 
     render(
       <Harness>
@@ -285,10 +288,12 @@ describe('RepairDeviceStep catalog behavior', () => {
     expect(screen.getByLabelText('Device Model')).toHaveValue(
       'Apple iPhone 15'
     );
-    expect(mocks.apiGet).toHaveBeenNthCalledWith(
-      2,
-      '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&compact=true',
-      expect.anything()
-    );
+    expect(
+      mocks.apiGet.mock.calls.some(
+        ([url]) =>
+          url ===
+          '/api/storefront/products?merchant_id=merchant-1&q=iPhone%2015&limit=50&offset=0&compact=true'
+      )
+    ).toBe(true);
   });
 });

@@ -193,6 +193,7 @@ describe('owner onboarding reminder API', () => {
       400
     );
     expect(upsert).not.toHaveBeenCalled();
+    expect(mocks.merchant).not.toHaveBeenCalled();
   });
   it('snoozes only the authenticated owner and rejects CSRF before mutation', async () => {
     const { PATCH } = await import('./route');

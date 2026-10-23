@@ -77,6 +77,8 @@ Only confirmed, non-deleted/non-banned owners whose merchant still belongs to th
 original owner are eligible. Home page and domain provisioning must exist.
 Published stores stop receiving follow-ups. Preferences and current launch facts
 are checked again before dispatch. A database claim prevents concurrent sends;
+the global delivery flag is separate from a merchant's preference. A global
+pause returns claimed work to pending; a merchant opt-out skips the stage.
 a 24-hour cap applies across the journey. A stage is sent once at most; the
 provider reference is a reconciliation aid, not provider-side idempotency.
 
@@ -107,7 +109,7 @@ this public route. Tokens and email addresses must not be logged.
 1. Inspect provider automations/templates/lists and record which system owns
    each merchant journey. Reuse or disable the competing path before activation.
 2. Run local regression/SQL checks and required code reviews. Apply only the new
-   email and in-app reminder migrations; do not replay historical migrations
+   email, in-app reminder and delivery-pause migrations; do not replay historical migrations
    against production. The in-app table must exist before deploying its web UI.
 3. Deploy the old `send-welcome-email` endpoint as the inert HTTP 410 implementation
    with JWT verification enabled. Verify it cannot send mail. The migration retires
@@ -139,6 +141,7 @@ Campaigns ownership/subscriptions before extending those journeys.
 Vitest: `pnpm --filter @baci/web exec vitest run src/lib/onboarding-emails`.
 The SQL fixture requires a disposable PostgreSQL 17 instance and isolated roles:
 apply `supabase/tests/merchant_onboarding_email_fixture.sql`, the new migration,
+then `20261023131010_merchant_onboarding_delivery_pause.sql`,
 then `supabase/tests/merchant_onboarding_email.sql` with `ON_ERROR_STOP=1`.
 Never run the fixture against Supabase or any production database.
 
@@ -147,3 +150,5 @@ For combined regression coverage, apply the email fixture, then
 migrations, the email assertions, and finally
 `supabase/tests/merchant_onboarding_in_app_reminders.sql`. The additional fixture
 supplies the local auth identity function and a second owner for RLS isolation.
+Apply the delivery-pause migration before running the email assertions in either
+fixture setup.

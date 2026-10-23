@@ -10,6 +10,7 @@ it('uses the same enable-payment action as dashboard readiness when a configured
     business_name: 'Store',
     confirmed: true,
     enabled: true,
+    delivery_enabled: true,
     reply_to: 'help@example.com',
     opt_out_token: '30000000-0000-4000-8000-000000000001',
     is_published: false,

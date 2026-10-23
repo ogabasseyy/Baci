@@ -18,6 +18,7 @@ export function toOnboardingContext(
   return {
     confirmed: context.confirmed,
     enabled: context.enabled,
+    deliveryEnabled: context.delivery_enabled,
     isPublished: context.is_published,
     provisioned: context.provisioned,
     facts: {

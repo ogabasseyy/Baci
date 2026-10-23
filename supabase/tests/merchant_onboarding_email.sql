@@ -15,6 +15,12 @@ RESET ROLE;
 UPDATE public.merchant_onboarding_email_control SET enabled=true,provider_inventory_checked_at=now(),provider_inventory_evidence='Local fixture: no competing automation',support_reply_to='help@example.com';
 INSERT INTO public.page_configs VALUES('20000000-0000-4000-8000-000000000002','home');
 INSERT INTO public.domains VALUES('20000000-0000-4000-8000-000000000002');
+UPDATE public.merchant_onboarding_email_control SET enabled=false;
+DO $$ DECLARE context jsonb; BEGIN
+ context := public.get_merchant_onboarding_email_context('20000000-0000-4000-8000-000000000002');
+ IF (context->>'enabled')::boolean IS DISTINCT FROM true OR (context->>'delivery_enabled')::boolean IS DISTINCT FROM false THEN RAISE EXCEPTION 'global pause conflated with merchant optout'; END IF;
+END $$;
+UPDATE public.merchant_onboarding_email_control SET enabled=true;
 UPDATE public.merchant_onboarding_email_jobs SET due_at=now()-interval '1 minute';
 SET ROLE service_role;
 DO $$ DECLARE a public.merchant_onboarding_email_jobs; b public.merchant_onboarding_email_jobs; BEGIN

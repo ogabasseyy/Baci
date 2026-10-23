@@ -17,7 +17,10 @@ function failure(message: string, status: number) {
   return NextResponse.json({ error: message }, { status, headers });
 }
 
-async function authorize(request: NextRequest) {
+async function authorize(
+  request: NextRequest,
+  options: { snooze?: boolean } = {}
+) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase) {
     return { response: failure('Unauthorized', 401) };
@@ -26,6 +29,15 @@ async function authorize(request: NextRequest) {
     merchantId: request.nextUrl.searchParams.get('merchantId'),
   });
   if (!query.success) return { response: failure('Invalid merchant', 400) };
+  if (options.snooze) {
+    const csrf = await checkCsrfProtection(request);
+    if (!csrf.valid)
+      return { response: failure('CSRF validation failed', 403) };
+    const body: unknown = await request.json().catch(() => null);
+    if (!onboardingReminderSnoozeSchema.safeParse(body).success) {
+      return { response: failure('Invalid reminder action', 400) };
+    }
+  }
   const merchant = await getMerchantForApiRequest(auth.supabase, auth.user.id, {
     requestedMerchantId: query.data.merchantId,
   });
@@ -95,14 +107,8 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const context = await authorize(request);
+    const context = await authorize(request, { snooze: true });
     if (context.response) return context.response;
-    const csrf = await checkCsrfProtection(request);
-    if (!csrf.valid) return failure('CSRF validation failed', 403);
-    const body: unknown = await request.json().catch(() => null);
-    if (!onboardingReminderSnoozeSchema.safeParse(body).success) {
-      return failure('Invalid reminder action', 400);
-    }
     const result = await context.supabase
       .from('merchant_onboarding_reminder_state')
       .upsert(

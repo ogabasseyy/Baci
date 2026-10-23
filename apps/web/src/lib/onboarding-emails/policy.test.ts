@@ -23,6 +23,7 @@ const facts = {
 const context = {
   confirmed: true,
   enabled: true,
+  deliveryEnabled: true,
   isPublished: false,
   provisioned: true,
   facts,

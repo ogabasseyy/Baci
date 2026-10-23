@@ -14,6 +14,7 @@ const context: JourneyContext = {
   business_name: 'A store',
   confirmed: true,
   enabled: true,
+  delivery_enabled: true,
   reply_to: 'help@usebaci.com',
   opt_out_token: 'token',
   is_published: false,
@@ -46,6 +47,29 @@ function fixture() {
   return { repo, send };
 }
 describe('onboarding email worker', () => {
+  it('keeps a claimed stage pending when global delivery is paused', async () => {
+    const { repo, send } = fixture();
+    vi.mocked(repo.context).mockResolvedValue({
+      ...context,
+      delivery_enabled: false,
+    });
+    await processOnboardingEmailBatch(repo, send, 'https://usebaci.com');
+    expect(send).not.toHaveBeenCalled();
+    expect(repo.finish).toHaveBeenCalledWith(
+      job,
+      'pending',
+      'waiting_for_setup'
+    );
+  });
+  it('keeps a stage pending when global delivery pauses before transport', async () => {
+    const { repo, send } = fixture();
+    vi.mocked(repo.context)
+      .mockResolvedValueOnce(context)
+      .mockResolvedValue({ ...context, delivery_enabled: false });
+    await processOnboardingEmailBatch(repo, send, 'https://usebaci.com');
+    expect(repo.beginDispatch).not.toHaveBeenCalled();
+    expect(repo.finish).toHaveBeenCalledWith(job, 'pending', 'state_changed');
+  });
   it('audits platform mail with a durable claim before dispatch', async () => {
     const { repo, send } = fixture();
     expect(

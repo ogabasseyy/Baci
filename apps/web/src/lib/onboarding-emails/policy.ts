@@ -11,6 +11,7 @@ export type OnboardingDecision =
 export interface OnboardingContext {
   confirmed: boolean;
   enabled: boolean;
+  deliveryEnabled: boolean;
   isPublished: boolean;
   provisioned: boolean;
   facts: StoreLaunchFacts;
@@ -21,7 +22,8 @@ export function decideOnboardingEmail(
 ): OnboardingDecision {
   if (!context.enabled || (stage !== 'welcome' && context.isPublished))
     return { kind: 'skip' };
-  if (!context.confirmed || !context.provisioned) return { kind: 'defer' };
+  if (!context.deliveryEnabled || !context.confirmed || !context.provisioned)
+    return { kind: 'defer' };
   const readiness = buildStoreLaunchReadiness(context.facts);
   const next = readiness.items.find(
     (item) => item.priority === 'required' && !item.completed

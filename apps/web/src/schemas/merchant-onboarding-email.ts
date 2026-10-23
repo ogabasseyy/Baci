@@ -18,6 +18,7 @@ export const journeyContextSchema = z.object({
   business_name: z.string(),
   confirmed: z.boolean(),
   enabled: z.boolean(),
+  delivery_enabled: z.boolean(),
   reply_to: z.email().nullable(),
   opt_out_token: z.uuid(),
   is_published: z.boolean(),

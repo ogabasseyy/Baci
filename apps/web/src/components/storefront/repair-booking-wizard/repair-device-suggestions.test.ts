@@ -43,7 +43,7 @@ describe('repair device product suggestions', () => {
     }
   });
 
-  it('maps standalone console catalog categories to repair consoles', () => {
+  it('maps console and wearable catalog categories to repair device types', () => {
     for (const category of ['Console', 'Consoles', 'Game Consoles']) {
       expect(
         toStoreProductSuggestion({
@@ -52,6 +52,16 @@ describe('repair device product suggestions', () => {
           category,
         })
       ).toMatchObject({ deviceType: 'Console' });
+    }
+
+    for (const category of ['Wearable', 'Wearables']) {
+      expect(
+        toStoreProductSuggestion({
+          id: category,
+          name: 'Apple Watch Series 10',
+          category,
+        })
+      ).toMatchObject({ deviceType: 'Smartwatch' });
     }
   });
 });

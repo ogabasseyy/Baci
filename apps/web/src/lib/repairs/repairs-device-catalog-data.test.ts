@@ -154,6 +154,45 @@ describe('getRepairDevicesForMerchant', () => {
     );
   });
 
+  it('skips invalid leading product images and uses the next valid image', async () => {
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient({
+        repair_devices: {
+          data: [
+            {
+              id: 'd1',
+              brand: 'Apple',
+              model: 'iPhone 15',
+              slug: 'iphone-15',
+              product_id: 'p1',
+              image_url: null,
+            },
+          ],
+          error: null,
+        },
+        products: {
+          data: [
+            {
+              id: 'p1',
+              images: [
+                { url: ' ' },
+                'javascript:alert(1)',
+                { url: 'https://cdn.example.com/iphone-15-valid.jpg' },
+              ],
+            },
+          ],
+          error: null,
+        },
+      })
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+
+    expect(groups[0]?.devices[0]?.imageUrl).toBe(
+      'https://cdn.example.com/iphone-15-valid.jpg'
+    );
+  });
+
   it('filters matching devices before looking up linked product images', async () => {
     const productLookups: string[][] = [];
     mocks.getPublicSupabaseClient.mockReturnValue(

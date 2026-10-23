@@ -244,4 +244,50 @@ describe('useGamingSelectionPreview', () => {
     expect(fetchWithCsrf).toHaveBeenCalledOnce();
     expect(pageFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('reuses the cached preview after another tab clears the mounted retry state', async () => {
+    const merchantId = 'merchant-mounted-cross-tab';
+    const selectionKey = gamingSelectionPreviewCache.key(
+      merchantId,
+      'gaming-category'
+    );
+    const uncertaintyKey = `jumia-gaming-preview-uncertain:${merchantId}`;
+    mockCategoryRange.mockResolvedValue({ data: [], error: null });
+    gamingSelectionPreviewCache.markUncertainCreation(merchantId);
+    gamingSelectionPreviewCache.write(selectionKey, {
+      selectionId,
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json({
+          selectionId,
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      )
+    );
+    const { result } = renderHook(() => useGamingSelectionPreview(merchantId));
+
+    await waitFor(() =>
+      expect(result.current.creationOutcomeUnknown).toBe(true)
+    );
+    act(() => {
+      localStorage.removeItem(uncertaintyKey);
+      window.dispatchEvent(
+        new StorageEvent('storage', { key: uncertaintyKey, newValue: null })
+      );
+    });
+    await waitFor(() =>
+      expect(result.current.creationOutcomeUnknown).toBe(false)
+    );
+    await act(async () => result.current.createPreview('create'));
+
+    expect(fetchWithCsrf).not.toHaveBeenCalled();
+    expect(result.current.snapshot?.selectionId).toBe(selectionId);
+  });
 });

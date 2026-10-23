@@ -11,25 +11,19 @@ import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 import { useGamingSelectionPreviewGeneration } from './use-gaming-selection-preview-generation';
 
 type PreviewCreationAction = 'create' | 'refresh' | 'retry';
+type MerchantValue<T> = { merchantId: string; value: T };
 
 export function useGamingSelectionPreview(merchantId: string) {
   const currentMerchantRef = useGamingSelectionPreviewGeneration(merchantId);
-  const [snapshotState, setSnapshotState] = useState<{
-    merchantId: string;
-    value: JumiaProductExportEligiblePage;
-  } | null>(null);
-  const [loadingState, setLoadingState] = useState<{
-    merchantId: string;
-    value: boolean;
-  } | null>(null);
-  const [errorState, setErrorState] = useState<{
-    merchantId: string;
-    value: string | null;
-  } | null>(null);
-  const [creationState, setCreationState] = useState<{
-    merchantId: string;
-    value: boolean;
-  } | null>(null);
+  const [snapshotState, setSnapshotState] =
+    useState<MerchantValue<JumiaProductExportEligiblePage> | null>(null);
+  const [loadingState, setLoadingState] =
+    useState<MerchantValue<boolean> | null>(null);
+  const [errorState, setErrorState] = useState<MerchantValue<
+    string | null
+  > | null>(null);
+  const [creationState, setCreationState] =
+    useState<MerchantValue<boolean> | null>(null);
   const snapshot =
     snapshotState?.merchantId === merchantId ? snapshotState.value : null;
   const loading = loadingState?.merchantId === merchantId && loadingState.value;
@@ -77,6 +71,15 @@ export function useGamingSelectionPreview(merchantId: string) {
       value: gamingSelectionPreviewCache.hasUncertainCreation(merchantId),
     });
   }, [merchantId]);
+
+  useEffect(
+    () =>
+      gamingSelectionPreviewCache.subscribeToUncertainCreationClear(
+        merchantId,
+        () => setCreationState({ merchantId, value: false })
+      ),
+    [merchantId]
+  );
 
   const loadPage = async (
     owner: string,

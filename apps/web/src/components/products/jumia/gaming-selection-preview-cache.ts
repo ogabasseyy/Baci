@@ -1,7 +1,8 @@
+import { gamingSelectionPreviewErrors } from './gaming-selection-preview-errors';
+
 type CachedSelection = { selectionId: string; expiresAt: string };
 
 type CacheEntry = { cacheKey: string; selection: CachedSelection };
-type PreviewRequestError = Error & { status: number };
 
 const CACHE_PREFIX = 'jumia-gaming-preview:';
 const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
@@ -26,20 +27,25 @@ if (typeof window !== 'undefined') {
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isSelectionId(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value);
-}
-
 function createCacheKey(merchantId: string, categoryId: string) {
   return `${CACHE_PREFIX}${merchantId}:${categoryId}`;
 }
 
 function uncertainCreationKey(merchantId: string) {
   return `${UNCERTAIN_CREATION_PREFIX}${merchantId}`;
+}
+
+function subscribeToUncertainCreationClear(
+  merchantId: string,
+  onClear: () => void
+) {
+  if (typeof window === 'undefined') return () => undefined;
+  const key = uncertainCreationKey(merchantId);
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === key && event.newValue === null) onClear();
+  };
+  window.addEventListener('storage', handleStorage);
+  return () => window.removeEventListener('storage', handleStorage);
 }
 
 function readCreationLease(merchantId: string) {
@@ -165,7 +171,7 @@ function readCachedSelection(cacheKey: string): CachedSelection | null {
   try {
     const value: unknown = JSON.parse(stored);
     if (
-      isRecord(value) &&
+      gamingSelectionPreviewErrors.isRecord(value) &&
       typeof value.selectionId === 'string' &&
       UUID_PATTERN.test(value.selectionId) &&
       typeof value.expiresAt === 'string' &&
@@ -213,7 +219,7 @@ async function loadFirstValidCachedSelection(
       await load(entry.selection.selectionId);
       return true;
     } catch (cause) {
-      if (!isRejectedCachedSelection(cause)) throw cause;
+      if (!gamingSelectionPreviewErrors.isRejected(cause)) throw cause;
       removeCachedSelection(entry.cacheKey);
     }
   }
@@ -234,7 +240,7 @@ async function loadFirstValidCachedSelectionForCategories(
       await load(entry.selection.selectionId);
       return true;
     } catch (cause) {
-      if (!isRejectedCachedSelection(cause)) throw cause;
+      if (!gamingSelectionPreviewErrors.isRejected(cause)) throw cause;
       removeCachedSelection(entry.cacheKey);
     }
   }
@@ -264,27 +270,10 @@ function writeCachedSelection(cacheKey: string, selection: CachedSelection) {
   }
 }
 
-function makePreviewRequestError(status: number, message: string) {
-  return Object.assign(new Error(message), { status }) as PreviewRequestError;
-}
-
-function makeInvalidPageResponseError() {
-  return makePreviewRequestError(
-    422,
-    'Unable to read the Gaming preview. Please create it again.'
-  );
-}
-
-function errorMessage(cause: unknown, fallback: string) {
-  return cause instanceof Error ? cause.message : fallback;
-}
-
-function isRejectedCachedSelection(cause: unknown) {
-  return isRecord(cause) && (cause.status === 410 || cause.status === 422);
-}
-
 export const gamingSelectionPreviewCache = {
+  ...gamingSelectionPreviewErrors,
   clearUncertainCreation,
+  subscribeToUncertainCreationClear,
   beginCreation,
   find: findCachedSelection,
   hasUncertainCreation,
@@ -293,12 +282,6 @@ export const gamingSelectionPreviewCache = {
   loadFirstValid: loadFirstValidCachedSelection,
   loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,
   markUncertainCreation,
-  isRecord,
-  isSelectionId,
-  isRejected: isRejectedCachedSelection,
-  errorMessage,
-  makeInvalidPageResponseError,
-  makeRequestError: makePreviewRequestError,
   read: readCachedSelection,
   remove: removeCachedSelection,
   write: writeCachedSelection,

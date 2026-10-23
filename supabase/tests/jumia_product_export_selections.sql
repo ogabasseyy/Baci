@@ -3,7 +3,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
-SELECT plan(12);
+SELECT plan(13);
 SELECT pg_catalog.set_config(
   'request.jwt.claims',
   '{"role":"service_role","sub":"00000000-0000-0000-0000-000000000000"}',
@@ -313,7 +313,7 @@ BEGIN
   ) = v_version THEN
     RAISE EXCEPTION 'product export image change did not alter source version';
   END IF;
-  UPDATE public.products SET status = 'inactive'
+  UPDATE public.products SET status = 'archived'
   WHERE id = '44444444-4444-4444-8444-444444444402';
   INSERT INTO public.products (
     id, merchant_id, name, description, price, status, sku, stock,
@@ -364,6 +364,30 @@ SELECT ok(
       )
   ) AS unavailable_rows),
   'deleted, inactive, and category-moved members remain unavailable without current product payloads'
+);
+RESET ROLE;
+
+UPDATE public.products SET status = NULL
+WHERE id = '44444444-4444-4444-8444-444444444402';
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
+)::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SET LOCAL ROLE authenticated;
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM public.get_jumia_product_export_selection_page(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid, 1, 50
+    ) AS result(page),
+    LATERAL jsonb_array_elements(page->'products') AS product(value)
+    WHERE product.value->>'id' = '44444444-4444-4444-8444-444444444402'
+      AND product.value->>'available' = 'false'
+      AND product.value->>'unavailableReason' = 'inactive'
+      AND product.value->'product' = 'null'::jsonb
+  ),
+  'a nullable non-active status is consistently unavailable without current product payload'
 );
 RESET ROLE;
 

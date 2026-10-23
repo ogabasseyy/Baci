@@ -8,6 +8,11 @@ import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { jumiaProductExportEligibleQuerySchema } from '@/schemas/jumia/product-export-selection';
 
 export async function GET(request: NextRequest) {
+  const auth = await authenticateApiRequest(request);
+  if (auth.error || !auth.user || !auth.supabase) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const parsed = jumiaProductExportEligibleQuerySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams)
   );
@@ -18,10 +23,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   const access = await getUserAccess(auth.supabase);
   if (!access?.merchantId) {
     return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });

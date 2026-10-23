@@ -169,6 +169,25 @@ describe('Jumia Gaming selection API', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
+  it('authenticates eligible queries before returning query validation errors', async () => {
+    mockAuthenticate.mockResolvedValueOnce({
+      user: null,
+      supabase: null,
+      error: new Error('unauthorized'),
+    });
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/marketplace/jumia/products/eligible?selectionId=invalid'
+      )
+    );
+
+    expect(response.status).toBe(401);
+    expect(mockAuthenticate).toHaveBeenCalledOnce();
+    expect(mockGetUserAccess).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it('requires integrations.manage and marketplace_sync for discovery', async () => {
     mockHasPermission.mockReturnValueOnce(false);
     const forbidden = await GET(

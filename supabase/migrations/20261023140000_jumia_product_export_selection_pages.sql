@@ -88,18 +88,19 @@ BEGIN
             v_merchant_id, item.product_id
           )
         END,
-        'available', product.status = 'active'
+        'available', product.status IS NOT DISTINCT FROM 'active'
           AND current_category.id IS NOT NULL
           AND membership.in_source_category,
         'unavailableReason', CASE
           WHEN product.id IS NULL THEN 'deleted'
-          WHEN product.status <> 'active' THEN 'inactive'
+          WHEN product.status IS DISTINCT FROM 'active' THEN 'inactive'
           WHEN current_category.id IS NULL THEN 'category_unavailable'
           WHEN NOT membership.in_source_category THEN 'category_changed'
           ELSE NULL
         END,
         'product', CASE
-          WHEN product.status = 'active' AND current_category.id IS NOT NULL
+          WHEN product.status IS NOT DISTINCT FROM 'active'
+            AND current_category.id IS NOT NULL
             AND membership.in_source_category
           THEN private.jumia_product_export_source_projection_v1(
             v_merchant_id, item.product_id

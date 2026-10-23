@@ -7,6 +7,6 @@ export const EXPECTED_JUMIA_PRODUCT_EXPORT_SELECTION_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261023140000_jumia_product_export_selection_pages.sql',
-    sha256: '448896cacfbf8048b93b12db665e3526b98423bffc43f95c55bc079d84db7703',
+    sha256: '03d348a52bb523dae8cf932c075086fd0f271a5ac4c341a61b14ebb7b0a80de4',
   },
 ];

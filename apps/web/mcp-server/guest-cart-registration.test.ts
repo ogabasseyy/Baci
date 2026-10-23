@@ -154,9 +154,10 @@ it.each([false, true])('discovers one cart workflow for OAuth connection=%s', as
   const client = new Client({ name: 'cart-discovery-client', version: '1.0.0' });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   const resolveToken = vi.fn(async () => 'a'.repeat(64));
+  const { supabase } = createFakeGuestCartSupabase();
   registerConfiguredGuestCartTool(server, {
-    store: new GuestCartStore(createFakeGuestCartSupabase().supabase),
-    supabase: {} as SupabaseClient,
+    store: new GuestCartStore(supabase),
+    supabase,
     getMerchantId: async () => 'merchant',
     formatPrice: String,
     ...(connected ? { connectionCart: { resolveToken } } : {}),

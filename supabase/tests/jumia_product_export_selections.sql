@@ -3,7 +3,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET LOCAL search_path = public, extensions;
-SELECT plan(9);
+SELECT plan(13);
 SELECT pg_catalog.set_config(
   'request.jwt.claims',
   '{"role":"service_role","sub":"00000000-0000-0000-0000-000000000000"}',
@@ -63,11 +63,13 @@ INSERT INTO public.products (
   ('44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222201', 'Linked headset', 'Headset', 22000, 'active', 'HEAD-1', 7, 7, true, false, 'Audio', NULL, '[]'::jsonb),
   ('44444444-4444-4444-8444-444444444403', '22222222-2222-4222-8222-222222222201', 'Dual listed console', 'Console', 90000, 'active', 'CONSOLE-1', 3, 3, true, true, 'Gaming', '33333333-3333-4333-8333-333333333301', '["https://assets.example.test/export.jpg"]'::jsonb),
   ('44444444-4444-4444-8444-444444444404', '22222222-2222-4222-8222-222222222201', 'Draft console', 'Draft', 50000, 'draft', 'DRAFT-1', 1, 1, true, false, 'Gaming', '33333333-3333-4333-8333-333333333301', '[]'::jsonb),
-  ('44444444-4444-4444-8444-444444444405', '22222222-2222-4222-8222-222222222201', 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb);
+  ('44444444-4444-4444-8444-444444444405', '22222222-2222-4222-8222-222222222201', 'Legacy label only', 'Legacy', 5000, 'active', 'LEGACY-1', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb),
+  ('44444444-4444-4444-8444-444444444407', '22222222-2222-4222-8222-222222222201', 'Legacy with other category', 'Legacy', 6000, 'active', 'LEGACY-2', 1, 1, true, false, 'Gaming', NULL, '[]'::jsonb);
 
 INSERT INTO public.product_categories (id, product_id, category_id, is_primary) VALUES
   ('55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444402', '33333333-3333-4333-8333-333333333301', true),
-  ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444403', '33333333-3333-4333-8333-333333333301', false);
+  ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444403', '33333333-3333-4333-8333-333333333301', false),
+  ('55555555-5555-4555-8555-555555555503', '44444444-4444-4444-8444-444444444407', '33333333-3333-4333-8333-333333333302', false);
 
 INSERT INTO public.product_variants (
   id, product_id, merchant_id, attributes, sku, stock_quantity, price_override,
@@ -101,8 +103,10 @@ SELECT ok(
   AND has_function_privilege('authenticated', 'public.create_jumia_product_export_selection(uuid,uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'private.jumia_product_export_source_projection_v1(uuid,uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'private.jumia_product_export_source_version_v1(uuid,uuid)', 'EXECUTE')
-  AND NOT has_function_privilege('authenticated', 'private.merchant_has_marketplace_sync_v1(uuid,timestamp with time zone)', 'EXECUTE'),
-  'only authenticated callers can invoke the guarded snapshot RPC, not private helpers'
+  AND NOT has_function_privilege('authenticated', 'private.merchant_has_marketplace_sync_v1(uuid,timestamp with time zone)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.get_jumia_product_export_selection_page(uuid,integer,integer)', 'EXECUTE')
+  AND has_function_privilege('authenticated', 'public.get_jumia_product_export_selection_page(uuid,integer,integer)', 'EXECUTE'),
+  'only authenticated callers can invoke guarded RPCs, not private projection helpers'
 );
 
 SELECT is(
@@ -171,6 +175,25 @@ BEGIN
   IF v_selection.expires_at <= v_selection.captured_at THEN
     RAISE EXCEPTION 'snapshot expiry must follow capture';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.get_jumia_product_export_selection_page(
+      v_selection.selection_id, 2, 2
+    ) AS result(page)
+    WHERE page->>'selectionId' = v_selection.selection_id::text
+      AND page->>'total' = '3'
+      AND page->>'page' = '2'
+      AND page->>'limit' = '2'
+      AND page->>'totalPages' = '2'
+      AND jsonb_array_length(page->'products') = 1
+      AND page->'products'->0->>'id' = '44444444-4444-4444-8444-444444444403'
+      AND page->'products'->0->>'available' = 'true'
+      AND page->'products'->0->'product'->'product'->>'name' = 'Dual listed console'
+      AND page->>'legacyUnmappedCount' = '2'
+  ) THEN
+    RAISE EXCEPTION 'page RPC did not return the expected stable second page and canonical source projection';
+  END IF;
+  PERFORM pg_catalog.set_config('test.jumia_selection_id', v_selection.selection_id::text, true);
   BEGIN
     PERFORM public.create_jumia_product_export_selection(
       '22222222-2222-4222-8222-222222222201',
@@ -290,6 +313,8 @@ BEGIN
   ) = v_version THEN
     RAISE EXCEPTION 'product export image change did not alter source version';
   END IF;
+  UPDATE public.products SET status = 'archived'
+  WHERE id = '44444444-4444-4444-8444-444444444402';
   INSERT INTO public.products (
     id, merchant_id, name, description, price, status, sku, stock,
     stock_quantity, manage_stock, has_variants, category, category_id
@@ -312,6 +337,82 @@ BEGIN
 END;
 $source_versions$;
 SELECT ok(true, 'capture freezes exact membership and source versions while later catalog changes remain detectable');
+SELECT ok(true, 'eligible page hydration uses the frozen ordinal, current safe projection, and separate legacy count');
+
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
+)::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SET LOCAL ROLE authenticated;
+SELECT ok(
+  (SELECT count(*) = 3 FROM (
+    SELECT product.value
+    FROM public.get_jumia_product_export_selection_page(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid, 1, 50
+    ) AS result(page),
+    LATERAL jsonb_array_elements(page->'products') AS product(value)
+    WHERE product.value->>'available' = 'false'
+      AND product.value->'product' = 'null'::jsonb
+      AND (
+        (product.value->>'id' = '44444444-4444-4444-8444-444444444401'
+          AND product.value->>'unavailableReason' = 'deleted')
+        OR (product.value->>'id' = '44444444-4444-4444-8444-444444444402'
+          AND product.value->>'unavailableReason' = 'inactive')
+        OR (product.value->>'id' = '44444444-4444-4444-8444-444444444403'
+          AND product.value->>'unavailableReason' = 'category_changed')
+      )
+  ) AS unavailable_rows),
+  'deleted, inactive, and category-moved members remain unavailable without current product payloads'
+);
+RESET ROLE;
+
+UPDATE public.products SET status = NULL
+WHERE id = '44444444-4444-4444-8444-444444444402';
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
+)::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SET LOCAL ROLE authenticated;
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM public.get_jumia_product_export_selection_page(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid, 1, 50
+    ) AS result(page),
+    LATERAL jsonb_array_elements(page->'products') AS product(value)
+    WHERE product.value->>'id' = '44444444-4444-4444-8444-444444444402'
+      AND product.value->>'available' = 'false'
+      AND product.value->>'unavailableReason' = 'inactive'
+      AND product.value->'product' = 'null'::jsonb
+  ),
+  'a nullable non-active status is consistently unavailable without current product payload'
+);
+RESET ROLE;
+
+UPDATE public.categories SET is_active = false
+WHERE id = '33333333-3333-4333-8333-333333333301';
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111101'
+)::text, true);
+SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111101', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SET LOCAL ROLE authenticated;
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM public.get_jumia_product_export_selection_page(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid, 1, 50
+    ) AS result(page),
+    LATERAL jsonb_array_elements(page->'products') AS product(value)
+    WHERE product.value->>'id' = '44444444-4444-4444-8444-444444444403'
+      AND product.value->>'unavailableReason' = 'category_unavailable'
+      AND product.value->'product' = 'null'::jsonb
+  ),
+  'a deactivated Gaming category blocks publishing and hides current source data'
+);
+RESET ROLE;
 
 SELECT set_config('request.jwt.claims', jsonb_build_object(
   'role', 'authenticated', 'sub', '11111111-1111-4111-8111-111111111102'
@@ -337,6 +438,13 @@ BEGIN
       '33333333-3333-4333-8333-333333333301'
     );
     RAISE EXCEPTION 'cross-merchant selection creation was accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM public.get_jumia_product_export_selection_page(
+      pg_catalog.current_setting('test.jumia_selection_id')::uuid, 1, 50
+    );
+    RAISE EXCEPTION 'cross-merchant selection page was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN

@@ -115,6 +115,11 @@ describe('RepairBookingWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMotionInitialValues.length = 0;
+    mockApiGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes('/repairs/devices') ? { groups: [] } : { products: [] }
+      )
+    );
   });
 
   it('renders the free-text device form by default (no preselection)', () => {

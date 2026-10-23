@@ -67,7 +67,7 @@ const defaultLedgers: CredentialReaderLedgers = {
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     // Refreshed after adding server-only Places/Redis/KV config; credential readers are unchanged.
     'apps/web/src/env.ts':
-      'ce5f8b316a4eb09f65208e7a74163381ebcbcf9f6a5d61f0d167339494c1b121',
+      '6755cbbfbb4fd310512f5d377aade449d6f0c00c16755369a7d7403710c4b8f3',
     // Reviewed private-draft input parsing only (8a1c4cd48a); credential reads
     // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':

@@ -154,9 +154,14 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 
 ## Available Tools
 
+OAuth-connected callers discover the persistent cart update/read tools. They do
+not discover or invoke `prepare_storefront_cart_link` or `add_to_cart`: those
+stateless legacy tools remain available only on the anonymous connection.
+
 | Tool | Description |
 |------|-------------|
 | `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
+| `get_ogabassey_guest_cart` | Read the OAuth connection’s persistent guest cart (connected callers only) |
 | `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
 | `add_to_cart` | Deprecated alias of `prepare_storefront_cart_link` for cached tool lists |
 | `render_ogabassey_catalog` | Display selected products after a search or product lookup |
@@ -184,7 +189,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `update_ucp_cart` | Replace UCP cart line items or fulfillment context |
 
 Rollout note: `prepare_storefront_cart_link` was renamed from `add_to_cart`;
-the old name stays registered as a deprecated alias on the same handler, so
+the old name stays registered for anonymous callers as a deprecated alias on the same handler, so
 callers with a cached `tools/list` entry or a hardcoded tool name keep working
 while they refresh tool discovery.
 

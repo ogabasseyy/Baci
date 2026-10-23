@@ -28,7 +28,6 @@ import { GuestCartStore } from './guest-cart-store';
 import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
-import { registerCartLinkTools } from './cart-link-tool';
 import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
@@ -1366,8 +1365,6 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
   );
 
   registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp, connectionCart: options.connectionCart });
-
-  registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {

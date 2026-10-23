@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-23T15:49:27.178174+00:00",
-  "source_revision": "1d05c8fb24ec6be788ec50d370c3bdfa0e2fa0d3",
-  "evidence_digest": "2bc719a94ca3a04d9e3507a62469811d4e3410ada2174b818b81d296be8ac5e7",
-  "claims_digest": "c941a051fb83c4f1618279e5ffb0c55755f18e5b90d6afe7b37f7d48ecb37855",
-  "review_scope": "Source audit only; not deployment proof. OAuth PKCE, encrypted tenant grants and 30s refresh receipts; catalogs recheck quantity; expired workers fail readiness. Resource HTTPS discovery rejects reserved paths; independent consent cookies. Admission 600/5min; 2,000 retained grants/tenant. New endpoint authorized but undeployed; original MCP preserved. Historical isolated add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh probe required before fleet membership. Text continuation off; privacy/retention unqualified. Offers merchant-scoped, published, selected and capped; PDP policy, RPC factory, chunk/outage recovery and case-normalized detail IDs audited. Onboarding payment readiness recognizes raw subaccount or derived configuration when Paystack is disabled. Checkout eligibility and provider activation claims unchanged.",
+  "reviewed_at": "2026-10-23T16:50:21.021709+00:00",
+  "source_revision": "e527d1b8bc792002af8d8d7c0525eca40b945bac",
+  "evidence_digest": "1d7bb09b146aa375bfd9dc46abd87421d3b8605912727625d14e6fe984f603e8",
+  "claims_digest": "47585bcf76d32c49a2924af209a6d54b474ffaf36b5b0946fb28d39e285cdb23",
+  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {
       "id": "payments",

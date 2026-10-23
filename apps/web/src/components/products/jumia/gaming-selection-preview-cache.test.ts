@@ -24,6 +24,28 @@ describe('Gaming selection preview cache helpers', () => {
     });
   });
 
+  it('builds a category cache key through the cache facade', () => {
+    expect(gamingSelectionPreviewCache.key('merchant-1', 'category-1')).toBe(
+      'jumia-gaming-preview:merchant-1:category-1'
+    );
+  });
+
+  it('persists and clears the uncertain-creation guard for a merchant', () => {
+    expect(gamingSelectionPreviewCache.hasUncertainCreation('merchant-1')).toBe(
+      false
+    );
+
+    gamingSelectionPreviewCache.markUncertainCreation('merchant-1');
+
+    expect(gamingSelectionPreviewCache.hasUncertainCreation('merchant-1')).toBe(
+      true
+    );
+    gamingSelectionPreviewCache.clearUncertainCreation('merchant-1');
+    expect(gamingSelectionPreviewCache.hasUncertainCreation('merchant-1')).toBe(
+      false
+    );
+  });
+
   it.each([
     ['malformed JSON', '{'],
     [

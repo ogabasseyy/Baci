@@ -4,6 +4,7 @@ type CacheEntry = { cacheKey: string; selection: CachedSelection };
 type PreviewRequestError = Error & { status: number };
 
 const CACHE_PREFIX = 'jumia-gaming-preview:';
+const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -13,6 +14,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSelectionId(value: unknown): value is string {
   return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
+function createCacheKey(merchantId: string, categoryId: string) {
+  return `${CACHE_PREFIX}${merchantId}:${categoryId}`;
+}
+
+function uncertainCreationKey(merchantId: string) {
+  return `${UNCERTAIN_CREATION_PREFIX}${merchantId}`;
+}
+
+function hasUncertainCreation(merchantId: string) {
+  try {
+    return localStorage.getItem(uncertainCreationKey(merchantId)) === 'pending';
+  } catch {
+    return false;
+  }
+}
+
+function markUncertainCreation(merchantId: string) {
+  try {
+    localStorage.setItem(uncertainCreationKey(merchantId), 'pending');
+  } catch {
+    // Keep the in-memory safeguard when browser storage is unavailable.
+  }
+}
+
+function clearUncertainCreation(merchantId: string) {
+  try {
+    localStorage.removeItem(uncertainCreationKey(merchantId));
+  } catch {
+    // Keep the in-memory safeguard when browser storage is unavailable.
+  }
 }
 
 function readCachedSelection(cacheKey: string): CachedSelection | null {
@@ -80,9 +113,7 @@ async function loadFirstValidCachedSelectionForCategories(
   load: (selectionId: string) => Promise<void>
 ) {
   const categoryKeys = new Set(
-    categoryIds.map(
-      (categoryId) => `${CACHE_PREFIX}${merchantId}:${categoryId}`
-    )
+    categoryIds.map((categoryId) => createCacheKey(merchantId, categoryId))
   );
   for (const entry of findCachedSelections(merchantId)) {
     if (!categoryKeys.has(entry.cacheKey)) continue;
@@ -132,9 +163,13 @@ function isRejectedCachedSelection(cause: unknown) {
 }
 
 export const gamingSelectionPreviewCache = {
+  clearUncertainCreation,
   find: findCachedSelection,
+  hasUncertainCreation,
+  key: createCacheKey,
   loadFirstValid: loadFirstValidCachedSelection,
   loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,
+  markUncertainCreation,
   isRecord,
   isSelectionId,
   isRejected: isRejectedCachedSelection,

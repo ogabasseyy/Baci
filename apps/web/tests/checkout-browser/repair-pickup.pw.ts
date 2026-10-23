@@ -25,7 +25,10 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   });
 
   await page.goto('/repair');
-  await page.getByLabel('Device Model').fill('iPhone 15');
+  await page.waitForLoadState('networkidle');
+  const deviceModel = page.getByLabel('Device Model');
+  await deviceModel.fill('iPhone 15');
+  await expect(deviceModel).toHaveValue('iPhone 15');
   const suggestion = page.getByRole('option', {
     name: 'Apple iPhone 15 Smartphone',
   });

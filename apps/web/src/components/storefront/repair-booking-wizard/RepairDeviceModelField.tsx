@@ -182,6 +182,7 @@ export function RepairDeviceModelField({
                       id={`${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${index}`}
                       key={suggestionKey}
                       onClick={() => selectSuggestion(device)}
+                      onMouseDown={(event) => event.preventDefault()}
                       onMouseEnter={() => setActiveSuggestionIndex(index)}
                       role="option"
                       type="button"

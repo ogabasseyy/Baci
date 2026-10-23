@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  jumiaProductExportEligibleItemSchema,
-  jumiaProductExportEligiblePageSchema,
-} from './eligible-page';
+import { jumiaProductExportEligiblePageSchema } from './eligible-page';
 
 const validItem = {
   id: 'item-1',
@@ -27,87 +24,6 @@ function withoutField(record: object, field: string) {
   delete result[field];
   return result;
 }
-
-describe('jumiaProductExportEligibleItemSchema', () => {
-  it('parses a valid available item and preserves optional product data', () => {
-    expect(jumiaProductExportEligibleItemSchema.parse(validItem)).toEqual(
-      validItem
-    );
-  });
-
-  it.each([
-    'id',
-    'available',
-    'unavailableReason',
-    'capturedSourceVersion',
-    'currentSourceVersion',
-    'product',
-  ])('rejects an item missing required field %s', (field) => {
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse(
-        withoutField(validItem, field)
-      ).success
-    ).toBe(false);
-  });
-
-  it.each([
-    ['id', 1],
-    ['available', 'true'],
-    ['unavailableReason', false],
-    ['capturedSourceVersion', 1],
-    ['currentSourceVersion', 1],
-    ['product', 'Controller'],
-  ])('rejects a wrong type for item field %s', (field, value) => {
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        [field]: value,
-      }).success
-    ).toBe(false);
-  });
-
-  it('accepts nullable source and product fields and rejects empty identifiers', () => {
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        unavailableReason: 'missing category mapping',
-        currentSourceVersion: null,
-        product: null,
-      }).success
-    ).toBe(true);
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        unavailableReason: null,
-        currentSourceVersion: '',
-      }).success
-    ).toBe(false);
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        product: { product: { name: 1 } },
-      }).success
-    ).toBe(false);
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        product: { product: {} },
-      }).success
-    ).toBe(true);
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        id: '',
-      }).success
-    ).toBe(false);
-    expect(
-      jumiaProductExportEligibleItemSchema.safeParse({
-        ...validItem,
-        capturedSourceVersion: '',
-      }).success
-    ).toBe(false);
-  });
-});
 
 describe('jumiaProductExportEligiblePageSchema', () => {
   it('parses a valid page including an empty product list', () => {

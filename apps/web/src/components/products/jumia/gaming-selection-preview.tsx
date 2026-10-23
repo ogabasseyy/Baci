@@ -54,7 +54,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
     setSnapshot(parsed.data);
   };
 
-  const createPreview = async () => {
+  const createPreview = async (refresh = false) => {
     setLoading(true);
     setError(null);
     try {
@@ -102,7 +102,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       } catch {
         // Ignore unavailable storage or malformed cached values.
       }
-      if (cachedSelection) {
+      if (cachedSelection && !refresh) {
         await loadPage(cachedSelection.selectionId, 1);
         return;
       }
@@ -186,11 +186,21 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
         <Button
           type="button"
           variant="outline"
-          onClick={createPreview}
+          onClick={() => createPreview()}
           disabled={loading}
         >
           {loading ? 'Loading…' : 'Create Gaming preview'}
         </Button>
+        {snapshot ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => createPreview(true)}
+            disabled={loading}
+          >
+            {loading ? 'Loading…' : 'Refresh preview'}
+          </Button>
+        ) : null}
       </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -224,7 +234,9 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
             {snapshot.products.map((item) => {
               const name =
                 item.product?.product?.name?.trim() ||
-                (item.available ? 'Unnamed product' : 'Unavailable product');
+                (item.available
+                  ? 'Unnamed product'
+                  : `Unavailable product (${item.id})`);
               const reason =
                 item.unavailableReason?.replaceAll('_', ' ') ??
                 'No longer eligible';

@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CatalogRouteLoading from '@/app/(storefront)/[slug]/(catalog)/loading';
+import postcss from 'postcss';
 
 const mocks = vi.hoisted(() => ({
   getOgabasseyBasePath: vi.fn(),
@@ -114,6 +115,24 @@ const merchant = {
 };
 
 describe('OgabasseyStorefrontLayout', () => {
+  it('delivers header geometry with its own template before suspended chrome', () => {
+    shouldSuspendChrome = true;
+    render(
+      <OgabasseyStorefrontLayout merchant={merchant}>
+        <main>Products</main>
+      </OgabasseyStorefrontLayout>
+    );
+    const widths: string[] = [];
+    for (const style of document.querySelectorAll('style'))
+      postcss.parse(style.textContent ?? '').walkRules(
+        '.ogabassey-navbar-search__icon',
+        (rule) => {
+          rule.walkDecls('width', (decl) => { widths.push(decl.value); });
+        }
+      );
+    expect(widths).toEqual(['1.25rem']);
+    expect(screen.getByRole('main')).toHaveTextContent('Products');
+  });
   beforeEach(() => {
     shouldSuspendChrome = false;
     mocks.getOgabasseyBasePath.mockReset();

@@ -1,8 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { createCommittedSnapshotStore } from '@/lib/committed-snapshot-store';
 import type { Product } from '@/lib/products';
 import { CartContext } from './cart-context';
 import {
@@ -237,6 +238,7 @@ export function StorefrontCartProvider({
     return total + itemTotal + assuranceCost;
   }, 0);
 
+  const hydrated = delegated ? shared.isHydrated : isHydrated;
   const value: CartContextType = {
     cart: delegated ? shared.cart : cart,
     merchantSlug,
@@ -262,7 +264,8 @@ export function StorefrontCartProvider({
     showUpsell: enableSmartCartPro ? showUpsell : false,
     dismissUpsell,
     hasSmartCartPro: enableSmartCartPro,
-    isHydrated: delegated ? shared.isHydrated : isHydrated,
+    // Revocation/reset must still fence readiness immediately.
+    isHydrated: hydrated,
     sharedCartEnabled: delegated,
     sharedCartAccountsEnabled: delegated && sharedCartAccountsEnabled,
     ...(delegated
@@ -283,5 +286,15 @@ export function StorefrontCartProvider({
       : {}),
   };
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  const [snapshotStore] = useState(() => createCommittedSnapshotStore(value));
+  // Publish only committed state, before paint. The stable context identity
+  // does not invalidate unrelated, still-dehydrated route boundaries. Mounted
+  // cart consumers subscribe individually; commands keep the urgent lifecycle.
+  useLayoutEffect(() => snapshotStore.publish(value));
+
+  return (
+    <CartContext.Provider value={snapshotStore}>
+      {children}
+    </CartContext.Provider>
+  );
 }

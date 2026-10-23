@@ -9,6 +9,7 @@ import {
   createSafePublicationFetcher,
   type PublicationFetchOptions,
 } from './publication-fetch';
+import { verifyPublicationPresentation } from './publication-presentation';
 import {
   allowedPublicHomePreflight,
   isBoundPublicHomeRpc,
@@ -202,6 +203,14 @@ export async function verifyPublication(
         }
       }
     }
+    if (
+      !(await verifyPublicationPresentation(
+        marker,
+        config.data,
+        input.merchantId
+      ))
+    )
+      return false;
     // Force lazy product images to load in this isolated proof, then wait within the probe budget.
     await marker.locator('img').evaluateAll((nodes) => {
       for (const node of nodes)

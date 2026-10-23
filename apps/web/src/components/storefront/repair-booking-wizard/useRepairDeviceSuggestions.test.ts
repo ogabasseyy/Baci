@@ -41,4 +41,59 @@ describe('useRepairDeviceSuggestions', () => {
     });
     expect(mocks.apiGet).toHaveBeenCalledTimes(2);
   });
+
+  it('hides results from the previous query immediately while the next query debounces', async () => {
+    vi.useFakeTimers();
+    mocks.apiGet
+      .mockResolvedValueOnce({
+        groups: [
+          {
+            brand: 'Apple',
+            devices: [
+              {
+                id: 'device-1',
+                brand: 'Apple',
+                model: 'iPhone 15',
+                slug: 'iphone-15',
+                deviceType: 'Smartphone',
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ groups: [] });
+
+    const { result, rerender } = renderHook(
+      ({ query }) =>
+        useRepairDeviceSuggestions({
+          catalogEnabled: true,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          query,
+          repairCatalogEnabled: true,
+          selectedModel: null,
+        }),
+      { initialProps: { query: 'iPhone 15' } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(result.current.suggestions).toHaveLength(1);
+
+    rerender({ query: 'Galaxy S24' });
+
+    expect(result.current).toMatchObject({
+      hasSearched: false,
+      suggestions: [],
+    });
+    expect(mocks.apiGet).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).toHaveBeenCalledTimes(3);
+  });
 });

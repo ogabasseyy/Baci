@@ -106,6 +106,7 @@ describe('desktop checkout summary visibility', () => {
         walletBalance={2500}
       />
     );
+    expect(resumedHtml).toMatch(/aria-label="Selected variant" class="[^"]*text-gray-500/);
     expect(resumedHtml).toContain('Condition:');
     expect(resumedHtml).toContain('New');
     expect(resumedHtml).toContain('512GB / Physical + eSIM / Silver');

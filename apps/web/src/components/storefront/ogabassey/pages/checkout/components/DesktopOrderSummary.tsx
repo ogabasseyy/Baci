@@ -122,7 +122,8 @@ export function DesktopOrderSummary({
                   <p className="text-sm font-bold text-gray-900 line-clamp-1">
                     {itemName}
                   </p>
-                  <CartVariantDetails item={item.kind === 'cart' ? item : { variantAttributes: {
+                  {/* Match this fixed white card; storefront text can be white in dark themes. */}
+                  <CartVariantDetails className="text-gray-500" item={item.kind === 'cart' ? item : { variantAttributes: {
                     ...(typeof item.condition === 'string' ? { condition: item.condition } : {}),
                     ...(typeof item.variant_name === 'string' ? { variant: item.variant_name } : {}),
                   } }} />

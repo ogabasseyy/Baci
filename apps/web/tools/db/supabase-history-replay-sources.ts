@@ -16,6 +16,7 @@ import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
@@ -262,6 +263,7 @@ const PENDING_SOURCES = [
   EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS,
   FEED_PENDING_REPLAY_SOURCE_ROWS,
   FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS,
+  ONBOARDING_PENDING_REPLAY_SOURCE_ROWS,
   GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS,
   GIGL_WALLET_SHIPPING_PENDING_SOURCES,
   INVENTORY_PENDING_REPLAY_SOURCE_ROWS,

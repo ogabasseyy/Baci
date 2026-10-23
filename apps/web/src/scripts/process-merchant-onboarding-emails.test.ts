@@ -1,0 +1,12 @@
+import { afterEach,expect,it,vi } from 'vitest';
+const mocks=vi.hoisted(()=>({process:vi.fn()}));
+vi.mock('@/env',()=>({getConfiguredAppUrl:()=> 'https://usebaci.com'}));
+vi.mock('@/lib/supabase/service',()=>({createServiceClient:()=> ({})}));
+vi.mock('@/lib/zeptomail',()=>({sendEmail:vi.fn()}));
+vi.mock('@/lib/onboarding-emails/repository',()=>({createJourneyRepository:()=> ({})}));
+vi.mock('@/lib/onboarding-emails/worker',()=>({processOnboardingEmailBatch:mocks.process}));
+import { runMerchantOnboardingEmailsCli } from './process-merchant-onboarding-emails';
+afterEach(()=>vi.restoreAllMocks());
+it('returns success for a disabled empty queue without printing recipients',async()=>{const log=vi.spyOn(console,'log').mockImplementation(()=>undefined);mocks.process.mockResolvedValue({processed:0,accepted:0,unknown:0,failed:0});expect(await runMerchantOnboardingEmailsCli()).toBe(0);expect(JSON.parse(log.mock.calls[0][0])).toEqual({worker:'merchant-onboarding-emails',processed:0,accepted:0,unknown:0,failed:0});});
+it.each([{unknown:1,failed:0},{unknown:0,failed:1}])('alerts for unresolved or failed work %j',async counts=>{vi.spyOn(console,'log').mockImplementation(()=>undefined);mocks.process.mockResolvedValue({processed:1,accepted:0,...counts});expect(await runMerchantOnboardingEmailsCli()).toBe(1);});
+it('does not expose provider secrets when the worker fails',async()=>{const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);mocks.process.mockRejectedValue(Error('private-provider-secret'));expect(await runMerchantOnboardingEmailsCli()).toBe(1);expect(JSON.stringify(error.mock.calls)).not.toContain('private-provider-secret');});

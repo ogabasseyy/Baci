@@ -33,6 +33,7 @@ describe('useGamingSelectionPreview', () => {
     mockCategoryRange.mockReset();
     mockCategoryRange.mockResolvedValue({ data: [], error: null });
     localStorage.clear();
+    gamingSelectionPreviewCache.clearUncertainCreation('merchant-1');
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -52,6 +53,59 @@ describe('useGamingSelectionPreview', () => {
 
     expect(result.current.error).toMatch(/may have created this preview/i);
     expect(fetchWithCsrf).not.toHaveBeenCalled();
+  });
+
+  it('blocks a reopened dialog from posting while creation is still in flight', async () => {
+    mockCategoryRange.mockResolvedValue({
+      data: [{ id: 'gaming-category', name: 'Gaming' }],
+      error: null,
+    });
+    let resolvePost!: (response: Response) => void;
+    vi.mocked(fetchWithCsrf).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePost = resolve;
+      })
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          selectionId,
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      )
+    );
+
+    const first = renderHook(() => useGamingSelectionPreview('merchant-1'));
+    let firstCreation!: Promise<void>;
+    act(() => {
+      firstCreation = first.result.current.createPreview('create');
+    });
+    await waitFor(() => expect(fetchWithCsrf).toHaveBeenCalledOnce());
+    expect(gamingSelectionPreviewCache.hasCreationInFlight('merchant-1')).toBe(
+      true
+    );
+    first.unmount();
+
+    const reopened = renderHook(() => useGamingSelectionPreview('merchant-1'));
+    await act(async () => reopened.result.current.createPreview('create'));
+
+    expect(fetchWithCsrf).toHaveBeenCalledOnce();
+    expect(reopened.result.current.error).toMatch(/already being created/i);
+    resolvePost(
+      Response.json(
+        { selectionId, expiresAt: '2099-01-01T00:00:00.000Z' },
+        { status: 201 }
+      )
+    );
+    await act(async () => firstCreation);
+    expect(gamingSelectionPreviewCache.hasCreationInFlight('merchant-1')).toBe(
+      false
+    );
   });
 
   it('discovers Gaming beyond the first category page and completes pagination', async () => {

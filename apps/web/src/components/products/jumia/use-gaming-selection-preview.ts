@@ -133,6 +133,14 @@ export function useGamingSelectionPreview(merchantId: string) {
     const refresh = action === 'refresh';
     const retryAfterUnreadableResponse = action === 'retry';
     const uncertainCreation = creationOutcomeUnknown;
+    if (gamingSelectionPreviewCache.hasCreationInFlight(owner)) {
+      setErrorForMerchant(
+        owner,
+        generation,
+        jumiaPreviewMessages.creationInFlight
+      );
+      return;
+    }
     if (uncertainCreation && !retryAfterUnreadableResponse) {
       setCreationState({ merchantId: owner, value: true });
       setErrorForMerchant(
@@ -144,6 +152,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     }
     setLoadingForMerchant(owner, generation, true);
     setErrorForMerchant(owner, generation, null);
+    let finishCreation: (() => void) | null = null;
     try {
       const { data: categories, error: categoryError } =
         await fetchMatchingGamingCategories(owner);
@@ -199,6 +208,15 @@ export function useGamingSelectionPreview(merchantId: string) {
         }
       }
       if (!isCurrentMerchant()) return;
+      finishCreation = gamingSelectionPreviewCache.beginCreation(owner);
+      if (!finishCreation) {
+        setErrorForMerchant(
+          owner,
+          generation,
+          jumiaPreviewMessages.creationInFlight
+        );
+        return;
+      }
       let response: Response;
       try {
         response = await fetchWithCsrf(
@@ -253,6 +271,7 @@ export function useGamingSelectionPreview(merchantId: string) {
         )
       );
     } finally {
+      finishCreation?.();
       setLoadingForMerchant(owner, generation, false);
     }
   };

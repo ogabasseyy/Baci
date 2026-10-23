@@ -6,6 +6,8 @@ type PreviewRequestError = Error & { status: number };
 const CACHE_PREFIX = 'jumia-gaming-preview:';
 const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
 const memorySelections = new Map<string, CachedSelection>();
+const uncertainCreations = new Set<string>();
+const inFlightCreations = new Set<string>();
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -26,27 +28,78 @@ function uncertainCreationKey(merchantId: string) {
 }
 
 function hasUncertainCreation(merchantId: string) {
+  if (uncertainCreations.has(merchantId)) return true;
   try {
-    return localStorage.getItem(uncertainCreationKey(merchantId)) === 'pending';
-  } catch {
+    const status = localStorage.getItem(uncertainCreationKey(merchantId));
+    if (status === 'pending') {
+      uncertainCreations.add(merchantId);
+      return true;
+    }
+    if (status === 'in-flight' && !inFlightCreations.has(merchantId)) {
+      markUncertainCreation(merchantId);
+      return true;
+    }
     return false;
+  } catch {
+    return uncertainCreations.has(merchantId);
   }
 }
 
 function markUncertainCreation(merchantId: string) {
+  uncertainCreations.add(merchantId);
   try {
     localStorage.setItem(uncertainCreationKey(merchantId), 'pending');
   } catch {
-    // Keep the in-memory safeguard when browser storage is unavailable.
+    // The in-memory safeguard remains available for this browser session.
   }
 }
 
 function clearUncertainCreation(merchantId: string) {
+  uncertainCreations.delete(merchantId);
   try {
     localStorage.removeItem(uncertainCreationKey(merchantId));
   } catch {
-    // Keep the in-memory safeguard when browser storage is unavailable.
+    // The in-memory safeguard is cleared even when storage is unavailable.
   }
+}
+
+function beginCreation(merchantId: string) {
+  if (inFlightCreations.has(merchantId)) return null;
+  inFlightCreations.add(merchantId);
+  try {
+    localStorage.setItem(uncertainCreationKey(merchantId), 'in-flight');
+  } catch {
+    // Keep the in-flight guard in memory for this browser session.
+  }
+  return () => {
+    inFlightCreations.delete(merchantId);
+    try {
+      const key = uncertainCreationKey(merchantId);
+      if (localStorage.getItem(key) === 'in-flight') {
+        if (uncertainCreations.has(merchantId)) {
+          localStorage.setItem(key, 'pending');
+        } else {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // The in-memory guard is released even when storage is unavailable.
+    }
+  };
+}
+
+function hasCreationInFlight(merchantId: string) {
+  if (inFlightCreations.has(merchantId)) return true;
+  try {
+    if (
+      localStorage.getItem(uncertainCreationKey(merchantId)) === 'in-flight'
+    ) {
+      markUncertainCreation(merchantId);
+    }
+  } catch {
+    // A storage-disabled in-flight request is represented in memory.
+  }
+  return false;
 }
 
 function readCachedSelection(cacheKey: string): CachedSelection | null {
@@ -183,8 +236,10 @@ function isRejectedCachedSelection(cause: unknown) {
 
 export const gamingSelectionPreviewCache = {
   clearUncertainCreation,
+  beginCreation,
   find: findCachedSelection,
   hasUncertainCreation,
+  hasCreationInFlight,
   key: createCacheKey,
   loadFirstValid: loadFirstValidCachedSelection,
   loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,

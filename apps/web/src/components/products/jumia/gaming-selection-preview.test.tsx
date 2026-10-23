@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GamingSelectionPreview } from './gaming-selection-preview';
+import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 const mockFrom = vi.fn();
 function setupGamingCategories(
@@ -31,6 +32,7 @@ describe('GamingSelectionPreview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    gamingSelectionPreviewCache.clearUncertainCreation('merchant-1');
   });
 
   it('requires explicit retry after an ambiguous creation failure', async () => {

@@ -3,7 +3,10 @@ import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
 
 describe('Gaming selection preview cache helpers', () => {
   beforeEach(() => localStorage.clear());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   it('reads an unexpired selection', () => {
     localStorage.setItem(
@@ -44,6 +47,49 @@ describe('Gaming selection preview cache helpers', () => {
     expect(gamingSelectionPreviewCache.hasUncertainCreation('merchant-1')).toBe(
       false
     );
+  });
+
+  it('retains the uncertain-creation guard in memory when storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+
+    gamingSelectionPreviewCache.markUncertainCreation('merchant-memory');
+
+    expect(
+      gamingSelectionPreviewCache.hasUncertainCreation('merchant-memory')
+    ).toBe(true);
+    gamingSelectionPreviewCache.clearUncertainCreation('merchant-memory');
+    expect(
+      gamingSelectionPreviewCache.hasUncertainCreation('merchant-memory')
+    ).toBe(false);
+  });
+
+  it('shares and releases an in-flight creation guard by merchant', async () => {
+    const finish = gamingSelectionPreviewCache.beginCreation('merchant-flight');
+    expect(finish).not.toBeNull();
+    expect(
+      gamingSelectionPreviewCache.beginCreation('merchant-flight')
+    ).toBeNull();
+    expect(
+      gamingSelectionPreviewCache.hasCreationInFlight('merchant-flight')
+    ).toBe(true);
+
+    finish?.();
+
+    expect(
+      gamingSelectionPreviewCache.hasCreationInFlight('merchant-flight')
+    ).toBe(false);
+    const nextFinish =
+      gamingSelectionPreviewCache.beginCreation('merchant-flight');
+    expect(nextFinish).not.toBeNull();
+    nextFinish?.();
   });
 
   it.each([

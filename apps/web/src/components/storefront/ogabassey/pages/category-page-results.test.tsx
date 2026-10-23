@@ -82,6 +82,7 @@ function renderResults(
       totalPages={1}
       pageTitle="Smartphones"
       categoryPath="/test-store/smartphones"
+      {...{ prioritizeFirstRowImages: true }}
       {...overrides}
     />
   );
@@ -90,6 +91,11 @@ function renderResults(
 }
 
 describe('CategoryPageResults', () => {
+  it('does not prioritize images without the verified merchant opt-in', () => {
+    const policy = { prioritizeFirstRowImages: false };
+    renderResults(policy);
+    expect(screen.getByRole('article', { name: 'Phone A' })).toHaveAttribute('data-image-priority', 'false');
+  });
   it.each(['grid', 'list'] as const)('limits eager image candidates to the first %s row', (viewMode) => {
     renderResults({ viewMode, visibleProducts: ['A', 'B', 'C'].map((id) => buildProduct({ id, name: `Phone ${id}` })) });
     expect(screen.getByRole('article', { name: 'Phone A' })).toHaveAttribute('data-image-priority', 'true');

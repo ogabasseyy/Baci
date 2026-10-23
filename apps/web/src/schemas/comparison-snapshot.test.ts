@@ -8,6 +8,25 @@ const snapshot = {
   image: '/phone.jpg',
   description: '',
 };
+it('trims identity fields without weakening finite-number or UUID checks', () => {
+  expect(
+    comparisonSnapshotSchema.parse({
+      ...snapshot,
+      id: ' p1 ',
+      name: ' Phone ',
+      rawPrice: 0,
+    })
+  ).toEqual({ ...snapshot, rawPrice: 0 });
+  for (const input of [
+    { ...snapshot, id: '   ' },
+    { ...snapshot, name: '   ' },
+    { ...snapshot, id: Number.NaN },
+    { ...snapshot, rawPrice: Number.POSITIVE_INFINITY },
+    { ...snapshot, rawPrice: Number.NEGATIVE_INFINITY },
+    { ...snapshot, categories: { id: null, name: 'Phones' } },
+  ])
+    expect(comparisonSnapshotSchema.safeParse(input).success).toBe(false);
+});
 it('keeps safe fallback fields and drops unvalidated fields', () => {
   expect(
     comparisonSnapshotSchema.parse({

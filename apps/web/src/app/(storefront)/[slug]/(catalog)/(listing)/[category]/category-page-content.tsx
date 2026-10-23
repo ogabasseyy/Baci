@@ -240,6 +240,7 @@ export async function CategoryPageContent({
 
       <V2ComparisonScope storageNamespace={merchant.id}>
         <OgabasseyCategoryPage
+          prioritizeFirstRowImages={merchant.slug === 'ogabassey'}
           hubSections={<CategoryHubSections hub={hubContent} />}
           hubSlug={resolveCarriedHubSlug({
             graphicsOptions,

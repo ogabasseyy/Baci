@@ -79,6 +79,7 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     products,
     paginationBasePath,
     hubSlug,
+    prioritizeFirstRowImages,
   }: {
     currentPage?: number;
     graphicsOptions?: string[];
@@ -88,8 +89,12 @@ vi.mock('@/components/storefront/ogabassey/pages/category-page', () => ({
     products?: Array<{ id: string; name: string; price: string }>;
     paginationBasePath?: string;
     hubSlug?: string;
+    prioritizeFirstRowImages?: boolean;
   }) => (
-    <section aria-label="Category page">
+    <section
+      aria-label="Category page"
+      data-image-priority={String(Boolean(prioritizeFirstRowImages))}
+    >
       Category page
       {currentPage ? <div>Page: {currentPage}</div> : null}
       {totalProductCount ? <div>Total: {totalProductCount}</div> : null}

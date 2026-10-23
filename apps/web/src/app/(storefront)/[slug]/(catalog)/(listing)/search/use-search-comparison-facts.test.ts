@@ -4,13 +4,36 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   query: { select: vi.fn(), eq: vi.fn(), in: vi.fn(), abortSignal: vi.fn() },
   client: vi.fn(),
+  moduleLoaded: vi.fn(),
 }));
-vi.mock('@/lib/supabase/client', () => ({ createClient: mocks.client }));
+vi.mock('@/lib/supabase/client', () => {
+  mocks.moduleLoaded();
+  return { createClient: mocks.client };
+});
 vi.mock('@/lib/normalize-product', () => ({
   normalizeProduct: (row: unknown) => row,
 }));
 
 import { useSearchComparisonFacts } from './use-search-comparison-facts';
+
+const loadedDuringImport = mocks.moduleLoaded.mock.calls.length > 0;
+
+it('does not evaluate the database SDK while importing an inactive comparison hook', () => {
+  expect(loadedDuringImport).toBe(false);
+});
+
+it('does not start a refresh after unmounting before the deferred dependency resolves', async () => {
+  const { unmount } = renderHook(() =>
+    useSearchComparisonFacts(
+      'm1',
+      ['11111111-1111-1111-1111-111111111111'],
+      true
+    )
+  );
+  unmount();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mocks.client).not.toHaveBeenCalled();
+});
 
 beforeEach(() => {
   Object.values(mocks.query).forEach((fn) => {

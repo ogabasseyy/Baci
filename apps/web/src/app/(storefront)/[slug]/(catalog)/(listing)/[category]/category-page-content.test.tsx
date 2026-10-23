@@ -17,6 +17,32 @@ import {
 } from './category-page-content.test-utils';
 
 describe('CategoryPageContent', () => {
+  it.each([
+    'ogabassey',
+    'demo-store',
+  ])('derives first-row loading from verified merchant %s, not the route spelling', async (slug) => {
+    mockGetMerchantByIdentifier.mockResolvedValue({
+      id: 'merchant-1',
+      slug,
+      business_name: 'Shop',
+      country: 'NG',
+      payout_currency: 'NGN',
+    });
+    const ui = await CategoryPageContent({
+      params: Promise.resolve({
+        slug: 'custom-domain.example',
+        category: 'phones',
+      }),
+      searchParams: Promise.resolve({}),
+    });
+    render(ui);
+    expect(
+      screen.getByRole('region', { name: 'Category page' })
+    ).toHaveAttribute(
+      'data-image-priority',
+      slug === 'ogabassey' ? 'true' : 'false'
+    );
+  });
   beforeEach(() => {
     resetCategoryPageContentMocks();
   });

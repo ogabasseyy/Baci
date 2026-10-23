@@ -45,8 +45,6 @@ UPDATE public.merchants SET user_id='10000000-0000-4000-8000-000000000002' WHERE
 SET ROLE service_role;
 DO $$ BEGIN IF public.get_merchant_onboarding_email_context('20000000-0000-4000-8000-000000000002') IS NOT NULL THEN RAISE EXCEPTION 'reassigned merchant retained journey'; END IF; END $$;
 RESET ROLE;
-SELECT 'merchant onboarding SQL regressions passed' AS result;
-\set ON_ERROR_STOP on
 -- Verify actual token capability under anonymous role, without table access.
 INSERT INTO auth.users VALUES('10000000-0000-4000-8000-000000000003','owner3@example.com',now(),NULL,NULL);
 INSERT INTO public.merchants(id,user_id,business_name) VALUES('20000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000003','Owner3');
@@ -55,3 +53,4 @@ SET ROLE anon;
 SELECT public.unsubscribe_merchant_onboarding_emails('30000000-0000-4000-8000-000000000003');
 RESET ROLE;
 DO $$ BEGIN IF (SELECT enabled FROM public.merchant_onboarding_email_preferences WHERE merchant_id='20000000-0000-4000-8000-000000000003') THEN RAISE EXCEPTION 'anonymous opt-out failed'; END IF; END $$;
+SELECT 'merchant onboarding SQL regressions passed' AS result;

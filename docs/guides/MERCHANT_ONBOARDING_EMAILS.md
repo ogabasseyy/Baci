@@ -79,7 +79,7 @@ Published stores stop receiving follow-ups. Preferences and current launch facts
 are checked again before dispatch. A database claim prevents concurrent sends;
 the global delivery flag is separate from a merchant's preference. A global
 pause returns claimed work to pending; a merchant opt-out skips the stage.
-a 24-hour cap applies across the journey. A stage is sent once at most; the
+A 24-hour cap applies across the journey. A stage is sent once at most; the
 provider reference is a reconciliation aid, not provider-side idempotency.
 
 The internal VPS worker runs every ten minutes through the existing stable-checkout
@@ -146,8 +146,8 @@ then `supabase/tests/merchant_onboarding_email.sql` with `ON_ERROR_STOP=1`.
 Never run the fixture against Supabase or any production database.
 
 For combined regression coverage, apply the email fixture, then
-`supabase/tests/merchant_onboarding_in_app_reminders_fixture.sql`, both new
-migrations, the email assertions, and finally
+`supabase/tests/merchant_onboarding_in_app_reminders_fixture.sql`, the email,
+in-app reminder and delivery-pause migrations, the email assertions, and finally
 `supabase/tests/merchant_onboarding_in_app_reminders.sql`. The additional fixture
 supplies the local auth identity function and a second owner for RLS isolation.
 Apply the delivery-pause migration before running the email assertions in either

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { jumiaPreviewCacheConstants, jumiaPreviewMessages } from './constants';
+import {
+  eligiblePreviewRequestTimeoutMs,
+  jumiaPreviewCacheConstants,
+  jumiaPreviewMessages,
+  jumiaPreviewSelectionIdPattern,
+  selectionCreationRequestTimeoutMs,
+} from './constants';
 
 describe('Jumia preview constants', () => {
   it('keeps cache namespaces distinct and lease timing bounded', () => {
@@ -18,6 +24,17 @@ describe('Jumia preview constants', () => {
     );
     expect(jumiaPreviewCacheConstants.creationLeaseMs).toBeGreaterThan(0);
     expect(jumiaPreviewMessages.categoryPageSize).toBeGreaterThan(0);
+    expect(eligiblePreviewRequestTimeoutMs).toBeGreaterThan(0);
+    expect(selectionCreationRequestTimeoutMs).toBeGreaterThan(0);
+  });
+
+  it('matches canonical UUID selection IDs without accepting malformed IDs', () => {
+    expect(
+      jumiaPreviewSelectionIdPattern.test(
+        '00000000-0000-4000-8000-000000000041'
+      )
+    ).toBe(true);
+    expect(jumiaPreviewSelectionIdPattern.test('not-a-uuid')).toBe(false);
   });
 
   it('explains safe recovery when shared storage is unavailable', () => {

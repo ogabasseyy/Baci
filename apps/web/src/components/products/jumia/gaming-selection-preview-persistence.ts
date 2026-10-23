@@ -1,13 +1,13 @@
-import { jumiaPreviewCacheConstants } from './constants';
+import {
+  jumiaPreviewCacheConstants,
+  jumiaPreviewSelectionIdPattern,
+} from './constants';
 import { gamingSelectionPreviewErrors } from './gaming-selection-preview-errors';
 
 type CachedSelection = { selectionId: string; expiresAt: string };
 type CacheEntry = { cacheKey: string; selection: CachedSelection };
 
 const memorySelections = new Map<string, CachedSelection>();
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function key(merchantId: string, categoryId: string) {
   return `${jumiaPreviewCacheConstants.cachePrefix}${merchantId}:${categoryId}`;
 }
@@ -26,7 +26,7 @@ function read(cacheKey: string): CachedSelection | null {
     if (
       gamingSelectionPreviewErrors.isRecord(value) &&
       typeof value.selectionId === 'string' &&
-      UUID_PATTERN.test(value.selectionId) &&
+      jumiaPreviewSelectionIdPattern.test(value.selectionId) &&
       typeof value.expiresAt === 'string' &&
       Number.isFinite(Date.parse(value.expiresAt))
     ) {

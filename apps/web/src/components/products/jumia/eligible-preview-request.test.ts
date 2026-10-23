@@ -128,17 +128,21 @@ describe('eligiblePreviewRequest', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('does not swallow cancellation while reading an upgrade error body', async () => {
+  it('cancels an eligible request while reading an upgrade error body', async () => {
     const controller = new AbortController();
     const response = {
+      ok: false,
       status: 402,
       json: () => new Promise(() => undefined),
     } as Response;
-    const request = eligiblePreviewRequest.errorMessage(
-      response,
-      'fallback',
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+    const request = eligiblePreviewRequest.page(
+      merchantId,
+      selectionId,
+      1,
       controller.signal
     );
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     controller.abort();
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' });

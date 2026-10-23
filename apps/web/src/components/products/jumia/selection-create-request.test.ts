@@ -43,4 +43,51 @@ describe('Gaming selection create request', () => {
       createGamingSelection('merchant-1', 'category-1')
     ).rejects.toBeInstanceOf(UnreadableSelectionCreationError);
   });
+
+  it('bounds a successful response whose body never finishes', async () => {
+    vi.useFakeTimers();
+    const response = {
+      ok: true,
+      status: 200,
+      json: () => new Promise(() => undefined),
+    } as Response;
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(response);
+
+    try {
+      const completion = createGamingSelection('merchant-1', 'category-1');
+      const rejected = expect(completion).rejects.toBeInstanceOf(
+        UnreadableSelectionCreationError
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejected;
+      expect(fetchWithCsrf).toHaveBeenCalledWith(
+        '/api/marketplace/jumia/products/selections',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      const requestSignal = vi.mocked(fetchWithCsrf).mock.calls[0]?.[1]?.signal;
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a stalled upgrade error body as an unreadable creation outcome', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce({
+      ok: false,
+      status: 402,
+      json: () => new Promise(() => undefined),
+    } as Response);
+
+    try {
+      const completion = createGamingSelection('merchant-1', 'category-1');
+      const rejected = expect(completion).rejects.toBeInstanceOf(
+        UnreadableSelectionCreationError
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -18,3 +18,6 @@ export const jumiaPreviewCacheConstants = {
 };
 
 export const eligiblePreviewRequestTimeoutMs = 30_000;
+export const selectionCreationRequestTimeoutMs = 30_000;
+export const jumiaPreviewSelectionIdPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

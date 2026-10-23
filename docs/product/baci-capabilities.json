@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-23T14:57:33.045629+00:00",
-  "source_revision": "2a9e7167e5caf0d98a7338cfeabee1e3a8f4364f",
-  "evidence_digest": "0e7c21c65e3b5f5063c3de2a1b7aaba4b9f624ee2b9e71796a07fc069efde4be",
-  "claims_digest": "4546a26b1b72e10654e5702c3b075e9a4db24f3dad35f07586ec86d7391f171e",
+  "reviewed_at": "2026-10-23T15:49:27.178174+00:00",
+  "source_revision": "1d05c8fb24ec6be788ec50d370c3bdfa0e2fa0d3",
+  "evidence_digest": "2bc719a94ca3a04d9e3507a62469811d4e3410ada2174b818b81d296be8ac5e7",
+  "claims_digest": "c941a051fb83c4f1618279e5ffb0c55755f18e5b90d6afe7b37f7d48ecb37855",
   "review_scope": "Source audit only; not deployment proof. OAuth PKCE, encrypted tenant grants and 30s refresh receipts; catalogs recheck quantity; expired workers fail readiness. Resource HTTPS discovery rejects reserved paths; independent consent cookies. Admission 600/5min; 2,000 retained grants/tenant. New endpoint authorized but undeployed; original MCP preserved. Historical isolated add/remove and Incognito handoff passed; current legacy removal failed; native pending. Fresh probe required before fleet membership. Text continuation off; privacy/retention unqualified. Offers merchant-scoped, published, selected and capped; PDP policy, RPC factory, chunk/outage recovery and case-normalized detail IDs audited. Onboarding payment readiness recognizes raw subaccount or derived configuration when Paystack is disabled. Checkout eligibility and provider activation claims unchanged.",
   "capabilities": [
     {

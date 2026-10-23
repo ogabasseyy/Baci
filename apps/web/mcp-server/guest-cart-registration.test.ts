@@ -147,3 +147,38 @@ it('uses verified connection authority across fresh request servers without mode
     { product_id: camera, quantity: 2 },
   ]);
 });
+
+
+it.each([false, true])('discovers one cart workflow for OAuth connection=%s', async (connected) => {
+  const server = new McpServer({ name: 'cart-discovery', version: '1.0.0' });
+  const client = new Client({ name: 'cart-discovery-client', version: '1.0.0' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const resolveToken = vi.fn(async () => 'a'.repeat(64));
+  registerConfiguredGuestCartTool(server, {
+    store: new GuestCartStore(createFakeGuestCartSupabase().supabase),
+    supabase: {} as SupabaseClient,
+    getMerchantId: async () => 'merchant',
+    formatPrice: String,
+    ...(connected ? { connectionCart: { resolveToken } } : {}),
+  });
+  await server.connect(st);
+  await client.connect(ct);
+  try {
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name).sort()).toEqual(connected
+      ? ['get_ogabassey_guest_cart', 'update_ogabassey_guest_cart']
+      : ['add_to_cart', 'prepare_storefront_cart_link', 'update_ogabassey_guest_cart']);
+    // Discovery must not create a cart or resolve a private cart credential.
+    expect(resolveToken).not.toHaveBeenCalled();
+    if (connected) {
+      for (const name of ['add_to_cart', 'prepare_storefront_cart_link']) {
+        await expect(client.callTool({ name, arguments: { product_id: charger } }))
+          .rejects.toThrow(`Tool ${name} not found`);
+      }
+      expect(resolveToken).not.toHaveBeenCalled();
+    }
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

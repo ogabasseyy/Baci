@@ -88,6 +88,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "apps/web/mcp-server/widgets"
+  - "apps/web/builder-mcp-server/widgets"
 # pnpm v11 allowBuilds (replaces onlyBuiltDependencies): package matcher -> boolean
 allowBuilds:
   "@firebase/util": true

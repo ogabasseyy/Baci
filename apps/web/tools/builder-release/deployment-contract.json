@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "activation": "disabled",
+  "scopeFile": "staging-scope.json",
+  "automaticTriggers": [],
+  "entrypoints": {
+    "mcp": {
+      "source": "builder-mcp-server/serve.ts",
+      "artifact": "builder-mcp-server/dist/server.mjs",
+      "ready": false,
+      "blocker": "Staging issuer/resource/backend profile qualification required"
+    },
+    "auth": {
+      "source": "tools/builder-auth/runtime.ts",
+      "ready": false,
+      "blocker": "Explicit standalone credential/HTTP/shutdown bootstrap required"
+    },
+    "web": {
+      "source": "src/instrumentation.ts",
+      "ready": false,
+      "blocker": "Staging profile and gateway/owner-publication runtime composition required"
+    },
+    "editRunner": {
+      "source": "tools/builder-auth/edit-runner.ts",
+      "ready": false,
+      "blocker": "Staging URL and separate bounded scheduler bootstrap required"
+    },
+    "verifier": {
+      "source": "tools/builder-auth/verify-publication.ts",
+      "ready": false,
+      "blocker": "Dedicated evidence credential and owner-session delivery/bootstrap required"
+    }
+  },
+  "releaseGates": [
+    "exactOwnerScope",
+    "newProjectAndCostApproval",
+    "diskBudget",
+    "stagingProfile",
+    "completeArtifacts",
+    "postgres17FullReplay",
+    "privacyCutover",
+    "realChatgptHost",
+    "codexReview"
+  ],
+  "rollback": "Compatible artifact only; preserve private storage and restrictive grants"
+}

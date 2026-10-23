@@ -14,6 +14,12 @@ export const storefrontLayoutJobInputSchema = z.strictObject({
   createdPageConfigUpdatedAt: z.iso.datetime({ offset: true }).nullable(),
 });
 
+// Stored snapshots are server-captured; the public request schema stays strict.
+export const storedStorefrontLayoutJobInputSchema =
+  storefrontLayoutJobInputSchema.extend({
+    starterConfig: z.unknown().refine((value) => value !== undefined),
+  });
+
 export const createAiJobSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('price_list_processing'),

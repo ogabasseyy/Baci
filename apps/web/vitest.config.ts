@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -95,6 +95,7 @@ export default defineConfig({
     noExternal: true,
   },
   test: {
+    exclude: [...configDefaults.exclude, 'tools/builder-auth/*.node.test.ts'],
     environment: 'jsdom',
     globals: true,
     testTimeout: 10_000,

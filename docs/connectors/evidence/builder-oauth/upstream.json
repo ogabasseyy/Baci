@@ -1,0 +1,15 @@
+{
+  "auth": "supabase/gotrue:v2.197.0",
+  "client": "openid-client@6.8.8",
+  "checks": [
+    "real upstream discovery and confidential predefined client",
+    "inner state nonce and PKCE reject outer-flow substitution",
+    "two independent nested code PKCE links with stable subject",
+    "verified email and stable UserInfo subject",
+    "browser and both upstream refreshes remain independent",
+    "local disconnect revokes only one link and preserves browser and second link",
+    "reauthorization preserves subject without email merging",
+    "explicit whole-client grant revocation invalidates both links"
+  ],
+  "scope": "local upstream fixture; not a production provider acceptance"
+}

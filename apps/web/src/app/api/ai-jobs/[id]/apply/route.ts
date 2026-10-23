@@ -204,8 +204,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (applyError?.code === '40001')
     return NextResponse.json(
-      { error: 'AI draft is stale', code: 'ai_draft_stale' },
-      { status: 409 }
+      {
+        error: 'Website is busy. Please retry.',
+        code: 'website_busy',
+        retryable: true,
+      },
+      { status: 409, headers: { 'Retry-After': '1' } }
     );
   if (applyError) {
     console.error('Failed to atomically apply AI draft', {

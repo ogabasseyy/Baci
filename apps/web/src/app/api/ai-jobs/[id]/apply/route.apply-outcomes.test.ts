@@ -130,16 +130,24 @@ describe('POST /api/ai-jobs/[id]/apply outcomes', () => {
       error: 'Failed to apply AI draft',
     });
   });
-  it('returns the safe stale 409 contract when a concurrent website writer owns the guard', async () => {
+  it.each([
+    false,
+    true,
+  ])('returns retryable busy for lock contention even with force=%s', async (force) => {
     const supabase = createApplySupabaseMock({
-      rpcError: Object.assign(new Error('private SQL text'), { code: '40001' }),
+      rpcError: Object.assign(new Error('website_busy'), { code: '40001' }),
     });
     mocks.createClient.mockResolvedValue(supabase);
-    const response = await POST(createApplyRequest(), routeContext());
+    const response = await POST(
+      createApplyRequest(JSON.stringify({ merchantId, force })),
+      routeContext()
+    );
     expect(response.status).toBe(409);
+    expect(response.headers.get('Retry-After')).toBe('1');
     expect(await response.json()).toEqual({
-      error: 'AI draft is stale',
-      code: 'ai_draft_stale',
+      error: 'Website is busy. Please retry.',
+      code: 'website_busy',
+      retryable: true,
     });
   });
 });

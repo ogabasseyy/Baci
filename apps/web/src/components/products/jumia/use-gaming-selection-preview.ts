@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
 import { jumiaProductExportSelectionCreateResponseSchema } from '@/schemas/jumia/product-export-selection-create-response';
@@ -8,11 +8,12 @@ import { jumiaPreviewMessages } from './constants';
 import { eligiblePreviewRequest } from './eligible-preview-request';
 import { fetchMatchingGamingCategories } from './fetch-matching-gaming-categories';
 import { gamingSelectionPreviewCache } from './gaming-selection-preview-cache';
+import { useGamingSelectionPreviewGeneration } from './use-gaming-selection-preview-generation';
 
 type PreviewCreationAction = 'create' | 'refresh' | 'retry';
 
 export function useGamingSelectionPreview(merchantId: string) {
-  const currentMerchantRef = useRef({ merchantId, generation: 0 });
+  const currentMerchantRef = useGamingSelectionPreviewGeneration(merchantId);
   const [snapshotState, setSnapshotState] = useState<{
     merchantId: string;
     value: JumiaProductExportEligiblePage;
@@ -38,15 +39,6 @@ export function useGamingSelectionPreview(merchantId: string) {
   const isCurrentMerchant = (owner: string, generation: number) =>
     currentMerchantRef.current.merchantId === owner &&
     currentMerchantRef.current.generation === generation;
-
-  useLayoutEffect(() => {
-    if (currentMerchantRef.current.merchantId !== merchantId) {
-      currentMerchantRef.current = {
-        merchantId,
-        generation: currentMerchantRef.current.generation + 1,
-      };
-    }
-  }, [merchantId]);
 
   const setSnapshotForMerchant = (
     owner: string,
@@ -100,19 +92,15 @@ export function useGamingSelectionPreview(merchantId: string) {
       loadPage(owner, generation, selectionId, 1)
     );
 
-  const markCreationOutcomeUnknown = (owner: string, generation: number) => {
-    gamingSelectionPreviewCache.markUncertainCreation(owner);
+  const updateCreationOutcome = (
+    owner: string,
+    generation: number,
+    unknown: boolean
+  ) => {
+    if (unknown) gamingSelectionPreviewCache.markUncertainCreation(owner);
+    else gamingSelectionPreviewCache.clearUncertainCreation(owner);
     if (isCurrentMerchant(owner, generation)) {
-      setCreationState({ merchantId: owner, value: true });
-    }
-  };
-  const clearCreationOutcomeUnknown = (owner: string, generation: number) => {
-    gamingSelectionPreviewCache.clearUncertainCreation(owner);
-    if (
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation
-    ) {
-      setCreationState({ merchantId: owner, value: false });
+      setCreationState({ merchantId: owner, value: unknown });
     }
   };
 
@@ -218,12 +206,12 @@ export function useGamingSelectionPreview(merchantId: string) {
           }
         );
       } catch {
-        markCreationOutcomeUnknown(owner, generation);
+        updateCreationOutcome(owner, generation, true);
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       if (!response.ok) {
         if (response.status >= 500) {
-          markCreationOutcomeUnknown(owner, generation);
+          updateCreationOutcome(owner, generation, true);
           throw new Error(jumiaPreviewMessages.unreadableCreation);
         }
         throw new Error(
@@ -237,20 +225,22 @@ export function useGamingSelectionPreview(merchantId: string) {
       try {
         result = await response.json();
       } catch {
-        markCreationOutcomeUnknown(owner, generation);
+        updateCreationOutcome(owner, generation, true);
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
       const parsedCreation =
         jumiaProductExportSelectionCreateResponseSchema.safeParse(result);
       if (!parsedCreation.success) {
-        markCreationOutcomeUnknown(owner, generation);
+        updateCreationOutcome(owner, generation, true);
         throw new Error(jumiaPreviewMessages.unreadableCreation);
       }
-      clearCreationOutcomeUnknown(owner, generation);
+      updateCreationOutcome(owner, generation, false);
       gamingSelectionPreviewCache.write(cacheKey, {
         selectionId: parsedCreation.data.selectionId,
         expiresAt: parsedCreation.data.expiresAt,
       });
+      finishCreation();
+      finishCreation = null;
       await loadPage(owner, generation, parsedCreation.data.selectionId, 1);
     } catch (cause) {
       setErrorForMerchant(

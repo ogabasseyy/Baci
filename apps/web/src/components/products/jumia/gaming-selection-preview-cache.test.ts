@@ -27,6 +27,27 @@ describe('Gaming selection preview cache helpers', () => {
     });
   });
 
+  it('prefers a newly cached selection when storage writes fail but reads work', () => {
+    const key = 'jumia-gaming-preview:merchant-refresh:category-1';
+    const oldSelection = {
+      selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    };
+    const refreshedSelection = {
+      selectionId: 'c5a0eb5e-ecc7-4142-ae9b-d7186c3d5c0b',
+      expiresAt: '2099-02-01T00:00:00.000Z',
+    };
+    localStorage.setItem(key, JSON.stringify(oldSelection));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage quota exceeded');
+    });
+
+    gamingSelectionPreviewCache.write(key, refreshedSelection);
+
+    expect(gamingSelectionPreviewCache.read(key)).toEqual(refreshedSelection);
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(oldSelection));
+  });
+
   it('builds a category cache key through the cache facade', () => {
     expect(gamingSelectionPreviewCache.key('merchant-1', 'category-1')).toBe(
       'jumia-gaming-preview:merchant-1:category-1'
@@ -254,6 +275,27 @@ describe('Gaming selection preview cache helpers', () => {
         expiresAt: '2099-01-01T00:00:00.000Z',
       },
     });
+  });
+
+  it('keeps a cached snapshot after an ambiguous access-related 404', async () => {
+    const key = 'jumia-gaming-preview:merchant-1:category-404';
+    const selection = {
+      selectionId: 'd1ef9f3a-4f2b-49af-a84f-97d19c0084bd',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    };
+    localStorage.setItem(key, JSON.stringify(selection));
+    const load = vi.fn(async () => {
+      throw gamingSelectionPreviewCache.makeRequestError(
+        404,
+        'Unable to load this Gaming preview. Please retry.'
+      );
+    });
+
+    await expect(
+      gamingSelectionPreviewCache.loadFirstValid('merchant-1', load)
+    ).rejects.toMatchObject({ status: 404 });
+
+    expect(localStorage.getItem(key)).toBe(JSON.stringify(selection));
   });
 
   it('chooses the newest merchant snapshot for server validation', () => {

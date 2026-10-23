@@ -140,6 +140,8 @@ function hasCreationInFlight(merchantId: string) {
 }
 
 function readCachedSelection(cacheKey: string): CachedSelection | null {
+  const memorySelection = memorySelections.get(cacheKey);
+  if (memorySelection) return memorySelection;
   let stored: string | null;
   try {
     stored = localStorage.getItem(cacheKey);
@@ -265,10 +267,7 @@ function errorMessage(cause: unknown, fallback: string) {
 }
 
 function isRejectedCachedSelection(cause: unknown) {
-  return (
-    isRecord(cause) &&
-    (cause.status === 404 || cause.status === 410 || cause.status === 422)
-  );
+  return isRecord(cause) && (cause.status === 410 || cause.status === 422);
 }
 
 export const gamingSelectionPreviewCache = {

@@ -44,7 +44,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
                 ? 'Retry preview creation'
                 : 'Create Gaming preview'}
           </Button>
-          {snapshot ? (
+          {snapshot || error ? (
             <Button
               type="button"
               variant="outline"
@@ -70,7 +70,8 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       {snapshot ? (
         <>
           <p className="text-xs text-muted-foreground">
-            {snapshot.total} products in this frozen selection
+            {snapshot.total} {snapshot.total === 1 ? 'product' : 'products'} in
+            this frozen selection
           </p>
           {snapshot.legacyUnmappedCount > 0 ? (
             <p className="text-sm text-amber-700" role="status">

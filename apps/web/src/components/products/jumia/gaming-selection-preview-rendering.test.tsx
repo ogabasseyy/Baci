@@ -189,5 +189,8 @@ describe('GamingSelectionPreview rendering and pagination', () => {
         '1 active product uses a legacy Gaming label and is not included. Assign it to the active Gaming category, then create a new preview.'
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('1 product in this frozen selection')
+    ).toBeInTheDocument();
   });
 });

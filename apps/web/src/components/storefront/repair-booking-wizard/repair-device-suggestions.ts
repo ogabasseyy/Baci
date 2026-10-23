@@ -39,7 +39,7 @@ const DEVICE_CATEGORY_TYPES: ReadonlyArray<{
   { pattern: /\b(laptops?|notebooks?)\b/i, deviceType: 'Laptop' },
   { pattern: /\b(tablets?|ipads?)\b/i, deviceType: 'Tablet' },
   {
-    pattern: /^(gaming)$|\b((game|gaming)\s+)?consoles?\b/i,
+    pattern: /\b((game|gaming)\s+)?consoles?\b/i,
     deviceType: 'Console',
   },
   {
@@ -75,6 +75,15 @@ export function toStoreProductSuggestion(
     categoryDeviceTypes.size === 1
       ? Array.from(categoryDeviceTypes)[0]
       : undefined;
+  if (
+    !deviceType &&
+    categories.some((category) => /^gaming$/i.test(category.trim())) &&
+    /\b(playstation|ps\s?\d|xbox|nintendo\s+switch|gaming\s+console)\b/i.test(
+      product.name
+    )
+  ) {
+    deviceType = 'Console';
+  }
   if (
     categoryDeviceTypes.size === 2 &&
     categoryDeviceTypes.has('Smartphone') &&

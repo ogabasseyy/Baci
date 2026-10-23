@@ -44,7 +44,7 @@ describe('repair device product suggestions', () => {
   });
 
   it('maps console and wearable catalog categories to repair device types', () => {
-    for (const category of ['Console', 'Consoles', 'Game Consoles', 'Gaming']) {
+    for (const category of ['Console', 'Consoles', 'Game Consoles']) {
       expect(
         toStoreProductSuggestion({
           id: category,
@@ -52,6 +52,27 @@ describe('repair device product suggestions', () => {
           category,
         })
       ).toMatchObject({ deviceType: 'Console' });
+    }
+
+    expect(
+      toStoreProductSuggestion({
+        id: 'gaming-console',
+        name: 'PlayStation 5',
+        category: 'Gaming',
+      })
+    ).toMatchObject({ deviceType: 'Console' });
+    for (const name of [
+      'DualSense Wireless Controller',
+      'Gaming Headset',
+      'FIFA 25 Game',
+    ]) {
+      expect(
+        toStoreProductSuggestion({
+          id: name,
+          name,
+          category: 'Gaming',
+        })
+      ).toBeNull();
     }
 
     for (const category of ['Wearable', 'Wearables']) {

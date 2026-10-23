@@ -152,6 +152,6 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
   {
     repositoryPath:
       'supabase/migrations/20261023111630_repair_device_typeahead_search.sql',
-    sha256: '8bcbcc2af4cc19667ec4cbd4dc30645abed404cb45d4ebcbefbe38ce4524d561',
+    sha256: 'c96304830d2b512ffd4c316583268dea0afbfd51bb2ffeb102cd5319fcfc7932',
   },
 ];

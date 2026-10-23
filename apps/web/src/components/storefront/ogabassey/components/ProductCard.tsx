@@ -56,6 +56,8 @@ interface ProductCardProps {
    * deferred. Left undefined elsewhere, the card keeps its default reservation.
    */
   contentVisibilityClassName?: string;
+  /** First-screen category candidates must not wait for lazy-load layout. */
+  imagePriority?: boolean;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -64,6 +66,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isAdded,
   viewMode = 'grid',
   contentVisibilityClassName,
+  imagePriority = false,
 }) => {
   // Preserve the pre-existing unconditional reservation for every other card
   // surface (home category grids, blog embeds, interactive grids). Only the
@@ -196,6 +199,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             alt={productImageAlt}
             fill
             sizes={imageSizes}
+            loading={imagePriority ? 'eager' : 'lazy'}
+            fetchPriority={imagePriority ? 'high' : 'auto'}
             className="object-cover transition-transform duration-500 md:group-hover:scale-105"
           />
 
@@ -330,6 +335,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           alt={productImageAlt}
           fill
           sizes="(max-width: 768px) 112px, 192px"
+          loading={imagePriority ? 'eager' : 'lazy'}
+          fetchPriority={imagePriority ? 'high' : 'auto'}
           className="object-cover md:group-hover:scale-110 transition-transform duration-500"
         />
         {(product.variant_attributes?.Platform || product.condition) && (

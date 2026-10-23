@@ -50,11 +50,16 @@ vi.mock('../products/product-index-card', () => ({
   ProductIndexCard: ({
     pathPrefix,
     product,
+    imagePriority,
   }: {
     pathPrefix: string;
     product: { name: string };
+    imagePriority?: boolean;
   }) => (
-    <div>
+    <div
+      data-image-priority={String(Boolean(imagePriority))}
+      data-testid={`card-${product.name}`}
+    >
       <span>{product.name}</span>
       <span data-testid={`path-prefix-${product.name}`}>{pathPrefix}</span>
     </div>
@@ -76,6 +81,46 @@ function createSearchProducts(count: number): NormalizedProduct[] {
 }
 
 describe('SearchPageContent', () => {
+  it.each([
+    'ogabassey',
+    'another-store',
+  ])('bounds first-screen image priority without changing %s tenant defaults', async (slug) => {
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'shop.example.ng'],
+        ['x-pathname', '/search'],
+      ])
+    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug,
+      business_name: 'Shop',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 3,
+      products: createSearchProducts(3),
+      query: 'iphone',
+    } as never);
+    render(
+      (await SearchPageContent({
+        params: Promise.resolve({ slug }),
+        searchParams: Promise.resolve({ q: 'iphone' }),
+      })) as React.ReactElement
+    );
+    expect(screen.getByTestId('card-iPhone 16')).toHaveAttribute(
+      'data-image-priority',
+      slug === 'ogabassey' ? 'true' : 'false'
+    );
+    expect(screen.getByTestId('card-iPhone 18')).toHaveAttribute(
+      'data-image-priority',
+      slug === 'ogabassey' ? 'true' : 'false'
+    );
+    expect(screen.getByTestId('card-iPhone 19')).toHaveAttribute(
+      'data-image-priority',
+      'false'
+    );
+  });
   beforeEach(() => {
     vi.mocked(getRequestScopedMerchant).mockReset();
     mockGetStorefrontSearchProducts.mockReset();

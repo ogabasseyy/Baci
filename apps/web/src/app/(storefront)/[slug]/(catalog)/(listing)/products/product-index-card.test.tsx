@@ -5,9 +5,19 @@ import type { NormalizedProduct } from '@/lib/normalize-product';
 import { ProductIndexCard } from './product-index-card';
 
 vi.mock('next/image', () => ({
-  default: ({ alt, src }: { alt: string; src: string }) => (
+  default: ({
+    alt,
+    src,
+    loading,
+    fetchPriority,
+  }: {
+    alt: string;
+    src: string;
+    loading?: 'eager' | 'lazy';
+    fetchPriority?: 'high' | 'auto';
+  }) => (
     // biome-ignore lint/performance/noImgElement: test stub for next/image
-    <img alt={alt} src={src} />
+    <img alt={alt} src={src} loading={loading} fetchPriority={fetchPriority} />
   ),
 }));
 
@@ -54,6 +64,31 @@ function makeProduct(
 }
 
 describe('ProductIndexCard', () => {
+  it('does not defer the explicitly selected first-screen image', () => {
+    const firstScreenProps = { imagePriority: true };
+    render(
+      <ProductIndexCard
+        formattedPrice="₦550,000"
+        pathPrefix=""
+        product={makeProduct()}
+        {...firstScreenProps}
+      />
+    );
+    expect(screen.getByRole('img')).toHaveAttribute('loading', 'eager');
+    expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'high');
+  });
+
+  it('keeps ordinary cards lazy rather than competing with first-screen images', () => {
+    render(
+      <ProductIndexCard
+        formattedPrice="₦550,000"
+        pathPrefix=""
+        product={makeProduct()}
+      />
+    );
+    expect(screen.getByRole('img')).toHaveAttribute('loading', 'lazy');
+    expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'auto');
+  });
   it('falls back to condition-offer metadata when available_conditions is empty', () => {
     render(
       <ProductIndexCard

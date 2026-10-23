@@ -12,14 +12,17 @@ vi.mock('../components/ProductCard', () => ({
     product,
     onAddToCart,
     contentVisibilityClassName,
+    imagePriority,
   }: {
     product: { name: string };
     onAddToCart?: (event: React.MouseEvent, product: unknown) => void;
     contentVisibilityClassName?: string;
+    imagePriority?: boolean;
   }) => (
     <article
       aria-label={product.name}
       className={contentVisibilityClassName || undefined}
+      data-image-priority={String(Boolean(imagePriority))}
     >
       <button type="button" onClick={(event) => onAddToCart?.(event, product)}>
         Add {product.name}
@@ -87,6 +90,12 @@ function renderResults(
 }
 
 describe('CategoryPageResults', () => {
+  it.each(['grid', 'list'] as const)('limits eager image candidates to the first %s row', (viewMode) => {
+    renderResults({ viewMode, visibleProducts: ['A', 'B', 'C'].map((id) => buildProduct({ id, name: `Phone ${id}` })) });
+    expect(screen.getByRole('article', { name: 'Phone A' })).toHaveAttribute('data-image-priority', 'true');
+    expect(screen.getByRole('article', { name: 'Phone B' })).toHaveAttribute('data-image-priority', viewMode === 'grid' ? 'true' : 'false');
+    expect(screen.getByRole('article', { name: 'Phone C' })).toHaveAttribute('data-image-priority', 'false');
+  });
   it('renders the product grid and forwards add-to-cart clicks', () => {
     const { onAddToCart } = renderResults();
 

@@ -164,6 +164,7 @@ export function CategoryPageResults({
                       onAddToCart={onAddToCart}
                       isAdded={isAdded}
                       viewMode={viewMode}
+                      imagePriority={index < (viewMode === 'grid' ? 2 : 1)}
                       contentVisibilityClassName={cardContentVisibilityClassName}
                     />
                     {/* Ad insertion logic */}

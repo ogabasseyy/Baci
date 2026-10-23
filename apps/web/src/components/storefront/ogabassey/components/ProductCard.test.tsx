@@ -66,6 +66,18 @@ const mockProduct = {
 };
 
 describe('ProductCard', () => {
+  it('loads the selected first-screen category image eagerly without a lazy gate', () => {
+    const firstScreenProps = { imagePriority: true };
+    render(<ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded={false} {...firstScreenProps} />);
+    expect(screen.getByRole('img')).toHaveAttribute('loading', 'eager');
+    expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'high');
+  });
+
+  it('keeps noncritical category images lazy', () => {
+    render(<ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded={false} />);
+    expect(screen.getByRole('img')).toHaveAttribute('loading', 'lazy');
+    expect(screen.getByRole('img')).toHaveAttribute('fetchpriority', 'auto');
+  });
   it('renders product name', () => {
     render(
       <ProductCard

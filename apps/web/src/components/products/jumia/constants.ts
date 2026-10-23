@@ -16,3 +16,5 @@ export const jumiaPreviewCacheConstants = {
   creationLeaseMs: 2 * 60 * 1000,
   creationLeaseRenewalMs: 30 * 1000,
 };
+
+export const eligiblePreviewRequestTimeoutMs = 30_000;

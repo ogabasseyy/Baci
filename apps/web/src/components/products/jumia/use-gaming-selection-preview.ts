@@ -30,17 +30,28 @@ export function useGamingSelectionPreview(merchantId: string) {
     owner: string,
     generation: number,
     selectionId: string,
-    page: number
+    page: number,
+    signal: AbortSignal
   ) => {
-    const result = await eligiblePreviewRequest.page(owner, selectionId, page);
+    if (signal.aborted) throw signal.reason;
+    const result = await eligiblePreviewRequest.page(
+      owner,
+      selectionId,
+      page,
+      signal
+    );
     if (!isCurrentMerchant(owner, generation)) {
       throw new Error('Gaming preview merchant changed while loading.');
     }
     setSnapshotForMerchant(owner, generation, result);
   };
-  const loadAnyCachedPreview = (owner: string, generation: number) =>
+  const loadAnyCachedPreview = (
+    owner: string,
+    generation: number,
+    signal: AbortSignal
+  ) =>
     gamingSelectionPreviewCache.loadFirstValid(owner, (selectionId) =>
-      loadPage(owner, generation, selectionId, 1)
+      loadPage(owner, generation, selectionId, 1, signal)
     );
 
   const updateCreationOutcome = (
@@ -58,6 +69,7 @@ export function useGamingSelectionPreview(merchantId: string) {
   const createPreview = async (action: PreviewCreationAction = 'create') => {
     const owner = merchantId;
     const generation = currentMerchantRef.current.generation;
+    const requestSignal = currentMerchantRef.current.requestController.signal;
     const refresh = action === 'refresh';
     const retryAfterUnreadableResponse = action === 'retry';
     const uncertainCreation =
@@ -76,7 +88,7 @@ export function useGamingSelectionPreview(merchantId: string) {
       setLoadingForMerchant(owner, generation, true);
       setErrorForMerchant(owner, generation, null);
       try {
-        if (!(await loadAnyCachedPreview(owner, generation))) {
+        if (!(await loadAnyCachedPreview(owner, generation, requestSignal))) {
           setErrorForMerchant(
             owner,
             generation,
@@ -112,7 +124,7 @@ export function useGamingSelectionPreview(merchantId: string) {
         if (
           !refresh &&
           !retryAfterUnreadableResponse &&
-          (await loadAnyCachedPreview(owner, generation))
+          (await loadAnyCachedPreview(owner, generation, requestSignal))
         )
           return;
         throw new Error('Unable to find the Gaming category. Please retry.');
@@ -123,7 +135,8 @@ export function useGamingSelectionPreview(merchantId: string) {
             'An active Gaming category is required to refresh or retry this preview.'
           );
         }
-        if (await loadAnyCachedPreview(owner, generation)) return;
+        if (await loadAnyCachedPreview(owner, generation, requestSignal))
+          return;
         throw new Error(
           'An active Gaming category was not found for this store.'
         );
@@ -134,7 +147,8 @@ export function useGamingSelectionPreview(merchantId: string) {
             await gamingSelectionPreviewCache.loadFirstValidForCategories(
               owner,
               gamingCategories.map((category) => category.id),
-              (selectionId) => loadPage(owner, generation, selectionId, 1)
+              (selectionId) =>
+                loadPage(owner, generation, selectionId, 1, requestSignal)
             );
           if (loadedCached) return;
         }
@@ -160,7 +174,8 @@ export function useGamingSelectionPreview(merchantId: string) {
                   owner,
                   generation,
                   cachedSelection.selectionId,
-                  1
+                  1,
+                  requestSignal
                 );
                 loadedCachedSelection = true;
                 return true;
@@ -185,7 +200,7 @@ export function useGamingSelectionPreview(merchantId: string) {
         if (
           uncertain &&
           !retryAfterUnreadableResponse &&
-          (await loadAnyCachedPreview(owner, generation))
+          (await loadAnyCachedPreview(owner, generation, requestSignal))
         ) {
           return;
         }
@@ -215,7 +230,13 @@ export function useGamingSelectionPreview(merchantId: string) {
       updateCreationOutcome(owner, generation, !persisted);
       finishCreation();
       finishCreation = null;
-      await loadPage(owner, generation, createdSelection.selectionId, 1);
+      await loadPage(
+        owner,
+        generation,
+        createdSelection.selectionId,
+        1,
+        requestSignal
+      );
     } catch (cause) {
       setErrorForMerchant(
         owner,
@@ -235,10 +256,17 @@ export function useGamingSelectionPreview(merchantId: string) {
     if (!snapshot) return;
     const owner = merchantId;
     const generation = currentMerchantRef.current.generation;
+    const requestSignal = currentMerchantRef.current.requestController.signal;
     setLoadingForMerchant(owner, generation, true);
     setErrorForMerchant(owner, generation, null);
     try {
-      await loadPage(owner, generation, snapshot.selectionId, page);
+      await loadPage(
+        owner,
+        generation,
+        snapshot.selectionId,
+        page,
+        requestSignal
+      );
     } catch (cause) {
       setErrorForMerchant(
         owner,

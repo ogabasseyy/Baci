@@ -9,6 +9,7 @@ describe('useGamingSelectionPreviewGeneration', () => {
       { initialProps: { merchantId: 'merchant-1' } }
     );
     const originalGeneration = result.current.current.generation;
+    const originalSignal = result.current.current.requestController.signal;
 
     rerender({ merchantId: 'merchant-2' });
 
@@ -16,6 +17,8 @@ describe('useGamingSelectionPreviewGeneration', () => {
     expect(result.current.current.generation).toBeGreaterThan(
       originalGeneration
     );
+    expect(originalSignal.aborted).toBe(true);
+    expect(result.current.current.requestController.signal.aborted).toBe(false);
   });
 
   it('invalidates pending work when the hook unmounts', () => {
@@ -24,9 +27,11 @@ describe('useGamingSelectionPreviewGeneration', () => {
     );
     const generation = result.current;
     const beforeUnmount = generation.current.generation;
+    const signal = generation.current.requestController.signal;
 
     unmount();
 
     expect(generation.current.generation).toBeGreaterThan(beforeUnmount);
+    expect(signal.aborted).toBe(true);
   });
 });

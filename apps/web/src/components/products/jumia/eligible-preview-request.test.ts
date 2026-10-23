@@ -30,7 +30,8 @@ describe('eligiblePreviewRequest', () => {
       eligiblePreviewRequest.page(merchantId, selectionId, 1)
     ).resolves.toEqual(pageFixture());
     expect(fetch).toHaveBeenCalledWith(
-      `/api/marketplace/jumia/products/eligible?selectionId=${selectionId}&merchantId=${merchantId}&page=1`
+      `/api/marketplace/jumia/products/eligible?selectionId=${selectionId}&merchantId=${merchantId}&page=1`,
+      { signal: expect.any(AbortSignal) }
     );
   });
 
@@ -89,5 +90,77 @@ describe('eligiblePreviewRequest', () => {
     ).rejects.toMatchObject({
       status: 422,
     });
+  });
+
+  it('preserves cancellation while a successful response body is pending', async () => {
+    const controller = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => new Promise(() => undefined),
+    } as Response);
+
+    const request = eligiblePreviewRequest.page(
+      merchantId,
+      selectionId,
+      1,
+      controller.signal
+    );
+    await vi.waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    );
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('does not start a fetch when the lifecycle signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await expect(
+      eligiblePreviewRequest.page(merchantId, selectionId, 1, controller.signal)
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow cancellation while reading an upgrade error body', async () => {
+    const controller = new AbortController();
+    const response = {
+      status: 402,
+      json: () => new Promise(() => undefined),
+    } as Response;
+    const request = eligiblePreviewRequest.errorMessage(
+      response,
+      'fallback',
+      controller.signal
+    );
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('bounds a stalled successful response body with a timeout', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => new Promise(() => undefined),
+    } as Response);
+
+    try {
+      const request = eligiblePreviewRequest.page(merchantId, selectionId, 1);
+      const rejected = expect(request).rejects.toMatchObject({
+        name: 'TimeoutError',
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

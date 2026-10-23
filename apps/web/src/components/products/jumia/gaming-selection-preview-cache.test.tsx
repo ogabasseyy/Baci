@@ -146,7 +146,8 @@ describe('GamingSelectionPreview snapshot cache', () => {
     expect(pageFetch).toHaveBeenLastCalledWith(
       expect.stringContaining(
         'selectionId=00000000-0000-4000-8000-000000000003'
-      )
+      ),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
     expect(
       JSON.parse(
@@ -191,7 +192,8 @@ describe('GamingSelectionPreview snapshot cache', () => {
     expect(pageFetch).toHaveBeenCalledWith(
       expect.stringContaining(
         'selectionId=00000000-0000-4000-8000-000000000004'
-      )
+      ),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
     expect(fetcher).not.toHaveBeenCalled();
 

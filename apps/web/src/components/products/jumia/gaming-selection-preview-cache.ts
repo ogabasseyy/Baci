@@ -1,39 +1,28 @@
+import { jumiaPreviewCacheConstants, jumiaPreviewMessages } from './constants';
 import { acquireGamingPreviewCreationLock } from './gaming-preview-creation-lock';
 import { gamingSelectionPreviewErrors } from './gaming-selection-preview-errors';
+import { gamingSelectionPreviewPersistence } from './gaming-selection-preview-persistence';
 
-type CachedSelection = { selectionId: string; expiresAt: string };
-
-type CacheEntry = { cacheKey: string; selection: CachedSelection };
-
-const CACHE_PREFIX = 'jumia-gaming-preview:';
-const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
-const CREATION_LEASE_MS = 2 * 60 * 1000;
-const CREATION_LEASE_RENEWAL_MS = 30 * 1000;
-const memorySelections = new Map<string, CachedSelection>();
 const uncertainCreations = new Set<string>();
 const inFlightCreations = new Set<string>();
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event) => {
     if (
-      event.newValue !== null ||
-      !event.key?.startsWith(UNCERTAIN_CREATION_PREFIX)
-    )
-      return;
-    uncertainCreations.delete(
-      event.key.slice(UNCERTAIN_CREATION_PREFIX.length)
-    );
+      event.newValue === null &&
+      event.key?.startsWith(jumiaPreviewCacheConstants.uncertainCreationPrefix)
+    ) {
+      uncertainCreations.delete(
+        event.key.slice(
+          jumiaPreviewCacheConstants.uncertainCreationPrefix.length
+        )
+      );
+    }
   });
 }
 
-function createCacheKey(merchantId: string, categoryId: string) {
-  return `${CACHE_PREFIX}${merchantId}:${categoryId}`;
-}
-
 function uncertainCreationKey(merchantId: string) {
-  return `${UNCERTAIN_CREATION_PREFIX}${merchantId}`;
+  return `${jumiaPreviewCacheConstants.uncertainCreationPrefix}${merchantId}`;
 }
 
 function subscribeToUncertainCreationClear(
@@ -43,7 +32,10 @@ function subscribeToUncertainCreationClear(
   if (typeof window === 'undefined') return () => undefined;
   const key = uncertainCreationKey(merchantId);
   const handleStorage = (event: StorageEvent) => {
-    if (event.key === key && event.newValue === null) onClear();
+    if (event.key === key && event.newValue === null) {
+      uncertainCreations.delete(merchantId);
+      onClear();
+    }
   };
   window.addEventListener('storage', handleStorage);
   return () => window.removeEventListener('storage', handleStorage);
@@ -65,7 +57,10 @@ function hasActiveCreationLease(merchantId: string) {
   return expiresAt !== null && expiresAt > Date.now();
 }
 
-function hasUncertainCreation(merchantId: string) {
+function hasUncertainCreation(
+  merchantId: string,
+  reconcileExpiredLease = false
+) {
   if (uncertainCreations.has(merchantId)) return true;
   try {
     const status = localStorage.getItem(uncertainCreationKey(merchantId));
@@ -78,7 +73,7 @@ function hasUncertainCreation(merchantId: string) {
       !inFlightCreations.has(merchantId)
     ) {
       if (hasActiveCreationLease(merchantId)) return false;
-      markUncertainCreation(merchantId);
+      if (reconcileExpiredLease) markUncertainCreation(merchantId);
       return true;
     }
     return false;
@@ -92,7 +87,7 @@ function markUncertainCreation(merchantId: string) {
   try {
     localStorage.setItem(uncertainCreationKey(merchantId), 'pending');
   } catch {
-    // The in-memory safeguard remains available for this browser session.
+    // The active browser lock/lease protects the in-flight request until release.
   }
 }
 
@@ -107,7 +102,8 @@ function clearUncertainCreation(merchantId: string) {
 
 async function beginCreation(
   merchantId: string,
-  allowUncertainCreation = false
+  allowUncertainCreation = false,
+  beforeLease?: () => Promise<boolean>
 ) {
   if (inFlightCreations.has(merchantId) || hasActiveCreationLease(merchantId))
     return null;
@@ -118,30 +114,47 @@ async function beginCreation(
     releaseCrossTabLock();
     return null;
   }
-  if (!allowUncertainCreation && hasUncertainCreation(merchantId)) {
+  if (!allowUncertainCreation && hasUncertainCreation(merchantId, true)) {
     releaseCrossTabLock();
     return null;
+  }
+  try {
+    if (beforeLease && (await beforeLease())) {
+      releaseCrossTabLock();
+      return null;
+    }
+  } catch (cause) {
+    releaseCrossTabLock();
+    throw cause;
   }
   inFlightCreations.add(merchantId);
   const key = uncertainCreationKey(merchantId);
   const leaseToken = crypto.randomUUID();
-  let lease = `in-flight:${Date.now() + CREATION_LEASE_MS}:${leaseToken}`;
+  let lease = `in-flight:${Date.now() + jumiaPreviewCacheConstants.creationLeaseMs}:${leaseToken}`;
   const renewLease = () => {
     try {
       if (localStorage.getItem(key) !== lease) return;
-      lease = `in-flight:${Date.now() + CREATION_LEASE_MS}:${leaseToken}`;
+      lease = `in-flight:${Date.now() + jumiaPreviewCacheConstants.creationLeaseMs}:${leaseToken}`;
       localStorage.setItem(key, lease);
     } catch {
       // The in-memory guard remains available for this browser session.
     }
   };
   try {
-    localStorage.setItem(uncertainCreationKey(merchantId), lease);
+    localStorage.setItem(key, lease);
   } catch {
-    // Keep the in-flight guard in memory for this browser session.
+    inFlightCreations.delete(merchantId);
+    releaseCrossTabLock();
+    throw new Error(jumiaPreviewMessages.sharedStorageUnavailable);
   }
-  const leaseRenewal = setInterval(renewLease, CREATION_LEASE_RENEWAL_MS);
+  const leaseRenewal = setInterval(
+    renewLease,
+    jumiaPreviewCacheConstants.creationLeaseRenewalMs
+  );
+  let finished = false;
   return () => {
+    if (finished) return;
+    finished = true;
     clearInterval(leaseRenewal);
     inFlightCreations.delete(merchantId);
     try {
@@ -153,155 +166,62 @@ async function beginCreation(
         }
       }
     } catch {
-      // The in-memory guard is released even when storage is unavailable.
+      // Leave the last persisted lease as a conservative recovery marker.
     } finally {
       releaseCrossTabLock();
     }
   };
 }
 
-function hasCreationInFlight(merchantId: string) {
-  if (inFlightCreations.has(merchantId)) return true;
-  if (hasActiveCreationLease(merchantId)) return true;
-  try {
-    if (
-      localStorage
-        .getItem(uncertainCreationKey(merchantId))
-        ?.startsWith('in-flight:')
-    ) {
-      markUncertainCreation(merchantId);
-    }
-  } catch {
-    // A storage-disabled in-flight request is represented in memory.
-  }
-  return false;
-}
-
-function readCachedSelection(cacheKey: string): CachedSelection | null {
-  const memorySelection = memorySelections.get(cacheKey);
-  if (memorySelection) return memorySelection;
-  let stored: string | null;
-  try {
-    stored = localStorage.getItem(cacheKey);
-  } catch {
-    return memorySelections.get(cacheKey) ?? null;
-  }
-  if (stored === null) return memorySelections.get(cacheKey) ?? null;
-  try {
-    const value: unknown = JSON.parse(stored);
-    if (
-      gamingSelectionPreviewErrors.isRecord(value) &&
-      typeof value.selectionId === 'string' &&
-      UUID_PATTERN.test(value.selectionId) &&
-      typeof value.expiresAt === 'string' &&
-      Number.isFinite(Date.parse(value.expiresAt))
-    ) {
-      return { selectionId: value.selectionId, expiresAt: value.expiresAt };
-    }
-    removeCachedSelection(cacheKey);
-  } catch {
-    removeCachedSelection(cacheKey);
-  }
-  return null;
-}
-
-function findCachedSelections(merchantId: string): CacheEntry[] {
-  const prefix = `${CACHE_PREFIX}${merchantId}:`;
-  const cacheKeys = [...memorySelections.keys()];
-  try {
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const cacheKey = localStorage.key(index);
-      if (cacheKey) cacheKeys.push(cacheKey);
-    }
-  } catch {
-    // In-memory entries remain available when browser storage is inaccessible.
-  }
-  const valid: CacheEntry[] = [];
-  for (const cacheKey of new Set(cacheKeys)) {
-    if (!cacheKey.startsWith(prefix)) continue;
-    const selection = readCachedSelection(cacheKey);
-    if (selection) valid.push({ cacheKey, selection });
-  }
-  return valid.sort(
-    (left, right) =>
-      Date.parse(right.selection.expiresAt) -
-      Date.parse(left.selection.expiresAt)
-  );
-}
-
-async function loadFirstValidCachedSelection(
+async function loadFirstValid(
   merchantId: string,
   load: (selectionId: string) => Promise<void>
 ) {
-  for (const entry of findCachedSelections(merchantId)) {
-    try {
-      await load(entry.selection.selectionId);
-      return true;
-    } catch (cause) {
-      if (!gamingSelectionPreviewErrors.isRejected(cause)) throw cause;
-      removeCachedSelection(entry.cacheKey);
-    }
+  const releaseLock = await acquireGamingPreviewCreationLock(merchantId);
+  if (!releaseLock) return false;
+  try {
+    return await gamingSelectionPreviewPersistence.loadFirstValid(
+      merchantId,
+      load
+    );
+  } finally {
+    releaseLock();
   }
-  return false;
 }
 
-async function loadFirstValidCachedSelectionForCategories(
+async function loadFirstValidForCategories(
   merchantId: string,
   categoryIds: string[],
   load: (selectionId: string) => Promise<void>
 ) {
-  const categoryKeys = new Set(
-    categoryIds.map((categoryId) => createCacheKey(merchantId, categoryId))
-  );
-  for (const entry of findCachedSelections(merchantId)) {
-    if (!categoryKeys.has(entry.cacheKey)) continue;
-    try {
-      await load(entry.selection.selectionId);
-      return true;
-    } catch (cause) {
-      if (!gamingSelectionPreviewErrors.isRejected(cause)) throw cause;
-      removeCachedSelection(entry.cacheKey);
-    }
+  const releaseLock = await acquireGamingPreviewCreationLock(merchantId);
+  if (!releaseLock) return false;
+  try {
+    return await gamingSelectionPreviewPersistence.loadFirstValidForCategories(
+      merchantId,
+      categoryIds,
+      load
+    );
+  } finally {
+    releaseLock();
   }
+}
+
+function hasCreationInFlight(merchantId: string) {
+  if (inFlightCreations.has(merchantId)) return true;
+  if (hasActiveCreationLease(merchantId)) return true;
   return false;
-}
-
-function findCachedSelection(merchantId: string): CacheEntry | null {
-  return findCachedSelections(merchantId)[0] ?? null;
-}
-
-function removeCachedSelection(cacheKey: string) {
-  memorySelections.delete(cacheKey);
-  try {
-    localStorage.removeItem(cacheKey);
-  } catch {
-    // The stale cache can be retried if storage is unavailable.
-  }
-}
-
-function writeCachedSelection(cacheKey: string, selection: CachedSelection) {
-  memorySelections.set(cacheKey, selection);
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify(selection));
-    memorySelections.delete(cacheKey);
-  } catch {
-    // The current module keeps the usable selection for this browser session.
-  }
 }
 
 export const gamingSelectionPreviewCache = {
   ...gamingSelectionPreviewErrors,
-  clearUncertainCreation,
-  subscribeToUncertainCreationClear,
+  ...gamingSelectionPreviewPersistence,
   beginCreation,
-  find: findCachedSelection,
-  hasUncertainCreation,
+  clearUncertainCreation,
   hasCreationInFlight,
-  key: createCacheKey,
-  loadFirstValid: loadFirstValidCachedSelection,
-  loadFirstValidForCategories: loadFirstValidCachedSelectionForCategories,
+  hasUncertainCreation,
+  loadFirstValid,
+  loadFirstValidForCategories,
   markUncertainCreation,
-  read: readCachedSelection,
-  remove: removeCachedSelection,
-  write: writeCachedSelection,
+  subscribeToUncertainCreationClear,
 };

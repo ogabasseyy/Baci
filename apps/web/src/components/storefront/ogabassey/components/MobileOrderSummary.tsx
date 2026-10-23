@@ -67,7 +67,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                 <div
                     id={orderSummaryId}
                     aria-hidden={!isExpanded}
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'visible max-h-[80vh] opacity-100 pb-6' : 'invisible max-h-0 opacity-0'
+                    className={`overflow-x-hidden overflow-y-auto transition-all duration-300 ease-in-out ${isExpanded ? 'visible max-h-[80vh] opacity-100 pb-6' : 'invisible max-h-0 opacity-0'
                         }`}
                 >
                     {/* Items List */}

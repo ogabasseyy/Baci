@@ -69,3 +69,8 @@ describe('CartVariantDetails', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+it('uses the storefront theme for variant text', () => {
+  render(<CartVariantDetails item={{ selectedStorage: '512GB' }} />);
+  expect(screen.getByLabelText('Selected variant')).toHaveClass('text-store-background-text/70');
+});

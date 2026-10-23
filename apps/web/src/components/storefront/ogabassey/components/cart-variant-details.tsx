@@ -12,7 +12,7 @@ interface VariantDetailsItem {
 /** Render the saved SKU selection consistently in carts and checkout. */
 export function CartVariantDetails({
   item,
-  className = 'text-gray-500',
+  className = 'text-store-background-text/70',
 }: {
   item: VariantDetailsItem;
   className?: string;

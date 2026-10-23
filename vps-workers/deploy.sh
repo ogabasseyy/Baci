@@ -43,7 +43,6 @@ fi
 check_deploy_workflow_inflight
 
 prepare_worker_release
-
 REMEDIATION_STATE=$(ssh "$VPS" "if [ -e '$REMEDIATION_DISABLED_MARKER' ] || [ -L '$REMEDIATION_DISABLED_MARKER' ]; then printf disabled; else printf enabled; fi")
 [[ "$REMEDIATION_STATE" == disabled || "$REMEDIATION_STATE" == enabled ]]
 if [ "$REMEDIATION_STATE" = enabled ]; then

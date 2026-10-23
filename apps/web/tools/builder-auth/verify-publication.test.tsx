@@ -56,7 +56,7 @@ it('verifies actual rendered revision plus changed content without credentials; 
     body: Buffer.from(
       html.replace(
         '</head>',
-        '<script src="https://www.googletagmanager.com/gtag/js?id=fixture"></script><script src="/baci-relay/static/recorder.js"></script><script>fetch("/baci-relay/decide?v=3").catch(()=>{});</script></head>'
+        '<script src="https://www.googletagmanager.com/gtag/js?id=fixture"></script><script src="https://connect.facebook.net/en_US/fbevents.js"></script><script src="https://analytics.tiktok.com/i18n/pixel/events.js"></script><script src="https://sc-static.net/scevent.min.js"></script><script src="https://static.ads-twitter.com/uwt.js"></script><script src="/baci-relay/static/recorder.js"></script><script>fetch("/baci-relay/decide?v=3").catch(()=>{});</script></head>'
       )
     ),
   }));
@@ -66,7 +66,7 @@ it('verifies actual rendered revision plus changed content without credentials; 
   expect(
     telemetry.mock.calls.every(
       ([url]) =>
-        !url.includes('googletagmanager') && !url.includes('/baci-relay')
+        new URL(url).origin === input.url && !url.includes('/baci-relay')
     )
   ).toBe(true);
   const required = vi.fn(async (url: string) => {

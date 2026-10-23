@@ -91,6 +91,10 @@ export async function verifyPublication(
             'www.googletagmanager.com',
             'www.google-analytics.com',
             'region1.google-analytics.com',
+            'connect.facebook.net',
+            'analytics.tiktok.com',
+            'sc-static.net',
+            'static.ads-twitter.com',
           ].includes(requestUrl.hostname) &&
           ['script', 'fetch', 'xhr', 'ping'].includes(request.resourceType()))
       ) {

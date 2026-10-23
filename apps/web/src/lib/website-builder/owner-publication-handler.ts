@@ -72,7 +72,8 @@ export function createOwnerPublicationHandler(
           : await retryCommittedDelivery(
               owner,
               parsed.data.receiptId,
-              deps.delivery
+              deps.delivery,
+              true
             );
       return respond(result);
     } catch (error) {

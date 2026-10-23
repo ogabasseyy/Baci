@@ -174,3 +174,56 @@ it('exact committed retry resolves current state after expiry, consumed nonce an
     ).rows[0].n
   ).toBe(1);
 });
+
+it('caps automatic attempts but lets an explicit owner retry recover the same receipt', async () => {
+  const { id, result, receipt } = await commit();
+  await f.pool.query(
+    "UPDATE builder_authorization.publication_outbox SET attempts=20,next_attempt_at=now()-interval '1 minute' WHERE receipt_id=$1",
+    [receipt]
+  );
+  expect(
+    await f.owner((c) => f.run(c, 'builder_due_publications', []))
+  ).toEqual([]);
+  const staleAutomaticClaim = await f.owner((c) =>
+    f.run<Record<string, unknown>>(c, 'builder_claim_publication_delivery', [
+      receipt,
+    ])
+  );
+  expect(staleAutomaticClaim.leaseId).toBeUndefined();
+  const claim = await f.owner((c) =>
+    f.run<Record<string, unknown>>(c, 'builder_retry_publication_delivery', [
+      receipt,
+    ])
+  );
+  expect(claim.leaseId).toBeDefined();
+  expect(
+    (
+      await f.pool.query(
+        'SELECT attempts FROM builder_authorization.publication_outbox WHERE receipt_id=$1',
+        [receipt]
+      )
+    ).rows[0].attempts
+  ).toBe(1);
+  const proof = await f.proof(
+    id,
+    'delivery',
+    receipt,
+    result.publishedVersion as string
+  );
+  expect(
+    await f.owner((c) =>
+      f.run(c, 'builder_finish_publication_delivery', [
+        receipt,
+        claim.leaseId,
+        proof,
+      ])
+    )
+  ).toMatchObject({ status: 'live', receiptId: receipt });
+  expect(
+    (
+      await f.pool.query(
+        'SELECT count(*)::int n FROM builder_authorization.publication_receipts'
+      )
+    ).rows[0].n
+  ).toBe(1);
+});

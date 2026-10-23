@@ -11,6 +11,7 @@ export const publicationMigrations = [
   '20261022121300_builder_publication_commit.sql',
   '20261022121400_builder_publication_delivery.sql',
   '20261022121500_builder_publication_status.sql',
+  '20261022235538_builder_publication_payment_and_retry_recovery.sql',
 ];
 export async function publicationFixture() {
   const db = await draftFixture({

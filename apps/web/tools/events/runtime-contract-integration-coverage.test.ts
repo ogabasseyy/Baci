@@ -59,3 +59,16 @@ it('detects deletion of the last mapped integration test when only the test path
     `${target}: changed runtime is missing colocated test apps/web/src/lib/website-builder/load-publication.test.ts`
   );
 });
+
+it('rejects named type-only re-exports but follows mixed runtime re-exports', () => {
+  const sources = new Map([
+    [suite, "export { type X } from '@/lib/website-builder/load-publication';"],
+    [target, 'export interface X {} export const load = () => true;'],
+  ]);
+  expect(hasRuntimeIntegrationCoverage(target, sources)).toBe(false);
+  sources.set(
+    suite,
+    "export { type X, load } from '@/lib/website-builder/load-publication';"
+  );
+  expect(hasRuntimeIntegrationCoverage(target, sources)).toBe(true);
+});

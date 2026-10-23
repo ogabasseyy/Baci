@@ -22,12 +22,17 @@ export interface PublicationDeliveryDependencies {
 export async function retryCommittedDelivery(
   ownerClient: SupabaseClient,
   receiptId: string,
-  deps: PublicationDeliveryDependencies
+  deps: PublicationDeliveryDependencies,
+  explicitOwnerRetry = false
 ) {
   const claim = deliveryClaimSchema.parse(
-    await publicationRpc(ownerClient, 'builder_claim_publication_delivery', {
-      p_receipt: receiptId,
-    })
+    await publicationRpc(
+      ownerClient,
+      explicitOwnerRetry
+        ? 'builder_retry_publication_delivery'
+        : 'builder_claim_publication_delivery',
+      { p_receipt: receiptId }
+    )
   );
   if (!claim.leaseId || claim.result.status !== 'verifying')
     return claim.result;

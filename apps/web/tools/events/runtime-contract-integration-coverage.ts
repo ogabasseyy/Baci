@@ -51,6 +51,12 @@ function references(path: string, source: string) {
     if (
       ts.isExportDeclaration(node) &&
       !node.isTypeOnly &&
+      !(
+        node.exportClause &&
+        ts.isNamedExports(node.exportClause) &&
+        node.exportClause.elements.length > 0 &&
+        node.exportClause.elements.every((element) => element.isTypeOnly)
+      ) &&
       node.moduleSpecifier &&
       ts.isStringLiteral(node.moduleSpecifier)
     )

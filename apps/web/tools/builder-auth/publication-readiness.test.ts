@@ -20,6 +20,8 @@ it('keeps authoritative SQL blockers equal to normal-owner readiness across laun
     ['NG', true, false, 'NGN'],
     ['GH', false, true, 'GHS'],
     ['US', false, true, 'USD'],
+    ['US', false, true, null],
+    ['NG', false, true, null],
     ['', false, false, 'NGN'],
   ] as const) {
     await f.pool.query(

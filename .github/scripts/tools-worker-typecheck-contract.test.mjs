@@ -130,3 +130,14 @@ test('bugfix: CI runner script changes trigger the web quality gate', async () =
     );
   }
 });
+
+test('full web shards install the isolated builder auth lockfile before fixture collection', async () => {
+  const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+  const shard = workflow.split('  quality-test-web:')[1].split('  quality-db-replay:')[0];
+  const install = 'pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile';
+  assert.ok(shard.indexOf(install) >= 0);
+  assert.ok(shard.indexOf(install) < shard.indexOf('Run web vitest shard'));
+  const pkg = JSON.parse(await readFile('apps/web/tools/builder-auth/package.json', 'utf8'));
+  assert.ok(pkg.dependencies['oidc-provider']);
+  assert.match(await readFile('apps/web/tools/builder-auth/pnpm-lock.yaml', 'utf8'), /oidc-provider:/);
+});

@@ -59,4 +59,9 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261022121500_builder_publication_status.sql',
     sha256: 'a2404ccc6be69ab21fff052b604a3554a49cfdf4bea3f722731667f8afc85fdf',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261022235538_builder_publication_payment_and_retry_recovery.sql',
+    sha256: '4fb1b5b098d63ad21aa2892036274ec975b4f042bf757e46a340a68f3e33437e',
+  },
 ];

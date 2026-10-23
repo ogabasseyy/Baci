@@ -1,3 +1,6 @@
+import { mcpReadiness } from './mcp-readiness';
+import { withOAuthReadinessTimeout } from './guest-oauth-startup';
+import { createGuestOAuthRuntime } from './guest-oauth-runtime';
 import { getConfirmedStockLabel } from './confirmed-stock-label';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -91,9 +94,8 @@ const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
-const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
-const MCP_ALLOWED_HEADERS = 'content-type, mcp-protocol-version, mcp-session-id';
+const MCP_ALLOWED_HEADERS = 'content-type, authorization, mcp-protocol-version, mcp-session-id';
 const MCP_ALLOWED_METHODS = 'POST, GET, OPTIONS, DELETE, HEAD';
 const AGENTIC_CHECKOUT_TOOLS_ENABLED =
   process.env.MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS === '1' ||
@@ -1233,7 +1235,15 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
-function createOgabasseyServer(options: { clientIp?: string } = {}) {
+const guestOAuth = createGuestOAuthRuntime({
+  issuer: MCP_PUBLIC_ORIGIN, supabaseUrl: SUPABASE_URL!, anonKey: SUPABASE_ANON_KEY!,
+  getMerchantId, cartStore: guestCartStore,
+});
+// The dedicated OAuth service listens at its advertised resource path.
+// Default-off/original instances retain /mcp.
+const MCP_PATH = guestOAuth?.resourcePath ?? '/mcp';
+
+function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { resolveToken: () => Promise<string> } } = {}) {
   const server = new McpServer({
     name: 'ogabassey-store',
     version: '1.0.0',
@@ -1355,7 +1365,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     }
   );
 
-  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
+  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp, connectionCart: options.connectionCart });
 
   registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
@@ -1761,7 +1771,8 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       return projection.manageStock && projection.stockQuantity <= 0
         ? 'out_of_stock'
         : 'in_stock';
-    }
+    },
+    Boolean(options.connectionCart),
   );
 
   if (ORDER_PAYMENT_TOOLS_ENABLED) {
@@ -2478,6 +2489,8 @@ const httpServer = createServer(
       return;
     }
 
+    if (guestOAuth && await guestOAuth.handleHttp(req, res, url, ip)) return;
+
     // CORS preflight
     if (req.method === 'OPTIONS' && url.pathname === MCP_PATH) {
       res.writeHead(204, {
@@ -2535,14 +2548,15 @@ const httpServer = createServer(
     // degraded cart store must not flip the probe red, or catalog traffic
     // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
-      const carts = describeGuestCartStoreHealth(guestCartStore);
+      const carts = { ...describeGuestCartStoreHealth(guestCartStore), ...guestOAuth?.health() };
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
-          res.writeHead(200, { 'content-type': 'application/json' });
+          const readiness = mcpReadiness(true, guestOAuth?.health().guestOAuthWorker);
+          res.writeHead(readiness.statusCode, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
-              status: 'healthy',
+              status: readiness.status,
               database: 'connected',
               ...carts,
             })
@@ -2617,7 +2631,9 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Allow-Headers', MCP_ALLOWED_HEADERS);
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const server = createOgabasseyServer({ clientIp: ip });
+      const connectionCart = guestOAuth ? await guestOAuth.connection(req, res) : undefined;
+      if (guestOAuth && !connectionCart) return;
+      const server = createOgabasseyServer({ clientIp: ip, connectionCart: connectionCart ?? undefined });
       const transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -2733,5 +2749,10 @@ function onListening() {
 // idling past the deploy's /health curl loop.
 gateStartupOnGuestCartCapability({
   client: guestCartClient,
-  onReady: () => httpServer.listen(PORT, onListening),
+  onReady: () => {
+    if (!guestOAuth) { httpServer.listen(PORT, onListening); return; }
+    withOAuthReadinessTimeout(() => guestOAuth.ready()).then(() => httpServer.listen(PORT, onListening)).catch(() => {
+      console.error('FATAL: Guest OAuth capability probe failed'); process.exit(1);
+    });
+  },
 });

@@ -1,3 +1,5 @@
+import { refreshConnectedCart } from '../refresh-connected-cart';
+import { parseConnectedCartReply, mergeConnectedCartReply } from '../connected-cart-reply';
 import { useRef, useState } from 'react';
 import {
   dropLineFromCartState,
@@ -28,6 +30,11 @@ export function useCartHandoff() {
   const { canReviewCart, handleViewCart } = useCartReview({
     cart,
     cartUrl: widgetState?.cartUrl,
+    connectionCartId: widgetState?.connectionCartId,
+    onConnectedRefresh: (reply) => {
+      setWidgetState((previous) => mergeConnectedCartReply(previous, reply));
+      syncCartNotice(reply.items, widgetState?.cart ?? [], '');
+    },
     busy,
     setCartError,
   });
@@ -48,7 +55,7 @@ export function useCartHandoff() {
     // Legacy conversations restore cart state without a token; with no
     // server cart to update, the line is dropped locally instead, which
     // needs no tool bridge.
-    if (!widgetState?.cartToken) {
+    if (!widgetState?.cartToken && !widgetState?.connectionCartId) {
       setCartError(null);
       setWidgetState((previous) => dropLineFromCartState(previous, productId));
       return;
@@ -68,8 +75,25 @@ export function useCartHandoff() {
       const response = await host?.callTool('update_ogabassey_guest_cart', {
         product_id: productId,
         quantity: 0,
-        cart_token: widgetState.cartToken,
+        ...(widgetState?.connectionCartId ? {
+          expectedVersion: widgetState.cartVersion, operationId: crypto.randomUUID(),
+        } : { cart_token: widgetState?.cartToken }),
       });
+      const connected = parseConnectedCartReply(readStructuredContent(response));
+      if (widgetState?.connectionCartId) {
+        if (!connected) {
+          const fresh = await refreshConnectedCart(host.callTool.bind(host), widgetState.connectionCartId);
+          setWidgetState((previous) => mergeConnectedCartReply(previous, fresh));
+          syncCartNotice(fresh.items, widgetState.cart ?? [], productId);
+          setCartError('Your connected cart changed. Please check it and try again.');
+          return;
+        }
+        if (connected.cartId !== widgetState.connectionCartId ||
+          connected.items.some((line) => line.product_id === productId)) throw new Error('Cart update failed');
+        setWidgetState((previous) => mergeConnectedCartReply(previous, connected));
+        syncCartNotice(connected.items, widgetState.cart ?? [], productId);
+        return;
+      }
       const content = parseCartToolOutput(readStructuredContent(response));
       if (content?.success === false && content.cart_expired === true) {
         // The server cart is gone, so the removed line is gone with it: drop
@@ -92,7 +116,7 @@ export function useCartHandoff() {
       }
       const remaining = parseRemovalRemaining(
         content,
-        widgetState.cartToken,
+        widgetState?.cartToken ?? '',
         productId
       );
       // The cart_url check only narrows content for the merge below: a

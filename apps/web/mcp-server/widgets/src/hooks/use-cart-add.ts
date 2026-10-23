@@ -1,3 +1,5 @@
+import { refreshConnectedCart } from '../refresh-connected-cart';
+import { parseConnectedCartReply, mergeConnectedCartReply } from '../connected-cart-reply';
 import type { SetStateAction } from 'react';
 import { reconcileCartLineQuantities } from '../drop-cart-line';
 import { openOgabasseyUrl } from '../open-ogabassey-url';
@@ -88,25 +90,51 @@ export function createCartAddHandler({
       // Keep the navigation handle but prevent the destination from reaching
       // back into the widget. Passing noopener to open would lose the handle.
       if (pendingTab) pendingTab.opener = null;
-      // Guest quantities are absolute totals, so re-adding tops the line up
-      // instead of resetting it to one.
-      // Last-wins absolute quantities: the add target derives from local
-      // widget state, so a stale view (e.g. a concurrent direct tool call)
-      // can shrink the server line. Accepted: idempotent retries need
-      // absolute totals, and the additive-only website transfer takes the
-      // higher side, so the website cart never moves backward.
-      const existingQuantity =
-        widgetState?.cart.find((item) => item.product.id === product.id)
-          ?.quantity ?? 0;
+      let currentState = widgetState;
+      const metadata = host.toolResponseMetadata;
+      const connectedCatalog = metadata && typeof metadata === 'object' &&
+        'connection_bound' in metadata && metadata.connection_bound === true;
+      if (connectedCatalog && !currentState?.connectionCartId) {
+        const fresh = await refreshConnectedCart(host.callTool.bind(host), currentState?.connectionCartId);
+        if (requestId !== handoffRequestId.current) { pendingTab?.close(); return; }
+        currentState = mergeConnectedCartReply(currentState, fresh, product);
+        setWidgetState(currentState);
+        syncCartNotice(fresh.items, widgetState?.cart ?? [], product.id);
+      }
+      const existingQuantity = currentState?.cart.find((item) => item.product.id === product.id)?.quantity ?? 0;
       const quantity = Math.min(existingQuantity + 1, 10);
       let result = await host?.callTool('update_ogabassey_guest_cart', {
         product_id: product.id,
         quantity,
-        cart_token: widgetState?.cartToken,
+        ...(currentState?.connectionCartId ? {
+          expectedVersion: currentState.cartVersion, operationId: crypto.randomUUID(),
+        } : { cart_token: currentState?.cartToken }),
       });
       if (requestId !== handoffRequestId.current) {
         pendingTab?.close();
         return;
+      }
+      const connected = parseConnectedCartReply(readStructuredContent(result));
+      if (connected) {
+        pendingTab?.close();
+        if (!connected.items.some((line) => line.product_id === product.id) ||
+          (widgetState?.connectionCartId && widgetState.connectionCartId !== connected.cartId)) {
+          setCartError('Could not confirm this connected cart. Please reopen the catalog.'); return;
+        }
+        setWidgetState((previous) => mergeConnectedCartReply(previous, connected, product));
+        syncCartNotice(connected.items, widgetState?.cart ?? [], product.id);
+        return;
+      }
+      const rawContent = readStructuredContent(result);
+      const isConnectedFailure = rawContent && typeof rawContent === 'object' && 'connection_bound' in rawContent && rawContent.connection_bound === true;
+      if (widgetState?.connectionCartId || isConnectedFailure) {
+        pendingTab?.close();
+        try {
+          const fresh = await refreshConnectedCart(host.callTool.bind(host), widgetState?.connectionCartId);
+          setWidgetState((previous) => mergeConnectedCartReply(previous, fresh, product));
+          syncCartNotice(fresh.items, widgetState?.cart ?? [], product.id);
+        } catch { /* Preserve state when the refresh is unavailable. */ }
+        setCartError('Your connected cart changed or is temporarily unavailable. Please try again.'); return;
       }
       // Recovery keeps the shopper's cart whole before the authoritative
       // merge: a stale token retries once without it, and a tokenless mint

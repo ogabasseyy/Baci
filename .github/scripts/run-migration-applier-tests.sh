@@ -9,6 +9,8 @@ cd "$repo_root"
 
 node --test "$script_dir/checkout-recovery-atomic-release.test.mjs" "$script_dir/security-pr-scope.test.mjs" "$script_dir/security-analysis-diagnostics.test.mjs" "$script_dir/recovery-release-approval.test.mjs" "$script_dir/semgrepignore-production-coverage.test.mjs"
 
+node --test "$repo_root/supabase/tests/mcp-guest-oauth-records.test.mjs"
+
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs"
@@ -79,3 +81,5 @@ bash "$repo_root/supabase/tests/run-gigl-tracking-retry-repair-test.sh"
 bash "$repo_root/supabase/tests/run-gigl-monitor-backfill-repair-test-runner.test.sh"
 bash "$repo_root/supabase/tests/run-gigl-monitor-backfill-repair-test.sh"
 node --test "$script_dir/split-sql-statements.test.mjs"
+
+bash "$script_dir/storefront-facet-timestamp.test.sh"

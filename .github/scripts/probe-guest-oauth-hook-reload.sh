@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Prove fleet-wide OAuth hook reload before separately restoring membership.
+# Never skips based on migration history: each restoration needs a fresh probe.
+set -euo pipefail
+
+: "${SUPABASE_ACCESS_TOKEN:?SUPABASE_ACCESS_TOKEN is required}"
+: "${SUPABASE_PROJECT_REF:?SUPABASE_PROJECT_REF is required}"
+: "${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL is required}"
+: "${NEXT_PUBLIC_SUPABASE_ANON_KEY:?NEXT_PUBLIC_SUPABASE_ANON_KEY is required}"
+
+# Bind the canary to the migrated project: the migration, reload
+# notifications, and isolate grant all target SUPABASE_PROJECT_REF, so a
+# stale or substituted NEXT_PUBLIC_SUPABASE_URL must fail here rather
+# than authorize the grant with another project's acks. supabase.co URLs
+# must match the ref exactly; anything else (local stubs, preview hosts)
+# requires the explicit escape hatch below (test/local use only — the
+# deploy workflow never sets it). This check intentionally diverges from
+# the GIGL/blog-media probe mirror.
+canary_host="$(node -e '
+try {
+  const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  if (url.username || url.password || !["http:", "https:"].includes(url.protocol)) process.exit(1);
+  process.stdout.write(url.hostname);
+} catch { process.exit(1); }
+')" || { echo '::error::Invalid guest OAuth probe URL; refusing to probe.' >&2; exit 1; }
+expected_host="${SUPABASE_PROJECT_REF}.supabase.co"
+case "$canary_host" in
+  *.supabase.co)
+    if [ "$canary_host" != "$expected_host" ]; then
+      echo "::error::GUEST OAUTH hook probe URL host '${canary_host}' does not match project ref '${SUPABASE_PROJECT_REF}' (expected '${expected_host}'); refusing to probe." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "${GUEST_OAUTH_HOOK_PROBE_ALLOW_UNBOUND_URL:-}" != "1" ]; then
+      echo "::error::GUEST OAUTH hook probe URL host '${canary_host}' is not a supabase.co project URL; set GUEST_OAUTH_HOOK_PROBE_ALLOW_UNBOUND_URL=1 to probe it explicitly (test/local use only)." >&2
+      exit 1
+    fi
+    ;;
+esac
+
+CANARY_PATH=__guest_oauth_hook_reload_canary__
+CANARY_MESSAGE='GUEST OAUTH hook reload canary observed'
+MGMT_BASE="${SUPABASE_MGMT_API_BASE:-https://api.supabase.com}"
+DEADLINE_S="${GUEST_OAUTH_HOOK_PROBE_DEADLINE_S:-900}"
+INTERVAL_S="${GUEST_OAUTH_HOOK_PROBE_INTERVAL_S:-2}"
+UNANIMITY_S="${GUEST_OAUTH_HOOK_PROBE_UNANIMITY_S:-300}"
+RENOTIFY_S="${GUEST_OAUTH_HOOK_PROBE_RENOTIFY_S:-60}"
+
+if ! [ "$DEADLINE_S" -ge 1 ] 2>/dev/null || ! [ "$INTERVAL_S" -ge 0 ] 2>/dev/null \
+  || ! [ "$UNANIMITY_S" -ge 1 ] 2>/dev/null || ! [ "$RENOTIFY_S" -ge 1 ] 2>/dev/null; then
+  echo "::error::GUEST OAUTH hook probe deadline/unanimity/renotify must be >= 1 and interval must be >= 0 (0 = test-only fast poll)" >&2
+  exit 1
+fi
+
+mgmt_api="${MGMT_BASE}/v1/projects/${SUPABASE_PROJECT_REF}/database/query"
+renotify_postgrest() {
+  local signal payload
+  # Config and schema notifications are SEPARATE (PostgREST listener
+  # docs): a replica that missed the restore-time schema reload keeps
+  # 404ing the canary until it hears 'reload schema' — config-only
+  # re-notifies can never heal it, and unanimity would time out. Both
+  # signals, every time.
+  for signal in 'reload config' 'reload schema'; do
+    payload="$(jq -n --arg signal "$signal" '{query: ("NOTIFY pgrst, \u0027" + $signal + "\u0027")}')" || return 1
+    curl --fail-with-body --silent --show-error -X POST \
+      -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+      -H 'Content-Type: application/json' \
+      --data-binary @- "$mgmt_api" <<<"$payload" >/dev/null 2>&1 || return 1
+  done
+}
+
+# Fresh reload signals for replicas that missed the restore-time
+# notifies (restarting or LISTEN-flapping then). Best-effort: the
+# unanimity window below is the actual gate, so a failed re-notify
+# warns and the probe still verifies empirically.
+if renotify_postgrest; then
+  echo "Signaled PostgREST config+schema reload."
+else
+  echo "::warning::GUEST OAUTH hook probe could not re-send the reload signals; relying on the restore-time signals plus unanimous observation."
+fi
+
+url="${NEXT_PUBLIC_SUPABASE_URL%/}/rest/v1/rpc/${CANARY_PATH}"
+start="$(date +%s)"
+last_notify="$start"
+unanimous_since=""
+ever_acked=0
+attempt=0
+while :; do
+  attempt=$((attempt + 1))
+  body="$(curl --silent --show-error --max-time 15 -X POST \
+    -H "apikey: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
+    -H "Authorization: Bearer ${NEXT_PUBLIC_SUPABASE_ANON_KEY}" \
+    -H 'Content-Type: application/json' \
+    -d '{}' "$url" 2>/dev/null)" || body=''
+  now="$(date +%s)"
+  # Status-agnostic on purpose (mirrors the supabase-js scope probe):
+  # PostgREST versions map raised 42501 to different HTTP statuses,
+  # but the JSON body code/message is the stable contract.
+  if [ -n "$body" ] && jq -e --arg msg "$CANARY_MESSAGE" \
+    'type == "object" and .code == "42501" and ((.message // "") | contains($msg))' \
+    >/dev/null 2>&1 <<<"$body"; then
+    ever_acked=1
+    if [ -z "$unanimous_since" ]; then
+      unanimous_since="$now"
+      echo "First canary ack on attempt ${attempt}; requiring ${UNANIMITY_S}s of unanimous acks."
+    fi
+    if [ "$((now - unanimous_since))" -ge "$UNANIMITY_S" ]; then
+      echo "GUEST OAUTH hook reload acknowledged fleet-wide: ${UNANIMITY_S}s unanimous after ${attempt} attempt(s)."
+      exit 0
+    fi
+  else
+    if [ -n "$unanimous_since" ]; then
+      echo "Non-ack on attempt ${attempt} (${body:0:160}); unanimity clock reset."
+      unanimous_since=""
+    else
+      echo "Attempt ${attempt}: no ack yet (${body:0:160})."
+    fi
+  fi
+  if [ "$((now - start))" -ge "$DEADLINE_S" ]; then
+    if [ "$ever_acked" = 1 ]; then
+      echo "::error::PostgREST canary acks never reached ${UNANIMITY_S}s unanimous within ${DEADLINE_S}s (a stale replica kept answering); the isolate grant is NOT applied. Check PostgREST fleet health and config reload, then re-run the deploy." >&2
+    else
+      echo "::error::PostgREST never served the GUEST OAUTH hook reload canary within ${DEADLINE_S}s (expected anonymous POST ${CANARY_PATH} to answer 42501 '${CANARY_MESSAGE}'); the isolate grant is NOT applied. Check PostgREST health and config reload, then re-run the deploy." >&2
+    fi
+    exit 1
+  fi
+  if [ "$((now - last_notify))" -ge "$RENOTIFY_S" ]; then
+    renotify_postgrest && last_notify="$now" || echo "::warning::GUEST OAUTH hook probe reload re-notify failed; continuing to observe."
+  fi
+  sleep "$INTERVAL_S"
+done

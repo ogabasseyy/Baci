@@ -9,7 +9,8 @@ export function registerCatalogRenderer(
   server: McpServer,
   uri: string,
   lookup: (id: string) => Promise<{ structuredContent?: unknown }>,
-  getSerializedBaseStock?: (id: string) => Promise<'in_stock' | 'out_of_stock' | 'not_serialized' | 'unknown'>
+  getSerializedBaseStock?: (id: string) => Promise<'in_stock' | 'out_of_stock' | 'not_serialized' | 'unknown'>,
+  connectionBound = false,
 ) {
   server.registerTool(
     'render_ogabassey_catalog',
@@ -30,6 +31,9 @@ export function registerCatalogRenderer(
         'openai/toolInvocation/invoked': 'Catalog ready',
       },
     },
-    createCatalogRenderer(lookup, getSerializedBaseStock)
+    async (input) => {
+      const reply = await createCatalogRenderer(lookup, getSerializedBaseStock)(input);
+      return { ...reply, _meta: { connection_bound: connectionBound } };
+    }
   );
 }

@@ -1,3 +1,4 @@
+import { connectedCartReviewUrl } from './connected-cart-reply';
 import { parseHandoffLines } from './parse-handoff-lines';
 
 // True when the stored cart link is a validated Ogabassey handoff that
@@ -8,6 +9,7 @@ export function hasReviewableHandoffLines(
   cartUrl: string | undefined
 ): boolean {
   if (!cartUrl) return false;
+  if (connectedCartReviewUrl(cartUrl)) return true;
   let review: string | null;
   try {
     review = buildReviewCartUrl(cartUrl);
@@ -28,6 +30,8 @@ export function hasReviewableHandoffLines(
 // value opens the bare cart instead of propagating to the website. Returns
 // null when the stored URL is not a usable Ogabassey cart link.
 export function buildReviewCartUrl(cartUrl: string): string | null {
+  const connected = connectedCartReviewUrl(cartUrl);
+  if (connected) return connected;
   const url = new URL(cartUrl);
   if (
     url.origin !== 'https://ogabassey.com' ||

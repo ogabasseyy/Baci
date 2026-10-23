@@ -1,3 +1,4 @@
+import { registerConnectedCartRead } from './register-connected-cart-read';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { privateCartContinuationEnabled } from './private-cart-continuation-config';
@@ -11,4 +12,5 @@ export function registerConfiguredGuestCartTool(
     ...options,
     enablePrivateTextContinuation: privateCartContinuationEnabled(),
   });
+  if (options.connectionCart) registerConnectedCartRead(server, options.store, options.connectionCart);
 }

@@ -4,6 +4,7 @@ import type { GuestCartStore } from './guest-cart-store';
 export interface GuestCartStoreLike {
   update: GuestCartStore['update'];
   hasToken: GuestCartStore['hasToken'];
+  readConnectionCart?: GuestCartStore['readConnectionCart'];
   /** Token-free code of the latest failed store write, cleared by the next success. */
   lastStorageErrorCode?: string | null;
   /** False when no canonical bridge is configured/allowlisted (legacy only). */

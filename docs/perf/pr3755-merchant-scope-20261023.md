@@ -6,11 +6,12 @@ Worktree: `/Users/mac/.codex/worktrees/pr3755-merchant-scope/Baci-app`.
 Branch: `codex/cold-mobile-header-search`; published head remains
 `55ac82509c93321713c6131c7db6e072504a378d`.
 
-Main synchronization is in progress locally. The two conflict markers in the
-generated inventory and its assertion are resolved using main's metadata as the
-intermediate state. The combined committed source must still regenerate that
-snapshot before final submission; no current-source inventory pass is claimed.
-No merge commit, push, PR merge or deployment has been performed this round.
+Main synchronization and the scope fix are committed locally as
+`9a148ae091483e4a2e5be3c63c95af66406028ec`. The two inventory conflicts were
+resolved using main's metadata as an intermediate state, then the generator ran
+against the combined committed source. All 584 route classifications and main's
+proxy-input hash remain unchanged; only source identity, route-tree hash and
+enclosing digest change. No PR merge or deployment is authorized.
 
 The OgaBassey header CSS has moved out of the unconditional tenant-neutral
 `StorefrontLcpCopyStyle` into `OgabasseyHeaderCriticalStyle`, rendered by the
@@ -58,11 +59,14 @@ CodeRabbit's first uncommitted attempt exceeded its 150-file limit because the
 main synchronization adds hundreds of files. A scoped attempt was rate-limited;
 after its approximately 15-minute window, retry reported a fresh 30-minute
 account limit with no assigned organization seat for usage-based review.
-No successful review of this round has occurred. Do not bypass that gate.
+No successful CodeRabbit review of this round occurred. The owner explicitly
+authorized skipping CodeRabbit on 2026-10-23. Other validation, push hooks and
+fresh current-head Codex review remain required; that exception does not
+authorize PR merge or deployment.
 
-Remaining: successful scoped local review; commit combined source; regenerate
-the inventory and verify its contract; commit/push; verify remote SHA; request
-fresh Codex review. No PR merge or deployment is authorized.
+The inventory contract is rechecked before the metadata commit and push. Remote
+SHA and fresh Codex request are recorded in the local PR review ledger. No clean
+Codex verdict or full-suite result is inferred from the targeted checks.
 
 ## Evidence
 

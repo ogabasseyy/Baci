@@ -15,6 +15,7 @@ import { RepairBookingWizard } from './RepairBookingWizard';
 // RadioGroupItem (device type / service type selectors) uses Radix's
 // useSize internally, which needs ResizeObserver — not implemented in jsdom.
 const OriginalResizeObserver = globalThis.ResizeObserver;
+const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 beforeAll(() => {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -28,19 +29,27 @@ beforeAll(() => {
       // intentional noop
     }
   };
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterAll(() => {
   globalThis.ResizeObserver = OriginalResizeObserver;
+  if (originalScrollIntoView) {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  }
 });
 
-const { mockCreateRepair, mockToast, mockMotionInitialValues } = vi.hoisted(
-  () => ({
+const { mockApiGet, mockCreateRepair, mockToast, mockMotionInitialValues } =
+  vi.hoisted(() => ({
+    mockApiGet: vi.fn(),
     mockCreateRepair: vi.fn(),
     mockToast: vi.fn(),
     mockMotionInitialValues: [] as unknown[],
-  })
-);
+  }));
+
+vi.mock('@/lib/api-client', () => ({ apiGet: mockApiGet }));
 
 vi.mock('@/app/actions/repair', () => ({
   calculateRepairShipping: vi.fn(),
@@ -240,6 +249,62 @@ describe('RepairBookingWizard', () => {
 
     await waitFor(() => expect(mockCreateRepair).toHaveBeenCalledOnce());
     const [data] = mockCreateRepair.mock.calls[0];
+    expect(data.deviceId).toBeUndefined();
+    expect(data.quoteId).toBeUndefined();
+  });
+
+  it('clears a selected catalog device when the customer changes device type', async () => {
+    mockApiGet.mockResolvedValue({
+      groups: [
+        {
+          brand: 'Apple',
+          devices: [
+            {
+              id: DEVICE_ID,
+              brand: 'Apple',
+              model: 'iPhone 13 Pro Max',
+              slug: 'iphone-13-pro-max',
+              deviceType: 'Smartphone',
+            },
+          ],
+        },
+      ],
+    });
+    mockCreateRepair.mockResolvedValueOnce({
+      success: true,
+      id: 'repair-3',
+      ticketNumber: 8,
+    });
+    const user = userEvent.setup();
+    render(
+      <RepairBookingWizard
+        merchantId="merchant-1"
+        merchantSlug="ogabassey"
+        merchantName="Ogabassey"
+        repairsCatalogEnabled
+      />
+    );
+
+    const modelField = screen.getByLabelText('Device Model');
+    await user.type(modelField, 'iPhone 13 Pro Max');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Apple iPhone 13 Pro Max Smartphone',
+      })
+    );
+    await user.click(screen.getByRole('radio', { name: 'Laptop' }));
+    await user.type(
+      screen.getByLabelText("What's the issue?"),
+      'The screen is damaged.'
+    );
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    await fillContactStep(user);
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    await user.click(screen.getByRole('button', { name: /book appointment/i }));
+
+    await waitFor(() => expect(mockCreateRepair).toHaveBeenCalledOnce());
+    const [data] = mockCreateRepair.mock.calls[0];
+    expect(data.deviceType).toBe('Laptop');
     expect(data.deviceId).toBeUndefined();
     expect(data.quoteId).toBeUndefined();
   });

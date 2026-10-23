@@ -34,13 +34,16 @@ export function useRepairDeviceSuggestions({
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
+  const [settledQuery, setSettledQuery] = useState<string | null>(null);
 
   useEffect(() => {
+    setSuggestions([]);
+    setHasSearched(false);
+    setIsLoading(false);
+    setLookupFailed(false);
+    setSettledQuery(null);
+
     if (!catalogEnabled || query.length < 2 || query === selectedModel) {
-      setSuggestions([]);
-      setHasSearched(false);
-      setIsLoading(false);
-      setLookupFailed(false);
       return;
     }
 
@@ -71,6 +74,7 @@ export function useRepairDeviceSuggestions({
         if (repairDevices.length > 0) {
           setSuggestions(repairDevices);
           setHasSearched(true);
+          setSettledQuery(query);
           setIsLoading(false);
           return;
         }
@@ -78,6 +82,7 @@ export function useRepairDeviceSuggestions({
         if (!merchantId) {
           setSuggestions([]);
           setHasSearched(true);
+          setSettledQuery(query);
           setIsLoading(false);
           setLookupFailed(repairLookupFailed);
           return;
@@ -100,11 +105,13 @@ export function useRepairDeviceSuggestions({
             .slice(0, 8);
           setSuggestions(storeSuggestions);
           setHasSearched(true);
+          setSettledQuery(query);
           setLookupFailed(repairLookupFailed && storeSuggestions.length === 0);
         } catch {
           if (controller.signal.aborted) return;
           setSuggestions([]);
           setHasSearched(true);
+          setSettledQuery(query);
           setLookupFailed(true);
         } finally {
           if (!controller.signal.aborted) setIsLoading(false);
@@ -133,9 +140,9 @@ export function useRepairDeviceSuggestions({
 
   return {
     clearSuggestions,
-    hasSearched,
+    hasSearched: hasSearched && settledQuery === query,
     isLoading,
-    lookupFailed,
-    suggestions,
+    lookupFailed: lookupFailed && settledQuery === query,
+    suggestions: settledQuery === query ? suggestions : [],
   };
 }

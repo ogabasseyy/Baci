@@ -35,6 +35,9 @@ export function useGamingSelectionPreview(merchantId: string) {
   const error = errorState?.merchantId === merchantId ? errorState.value : null;
   const creationOutcomeUnknown =
     creationState?.merchantId === merchantId ? creationState.value : false;
+  const isCurrentMerchant = (owner: string, generation: number) =>
+    currentMerchantRef.current.merchantId === owner &&
+    currentMerchantRef.current.generation === generation;
 
   useLayoutEffect(() => {
     if (currentMerchantRef.current.merchantId !== merchantId) {
@@ -50,10 +53,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     generation: number,
     value: JumiaProductExportEligiblePage
   ) => {
-    if (
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation
-    ) {
+    if (isCurrentMerchant(owner, generation)) {
       setSnapshotState({ merchantId: owner, value });
     }
   };
@@ -62,10 +62,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     generation: number,
     value: boolean
   ) => {
-    if (
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation
-    ) {
+    if (isCurrentMerchant(owner, generation)) {
       setLoadingState({ merchantId: owner, value });
     }
   };
@@ -74,10 +71,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     generation: number,
     value: string | null
   ) => {
-    if (
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation
-    ) {
+    if (isCurrentMerchant(owner, generation)) {
       setErrorState({ merchantId: owner, value });
     }
   };
@@ -108,10 +102,7 @@ export function useGamingSelectionPreview(merchantId: string) {
 
   const markCreationOutcomeUnknown = (owner: string, generation: number) => {
     gamingSelectionPreviewCache.markUncertainCreation(owner);
-    if (
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation
-    ) {
+    if (isCurrentMerchant(owner, generation)) {
       setCreationState({ merchantId: owner, value: true });
     }
   };
@@ -128,9 +119,6 @@ export function useGamingSelectionPreview(merchantId: string) {
   const createPreview = async (action: PreviewCreationAction = 'create') => {
     const owner = merchantId;
     const generation = currentMerchantRef.current.generation;
-    const isCurrentMerchant = () =>
-      currentMerchantRef.current.merchantId === owner &&
-      currentMerchantRef.current.generation === generation;
     const refresh = action === 'refresh';
     const retryAfterUnreadableResponse = action === 'retry';
     const uncertainCreation =
@@ -159,7 +147,7 @@ export function useGamingSelectionPreview(merchantId: string) {
     try {
       const { data: categories, error: categoryError } =
         await fetchMatchingGamingCategories(owner);
-      if (!isCurrentMerchant()) return;
+      if (!isCurrentMerchant(owner, generation)) return;
       const gamingCategories = categories?.filter(
         (category) =>
           category.name?.replace(/^ +| +$/g, '').toLowerCase() === 'gaming'
@@ -210,7 +198,7 @@ export function useGamingSelectionPreview(merchantId: string) {
           gamingSelectionPreviewCache.remove(cacheKey);
         }
       }
-      if (!isCurrentMerchant()) return;
+      if (!isCurrentMerchant(owner, generation)) return;
       finishCreation = gamingSelectionPreviewCache.beginCreation(owner);
       if (!finishCreation) {
         setErrorForMerchant(

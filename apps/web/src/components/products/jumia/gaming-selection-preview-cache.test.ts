@@ -92,6 +92,58 @@ describe('Gaming selection preview cache helpers', () => {
     nextFinish?.();
   });
 
+  it('preserves a live cross-tab creation lease without exposing a retry', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
+    const key = 'jumia-gaming-preview-uncertain:merchant-cross-tab';
+    localStorage.setItem(key, `in-flight:${Date.now() + 60_000}`);
+
+    expect(
+      gamingSelectionPreviewCache.hasUncertainCreation('merchant-cross-tab')
+    ).toBe(false);
+    expect(
+      gamingSelectionPreviewCache.hasCreationInFlight('merchant-cross-tab')
+    ).toBe(true);
+    expect(localStorage.getItem(key)).toBe(`in-flight:${Date.now() + 60_000}`);
+    expect(
+      gamingSelectionPreviewCache.beginCreation('merchant-cross-tab')
+    ).toBeNull();
+  });
+
+  it('renews the active tab lease until its request completes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
+    const key = 'jumia-gaming-preview-uncertain:merchant-renewed';
+    const finish =
+      gamingSelectionPreviewCache.beginCreation('merchant-renewed');
+    const initialLease = Number(localStorage.getItem(key)?.slice(10));
+
+    vi.advanceTimersByTime(30_000);
+
+    const renewedLease = Number(localStorage.getItem(key)?.slice(10));
+    expect(renewedLease).toBeGreaterThan(initialLease);
+    expect(
+      gamingSelectionPreviewCache.hasCreationInFlight('merchant-renewed')
+    ).toBe(true);
+    finish?.();
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it('recovers an expired cross-tab creation lease as uncertain', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-23T12:00:00.000Z'));
+    const key = 'jumia-gaming-preview-uncertain:merchant-expired-lease';
+    localStorage.setItem(key, `in-flight:${Date.now() - 1}`);
+
+    expect(
+      gamingSelectionPreviewCache.hasCreationInFlight('merchant-expired-lease')
+    ).toBe(false);
+    expect(
+      gamingSelectionPreviewCache.hasUncertainCreation('merchant-expired-lease')
+    ).toBe(true);
+    expect(localStorage.getItem(key)).toBe('pending');
+  });
+
   it.each([
     ['malformed JSON', '{'],
     [

@@ -5,6 +5,8 @@ type PreviewRequestError = Error & { status: number };
 
 const CACHE_PREFIX = 'jumia-gaming-preview:';
 const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
+const CREATION_LEASE_MS = 2 * 60 * 1000;
+const CREATION_LEASE_RENEWAL_MS = 30 * 1000;
 const memorySelections = new Map<string, CachedSelection>();
 const uncertainCreations = new Set<string>();
 const inFlightCreations = new Set<string>();
@@ -27,6 +29,22 @@ function uncertainCreationKey(merchantId: string) {
   return `${UNCERTAIN_CREATION_PREFIX}${merchantId}`;
 }
 
+function readCreationLease(merchantId: string) {
+  try {
+    const value = localStorage.getItem(uncertainCreationKey(merchantId));
+    if (!value?.startsWith('in-flight:')) return null;
+    const expiresAt = Number(value.slice('in-flight:'.length));
+    return Number.isFinite(expiresAt) ? expiresAt : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasActiveCreationLease(merchantId: string) {
+  const expiresAt = readCreationLease(merchantId);
+  return expiresAt !== null && expiresAt > Date.now();
+}
+
 function hasUncertainCreation(merchantId: string) {
   if (uncertainCreations.has(merchantId)) return true;
   try {
@@ -35,7 +53,11 @@ function hasUncertainCreation(merchantId: string) {
       uncertainCreations.add(merchantId);
       return true;
     }
-    if (status === 'in-flight' && !inFlightCreations.has(merchantId)) {
+    if (
+      status?.startsWith('in-flight:') &&
+      !inFlightCreations.has(merchantId)
+    ) {
+      if (hasActiveCreationLease(merchantId)) return false;
       markUncertainCreation(merchantId);
       return true;
     }
@@ -64,18 +86,30 @@ function clearUncertainCreation(merchantId: string) {
 }
 
 function beginCreation(merchantId: string) {
-  if (inFlightCreations.has(merchantId)) return null;
+  if (inFlightCreations.has(merchantId) || hasActiveCreationLease(merchantId))
+    return null;
   inFlightCreations.add(merchantId);
+  let lease = `in-flight:${Date.now() + CREATION_LEASE_MS}`;
+  const renewLease = () => {
+    lease = `in-flight:${Date.now() + CREATION_LEASE_MS}`;
+    try {
+      localStorage.setItem(uncertainCreationKey(merchantId), lease);
+    } catch {
+      // The in-memory guard remains available for this browser session.
+    }
+  };
   try {
-    localStorage.setItem(uncertainCreationKey(merchantId), 'in-flight');
+    localStorage.setItem(uncertainCreationKey(merchantId), lease);
   } catch {
     // Keep the in-flight guard in memory for this browser session.
   }
+  const leaseRenewal = setInterval(renewLease, CREATION_LEASE_RENEWAL_MS);
   return () => {
+    clearInterval(leaseRenewal);
     inFlightCreations.delete(merchantId);
     try {
       const key = uncertainCreationKey(merchantId);
-      if (localStorage.getItem(key) === 'in-flight') {
+      if (localStorage.getItem(key) === lease) {
         if (uncertainCreations.has(merchantId)) {
           localStorage.setItem(key, 'pending');
         } else {
@@ -90,9 +124,12 @@ function beginCreation(merchantId: string) {
 
 function hasCreationInFlight(merchantId: string) {
   if (inFlightCreations.has(merchantId)) return true;
+  if (hasActiveCreationLease(merchantId)) return true;
   try {
     if (
-      localStorage.getItem(uncertainCreationKey(merchantId)) === 'in-flight'
+      localStorage
+        .getItem(uncertainCreationKey(merchantId))
+        ?.startsWith('in-flight:')
     ) {
       markUncertainCreation(merchantId);
     }

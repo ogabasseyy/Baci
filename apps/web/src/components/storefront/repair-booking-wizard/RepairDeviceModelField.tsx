@@ -6,10 +6,8 @@ import type { z } from 'zod';
 import { Input } from '@/components/ui/input';
 import type { repairBookingSchema } from '@/lib/validations/repair';
 import { RepairDeviceSuggestionImage } from './RepairDeviceSuggestionImage';
-import {
-  getRepairDeviceSuggestionLabel,
-  type RepairDeviceSelection,
-} from './repair-device-suggestions';
+import { getRepairDeviceSuggestionLabel } from './repair-device-suggestion-label';
+import type { RepairDeviceSelection } from './repair-device-suggestions';
 import { useRepairDeviceSuggestions } from './useRepairDeviceSuggestions';
 
 const DEVICE_SUGGESTIONS_LISTBOX_ID = 'repair-device-suggestions';

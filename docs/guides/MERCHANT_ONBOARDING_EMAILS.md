@@ -21,6 +21,31 @@ Provider preflight on 23 October 2026:
 
 ## Operation
 
+### In-app setup reminders
+
+An owner sees one contextual reminder across the web dashboard. It selects the
+next incomplete required step from the existing web readiness checklist and links
+straight to it. Once all required steps are complete, it offers store publication.
+Unprovisioned or published stores show no reminder. Existing unpublished merchants
+can see this live assistance; this does not enroll them into the email journey.
+
+The normal authenticated client loads readiness and checks the existing in-app,
+banner, and follow-up alert preferences. Disabling any of those suppresses the
+reminder. Follow-up Alerts now describes both setup and customer-invoice reminders.
+The reminder refreshes on dashboard navigation, browser focus, and once per minute
+while visible. No push notification, toast, or duplicate notification inbox row is
+created. There is one live projection, so completed task alerts do not accumulate.
+
+“Remind me tomorrow” persists a 24-hour snooze across devices in the RLS-protected
+`merchant_onboarding_reminder_state` table. The state belongs to both merchant and
+owner; staff, other owners, and former owners cannot access it. Read failures hide
+the optional banner; failed snooze writes retain the reminder with retry feedback.
+In-app assistance does not depend on external email-provider inventory access.
+The production notification table was inspected on 23 October 2026 and contained
+zero notification rows; no existing in-app setup sequence was found there.
+
+### Email setup journey
+
 Future merchant INSERTs enroll exactly one version-1 journey: welcome after two
 minutes, first-product reminder after one day, missing launch requirement after
 three days, publication reminder after five days, and setup-help offer after
@@ -58,7 +83,8 @@ this public route. Tokens and email addresses must not be logged.
 1. Inspect provider automations/templates/lists and record which system owns
    each merchant journey. Reuse or disable the competing path before activation.
 2. Run local regression/SQL checks and required code reviews. Apply only the new
-   migration; do not replay historical migrations against production.
+   email and in-app reminder migrations; do not replay historical migrations
+   against production. The in-app table must exist before deploying its web UI.
 3. Deploy the old `send-welcome-email` endpoint as the inert HTTP 410 implementation
    with JWT verification enabled. Verify it cannot send mail. The migration retires
    `on_email_confirmed`; the web workflow no longer sends direct welcomes.
@@ -91,3 +117,9 @@ The SQL fixture requires a disposable PostgreSQL 17 instance and isolated roles:
 apply `supabase/tests/merchant_onboarding_email_fixture.sql`, the new migration,
 then `supabase/tests/merchant_onboarding_email.sql` with `ON_ERROR_STOP=1`.
 Never run the fixture against Supabase or any production database.
+
+For combined regression coverage, apply the email fixture, then
+`supabase/tests/merchant_onboarding_in_app_reminders_fixture.sql`, both new
+migrations, the email assertions, and finally
+`supabase/tests/merchant_onboarding_in_app_reminders.sql`. The additional fixture
+supplies the local auth identity function and a second owner for RLS isolation.

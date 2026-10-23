@@ -4,8 +4,10 @@ import path from 'node:path';
 import { expect, it } from 'vitest';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 
-const name = '20261023080443_merchant_onboarding_email_journey.sql';
-it('registers the exact new onboarding migration without changing frozen history', () => {
+it.each([
+  '20261023080443_merchant_onboarding_email_journey.sql',
+  '20261023110000_merchant_onboarding_in_app_reminders.sql',
+])('registers exact onboarding migration %s', (name) => {
   const hash = createHash('sha256')
     .update(
       readFileSync(

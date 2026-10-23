@@ -13,4 +13,13 @@ Spec: output/audits/baci-onboarding-engagement-2026-10-23.md in the original aud
 
 Calls made for this implementation: no marketing/win-back emails through ZeptoMail; first-sale promotion awaits Campaigns inventory/consent verification. No production activation or historical backfill. Operational setup reminders cease when the store is published. Failure before dispatch can retry; uncertain or interrupted dispatch requires reconciliation.
 
-Validation: task-specific tests, SQL regressions, main web/worker TypeScript, repository authority and monorepo lint pass. CodeRabbit final review raised 0 issues. Full monorepo validation remains incomplete because existing builder-auth code imports the undeclared oidc-provider dependency; provider inventory/activation is blocked by Campaigns invalid_client and missing ZeptoMail read scopes. No production change was made.
+Follow-up scope: add one owner-only live dashboard reminder from canonical readiness,
+respect notification preferences, persist a 24-hour cross-device snooze under RLS,
+and suppress published/unprovisioned stores. Cover owner isolation, stale requests,
+navigation/focus refresh, persistence failures, and snooze/refresh races.
+
+The prior publication typecheck blocker was resolved by installing the already
+declared standalone builder-auth dependencies using its frozen lockfile. No
+dependency manifest change was needed. Provider inventory/activation remains
+blocked by Campaigns invalid_client and missing ZeptoMail read scopes. No production
+change has been made; release checks are being refreshed for the combined change.

@@ -81,6 +81,10 @@ vi.mock('@/components/notifications/notification-banner', () => ({
   NotificationBanner: () => null,
 }));
 
+vi.mock('@/components/notifications/onboarding-reminder', () => ({
+  OnboardingReminderBanner: () => <div data-testid="onboarding-reminder" />,
+}));
+
 vi.mock('@/components/notifications/notification-center', () => ({
   NotificationCenter: () => null,
 }));
@@ -141,6 +145,18 @@ function setSmartNavUsage(usage: unknown) {
 }
 
 describe('DashboardClientLayout', () => {
+  it('shows onboarding reminders only for the current merchant owner', () => {
+    const view = renderLayout();
+    expect(screen.getByTestId('onboarding-reminder')).toBeInTheDocument();
+    view.unmount();
+    mockUseMerchantForLayout(
+      createMerchantHookValue({
+        merchant: { ...defaultMerchant, user_id: 'another-owner' },
+      })
+    );
+    renderLayout();
+    expect(screen.queryByTestId('onboarding-reminder')).not.toBeInTheDocument();
+  });
   it('does not subscribe to toast state', () => {
     renderLayout();
 

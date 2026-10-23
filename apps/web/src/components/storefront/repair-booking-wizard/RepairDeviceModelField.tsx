@@ -26,6 +26,7 @@ interface RepairDeviceModelFieldProps {
   merchantSlug: string;
   onDeviceChange: () => void;
   onSelectDevice: (device: RepairDeviceSelection) => void;
+  selectedModel?: string | null;
 }
 
 export function RepairDeviceModelField({
@@ -39,8 +40,8 @@ export function RepairDeviceModelField({
   merchantSlug,
   onDeviceChange,
   onSelectDevice,
+  selectedModel = null,
 }: RepairDeviceModelFieldProps) {
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const query = field.value.trim();
   const {
@@ -63,7 +64,6 @@ export function RepairDeviceModelField({
     showSearchResults && !isLoading && suggestions.length > 0;
 
   const selectSuggestion = (device: RepairDeviceSelection) => {
-    setSelectedModel(getRepairDeviceSuggestionLabel(device));
     onSelectDevice(device);
     clearSuggestions();
     setActiveSuggestionIndex(-1);
@@ -100,7 +100,6 @@ export function RepairDeviceModelField({
           field.onBlur();
         }}
         onChange={(event) => {
-          setSelectedModel(null);
           setActiveSuggestionIndex(-1);
           field.onChange(event);
           onDeviceChange();

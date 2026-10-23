@@ -36,6 +36,7 @@ interface RepairDeviceStepProps {
   onDeviceTypeChange?: () => void;
   onSelectDevice?: (device: RepairDeviceSelection) => void;
   preselection?: RepairBookingPreselection;
+  selectedModel?: string | null;
   showConfirmation: boolean;
   onChangeDevice: () => void;
 }
@@ -65,6 +66,7 @@ export function RepairDeviceStep({
   onSelectDevice = () => undefined,
   onChangeDevice,
   preselection,
+  selectedModel,
   showConfirmation,
 }: RepairDeviceStepProps) {
   if (showConfirmation && preselection) {
@@ -170,6 +172,7 @@ export function RepairDeviceStep({
                 repairCatalogEnabled={repairCatalogEnabled}
                 onDeviceChange={onDeviceChange}
                 onSelectDevice={onSelectDevice}
+                selectedModel={selectedModel}
               />
             </FormControl>
             {catalogEnabled && (

@@ -68,8 +68,10 @@ const defaultLedgers: CredentialReaderLedgers = {
     // Refreshed after adding server-only Places/Redis config; credential readers are unchanged.
     'apps/web/src/env.ts':
       '39c188ee4108d7fe66a2f057e828dbfca85dce66c22a78258cf15e8c9e9b183f',
+    // Reviewed private-draft input parsing only (8a1c4cd48a); credential reads
+    // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
-      '47bea3bc3ac77a939febb07b99c4ec4edf6f16f33f310dddd23ec2a4cbe2c0ad',
+      'a730ed7b56887a231aa4a483526354162ec1dcb514a47fd899e0c347e2268d03',
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':
       '29d02f20900fe0d476d57b2620dd324a4830ff200a66fc3b4454aaf48047dd19',
     'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs':

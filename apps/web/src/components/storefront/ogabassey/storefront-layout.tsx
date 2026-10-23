@@ -9,6 +9,7 @@ import type React from 'react';
 import * as ReactDOM from 'react-dom';
 import { Suspense } from 'react';
 import { type V2ThemeMode } from './providers/v2-theme-context';
+import { OgabasseyHeaderCriticalStyle } from './storefront-header-critical-style';
 import {
   getOgabasseyBasePath,
   shouldEnableOgabasseyGoogleStoreWidget,
@@ -52,6 +53,7 @@ export function OgabasseyStorefrontLayout({
 
   return (
     <>
+      <OgabasseyHeaderCriticalStyle />
       {/*
         Speculation Rules (SPEC-RULES): prerender the highest-value next
         navigation (listing/home -> PDP) at moderate eagerness and prefetch the

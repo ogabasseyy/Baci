@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "scope": "Real PostgreSQL lock/backfill/contraction mechanism in isolated synthetic schema",
+  "checks": [
+    "pre-lock committed writer captured",
+    "cutover waits for writer",
+    "late legacy writer blocked then fails closed",
+    "published projection preserved"
+  ]
+}

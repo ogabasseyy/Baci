@@ -1,5 +1,7 @@
 'use client';
 
+import { CartVariantDetails } from '../../../components/cart-variant-details';
+
 import { ChevronRight, Loader2, ShieldCheck, ShoppingBag } from 'lucide-react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { CartItem } from '@/hooks/cart';
@@ -120,6 +122,11 @@ export function DesktopOrderSummary({
                   <p className="text-sm font-bold text-gray-900 line-clamp-1">
                     {itemName}
                   </p>
+                  {/* Match this fixed white card; storefront text can be white in dark themes. */}
+                  <CartVariantDetails className="text-gray-500" item={item.kind === 'cart' ? item : { variantAttributes: {
+                    ...(typeof item.condition === 'string' ? { condition: item.condition } : {}),
+                    ...(typeof item.variant_name === 'string' ? { variant: item.variant_name } : {}),
+                  } }} />
                   <div className="flex justify-between items-center text-xs text-gray-500 mt-0.5">
                     <span>Qty: {item.quantity}</span>
                     <span>

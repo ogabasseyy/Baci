@@ -1,5 +1,7 @@
 'use client';
 
+import { CartVariantDetails } from './cart-variant-details';
+
 import { ChevronDown, ChevronUp, ShoppingBag } from 'lucide-react';
 import type React from 'react';
 import { useId, useState } from 'react';
@@ -65,7 +67,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                 <div
                     id={orderSummaryId}
                     aria-hidden={!isExpanded}
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'visible max-h-[80vh] opacity-100 pb-6' : 'invisible max-h-0 opacity-0'
+                    className={`overflow-x-hidden overflow-y-auto transition-all duration-300 ease-in-out ${isExpanded ? 'visible max-h-[80vh] opacity-100 pb-6' : 'invisible max-h-0 opacity-0'
                         }`}
                 >
                     {/* Items List */}
@@ -88,6 +90,7 @@ export const MobileOrderSummary: React.FC<MobileOrderSummaryProps> = ({
                                     <p className="text-sm font-bold text-store-background-text line-clamp-2 leading-snug">
                                         {item.name}
                                     </p>
+                                    <CartVariantDetails item={item} className="text-store-background-text/70" />
                                     <p className="text-sm text-store-background-text/60 mt-1">
                                         {isQuizVoucherCartItem(item) ? 'Free gift' : formatCurrencyAuto(item.negotiatedPrice ?? item.price)}
                                     </p>

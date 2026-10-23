@@ -1,0 +1,17 @@
+{
+  "baseSha": "9e3d1b14b1931a5e441fc23f0e5417c188056e47",
+  "mode": "chronological",
+  "serverVersionNum": 170006,
+  "comparison": {
+    "changedComponents": [],
+    "converged": true,
+    "mode": "enforce",
+    "productionEffectSha256": "71cba5629959c75352726e26cafcbfec8de99b1b52d10e6ad70fd85f07e4d253"
+  },
+  "effectSha256": "71cba5629959c75352726e26cafcbfec8de99b1b52d10e6ad70fd85f07e4d253",
+  "inspectedSourceHead": "270fe355d8a78ddb685e3e490fcf6652fe89910e",
+  "frozenOrderedSources": 427,
+  "bootstrapHistoryCount": 125,
+  "currentTreeAppliedThrough": "20261020042734_storefront_shared_cart_public_hints.sql",
+  "productionQueried": false
+}

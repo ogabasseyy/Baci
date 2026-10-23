@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
+import { HeroPresentation } from '@/components/storefront/portable/hero-presentation';
 import { ThemedButton } from '@/components/themed/themed-button';
-import { cn } from '@/lib/utils';
 import { AnimatedWrapper, type AnimationType } from './animated-wrapper';
 import { ImagePickerField } from './fields/image-picker-field';
 import { ScopedStorefrontLink } from './scoped-storefront-link';
@@ -110,16 +110,6 @@ function renderHero({
   animationDelay,
   animationTrigger,
 }: HeroProps): ReactElement {
-  const paddingClass = {
-    small: 'py-12',
-    medium: 'py-24',
-    large: 'py-32',
-  }[padding];
-  const HeadingTag = (headingLevel || 'h1') as 'h1' | 'h2' | 'div';
-  const usesReadableGradientSurface = Boolean(
-    backgroundGradient && !backgroundImage
-  );
-
   return (
     <AnimatedWrapper
       animation={{
@@ -129,55 +119,23 @@ function renderHero({
         trigger: mapAnimationTrigger(animationTrigger),
       }}
     >
-      <section
-        className={cn('relative', paddingClass)}
-        style={
-          backgroundImage || backgroundGradient
-            ? {
-                backgroundImage: backgroundImage
-                  ? `url(${backgroundImage})`
-                  : backgroundGradient,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }
-            : {}
-        }
-        aria-label="Hero Banner"
-      >
-        {(usesReadableGradientSurface || (overlay && backgroundImage)) && (
-          <div
-            className={cn(
-              'absolute inset-0',
-              usesReadableGradientSurface ? 'bg-black/60' : 'bg-black/40'
-            )}
-            aria-hidden="true"
-          />
-        )}
-        <div
-          className={cn(
-            'container px-4 md:px-6 flex flex-col gap-4 relative z-10',
-            {
-              'items-start text-left': align === 'left',
-              'items-center text-center': align === 'center',
-              'items-end text-right': align === 'right',
-            },
-            {
-              'text-white':
-                usesReadableGradientSurface || (backgroundImage && overlay),
-            }
-          )}
-        >
-          <HeadingTag className="text-4xl md:text-6xl font-bold tracking-tighter">
-            {title}
-          </HeadingTag>
-          <p className="text-xl max-w-[700px] opacity-90">{subtitle}</p>
+      <HeroPresentation
+        title={title}
+        subtitle={subtitle}
+        align={align}
+        padding={padding}
+        backgroundImage={backgroundImage}
+        backgroundGradient={backgroundGradient}
+        overlay={overlay}
+        headingLevel={headingLevel}
+        action={
           <ThemedButton colorRole="primary" size="lg" asChild>
             <ScopedStorefrontLink href={ctaLink}>
               {ctaText}
             </ScopedStorefrontLink>
           </ThemedButton>
-        </div>
-      </section>
+        }
+      />
     </AnimatedWrapper>
   );
 }

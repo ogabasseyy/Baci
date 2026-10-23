@@ -30,6 +30,14 @@ export function deriveCheckoutDisplayModel({
     !hasCheckoutCartItems && resumedOrder
       ? resumedOrder.items.map((item) => ({
           brand: '',
+          variantAttributes: {
+            ...(typeof item.condition === 'string'
+              ? { condition: item.condition }
+              : {}),
+            ...(typeof item.variant_name === 'string'
+              ? { variant: item.variant_name }
+              : {}),
+          },
           cartItemId: item.id,
           description: '',
           gtin: '',

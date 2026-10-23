@@ -12,9 +12,9 @@ describe('analytics delivery authority repository contract', () => {
     const good = 'apps/web/src/lib/analytics/good.ts';
     const oversized = 'apps/web/src/lib/analytics/oversized-provider.ts';
     const sources = new Map([
-      [good, 'export const good = true;'],
+      [good, 'export const good = () => true;'],
       ['apps/web/src/lib/analytics/good.test.ts', 'test();'],
-      [oversized, `${'// line\n'.repeat(301)}export const send = true;`],
+      [oversized, `${'// line\n'.repeat(301)}export const send = () => true;`],
     ]);
     expect(analyzeChangedRuntimeContracts([good, oversized], sources)).toEqual([
       `${oversized}: changed runtime exceeds 300 lines`,
@@ -103,7 +103,7 @@ describe('analytics delivery authority repository contract', () => {
     expect(
       analyzeChangedRuntimeContracts(
         [path],
-        new Map([[path, 'export const provider = true;']])
+        new Map([[path, 'export const provider = () => true;']])
       )
     ).toEqual([
       `${path}: changed runtime is missing colocated test apps/web/src/lib/analytics/provider.test.${extension}`,

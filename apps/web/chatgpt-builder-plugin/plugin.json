@@ -1,0 +1,26 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "baci-website-builder",
+  "version": "0.1.0",
+  "description": "Create and edit a private Baci homepage, preview the exact draft and request owner approval to publish it.",
+  "author": { "name": "Baci" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Baci Website Builder",
+        "shortDescription": "Build your Baci website",
+        "longDescription": "Link your Baci merchant account to create a private store homepage, request asynchronous edits, apply a ready edit and preview the exact revision. Publishing requires a separate signed-in owner approval in Baci. Supports the portable homepage layout, copy and theme; other pages, SEO, domains, catalog setup, payments and launch requirements remain in the Baci dashboard. Publication is reported live only after public delivery verification.",
+        "developerName": "Baci",
+        "category": "Business & Operations",
+        "capabilities": ["Interactive"],
+        "websiteURL": "https://usebaci.com",
+        "privacyPolicyURL": "https://usebaci.com/privacy",
+        "termsOfServiceURL": "https://usebaci.com/terms",
+        "supportURL": "https://usebaci.com/contact",
+        "logo": "./assets/baci-icon.png",
+        "composerIcon": "./assets/baci-icon.png",
+        "defaultPrompt": "Help me create or update my Baci homepage, preview it, and request approval before publishing."
+      }
+    }
+  }
+}

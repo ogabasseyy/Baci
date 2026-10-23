@@ -119,6 +119,18 @@ describe('RepairDeviceStep catalog behavior', () => {
       target: { value: 'phone' },
     });
 
+    const modelInput = screen.getByLabelText('Device Model');
+    const descriptionIds = modelInput
+      .getAttribute('aria-describedby')
+      ?.split(/\s+/);
+    expect(
+      descriptionIds?.some((descriptionId) =>
+        document
+          .getElementById(descriptionId)
+          ?.textContent?.includes('Search repairable devices')
+      )
+    ).toBe(true);
+
     expect(
       await screen.findByRole('option', { name: 'Acme Phone One Smartphone' })
     ).toBeInTheDocument();

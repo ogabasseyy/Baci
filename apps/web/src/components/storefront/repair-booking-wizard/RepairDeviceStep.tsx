@@ -4,6 +4,7 @@ import type { Control } from 'react-hook-form';
 import type { z } from 'zod';
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -180,10 +181,10 @@ export function RepairDeviceStep({
               />
             </FormControl>
             {catalogEnabled && (
-              <p className="text-xs text-store-background-text/70">
+              <FormDescription className="text-xs text-store-background-text/70">
                 Search repairable devices and matching store products. You can
                 still enter a model that is not listed.
-              </p>
+              </FormDescription>
             )}
             <FormMessage />
           </FormItem>

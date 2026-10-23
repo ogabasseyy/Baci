@@ -221,4 +221,84 @@ describe('useRepairDeviceSuggestions', () => {
       suggestions: [],
     });
   });
+
+  it('continues past a page of non-device products to find catalog devices', async () => {
+    vi.useFakeTimers();
+    mocks.apiGet.mockImplementation((url: unknown) => {
+      if (typeof url === 'string' && url.includes('offset=50')) {
+        return Promise.resolve({
+          count: 51,
+          products: [
+            {
+              id: 'iphone-15',
+              name: 'iPhone 15',
+              category: 'Phones',
+            },
+          ],
+        });
+      }
+      return Promise.resolve({
+        count: 51,
+        products: Array.from({ length: 50 }, (_, index) => ({
+          id: `case-${index}`,
+          name: `iPhone 15 Case ${index}`,
+          category: 'Accessories',
+        })),
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useRepairDeviceSuggestions({
+        catalogEnabled: true,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        query: 'iPhone 15',
+        repairCatalogEnabled: false,
+        selectedModel: null,
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    expect(mocks.apiGet.mock.calls[0]?.[0]).toContain('offset=0');
+    expect(mocks.apiGet.mock.calls[1]?.[0]).toContain('offset=50');
+    expect(result.current.suggestions).toMatchObject([
+      { productId: 'iphone-15', deviceType: 'Smartphone' },
+    ]);
+  });
+
+  it('restarts an unchanged query when the field requests a refresh', async () => {
+    vi.useFakeTimers();
+    mocks.apiGet.mockResolvedValue({ count: 0, products: [] });
+
+    const { result } = renderHook(() =>
+      useRepairDeviceSuggestions({
+        catalogEnabled: true,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        query: 'iPhone 15',
+        repairCatalogEnabled: false,
+        selectedModel: null,
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.clearSuggestions();
+      result.current.refreshSuggestions();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
+    expect(result.current.hasSearched).toBe(true);
+  });
 });

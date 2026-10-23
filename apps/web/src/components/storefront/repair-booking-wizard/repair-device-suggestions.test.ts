@@ -43,6 +43,30 @@ describe('repair device product suggestions', () => {
     }
   });
 
+  it('keeps clearly named devices in mixed device and accessory categories', () => {
+    expect(
+      toStoreProductSuggestion({
+        id: 'mixed-category-phone',
+        name: 'Samsung Galaxy S24',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toMatchObject({ deviceType: 'Smartphone' });
+    expect(
+      toStoreProductSuggestion({
+        id: 'mixed-category-tablet',
+        name: 'Apple iPad Pro 11-inch',
+        category_names: ['Tablets', 'Accessories'],
+      })
+    ).toMatchObject({ deviceType: 'Tablet' });
+    expect(
+      toStoreProductSuggestion({
+        id: 'mixed-category-case',
+        name: 'iPhone 15 Silicone Case',
+        category: 'Mobile Phones & Accessories',
+      })
+    ).toBeNull();
+  });
+
   it('maps console and wearable catalog categories to repair device types', () => {
     for (const category of ['Console', 'Consoles', 'Game Consoles']) {
       expect(

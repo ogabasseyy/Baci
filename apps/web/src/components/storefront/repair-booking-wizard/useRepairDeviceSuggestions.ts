@@ -11,7 +11,8 @@ import {
   toStoreProductSuggestion,
 } from './repair-device-suggestions';
 
-const PRODUCT_SEARCH_CANDIDATE_LIMIT = 50;
+const PRODUCT_SEARCH_PAGE_SIZE = 50;
+const MAX_REPAIR_DEVICE_SUGGESTIONS = 8;
 
 interface UseRepairDeviceSuggestionsOptions {
   catalogEnabled: boolean;
@@ -35,8 +36,10 @@ export function useRepairDeviceSuggestions({
   const [hasSearched, setHasSearched] = useState(false);
   const [lookupFailed, setLookupFailed] = useState(false);
   const [settledQuery, setSettledQuery] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const activeControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
+  const lastRefreshVersionRef = useRef(0);
 
   useEffect(() => {
     setSuggestions([]);
@@ -51,69 +54,101 @@ export function useRepairDeviceSuggestions({
 
     const controller = new AbortController();
     activeControllerRef.current = controller;
-    const timer = window.setTimeout(() => {
-      debounceTimerRef.current = null;
-      setIsLoading(true);
-      setLookupFailed(false);
-      void (async () => {
-        const repairRequest: Promise<RepairDeviceSummary[]> =
-          repairCatalogEnabled
-            ? apiGet<RepairDevicesResponse>(
-                `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}`,
-                { signal: controller.signal }
-              ).then(({ groups }) =>
-                groups.flatMap((group) => group.devices).slice(0, 8)
-              )
-            : Promise.resolve([]);
-        const productsRequest: Promise<{
-          failed: boolean;
-          products: StorefrontProductDeviceCandidate[];
-        }> = merchantId
-          ? apiGet<{
-              products: StorefrontProductDeviceCandidate[];
-            }>(
-              `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_CANDIDATE_LIMIT}&compact=true`,
-              { signal: controller.signal }
-            ).then(
-              ({ products }) => ({ failed: false, products }),
-              () => ({ failed: true, products: [] })
-            )
-          : Promise.resolve({ failed: false, products: [] });
+    const shouldRefreshImmediately =
+      refreshVersion > lastRefreshVersionRef.current;
+    lastRefreshVersionRef.current = refreshVersion;
+    const timer = window.setTimeout(
+      () => {
+        debounceTimerRef.current = null;
+        setIsLoading(true);
+        setLookupFailed(false);
+        void (async () => {
+          const repairRequest: Promise<RepairDeviceSummary[]> =
+            repairCatalogEnabled
+              ? apiGet<RepairDevicesResponse>(
+                  `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}`,
+                  { signal: controller.signal }
+                ).then(({ groups }) =>
+                  groups.flatMap((group) => group.devices).slice(0, 8)
+                )
+              : Promise.resolve([]);
+          const productsRequest: Promise<{
+            failed: boolean;
+            products: StoreProductDeviceSuggestion[];
+          }> = merchantId
+            ? (async () => {
+                const products: StoreProductDeviceSuggestion[] = [];
+                let offset = 0;
+                let totalCount = Number.POSITIVE_INFINITY;
 
-        let repairDevices: RepairDeviceSummary[] = [];
-        let repairLookupFailed = false;
-        try {
-          repairDevices = await repairRequest;
-        } catch {
+                try {
+                  while (
+                    products.length < MAX_REPAIR_DEVICE_SUGGESTIONS &&
+                    offset < totalCount
+                  ) {
+                    const response = await apiGet<{
+                      count?: number;
+                      products: StorefrontProductDeviceCandidate[];
+                    }>(
+                      `/api/storefront/products?merchant_id=${encodeURIComponent(merchantId)}&q=${encodeURIComponent(query)}&limit=${PRODUCT_SEARCH_PAGE_SIZE}&offset=${offset}&compact=true`,
+                      { signal: controller.signal }
+                    );
+                    const pageProducts = response.products ?? [];
+                    const pageSuggestions = pageProducts
+                      .map(toStoreProductSuggestion)
+                      .filter(
+                        (product): product is StoreProductDeviceSuggestion =>
+                          product !== null
+                      );
+                    products.push(...pageSuggestions);
+                    totalCount =
+                      typeof response.count === 'number'
+                        ? response.count
+                        : offset + pageProducts.length;
+                    if (pageProducts.length < PRODUCT_SEARCH_PAGE_SIZE) break;
+                    offset += PRODUCT_SEARCH_PAGE_SIZE;
+                  }
+                  return { failed: false, products };
+                } catch {
+                  return { failed: true, products };
+                }
+              })()
+            : Promise.resolve({ failed: false, products: [] });
+
+          let repairDevices: RepairDeviceSummary[] = [];
+          let repairLookupFailed = false;
+          try {
+            repairDevices = await repairRequest;
+          } catch {
+            if (controller.signal.aborted) return;
+            repairLookupFailed = true;
+          }
+
           if (controller.signal.aborted) return;
-          repairLookupFailed = true;
-        }
+          if (repairDevices.length > 0) {
+            controller.abort();
+            setSuggestions(repairDevices);
+            setHasSearched(true);
+            setSettledQuery(query);
+            setIsLoading(false);
+            return;
+          }
 
-        if (controller.signal.aborted) return;
-        if (repairDevices.length > 0) {
-          setSuggestions(repairDevices);
+          const productsResult = await productsRequest;
+          if (controller.signal.aborted) return;
+          const storeSuggestions = productsResult.products.slice(
+            0,
+            MAX_REPAIR_DEVICE_SUGGESTIONS
+          );
+          setSuggestions(storeSuggestions);
           setHasSearched(true);
           setSettledQuery(query);
+          setLookupFailed(repairLookupFailed || productsResult.failed);
           setIsLoading(false);
-          return;
-        }
-
-        const productsResult = await productsRequest;
-        if (controller.signal.aborted) return;
-        const storeSuggestions = productsResult.products
-          .map(toStoreProductSuggestion)
-          .filter(
-            (product): product is StoreProductDeviceSuggestion =>
-              product !== null
-          )
-          .slice(0, 8);
-        setSuggestions(storeSuggestions);
-        setHasSearched(true);
-        setSettledQuery(query);
-        setLookupFailed(repairLookupFailed || productsResult.failed);
-        setIsLoading(false);
-      })();
-    }, 250);
+        })();
+      },
+      shouldRefreshImmediately ? 0 : 250
+    );
     debounceTimerRef.current = timer;
 
     return () => {
@@ -132,6 +167,7 @@ export function useRepairDeviceSuggestions({
     merchantSlug,
     query,
     repairCatalogEnabled,
+    refreshVersion,
     selectedModel,
   ]);
 
@@ -149,11 +185,16 @@ export function useRepairDeviceSuggestions({
     setSettledQuery(null);
   };
 
+  const refreshSuggestions = () => {
+    setRefreshVersion((version) => version + 1);
+  };
+
   return {
     clearSuggestions,
     hasSearched: hasSearched && settledQuery === query,
     isLoading,
     lookupFailed: lookupFailed && settledQuery === query,
+    refreshSuggestions,
     suggestions: settledQuery === query ? suggestions : [],
   };
 }

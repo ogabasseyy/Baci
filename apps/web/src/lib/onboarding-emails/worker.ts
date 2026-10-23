@@ -56,6 +56,7 @@ export async function processOnboardingEmailBatch(
         businessName: context.business_name,
         decision,
         stage: job.stage,
+        appUrl,
         optOutUrl: optOutUrl.toString(),
       });
       const result = await send({
@@ -116,13 +117,17 @@ export async function processOnboardingEmailBatch(
         );
         counts.accepted++;
       } else {
-        const status = dispatched ? 'unknown' : 'pending';
+        const uncertain = result.deliveryOutcome === 'unknown';
         await repo.finish(
           job,
-          status,
-          dispatched ? 'reconcile_provider_outcome' : 'transport_not_started'
+          uncertain ? 'unknown' : 'pending',
+          uncertain
+            ? 'reconcile_provider_outcome'
+            : dispatched
+              ? 'provider_rejected'
+              : 'transport_not_started'
         );
-        if (dispatched) counts.unknown++;
+        if (uncertain) counts.unknown++;
         else counts.failed++;
       }
     } catch {

@@ -70,8 +70,11 @@ transport attempt. Queue IDs and sequence/stage/merchant links are audit metadat
 Acceptance is distinct from delivery. Interrupted/uncertain dispatches are marked
 `unknown` and never retried automatically; reconcile ZeptoMail by
 `merchant-onboarding:<job-id>` before deciding on manual action. Do not retry an
-unknown send just because a worker timed out. Pre-dispatch failures defer one hour
-until the original expiry, and an unavailable worker/schema returns a nonzero exit.
+unknown send just because a worker timed out. Pre-dispatch failures and definite
+provider rejections defer one hour until the original expiry. The transport's
+explicit `deliveryOutcome=unknown`, or an exception after dispatch with no reliable
+result, requires reconciliation. An unavailable worker/schema returns a nonzero exit.
+Both setup-task and opt-out links use the configured application origin.
 
 The app-hosted `/onboarding/email-preferences` handler uses the normal Supabase client and a single-purpose,
 opaque-token RPC. GET only displays a confirmation so mail scanners do not change

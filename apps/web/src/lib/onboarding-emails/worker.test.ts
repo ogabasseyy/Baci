@@ -126,6 +126,37 @@ describe('onboarding email worker', () => {
     );
     expect(send).toHaveBeenCalledOnce();
   });
+  it('defers a definite provider rejection for a later bounded retry', async () => {
+    const { repo, send } = fixture();
+    send.mockImplementation(async (input) => {
+      await input.beforeTransportDispatch();
+      return { success: false, errorCode: 'TM_5001' };
+    });
+    expect(
+      await processOnboardingEmailBatch(repo, send, 'https://usebaci.com')
+    ).toMatchObject({ failed: 1, unknown: 0 });
+    expect(repo.finish).toHaveBeenCalledWith(
+      job,
+      'pending',
+      'provider_rejected'
+    );
+    expect(send).toHaveBeenCalledOnce();
+  });
+  it('quarantines an explicitly uncertain transport result', async () => {
+    const { repo, send } = fixture();
+    send.mockImplementation(async (input) => {
+      await input.beforeTransportDispatch();
+      return { success: false, deliveryOutcome: 'unknown' };
+    });
+    expect(
+      await processOnboardingEmailBatch(repo, send, 'https://usebaci.com')
+    ).toMatchObject({ unknown: 1, failed: 0 });
+    expect(repo.finish).toHaveBeenCalledWith(
+      job,
+      'unknown',
+      'reconcile_provider_outcome'
+    );
+  });
   it('defers unconfirmed owners without beginning transport', async () => {
     const { repo, send } = fixture();
     vi.mocked(repo.context).mockResolvedValue({ ...context, confirmed: false });
@@ -171,4 +202,17 @@ it('hosts the opt-out confirmation on Baci rather than the default Supabase doma
     'https://usebaci.com/onboarding/email-preferences?token=token'
   );
   expect(send.mock.calls[0][0].textContent).not.toContain('/functions/v1/');
+});
+
+it('uses the configured application origin for both task and opt-out links', async () => {
+  const { repo, send } = fixture();
+  await processOnboardingEmailBatch(repo, send, 'https://staging.example.com');
+  const content = send.mock.calls[0][0];
+  expect(content.textContent).toContain(
+    'https://staging.example.com/dashboard/products'
+  );
+  expect(content.textContent).toContain(
+    'https://staging.example.com/onboarding/email-preferences'
+  );
+  expect(content.htmlContent).not.toContain('https://usebaci.com');
 });

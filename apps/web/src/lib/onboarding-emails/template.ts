@@ -5,9 +5,10 @@ export function buildOnboardingEmail(input: {
   businessName: string;
   decision: Extract<OnboardingDecision, { kind: 'send' }>;
   stage: OnboardingStage;
+  appUrl: string;
   optOutUrl: string;
 }) {
-  const { businessName, decision, stage, optOutUrl } = input;
+  const { businessName, decision, stage, optOutUrl, appUrl } = input;
   const subject =
     stage === 'welcome'
       ? 'Welcome to Baci — let’s set up your store'
@@ -20,7 +21,7 @@ export function buildOnboardingEmail(input: {
       : stage === 'day7'
         ? 'Your store setup is still incomplete. Reply to this email and tell us where you need help.'
         : 'Here is the next step for your store setup. You can continue from where you left off.';
-  const href = new URL(decision.href, 'https://usebaci.com').toString();
+  const href = new URL(decision.href, appUrl).toString();
   return {
     subject,
     textContent: `Hi ${businessName},\n\n${introduction}\n\n${decision.action}: ${href}\n\nReply if you need setup help.\nStop setup reminders: ${optOutUrl}`,

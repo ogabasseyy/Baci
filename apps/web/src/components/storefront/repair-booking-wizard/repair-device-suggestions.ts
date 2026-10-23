@@ -64,11 +64,35 @@ export function toStoreProductSuggestion(
   ) {
     return null;
   }
-  const deviceType = categories
-    .flatMap((category) =>
-      DEVICE_CATEGORY_TYPES.filter(({ pattern }) => pattern.test(category))
+  const categoryDeviceTypes = new Set(
+    categories.flatMap((category) =>
+      DEVICE_CATEGORY_TYPES.filter(({ pattern }) => pattern.test(category)).map(
+        ({ deviceType }) => deviceType
+      )
     )
-    .at(0)?.deviceType;
+  );
+  let deviceType =
+    categoryDeviceTypes.size === 1
+      ? Array.from(categoryDeviceTypes)[0]
+      : undefined;
+  if (
+    categoryDeviceTypes.size === 2 &&
+    categoryDeviceTypes.has('Smartphone') &&
+    categoryDeviceTypes.has('Tablet')
+  ) {
+    const name = product.name;
+    const hasTabletCue =
+      /\b(ipad|tablets?|galaxy tab|redmi pad|xiaomi pad|lenovo tab)\b/i.test(
+        name
+      );
+    const hasPhoneCue =
+      /\b(iphones?|smartphones?|mobile phones?|cell phones?|galaxy [a-z]?\d{1,2}|pixel \d+)\b/i.test(
+        name
+      );
+    if (hasTabletCue !== hasPhoneCue) {
+      deviceType = hasTabletCue ? 'Tablet' : 'Smartphone';
+    }
+  }
   if (!deviceType) {
     return null;
   }

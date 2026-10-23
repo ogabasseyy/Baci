@@ -34,9 +34,15 @@ function makeBuilder(
 
 function makeClient(
   results: Record<string, QueryResult>,
-  onProductLookup?: (column: string, values: string[]) => void
+  onProductLookup?: (column: string, values: string[]) => void,
+  onRpc?: (name: string, args: Record<string, unknown>) => QueryResult
 ) {
   return {
+    rpc: (name: string, args: Record<string, unknown>) =>
+      Promise.resolve(
+        onRpc?.(name, args) ??
+          results.repair_devices ?? { data: null, error: null }
+      ),
     from: (table: string) =>
       makeBuilder(
         results[table] ?? { data: null, error: null },
@@ -121,6 +127,7 @@ describe('getRepairDevicesForMerchant', () => {
 
   it('filters matching devices before looking up linked product images', async () => {
     const productLookups: string[][] = [];
+    const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
     mocks.getPublicSupabaseClient.mockReturnValue(
       makeClient(
         {
@@ -147,7 +154,23 @@ describe('getRepairDevicesForMerchant', () => {
           },
           products: { data: [], error: null },
         },
-        (_column, values) => productLookups.push(values)
+        (_column, values) => productLookups.push(values),
+        (name, args) => {
+          rpcCalls.push({ name, args });
+          return {
+            data: [
+              {
+                id: 'd1',
+                brand: 'Apple',
+                model: 'iPhone 15',
+                slug: 'iphone-15',
+                product_id: 'p1',
+                image_url: null,
+              },
+            ],
+            error: null,
+          };
+        }
       )
     );
 
@@ -156,12 +179,18 @@ describe('getRepairDevicesForMerchant', () => {
     expect(
       groups.flatMap((group) => group.devices.map((device) => device.id))
     ).toEqual(['d1']);
+    expect(rpcCalls).toEqual([
+      {
+        name: 'search_repair_devices',
+        args: { p_merchant_id: 'merchant-1', p_query: 'iphone' },
+      },
+    ]);
     expect(productLookups).toEqual([['p1']]);
   });
 
-  it('hydrates images only for the first eight query suggestions', async () => {
+  it('hydrates images only for the bounded query suggestions returned by the database', async () => {
     const productLookups: string[][] = [];
-    const devices = Array.from({ length: 12 }, (_, index) => ({
+    const devices = Array.from({ length: 8 }, (_, index) => ({
       id: `d${index}`,
       brand: 'Apple',
       model: `iPhone 15 ${index}`,
@@ -172,10 +201,10 @@ describe('getRepairDevicesForMerchant', () => {
     mocks.getPublicSupabaseClient.mockReturnValue(
       makeClient(
         {
-          repair_devices: { data: devices, error: null },
           products: { data: [], error: null },
         },
-        (_column, values) => productLookups.push(values)
+        (_column, values) => productLookups.push(values),
+        () => ({ data: devices, error: null })
       )
     );
 
@@ -247,22 +276,19 @@ describe('getRepairDevicesForMerchant', () => {
 
   it('filters by query across brand, model, and aliases', async () => {
     mocks.getPublicSupabaseClient.mockReturnValue(
-      makeClient({
-        repair_devices: {
-          data: [
-            { id: 'd1', brand: 'Apple', model: 'iPhone 13', slug: 'iphone-13' },
-            {
-              id: 'd2',
-              brand: 'Samsung',
-              model: 'Galaxy S23',
-              slug: 's23',
-              aliases: ['iphone killer'],
-            },
-            { id: 'd3', brand: 'Tecno', model: 'Camon', slug: 'camon' },
-          ],
-          error: null,
-        },
-      })
+      makeClient({}, undefined, () => ({
+        data: [
+          { id: 'd1', brand: 'Apple', model: 'iPhone 13', slug: 'iphone-13' },
+          {
+            id: 'd2',
+            brand: 'Samsung',
+            model: 'Galaxy S23',
+            slug: 's23',
+            aliases: ['iphone killer'],
+          },
+        ],
+        error: null,
+      }))
     );
 
     const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');

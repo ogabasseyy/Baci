@@ -80,4 +80,29 @@ describe('repair device product suggestions', () => {
       deviceType: 'Smartphone',
     });
   });
+
+  it('disambiguates combined phone and tablet categories from the product name', () => {
+    const categories = ['Phones & Tablets'];
+    expect(
+      toStoreProductSuggestion({
+        id: 'ipad',
+        name: 'Apple iPad Pro 11-inch',
+        category_names: categories,
+      })
+    ).toMatchObject({ deviceType: 'Tablet' });
+    expect(
+      toStoreProductSuggestion({
+        id: 'phone',
+        name: 'Samsung Galaxy S24',
+        category_names: categories,
+      })
+    ).toMatchObject({ deviceType: 'Smartphone' });
+    expect(
+      toStoreProductSuggestion({
+        id: 'unknown',
+        name: 'Device Model',
+        category_names: categories,
+      })
+    ).toBeNull();
+  });
 });

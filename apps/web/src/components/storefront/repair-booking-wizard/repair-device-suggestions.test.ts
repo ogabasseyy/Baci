@@ -30,4 +30,22 @@ describe('repair device product suggestions', () => {
       })
     ).toBeNull();
   });
+
+  it('rejects specific phone accessory categories before phone matching', () => {
+    for (const category of [
+      'Phone Cases',
+      'Phone Chargers',
+      'Phone Accessory',
+      'Phone Accessories',
+      'Mobile Screen Protector',
+    ]) {
+      expect(
+        toStoreProductSuggestion({
+          id: category,
+          name: 'iPhone accessory',
+          category,
+        })
+      ).toBeNull();
+    }
+  });
 });

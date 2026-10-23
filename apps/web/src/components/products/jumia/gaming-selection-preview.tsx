@@ -75,18 +75,12 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
             'An active Gaming category is required to refresh this preview.'
           );
         }
-        const cached = gamingSelectionPreviewCache.find(merchantId);
-        if (cached) {
-          try {
-            await loadPage(cached.selection.selectionId, 1);
-            return;
-          } catch (cause) {
-            if (gamingSelectionPreviewCache.isRejected(cause)) {
-              gamingSelectionPreviewCache.remove(cached.cacheKey);
-            } else {
-              throw cause;
-            }
-          }
+        const loadedCached = await gamingSelectionPreviewCache.loadFirstValid(
+          merchantId,
+          (selectionId) => loadPage(selectionId, 1)
+        );
+        if (loadedCached) {
+          return;
         }
         throw new Error(
           'An active Gaming category was not found for this store.'

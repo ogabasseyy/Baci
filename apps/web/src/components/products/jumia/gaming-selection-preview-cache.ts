@@ -31,30 +31,47 @@ function readCachedSelection(cacheKey: string): CachedSelection | null {
   return null;
 }
 
-function findCachedSelection(merchantId: string): CacheEntry | null {
+function findCachedSelections(merchantId: string): CacheEntry[] {
   try {
     const prefix = `${CACHE_PREFIX}${merchantId}:`;
     const cacheKeys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index)
     );
-    let newest: CacheEntry | null = null;
+    const valid: CacheEntry[] = [];
     for (const cacheKey of cacheKeys) {
       if (!cacheKey?.startsWith(prefix)) continue;
       const selection = readCachedSelection(cacheKey);
-      if (
-        selection &&
-        (!newest ||
-          Date.parse(selection.expiresAt) >
-            Date.parse(newest.selection.expiresAt))
-      ) {
-        newest = { cacheKey, selection };
-      }
+      if (selection) valid.push({ cacheKey, selection });
     }
-    return newest;
+    return valid.sort(
+      (left, right) =>
+        Date.parse(right.selection.expiresAt) -
+        Date.parse(left.selection.expiresAt)
+    );
   } catch {
     // Preview creation still works without local storage.
   }
-  return null;
+  return [];
+}
+
+async function loadFirstValidCachedSelection(
+  merchantId: string,
+  load: (selectionId: string) => Promise<void>
+) {
+  for (const entry of findCachedSelections(merchantId)) {
+    try {
+      await load(entry.selection.selectionId);
+      return true;
+    } catch (cause) {
+      if (!isRejectedCachedSelection(cause)) throw cause;
+      removeCachedSelection(entry.cacheKey);
+    }
+  }
+  return false;
+}
+
+function findCachedSelection(merchantId: string): CacheEntry | null {
+  return findCachedSelections(merchantId)[0] ?? null;
 }
 
 function removeCachedSelection(cacheKey: string) {
@@ -78,6 +95,7 @@ function isRejectedCachedSelection(cause: unknown) {
 
 export const gamingSelectionPreviewCache = {
   find: findCachedSelection,
+  loadFirstValid: loadFirstValidCachedSelection,
   isRecord,
   isRejected: isRejectedCachedSelection,
   makeRequestError: makePreviewRequestError,

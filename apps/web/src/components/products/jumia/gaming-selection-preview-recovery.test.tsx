@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GamingSelectionPreview } from './gaming-selection-preview';
 
 const mockFrom = vi.fn();
-function setupGamingCategories() {
+function setupGamingCategories(
+  categories: Array<{ id: string; name: string }> = [
+    { id: 'gaming-category', name: 'Gaming' },
+  ]
+) {
   mockFrom.mockReturnValue({
     select: () => ({
       eq: () => ({
@@ -11,7 +15,7 @@ function setupGamingCategories() {
           ilike: () => ({
             order: () => ({
               limit: async () => ({
-                data: [{ id: 'gaming-category', name: 'Gaming' }],
+                data: categories,
                 error: null,
               }),
             }),
@@ -138,5 +142,59 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
         ) ?? 'null'
       )
     ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000008' });
+  });
+
+  it('continues to an older cached selection when the newest is rejected without a category', async () => {
+    setupGamingCategories([]);
+    const olderKey = 'jumia-gaming-preview:merchant-1:older-category';
+    const newerKey = 'jumia-gaming-preview:merchant-1:newer-category';
+    localStorage.setItem(
+      olderKey,
+      JSON.stringify({
+        selectionId: '00000000-0000-4000-8000-000000000009',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      })
+    );
+    localStorage.setItem(
+      newerKey,
+      JSON.stringify({
+        selectionId: '00000000-0000-4000-8000-000000000010',
+        expiresAt: '2099-02-01T00:00:00.000Z',
+      })
+    );
+    const pageFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ error: 'selection expired' }, { status: 410 })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          selectionId: '00000000-0000-4000-8000-000000000009',
+          total: 0,
+          page: 1,
+          totalPages: 0,
+          legacyUnmappedCount: 0,
+          products: [],
+        })
+      );
+    vi.stubGlobal('fetch', pageFetch);
+    render(<GamingSelectionPreview merchantId="merchant-1" />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create Gaming preview' })
+    );
+
+    expect(
+      await screen.findByText('No products in this Gaming selection.')
+    ).toBeInTheDocument();
+    expect(pageFetch).toHaveBeenCalledTimes(2);
+    expect(pageFetch.mock.calls[0][0]).toContain(
+      '00000000-0000-4000-8000-000000000010'
+    );
+    expect(pageFetch.mock.calls[1][0]).toContain(
+      '00000000-0000-4000-8000-000000000009'
+    );
+    expect(localStorage.getItem(newerKey)).toBeNull();
+    expect(localStorage.getItem(olderKey)).not.toBeNull();
   });
 });

@@ -37,7 +37,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
     localStorage.setItem(
       'jumia-gaming-preview:merchant-1:gaming-category',
       JSON.stringify({
-        selectionId: 'selection-expired',
+        selectionId: '00000000-0000-4000-8000-000000000005',
         expiresAt: '2099-01-01T00:00:00.000Z',
       })
     );
@@ -45,7 +45,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
     fetcher.mockResolvedValue(
       Response.json(
         {
-          selectionId: 'selection-replacement',
+          selectionId: '00000000-0000-4000-8000-000000000006',
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
         { status: 201 }
@@ -58,7 +58,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
       )
       .mockResolvedValueOnce(
         Response.json({
-          selectionId: 'selection-replacement',
+          selectionId: '00000000-0000-4000-8000-000000000006',
           total: 0,
           page: 1,
           totalPages: 0,
@@ -84,7 +84,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
           'jumia-gaming-preview:merchant-1:gaming-category'
         ) ?? 'null'
       )
-    ).toMatchObject({ selectionId: 'selection-replacement' });
+    ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000006' });
   });
 
   it('replaces a cached selection when its page fails schema validation', async () => {
@@ -92,7 +92,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
     localStorage.setItem(
       'jumia-gaming-preview:merchant-1:gaming-category',
       JSON.stringify({
-        selectionId: 'selection-malformed',
+        selectionId: '00000000-0000-4000-8000-000000000007',
         expiresAt: '2099-01-01T00:00:00.000Z',
       })
     );
@@ -100,7 +100,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
     fetcher.mockResolvedValue(
       Response.json(
         {
-          selectionId: 'selection-valid-replacement',
+          selectionId: '00000000-0000-4000-8000-000000000008',
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
         { status: 201 }
@@ -111,7 +111,7 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
       .mockResolvedValueOnce(Response.json({ selectionId: 'malformed' }))
       .mockResolvedValueOnce(
         Response.json({
-          selectionId: 'selection-valid-replacement',
+          selectionId: '00000000-0000-4000-8000-000000000008',
           total: 0,
           page: 1,
           totalPages: 0,
@@ -137,6 +137,6 @@ describe('GamingSelectionPreview cached-selection recovery', () => {
           'jumia-gaming-preview:merchant-1:gaming-category'
         ) ?? 'null'
       )
-    ).toMatchObject({ selectionId: 'selection-valid-replacement' });
+    ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000008' });
   });
 });

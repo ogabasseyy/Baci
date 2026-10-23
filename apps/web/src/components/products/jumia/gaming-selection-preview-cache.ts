@@ -4,8 +4,10 @@ type CacheEntry = { cacheKey: string; selection: CachedSelection };
 type PreviewRequestError = Error & { status: number };
 
 const CACHE_PREFIX = 'jumia-gaming-preview:';
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
@@ -15,6 +17,7 @@ function readCachedSelection(cacheKey: string): CachedSelection | null {
     if (
       isRecord(value) &&
       typeof value.selectionId === 'string' &&
+      UUID_PATTERN.test(value.selectionId) &&
       typeof value.expiresAt === 'string' &&
       Date.parse(value.expiresAt) > Date.now()
     ) {
@@ -34,11 +37,20 @@ function findCachedSelection(merchantId: string): CacheEntry | null {
     const cacheKeys = Array.from({ length: localStorage.length }, (_, index) =>
       localStorage.key(index)
     );
+    let newest: CacheEntry | null = null;
     for (const cacheKey of cacheKeys) {
       if (!cacheKey?.startsWith(prefix)) continue;
       const selection = readCachedSelection(cacheKey);
-      if (selection) return { cacheKey, selection };
+      if (
+        selection &&
+        (!newest ||
+          Date.parse(selection.expiresAt) >
+            Date.parse(newest.selection.expiresAt))
+      ) {
+        newest = { cacheKey, selection };
+      }
     }
+    return newest;
   } catch {
     // Preview creation still works without local storage.
   }

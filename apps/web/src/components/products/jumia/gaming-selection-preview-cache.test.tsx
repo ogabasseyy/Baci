@@ -40,7 +40,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
     fetcher.mockImplementation(async () =>
       Response.json(
         {
-          selectionId: 'selection-cached',
+          selectionId: '00000000-0000-4000-8000-000000000001',
           total: 0,
           expiresAt: '2099-01-01T00:00:00.000Z',
         },
@@ -49,7 +49,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
     );
     const pageFetch = vi.fn(async () =>
       Response.json({
-        selectionId: 'selection-cached',
+        selectionId: '00000000-0000-4000-8000-000000000001',
         total: 0,
         page: 1,
         totalPages: 0,
@@ -75,7 +75,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
         ) ?? 'null'
       )
     ).toMatchObject({
-      selectionId: 'selection-cached',
+      selectionId: '00000000-0000-4000-8000-000000000001',
       expiresAt: '2099-01-01T00:00:00.000Z',
     });
     firstRender.unmount();
@@ -98,7 +98,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
       .mockResolvedValueOnce(
         Response.json(
           {
-            selectionId: 'selection-before-refresh',
+            selectionId: '00000000-0000-4000-8000-000000000002',
             expiresAt: '2099-01-01T00:00:00.000Z',
           },
           { status: 201 }
@@ -107,7 +107,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
       .mockResolvedValueOnce(
         Response.json(
           {
-            selectionId: 'selection-after-refresh',
+            selectionId: '00000000-0000-4000-8000-000000000003',
             expiresAt: '2099-01-01T00:00:00.000Z',
           },
           { status: 201 }
@@ -144,7 +144,9 @@ describe('GamingSelectionPreview snapshot cache', () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(pageFetch).toHaveBeenCalledTimes(2));
     expect(pageFetch).toHaveBeenLastCalledWith(
-      expect.stringContaining('selectionId=selection-after-refresh')
+      expect.stringContaining(
+        'selectionId=00000000-0000-4000-8000-000000000003'
+      )
     );
     expect(
       JSON.parse(
@@ -152,7 +154,7 @@ describe('GamingSelectionPreview snapshot cache', () => {
           'jumia-gaming-preview:merchant-1:gaming-category'
         ) ?? 'null'
       )
-    ).toMatchObject({ selectionId: 'selection-after-refresh' });
+    ).toMatchObject({ selectionId: '00000000-0000-4000-8000-000000000003' });
   });
 
   it('reopens a frozen preview when its source category is no longer active', async () => {
@@ -160,14 +162,14 @@ describe('GamingSelectionPreview snapshot cache', () => {
     localStorage.setItem(
       'jumia-gaming-preview:merchant-1:inactive-category',
       JSON.stringify({
-        selectionId: 'selection-frozen',
+        selectionId: '00000000-0000-4000-8000-000000000004',
         expiresAt: '2099-01-01T00:00:00.000Z',
       })
     );
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     const pageFetch = vi.fn(async () =>
       Response.json({
-        selectionId: 'selection-frozen',
+        selectionId: '00000000-0000-4000-8000-000000000004',
         total: 0,
         page: 1,
         totalPages: 0,
@@ -187,7 +189,9 @@ describe('GamingSelectionPreview snapshot cache', () => {
       await screen.findByText('No products in this Gaming selection.')
     ).toBeInTheDocument();
     expect(pageFetch).toHaveBeenCalledWith(
-      expect.stringContaining('selectionId=selection-frozen')
+      expect.stringContaining(
+        'selectionId=00000000-0000-4000-8000-000000000004'
+      )
     );
     expect(fetcher).not.toHaveBeenCalled();
 

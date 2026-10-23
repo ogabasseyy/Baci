@@ -127,6 +127,13 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
     expect(
+      screen.getByRole('button', { name: 'Next page' }).parentElement
+    ).toHaveClass('flex-wrap');
+    expect(screen.getByRole('button', { name: 'Next page' })).toHaveClass(
+      'w-full',
+      'sm:w-auto'
+    );
+    expect(
       screen.getByText('51 products in this frozen selection')
     ).toBeInTheDocument();
     expect(preview.querySelector('[role="checkbox"]')).toBeNull();

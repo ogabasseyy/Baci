@@ -269,12 +269,13 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
               );
             })}
           </ul>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"
               disabled={loading || snapshot.page <= 1}
               onClick={() => goToPage(snapshot.page - 1)}
+              className="w-full sm:w-auto"
             >
               Previous page
             </Button>
@@ -286,6 +287,7 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
               variant="outline"
               disabled={loading || snapshot.page >= snapshot.totalPages}
               onClick={() => goToPage(snapshot.page + 1)}
+              className="w-full sm:w-auto"
             >
               Next page
             </Button>

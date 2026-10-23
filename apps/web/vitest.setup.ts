@@ -178,4 +178,25 @@ vi.mock('next/image', () => ({
 // attempts. Reset it globally so each test starts from a clean chain.
 beforeEach(() => {
   resetProviderCooldowns();
+  if (!navigator.locks) {
+    const heldLocks = new Set<string>();
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: async (
+          name: string,
+          _options: unknown,
+          callback: (lock: Lock | null) => Promise<unknown>
+        ) => {
+          if (heldLocks.has(name)) return callback(null);
+          heldLocks.add(name);
+          try {
+            return await callback({ name, mode: 'exclusive' } as Lock);
+          } finally {
+            heldLocks.delete(name);
+          }
+        },
+      } as unknown as LockManager,
+    });
+  }
 });

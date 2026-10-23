@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { JumiaBrandSelector } from './brand-selector';
 import { JumiaCategorySelector } from './category-selector';
+import { GamingSelectionPreview } from './gaming-selection-preview';
 import { usePublishProductsDialog } from './use-publish-products-dialog';
 
 interface PublishProductsDialogProps {
@@ -57,7 +58,7 @@ export function PublishProductsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[680px]">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[680px]">
         <DialogHeader>
           <DialogTitle>Add products to Jumia</DialogTitle>
           <DialogDescription>
@@ -67,6 +68,7 @@ export function PublishProductsDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
+          <GamingSelectionPreview merchantId={merchantId} />
           <div className="grid gap-2">
             <Label htmlFor="jumia-product-search">Products</Label>
             <div className="relative">

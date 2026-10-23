@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createJumiaProductExportSelectionSchema = z
   .object({
     sourceCategoryId: z.uuid(),
+    merchantId: z.uuid(),
   })
   .strict();
 
@@ -18,6 +19,7 @@ export const jumiaProductExportSelectionRpcRowSchema = z
 export const jumiaProductExportEligibleQuerySchema = z
   .object({
     selectionId: z.uuid(),
+    merchantId: z.uuid(),
     page: z.coerce.number().int().min(1).max(100_000).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })

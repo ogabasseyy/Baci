@@ -49,7 +49,6 @@ INSERT INTO public.staff_members (
   '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111104', 'jumia-selection-limited-staff@example.test',
   'Limited Staff', 'sales_rep', '{"catalog":{"read":true}}', 'active'
 );
-
 INSERT INTO public.categories (id, merchant_id, name, slug, is_active) VALUES
   ('33333333-3333-4333-8333-333333333301', '22222222-2222-4222-8222-222222222201', 'Gaming', 'gaming', true),
   ('33333333-3333-4333-8333-333333333302', '22222222-2222-4222-8222-222222222201', 'Electronics', 'electronics', true),

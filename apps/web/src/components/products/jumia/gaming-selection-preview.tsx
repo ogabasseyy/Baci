@@ -8,12 +8,14 @@ import {
   type JumiaProductExportEligiblePage,
   jumiaProductExportEligiblePageSchema,
 } from '@/schemas/jumia/eligible-page';
-
-type CachedSelection = { selectionId: string; expiresAt: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
+import {
+  findCachedSelection,
+  isRecord,
+  isRejectedCachedSelection,
+  makePreviewRequestError,
+  readCachedSelection,
+  removeCachedSelection,
+} from './gaming-selection-preview-cache';
 
 const UPGRADE_REQUIRED_MESSAGE =
   'Marketplace sync requires an upgraded plan. Upgrade your plan to preview Jumia products.';
@@ -37,7 +39,8 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       `/api/marketplace/jumia/products/eligible?${new URLSearchParams({ selectionId, page: String(page) })}`
     );
     if (!response.ok) {
-      throw new Error(
+      throw makePreviewRequestError(
+        response.status,
         await requestErrorMessage(
           response,
           'Unable to load this Gaming preview. Please retry.'
@@ -69,7 +72,23 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       const gamingCategories = categories?.filter(
         (category) => category.name?.trim().toLowerCase() === 'gaming'
       );
-      if (categoryError || !gamingCategories?.length) {
+      if (categoryError) {
+        throw new Error('Unable to find the Gaming category. Please retry.');
+      }
+      if (!gamingCategories?.length) {
+        const cached = findCachedSelection(merchantId);
+        if (cached) {
+          try {
+            await loadPage(cached.selection.selectionId, 1);
+            return;
+          } catch (cause) {
+            if (isRejectedCachedSelection(cause)) {
+              removeCachedSelection(cached.cacheKey);
+            } else {
+              throw cause;
+            }
+          }
+        }
         throw new Error(
           'An active Gaming category was not found for this store.'
         );
@@ -81,30 +100,15 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
       }
       const categoryId = gamingCategories[0].id;
       const cacheKey = `jumia-gaming-preview:${merchantId}:${categoryId}`;
-      let cachedSelection: CachedSelection | null = null;
-      try {
-        const value: unknown = JSON.parse(
-          localStorage.getItem(cacheKey) ?? 'null'
-        );
-        if (
-          isRecord(value) &&
-          typeof value.selectionId === 'string' &&
-          typeof value.expiresAt === 'string' &&
-          Date.parse(value.expiresAt) > Date.now()
-        ) {
-          cachedSelection = {
-            selectionId: value.selectionId,
-            expiresAt: value.expiresAt,
-          };
-        } else {
-          localStorage.removeItem(cacheKey);
-        }
-      } catch {
-        // Ignore unavailable storage or malformed cached values.
-      }
+      const cachedSelection = readCachedSelection(cacheKey);
       if (cachedSelection && !refresh) {
-        await loadPage(cachedSelection.selectionId, 1);
-        return;
+        try {
+          await loadPage(cachedSelection.selectionId, 1);
+          return;
+        } catch (cause) {
+          if (!isRejectedCachedSelection(cause)) throw cause;
+          removeCachedSelection(cacheKey);
+        }
       }
       const response = await fetchWithCsrf(
         '/api/marketplace/jumia/products/selections',

@@ -5,6 +5,7 @@ type PreviewRequestError = Error & { status: number };
 
 const CACHE_PREFIX = 'jumia-gaming-preview:';
 const UNCERTAIN_CREATION_PREFIX = 'jumia-gaming-preview-uncertain:';
+const memorySelections = new Map<string, CachedSelection>();
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -49,8 +50,15 @@ function clearUncertainCreation(merchantId: string) {
 }
 
 function readCachedSelection(cacheKey: string): CachedSelection | null {
+  let stored: string | null;
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(cacheKey) ?? 'null');
+    stored = localStorage.getItem(cacheKey);
+  } catch {
+    return memorySelections.get(cacheKey) ?? null;
+  }
+  if (stored === null) return memorySelections.get(cacheKey) ?? null;
+  try {
+    const value: unknown = JSON.parse(stored);
     if (
       isRecord(value) &&
       typeof value.selectionId === 'string' &&
@@ -60,35 +68,35 @@ function readCachedSelection(cacheKey: string): CachedSelection | null {
     ) {
       return { selectionId: value.selectionId, expiresAt: value.expiresAt };
     }
-    localStorage.removeItem(cacheKey);
+    removeCachedSelection(cacheKey);
   } catch {
-    // Ignore unavailable storage or malformed cached values.
     removeCachedSelection(cacheKey);
   }
   return null;
 }
 
 function findCachedSelections(merchantId: string): CacheEntry[] {
+  const prefix = `${CACHE_PREFIX}${merchantId}:`;
+  const cacheKeys = [...memorySelections.keys()];
   try {
-    const prefix = `${CACHE_PREFIX}${merchantId}:`;
-    const cacheKeys = Array.from({ length: localStorage.length }, (_, index) =>
-      localStorage.key(index)
-    );
-    const valid: CacheEntry[] = [];
-    for (const cacheKey of cacheKeys) {
-      if (!cacheKey?.startsWith(prefix)) continue;
-      const selection = readCachedSelection(cacheKey);
-      if (selection) valid.push({ cacheKey, selection });
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const cacheKey = localStorage.key(index);
+      if (cacheKey) cacheKeys.push(cacheKey);
     }
-    return valid.sort(
-      (left, right) =>
-        Date.parse(right.selection.expiresAt) -
-        Date.parse(left.selection.expiresAt)
-    );
   } catch {
-    // Preview creation still works without local storage.
+    // In-memory entries remain available when browser storage is inaccessible.
   }
-  return [];
+  const valid: CacheEntry[] = [];
+  for (const cacheKey of new Set(cacheKeys)) {
+    if (!cacheKey.startsWith(prefix)) continue;
+    const selection = readCachedSelection(cacheKey);
+    if (selection) valid.push({ cacheKey, selection });
+  }
+  return valid.sort(
+    (left, right) =>
+      Date.parse(right.selection.expiresAt) -
+      Date.parse(left.selection.expiresAt)
+  );
 }
 
 async function loadFirstValidCachedSelection(
@@ -133,10 +141,21 @@ function findCachedSelection(merchantId: string): CacheEntry | null {
 }
 
 function removeCachedSelection(cacheKey: string) {
+  memorySelections.delete(cacheKey);
   try {
     localStorage.removeItem(cacheKey);
   } catch {
     // The stale cache can be retried if storage is unavailable.
+  }
+}
+
+function writeCachedSelection(cacheKey: string, selection: CachedSelection) {
+  memorySelections.set(cacheKey, selection);
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify(selection));
+    memorySelections.delete(cacheKey);
+  } catch {
+    // The current module keeps the usable selection for this browser session.
   }
 }
 
@@ -178,4 +197,5 @@ export const gamingSelectionPreviewCache = {
   makeRequestError: makePreviewRequestError,
   read: readCachedSelection,
   remove: removeCachedSelection,
+  write: writeCachedSelection,
 };

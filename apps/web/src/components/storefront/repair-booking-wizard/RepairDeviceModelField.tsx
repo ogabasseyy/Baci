@@ -125,7 +125,7 @@ export function RepairDeviceModelField({
             setActiveSuggestionIndex(-1);
             return;
           }
-          if (suggestions.length === 0) return;
+          if (!hasSuggestionOptions) return;
           if (event.key === 'ArrowDown') {
             event.preventDefault();
             setActiveSuggestionIndex((current) =>

@@ -86,4 +86,53 @@ describe('RepairDeviceModelField', () => {
 
     expect(refreshSuggestions).toHaveBeenCalledTimes(1);
   });
+
+  it('does not select stale suggestions while replacement results are loading', () => {
+    const staleSuggestion = {
+      brand: 'Apple',
+      deviceType: 'Smartphone' as const,
+      id: '11111111-1111-4111-8111-111111111111',
+      imageUrl: null,
+      model: 'iPhone 14',
+      productId: null,
+      slug: 'apple-iphone-14',
+    };
+    mockedSuggestionsHook.mockReturnValue({
+      clearSuggestions: vi.fn(),
+      hasSearched: true,
+      isLoading: true,
+      lookupFailed: false,
+      refreshSuggestions: vi.fn(),
+      suggestions: [staleSuggestion],
+    });
+    const onSelectDevice = vi.fn();
+    const field: ControllerRenderProps<
+      z.input<typeof repairBookingSchema>,
+      'deviceModel'
+    > = {
+      name: 'deviceModel',
+      value: 'iPhone 15',
+      onBlur: vi.fn(),
+      onChange: vi.fn(),
+      ref: vi.fn(),
+    };
+
+    render(
+      <RepairDeviceModelField
+        catalogEnabled
+        field={field}
+        merchantSlug="ogabassey"
+        onDeviceChange={vi.fn()}
+        onSelectDevice={onSelectDevice}
+      />
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByRole('status')).toHaveTextContent('Searching');
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+    expect(onSelectDevice).not.toHaveBeenCalled();
+  });
 });

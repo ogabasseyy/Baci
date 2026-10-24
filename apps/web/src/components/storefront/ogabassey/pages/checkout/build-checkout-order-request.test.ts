@@ -104,7 +104,7 @@ afterEach(() => {
 });
 it('reads current consent and SDK references when building the actual checkout request', () => {
   vi.spyOn(document, 'cookie', 'get').mockReturnValue(
-    '__oppref=click-now; __obref=browser-now'
+    'unrelated_promotion=20%off; __oppref=click-now; __obref=browser-now'
   );
   localStorage.setItem(
     'baci-cookie-consent',

@@ -39,6 +39,11 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
+      'supabase/migrations/20261024162000_chatgpt_ads_admin_destination.sql',
+    sha256: 'e678d6ec10d05787fc0b66af71d1cda4bad2928f03716581e7b8ba62beb3ea6f',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261024160000_chatgpt_ads_settings_and_destination.sql',
     sha256: 'e85d9c2a0490784d6a4b9a3fe010f7f5bce4b2731d6386c88bbb93049171eccc',
   },

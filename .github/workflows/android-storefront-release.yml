@@ -62,9 +62,9 @@ jobs:
     name: Build Storefront AAB & Upload to Play Store
     runs-on: baci-android
     # Patched ReactAndroid and Hermes compile from source for all four ABIs.
-    # A cold build exceeded 90 minutes on baci-android; allow completion plus
-    # setup, publication and credential cleanup without dropping native patches.
-    timeout-minutes: 240
+    # Measured cold builds still compile native ABIs after 150 minutes. Reserve
+    # a full cold-build window plus setup, publication and credential cleanup.
+    timeout-minutes: 360
 
     steps:
       - name: Checkout
@@ -223,7 +223,7 @@ jobs:
         run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" decode-keystore
 
       - name: Build Android App Bundle (storefront)
-        timeout-minutes: 210
+        timeout-minutes: 330
         working-directory: ${{ env.WORKING_DIR }}/android
         env:
           GRADLE_OPTS: ${{ env.ANDROID_GRADLE_OPTS }}

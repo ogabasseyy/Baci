@@ -2,6 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import type React from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
+import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
+import {
+  clearSettledCanonicalOgabasseyHomeState,
+  getSettledCanonicalOgabasseyHomeStateBox,
+  isStorefrontHomeRequest,
+  recordSettledCanonicalOgabasseyHomeState,
+} from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
 import { StorefrontLcpCopyStyle } from '@/app/(storefront)/storefront-lcp-copy-style';
 import { AdAttributionCapture } from '@/components/storefront/ad-attribution-capture';
 import {
@@ -16,7 +23,10 @@ import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { isOgabasseyHomeIdentifier } from './(home)/is-ogabassey-home-identifier';
+import {
+  isOgabasseyCanonicalDomainSlug,
+  isOgabasseyHomeIdentifier,
+} from './(home)/is-ogabassey-home-identifier';
 import { getStorefrontSeoDescription } from './seo-helpers';
 import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
 import { StorefrontShellFrame } from './storefront-shell-frame';
@@ -156,6 +166,10 @@ export async function StorefrontLayoutContent(props: {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
 }) {
+  const isHomeRequestBeforeSlug = isStorefrontHomeRequest(props.children);
+  const settledStateBox = isHomeRequestBeforeSlug
+    ? getSettledCanonicalOgabasseyHomeStateBox(props.params)
+    : null;
   const { slug } = await props.params;
 
   if (!isValidMerchantIdentifier(slug)) {
@@ -163,6 +177,24 @@ export async function StorefrontLayoutContent(props: {
   }
 
   const appearance = resolveStorefrontAppearance(slug);
+
+  const isCanonicalOgabasseyDomain = isOgabasseyCanonicalDomainSlug(slug);
+  const isHomeRequest =
+    isCanonicalOgabasseyDomain &&
+    (isHomeRequestBeforeSlug || isStorefrontHomeRequest(props.children));
+  if (!isHomeRequest) {
+    clearSettledCanonicalOgabasseyHomeState();
+  }
+  const activeSettledStateBox = isHomeRequest
+    ? (settledStateBox ??
+      getSettledCanonicalOgabasseyHomeStateBox(props.params))
+    : null;
+  const canonicalHomeHeroShellPromise = isHomeRequest
+    ? Promise.resolve(resolveOgabasseyHomeHeroShell()).catch(() => null)
+    : null;
+  const canonicalHomeMerchantPromise = isHomeRequest
+    ? Promise.resolve(getRequestScopedMerchant(slug)).catch(() => null)
+    : null;
 
   // Start the merchant read and, for the known OgaBassey home tenant, the
   // navigation read together: the merchant id is a committed constant, so
@@ -202,6 +234,21 @@ export async function StorefrontLayoutContent(props: {
 
   if (!shellSnapshot) {
     notFound();
+  }
+
+  if (isHomeRequest && activeSettledStateBox) {
+    const [heroShell, resolvedMerchant] = await Promise.all([
+      canonicalHomeHeroShellPromise,
+      canonicalHomeMerchantPromise,
+    ]);
+    recordSettledCanonicalOgabasseyHomeState({
+      box: activeSettledStateBox,
+      heroShell: heroShell ?? null,
+      merchant: resolvedMerchant ?? null,
+      params: props.params,
+      shareAcrossRequestTree: true,
+      slug,
+    });
   }
 
   return (

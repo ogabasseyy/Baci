@@ -39,7 +39,9 @@ function HeroUtilityPanelStreamReserve() {
           data-ogabassey-mobile-utility-panel="true"
         />
       </div>
-      <div className="hidden md:flex max-w-[1400px] mx-auto px-4 md:px-6 min-h-[92px] flex-row items-center justify-between" />
+      <Suspense fallback={null}>
+        <div className="hidden md:flex max-w-[1400px] mx-auto px-4 md:px-6 min-h-[92px] flex-row items-center justify-between" />
+      </Suspense>
     </div>
   );
 }

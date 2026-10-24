@@ -224,7 +224,8 @@ export function buildRemediationVerificationCommand({
   addDependencyMounts({
     args: dockerArgs,
     dependencyRoot: env.BACI_REMEDIATION_DEPENDENCY_ROOT || repoDir,
-    destinationRoot: '/opt/remediation-dependencies',
+    destinationRoot: worktreeDir,
+    prepareMountPoints: true,
     worktreeDir,
   });
   if (existsSync(pnpmStorePath)) {
@@ -235,34 +236,17 @@ export function buildRemediationVerificationCommand({
       'pnpm_config_store_dir=/pnpm-store'
     );
   }
-  const dependencyCopy = [
-    'node_modules',
-    'apps/web/node_modules',
-    'apps/mobile-admin/node_modules',
-    'apps/mobile-storefront/node_modules',
-  ]
-    .map(
-      (relativePath) =>
-        `[ ! -d /opt/remediation-dependencies/${relativePath} ] || (mkdir -p "$(dirname "${relativePath}")" && rm -rf "${relativePath}" && cp -a "/opt/remediation-dependencies/${relativePath}" "${relativePath}")`
-    )
-    .join(' && ');
   dockerArgs.push(
     '--workdir',
     worktreeDir,
     image,
     '-lc',
-    `${dependencyCopy} && ${verifyCommand}`
+    verifyCommand
   );
 
   return {
     args: dockerArgs,
     cleanup: { args: ['rm', '-f', containerName], command: dockerBin },
-    dependencyCopyPaths: [
-      'node_modules',
-      'apps/web/node_modules',
-      'apps/mobile-admin/node_modules',
-      'apps/mobile-storefront/node_modules',
-    ],
     command: dockerBin,
   };
 }

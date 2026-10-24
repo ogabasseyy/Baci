@@ -7,7 +7,7 @@ export function checkVerifiedRemediationChanges({
 }) {
   const status = runChecked(
     'git',
-    ['status', '--porcelain'],
+    ['status', '--porcelain', '-uall'],
     worktreeGitCommandOptions
   );
   const changedFiles = parseRemediationStatusFiles(status);

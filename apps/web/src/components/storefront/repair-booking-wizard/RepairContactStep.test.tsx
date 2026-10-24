@@ -48,7 +48,10 @@ vi.mock('@/components/ui/phone-input', () => ({
 vi.mock('@/components/address-autocomplete', () => ({
   AddressAutocomplete: (props: Record<string, unknown>) => (
     <input
+      aria-describedby={props['aria-describedby'] as string | undefined}
+      aria-invalid={props['aria-invalid'] as boolean | undefined}
       aria-label="Pickup Address"
+      id={props.id as string | undefined}
       onChange={(event: { target: { value: string } }) =>
         (props.onChange as (value: string) => void)?.(event.target.value)
       }
@@ -110,6 +113,49 @@ describe('RepairContactStep', () => {
     expect(screen.queryByLabelText('Pickup Address')).not.toBeInTheDocument();
   });
 
+  it('associates pickup guidance and validation errors with the address input', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness serviceType="pickup">
+        {(form) => (
+          <>
+            <RepairContactStep
+              control={form.control}
+              isCalculatingShipping={false}
+              onAddressSelect={vi.fn()}
+              serviceType="pickup"
+              shippingQuote={null}
+            />
+            <button
+              onClick={() =>
+                form.setError('pickupAddress', {
+                  message: 'Choose an address suggestion',
+                })
+              }
+              type="button"
+            >
+              Show address error
+            </button>
+          </>
+        )}
+      </Harness>
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Show address error' })
+    );
+
+    const address = screen.getByLabelText('Pickup Address');
+    const describedBy = address.getAttribute('aria-describedby')?.split(' ');
+    expect(describedBy).toHaveLength(2);
+    expect(document.getElementById(describedBy?.[0] ?? '')).toHaveTextContent(
+      /select an address suggestion to calculate the gig logistics pickup fee/i
+    );
+    expect(document.getElementById(describedBy?.[1] ?? '')).toHaveTextContent(
+      'Choose an address suggestion'
+    );
+  });
+
   it('shows the pickup address field and shipping quote when service type is pickup', () => {
     render(
       <Harness serviceType="pickup">
@@ -131,6 +177,11 @@ describe('RepairContactStep', () => {
     );
 
     expect(screen.getByLabelText('Pickup Address')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /select an address suggestion to calculate the GIG Logistics pickup fee/i
+      )
+    ).toBeInTheDocument();
     expect(
       screen.getByText('Free pickup available in Lagos!')
     ).toBeInTheDocument();

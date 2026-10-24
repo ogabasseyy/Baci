@@ -368,6 +368,7 @@ export async function GET(request: NextRequest) {
       condition,
       compact,
       limit,
+      offset,
       min_price,
       max_price,
       sort,
@@ -451,6 +452,7 @@ export async function GET(request: NextRequest) {
           merchantId,
           query: q,
           limit: requestedLimit,
+          offset,
           filters: searchFilters,
           sort: searchSort,
         });
@@ -497,8 +499,9 @@ export async function GET(request: NextRequest) {
           (order.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER) -
           (order.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER)
       );
+      const visibleOffset = usesInMemoryFilters ? (offset ?? 0) : 0;
       const visibleProducts = filteredRows
-        .slice(0, requestedLimit)
+        .slice(visibleOffset, visibleOffset + requestedLimit)
         .map(storefrontProductsRouteData.mapProduct);
       const responseCount = usesInMemoryFilters
         ? filteredRows.length

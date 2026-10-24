@@ -41,7 +41,7 @@ test('does not borrow a build timeout from a different job', () => {
 
 test('does not borrow a timeout from an unnamed following step', () => {
   const fixture = workflow
-    .replace('        timeout-minutes: 210\n', '')
+    .replace(`        timeout-minutes: ${buildBudget}\n`, '')
     .replace(
       '      - name: Upload AAB artifact',
       '      - uses: actions/fixture@v1\n        timeout-minutes: 210\n      - name: Upload AAB artifact',
@@ -50,11 +50,12 @@ test('does not borrow a timeout from an unnamed following step', () => {
 });
 
 test('source-built Android release has time for all ABIs plus publication and cleanup', () => {
-  // The four-ABI ReactAndroid/Hermes cold build exceeded the old 90-minute job.
-  assert.ok(jobBudget >= 240, 'cold native builds need a four-hour job window');
+  // The measured cold build is still compiling its third ReactAndroid ABI
+  // and second Hermes ABI after 150 minutes on baci-android.
+  assert.ok(jobBudget >= 360, 'cold native builds need a six-hour job window');
   assert.ok(
-    buildBudget >= 180,
-    'the native build step needs at least three hours',
+    buildBudget >= 330,
+    'the native build step needs at least five and a half hours',
   );
   assert.ok(
     jobBudget - buildBudget >= 30,

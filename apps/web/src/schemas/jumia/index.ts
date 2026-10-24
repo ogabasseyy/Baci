@@ -47,6 +47,10 @@ export {
   JumiaConsignmentStockResponseSchema,
 } from '@/schemas/jumia/consignment';
 export {
+  type JumiaCreateProduct,
+  JumiaCreateProductSchema,
+} from '@/schemas/jumia/create-product';
+export {
   type JumiaApiError,
   JumiaApiErrorSchema,
 } from '@/schemas/jumia/errors';

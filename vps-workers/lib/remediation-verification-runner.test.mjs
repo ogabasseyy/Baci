@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -9,6 +9,7 @@ import { runRemediationVerification } from './remediation-verification-runner.mj
 function setup({ docker = false } = {}) {
   const repoDir = mkdtempSync(join(tmpdir(), 'baci-verify-repo-'));
   const worktreeDir = mkdtempSync(join(tmpdir(), 'baci-verify-tree-'));
+  if (docker) mkdirSync(join(repoDir, 'node_modules'), { recursive: true });
   const childEnv = { PATH: '/usr/bin' };
   const commandEnv = {
     HOME: repoDir,

@@ -66,6 +66,32 @@ describe('remediation Codex dependency mounts', () => {
     }
   });
 
+  it('skips cache preparation when the dependency root does not exist', () => {
+    const root = mkdtempSync(join(tmpdir(), 'baci-vite-cache-missing-root-'));
+    const dependencyRoot = join(root, 'missing-dependencies');
+    const worktreeDir = join(root, 'worktree');
+    try {
+      mkdirSync(worktreeDir, { recursive: true });
+
+      const result = buildRemediationVerificationCommand({
+        containerIdentity: testContainerIdentity,
+        env: dockerEnvironment(dependencyRoot),
+        repoDir: dependencyRoot,
+        worktreeDir,
+      });
+
+      const viteMounts = result.args.flatMap((argument, index) =>
+        argument === '--tmpfs' &&
+        /node_modules\/\.vite(?:-temp)?/.test(result.args[index + 1] ?? '')
+          ? [result.args[index + 1]]
+          : []
+      );
+      assert.deepEqual(viteMounts, []);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('prepares Vite cache mountpoints when the dependency root is a symlink', () => {
     const root = mkdtempSync(join(tmpdir(), 'baci-vite-cache-symlink-'));
     const realDependencyRoot = join(root, 'release');
@@ -94,6 +120,16 @@ describe('remediation Codex dependency mounts', () => {
           `type=bind,src=${join(dependencyRoot, 'node_modules')},dst=${join(worktreeDir, 'node_modules')},readonly`
         ),
         true
+      );
+      assert.equal(
+        result.args
+          .flatMap((argument, index) =>
+            argument === '--tmpfs' ? [result.args[index + 1]] : []
+          )
+          .includes(
+            `${join(worktreeDir, 'apps/mobile-admin/node_modules/.vite')}:rw,nosuid,nodev,size=256m`
+          ),
+        false
       );
       assert.equal(
         realpathSync(dependencyRoot),

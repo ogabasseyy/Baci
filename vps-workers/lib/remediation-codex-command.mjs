@@ -79,6 +79,7 @@ function addDependencyMounts({
 }
 
 function prepareViteCacheMountSources(dependencyRoot) {
+  if (!existsSync(dependencyRoot)) return;
   const realDependencyRoot = realpathSync(dependencyRoot);
   for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
     const dependencyPath = join(realDependencyRoot, relativePath);
@@ -92,16 +93,16 @@ function prepareViteCacheMountSources(dependencyRoot) {
   }
 }
 
-function addViteCacheMounts(args, worktreeDir) {
-  for (const relativePath of DEPENDENCY_MOUNT_PATHS.flatMap((dependencyPath) =>
-    VITE_CACHE_DIRECTORY_NAMES.map((cacheDirectory) =>
-      join(dependencyPath, cacheDirectory)
-    )
-  )) {
-    args.push(
-      '--tmpfs',
-      `${join(worktreeDir, relativePath)}:rw,nosuid,nodev,size=256m`
-    );
+function addViteCacheMounts(args, dependencyRoot, worktreeDir) {
+  for (const dependencyPath of DEPENDENCY_MOUNT_PATHS) {
+    if (!existsSync(join(dependencyRoot, dependencyPath))) continue;
+    for (const cacheDirectory of VITE_CACHE_DIRECTORY_NAMES) {
+      const relativePath = join(dependencyPath, cacheDirectory);
+      args.push(
+        '--tmpfs',
+        `${join(worktreeDir, relativePath)}:rw,nosuid,nodev,size=256m`
+      );
+    }
   }
 }
 
@@ -260,7 +261,7 @@ export function buildRemediationVerificationCommand({
     prepareMountPoints: true,
     worktreeDir,
   });
-  addViteCacheMounts(dockerArgs, worktreeDir);
+  addViteCacheMounts(dockerArgs, dependencyRoot, worktreeDir);
   if (existsSync(pnpmStorePath)) {
     dockerArgs.push(
       '--mount',

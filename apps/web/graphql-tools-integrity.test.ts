@@ -134,6 +134,16 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
     const executionResult: Record<string, unknown> = { data: {} };
     mergeIncrementalResult({
       incrementalResult: {
+        path: ['__proto__', 'polluted'],
+        data: true,
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    mergeIncrementalResult({
+      incrementalResult: {
         path: ['created', 'constructor', 'prototype', 'polluted'],
         data: { yes: true },
       },
@@ -181,6 +191,16 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       pathToFileURL(join(root, packageModule(root))).href
     )) as { mergeIncrementalResult: MergeIncrementalResultFn };
     const executionResult: Record<string, unknown> = { data: {} };
+    esm.mergeIncrementalResult({
+      incrementalResult: {
+        path: ['__proto__', 'polluted'],
+        data: true,
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
     esm.mergeIncrementalResult({
       incrementalResult: {
         path: ['created', 'constructor', 'prototype', 'polluted'],

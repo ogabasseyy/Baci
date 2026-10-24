@@ -58,19 +58,21 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
-      {avifSrcSet ? (
+      <Suspense fallback={null}>
+        {avifSrcSet ? (
+          <source
+            media={BIG_IMAGE_SOURCE_MEDIA}
+            sizes={sizes ?? BIG_IMAGE_SIZES}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        ) : null}
         <source
           media={BIG_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? BIG_IMAGE_SIZES}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={fallbackSrcSet}
         />
-      ) : null}
-      <source
-        media={BIG_IMAGE_SOURCE_MEDIA}
-        sizes={sizes ?? BIG_IMAGE_SIZES}
-        srcSet={fallbackSrcSet}
-      />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}

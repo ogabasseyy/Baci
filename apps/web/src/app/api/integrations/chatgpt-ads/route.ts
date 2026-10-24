@@ -4,6 +4,7 @@ import {
   revalidateFeatures,
   revalidateMerchant,
 } from '@/lib/cache-revalidation';
+import { loadChatgptAdsConnection } from '@/lib/chatgpt-ads/load-connection';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
@@ -34,24 +35,7 @@ async function status(
   client: NonNullable<Awaited<ReturnType<typeof resolve>>['client']>,
   merchantId: string
 ) {
-  const [settings, credential] = await Promise.all([
-    client
-      .from('merchant_feature_settings')
-      .select('chatgpt_pixel_id')
-      .eq('merchant_id', merchantId)
-      .maybeSingle(),
-    client
-      .from('merchant_chatgpt_ads_credentials')
-      .select('merchant_id')
-      .eq('merchant_id', merchantId)
-      .maybeSingle(),
-  ]);
-  if (settings.error || credential.error)
-    return json({ error: 'Could not load connection settings.' }, 500);
-  return json({
-    pixelId: settings.data?.chatgpt_pixel_id ?? null,
-    capiConfigured: !!credential.data,
-  });
+  return json(await loadChatgptAdsConnection(client, merchantId));
 }
 export async function GET(request: NextRequest) {
   try {

@@ -133,3 +133,20 @@ pipeline's shadow/canary/provider-identity rollout, secure owner key setup, and
 provider-side ingestion verification. Credential creation requires action-time
 browser confirmation; it should occur only once the secure production save path
 is ready. No campaign spend or production migration was performed by this task.
+
+## Server-rendered connection settings
+
+The Jules dashboard suggestion is implemented: the server page authenticates the
+owner and loads the initial Pixel ID and configured-key boolean through the
+normal RLS client. The API and server page share a server-only loader with
+explicit public projections; neither selects or serializes the CAPI key.
+The interactive form uses that seed without an initial browser request. Switching
+stores discards it, clears entered secrets, aborts stale requests, and reloads
+current settings even when switching back to the original store.
+
+The focused server/client/loader/API suite passes 29 tests across five files,
+including authorization, safe errors, projections, immediate rendering, and
+merchant-switch races. A fresh-context third-round inspection found no further
+concrete issue; this does not replace current-head Codex review or CI. CodeRabbit
+remains skipped at the owner's request. Main was rebased before validation;
+previous-head review and CI receipts do not establish the new head's status.

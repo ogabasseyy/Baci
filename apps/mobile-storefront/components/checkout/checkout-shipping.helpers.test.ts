@@ -130,6 +130,7 @@ describe('checkout-shipping.helpers', () => {
         expect.objectContaining({
           id: 'quote-1',
           provider: 'Provider A',
+          receiverAddress: '1 Marina',
         }),
       ])
     );

@@ -210,5 +210,17 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
     });
     expect(executionResult).toEqual({ data: {} });
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    esm.mergeIncrementalResult({
+      incrementalResult: { path: ['safe'], data: { value: 1 } },
+      executionResult,
+    });
+    esm.mergeIncrementalResult({
+      incrementalResult: { path: ['safe'], data: { other: 2 } },
+      executionResult,
+    });
+    expect(executionResult.data).toEqual({
+      safe: { value: 1, other: 2 },
+    });
   });
 });

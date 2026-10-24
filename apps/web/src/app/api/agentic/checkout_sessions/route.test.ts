@@ -280,7 +280,7 @@ describe('POST /api/agentic/checkout_sessions', () => {
     expect(calculateCheckoutSession).not.toHaveBeenCalled();
   });
 
-  it('creates a checkout session and returns the idempotency header', async () => {
+  it('defaults omitted checkout currency to NGN and returns the idempotency header', async () => {
     const insertSpy = vi.fn((_: Record<string, unknown>) => ({
       select: vi.fn(() => ({
         single: vi.fn().mockResolvedValue({
@@ -347,7 +347,6 @@ describe('POST /api/agentic/checkout_sessions', () => {
         },
         body: JSON.stringify({
           items: [{ id: 'product-1', quantity: 1 }],
-          currency: 'ngn',
         }),
       }
     );
@@ -365,6 +364,13 @@ describe('POST /api/agentic/checkout_sessions', () => {
       line_items: expect.any(Array),
       shipping_address: null,
     });
+    expect(calculateCheckoutSession).toHaveBeenCalledWith(
+      mockSupabase,
+      [{ id: 'product-1', quantity: 1 }],
+      null,
+      'NGN',
+      'merchant-1'
+    );
     expect(insertSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         cart_items: [{ id: 'product-1', quantity: 1 }],

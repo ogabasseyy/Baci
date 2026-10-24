@@ -22,6 +22,20 @@ describe('checkoutSessionSchema', () => {
     }
   });
 
+  it('defaults an item checkout to NGN when currency is omitted', () => {
+    const result = checkoutSessionSchema.safeParse({
+      items: [{ id: 'product-1', quantity: 2 }],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toMatchObject({
+        currency: 'NGN',
+        items: [{ id: 'product-1', quantity: 2 }],
+      });
+    }
+  });
+
   it('accepts a UCP cart id checkout creation payload', () => {
     const result = checkoutSessionSchema.safeParse({ cart_id: 'cart_123' });
 

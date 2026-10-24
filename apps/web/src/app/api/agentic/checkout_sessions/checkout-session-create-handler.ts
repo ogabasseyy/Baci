@@ -102,6 +102,7 @@ export async function handleAgenticCheckoutSessionCreate(
     }
 
     const { items, shipping_address, currency } = parsed.data;
+    const checkoutCurrency = currency ?? 'NGN';
     const idempotency = await reserveAgenticIdempotencyKey({
       agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
@@ -191,7 +192,7 @@ export async function handleAgenticCheckoutSessionCreate(
         supabase,
         items,
         null,
-        currency,
+        checkoutCurrency,
         merchant.id
       );
     } catch (error) {
@@ -221,7 +222,7 @@ export async function handleAgenticCheckoutSessionCreate(
       sessionId,
       merchantId: merchant.id,
       items,
-      currency,
+      currency: checkoutCurrency,
       fulfillmentAddress: shipping_address ?? null,
       fulfillmentOptionId,
       lineItems: sessionCalc.lineItems,
@@ -254,7 +255,7 @@ export async function handleAgenticCheckoutSessionCreate(
     });
     const responseSessionId = session.session_id ?? sessionId;
     const responsePayload = buildCheckoutSessionStateResponse({
-      currency,
+      currency: checkoutCurrency,
       fulfillmentOptionId,
       fulfillmentOptions: sessionCalc.fulfillmentOptions,
       lineItems: sessionCalc.lineItems,

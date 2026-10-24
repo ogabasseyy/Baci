@@ -66,6 +66,7 @@ interface CategoryPageResultsProps {
   totalPages: number;
   pageTitle: string;
   categoryPath: string;
+  prioritizeFirstRowImages?: boolean;
 }
 
 /**
@@ -95,6 +96,7 @@ export function CategoryPageResults({
   totalPages,
   pageTitle,
   categoryPath,
+  prioritizeFirstRowImages = false,
 }: CategoryPageResultsProps) {
   // Filtered mode renders every matching product in one page (unbounded) — defer
   // offscreen card work with a correctly-sized reservation per view mode.
@@ -164,6 +166,7 @@ export function CategoryPageResults({
                       onAddToCart={onAddToCart}
                       isAdded={isAdded}
                       viewMode={viewMode}
+                      imagePriority={prioritizeFirstRowImages && index < (viewMode === 'grid' ? 2 : 1)}
                       contentVisibilityClassName={cardContentVisibilityClassName}
                     />
                     {/* Ad insertion logic */}

@@ -27,8 +27,8 @@ minimumReleaseAgeExclude:
   - dompurify@3.4.13
   - js-yaml@4.3.1
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-10-08.
-  - next@16.3.8
-  - '@next/env@16.3.8'
+  - next@16.4.1
+  - '@next/env@16.4.1'
 # Refuse trust-signal downgrades; trustLockfile keeps already-locked entries installable.
 trustPolicy: no-downgrade
 trustLockfile: true
@@ -224,11 +224,11 @@ overrides:
   # parse-diagnostic DoS, and GHSA-rpw4-54j3-4h4q / GHSA-2vr4-cq9g-pvrc SSRF
   # trust-boundary advisories.
   ip-address: "10.7.1"
-  # Keep every workspace package on the reviewed Next.js 16.3.8 release.
+  # Keep every workspace package on the reviewed Next.js 16.4.1 release.
   # 16.3.6 closed GHSA-vcvr-r3jv-pc5j (critical RCE in next/og ImageResponse);
   # 16.3.8 closes GHSA-cjq9-62q9-8jv4 (SSRF in Image Optimization) plus five
   # medium and one low cache-poisoning/disclosure advisories.
-  next: "16.3.8"
+  next: "16.4.1"
   flatted: "3.4.2"
   lodash: "4.18.1"
   lodash-es: "4.18.1"
@@ -406,7 +406,7 @@ patchedDependencies:
   'expo-apple-authentication@57.0.1': patches/expo-apple-authentication@57.0.1.patch
   'expo-print@57.0.1': patches/expo-print@57.0.1.patch
   image-size@1.2.1: patches/image-size@1.2.1.patch
-  "next@16.3.8": "patches/next@16.3.8.patch"
+  "next@16.4.1": "patches/next@16.4.1.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   node-forge@1.4.0: patches/node-forge@1.4.0.patch
   # Pause RecyclerView recycling while retaining exit content (screens PR 4755).

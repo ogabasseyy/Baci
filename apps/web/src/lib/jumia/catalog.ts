@@ -24,22 +24,35 @@ const MAX_PAGES = 1000;
 
 // ── Products ──
 
+type ProductFilters = {
+  status?: string;
+  shopId?: string;
+  /** Documented scalar exact seller-SKU filter (not a multi-SKU query). */
+  sellerSku?: string;
+};
+
 export async function getProducts(
   client: JumiaClient,
-  params?: {
-    nextToken?: string;
-    status?: string;
-    shopId?: string;
-  }
+  params?: ProductFilters & { nextToken?: string }
 ): Promise<{
   products: JumiaProduct[];
   nextToken: string | null;
   isLastPage: boolean;
 }> {
   const query = new URLSearchParams();
-  if (params?.nextToken) query.set('nextToken', params.nextToken);
-  if (params?.status) query.set('status', params.status);
+  // Keep the helper's nextToken API; the provider's request key is token.
+  if (params?.nextToken) query.set('token', params.nextToken);
+  if (params?.status) {
+    const status = params.status;
+    query.set(
+      'status',
+      status === 'active' || status === 'inactive'
+        ? status.toUpperCase()
+        : status
+    );
+  }
   if (params?.shopId) query.set('shopId', params.shopId);
+  if (params?.sellerSku) query.set('sellerSku', params.sellerSku);
 
   const qs = query.toString();
   const path = qs ? `/catalog/products?${qs}` : '/catalog/products';
@@ -58,11 +71,12 @@ export async function getProducts(
 
 export async function getAllProducts(
   client: JumiaClient,
-  params?: { status?: string; shopId?: string }
+  params?: ProductFilters
 ): Promise<JumiaProduct[]> {
   const all: JumiaProduct[] = [];
   let nextToken: string | null = null;
   let pageCount = 0;
+  const seenTokens = new Set<string>();
 
   do {
     if (++pageCount > MAX_PAGES) {
@@ -82,6 +96,12 @@ export async function getAllProducts(
         'getAllProducts: API returned isLastPage=false but no nextToken — aborting to prevent data loss'
       );
     }
+    if (seenTokens.has(nextToken)) {
+      throw new Error(
+        'getAllProducts: API returned a repeated nextToken — aborting to prevent data loss'
+      );
+    }
+    seenTokens.add(nextToken);
   } while (nextToken);
 
   return all;

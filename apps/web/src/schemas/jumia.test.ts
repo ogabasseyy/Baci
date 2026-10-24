@@ -61,8 +61,8 @@ const validProductsResponse = {
       description: 'Latest Apple flagship',
       parentSku: 'IPHONE-15-PM',
       shop: { id: '550e8400-e29b-41d4-a716-446655440000' },
-      brand: { code: 123, name: 'Apple' },
-      category: { code: 456, name: 'Smartphones' },
+      brand: { code: '123', name: 'Apple' },
+      category: { code: '456', name: 'Smartphones' },
       images: [
         {
           url: 'https://cdn.jumia.com/img1.jpg',
@@ -88,8 +88,8 @@ const validProductsResponse = {
           barcodeEan: '1234567890123',
           variation: '256GB Black',
           globalPrice: {
+            currency: 'NGN',
             value: 750000,
-            updateAt: '2025-03-24T10:00:00.000Z',
             salePrice: {
               value: 700000,
               startAt: '2025-03-20T00:00:00.000Z',
@@ -104,6 +104,7 @@ const validProductsResponse = {
               translations: [],
             },
           ],
+          businessClients: [],
         },
       ],
     },

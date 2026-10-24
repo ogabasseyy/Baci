@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { buildCodexDockerRuntimeArgs } from './remediation-codex-docker-args.mjs';
 import { buildCodexDockerRuntime } from './remediation-codex-docker-runtime.mjs';
@@ -79,12 +79,13 @@ function addDependencyMounts({
 }
 
 function prepareViteCacheMountSources(dependencyRoot) {
+  const realDependencyRoot = realpathSync(dependencyRoot);
   for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
-    const dependencyPath = join(dependencyRoot, relativePath);
+    const dependencyPath = join(realDependencyRoot, relativePath);
     if (!existsSync(dependencyPath)) continue;
     for (const cacheDirectory of VITE_CACHE_DIRECTORY_NAMES) {
       ensureRealDirectoryPath(
-        dependencyRoot,
+        realDependencyRoot,
         join(dependencyPath, cacheDirectory)
       );
     }

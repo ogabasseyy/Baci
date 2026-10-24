@@ -19,7 +19,7 @@
     "check:module-size": "node ./scripts/check-module-size.mjs",
     "check:route-size": "node ./scripts/check-route-size.mjs",
     "lint": "biome check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit",
     "test": "pnpm exec jest --runInBand && pnpm exec node --test ios/podfile-precompiled-modules-precedence.test.mjs android/settings-gradle-include-build.test.mjs config/*.test.mjs"
   },
   "dependencies": {

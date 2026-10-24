@@ -1,5 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GET as getAttributes } from '@/app/api/marketplace/jumia/attribute-sets/[attributeSetId]/route';
+import { GET as getBrands } from '@/app/api/marketplace/jumia/brands/route';
+import { GET as getCategories } from '@/app/api/marketplace/jumia/categories/route';
+import { GET as getDestinations } from '@/app/api/marketplace/jumia/destination-context/route';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -50,6 +54,18 @@ describe('authorizeJumiaMetadata', () => {
     );
     expect(mocks.legacy).not.toHaveBeenCalled();
   });
+  it('returns the validated attribute SID after authenticating and resolving path params', async () => {
+    const result = await authorizeJumiaMetadata(
+      request(),
+      true,
+      Promise.resolve({ attributeSetId: merchantId })
+    );
+    expect(result).toEqual({
+      client: { shopId: 'shop' },
+      attributeSetId: merchantId,
+    });
+    expect(mocks.auth).toHaveBeenCalledTimes(1);
+  });
   it.each([
     'merchantId=nope',
     `merchantId=${merchantId}&integrationId=nope`,
@@ -64,6 +80,72 @@ describe('authorizeJumiaMetadata', () => {
     const result = await authorizeJumiaMetadata(request(), true);
     expect('response' in result && result.response.status).toBe(401);
     expect(mocks.merchant).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['categories', getCategories],
+    ['brands', getBrands],
+    ['destination-context', getDestinations],
+    [
+      'attribute-sets',
+      (input: NextRequest) =>
+        getAttributes(input, {
+          params: Promise.resolve({ attributeSetId: 'wrong' }),
+        }),
+    ],
+  ])('returns 401 before malformed metadata validation through the %s route', async (_name, handler) => {
+    mocks.auth.mockResolvedValue({ user: null });
+    const response = await handler(
+      request('merchantId=wrong&integrationId=wrong')
+    );
+    expect(response.status).toBe(401);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.exact).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['categories', getCategories],
+    ['brands', getBrands],
+    ['destination-context', getDestinations],
+    [
+      'attribute-sets',
+      (input: NextRequest) =>
+        getAttributes(input, {
+          params: Promise.resolve({ attributeSetId: merchantId }),
+        }),
+    ],
+  ])('returns 400 for authenticated malformed queries through the %s route without business reads', async (_name, handler) => {
+    const response = await handler(
+      request('merchantId=wrong&integrationId=wrong')
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.exact).not.toHaveBeenCalled();
+  });
+  it.each([
+    'merchantId=wrong',
+    '',
+    `merchantId=${merchantId}&integrationId=wrong`,
+  ])('authenticates before reporting malformed protected queries: %s', async (query) => {
+    mocks.auth.mockResolvedValue({ user: null });
+    const result = await authorizeJumiaMetadata(request(query), true);
+    expect('response' in result && result.response.status).toBe(401);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.exact).not.toHaveBeenCalled();
+  });
+  it('authenticates before reporting a malformed attribute set path', async () => {
+    mocks.auth.mockResolvedValue({ user: null });
+    const result = await authorizeJumiaMetadata(request(), true, {
+      attributeSetId: 'wrong',
+    });
+    expect('response' in result && result.response.status).toBe(401);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+  });
+  it('rejects an authenticated malformed path before any tenant or provider reads', async () => {
+    const result = await authorizeJumiaMetadata(request(), true, {
+      attributeSetId: 'wrong',
+    });
+    expect('response' in result && result.response.status).toBe(400);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.exact).not.toHaveBeenCalled();
   });
   it.each([
     null,

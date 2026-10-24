@@ -3,23 +3,21 @@ import { getAttributeSet } from '@/lib/jumia/catalog';
 import { JumiaApiError } from '@/lib/jumia/helpers';
 import { authorizeJumiaMetadata } from '@/lib/jumia/metadata-request';
 import { JumiaAttributeSetResponseSchema } from '@/schemas/jumia/catalog';
-import { jumiaAttributeSetParamSchema } from '@/schemas/jumia/metadata-query';
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ attributeSetId: string }> }
 ) {
-  const parsed = jumiaAttributeSetParamSchema.safeParse(await context.params);
-  if (!parsed.success)
-    return NextResponse.json(
-      { error: 'Invalid attribute set ID' },
-      { status: 400 }
-    );
   try {
-    const auth = await authorizeJumiaMetadata(request, true);
+    const auth = await authorizeJumiaMetadata(request, true, context.params);
     if ('response' in auth) return auth.response;
+    if (!auth.attributeSetId)
+      return NextResponse.json(
+        { error: 'Invalid attribute set ID' },
+        { status: 400 }
+      );
     const attributes = JumiaAttributeSetResponseSchema.parse(
-      await getAttributeSet(auth.client, parsed.data.attributeSetId)
+      await getAttributeSet(auth.client, auth.attributeSetId)
     );
     return NextResponse.json(attributes);
   } catch (error) {

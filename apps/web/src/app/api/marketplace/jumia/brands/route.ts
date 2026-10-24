@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getAllBrands } from '@/lib/jumia/catalog';
 import { JumiaApiError } from '@/lib/jumia/helpers';
 import { authorizeJumiaMetadata } from '@/lib/jumia/metadata-request';
+import { logger } from '@/lib/logger';
 import { JumiaBrandsResponseSchema } from '@/schemas/jumia/catalog';
 
 export async function GET(request: NextRequest) {
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
+    logger.error({
+      message: 'Jumia brands metadata unavailable',
+      status: 502,
+      kind: error instanceof JumiaApiError ? 'provider' : 'metadata',
+    });
     return NextResponse.json(
       { error: 'Failed to fetch brands' },
       { status: 502 }

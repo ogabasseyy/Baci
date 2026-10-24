@@ -76,6 +76,22 @@ describe('scoped Jumia metadata reads', () => {
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.data).toEqual({ items: [] }));
   });
+  it('shows trusted reconnect guidance for conflicts without echoing server bodies', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: 'secret-provider-token' }, { status: 409 })
+        )
+    );
+    const { result } = renderHook(() =>
+      useJumiaMetadata('/context', schema, true)
+    );
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.error).toMatch(/reconnect jumia.*before retrying/i);
+    expect(result.current.error).not.toContain('secret-provider-token');
+  });
   it('cancels on unmount and never fetches disabled metadata', async () => {
     const fetcher = vi.fn<typeof fetch>(
       () => new Promise<Response>(() => undefined)

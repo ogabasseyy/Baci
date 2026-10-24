@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import type { z } from 'zod';
 import { requestDeadline } from './request-deadline';
 
+class MetadataDestinationConflict extends Error {
+  constructor() {
+    super(
+      'Reconnect Jumia with an exact shop and active destination before retrying.'
+    );
+  }
+}
+
 type MetadataState<T> = {
   url: string;
   data: T | null;
@@ -37,6 +45,7 @@ export function useJumiaMetadata<T>(
       .run(
         async (signal) => {
           const response = await fetch(url, { signal });
+          if (response.status === 409) throw new MetadataDestinationConflict();
           if (!response.ok) throw new Error('Metadata unavailable');
           return schema.parse(await response.json());
         },
@@ -60,7 +69,9 @@ export function useJumiaMetadata<T>(
             error:
               error instanceof DOMException && error.name === 'TimeoutError'
                 ? error.message
-                : 'Jumia metadata could not be loaded. Retry to continue.',
+                : error instanceof MetadataDestinationConflict
+                  ? error.message
+                  : 'Jumia metadata could not be loaded. Retry to continue.',
           });
       });
     return () => controller.abort();

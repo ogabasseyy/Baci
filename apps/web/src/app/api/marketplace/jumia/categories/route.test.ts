@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JumiaApiError } from '@/lib/jumia/helpers';
+import { logger } from '@/lib/logger';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@/lib/jumia/client', () => ({
   JumiaClient: { forIntegration: mocks.exact, forMerchant: mocks.legacy },
 }));
 vi.mock('@/lib/jumia/catalog', () => ({ getAllCategories: mocks.catalog }));
+vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
 import { GET } from './route';
 
@@ -95,5 +97,13 @@ describe('categories metadata route', () => {
     const response = await GET(request());
     expect(response.status).toBe(502);
     expect(JSON.stringify(await response.json())).not.toContain('secret');
+    expect(logger.error).toHaveBeenCalledWith({
+      message: 'Jumia categories metadata unavailable',
+      status: 502,
+      kind: 'metadata',
+    });
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain(
+      'secret'
+    );
   });
 });

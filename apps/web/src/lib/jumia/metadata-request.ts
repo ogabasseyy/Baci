@@ -5,13 +5,26 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { JumiaClient } from '@/lib/jumia/client';
-import { jumiaDestinationQuerySchema } from '@/schemas/jumia/metadata-query';
+import {
+  jumiaAttributeSetParamSchema,
+  jumiaDestinationQuerySchema,
+} from '@/schemas/jumia/metadata-query';
 import { jumiaMerchantIdQuerySchema } from '@/schemas/marketplace';
 
 export async function authorizeJumiaMetadata(
   request: NextRequest,
-  requireExact: boolean
-): Promise<{ client: JumiaClient } | { response: NextResponse }> {
+  requireExact: boolean,
+  attributeSetParams?:
+    | { attributeSetId: string }
+    | Promise<{ attributeSetId: string }>
+): Promise<
+  { client: JumiaClient; attributeSetId?: string } | { response: NextResponse }
+> {
+  const auth = await authenticateApiRequest(request);
+  if (auth.error || !auth.user || !auth.supabase)
+    return {
+      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    };
   const params = new URL(request.url).searchParams;
   const parsed = (
     requireExact ? jumiaDestinationQuerySchema : jumiaMerchantIdQuerySchema
@@ -26,10 +39,15 @@ export async function authorizeJumiaMetadata(
         { status: 400 }
       ),
     };
-  const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase)
+  const parsedPath = attributeSetParams
+    ? jumiaAttributeSetParamSchema.safeParse(await attributeSetParams)
+    : undefined;
+  if (parsedPath && !parsedPath.success)
     return {
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      response: NextResponse.json(
+        { error: 'Invalid attribute set ID' },
+        { status: 400 }
+      ),
     };
   const context = await getMerchantForApiRequest(auth.supabase, auth.user.id, {
     requestedMerchantId: parsed.data.merchantId,
@@ -50,5 +68,7 @@ export async function authorizeJumiaMetadata(
         parsed.data.integrationId
       )
     : await JumiaClient.forMerchant(auth.supabase, context.merchantId);
-  return { client };
+  return parsedPath?.success
+    ? { client, attributeSetId: parsedPath.data.attributeSetId }
+    : { client };
 }

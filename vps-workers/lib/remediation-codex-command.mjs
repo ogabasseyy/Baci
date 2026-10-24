@@ -7,6 +7,14 @@ import { readOnlyDockerSecurityArgs } from './remediation-readonly-seccomp.mjs';
 
 export const REMEDIATION_VERIFY_COMMAND =
   'pnpm turbo lint && pnpm turbo typecheck && pnpm turbo test';
+const DEPENDENCY_MOUNT_PATHS = [
+  'node_modules',
+  'apps/web/node_modules',
+  'apps/mobile-admin/node_modules',
+  'apps/mobile-storefront/node_modules',
+];
+const VITE_CACHE_DIRECTORY_NAMES = ['.vite', '.vite-temp'];
+
 function bindMount(source, destination, { readonly = false } = {}) {
   return `type=bind,src=${source},dst=${destination}${readonly ? ',readonly' : ''}`;
 }
@@ -53,12 +61,7 @@ function addDependencyMounts({
   worktreeDir,
   destinationRoot = worktreeDir,
 }) {
-  for (const relativePath of [
-    'node_modules',
-    'apps/web/node_modules',
-    'apps/mobile-admin/node_modules',
-    'apps/mobile-storefront/node_modules',
-  ]) {
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
     const source = join(dependencyRoot, relativePath);
     if (existsSync(source)) {
       const destination = join(destinationRoot, relativePath);
@@ -75,17 +78,25 @@ function addDependencyMounts({
   }
 }
 
+function prepareViteCacheMountSources(dependencyRoot) {
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
+    const dependencyPath = join(dependencyRoot, relativePath);
+    if (!existsSync(dependencyPath)) continue;
+    for (const cacheDirectory of VITE_CACHE_DIRECTORY_NAMES) {
+      ensureRealDirectoryPath(
+        dependencyRoot,
+        join(dependencyPath, cacheDirectory)
+      );
+    }
+  }
+}
+
 function addViteCacheMounts(args, worktreeDir) {
-  for (const relativePath of [
-    'node_modules/.vite',
-    'node_modules/.vite-temp',
-    'apps/web/node_modules/.vite',
-    'apps/web/node_modules/.vite-temp',
-    'apps/mobile-admin/node_modules/.vite',
-    'apps/mobile-admin/node_modules/.vite-temp',
-    'apps/mobile-storefront/node_modules/.vite',
-    'apps/mobile-storefront/node_modules/.vite-temp',
-  ]) {
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS.flatMap((dependencyPath) =>
+    VITE_CACHE_DIRECTORY_NAMES.map((cacheDirectory) =>
+      join(dependencyPath, cacheDirectory)
+    )
+  )) {
     args.push(
       '--tmpfs',
       `${join(worktreeDir, relativePath)}:rw,nosuid,nodev,size=256m`
@@ -239,9 +250,11 @@ export function buildRemediationVerificationCommand({
     runtime,
     worktreeDir,
   });
+  const dependencyRoot = env.BACI_REMEDIATION_DEPENDENCY_ROOT || repoDir;
+  prepareViteCacheMountSources(dependencyRoot);
   addDependencyMounts({
     args: dockerArgs,
-    dependencyRoot: env.BACI_REMEDIATION_DEPENDENCY_ROOT || repoDir,
+    dependencyRoot,
     destinationRoot: worktreeDir,
     prepareMountPoints: true,
     worktreeDir,

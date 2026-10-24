@@ -63,7 +63,7 @@ export function useCheckoutShipping({
     watchedState,
     watchedCity,
     items,
-    committedAddress
+    watchedAddress || `${watchedCity}, ${watchedState}`
   );
   const activeDeliveryCoordinates =
     watchedAddress === committedAddress ? deliveryCoordinates : null;

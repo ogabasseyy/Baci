@@ -30,6 +30,10 @@ import { packageModule } from './security-integrity-package-module';
 const require = createRequire(import.meta.url);
 
 type MergeDeepFn = (sources: unknown[]) => unknown;
+type MergeIncrementalResultFn = (input: {
+  incrementalResult: Record<string, unknown>;
+  executionResult: Record<string, unknown>;
+}) => void;
 
 function candidateRoots(): string[] {
   // Dynamically enumerate EVERY installed copy: nested duplicates under
@@ -112,5 +116,79 @@ describe('@graphql-tools/utils mergeDeep integrity (CVE-2026-104852)', () => {
     expect(merged).toMatchObject({ a: 1, b: 2 });
     expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
     expect(merged.x).toBeUndefined();
+  });
+});
+
+function loadMergeIncrementalResult(root: string): MergeIncrementalResultFn {
+  const entry = require(join(root, packageMain(root))) as {
+    mergeIncrementalResult: MergeIncrementalResultFn;
+  };
+  return entry.mergeIncrementalResult;
+}
+
+describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
+  it.each(
+    candidateRoots()
+  )('rejects unsafe and inherited paths in %s', (root) => {
+    const mergeIncrementalResult = loadMergeIncrementalResult(root);
+    const executionResult: Record<string, unknown> = { data: {} };
+    mergeIncrementalResult({
+      incrementalResult: {
+        path: ['created', 'constructor', 'prototype', 'polluted'],
+        data: { yes: true },
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    mergeIncrementalResult({
+      incrementalResult: {
+        path: ['constructor'],
+        data: { polluted: true },
+      },
+      executionResult,
+    });
+    expect(Object.hasOwn(executionResult.data as object, 'constructor')).toBe(
+      false
+    );
+
+    mergeIncrementalResult({
+      incrementalResult: { path: ['toString', 'safe'], data: true },
+      executionResult,
+    });
+    expect(executionResult.data).toMatchObject({ toString: { safe: true } });
+    expect(({} as Record<string, unknown>).safe).toBeUndefined();
+
+    mergeIncrementalResult({
+      incrementalResult: { path: ['safe'], data: { value: 1 } },
+      executionResult,
+    });
+    mergeIncrementalResult({
+      incrementalResult: { path: ['safe'], data: { other: 2 } },
+      executionResult,
+    });
+    expect(executionResult.data).toEqual({
+      safe: { value: 1, other: 2 },
+      toString: { safe: true },
+    });
+  });
+
+  it.each(
+    candidateRoots()
+  )('rejects unsafe paths via ESM in %s', async (root) => {
+    const esm = (await import(
+      pathToFileURL(join(root, packageModule(root))).href
+    )) as { mergeIncrementalResult: MergeIncrementalResultFn };
+    const executionResult: Record<string, unknown> = { data: {} };
+    esm.mergeIncrementalResult({
+      incrementalResult: {
+        path: ['created', 'constructor', 'prototype', 'polluted'],
+        data: { yes: true },
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });

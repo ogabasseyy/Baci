@@ -23,9 +23,6 @@ export function ChatgptPixel({ pixelId }: { pixelId: string }) {
   const pathname = usePathname();
   useEffect(() => {
     initializeChatgptPixel(pixelId, isAnalyticsAllowed());
-    return () => {
-      setChatgptMeasurementConsent(false);
-    };
   }, [pixelId]);
   useEffect(() => {
     // The hydration snapshot is denied even when browser consent is saved.

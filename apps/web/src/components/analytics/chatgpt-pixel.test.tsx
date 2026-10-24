@@ -16,6 +16,17 @@ afterEach(() => {
   routing.pathname = '/one';
 });
 describe('ChatGPT Pixel navigation and consent', () => {
+  it('preserves the saved measurement choice when leaving a page that mounted the Pixel', () => {
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({ analytics: true })
+    );
+    const { unmount } = render(<ChatgptPixel pixelId="pixel-a" />);
+    const queue = (window as PixelWindow).oaiq?.q;
+    const before = queue?.length ?? 0;
+    unmount();
+    expect(queue?.slice(before)).not.toContainEqual(['consent', false]);
+  });
   it('never withdraws saved consent while hydrating a server snapshot', async () => {
     localStorage.setItem(
       'baci-cookie-consent',

@@ -48,7 +48,7 @@ it.each([
   false,
 ])('submits consent-aware attribution with the generic checkout: %s', async (allowed) => {
   vi.spyOn(document, 'cookie', 'get').mockReturnValue(
-    '__oppref=click; __obref=browser'
+    'unrelated_promotion=20%off; __oppref=click; __obref=browser'
   );
   localStorage.setItem(
     'baci-cookie-consent',

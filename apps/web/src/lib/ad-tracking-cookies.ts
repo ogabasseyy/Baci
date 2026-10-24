@@ -121,10 +121,21 @@ export function generateClickIdCookies(
  * Works on both client and server
  */
 export function parseAdTrackingCookies(cookieString: string): AdTrackingData {
+  const allowedNames = new Set<string>([
+    '__oppref',
+    '__obref',
+    ...Object.values(AD_TRACKING_COOKIES),
+  ]);
   const cookies = Object.fromEntries(
-    cookieString.split(';').map((c) => {
+    cookieString.split(';').flatMap((c) => {
       const [key, ...valueParts] = c.trim().split('=');
-      return [key, decodeURIComponent(valueParts.join('='))];
+      if (!allowedNames.has(key) || valueParts.length === 0) return [];
+      try {
+        return [[key, decodeURIComponent(valueParts.join('='))]];
+      } catch {
+        // A malformed optional reference must not stop an order submission.
+        return [];
+      }
     })
   );
 
@@ -168,7 +179,12 @@ export function getAdTrackingData(): AdTrackingData {
     return {};
   }
 
-  const tracking = parseAdTrackingCookies(document.cookie);
+  let tracking: AdTrackingData = {};
+  try {
+    tracking = parseAdTrackingCookies(document.cookie);
+  } catch {
+    // Cookie access can itself be denied. Checkout still proceeds without IDs.
+  }
   const allowed = isAnalyticsAllowed();
   if (!allowed) {
     delete tracking.oppref;

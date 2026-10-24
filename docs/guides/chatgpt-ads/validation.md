@@ -104,6 +104,23 @@ heavy swapping; this is not recorded as a passing suite. Full final-head CI is
 still required once all fixes can be committed and pushed.
 
 
+## Subsequent review boundaries
+
+The active operator RPC (`list_event_pipeline_deliveries_admin_v3`) now accepts
+ChatGPT filters through a separate append-only migration. Its disposable SQL
+regression failed with `invalid_event_destination` before the migration and
+passed afterward, including permission denial for a viewer and rejection of an
+unsupported destination. The test database was removed after validation.
+
+Page unmount no longer withdraws a shopper's unchanged measurement consent.
+Attribution decoding considers only known cookies and skips malformed optional
+values; cookie-access failure also leaves checkout usable. Four new regressions
+failed before these fixes. The expanded Pixel/cookie/checkout/persistence suite
+passed 42 tests across ten files, and the replay registry/materialization suite
+passed 34 tests across six files. New migration hashes and the operator SQL
+fixture are registered for CI. CodeRabbit remains skipped under the owner's
+explicit authorization; Codex review and full final-head CI remain required.
+
 ## Ads Manager and remaining rollout
 
 The Ogabassey website source and Successful payment conversion are created and

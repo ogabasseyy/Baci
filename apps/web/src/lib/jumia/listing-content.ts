@@ -39,7 +39,8 @@ const own = (value: Record<string, unknown>, key: string): unknown =>
 
 /**
  * Local content policy only, NOT canonical-source proof or provider readiness.
- * Callers supply plain-text facts; literal markup is escaped, never executed.
+ * Callers supply plain-text facts. The create-shaped JSON name retains raw
+ * title bytes; generated description/list HTML escapes literal markup.
  * Unknown classification only meets the general four-bullet floor, not 3C.
  * Future authorized loaders must establish classification and weight units.
  * This never fills category-required metadata: the canonical serializer must
@@ -131,7 +132,7 @@ export function prepareJumiaListingContent(input: unknown): JumiaContentResult {
   return {
     success: true,
     content: {
-      name: { value: escapeHtmlAttribute(title as string) },
+      name: { value: title as string },
       description: { value: escapeHtmlAttribute(description as string) },
       shortDescriptionHtml: `<ul>${plainBullets.map((bullet) => `<li>${escapeHtmlAttribute(bullet)}</li>`).join('')}</ul>`,
       productWeightKg: kilograms as number,

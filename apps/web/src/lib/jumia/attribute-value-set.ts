@@ -25,15 +25,19 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function explicitArray(value: unknown): value is unknown[] {
-  return (
-    Array.isArray(value) &&
-    Object.getPrototypeOf(value) === Array.prototype &&
-    Array.from(
-      { length: value.length },
-      (_, index) =>
-        'value' in (Object.getOwnPropertyDescriptor(value, index) ?? {})
-    ).every(Boolean)
-  );
+  if (
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    Reflect.ownKeys(value).length !== value.length + 1
+  )
+    return false;
+  // Dense index data plus length are the only allowed own properties. Reject
+  // methods, accessors and iterators before any consumer invokes array behavior.
+  for (let index = 0; index < value.length; index++) {
+    if (!('value' in (Object.getOwnPropertyDescriptor(value, index) ?? {})))
+      return false;
+  }
+  return true;
 }
 
 function explicitMetadata(value: unknown, seen = new Set<object>()): boolean {

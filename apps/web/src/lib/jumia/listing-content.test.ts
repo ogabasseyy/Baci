@@ -21,7 +21,7 @@ describe('pure Jumia listing content preparation', () => {
     expect(result).toEqual({
       success: true,
       content: {
-        name: { value: 'A &lt;b&gt;product&lt;/b&gt; &amp; name' },
+        name: { value: 'A <b>product</b> & name' },
         description: {
           value: '&lt;script&gt;alert(1)&lt;/script&gt; &amp; facts',
         },
@@ -178,5 +178,15 @@ describe('pure Jumia listing content preparation', () => {
       enumerable: true,
     });
     expect(prepareJumiaListingContent(input).success).toBe(false);
+  });
+  it.each([
+    'Factual product A & B',
+    'Factual product &amp; B',
+    'Factual <b>product</b>',
+  ])('preserves raw JSON title bytes without assuming HTML entity decoding: %s', (title) => {
+    expect(prepareJumiaListingContent({ ...facts, title })).toMatchObject({
+      success: true,
+      content: { name: { value: title } },
+    });
   });
 });

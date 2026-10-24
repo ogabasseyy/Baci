@@ -184,7 +184,7 @@ patchedDependencies:
   lottie-react-native@7.3.8: cd9d83823cc2d1edf6ca8e47fb7c6bea5dd902b0b7188b2a6fb4302920e07cd7
   metro-runtime@0.84.4: 7f83ec93fe717bebba70d6301eac128b36bbb0b46d5db476fb5c43bac9daea6a
   metro@0.84.4: 3311285d3ff06ff147ed0951f5b59171824bc81484aad50405a491dc4fd2310e
-  next@16.4.1: 7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af
+  next@16.4.1: 0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891
   node-forge@1.4.0: 4fa957cddb4b4601a48b535053d0fec7ed013f9d075660a38365f285fc830fe0
   novel@1.0.2: 5ec4c401d7f2d2d623fd40bbbc680e8d9630f827d499abe97d0871041e9fe113
   postcss-selector-parser@6.0.10: b7e2167fd5ae86844516045678a79c252afee0e9302b8603936b8d44ace81f4d
@@ -222,7 +222,7 @@ importers:
         version: 2.1.9
       next:
         specifier: 16.4.1
-        version: 16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       tailwindcss:
         specifier: ^4.3.1
         version: 4.3.1
@@ -905,7 +905,7 @@ importers:
         version: 1.9.1
       '@posthog/nextjs-config':
         specifier: ^1.9.68
-        version: 1.9.68(next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(esbuild@0.28.1)(postcss@8.5.23))
+        version: 1.9.68(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(esbuild@0.28.1)(postcss@8.5.23))
       '@puckeditor/core':
         specifier: 0.21.2
         version: 0.21.2(@floating-ui/dom@1.7.6)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(immer@11.1.8)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3))
@@ -1061,7 +1061,7 @@ importers:
         version: 1.38.0
       '@vercel/edge-config':
         specifier: ^1.4.3
-        version: 1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
+        version: 1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))
       '@vercel/functions':
         specifier: ^3.7.5
         version: 3.7.5(ws@8.21.0)
@@ -1151,7 +1151,7 @@ importers:
         version: 5.1.16
       next:
         specifier: 16.4.1
-        version: 16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        version: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -16767,12 +16767,12 @@ snapshots:
     dependencies:
       '@posthog/types': 1.400.0
 
-  '@posthog/nextjs-config@1.9.68(next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(esbuild@0.28.1)(postcss@8.5.23))':
+  '@posthog/nextjs-config@1.9.68(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(webpack@5.107.2(esbuild@0.28.1)(postcss@8.5.23))':
     dependencies:
       '@posthog/cli': 0.7.33
       '@posthog/plugin-utils': 1.1.2
       '@posthog/webpack-plugin': 1.5.24(webpack@5.107.2(esbuild@0.28.1)(postcss@8.5.23))
-      next: 16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       semver: 7.8.4
     transitivePeerDependencies:
       - webpack
@@ -19457,12 +19457,12 @@ snapshots:
 
   '@vercel/edge-config-fs@0.1.0': {}
 
-  '@vercel/edge-config@1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))':
+  '@vercel/edge-config@1.4.3(@opentelemetry/api@1.9.1)(next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3))':
     dependencies:
       '@vercel/edge-config-fs': 0.1.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      next: 16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      next: 16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
 
   '@vercel/functions@3.7.5(ws@8.21.0)':
     dependencies:
@@ -20045,7 +20045,7 @@ snapshots:
 
   blake3-wasm@2.1.5: {}
 
-  body-parser@1.20.9:
+  body-parser@1.20.9(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
@@ -22113,7 +22113,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.9
+      body-parser: 1.20.9(supports-color@10.2.2)
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 0.7.2
@@ -25294,7 +25294,7 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
 
-  next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
+  next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@babel/core@7.29.6)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@24.13.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
       '@next/env': 16.4.1
       '@swc/helpers': 0.5.23
@@ -25322,7 +25322,7 @@ snapshots:
       - '@types/node'
       - babel-plugin-macros
 
-  next@16.4.1(patch_hash=7d350dc998692f411e296280e6d7376d01bb0c0bab7fde171bb0679e092446af)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  next@16.4.1(patch_hash=0679e0c29945fc606732a859cafe5301630cc84a4335a89f2a84e53dcf9b0891)(@opentelemetry/api@1.9.1)(@playwright/test@1.63.0)(@types/node@26.5.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       '@next/env': 16.4.1
       '@swc/helpers': 0.5.23

@@ -51,10 +51,16 @@ activation or an OpenAI ingestion receipt.
   event-age diagnostic was deferred: original timestamps remain immutable, and
   provider age rejections already become permanent HTTP failures in the worker.
   No timestamp clamping or historical backfill was introduced.
-- The complete package typecheck is blocked by the existing undeclared
-  `oidc-provider` dependency in `tools/builder-auth/provider-storage.ts`.
-  The main application, tools/workers, MCP, and builder MCP stages passed before
-  the separate builder-publication stage reached that baseline error.
+- The previously undeclared `oidc-provider` dependency in
+  `tools/builder-auth/provider-storage.ts` is fixed locally with a runtime
+  dependency and matching TypeScript declarations, kept separate from the Ads
+  feature commit. All 12 monorepo lint/typecheck tasks passed; existing lint
+  warnings remain. The runtime import and `InvalidGrant` constructor smoke check
+  passed. Existing locked package resolutions are unchanged.
+- CodeRabbit initially rejected the separate dependency review with a
+  rate-limit/account-capacity error. A retry after its stated cooldown completed
+  and raised zero issues across the manifest, lockfile, and validation note. No
+  review gate was bypassed. The full monorepo test run is still in progress.
 
 ## Ads Manager and remaining rollout
 

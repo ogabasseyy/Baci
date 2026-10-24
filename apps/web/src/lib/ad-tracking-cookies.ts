@@ -16,6 +16,8 @@
  * - _ga: Google Analytics client ID
  */
 
+import { isAnalyticsAllowed } from './analytics-consent';
+
 // Cookie names for ad tracking
 export const AD_TRACKING_COOKIES = {
   // Click IDs (captured from URL params)
@@ -51,6 +53,9 @@ const COOKIE_MAX_AGE = 90 * 24 * 60 * 60; // 90 days in seconds
  * Interface for captured ad tracking data
  */
 export interface AdTrackingData {
+  oppref?: string;
+  obref?: string;
+  chatgptConsent?: boolean;
   // Click IDs from URL params
   fbclid?: string;
   ttclid?: string;
@@ -124,6 +129,8 @@ export function parseAdTrackingCookies(cookieString: string): AdTrackingData {
   );
 
   return {
+    oppref: cookies.__oppref,
+    obref: cookies.__obref,
     // Our captured click IDs
     fbclid: cookies[AD_TRACKING_COOKIES.FACEBOOK_CLICK_ID],
     ttclid: cookies[AD_TRACKING_COOKIES.TIKTOK_CLICK_ID],
@@ -161,7 +168,13 @@ export function getAdTrackingData(): AdTrackingData {
     return {};
   }
 
-  return parseAdTrackingCookies(document.cookie);
+  const tracking = parseAdTrackingCookies(document.cookie);
+  const allowed = isAnalyticsAllowed();
+  if (!allowed) {
+    delete tracking.oppref;
+    delete tracking.obref;
+  }
+  return { ...tracking, chatgptConsent: allowed };
 }
 
 /**

@@ -10,6 +10,10 @@ import {
   getStock,
 } from '@/lib/jumia/catalog';
 import type { JumiaClient } from '@/lib/jumia/client';
+import {
+  documentedAttributes,
+  documentedCategories,
+} from '@/schemas/jumia/catalog.test-fixtures.json';
 
 function createMockClient(
   response: unknown,
@@ -157,8 +161,8 @@ describe('getAllProducts', () => {
 
 describe('getCategories', () => {
   it('calls GET /catalog/categories', async () => {
-    const mockCategories = [{ id: 'cat-1', name: 'Electronics' }];
-    const client = createMockClient({ categories: mockCategories });
+    const mockCategories = documentedCategories.categories;
+    const client = createMockClient(documentedCategories);
 
     const result = await getCategories(client);
 
@@ -171,7 +175,10 @@ describe('getCategories', () => {
   });
 
   it('passes page param as query string', async () => {
-    const client = createMockClient({ categories: [] });
+    const client = createMockClient({
+      categories: [],
+      page: { current: 3, totalOfPages: 3 },
+    });
 
     await getCategories(client, { page: 3 });
 
@@ -190,10 +197,7 @@ describe('getCategories', () => {
 
 describe('getAllCategories', () => {
   it('returns categories array from single-page fetch', async () => {
-    const cats = [
-      { id: 'cat-1', name: 'Electronics' },
-      { id: 'cat-2', name: 'Fashion' },
-    ];
+    const cats = documentedCategories.categories;
     const client = createMockClient({
       categories: cats,
       page: { current: 1, totalOfPages: 1 },
@@ -206,9 +210,8 @@ describe('getAllCategories', () => {
   });
 
   it('auto-paginates through multiple pages', async () => {
-    const c1 = { id: 'cat-1', name: 'Electronics' };
-    const c2 = { id: 'cat-2', name: 'Fashion' };
-    const c3 = { id: 'cat-3', name: 'Home' };
+    const [c1, c2] = documentedCategories.categories;
+    const c3 = { ...c2, code: 1020203, name: 'Home' };
 
     const client = { request: vi.fn() } as unknown as JumiaClient;
     vi.mocked(client.request)
@@ -237,7 +240,7 @@ describe('getAllCategories', () => {
     const client = { request: vi.fn() } as unknown as JumiaClient;
     vi.mocked(client.request)
       .mockResolvedValueOnce({
-        categories: [{ id: 'cat-1', name: 'Electronics' }],
+        categories: [documentedCategories.categories[0]],
         page: { current: 1, totalOfPages: 3 },
       })
       .mockRejectedValueOnce(new Error('Gateway timeout'));
@@ -345,9 +348,7 @@ describe('getAllBrands', () => {
 
 describe('getAttributeSet', () => {
   it('calls GET /catalog/attribute-sets/:id with the given ID', async () => {
-    const mockResponse = {
-      attributeSet: { id: 'as-42', name: 'Phones', attributes: [] },
-    };
+    const mockResponse = documentedAttributes;
     const client = createMockClient(mockResponse);
 
     const result = await getAttributeSet(client, 'as-42');
@@ -447,7 +448,7 @@ describe('getAllCategories MAX_PAGES overflow', () => {
     const client = {
       request: vi.fn().mockImplementation(() =>
         Promise.resolve({
-          categories: [{ id: 'cat-X', name: 'Infinite' }],
+          categories: [documentedCategories.categories[0]],
           page: { current: 1, totalOfPages: 99999 },
         })
       ),

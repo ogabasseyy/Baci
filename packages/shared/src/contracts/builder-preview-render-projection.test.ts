@@ -13,6 +13,11 @@ describe('preview render projection', () => {
       previewRenderProjection.isAssetSource('/avatars/customer.webp')
     ).toBe(true);
     expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'a'.repeat(64)}.webp`
+      )
+    ).toBe(true);
+    expect(
       previewRenderProjection.isAssetSource('/api/storefront/auth/session')
     ).toBe(false);
     expect(
@@ -56,5 +61,18 @@ describe('preview render projection', () => {
         type: 'PreviewPlaceholder',
       },
     ]);
+  });
+
+  it('rejects noncanonical release asset paths', () => {
+    expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'A'.repeat(64)}.WEBP`
+      )
+    ).toBe(false);
+    expect(
+      previewRenderProjection.isAssetSource(
+        `/release-assets/${'a'.repeat(63)}.webp`
+      )
+    ).toBe(false);
   });
 });

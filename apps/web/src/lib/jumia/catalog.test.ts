@@ -52,7 +52,7 @@ describe('getProducts', () => {
     });
   });
 
-  it('passes status and nextToken as query params', async () => {
+  it('passes normalized status and token as query params', async () => {
     const client = createMockClient({
       products: [],
       nextToken: null,
@@ -63,8 +63,8 @@ describe('getProducts', () => {
 
     const calledPath = vi.mocked(client.request).mock.calls[0][1] as string;
     expect(calledPath).toContain('/catalog/products?');
-    expect(calledPath).toContain('status=active');
-    expect(calledPath).toContain('nextToken=tok99');
+    expect(calledPath).toContain('status=ACTIVE');
+    expect(calledPath).toContain('token=tok99');
   });
 
   it('passes through nextToken and isLastPage from the validated response', async () => {
@@ -112,9 +112,9 @@ describe('getAllProducts', () => {
     expect(result).toEqual([p1, p2]);
     expect(client.request).toHaveBeenCalledTimes(2);
 
-    // Second call should include the nextToken from first page
+    // Second call sends the response nextToken under the documented token key.
     const secondCallPath = vi.mocked(client.request).mock.calls[1][1] as string;
-    expect(secondCallPath).toContain('nextToken=page2tok');
+    expect(secondCallPath).toContain('token=page2tok');
   });
 
   it('returns empty array when no products exist', async () => {
@@ -140,7 +140,7 @@ describe('getAllProducts', () => {
     await getAllProducts(client, { status: 'inactive' });
 
     const calledPath = vi.mocked(client.request).mock.calls[0][1] as string;
-    expect(calledPath).toContain('status=inactive');
+    expect(calledPath).toContain('status=INACTIVE');
   });
 
   it('propagates errors when request fails mid-pagination', async () => {
@@ -427,11 +427,12 @@ describe('getStock', () => {
 
 describe('getAllProducts MAX_PAGES overflow', () => {
   it('throws when pagination exceeds MAX_PAGES limit', async () => {
+    let cursor = 0;
     const client = {
       request: vi.fn().mockImplementation(() =>
         Promise.resolve({
           products: [{ sku: 'SKU-X' }],
-          nextToken: 'always-more',
+          nextToken: `more-${cursor++}`,
           isLastPage: false,
         })
       ),

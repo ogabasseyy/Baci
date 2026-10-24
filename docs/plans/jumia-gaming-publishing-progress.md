@@ -1,6 +1,6 @@
 # Jumia Gaming publishing progress
 
-Original row 3 is split into read-only preview (3a) and explicit selection controls (3b), both merged. Original row 4 is split into wire contracts (4a), exact-destination metadata/forms (4b), and canonical payload/source preflight (4c). There are **11 remaining PR-sized slices including this PR, 10 after merge**; **10 original milestones remain until row 4 is fully complete**. The count reflects the last explicit split, not completed publishing.
+Original row 3 is split into read-only preview (3a) and explicit selection controls (3b), both merged. Original row 4 is split into wire contracts (4a), exact-destination metadata/forms (4b), retrieval-contract prerequisite (4c1), and canonical payload/source preflight (4c2). There are **11 remaining PR-sized slices including this PR, 10 after merge**; **10 original milestones remain until row 4 is fully complete**. The additional retrieval-contract split changes the count, not functionality delivered or publishing readiness.
 
 | Original row | Slice | Status |
 | --- | --- | --- |
@@ -9,8 +9,9 @@ Original row 3 is split into read-only preview (3a) and explicit selection contr
 | 3a | Read-only Gaming preview | Merged: #3765 |
 | 3b | Individual / all-eligible selection controls | Merged: #3773 |
 | 4a | Category/attribute wire contracts | Merged: #3774 |
-| 4b | Exact-destination metadata/forms | Current PR |
-| 4c | Canonical payload/source preflight, including remaining retrieval-contract prerequisite | Pending |
+| 4b | Exact-destination metadata/forms | Merged: #3775 |
+| 4c1 | Retrieval-contract prerequisite | Current PR |
+| 4c2 | Canonical payload/source preflight | Pending |
 | 5 | Original planned slice | Pending |
 | 6 | Original planned slice | Pending |
 | 7 | Original planned slice | Pending |
@@ -40,4 +41,11 @@ Verification for 4a uses deterministic schema tests and mocked HTTP through the 
 
 - The exact integration's provider shop and marketplace key constrain the active business clients offered. A merchant must explicitly choose one; neither country nor cached client fields authorize a destination.
 - Category, brand and attribute draft controls reset on destination changes; category changes clear attribute values, and mapping changes revoke category confirmation. Required unavailable or unsupported metadata blocks confirmation.
-- These local mapping drafts do not feed the frozen product selection or the independently scoped legacy publisher. Destination/category authorization, canonical product facts, payload preflight, and provider submission remain pending in 4c and later slices.
+- These local mapping drafts do not feed the frozen product selection or the independently scoped legacy publisher. Destination/category authorization, canonical product facts, payload preflight, and provider submission remain pending in 4c2 and later slices.
+
+## Product retrieval-contract boundary
+
+- Retrieve Products follows the current public [product schema](https://vendorcenter.jumia.com/api-docs/paths/catalog/catalog@products.yaml), verified 2026-10-24. The helper retains its `nextToken` option but emits the provider's `token` query key. Scalar seller-SKU, shop and status filters remain stable across pages; legacy lowercase active/inactive callers emit documented uppercase values.
+- Required product/variation identity is validated. Exact nested seller SKUs, string brand/category codes, nullable barcode/price/visibility observations and business-client QC evidence survive parsing without invented defaults. Category/brand metadata endpoints and stock pagination are unchanged.
+- All-products retrieval fails on malformed data, provider/network errors, missing or repeated/cyclic cursors and the bounded page cap; it never returns partial success. Empty terminal pages remain valid. The single-page helper stays resumable; no exact-SKU worker is implemented here.
+- Deterministic schema and mocked real-client HTTP tests cover this read-only repair. Client observations do not establish stock, approved QC, destination readiness or publishing authority. No provider write, import execution, migration, deployment or publishing enablement is included.

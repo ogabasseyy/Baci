@@ -12,7 +12,11 @@ export async function GET(request: NextRequest) {
     const categories = JumiaCategorySchema.array().parse(
       await getAllCategories(auth.client)
     );
-    return NextResponse.json({ categories, configured: true });
+    return NextResponse.json({
+      categories,
+      configured: true,
+      availability: { scope: 'provider-wide', destinationVerified: false },
+    });
   } catch (error) {
     if (
       error instanceof Error &&

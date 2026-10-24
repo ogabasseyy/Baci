@@ -114,10 +114,10 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
         />
       )}
       <p className="text-xs text-muted-foreground">
-        Destination and category still require later provider and source
-        validation before submission. The global category list does not prove
-        availability for this business client. No prices or source facts are
-        inferred.
+        Destination, category and brand still require later provider and source
+        validation before submission. Global category and brand lists do not
+        prove availability for this business client. No prices or source facts
+        are inferred.
       </p>
     </section>
   );
@@ -143,6 +143,10 @@ function MappingControls(destination: Destination) {
       </div>
       <div className="grid gap-1">
         <Label>Draft Jumia brand</Label>
+        <p className="text-xs text-muted-foreground">
+          Brand availability is unverified for {destination.businessClientCode}.
+          This list is provider-wide.
+        </p>
         <JumiaBrandSelector
           {...destination}
           value={brand}

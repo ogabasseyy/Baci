@@ -1,12 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
   jumiaAttributeSetParamSchema,
+  jumiaBrandMetadataSchema,
+  jumiaCategoryMetadataSchema,
   jumiaDestinationContextSchema,
   jumiaDestinationQuerySchema,
 } from './metadata-query';
 
 const id = '11111111-1111-4111-8111-111111111111';
 describe('Jumia exact metadata query schemas', () => {
+  it.each([
+    [jumiaBrandMetadataSchema, { brands: [] }],
+    [jumiaCategoryMetadataSchema, { categories: [] }],
+  ])('retains legacy catalogs but never accepts verified destination availability', (schema, catalog) => {
+    expect(schema.safeParse(catalog).success).toBe(true);
+    const availability = { scope: 'provider-wide', destinationVerified: false };
+    expect(schema.parse({ ...catalog, availability })).toEqual({
+      ...catalog,
+      availability,
+    });
+    expect(
+      schema.safeParse({
+        ...catalog,
+        availability: { ...availability, destinationVerified: true },
+      }).success
+    ).toBe(false);
+  });
   it('accepts only a complete UUID destination and UUID attribute set', () => {
     expect(
       jumiaDestinationQuerySchema.safeParse({

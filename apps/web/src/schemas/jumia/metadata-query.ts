@@ -7,11 +7,18 @@ export const jumiaDestinationQuerySchema =
 export const jumiaAttributeSetParamSchema = z.object({
   attributeSetId: z.uuid(),
 });
+const catalogAvailabilitySchema = z.object({
+  scope: z.literal('provider-wide'),
+  destinationVerified: z.literal(false),
+});
 export const jumiaCategoryMetadataSchema = z.object({
   categories: JumiaCategorySchema.array(),
+  availability: catalogAvailabilitySchema.optional(),
 });
 export const jumiaBrandMetadataSchema = JumiaBrandsResponseSchema.pick({
   brands: true,
+}).extend({
+  availability: catalogAvailabilitySchema.optional(),
 });
 export const jumiaDestinationContextSchema = z.object({
   businessClients: z.array(

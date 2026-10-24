@@ -108,6 +108,9 @@ describe('destination-scoped mapping drafts', () => {
     ).toHaveValue('');
     expect(screen.queryByText('Choose draft Games')).not.toBeInTheDocument();
     await mapCategory();
+    expect(
+      screen.getByText(/brand availability is unverified for jumia-ng/i)
+    ).toBeInTheDocument();
     const confirm = screen.getByRole('button', {
       name: 'Confirm draft category: Games',
     });

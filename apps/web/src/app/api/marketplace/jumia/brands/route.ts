@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
     const brands = JumiaBrandsResponseSchema.shape.brands.element
       .array()
       .parse(await getAllBrands(auth.client));
-    return NextResponse.json({ brands });
+    return NextResponse.json({
+      brands,
+      availability: { scope: 'provider-wide', destinationVerified: false },
+    });
   } catch (error) {
     if (
       error instanceof Error &&

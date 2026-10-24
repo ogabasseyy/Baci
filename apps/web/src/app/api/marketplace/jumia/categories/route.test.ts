@@ -55,7 +55,12 @@ describe('categories metadata route', () => {
   it('uses the explicitly authorized merchant and exact integration', async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
-    expect((await response.json()).categories).toEqual(fixture);
+    const body = await response.json();
+    expect(body.categories).toEqual(fixture);
+    expect(body.availability).toEqual({
+      scope: 'provider-wide',
+      destinationVerified: false,
+    });
     expect(mocks.merchant).toHaveBeenCalledWith({}, 'user', {
       requestedMerchantId: merchantId,
     });

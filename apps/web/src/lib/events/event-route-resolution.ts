@@ -64,7 +64,7 @@ const EVENT_ROUTES: Record<string, RouteDefinition> = {
   },
   'analytics.purchase.completed.v1': {
     ...SERVER_ROUTE,
-    destinations: ['facebook', 'tiktok', 'ga4', 'snapchat'],
+    destinations: ['facebook', 'tiktok', 'ga4', 'snapchat', 'chatgpt'],
   },
   'analytics.search.v1': {
     ...CLIENT_VERIFIED_ROUTE,

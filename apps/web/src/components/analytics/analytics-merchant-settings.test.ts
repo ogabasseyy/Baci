@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { buildMerchantAnalyticsSettings } from './analytics-merchant-settings';
 
 describe('buildMerchantAnalyticsSettings', () => {
+  it('reads the new ChatGPT pixel only from entitled canonical feature settings', () => {
+    expect(
+      buildMerchantAnalyticsSettings({
+        plan_tier: 'pro',
+        plan_expires_at: null,
+        feature_settings: { chatgpt_pixel_id: ' pixel-a ' },
+        chatgpt_pixel_id: 'unpersisted-fallback',
+      })
+    ).toMatchObject({ chatgpt_pixel_id: 'pixel-a' });
+    expect(
+      buildMerchantAnalyticsSettings({
+        plan_tier: 'pro',
+        plan_expires_at: null,
+        chatgpt_pixel_id: 'unpersisted-fallback',
+      })
+    ).toMatchObject({ chatgpt_pixel_id: null });
+  });
   it('returns null for nullish merchant sources', () => {
     expect(buildMerchantAnalyticsSettings(null)).toBeNull();
     expect(buildMerchantAnalyticsSettings(undefined)).toBeNull();
@@ -80,6 +97,7 @@ describe('buildMerchantAnalyticsSettings', () => {
         premium_features: [],
       })
     ).toEqual({
+      chatgpt_pixel_id: null,
       google_analytics_id: null,
       facebook_pixel_id: null,
       tiktok_pixel_id: null,
@@ -114,6 +132,7 @@ describe('buildMerchantAnalyticsSettings', () => {
         premium_features: [],
       })
     ).toEqual({
+      chatgpt_pixel_id: null,
       google_analytics_id: null,
       facebook_pixel_id: null,
       tiktok_pixel_id: null,

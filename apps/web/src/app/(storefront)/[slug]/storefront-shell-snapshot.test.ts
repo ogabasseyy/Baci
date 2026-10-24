@@ -64,6 +64,41 @@ describe('getStorefrontShellSnapshot', () => {
     vi.mocked(getRootDomain).mockReturnValue('usebaci.com');
   });
 
+  it.each([
+    [
+      'active paid plan',
+      { plan_tier: 'pro', plan_expires_at: null },
+      'pixel-shell',
+    ],
+    [
+      'expired plan',
+      { plan_tier: 'pro', plan_expires_at: '2000-01-01T00:00:00Z' },
+      null,
+    ],
+    ['free plan', { plan_tier: 'free', plan_expires_at: null }, null],
+    [
+      'explicit grant',
+      { plan_tier: 'free', premium_features: ['growth_integrations'] },
+      'pixel-shell',
+    ],
+  ])('resolves only the public entitled Pixel ID for %s', async (_name, plan, expected) => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      ...baseMerchant,
+      ...plan,
+      feature_settings: {
+        chatgpt_pixel_id: ' pixel-shell ',
+        capi_key: 'never-public',
+      },
+    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+    vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([]);
+    const base = await getStorefrontShellSnapshotBase('ogabassey');
+    expect(base?.chatgptPixelId).toBe(expected);
+    if (!base) throw new Error('Expected a resolved merchant snapshot');
+    const snapshot = await getStorefrontShellSnapshot(base);
+    expect(snapshot?.chatgptPixelId).toBe(expected);
+    expect(JSON.stringify(snapshot)).not.toContain('never-public');
+  });
+
   it('returns path-routed shell data with a slug-based basePath on first render', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(
       baseMerchant as unknown as Awaited<

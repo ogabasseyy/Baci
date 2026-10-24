@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import type React from 'react';
+import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
@@ -48,6 +49,9 @@ export function StorefrontShellFrame({
           merchantId={merchant.id}
           merchantSlug={merchantSlug}
         />
+        {shellSnapshot.chatgptPixelId ? (
+          <ChatgptPixel pixelId={shellSnapshot.chatgptPixelId} />
+        ) : null}
         <DeferredPageViewTracker merchantId={merchant.id} />
         {/*
           Global Layout Wrapper logic:

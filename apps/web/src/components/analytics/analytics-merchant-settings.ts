@@ -2,6 +2,7 @@ import { normalizeAnalyticsId } from './analytics-id';
 import type { MerchantWithAnalytics } from './analytics-pixel-provider';
 
 const ANALYTICS_ID_KEYS = [
+  'chatgpt_pixel_id',
   'google_analytics_id',
   'facebook_pixel_id',
   'tiktok_pixel_id',
@@ -76,7 +77,9 @@ export function buildMerchantAnalyticsSettings(
     ANALYTICS_ID_KEYS.map((key) => [
       key,
       normalizeAnalyticsId(featureSettings?.[key]) ??
-        normalizeAnalyticsId(merchant[key]),
+        (key === 'chatgpt_pixel_id'
+          ? null
+          : normalizeAnalyticsId(merchant[key])),
     ])
   ) as MerchantWithAnalytics;
 }

@@ -15,9 +15,22 @@ vi.mock('./category-selector', () => ({
   JumiaCategorySelector: ({
     onSelect,
   }: {
-    onSelect: (code: number) => void;
+    onSelect: (category: {
+      code: number;
+      name: string;
+      attributeSetId: string;
+    }) => void;
   }) => (
-    <button type="button" onClick={() => onSelect(42)}>
+    <button
+      type="button"
+      onClick={() =>
+        onSelect({
+          code: 42,
+          name: 'Games',
+          attributeSetId: '11111111-1111-4111-8111-111111111111',
+        })
+      }
+    >
       Choose category
     </button>
   ),
@@ -38,6 +51,62 @@ vi.mock('./brand-selector', () => ({
 }));
 
 describe('PublishProductsDialog', () => {
+  it('clears legacy choices on same-merchant integration replacement while keeping the snapshot mounted', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          Response.json(
+            url.includes('mapped-product-ids')
+              ? { mappings: [] }
+              : url.includes('destination-context')
+                ? { businessClients: [] }
+                : {
+                    products: [
+                      {
+                        id: 'p1',
+                        name: 'Phone',
+                        sku: 'SKU-1',
+                        price: 100,
+                        stock: 3,
+                        images: [{ url: 'https://cdn.example.com/phone.jpg' }],
+                      },
+                    ],
+                  }
+          )
+        )
+      )
+    );
+    const { rerender } = render(
+      <PublishProductsDialog
+        merchantId="merchant"
+        integrationId="old"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    await screen.findByText('Phone');
+    fireEvent.click(screen.getByText('Phone'));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose category' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose brand' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    const frozenPreview = screen.getByRole('region', {
+      name: 'Gaming selection preview',
+    });
+    rerender(
+      <PublishProductsDialog
+        merchantId="merchant"
+        integrationId="new"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    await screen.findByText('Phone');
+    expect(screen.getByText('0 selected')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Gaming selection preview' })
+    ).toBe(frozenPreview);
+  });
   it('keeps the dialog content within the viewport and scrollable', () => {
     render(
       <PublishProductsDialog

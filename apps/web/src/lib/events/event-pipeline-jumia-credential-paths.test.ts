@@ -7,6 +7,20 @@ import {
 import { eventPipelineJumiaServicePaths } from './event-pipeline-jumia-service-paths';
 
 describe('eventPipelineJumiaCredentialPaths', () => {
+  it.each([
+    'apps/web/src/app/api/marketplace/jumia/attribute-sets/[attributeSetId]/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/destination-context/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+    'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
+  ])('pins the metadata authorization helper credential chain for %s', (route) => {
+    expect(jumiaApiRoutesUsingClient).toContain(route);
+    expect(eventPipelineJumiaCredentialPaths).toContainEqual([
+      route,
+      'apps/web/src/lib/jumia/metadata-request.ts',
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/env.ts',
+    ]);
+  });
   it('includes every audited API-route credential suffix', () => {
     for (const route of jumiaApiRoutesUsingClient) {
       for (const suffix of clientCredentialSuffixes) {

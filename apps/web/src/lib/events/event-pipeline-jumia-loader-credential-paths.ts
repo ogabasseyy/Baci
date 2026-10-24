@@ -38,6 +38,18 @@ const stockSyncIntegration =
   'apps/web/src/lib/jumia/sync-jumia-stock-integration.ts';
 const orderSyncScript = 'apps/web/src/scripts/sync-jumia-orders.ts';
 
+export const jumiaMetadataApiRoutes = [
+  'apps/web/src/app/api/marketplace/jumia/attribute-sets/[attributeSetId]/route.ts',
+  'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
+  'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+  'apps/web/src/app/api/marketplace/jumia/destination-context/route.ts',
+] as const;
+const metadataHelper = 'apps/web/src/lib/jumia/metadata-request.ts';
+export const jumiaMetadataClientPrefixes = [
+  ...jumiaMetadataApiRoutes.map((route) => [route, metadataHelper]),
+  [metadataHelper],
+];
+
 const loaderTail = [
   grantLoader,
   loaderClient,
@@ -57,8 +69,7 @@ function withPrefix(
 
 const loaderClientRoutes = [
   'apps/web/src/app/api/marketplace/jumia/actions/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+  ...jumiaMetadataApiRoutes,
   'apps/web/src/app/api/marketplace/jumia/consignment/route.ts',
   'apps/web/src/app/api/marketplace/jumia/orders/[id]/items/route.ts',
   'apps/web/src/app/api/marketplace/jumia/orders/route.ts',
@@ -81,6 +92,9 @@ export const eventPipelineJumiaLoaderCredentialPaths: readonly (readonly string[
     [claimResumedAuthorization, ...loaderTail],
     ...loaderClientRoutes.flatMap((route) =>
       withPrefix([route], [loaderViaClient])
+    ),
+    ...jumiaMetadataClientPrefixes.flatMap((prefix) =>
+      withPrefix(prefix, [loaderViaClient])
     ),
     ...withPrefix([consignmentStockRoute], [loaderViaClient]),
     ...withPrefix([orderSync], [loaderViaClient]),

@@ -1,4 +1,8 @@
-import { eventPipelineJumiaLoaderCredentialPaths } from './event-pipeline-jumia-loader-credential-paths';
+import {
+  eventPipelineJumiaLoaderCredentialPaths,
+  jumiaMetadataApiRoutes,
+  jumiaMetadataClientPrefixes,
+} from './event-pipeline-jumia-loader-credential-paths';
 
 const envPath = 'apps/web/src/env.ts';
 const client = 'apps/web/src/lib/jumia/client.ts';
@@ -51,8 +55,7 @@ const clientCredentialSuffixes = [
 
 const jumiaApiRoutesUsingClient = [
   'apps/web/src/app/api/marketplace/jumia/actions/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+  ...jumiaMetadataApiRoutes,
   'apps/web/src/app/api/marketplace/jumia/connect/exchange/route.ts',
   'apps/web/src/app/api/marketplace/jumia/consignment/route.ts',
   'apps/web/src/app/api/marketplace/jumia/orders/[id]/items/route.ts',
@@ -156,6 +159,12 @@ export const eventPipelineJumiaCredentialPaths = [
       [route],
       [...clientCredentialSuffixes, [client, jumiaHelpers, envPath]]
     )
+  ),
+  ...jumiaMetadataClientPrefixes.flatMap((prefix) =>
+    withPrefix(prefix, [
+      ...clientCredentialSuffixes,
+      [client, jumiaHelpers, envPath],
+    ])
   ),
   [
     'apps/web/src/app/api/marketplace/jumia/products/export/route.ts',

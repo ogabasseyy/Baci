@@ -99,6 +99,7 @@ EXCLUDED=(
   # catalog coverage; no disposable storefront search suite calls it.
   20261023111630_repair_device_typeahead_search.sql
   20261024170000_repair_device_catalog_search_limit.sql
+  20261024180000_repair_device_catalog_preserve_private_boundary.sql
   # Shared-cart terminal purge: matched the registration pattern only via
   # "search_path"; no disposable search suite calls the purge function
   # (covered by the commerce_cart_terminal_purge replay suite instead).

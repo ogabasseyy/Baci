@@ -159,4 +159,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
       'supabase/migrations/20261024170000_repair_device_catalog_search_limit.sql',
     sha256: '6ef78e0eb8c1058de9ed8beade696a7986ef025e5ca8ab325dd1ab6075ec2541',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024180000_repair_device_catalog_preserve_private_boundary.sql',
+    sha256: 'a9c99935a58deeee1c5260fe500c95af00dc450de44ebbf7b68528190b12d391',
+  },
 ];

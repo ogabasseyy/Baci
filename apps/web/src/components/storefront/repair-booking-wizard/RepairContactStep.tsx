@@ -120,15 +120,7 @@ export function RepairContactStep({
                   <FormControl>
                     <RadioGroupItem className="peer sr-only" value="dropoff" />
                   </FormControl>
-                  <FormLabel
-                    className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary"
-                    style={{
-                      borderColor:
-                        field.value === 'dropoff'
-                          ? 'var(--store-primary)'
-                          : undefined,
-                    }}
-                  >
+                  <FormLabel className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary">
                     <MapPin className="mb-2 size-6" />
                     <span className="font-medium">Drop-off</span>
                     <span className="text-center text-xs text-store-background-text/70">
@@ -140,15 +132,7 @@ export function RepairContactStep({
                   <FormControl>
                     <RadioGroupItem className="peer sr-only" value="pickup" />
                   </FormControl>
-                  <FormLabel
-                    className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary"
-                    style={{
-                      borderColor:
-                        field.value === 'pickup'
-                          ? 'var(--store-primary)'
-                          : undefined,
-                    }}
-                  >
+                  <FormLabel className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary">
                     <Truck className="mb-2 size-6" />
                     <span className="font-medium">Pickup</span>
                     <span className="text-center text-xs text-store-background-text/70">

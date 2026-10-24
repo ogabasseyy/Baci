@@ -188,7 +188,13 @@ export function validateJumiaAttributeValueSet(
           ? 'Supply only explicit selection IDs.'
           : validateAttributeValue(attribute, value));
     if (message) errors.push({ field: `values.${code}`, message });
-    else if (value !== undefined) values[code] = value as JumiaDraftValue;
+    else if (Array.isArray(value)) {
+      // Accepted selections belong to the result, never to the caller's array.
+      const selections: number[] = [];
+      for (let index = 0; index < value.length; index++)
+        selections.push(value[index] as number);
+      values[code] = selections;
+    } else if (value !== undefined) values[code] = value as JumiaDraftValue;
   }
   return errors.length ? { success: false, errors } : { success: true, values };
 }

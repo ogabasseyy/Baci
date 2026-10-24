@@ -24,6 +24,55 @@ const attribute = (
 });
 
 describe('Jumia attribute value-set plain-data containers', () => {
+  it.each([
+    'append',
+    'replace',
+  ])('keeps accepted selections unchanged after input %s', (mutation) => {
+    const selections = [10];
+    const result = validateJumiaAttributeValueSet([attribute([option])], {
+      '1': selections,
+    });
+    expect(result.success).toBe(true);
+    if (mutation === 'append') selections.push(99);
+    else selections[0] = 99;
+    expect(result).toEqual({ success: true, values: { '1': [10] } });
+  });
+  it('keeps caller selections unchanged when accepted output is mutated', () => {
+    const selections = [10];
+    const result = validateJumiaAttributeValueSet([attribute([option])], {
+      '1': selections,
+    });
+    if (!result.success) throw new Error('Valid selections must succeed');
+    const accepted = result.values['1'];
+    if (!Array.isArray(accepted)) throw new Error('Expected selection IDs');
+    accepted[0] = 99;
+    accepted.push(100);
+    expect(selections).toEqual([10]);
+    expect(accepted).toEqual([99, 100]);
+  });
+  it.each([
+    'input',
+    'output',
+  ])('owns optional empty selections independently from %s mutations', (side) => {
+    const selections: number[] = [];
+    const result = validateJumiaAttributeValueSet(
+      [{ ...attribute([option]), mandatory: false }],
+      { '1': selections }
+    );
+    if (!result.success)
+      throw new Error('Optional empty selections must succeed');
+    const accepted = result.values['1'];
+    if (!Array.isArray(accepted)) throw new Error('Expected selection IDs');
+    if (side === 'input') {
+      selections.push(10);
+      expect(accepted).toEqual([]);
+      expect(selections).toEqual([10]);
+    } else {
+      accepted.push(10);
+      expect(selections).toEqual([]);
+      expect(accepted).toEqual([10]);
+    }
+  });
   it('rejects the exact array-owned some bypass for unlisted nonnumeric selections', () => {
     const choices = ['not-a-numeric-option'];
     Object.defineProperty(choices, 'some', { value: () => false });

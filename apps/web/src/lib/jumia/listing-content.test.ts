@@ -179,6 +179,29 @@ describe('pure Jumia listing content preparation', () => {
     });
     expect(prepareJumiaListingContent(input).success).toBe(false);
   });
+  it('reports a sparse bullet index without rejecting the four valid bullets', () => {
+    const bullets = ['A', 'B', 'C', 'D', 'E'];
+    Reflect.deleteProperty(bullets, 1);
+    const result = prepareJumiaListingContent({ ...facts, bullets });
+    if (result.success) throw new Error('Sparse bullets must fail');
+    expect(result.errors.map((error) => error.field)).toEqual(['bullets.1']);
+  });
+  it('reports an accessor bullet index without executing its getter', () => {
+    const bullets = ['A', 'B', 'C', 'D', 'E'];
+    let reads = 0;
+    Object.defineProperty(bullets, 1, {
+      get: () => {
+        reads++;
+        return 'B';
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    const result = prepareJumiaListingContent({ ...facts, bullets });
+    if (result.success) throw new Error('Accessor bullets must fail');
+    expect(result.errors.map((error) => error.field)).toEqual(['bullets.1']);
+    expect(reads).toBe(0);
+  });
   it.each([
     'Factual product A & B',
     'Factual product &amp; B',

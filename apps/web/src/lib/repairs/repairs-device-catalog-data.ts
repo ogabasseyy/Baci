@@ -75,15 +75,21 @@ function groupByBrand(rows: Row[]): RepairDeviceBrandGroup[] {
 
 export async function getRepairDevicesForMerchant(
   merchantId: string,
-  query?: string
+  query?: string,
+  mode: 'catalog' | 'suggestions' = 'catalog'
 ): Promise<RepairDeviceBrandGroup[]> {
   const supabase = getPublicSupabaseClient();
   const normalizedQuery = query?.trim();
   const { data, error } = normalizedQuery
-    ? await supabase.rpc('search_repair_devices', {
-        p_merchant_id: merchantId,
-        p_query: normalizedQuery,
-      })
+    ? await supabase.rpc(
+        mode === 'suggestions'
+          ? 'search_repair_device_suggestions'
+          : 'search_repair_devices',
+        {
+          p_merchant_id: merchantId,
+          p_query: normalizedQuery,
+        }
+      )
     : await supabase
         .from('repair_devices')
         .select(DEVICE_COLUMNS)

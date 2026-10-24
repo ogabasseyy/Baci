@@ -139,7 +139,7 @@ describe('RepairDeviceStep catalog behavior', () => {
     await user.type(input, 'iPhone 15');
     await waitFor(() =>
       expect(mocks.apiGet).toHaveBeenLastCalledWith(
-        '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
+        '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015&mode=suggestions',
         expect.anything()
       )
     );
@@ -163,7 +163,7 @@ describe('RepairDeviceStep catalog behavior', () => {
 
     await waitFor(() =>
       expect(mocks.apiGet).toHaveBeenCalledWith(
-        '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
+        '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015&mode=suggestions',
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       )
     );

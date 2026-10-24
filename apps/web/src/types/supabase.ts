@@ -16259,6 +16259,20 @@ export type Database = {
           sort_order: number;
         }[];
       };
+      search_repair_device_suggestions: {
+        Args: { p_merchant_id: string; p_query: string };
+        Returns: {
+          aliases: string[];
+          brand: string;
+          device_type: string | null;
+          id: string;
+          image_url: string | null;
+          model: string;
+          product_id: string | null;
+          slug: string;
+          sort_order: number;
+        }[];
+      };
       blog_media_objects_present_v1: {
         Args: { p_paths: string[] };
         Returns: {

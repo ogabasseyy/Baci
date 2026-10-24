@@ -67,7 +67,7 @@ export function useRepairDeviceSuggestions({
           const repairRequest: Promise<RepairDeviceSummary[]> =
             repairCatalogEnabled
               ? apiGet<RepairDevicesResponse>(
-                  `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}`,
+                  `/api/storefront/${encodeURIComponent(merchantSlug)}/repairs/devices?q=${encodeURIComponent(query)}&mode=suggestions`,
                   { signal: controller.signal }
                 ).then(({ groups }) =>
                   groups.flatMap((group) => group.devices).slice(0, 8)

@@ -174,14 +174,18 @@ describe('getRepairDevicesForMerchant', () => {
       )
     );
 
-    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+    const groups = await getRepairDevicesForMerchant(
+      'merchant-1',
+      'iphone',
+      'suggestions'
+    );
 
     expect(
       groups.flatMap((group) => group.devices.map((device) => device.id))
     ).toEqual(['d1']);
     expect(rpcCalls).toEqual([
       {
-        name: 'search_repair_devices',
+        name: 'search_repair_device_suggestions',
         args: { p_merchant_id: 'merchant-1', p_query: 'iphone' },
       },
     ]);
@@ -208,7 +212,11 @@ describe('getRepairDevicesForMerchant', () => {
       )
     );
 
-    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+    const groups = await getRepairDevicesForMerchant(
+      'merchant-1',
+      'iphone',
+      'suggestions'
+    );
 
     expect(
       groups.flatMap((group) => group.devices.map(({ id }) => id))
@@ -216,6 +224,29 @@ describe('getRepairDevicesForMerchant', () => {
     expect(productLookups).toEqual([
       devices.slice(0, 8).map(({ product_id }) => product_id),
     ]);
+  });
+
+  it('keeps full brand catalog searches unbounded', async () => {
+    const devices = Array.from({ length: 10 }, (_, index) => ({
+      id: `d${index}`,
+      brand: 'Apple',
+      model: `iPhone ${index}`,
+      slug: `iphone-${index}`,
+      product_id: null,
+      image_url: null,
+    }));
+    const rpcCalls: string[] = [];
+    mocks.getPublicSupabaseClient.mockReturnValue(
+      makeClient({ products: { data: [], error: null } }, undefined, (name) => {
+        rpcCalls.push(name);
+        return { data: devices, error: null };
+      })
+    );
+
+    const groups = await getRepairDevicesForMerchant('merchant-1', 'Apple');
+
+    expect(groups.flatMap((group) => group.devices)).toHaveLength(10);
+    expect(rpcCalls).toEqual(['search_repair_devices']);
   });
 
   it('returns devices without fallback images when product lookup fails', async () => {
@@ -291,7 +322,11 @@ describe('getRepairDevicesForMerchant', () => {
       }))
     );
 
-    const groups = await getRepairDevicesForMerchant('merchant-1', 'iphone');
+    const groups = await getRepairDevicesForMerchant(
+      'merchant-1',
+      'iphone',
+      'suggestions'
+    );
 
     const ids = groups.flatMap((group) =>
       group.devices.map((device) => device.id)

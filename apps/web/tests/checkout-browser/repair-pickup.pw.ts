@@ -67,7 +67,7 @@ test('books a catalog device with a quoted pickup through payment handoff', asyn
   await expect(page.getByRole('heading', { name: 'Summary' })).toBeVisible();
   await expect(page.getByText('₦2,500', { exact: true })).toBeVisible();
   expect(deviceSearchRequests).toEqual([
-    '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015',
+    '/api/storefront/ogabassey/repairs/devices?q=iPhone%2015&mode=suggestions',
   ]);
   await page.getByRole('button', { name: 'Continue to payment' }).click();
 

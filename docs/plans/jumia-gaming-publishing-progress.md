@@ -1,6 +1,6 @@
 # Jumia Gaming publishing progress
 
-Original row 3 is split into read-only preview (3a) and explicit selection controls (3b), both merged. Original row 4 is split into wire contracts (4a), exact-destination metadata/forms (4b), retrieval-contract prerequisite (4c1), and canonical payload/source preflight (4c2). There are **11 remaining PR-sized slices including this PR, 10 after merge**; **10 original milestones remain until row 4 is fully complete**. The additional retrieval-contract split changes the count, not functionality delivered or publishing readiness.
+Original row 3 is split into read-only preview (3a) and explicit selection controls (3b), both merged. Original row 4 is split into metadata wire contracts (4a), exact-destination metadata/forms (4b), retrieval contracts (4c1), flat create contracts (4c2a), content/metadata validation (4c2b), canonical family/evidence/digest/packing preflight (4c2c), and authorized source-loading/preview integration (4c3). There are **13 remaining PR-sized slices including this PR, 12 after merge**; **10 original milestones remain until row 4 is fully complete**. The contract-first split adds three slices to the previous ten-slice estimate; it does not deliver publishing readiness. Original rows 5–13 remain unchanged.
 
 | Original row | Slice | Status |
 | --- | --- | --- |
@@ -10,8 +10,11 @@ Original row 3 is split into read-only preview (3a) and explicit selection contr
 | 3b | Individual / all-eligible selection controls | Merged: #3773 |
 | 4a | Category/attribute wire contracts | Merged: #3774 |
 | 4b | Exact-destination metadata/forms | Merged: #3775 |
-| 4c1 | Retrieval-contract prerequisite | Current PR |
-| 4c2 | Canonical payload/source preflight | Pending |
+| 4c1 | Retrieval-contract prerequisite | Merged: #3777 |
+| 4c2a | Flat create-product schema/type | Current PR |
+| 4c2b | Content/metadata validation | Pending |
+| 4c2c | Canonical family/evidence/digest/packing preflight | Pending |
+| 4c3 | Authorized source-loading/preview integration | Pending |
 | 5 | Original planned slice | Pending |
 | 6 | Original planned slice | Pending |
 | 7 | Original planned slice | Pending |
@@ -49,3 +52,13 @@ Verification for 4a uses deterministic schema tests and mocked HTTP through the 
 - Required product/variation identity is validated. Exact nested seller SKUs, string brand/category codes, nullable barcode/price/visibility observations and business-client QC evidence survive parsing without invented defaults. Category/brand metadata endpoints and stock pagination are unchanged.
 - All-products retrieval fails on malformed data, provider/network errors, missing or repeated/cyclic cursors and the bounded page cap; it never returns partial success. Empty terminal pages remain valid. The single-page helper stays resumable; no exact-SKU worker is implemented here.
 - Deterministic schema and mocked real-client HTTP tests cover this read-only repair. Client observations do not establish stock, approved QC, destination readiness or publishing authority. No provider write, import execution, migration, deployment or publishing enablement is included.
+
+## Flat create-contract boundary
+
+- The new, unused `JumiaCreateProductSchema` / `JumiaCreateProduct` contract follows the public [Create Products schema](https://vendorcenter.jumia.com/api-docs/paths/feeds/feeds@products@create.yaml), discovered through the [OpenAPI root](https://vendorcenter.jumia.com/api-docs/openapi.yaml) linked by the [API documentation](https://vendorcenter.jumia.com/api-docs/). Verified 2026-10-24; source SHA-256: `4d4da07572c93e4869f0219b03266630260c96410161620cc1f7a5ebdf07d3e5`.
+- Each record is flat, with numeric create brand/category codes (unlike retrieval's string codes), exact Seller SKU bytes, `{name,value}` attributes, explicit top-level price, stock, and optional local `businessClients` prices. Documented translations, barcode, deprecated supplemental categories, sale-price shapes and unknown supplemental metadata are preserved without defaults. Legacy `variations` / `globalPrice` containers are rejected; the existing `createProduct` POST signature, validation and payload remain unchanged.
+- Local outbound restrictions are deliberately stronger than wire optionality: required text is nonempty; top-level currency is explicit instead of defaulting to USD; prices are finite and positive; stock is a nonnegative safe integer. Image URI/primary-field shape and exactly one primary image are checked, not public reachability or quality. Optional client fields and nullable local sale-price fields retain provider requiredness. Sale-date validity and relationships are not validated here.
+- This generic contract supports multiple/non-Nigerian clients; it does not enforce the future selected-NG-client/NGN policy, canonical pricing, destination ownership, category confirmation, family/variant rules, required category attributes, content safety, image evidence, remote duplicate checks, or immutable source membership. Parsing is neither authorization nor a READY result and makes no provider-isolation claim. The contract is not connected to the legacy Submit action.
+- Row 4 remains incomplete: 4c2b must validate/generate content and numeric-type 0–8 metadata; 4c2c must prepare canonical families, enforce trusted destination/category/brand/global-price/stock and image evidence, compute confirmation-bound deterministic preview digests, and pack whole families all-or-none; 4c3 must reload and authorize source facts for preview. A preview digest must not replace frozen DB snapshot/version/authorization checks. Detailed requirements in the parent publishing plan remain pending; fixtures cannot supply production proof or enable writes.
+
+Verification uses synthetic provider-shaped fixtures and local schema/feed tests only. No live tenant data, provider request/write, database mutation, deployment or publishing enablement is included. Local validation, review, merge and production verification are separate gates.

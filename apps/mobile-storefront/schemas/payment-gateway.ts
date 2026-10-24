@@ -38,6 +38,12 @@ const sanitizedReturnTo = z.preprocess(
     .optional()
 );
 
+// Contract: these coerced floats are display/analytics values only
+// (banner formatting, tracking fallbacks) — every consumer prefers a
+// server-confirmed total, and no charging logic may derive minor units
+// from them (binary-float rounding). Money math parses the raw
+// `amount` search param to integer kobo via the shared fund parser
+// (see the mount bind) or uses server totals.
 const optionalPositiveAmount = z.preprocess(
   (value) =>
     typeof value === 'string' && value.trim() === '' ? undefined : value,

@@ -1,6 +1,43 @@
+import { lstatSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildRemediationVerificationCommand } from './remediation-codex-command.mjs';
 import { readPositiveInt } from './remediation-worker-config.mjs';
+
+function removeWorktreeDependencyCopy(worktreeDir, relativePath) {
+  const segments = relativePath.split(/[\\/]+/);
+  if (
+    !relativePath ||
+    relativePath.startsWith('/') ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error('Invalid remediation dependency cleanup path');
+  }
+
+  const worktreeStats = lstatSync(worktreeDir);
+  if (!worktreeStats.isDirectory() || worktreeStats.isSymbolicLink()) {
+    throw new Error('Refusing remediation cleanup outside a real worktree');
+  }
+
+  let currentPath = worktreeDir;
+  for (const [index, segment] of segments.entries()) {
+    currentPath = join(currentPath, segment);
+    let stats;
+    try {
+      stats = lstatSync(currentPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+    if (stats.isSymbolicLink()) {
+      throw new Error('Refusing remediation cleanup through a symlink');
+    }
+    if (index < segments.length - 1 && !stats.isDirectory()) {
+      throw new Error('Refusing remediation cleanup through a non-directory');
+    }
+  }
+
+  rmSync(currentPath, { force: true, recursive: true });
+}
 
 export function runRemediationVerification({
   childEnv,
@@ -41,11 +78,7 @@ export function runRemediationVerification({
     for (const relativePath of verificationCommand.dependencyCopyPaths ||
       []) {
       try {
-        runChecked('rm', ['-rf', '--', join(worktreeDir, relativePath)], {
-          cwd: worktreeDir,
-          env: childEnv,
-          runner,
-        });
+        removeWorktreeDependencyCopy(worktreeDir, relativePath);
       } catch (error) {
         cleanupErrors.push(error);
       }

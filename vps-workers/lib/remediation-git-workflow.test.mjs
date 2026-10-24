@@ -185,6 +185,56 @@ describe('remediation git workflow', () => {
     );
   });
 
+  it('rechecks protected paths after verification before publishing', () => {
+    const { calls, runner: baseRunner } = makeRunner();
+    let statusChecks = 0;
+    const runner = (command, args, options) => {
+      if (
+        command === 'git' &&
+        args[0] === 'status' &&
+        args[1] === '--porcelain'
+      ) {
+        statusChecks += 1;
+        if (statusChecks === 2) {
+          return {
+            status: 0,
+            stdout:
+              ' M apps/web/src/components/cart.tsx\n?? .github/workflows/evil.yml\n',
+            stderr: '',
+          };
+        }
+      }
+      return baseRunner(command, args, options);
+    };
+
+    const result = runRemediationAutofix({
+      candidate,
+      env: {
+        BACI_REMEDIATION_RUN_ID: 'policy-recheck',
+        BACI_REPO_DIR: '/repo',
+        BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
+      },
+      prompt: 'Fix this production error.',
+      runner,
+    });
+
+    assert.equal(result.type, 'policy_blocked');
+    assert.deepEqual(result.changedFiles, [
+      'apps/web/src/components/cart.tsx',
+      '.github/workflows/evil.yml',
+    ]);
+    assert.match(result.reasons.join(' '), /protected path touched/);
+    assert.equal(calls.some((call) => call.join(' ') === 'git add -A'), false);
+    assert.equal(
+      calls.some((call) => call.join(' ').includes(' push -u origin ')),
+      false
+    );
+    assert.equal(
+      calls.some((call) => call.join(' ').includes('pr create')),
+      false
+    );
+  });
+
   it('redacts a runner failure before it can be reported', () => {
     const { runner: baseRunner } = makeRunner();
     const runner = (command, args, options) => {

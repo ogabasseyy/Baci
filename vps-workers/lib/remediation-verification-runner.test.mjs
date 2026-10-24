@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -81,6 +87,9 @@ describe('runRemediationVerification', () => {
     const { options, runCheckedCalls, runnerCalls, worktreeDir } = setup({
       docker: true,
     });
+    const dependency = join(worktreeDir, 'apps/mobile-admin/node_modules');
+    mkdirSync(dependency, { recursive: true });
+    writeFileSync(join(dependency, 'marker'), 'copied');
     const verifyError = new Error('verify failed');
     options.runChecked = (command, args, runOptions) => {
       runCheckedCalls.push([command, args, runOptions]);
@@ -92,45 +101,55 @@ describe('runRemediationVerification', () => {
     assert.equal(runnerCalls.length, 1);
     assert.equal(runnerCalls[0][0], 'docker');
     assert.match(runnerCalls[0][1].join(' '), /rm -f baci-remediation-.*-verify/);
-    const removals = runCheckedCalls
-      .filter(([command]) => command === 'rm')
-      .map(([, args]) => args.join(' '));
-    assert.deepEqual(
-      removals.map((args) =>
-        args.replace(worktreeDir, '<worktree>').replace(/\\/g, '/')
-      ),
-      [
-        'node_modules',
-        'apps/web/node_modules',
-        'apps/mobile-admin/node_modules',
-        'apps/mobile-storefront/node_modules',
-      ].map((relativePath) => `-rf -- <worktree>/${relativePath}`)
-    );
+    assert.equal(runCheckedCalls.some(([command]) => command === 'rm'), false);
+    assert.equal(existsSync(dependency), false);
   });
 
-  it('preserves the verification error when dependency cleanup fails', () => {
-    const { options, runCheckedCalls } = setup({ docker: true });
+  it('preserves the verification error when cleanup encounters a symlink', () => {
+    const { options, runCheckedCalls, worktreeDir } = setup({ docker: true });
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'baci-verify-outside-'));
+    const outsideDependencies = join(outsideRoot, 'node_modules');
+    mkdirSync(outsideDependencies);
+    writeFileSync(join(outsideDependencies, 'keep'), 'outside');
     const verifyError = new Error('verify failed');
-    let removals = 0;
     options.runChecked = (command, args, runOptions) => {
       runCheckedCalls.push([command, args, runOptions]);
-      if (command === 'docker') throw verifyError;
-      removals += 1;
-      if (removals === 1) throw new Error('first rm failed');
+      if (command === 'docker') {
+        mkdirSync(join(worktreeDir, 'apps'));
+        symlinkSync(outsideRoot, join(worktreeDir, 'apps/mobile-admin'));
+        throw verifyError;
+      }
       return '';
     };
 
     assert.throws(() => runRemediationVerification(options), /verify failed/);
-    assert.equal(removals, 4);
+    assert.equal(existsSync(join(outsideDependencies, 'keep')), true);
   });
 
-  it('reports cleanup failures when verification succeeds', () => {
-    const { options } = setup({ docker: true });
-    options.runChecked = (command) => {
-      if (command === 'docker') return '';
-      throw new Error('rm failed');
-    };
+  it('removes real dependency copies after successful verification', () => {
+    const { options, worktreeDir } = setup({ docker: true });
+    const dependency = join(worktreeDir, 'apps/mobile-admin/node_modules');
+    mkdirSync(dependency, { recursive: true });
+    writeFileSync(join(dependency, 'marker'), 'copied');
 
-    assert.throws(() => runRemediationVerification(options), /rm failed/);
+    runRemediationVerification(options);
+
+    assert.equal(existsSync(dependency), false);
+  });
+
+  it('refuses cleanup through a symlinked worktree ancestor', () => {
+    const { options, worktreeDir } = setup({ docker: true });
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'baci-verify-outside-'));
+    const outsideDependencies = join(outsideRoot, 'node_modules');
+    mkdirSync(outsideDependencies);
+    writeFileSync(join(outsideDependencies, 'keep'), 'outside');
+    mkdirSync(join(worktreeDir, 'apps'));
+    symlinkSync(outsideRoot, join(worktreeDir, 'apps/mobile-admin'));
+
+    assert.throws(
+      () => runRemediationVerification(options),
+      /Refusing remediation cleanup through a symlink/
+    );
+    assert.equal(existsSync(join(outsideDependencies, 'keep')), true);
   });
 });

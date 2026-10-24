@@ -243,7 +243,7 @@ async function renderStorefrontHomeRouteAsync(
     if (isOgabasseyCanonicalDomainSlug(slug)) {
       const [resolvedMerchant, heroShell] = await Promise.all([
         settleCanonicalOgabasseyHomeMerchant(getRequestScopedMerchant(slug)),
-        Promise.resolve(resolveOgabasseyHomeHeroShell()).catch(() => null),
+        resolveOgabasseyHomeHeroShell(),
       ]);
       recordSettledCanonicalOgabasseyHomeState({
         box: stateBox,

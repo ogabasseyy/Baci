@@ -1,7 +1,6 @@
 import { workAsyncStorage } from 'next/dist/server/app-render/work-async-storage.external';
 import { workUnitAsyncStorage } from 'next/dist/server/app-render/work-unit-async-storage.external';
 import { unstable_rethrow } from 'next/navigation';
-import type React from 'react';
 import { cache } from 'react';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import type { OgabasseyHomeHeroShellResult } from './ogabassey-home-hero-shell-data';
@@ -11,12 +10,17 @@ export type CanonicalOgabasseyHomeMerchant = Awaited<
 >;
 
 export async function settleCanonicalOgabasseyHomeMerchant(
-  lookup: Promise<CanonicalOgabasseyHomeMerchant>
+  lookup:
+    | Promise<CanonicalOgabasseyHomeMerchant>
+    | CanonicalOgabasseyHomeMerchant
+    | undefined
 ): Promise<CanonicalOgabasseyHomeMerchant | null> {
   try {
-    return await lookup;
+    return (await lookup) ?? null;
   } catch (error) {
-    unstable_rethrow(error);
+    if (typeof unstable_rethrow === 'function') {
+      unstable_rethrow(error);
+    }
     return null;
   }
 }
@@ -97,13 +101,13 @@ const requestTreeSettledBoxes = new WeakMap<
 function getActiveRequestTreeStore(): object | null {
   try {
     const workStore = workAsyncStorage.getStore();
-    if (workStore) return workStore as object;
+    if (workStore) return workStore;
   } catch {
     // Ignore store lookup failures outside Next.js request context
   }
   try {
     const unitStore = workUnitAsyncStorage.getStore();
-    if (unitStore) return unitStore as object;
+    if (unitStore) return unitStore;
   } catch {
     // Ignore store lookup failures outside Next.js request context
   }
@@ -128,7 +132,7 @@ export function clearSettledCanonicalOgabasseyHomeState(): void {
   setActiveRequestTreeSettledBox(null);
 }
 
-export function isStorefrontHomeRequest(children?: React.ReactNode): boolean {
+export function isStorefrontHomeRequest(): boolean {
   try {
     const workStore = workAsyncStorage.getStore() as
       | { page?: string; route?: string }
@@ -153,18 +157,6 @@ export function isStorefrontHomeRequest(children?: React.ReactNode): boolean {
     }
   } catch {
     // Ignore store lookup failures outside Next.js request context
-  }
-
-  if (children && typeof children === 'object' && 'type' in children) {
-    const type = (children as { type?: unknown }).type;
-    if (
-      typeof type === 'function' &&
-      (type.name === 'StorefrontFullCssLayout' ||
-        type.name === 'StorefrontPage' ||
-        type.name.includes('Home'))
-    ) {
-      return true;
-    }
   }
 
   return false;

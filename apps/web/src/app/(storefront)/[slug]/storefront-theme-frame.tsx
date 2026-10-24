@@ -1,5 +1,3 @@
-'use client';
-
 import type React from 'react';
 import type { StorefrontAppearance } from '@/components/storefront/storefront-appearance';
 import { StorefrontThemeProvider } from '@/components/storefront/storefront-theme-provider';

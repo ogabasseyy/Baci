@@ -9,6 +9,7 @@ import {
   peekSettledCanonicalOgabasseyHomeState,
   recordSettledCanonicalOgabasseyHomeState,
   type SettledCanonicalOgabasseyHomeState,
+  settleCanonicalOgabasseyHomeMerchant,
 } from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import {
@@ -48,8 +49,8 @@ async function renderOgabasseyHomeCommittedLcpAsync(
   const { slug } = await params;
   if (isStorefrontPageParams(params) && isOgabasseyCanonicalDomainSlug(slug)) {
     const [resolvedMerchant, heroShell] = await Promise.all([
-      Promise.resolve(getRequestScopedMerchant(slug)).catch(() => null),
-      Promise.resolve(resolveOgabasseyHomeHeroShell()).catch(() => null),
+      settleCanonicalOgabasseyHomeMerchant(getRequestScopedMerchant(slug)),
+      resolveOgabasseyHomeHeroShell(),
     ]);
     recordSettledCanonicalOgabasseyHomeState({
       box: stateBox,

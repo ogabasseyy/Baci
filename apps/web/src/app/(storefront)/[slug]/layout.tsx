@@ -8,6 +8,7 @@ import {
   getSettledCanonicalOgabasseyHomeStateBox,
   isStorefrontHomeRequest,
   recordSettledCanonicalOgabasseyHomeState,
+  settleCanonicalOgabasseyHomeMerchant,
 } from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
 import { StorefrontLcpCopyStyle } from '@/app/(storefront)/storefront-lcp-copy-style';
 import { AdAttributionCapture } from '@/components/storefront/ad-attribution-capture';
@@ -166,7 +167,7 @@ export async function StorefrontLayoutContent(props: {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
 }) {
-  const isHomeRequestBeforeSlug = isStorefrontHomeRequest(props.children);
+  const isHomeRequestBeforeSlug = isStorefrontHomeRequest();
   const settledStateBox = isHomeRequestBeforeSlug
     ? getSettledCanonicalOgabasseyHomeStateBox(props.params)
     : null;
@@ -181,7 +182,7 @@ export async function StorefrontLayoutContent(props: {
   const isCanonicalOgabasseyDomain = isOgabasseyCanonicalDomainSlug(slug);
   const isHomeRequest =
     isCanonicalOgabasseyDomain &&
-    (isHomeRequestBeforeSlug || isStorefrontHomeRequest(props.children));
+    (isHomeRequestBeforeSlug || isStorefrontHomeRequest());
   if (!isHomeRequest) {
     clearSettledCanonicalOgabasseyHomeState();
   }
@@ -190,10 +191,10 @@ export async function StorefrontLayoutContent(props: {
       getSettledCanonicalOgabasseyHomeStateBox(props.params))
     : null;
   const canonicalHomeHeroShellPromise = isHomeRequest
-    ? Promise.resolve(resolveOgabasseyHomeHeroShell()).catch(() => null)
+    ? resolveOgabasseyHomeHeroShell()
     : null;
   const canonicalHomeMerchantPromise = isHomeRequest
-    ? Promise.resolve(getRequestScopedMerchant(slug)).catch(() => null)
+    ? settleCanonicalOgabasseyHomeMerchant(getRequestScopedMerchant(slug))
     : null;
 
   // Start the merchant read and, for the known OgaBassey home tenant, the

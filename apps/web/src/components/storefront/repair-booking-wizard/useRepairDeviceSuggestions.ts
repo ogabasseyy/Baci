@@ -12,6 +12,7 @@ import {
 } from './repair-device-suggestions';
 
 const PRODUCT_SEARCH_PAGE_SIZE = 50;
+const MAX_PRODUCT_SEARCH_PAGES = 5;
 const MAX_REPAIR_DEVICE_SUGGESTIONS = 8;
 
 interface UseRepairDeviceSuggestionsOptions {
@@ -79,11 +80,13 @@ export function useRepairDeviceSuggestions({
             ? (async () => {
                 const products: StoreProductDeviceSuggestion[] = [];
                 let offset = 0;
+                let pagesFetched = 0;
                 let totalCount = Number.POSITIVE_INFINITY;
 
                 try {
                   while (
                     products.length < MAX_REPAIR_DEVICE_SUGGESTIONS &&
+                    pagesFetched < MAX_PRODUCT_SEARCH_PAGES &&
                     offset < totalCount
                   ) {
                     const response = await apiGet<{
@@ -94,6 +97,7 @@ export function useRepairDeviceSuggestions({
                       { signal: controller.signal }
                     );
                     const pageProducts = response.products ?? [];
+                    pagesFetched += 1;
                     const pageSuggestions = pageProducts
                       .map(toStoreProductSuggestion)
                       .filter(
@@ -186,6 +190,7 @@ export function useRepairDeviceSuggestions({
   };
 
   const refreshSuggestions = () => {
+    if (!catalogEnabled || query.length < 2 || query === selectedModel) return;
     setRefreshVersion((version) => version + 1);
   };
 

@@ -25,6 +25,15 @@ describe('repair device product suggestions', () => {
     ).toBeNull();
   });
 
+  it('rejects accessory names even when they use a device category', () => {
+    for (const [name, category] of [
+      ['PlayStation 5 Controller', 'Consoles'],
+      ['iPhone 15 Case', 'Smartphones'],
+    ]) {
+      expect(toStoreProductSuggestion({ id: name, name, category })).toBeNull();
+    }
+  });
+
   it('rejects specific phone accessory categories before phone matching', () => {
     for (const category of [
       'Phone Cases',

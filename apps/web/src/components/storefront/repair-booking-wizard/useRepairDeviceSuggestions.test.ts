@@ -222,52 +222,35 @@ describe('useRepairDeviceSuggestions', () => {
     });
   });
 
-  it('continues past a page of non-device products to find catalog devices', async () => {
+  it('keeps the debounce after focus on an initially empty query', async () => {
     vi.useFakeTimers();
-    mocks.apiGet.mockImplementation((url: unknown) => {
-      if (typeof url === 'string' && url.includes('offset=50')) {
-        return Promise.resolve({
-          count: 51,
-          products: [
-            {
-              id: 'iphone-15',
-              name: 'iPhone 15',
-              category: 'Phones',
-            },
-          ],
-        });
-      }
-      return Promise.resolve({
-        count: 51,
-        products: Array.from({ length: 50 }, (_, index) => ({
-          id: `case-${index}`,
-          name: `iPhone 15 Case ${index}`,
-          category: 'Accessories',
-        })),
-      });
-    });
-
-    const { result } = renderHook(() =>
-      useRepairDeviceSuggestions({
-        catalogEnabled: true,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        query: 'iPhone 15',
-        repairCatalogEnabled: false,
-        selectedModel: null,
-      })
+    mocks.apiGet.mockResolvedValue({ count: 0, products: [] });
+    const { result, rerender } = renderHook(
+      ({ query }) =>
+        useRepairDeviceSuggestions({
+          catalogEnabled: true,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          query,
+          repairCatalogEnabled: false,
+          selectedModel: null,
+        }),
+      { initialProps: { query: '' } }
     );
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
+    act(() => result.current.refreshSuggestions());
+    rerender({ query: 'i' });
+    rerender({ query: 'ip' });
 
-    expect(mocks.apiGet).toHaveBeenCalledTimes(2);
-    expect(mocks.apiGet.mock.calls[0]?.[0]).toContain('offset=0');
-    expect(mocks.apiGet.mock.calls[1]?.[0]).toContain('offset=50');
-    expect(result.current.suggestions).toMatchObject([
-      { productId: 'iphone-15', deviceType: 'Smartphone' },
-    ]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(249);
+    });
+    expect(mocks.apiGet).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(mocks.apiGet).toHaveBeenCalledTimes(1);
   });
 
   it('restarts an unchanged query when the field requests a refresh', async () => {

@@ -118,12 +118,14 @@ const validCategoriesResponse = {
       code: 100,
       name: 'Smartphones',
       completePath: 'Electronics > Phones > Smartphones',
+      hasChildren: false,
       attributeSet: {
-        id: '550e8400-e29b-41d4-a716-446655440006',
+        sid: '550e8400-e29b-41d4-a716-446655440006',
         name: 'Mobile Phone Attributes',
       },
     },
   ],
+  page: { current: 1, totalOfPages: 1 },
 };
 
 const validBrandsResponse = {
@@ -143,7 +145,7 @@ const validAttributeSetResponse = {
       code: 10,
       name: 'Color',
       description: 'Product color',
-      type: 'option',
+      type: 4,
       mandatory: true,
       variation: true,
       translatable: true,
@@ -153,18 +155,15 @@ const validAttributeSetResponse = {
       ],
       options: [
         {
-          id: '550e8400-e29b-41d4-a716-446655440008',
+          id: 5241,
+          sid: '550e8400-e29b-41d4-a716-446655440008',
           name: 'Black',
           position: 1,
           isDefault: true,
+          status: 'ACTIVE',
         },
       ],
-      validations: [
-        {
-          MaxLength: 50,
-          MinLength: 1,
-        },
-      ],
+      validations: { maxLength: 50, minLength: 1 },
     },
   ],
 };
@@ -670,12 +669,14 @@ describe('Jumia Vendor API Schemas', () => {
     it('parses empty categories list', () => {
       const result = JumiaCategoriesResponseSchema.safeParse({
         categories: [],
+        page: { current: 1, totalOfPages: 0 },
       });
       expect(result.success).toBe(true);
     });
 
     it('rejects category with empty name', () => {
       const result = JumiaCategoriesResponseSchema.safeParse({
+        page: { current: 1, totalOfPages: 1 },
         categories: [{ ...validCategoriesResponse.categories[0], name: '' }],
       });
       expect(result.success).toBe(false);
@@ -726,14 +727,14 @@ describe('Jumia Vendor API Schemas', () => {
             code: 10,
             name: 'Color',
             description: '',
-            type: 'option',
+            type: 4,
             mandatory: false,
             variation: false,
             translatable: false,
             sid: '550e8400-e29b-41d4-a716-446655440007',
             translations: [],
             options: [],
-            validations: [],
+            validations: {},
           },
         ],
       };

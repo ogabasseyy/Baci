@@ -6,6 +6,7 @@
 import type { JumiaClient } from '@/lib/jumia/client';
 import type {
   JumiaAttributeSetResponse,
+  JumiaCategoriesResponse,
   JumiaCategory,
   JumiaProduct,
   JumiaStockResponse,
@@ -91,10 +92,7 @@ export async function getAllProducts(
 export async function getCategories(
   client: JumiaClient,
   params?: { page?: number }
-): Promise<{
-  categories: JumiaCategory[];
-  page?: { current: number; totalOfPages: number };
-}> {
+): Promise<JumiaCategoriesResponse> {
   const query = new URLSearchParams();
   if (params?.page !== undefined) query.set('page', params.page.toString());
 
@@ -117,7 +115,7 @@ export async function getAllCategories(
     }
     const response = await getCategories(client, { page });
     all.push(...response.categories);
-    if (!response.page || page >= response.page.totalOfPages) break;
+    if (page >= response.page.totalOfPages) break;
     page++;
   }
 

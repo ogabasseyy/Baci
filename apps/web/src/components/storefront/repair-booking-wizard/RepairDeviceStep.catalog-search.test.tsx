@@ -148,7 +148,10 @@ describe('RepairDeviceStep catalog behavior', () => {
     });
     expect(suggestion).toHaveAttribute('tabindex', '-1');
     expect(input).toHaveAttribute('aria-expanded', 'true');
-    expect(input).toHaveAttribute('aria-controls', 'repair-device-suggestions');
+    expect(input).toHaveAttribute(
+      'aria-controls',
+      screen.getByRole('listbox').id
+    );
     expect(
       screen.getByRole('img', { name: 'Apple iPhone 15' })
     ).toHaveAttribute('src', expect.stringContaining('iphone-15.jpg'));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ControllerRenderProps } from 'react-hook-form';
 import type { z } from 'zod';
 import { Input } from '@/components/ui/input';
@@ -9,8 +9,6 @@ import { RepairDeviceSuggestionImage } from './RepairDeviceSuggestionImage';
 import { getRepairDeviceSuggestionLabel } from './repair-device-suggestion-label';
 import type { RepairDeviceSelection } from './repair-device-suggestions';
 import { useRepairDeviceSuggestions } from './useRepairDeviceSuggestions';
-
-const DEVICE_SUGGESTIONS_LISTBOX_ID = 'repair-device-suggestions';
 
 interface RepairDeviceModelFieldProps {
   'aria-describedby'?: string;
@@ -42,6 +40,8 @@ export function RepairDeviceModelField({
   onSelectDevice,
   selectedModel = null,
 }: RepairDeviceModelFieldProps) {
+  const generatedId = useId();
+  const suggestionListboxId = `${generatedId}-repair-device-suggestions`;
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const query = field.value.trim();
   const {
@@ -73,11 +73,9 @@ export function RepairDeviceModelField({
   useEffect(() => {
     if (activeSuggestionIndex < 0 || !hasSuggestionOptions) return;
     document
-      .getElementById(
-        `${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${activeSuggestionIndex}`
-      )
+      .getElementById(`${suggestionListboxId}-option-${activeSuggestionIndex}`)
       ?.scrollIntoView({ block: 'nearest' });
-  }, [activeSuggestionIndex, hasSuggestionOptions]);
+  }, [activeSuggestionIndex, hasSuggestionOptions, suggestionListboxId]);
 
   return (
     <div
@@ -98,13 +96,11 @@ export function RepairDeviceModelField({
         aria-describedby={ariaDescribedBy}
         aria-activedescendant={
           activeSuggestionIndex >= 0 && hasSuggestionOptions
-            ? `${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${activeSuggestionIndex}`
+            ? `${suggestionListboxId}-option-${activeSuggestionIndex}`
             : undefined
         }
         aria-autocomplete={catalogEnabled ? 'list' : undefined}
-        aria-controls={
-          hasSuggestionOptions ? DEVICE_SUGGESTIONS_LISTBOX_ID : undefined
-        }
+        aria-controls={hasSuggestionOptions ? suggestionListboxId : undefined}
         aria-expanded={catalogEnabled ? hasSuggestionOptions : undefined}
         aria-invalid={ariaInvalid}
         autoComplete="off"
@@ -162,7 +158,7 @@ export function RepairDeviceModelField({
               <div
                 className="max-h-64 space-y-2 overflow-y-auto"
                 aria-label="Device suggestions"
-                id={DEVICE_SUGGESTIONS_LISTBOX_ID}
+                id={suggestionListboxId}
                 role="listbox"
               >
                 {suggestions.map((device, index) => {
@@ -181,7 +177,7 @@ export function RepairDeviceModelField({
                           ? 'border-store-primary/50 bg-store-primary/10'
                           : 'bg-store-background'
                       }`}
-                      id={`${DEVICE_SUGGESTIONS_LISTBOX_ID}-option-${index}`}
+                      id={`${suggestionListboxId}-option-${index}`}
                       key={suggestionKey}
                       onClick={() => selectSuggestion(device)}
                       onMouseDown={(event) => event.preventDefault()}

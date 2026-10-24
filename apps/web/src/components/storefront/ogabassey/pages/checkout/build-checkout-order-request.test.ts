@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {
   buildCheckoutOrderRequest,
   type CheckoutOrderRequestInput,
@@ -96,4 +96,33 @@ it('attaches the shared cart binding for bound checkouts', () => {
 });
 it('omits shared_cart for legacy checkouts', () => {
   expect(buildCheckoutOrderRequest(input)).not.toHaveProperty('shared_cart');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
+it('reads current consent and SDK references when building the actual checkout request', () => {
+  vi.spyOn(document, 'cookie', 'get').mockReturnValue(
+    '__oppref=click-now; __obref=browser-now'
+  );
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({ analytics: true })
+  );
+  expect(buildCheckoutOrderRequest(input)).toMatchObject({
+    ad_tracking: {
+      chatgptConsent: true,
+      oppref: 'click-now',
+      obref: 'browser-now',
+    },
+  });
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({ analytics: false })
+  );
+  const denied = buildCheckoutOrderRequest(input);
+  expect(denied).toMatchObject({ ad_tracking: { chatgptConsent: false } });
+  expect(denied).not.toHaveProperty('ad_tracking.oppref');
+  expect(denied).not.toHaveProperty('ad_tracking.obref');
 });

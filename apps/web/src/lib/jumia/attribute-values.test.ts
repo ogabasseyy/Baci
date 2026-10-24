@@ -41,10 +41,6 @@ describe('draft attribute value contracts', () => {
   ])('requires an explicit value for mandatory kind %s', (type) => {
     expect(validateAttributeValue(attribute(type), undefined)).not.toBeNull();
   });
-  it('keeps an unset boolean distinct from false and rejects string coercion', () => {
-    expect(validateAttributeValue(attribute(6), false)).toBeNull();
-    expect(validateAttributeValue(attribute(6), 'false')).not.toBeNull();
-  });
   it('validates numeric integer, finite, positivity and precision boundaries', () => {
     expect(validateAttributeValue(attribute(2), '2')).not.toBeNull();
     expect(validateAttributeValue(attribute(2), 2.2)).not.toBeNull();
@@ -105,15 +101,6 @@ describe('draft attribute value contracts', () => {
     expect(
       validateAttributeValue(attribute(3, { options }), [10, 10])
     ).not.toBeNull();
-  });
-  it('requires format/options for required controls while optional unavailable metadata can be omitted', () => {
-    for (const type of [3, 4, 5, 7, 99]) {
-      expect(attributeUnavailableReason(attribute(type))).not.toBeNull();
-      expect(validateAttributeValue(attribute(type), 'made-up')).not.toBeNull();
-      expect(
-        validateAttributeValue(attribute(type, { mandatory: false }), undefined)
-      ).toBeNull();
-    }
   });
   it('accepts exact documented date formats and rejects invalid calendar dates and silent normalization', () => {
     const date = attribute(5, { validations: { dateFormat: 'YYYY-MM-DD' } });

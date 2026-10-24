@@ -8,6 +8,12 @@ const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
 
+vi.mock('@/components/analytics/chatgpt-pixel', () => ({
+  ChatgptPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="chatgpt-pixel">{pixelId}</span>
+  ),
+}));
+
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
@@ -60,6 +66,32 @@ describe('StorefrontShellFrame', () => {
     expect(screen.getByTestId('layout-renderer')).toHaveTextContent(
       'Shell body'
     );
+  });
+
+  it('mounts the consent-aware Pixel in the persistent shell for a direct product landing and checkout navigation', () => {
+    const props = {
+      preloadHeroLcpImages: false,
+      shellSnapshot: {
+        ...shellSnapshot,
+        chatgptPixelId: 'pixel-landing',
+      } as never,
+    };
+    const view = render(
+      <StorefrontShellFrame {...props}>
+        <main>Product landing</main>
+      </StorefrontShellFrame>
+    );
+    expect(screen.getAllByTestId('chatgpt-pixel')).toHaveLength(1);
+    expect(screen.getByTestId('chatgpt-pixel')).toHaveTextContent(
+      'pixel-landing'
+    );
+    view.rerender(
+      <StorefrontShellFrame {...props}>
+        <main>Checkout</main>
+      </StorefrontShellFrame>
+    );
+    expect(screen.getAllByTestId('chatgpt-pixel')).toHaveLength(1);
+    expect(screen.getByText('Checkout')).toBeInTheDocument();
   });
 
   it('calls notFound when the shell snapshot is missing', () => {

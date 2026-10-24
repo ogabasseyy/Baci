@@ -150,3 +150,15 @@ merchant-switch races. A fresh-context third-round inspection found no further
 concrete issue; this does not replace current-head Codex review or CI. CodeRabbit
 remains skipped at the owner's request. Main was rebased before validation;
 previous-head review and CI receipts do not establish the new head's status.
+
+## Persistent storefront measurement
+
+Codex identified that direct product landings skipped the homepage-only Pixel
+mount. The shell regression reproduced that omission. ChatGPT now mounts once
+in the persistent storefront shell, and its former page-level analytics provider
+mount is removed. The trusted shell snapshot resolves the public Pixel ID with
+the existing entitlement check before projecting merchant data, preserving plan
+expiry semantics without adding credentials or database reads. Consent remains
+inside the Pixel component. Shell navigation, entitlement/public projection,
+no duplicate page-level mount, and existing consent/navigation suites pass:
+270 tests across 60 files.

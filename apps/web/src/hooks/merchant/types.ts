@@ -153,12 +153,15 @@ export interface StaffAccess {
 export type RoutingMode = 'domain' | 'path';
 
 export interface StorefrontShellSnapshotBase {
+  /** Public, entitlement-checked Pixel ID resolved before merchant projection. */
+  chatgptPixelId?: string | null;
   merchant: MerchantData;
   routingMode: RoutingMode;
   basePath: string;
 }
 
 export interface StorefrontShellSnapshot {
+  chatgptPixelId?: StorefrontShellSnapshotBase['chatgptPixelId'];
   merchant: StorefrontShellSnapshotBase['merchant'];
   routingMode: StorefrontShellSnapshotBase['routingMode'];
   basePath: StorefrontShellSnapshotBase['basePath'];

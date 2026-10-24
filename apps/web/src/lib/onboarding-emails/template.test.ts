@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { OnboardingStage } from './policy';
 import { buildOnboardingEmail } from './template';
@@ -15,6 +18,22 @@ const input = {
 };
 
 describe('onboarding email presentation', () => {
+  it('ships the official logo in both local Next and production Vercel public roots', () => {
+    const localLogo = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../public/baci-logo-email.png'
+      )
+    );
+    const productionLogo = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../../../public/baci-logo-email.png'
+      )
+    );
+    expect(productionLogo.equals(localLogo)).toBe(true);
+  });
+
   it.each<OnboardingStage>([
     'welcome',
     'day1',

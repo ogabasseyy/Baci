@@ -105,10 +105,9 @@ export function toStoreProductSuggestion(
     }
   }
   if (
-    hasAccessoryCategory &&
-    (!deviceType ||
-      ACCESSORY_PRODUCT_NAME_PATTERN.test(product.name) ||
-      !hasDeviceTypeNameCue(deviceType, product.name))
+    ACCESSORY_PRODUCT_NAME_PATTERN.test(product.name) ||
+    (hasAccessoryCategory &&
+      (!deviceType || !hasDeviceTypeNameCue(deviceType, product.name)))
   ) {
     return null;
   }

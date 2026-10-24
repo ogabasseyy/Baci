@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { inspectInitialHero } from './storefront-initial-hero.mjs';
 
 test('rejects a real hero delivered in a hidden reveal segment outside main', () => {

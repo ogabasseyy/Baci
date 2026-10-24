@@ -37,10 +37,7 @@ import {
 } from './storefront-shell-snapshot';
 import { StorefrontThemeFrame } from './storefront-theme-frame';
 
-// Run storefront SSR next to the Supabase primary (AWS eu-west-1 / Dublin) so
-// every render's DB round-trips stay intra-region. Region pinning lives in
-// vercel.json `regions` (dub1); per-route `preferredRegion` is deprecated and
-// removed — the project-level pin is the supported mechanism.
+// Storefront SSR runs next to Supabase primary (eu-west-1 / dub1 via vercel.json).
 
 const STORE_NOT_FOUND_METADATA: Metadata = {
   title: 'Store Not Found',
@@ -50,8 +47,7 @@ const STORE_NOT_FOUND_METADATA: Metadata = {
     index: false,
     follow: true,
   },
-  // Replace root verification so the platform `google-adsense-account` meta does
-  // not bleed onto not-found pages served on third-party custom domains.
+  // Replace root verification so platform google-adsense-account meta does not bleed onto fallback pages.
   verification: {},
 };
 
@@ -62,13 +58,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
 
-  // Validate identifier format
   if (!isValidMerchantIdentifier(slug)) {
     return STORE_NOT_FOUND_METADATA;
   }
 
-  // Keep metadata cacheable. Request-bound storefront validation belongs in
-  // StorefrontLayoutContent so Next's metadata boundary cannot displace PDP slots.
+  // Keep metadata cacheable; request-bound validation stays in StorefrontLayoutContent.
   const merchant = await getRequestScopedMerchant(slug);
 
   if (!merchant) {
@@ -76,7 +70,6 @@ export async function generateMetadata({
   }
 
   // Extract verification code from feature settings or published config.
-  // feature_settings is normalized in cached-data; published_config is optional.
   const featureSettings = merchant.feature_settings;
   const publishedConfig = merchant.published_config;
 
@@ -86,13 +79,11 @@ export async function generateMetadata({
   const verificationCode =
     typeof rawVerification === 'string' ? rawVerification : undefined;
 
-  // Build icons configuration for merchant favicon
-  // Fall back to logo_url if no dedicated favicon exists
+  // Build icons configuration for merchant favicon (fallback to logo_url).
   const faviconSvg = merchant.favicon_svg_url;
   const faviconPng32 = merchant.favicon_png_32_url;
   const faviconAppleTouch = merchant.favicon_apple_touch_url;
 
-  // Build icons array only if merchant has custom favicons
   const icons =
     faviconSvg || faviconPng32 || faviconAppleTouch
       ? {
@@ -113,7 +104,6 @@ export async function generateMetadata({
           }
         : undefined;
 
-  // Build SEO-friendly description with proper fallbacks
   const description = getStorefrontSeoDescription(merchant);
   const baseUrl = buildStoreUrl(merchant);
   let metadataBase: URL | undefined;
@@ -130,12 +120,7 @@ export async function generateMetadata({
     metadataBase,
     description,
     icons,
-    // Always emit an explicit verification object so the platform-level
-    // `google-adsense-account` meta from the root layout never bleeds onto
-    // merchant storefronts — especially independent third-party custom domains
-    // (merchant sovereignty). The platform AdSense tag stays scoped to the
-    // usebaci.com apex, which is served by the root layout. A merchant's own
-    // Google Search Console code is still applied here when configured.
+    // Emit explicit verification so platform-level google-adsense-account meta never bleeds onto merchant storefronts.
     verification: {
       google: verificationCode,
     },
@@ -151,11 +136,7 @@ export async function generateMetadata({
   };
 }
 
-/**
- * Next.js 16+ Viewport Configuration
- * 2026 Best Practice: Static viewport for PPR compatibility
- * Dynamic theme colors are applied via meta tag in the layout component
- */
+/** Static viewport for Next.js 16+ PPR compatibility. */
 export function generateViewport(): Viewport {
   return {
     width: 'device-width',

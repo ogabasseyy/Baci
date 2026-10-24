@@ -32,13 +32,9 @@ import { useHeroSwipe } from './use-hero-swipe';
 const AUTO_ADVANCE_MS = 5000;
 
 interface HeroMobileCarouselProps {
-  /** Launch products (newest-first, pins applied). slides[0]'s image is the
-   *  eager mobile LCP element unless `prioritizeFirstImage` is false; the rest
-   *  lazy-load. Each slide deep-links to its PDP and is server-rendered so the
-   *  links stay crawlable. */
+  /** Launch products (newest-first, pins applied). slides[0] is eager LCP unless prioritizeFirstImage is false. */
   slides: LaunchProductSlide[];
-  /** Keep the first image eager/high-priority only when it can be LCP.
-   *  Below-fold carousels under a committed text hero must stay lazy. */
+  /** Keep the first image eager/high-priority only when it can be LCP. */
   prioritizeFirstImage?: boolean;
 }
 
@@ -52,12 +48,7 @@ export function HeroMobileCarousel({
   // `cycle` increments to (re)start the current slide's countdown + fill.
   const [cycle, setCycle] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  // Persistent pause via the explicit control (WCAG 2.2.2), vs transient touch.
-  // The critical slide is stable by default. Slow mobile lab runs currently
-  // reach LCP after the former 5s autoplay deadline, which could hide slide 0
-  // and start a lazy slide-1 request before LCP settled. Rotation is therefore
-  // an explicit progressive enhancement: swipe/dots work immediately, while
-  // timed rotation begins only after the user presses Play.
+  // Persistent pause via explicit control (WCAG 2.2.2); timed rotation starts only after pressing Play.
   const [userPaused, setUserPaused] = useState(true);
   // Pause while keyboard / screen-reader focus is inside the carousel so the
   // focused slide/link can't be hidden (inert) out from under the user.
@@ -65,9 +56,7 @@ export function HeroMobileCarousel({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
   useEffect(() => {
-    // matchMedia is universal in browsers but absent in some test/SSR
-    // shells; a missing API must not crash the carousel (it only gates the
-    // decorative progress fill). Absent means "no preference expressed".
+    // Guard against missing matchMedia in test/SSR shells.
     if (typeof window.matchMedia !== 'function') {
       return;
     }

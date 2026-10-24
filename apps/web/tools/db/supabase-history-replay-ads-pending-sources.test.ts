@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 
@@ -56,6 +58,23 @@ describe('supabase history replay ads pending sources', () => {
     );
     expect(ADS_PENDING_REPLAY_SOURCE_ROWS).toContain(
       '5dad1e7b74d8f6d35b7849584b8241358aeec2a36dbe5882f159128bf246691b 20260828100000_ads_sync_window_completion.sql'
+    );
+  });
+  it('registers both ChatGPT Ads migrations with their exact contents', () => {
+    const rows = ADS_PENDING_REPLAY_SOURCE_ROWS.trim().split('\n');
+    const names = [
+      '20261024160000_chatgpt_ads_settings_and_destination.sql',
+      '20261024160100_validate_chatgpt_event_destination.sql',
+    ] as const;
+    for (const name of names) {
+      const bytes = readFileSync(`../../supabase/migrations/${name}`);
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      expect(rows.filter((row) => row.endsWith(` ${name}`))).toEqual([
+        `${hash} ${name}`,
+      ]);
+    }
+    expect(rows.findIndex((row) => row.endsWith(names[0]))).toBeLessThan(
+      rows.findIndex((row) => row.endsWith(names[1]))
     );
   });
 });

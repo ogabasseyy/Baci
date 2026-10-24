@@ -28,7 +28,11 @@ export function ChatgptPixel({ pixelId }: { pixelId: string }) {
     };
   }, [pixelId]);
   useEffect(() => {
-    setChatgptMeasurementConsent(allowed);
+    // The hydration snapshot is denied even when browser consent is saved.
+    // Only the current browser choice may withdraw SDK consent and its cookies.
+    if (allowed === isAnalyticsAllowed()) {
+      setChatgptMeasurementConsent(allowed);
+    }
   }, [allowed]);
   useEffect(() => {
     if (allowed && pathname) measureChatgptPage(pixelId);

@@ -1,4 +1,6 @@
 import { act, render } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const routing = vi.hoisted(() => ({ pathname: '/one' }));
@@ -14,6 +16,27 @@ afterEach(() => {
   routing.pathname = '/one';
 });
 describe('ChatGPT Pixel navigation and consent', () => {
+  it('never withdraws saved consent while hydrating a server snapshot', async () => {
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({ analytics: true })
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<ChatgptPixel pixelId="pixel-a" />);
+    document.body.append(container);
+    const root = hydrateRoot(container, <ChatgptPixel pixelId="pixel-a" />);
+    try {
+      await act(async () => {});
+      expect((window as PixelWindow).oaiq?.q).toBeDefined();
+      expect((window as PixelWindow).oaiq?.q).not.toContainEqual([
+        'consent',
+        false,
+      ]);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
   it('measures a navigation without withdrawing consent or reinitializing the SDK', () => {
     localStorage.setItem(
       'baci-cookie-consent',

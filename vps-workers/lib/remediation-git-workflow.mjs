@@ -207,7 +207,7 @@ export function runRemediationAutofix({
     });
     const status = runChecked(
       'git',
-      ['status', '--porcelain'],
+      ['status', '--porcelain', '-uall'],
       worktreeGitCommandOptions
     );
     if (!status.trim()) {

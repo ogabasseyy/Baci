@@ -198,8 +198,9 @@ describe('remediation git workflow', () => {
         if (statusChecks === 2) {
           return {
             status: 0,
-            stdout:
-              ' M apps/web/src/components/cart.tsx\n?? .github/workflows/evil.yml\n',
+            stdout: args.includes('-uall')
+              ? ' M apps/web/src/components/cart.tsx\n?? .github/workflows/evil.yml\n'
+              : ' M apps/web/src/components/cart.tsx\n?? .github/workflows/\n',
             stderr: '',
           };
         }

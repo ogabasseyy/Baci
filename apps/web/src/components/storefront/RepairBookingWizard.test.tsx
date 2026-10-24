@@ -15,6 +15,7 @@ import { RepairBookingWizard } from './RepairBookingWizard';
 // RadioGroupItem (device type / service type selectors) uses Radix's
 // useSize internally, which needs ResizeObserver — not implemented in jsdom.
 const OriginalResizeObserver = globalThis.ResizeObserver;
+const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 beforeAll(() => {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -28,16 +29,27 @@ beforeAll(() => {
       // intentional noop
     }
   };
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterAll(() => {
   globalThis.ResizeObserver = OriginalResizeObserver;
+  if (originalScrollIntoView) {
+    Element.prototype.scrollIntoView = originalScrollIntoView;
+  } else {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  }
 });
 
-const { mockCreateRepair, mockToast } = vi.hoisted(() => ({
-  mockCreateRepair: vi.fn(),
-  mockToast: vi.fn(),
-}));
+const { mockApiGet, mockCreateRepair, mockToast, mockMotionInitialValues } =
+  vi.hoisted(() => ({
+    mockApiGet: vi.fn(),
+    mockCreateRepair: vi.fn(),
+    mockToast: vi.fn(),
+    mockMotionInitialValues: [] as unknown[],
+  }));
+
+vi.mock('@/lib/api-client', () => ({ apiGet: mockApiGet }));
 
 vi.mock('@/app/actions/repair', () => ({
   calculateRepairShipping: vi.fn(),
@@ -58,6 +70,7 @@ vi.mock('framer-motion', () => {
       transition: _transition,
       ...rest
     } = propsRecord;
+    mockMotionInitialValues.push(_initial);
     return rest as T;
   };
 
@@ -101,6 +114,12 @@ async function fillContactStep(user: ReturnType<typeof userEvent.setup>) {
 describe('RepairBookingWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMotionInitialValues.length = 0;
+    mockApiGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes('/repairs/devices') ? { groups: [] } : { products: [] }
+      )
+    );
   });
 
   it('renders the free-text device form by default (no preselection)', () => {
@@ -114,6 +133,21 @@ describe('RepairBookingWizard', () => {
 
     expect(screen.getByText(/what device needs repair/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Device Model')).toBeInTheDocument();
+    expect(mockMotionInitialValues).toContain(false);
+  });
+
+  it('uses the merchant storefront primary color on the next button', () => {
+    render(
+      <RepairBookingWizard
+        merchantId="merchant-1"
+        merchantSlug="ogabassey"
+        merchantName="Ogabassey"
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /^next$/i })).toHaveStyle({
+      backgroundColor: 'var(--store-primary)',
+    });
   });
 
   it('shows a confirmation panel with the device and quoted price when preselected', () => {

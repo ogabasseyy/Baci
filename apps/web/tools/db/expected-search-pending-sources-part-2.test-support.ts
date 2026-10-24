@@ -149,4 +149,19 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
       'supabase/migrations/20261020130000_pdp_core_snapshot_effective_policy.sql',
     sha256: '6051114c34b8810035d9ac8163e3edb97170c78cd9b6af0a6d5667938551eec0',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023111630_repair_device_typeahead_search.sql',
+    sha256: 'c96304830d2b512ffd4c316583268dea0afbfd51bb2ffeb102cd5319fcfc7932',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024170000_repair_device_catalog_search_limit.sql',
+    sha256: '6ef78e0eb8c1058de9ed8beade696a7986ef025e5ca8ab325dd1ab6075ec2541',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024180000_repair_device_catalog_preserve_private_boundary.sql',
+    sha256: 'a9c99935a58deeee1c5260fe500c95af00dc450de44ebbf7b68528190b12d391',
+  },
 ];

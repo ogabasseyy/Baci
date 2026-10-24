@@ -37,6 +37,11 @@ html:has([data-storefront-shell]) *::after {
   min-height: 0;
 }
 
+/* The repair booking title is followed by its form in the same viewport. */
+[data-repair-booking-lcp-fold] {
+  min-height: 0;
+}
+
 [data-cwv-lcp-copy] {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
   letter-spacing: normal !important;

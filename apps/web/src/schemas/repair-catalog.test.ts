@@ -73,6 +73,7 @@ describe('repairsDevicesQuerySchema', () => {
     expect(result.success).toBe(true);
     if (!result.success) throw new Error('expected success');
     expect(result.data.q).toBe('iphone');
+    expect(result.data.mode).toBe('catalog');
   });
 
   it('allows an omitted query', () => {
@@ -87,5 +88,16 @@ describe('repairsDevicesQuerySchema', () => {
     const result = repairsDevicesQuerySchema.safeParse({ q: 'a'.repeat(101) });
 
     expect(result.success).toBe(false);
+  });
+
+  it('accepts suggestion mode and rejects unknown modes', () => {
+    expect(
+      repairsDevicesQuerySchema.safeParse({ q: 'iphone', mode: 'suggestions' })
+        .success
+    ).toBe(true);
+    expect(
+      repairsDevicesQuerySchema.safeParse({ q: 'iphone', mode: 'other' })
+        .success
+    ).toBe(false);
   });
 });

@@ -26,6 +26,7 @@ import {
 } from './repair-booking-wizard/repair-booking-wizard-constants';
 import { useRepairBookingSubmit } from './repair-booking-wizard/use-repair-booking-submit';
 import { useRepairShippingQuote } from './repair-booking-wizard/use-repair-shipping-quote';
+import { useRepairDeviceCatalogSelection } from './repair-booking-wizard/useRepairDeviceCatalogSelection';
 
 export type { RepairBookingPreselection };
 
@@ -33,6 +34,7 @@ interface RepairBookingWizardProps {
   merchantId: string;
   merchantSlug: string;
   merchantName: string;
+  repairsCatalogEnabled?: boolean;
   preselection?: RepairBookingPreselection;
 }
 
@@ -40,6 +42,7 @@ export function RepairBookingWizard({
   merchantId,
   merchantSlug,
   merchantName,
+  repairsCatalogEnabled = false,
   preselection,
 }: RepairBookingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -88,15 +91,16 @@ export function RepairBookingWizard({
 
   const { control, trigger } = form;
   const formData = useWatch({ control });
-
-  const handleChangeDevice = () => {
-    setShowCatalogConfirmation(false);
-    form.setValue('deviceId', undefined);
-    form.setValue('quoteId', undefined);
-    form.setValue('deviceType', 'Smartphone');
-    form.setValue('deviceModel', '');
-    form.setValue('issueDescription', '');
-  };
+  const {
+    handleChangeDevice,
+    handleDeviceModelChange,
+    handleDeviceTypeChange,
+    handleSelectCatalogDevice,
+    selectedModel,
+  } = useRepairDeviceCatalogSelection({
+    form,
+    hideCatalogConfirmation: () => setShowCatalogConfirmation(false),
+  });
 
   const nextStep = async () => {
     let fieldsToValidate: (keyof RepairBookingInput)[] = [];
@@ -148,14 +152,22 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-0"
                 transition={{ duration: 0.3 }}
               >
                 <RepairDeviceStep
+                  catalogEnabled={repairsCatalogEnabled || Boolean(merchantId)}
                   control={control}
+                  merchantId={merchantId}
+                  merchantSlug={merchantSlug}
+                  repairCatalogEnabled={repairsCatalogEnabled}
+                  onDeviceChange={handleDeviceModelChange}
+                  onDeviceTypeChange={handleDeviceTypeChange}
                   onChangeDevice={handleChangeDevice}
+                  onSelectDevice={handleSelectCatalogDevice}
                   preselection={preselection}
+                  selectedModel={selectedModel}
                   showConfirmation={showCatalogConfirmation}
                 />
               </motion.div>
@@ -165,7 +177,7 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-1"
                 transition={{ duration: 0.3 }}
               >
@@ -187,7 +199,7 @@ export function RepairBookingWizard({
               <motion.div
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                initial={{ opacity: 0, x: 20 }}
+                initial={false}
                 key="step-2"
                 transition={{ duration: 0.3 }}
               >
@@ -213,8 +225,11 @@ export function RepairBookingWizard({
             {currentStep < REPAIR_WIZARD_STEPS.length - 1 ? (
               <button
                 className="inline-flex items-center rounded-md px-6 py-2.5 font-medium text-white transition-colors"
-                onClick={nextStep}
-                style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void nextStep();
+                }}
+                style={{ backgroundColor: 'var(--store-primary)' }}
                 type="button"
               >
                 Next <ChevronRight className="ml-2 size-4" />
@@ -227,7 +242,7 @@ export function RepairBookingWizard({
                   (formData.serviceType === 'pickup' &&
                     (!shippingQuote?.price || Boolean(shippingQuote.error)))
                 }
-                style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
+                style={{ backgroundColor: 'var(--store-primary)' }}
                 type="submit"
               >
                 {isSubmitting ? (

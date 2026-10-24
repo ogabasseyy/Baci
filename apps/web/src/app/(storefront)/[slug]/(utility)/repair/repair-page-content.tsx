@@ -69,6 +69,11 @@ export async function RepairPageContent({
           merchantId={merchant.id}
           merchantSlug={slug}
           merchantName={merchant.business_name}
+          repairsCatalogEnabled={isRepairsCatalogEnabled({
+            businessType: merchant.business_type,
+            repairsCatalogEnabled:
+              merchant.feature_settings?.repairs_catalog_enabled,
+          })}
           preselection={preselection}
         />
       </div>
@@ -85,7 +90,7 @@ export async function RepairPageContent({
   }
 
   return (
-    <div className="container mx-auto px-4 py-12">
+    <div className="container mx-auto px-4 pt-6 pb-10 sm:pt-8">
       <JsonLd data={breadcrumbSchema} />
       <div className="mx-auto max-w-3xl">
         <RepairBookingLcpIntro />

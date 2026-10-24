@@ -142,8 +142,8 @@ export function ExportToJumiaDialog({
               merchantId={merchantId}
               integrationId={integrationId}
               value={categoryCode ?? undefined}
-              onSelect={(code) => {
-                setCategoryCode(code);
+              onSelect={(category) => {
+                setCategoryCode(category.code);
               }}
             />
           </div>

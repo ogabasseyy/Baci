@@ -45,9 +45,22 @@ vi.mock('./category-selector', () => ({
   JumiaCategorySelector: ({
     onSelect,
   }: {
-    onSelect: (code: number) => void;
+    onSelect: (category: {
+      code: number;
+      name: string;
+      attributeSetId: string;
+    }) => void;
   }) => (
-    <button type="button" onClick={() => onSelect(42)}>
+    <button
+      type="button"
+      onClick={() =>
+        onSelect({
+          code: 42,
+          name: 'Games',
+          attributeSetId: '11111111-1111-4111-8111-111111111111',
+        })
+      }
+    >
       Choose category
     </button>
   ),

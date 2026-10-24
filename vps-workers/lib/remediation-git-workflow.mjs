@@ -242,6 +242,33 @@ export function runRemediationAutofix({
       worktreeCommandOptions,
       worktreeDir,
     });
+    const verifiedStatus = runChecked(
+      'git',
+      ['status', '--porcelain'],
+      worktreeGitCommandOptions
+    );
+    const verifiedChangedFiles = parseRemediationStatusFiles(verifiedStatus);
+    if (verifiedChangedFiles.length === 0) {
+      cleanupCompletedWorktree = true;
+      return { branch, resultPath, type: 'no_changes', worktreeDir };
+    }
+    const verifiedPolicy = evaluateMergePolicy({
+      changedFiles: verifiedChangedFiles,
+      checksPassed: true,
+      hasHighSeverityReview: false,
+      hasUnresolvedThreads: false,
+    });
+    if (!verifiedPolicy.allowed) {
+      if (retainedWorktreeDir) cleanupCompletedWorktree = true;
+      return {
+        branch,
+        changedFiles: verifiedChangedFiles,
+        reasons: verifiedPolicy.reasons,
+        resultPath,
+        type: 'policy_blocked',
+        worktreeDir,
+      };
+    }
     runChecked('git', ['add', '-A'], worktreeGitCommandOptions);
     runChecked(
       'git',
@@ -262,7 +289,7 @@ export function runRemediationAutofix({
     cleanupCompletedWorktree = true;
     return {
       branch,
-      changedFiles,
+      changedFiles: verifiedChangedFiles,
       prUrl,
       resultPath,
       type: 'pr_opened',

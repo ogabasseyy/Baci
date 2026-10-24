@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { jumiaPreviewMessages } from './constants';
-import { GamingSelectionPreviewProducts } from './gaming-selection-preview-products';
+import { GamingSelectionDraft } from './gaming-selection-draft';
 import { useGamingSelectionPreview } from './use-gaming-selection-preview';
 
 export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
@@ -80,7 +80,9 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
                 : `${snapshot.legacyUnmappedCount} active products use legacy Gaming labels and are not included. Assign them to the active Gaming category, then create a new preview.`}
             </p>
           ) : null}
-          <GamingSelectionPreviewProducts
+          <GamingSelectionDraft
+            key={`${merchantId}:${snapshot.selectionId}`}
+            merchantId={merchantId}
             snapshot={snapshot}
             loading={loading}
             onPageChange={goToPage}

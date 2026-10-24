@@ -32,7 +32,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     localStorage.clear();
   });
 
-  it('creates and pages a preview only, without selection or submit controls', async () => {
+  it('creates and pages a preview without enabling ineligible draft rows or submission', async () => {
     setupGamingCategories();
     const fetcher = vi.mocked((await import('@/lib/api-client')).fetchWithCsrf);
     fetcher.mockResolvedValue(
@@ -136,7 +136,7 @@ describe('GamingSelectionPreview rendering and pagination', () => {
     expect(
       screen.getByText('51 products in this frozen selection')
     ).toBeInTheDocument();
-    expect(preview.querySelector('[role="checkbox"]')).toBeNull();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
     expect(
       screen.queryByRole('button', { name: 'Submit products' })
     ).not.toBeInTheDocument();

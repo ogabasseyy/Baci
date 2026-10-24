@@ -1,16 +1,20 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
+import type { useGamingSelectionDraft } from './use-gaming-selection-draft';
 
 export function GamingSelectionPreviewProducts({
   snapshot,
   loading,
   onPageChange,
+  selection,
 }: {
   snapshot: JumiaProductExportEligiblePage;
   loading: boolean;
   onPageChange: (page: number) => void;
+  selection?: ReturnType<typeof useGamingSelectionDraft>;
 }) {
   return (
     <>
@@ -39,7 +43,33 @@ export function GamingSelectionPreviewProducts({
               key={item.id}
               className="flex items-center gap-2 rounded px-2 py-1 text-sm"
             >
+              {selection ? (
+                <Checkbox
+                  aria-label={`Select ${name} for draft`}
+                  aria-describedby={
+                    selection.blockedIds.has(item.id)
+                      ? `jumia-draft-reason-${item.id}`
+                      : undefined
+                  }
+                  checked={Boolean(selection.draft[item.id])}
+                  disabled={
+                    loading ||
+                    (!selection.draft[item.id] &&
+                      !selection.eligible.has(item.id))
+                  }
+                  onCheckedChange={() => selection.toggle(item.id)}
+                />
+              ) : null}
               <span>{name}</span>
+              {selection?.blockedIds.has(item.id) ? (
+                <span
+                  id={`jumia-draft-reason-${item.id}`}
+                  className="text-xs text-amber-700"
+                >
+                  Observed source change or unavailability; refresh preview to
+                  select.
+                </span>
+              ) : null}
               {!item.available ? (
                 <span className="text-xs text-destructive">{reason}</span>
               ) : null}

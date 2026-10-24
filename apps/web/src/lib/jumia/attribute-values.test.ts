@@ -3,7 +3,7 @@ import {
   attributeUnavailableReason,
   type JumiaDraftAttribute,
   validateAttributeValue,
-} from './jumia-attribute-values';
+} from './attribute-values';
 
 const attribute = (
   type: number,

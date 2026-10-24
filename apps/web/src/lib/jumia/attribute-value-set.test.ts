@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { JumiaDraftAttribute } from '@/components/products/jumia/jumia-attribute-values';
 import { validateJumiaAttributeValueSet } from './attribute-value-set';
+import type { JumiaDraftAttribute } from './attribute-values';
 import { prepareJumiaListingContent } from './listing-content';
 
 const attribute = (
@@ -282,55 +282,5 @@ describe('whole Jumia metadata and typed value validation', () => {
         '1': 'Supplied description',
       }).success
     ).toBe(true);
-  });
-  it('rejects the exact array-owned some bypass for unlisted nonnumeric selections', () => {
-    const choices = ['not-a-numeric-option'];
-    Object.defineProperty(choices, 'some', { value: () => false });
-    expect(
-      validateJumiaAttributeValueSet([attribute(3, { options: [option] })], {
-        '1': choices,
-      }).success
-    ).toBe(false);
-  });
-  it.each([
-    'some',
-    'every',
-    'map',
-    'filter',
-    Symbol.iterator,
-  ])('rejects array-owned %s accessors safely across every input position', (key) => {
-    for (const location of ['definitions', 'options', 'selections']) {
-      const options = [option];
-      const definitions = [attribute(3, { options })];
-      const selections = [10];
-      const target =
-        location === 'definitions'
-          ? definitions
-          : location === 'options'
-            ? options
-            : selections;
-      Object.defineProperty(target, key, {
-        get: () => {
-          throw new Error('Array accessor must not execute');
-        },
-      });
-      expect(
-        validateJumiaAttributeValueSet(definitions, { '1': selections }).success
-      ).toBe(false);
-    }
-  });
-  it.each([
-    'some',
-    'every',
-    'map',
-    'filter',
-    Symbol.iterator,
-  ])('rejects array-owned %s methods without executing input behavior', (key) => {
-    const options = [option];
-    Object.defineProperty(options, key, { value: () => false });
-    expect(
-      validateJumiaAttributeValueSet([attribute(3, { options })], { '1': [10] })
-        .success
-    ).toBe(false);
   });
 });

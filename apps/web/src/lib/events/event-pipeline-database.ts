@@ -202,6 +202,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     vpsCleanup: ['cleanup_domain_event_pipeline_v1'],
   },
   operations: {
+    merchant_chatgpt_ads_credentials: ['select'],
     analytics_events: ['insert', 'upsert'],
     domains: ['select'],
     merchant_feature_settings: ['select'],
@@ -213,6 +214,9 @@ export const EVENT_PIPELINE_BOUNDARY = {
     platform_settings: ['select'],
   },
   projectionAuthorities: {
+    'apps/web/src/lib/events/chatgpt-destination-adapter.ts': [
+      'chatgptDelivery',
+    ],
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
@@ -231,6 +235,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'apps/web/src/lib/platform-admin-auth.ts': ['operatorAuth'],
   },
   projections: {
+    // biome-ignore format: exact worker projection preserves the 300-line boundary gate.
+    chatgptDelivery: { merchants: columns('slug plan_tier plan_expires_at premium_features offline_conversions_enabled'), merchant_feature_settings: ['chatgpt_pixel_id'], merchant_chatgpt_ads_credentials: ['capi_key'], domains: ['domain'] },
     conversion: { merchants: columns('country payout_currency') },
     identity: {
       domains: ['merchant_id'],

@@ -162,3 +162,21 @@ expiry semantics without adding credentials or database reads. Consent remains
 inside the Pixel component. Shell navigation, entitlement/public projection,
 no duplicate page-level mount, and existing consent/navigation suites pass:
 270 tests across 60 files.
+
+## CI contract repairs
+
+The first complete CI run on the persistent-shell implementation passed build,
+lint, typechecking, checkout browser tests, database replay, disposable SQL and
+five web shards. The remaining shard exposed two repository contracts: the
+worker's new reads lacked explicit projection declarations, and the checked-in
+storefront inventory no longer matched the committed route/CSP inputs.
+
+The worker boundary now lists only its exact ChatGPT read projections, with
+negative tests for unrelated credentials, credential writes and other callers.
+Pure URL formatting uses a structural public identity type, removing its type
+import of the broad storefront loader from the worker dependency graph. No
+privileged factory, frozen authority receipt or legacy exception was widened.
+The focused URL/worker/boundary suites passed 37 tests. After rebasing the newer
+homepage commit from main, the existing inventory generator refreshed the
+repository snapshot: all 584 row decisions are unchanged; route/input digests
+reflect the current source. This snapshot is not deployment evidence.

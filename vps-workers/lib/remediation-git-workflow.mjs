@@ -207,10 +207,10 @@ export function runRemediationAutofix({
     });
     const status = runChecked(
       'git',
-      ['status', '--porcelain', '-uall'],
+      ['status', '--porcelain=v1', '-z', '-uall'],
       worktreeGitCommandOptions
     );
-    if (!status.trim()) {
+    if (parseRemediationStatusFiles(status).length === 0) {
       cleanupCompletedWorktree = true;
       return { branch, resultPath, type: 'no_changes', worktreeDir };
     }

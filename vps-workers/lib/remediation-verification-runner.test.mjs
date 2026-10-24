@@ -47,7 +47,10 @@ describe('runRemediationVerification', () => {
     runRemediationVerification(options);
     assert.equal(runCheckedCalls.length, 1);
     assert.equal(runCheckedCalls[0][0], 'bash');
-    assert.deepEqual(runCheckedCalls[0][1], ['-lc', REMEDIATION_VERIFY_COMMAND]);
+    assert.deepEqual(runCheckedCalls[0][1], [
+      '-lc',
+      REMEDIATION_VERIFY_COMMAND,
+    ]);
     assert.equal(runCheckedCalls[0][2].timeout, 30 * 60 * 1_000);
     assert.deepEqual(runnerCalls, []);
   });
@@ -68,6 +71,22 @@ describe('runRemediationVerification', () => {
     assert.equal(verifyArgs[userIndex + 1], '1001:1002');
   });
 
+  it('provides writable ephemeral Vite caches beside read-only dependencies', () => {
+    const { options, runCheckedCalls } = setup({ docker: true });
+    runRemediationVerification(options);
+    const dockerArgs = runCheckedCalls[0][1];
+    const tempMounts = dockerArgs.flatMap((arg, index) =>
+      arg === '--tmpfs' && dockerArgs[index + 1]?.includes('node_modules/.vite')
+        ? [dockerArgs[index + 1]]
+        : []
+    );
+    assert.ok(tempMounts.length > 0);
+    for (const mount of tempMounts) {
+      assert.match(mount, /node_modules\/\.vite/);
+      assert.match(mount, /rw,nosuid,nodev/);
+    }
+  });
+
   it('removes only the verification container when verification fails', () => {
     const { options, runCheckedCalls, runnerCalls } = setup({ docker: true });
     const verifyError = new Error('verify failed');
@@ -78,7 +97,13 @@ describe('runRemediationVerification', () => {
     assert.throws(() => runRemediationVerification(options), /verify failed/);
     assert.equal(runnerCalls.length, 1);
     assert.equal(runnerCalls[0][0], 'docker');
-    assert.match(runnerCalls[0][1].join(' '), /rm -f baci-remediation-.*-verify/);
-    assert.equal(runCheckedCalls.some(([command]) => command === 'rm'), false);
+    assert.match(
+      runnerCalls[0][1].join(' '),
+      /rm -f baci-remediation-.*-verify/
+    );
+    assert.equal(
+      runCheckedCalls.some(([command]) => command === 'rm'),
+      false
+    );
   });
 });

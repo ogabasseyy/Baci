@@ -75,6 +75,24 @@ function addDependencyMounts({
   }
 }
 
+function addViteCacheMounts(args, worktreeDir) {
+  for (const relativePath of [
+    'node_modules/.vite',
+    'node_modules/.vite-temp',
+    'apps/web/node_modules/.vite',
+    'apps/web/node_modules/.vite-temp',
+    'apps/mobile-admin/node_modules/.vite',
+    'apps/mobile-admin/node_modules/.vite-temp',
+    'apps/mobile-storefront/node_modules/.vite',
+    'apps/mobile-storefront/node_modules/.vite-temp',
+  ]) {
+    args.push(
+      '--tmpfs',
+      `${join(worktreeDir, relativePath)}:rw,nosuid,nodev,size=256m`
+    );
+  }
+}
+
 export function buildRemediationCodexCommand({
   codexBin,
   containerIdentity,
@@ -228,6 +246,7 @@ export function buildRemediationVerificationCommand({
     prepareMountPoints: true,
     worktreeDir,
   });
+  addViteCacheMounts(dockerArgs, worktreeDir);
   if (existsSync(pnpmStorePath)) {
     dockerArgs.push(
       '--mount',
@@ -236,13 +255,7 @@ export function buildRemediationVerificationCommand({
       'pnpm_config_store_dir=/pnpm-store'
     );
   }
-  dockerArgs.push(
-    '--workdir',
-    worktreeDir,
-    image,
-    '-lc',
-    verifyCommand
-  );
+  dockerArgs.push('--workdir', worktreeDir, image, '-lc', verifyCommand);
 
   return {
     args: dockerArgs,

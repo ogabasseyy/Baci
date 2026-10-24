@@ -192,15 +192,15 @@ describe('remediation git workflow', () => {
       if (
         command === 'git' &&
         args[0] === 'status' &&
-        args[1] === '--porcelain'
+        args[1] === '--porcelain=v1'
       ) {
         statusChecks += 1;
         if (statusChecks === 2) {
           return {
             status: 0,
             stdout: args.includes('-uall')
-              ? ' M apps/web/src/components/cart.tsx\n?? .github/workflows/evil.yml\n'
-              : ' M apps/web/src/components/cart.tsx\n?? .github/workflows/\n',
+              ? ' M apps/web/src/components/cart.tsx\0?? .github/workflows/evil.yml\0'
+              : ' M apps/web/src/components/cart.tsx\0?? .github/workflows/\0',
             stderr: '',
           };
         }
@@ -225,7 +225,10 @@ describe('remediation git workflow', () => {
       '.github/workflows/evil.yml',
     ]);
     assert.match(result.reasons.join(' '), /protected path touched/);
-    assert.equal(calls.some((call) => call.join(' ') === 'git add -A'), false);
+    assert.equal(
+      calls.some((call) => call.join(' ') === 'git add -A'),
+      false
+    );
     assert.equal(
       calls.some((call) => call.join(' ').includes(' push -u origin ')),
       false

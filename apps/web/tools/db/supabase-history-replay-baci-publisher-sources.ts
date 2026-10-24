@@ -1,0 +1,8 @@
+/** Applied publisher migrations, pinned for the separate history replay registry. */
+export const BACI_PUBLISHER_PENDING_REPLAY_SOURCE_ROWS = [
+  'b734ced1d17845e4ee2f679ee59e7e82285362b19bb8aa1cd75dd225880f6dff 20261011192249_scoped_baci_blog_release.sql',
+  'fd34702862f83a3612c1c49741ce9bf9e7c92902376c06ba1bc28e5496801d6d 20261011192250_approved_baci_blog_release_audit.sql',
+  '17ebd2c5dde36c8a601fa107cdadcd5cdcf4fab33c80cac66e06741e296eddd9 20261011210311_scoped_baci_blog_corrections.sql',
+  'b895cd2de787ec8d96798cb53513e7054b91c0cac459ca5d72c0712cc1295a0c 20261011210312_approved_baci_blog_correction_audit.sql',
+  'b86384b91c2c117493f6a069304001a38861af39eb989028db266499267aedda 20261011211047_fix_baci_blog_correction_audit_metadata.sql',
+].join('\n');

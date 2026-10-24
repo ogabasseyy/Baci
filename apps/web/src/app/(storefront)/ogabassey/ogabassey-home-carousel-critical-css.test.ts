@@ -59,6 +59,13 @@ describe('homepage carousel critical CSS', () => {
         'touch-action': 'pan-y',
       }
     );
+    expect(declarationsFor('[data-ogabassey-hero] picture')).toMatchObject({
+      position: 'absolute',
+      inset: '0',
+      display: 'block',
+      height: '100%',
+      width: '100%',
+    });
   });
 
   it('only paints the active slide before the full utility stylesheet arrives', () => {

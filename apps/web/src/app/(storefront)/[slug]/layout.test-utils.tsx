@@ -47,6 +47,10 @@ vi.mock('./storefront-shell-snapshot', () => ({
   getStorefrontShellSnapshot,
 }));
 
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: vi.fn(() => Promise.resolve(null)),
+}));
+
 vi.mock('@/components/storefront/ogabassey/storefront-layout', () => ({
   OgabasseyStorefrontLayout: mockOgabasseyStorefrontLayout,
 }));
@@ -198,6 +202,8 @@ export const baseShellSnapshotWithoutCategories = {
 export type BaseShellSnapshotWithoutCategories =
   typeof baseShellSnapshotWithoutCategories;
 
+import { clearSettledCanonicalOgabasseyHomeState } from '@/app/(storefront)/ogabassey/ogabassey-home-settled-state';
+
 export const {
   default: StorefrontLayout,
   generateMetadata,
@@ -206,6 +212,7 @@ export const {
 } = await import('./layout');
 
 export function resetStorefrontLayoutTestState() {
+  clearSettledCanonicalOgabasseyHomeState();
   getRequestScopedMerchant.mockReset();
   getStorefrontNavigationCategories.mockReset();
   // Faithful default: the real boundary always resolves (fail-open []), never

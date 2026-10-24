@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { buildCodexDockerRuntimeArgs } from './remediation-codex-docker-args.mjs';
 import { buildCodexDockerRuntime } from './remediation-codex-docker-runtime.mjs';
@@ -7,6 +7,14 @@ import { readOnlyDockerSecurityArgs } from './remediation-readonly-seccomp.mjs';
 
 export const REMEDIATION_VERIFY_COMMAND =
   'pnpm turbo lint && pnpm turbo typecheck && pnpm turbo test';
+const DEPENDENCY_MOUNT_PATHS = [
+  'node_modules',
+  'apps/web/node_modules',
+  'apps/mobile-admin/node_modules',
+  'apps/mobile-storefront/node_modules',
+];
+const VITE_CACHE_DIRECTORY_NAMES = ['.vite', '.vite-temp'];
+
 function bindMount(source, destination, { readonly = false } = {}) {
   return `type=bind,src=${source},dst=${destination}${readonly ? ',readonly' : ''}`;
 }
@@ -53,12 +61,7 @@ function addDependencyMounts({
   worktreeDir,
   destinationRoot = worktreeDir,
 }) {
-  for (const relativePath of [
-    'node_modules',
-    'apps/web/node_modules',
-    'apps/mobile-admin/node_modules',
-    'apps/mobile-storefront/node_modules',
-  ]) {
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
     const source = join(dependencyRoot, relativePath);
     if (existsSync(source)) {
       const destination = join(destinationRoot, relativePath);
@@ -72,6 +75,33 @@ function addDependencyMounts({
         })
       );
     }
+  }
+}
+
+function prepareViteCacheMountSources(dependencyRoot) {
+  const realDependencyRoot = realpathSync(dependencyRoot);
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS) {
+    const dependencyPath = join(realDependencyRoot, relativePath);
+    if (!existsSync(dependencyPath)) continue;
+    for (const cacheDirectory of VITE_CACHE_DIRECTORY_NAMES) {
+      ensureRealDirectoryPath(
+        realDependencyRoot,
+        join(dependencyPath, cacheDirectory)
+      );
+    }
+  }
+}
+
+function addViteCacheMounts(args, worktreeDir) {
+  for (const relativePath of DEPENDENCY_MOUNT_PATHS.flatMap((dependencyPath) =>
+    VITE_CACHE_DIRECTORY_NAMES.map((cacheDirectory) =>
+      join(dependencyPath, cacheDirectory)
+    )
+  )) {
+    args.push(
+      '--tmpfs',
+      `${join(worktreeDir, relativePath)}:rw,nosuid,nodev,size=256m`
+    );
   }
 }
 
@@ -221,12 +251,16 @@ export function buildRemediationVerificationCommand({
     runtime,
     worktreeDir,
   });
+  const dependencyRoot = env.BACI_REMEDIATION_DEPENDENCY_ROOT || repoDir;
+  prepareViteCacheMountSources(dependencyRoot);
   addDependencyMounts({
     args: dockerArgs,
-    dependencyRoot: env.BACI_REMEDIATION_DEPENDENCY_ROOT || repoDir,
-    destinationRoot: '/opt/remediation-dependencies',
+    dependencyRoot,
+    destinationRoot: worktreeDir,
+    prepareMountPoints: true,
     worktreeDir,
   });
+  addViteCacheMounts(dockerArgs, worktreeDir);
   if (existsSync(pnpmStorePath)) {
     dockerArgs.push(
       '--mount',
@@ -235,34 +269,11 @@ export function buildRemediationVerificationCommand({
       'pnpm_config_store_dir=/pnpm-store'
     );
   }
-  const dependencyCopy = [
-    'node_modules',
-    'apps/web/node_modules',
-    'apps/mobile-admin/node_modules',
-    'apps/mobile-storefront/node_modules',
-  ]
-    .map(
-      (relativePath) =>
-        `[ ! -d /opt/remediation-dependencies/${relativePath} ] || (mkdir -p "$(dirname "${relativePath}")" && rm -rf "${relativePath}" && cp -a "/opt/remediation-dependencies/${relativePath}" "${relativePath}")`
-    )
-    .join(' && ');
-  dockerArgs.push(
-    '--workdir',
-    worktreeDir,
-    image,
-    '-lc',
-    `${dependencyCopy} && ${verifyCommand}`
-  );
+  dockerArgs.push('--workdir', worktreeDir, image, '-lc', verifyCommand);
 
   return {
     args: dockerArgs,
     cleanup: { args: ['rm', '-f', containerName], command: dockerBin },
-    dependencyCopyPaths: [
-      'node_modules',
-      'apps/web/node_modules',
-      'apps/mobile-admin/node_modules',
-      'apps/mobile-storefront/node_modules',
-    ],
     command: dockerBin,
   };
 }

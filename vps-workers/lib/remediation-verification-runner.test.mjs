@@ -38,15 +38,13 @@ function setup({ docker = false } = {}) {
     worktreeCommandOptions: { cwd: worktreeDir, env: childEnv },
     worktreeDir,
   };
-  return { options, repoDir, runCheckedCalls, runnerCalls, worktreeDir };
+  return { options, runCheckedCalls, runnerCalls };
 }
 
 describe('runRemediationVerification', () => {
-  it('runs the local verification command without container cleanup', () => {
+  it('runs local verification without container cleanup', () => {
     const { options, runCheckedCalls, runnerCalls } = setup();
-
     runRemediationVerification(options);
-
     assert.equal(runCheckedCalls.length, 1);
     assert.equal(runCheckedCalls[0][0], 'bash');
     assert.deepEqual(runCheckedCalls[0][1], [
@@ -60,77 +58,52 @@ describe('runRemediationVerification', () => {
   it('honors the configured verification timeout', () => {
     const { options, runCheckedCalls } = setup();
     options.env = { BACI_REMEDIATION_VERIFY_TIMEOUT_MS: '5000' };
-
     runRemediationVerification(options);
-
     assert.equal(runCheckedCalls[0][2].timeout, 5000);
   });
 
   it('passes the container identity to Docker verification', () => {
     const { options, runCheckedCalls } = setup({ docker: true });
-
     runRemediationVerification(options);
-
     const verifyArgs = runCheckedCalls[0][1];
     const userIndex = verifyArgs.indexOf('--user');
     assert.notEqual(userIndex, -1);
     assert.equal(verifyArgs[userIndex + 1], '1001:1002');
   });
 
-  it('removes the container and dependency copies when verification fails', () => {
-    const { options, runCheckedCalls, runnerCalls, worktreeDir } = setup({
-      docker: true,
-    });
+  it('provides writable ephemeral Vite caches beside read-only dependencies', () => {
+    const { options, runCheckedCalls } = setup({ docker: true });
+    runRemediationVerification(options);
+    const dockerArgs = runCheckedCalls[0][1];
+    const tempMounts = dockerArgs.flatMap((arg, index) =>
+      arg === '--tmpfs' && dockerArgs[index + 1]?.includes('node_modules/.vite')
+        ? [dockerArgs[index + 1]]
+        : []
+    );
+    assert.ok(tempMounts.length > 0);
+    for (const mount of tempMounts) {
+      assert.match(mount, /node_modules\/\.vite/);
+      assert.match(mount, /rw,nosuid,nodev/);
+    }
+  });
+
+  it('removes only the verification container when verification fails', () => {
+    const { options, runCheckedCalls, runnerCalls } = setup({ docker: true });
     const verifyError = new Error('verify failed');
     options.runChecked = (command, args, runOptions) => {
       runCheckedCalls.push([command, args, runOptions]);
-      if (command === 'docker') throw verifyError;
-      return '';
+      throw verifyError;
     };
-
     assert.throws(() => runRemediationVerification(options), /verify failed/);
     assert.equal(runnerCalls.length, 1);
     assert.equal(runnerCalls[0][0], 'docker');
-    assert.match(runnerCalls[0][1].join(' '), /rm -f baci-remediation-.*-verify/);
-    const removals = runCheckedCalls
-      .filter(([command]) => command === 'rm')
-      .map(([, args]) => args.join(' '));
-    assert.deepEqual(
-      removals.map((args) =>
-        args.replace(worktreeDir, '<worktree>').replace(/\\/g, '/')
-      ),
-      [
-        'node_modules',
-        'apps/web/node_modules',
-        'apps/mobile-admin/node_modules',
-        'apps/mobile-storefront/node_modules',
-      ].map((relativePath) => `-rf -- <worktree>/${relativePath}`)
+    assert.match(
+      runnerCalls[0][1].join(' '),
+      /rm -f baci-remediation-.*-verify/
     );
-  });
-
-  it('preserves the verification error when dependency cleanup fails', () => {
-    const { options, runCheckedCalls } = setup({ docker: true });
-    const verifyError = new Error('verify failed');
-    let removals = 0;
-    options.runChecked = (command, args, runOptions) => {
-      runCheckedCalls.push([command, args, runOptions]);
-      if (command === 'docker') throw verifyError;
-      removals += 1;
-      if (removals === 1) throw new Error('first rm failed');
-      return '';
-    };
-
-    assert.throws(() => runRemediationVerification(options), /verify failed/);
-    assert.equal(removals, 4);
-  });
-
-  it('reports cleanup failures when verification succeeds', () => {
-    const { options } = setup({ docker: true });
-    options.runChecked = (command) => {
-      if (command === 'docker') return '';
-      throw new Error('rm failed');
-    };
-
-    assert.throws(() => runRemediationVerification(options), /rm failed/);
+    assert.equal(
+      runCheckedCalls.some(([command]) => command === 'rm'),
+      false
+    );
   });
 });

@@ -156,31 +156,13 @@ describe('remediation Docker workflow', () => {
     );
     assert.ok(verificationCall);
     assert.equal(
-      verificationCall.includes(
-        `type=bind,src=${dependencyRoot}/node_modules,dst=/opt/remediation-dependencies/node_modules,readonly`
+      verificationCall.some((arg) =>
+        new RegExp(`type=bind,src=${dependencyRoot}/node_modules,dst=.*/node_modules,readonly`).test(arg)
       ),
       true
     );
-    const verificationScript = verificationCall.at(-1);
-    const verifyPosition = verificationScript.lastIndexOf(
-      REMEDIATION_VERIFY_COMMAND
-    );
-    assert.ok(verificationScript.indexOf('cp -a') < verifyPosition);
-    for (const relativePath of [
-      'node_modules',
-      'apps/web/node_modules',
-      'apps/mobile-admin/node_modules',
-      'apps/mobile-storefront/node_modules',
-    ]) {
-      assert.match(
-        verificationScript,
-        new RegExp(`cp -a \\"/opt/remediation-dependencies/${relativePath}`)
-      );
-    }
-    assert.match(
-      verificationScript,
-      new RegExp(` && ${REMEDIATION_VERIFY_COMMAND.replaceAll(' ', '\\s')}$`)
-    );
+    assert.equal(verificationCall.at(-1), REMEDIATION_VERIFY_COMMAND);
+    assert.equal(verificationCall.some((arg) => arg.includes('cp -a')), false);
     assert.equal(
       verificationCall.includes('pnpm_config_store_dir=/pnpm-store'),
       true

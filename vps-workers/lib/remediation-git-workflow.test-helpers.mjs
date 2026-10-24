@@ -80,8 +80,8 @@ function makeRunner({
             (changedFiles ?? 'apps/web/src/components/cart.tsx\n')
               .split('\n')
               .filter(Boolean)
-              .map((path) => ` M ${path}`)
-              .join('\n'),
+              .map((path) => ` M ${path}\0`)
+              .join(''),
           stderr: '',
         };
       }

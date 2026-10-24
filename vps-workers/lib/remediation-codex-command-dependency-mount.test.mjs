@@ -4,13 +4,17 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
+import {
+  buildRemediationCodexCommand,
+  buildRemediationVerificationCommand,
+} from './remediation-codex-command.mjs';
 
 const testContainerIdentity = { gid: 1001, uid: 1001 };
 
@@ -25,6 +29,81 @@ function dockerEnvironment(dependencyRoot) {
 }
 
 describe('remediation Codex dependency mounts', () => {
+  it('creates missing Vite cache mountpoints in read-only dependency sources', () => {
+    const root = mkdtempSync(join(tmpdir(), 'baci-vite-cache-mount-'));
+    const dependencyRoot = join(root, 'dependencies');
+    const worktreeDir = join(root, 'worktree');
+    try {
+      mkdirSync(join(dependencyRoot, 'node_modules'), { recursive: true });
+      mkdirSync(join(dependencyRoot, 'apps/web/node_modules'), {
+        recursive: true,
+      });
+      mkdirSync(worktreeDir, { recursive: true });
+
+      const result = buildRemediationVerificationCommand({
+        containerIdentity: testContainerIdentity,
+        env: dockerEnvironment(dependencyRoot),
+        repoDir: worktreeDir,
+        worktreeDir,
+      });
+
+      for (const dependencyPath of ['node_modules', 'apps/web/node_modules']) {
+        for (const cacheDirectory of ['.vite', '.vite-temp']) {
+          assert.equal(
+            existsSync(join(dependencyRoot, dependencyPath, cacheDirectory)),
+            true
+          );
+        }
+      }
+      assert.equal(
+        result.args.includes(
+          `type=bind,src=${join(dependencyRoot, 'node_modules')},dst=${join(worktreeDir, 'node_modules')},readonly`
+        ),
+        true
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('prepares Vite cache mountpoints when the dependency root is a symlink', () => {
+    const root = mkdtempSync(join(tmpdir(), 'baci-vite-cache-symlink-'));
+    const realDependencyRoot = join(root, 'release');
+    const dependencyRoot = join(root, 'app-live');
+    const worktreeDir = join(root, 'worktree');
+    try {
+      mkdirSync(join(realDependencyRoot, 'node_modules'), { recursive: true });
+      mkdirSync(worktreeDir, { recursive: true });
+      symlinkSync(realDependencyRoot, dependencyRoot, 'dir');
+
+      const result = buildRemediationVerificationCommand({
+        containerIdentity: testContainerIdentity,
+        env: dockerEnvironment(dependencyRoot),
+        repoDir: worktreeDir,
+        worktreeDir,
+      });
+
+      for (const cacheDirectory of ['.vite', '.vite-temp']) {
+        assert.equal(
+          existsSync(join(realDependencyRoot, 'node_modules', cacheDirectory)),
+          true
+        );
+      }
+      assert.equal(
+        result.args.includes(
+          `type=bind,src=${join(dependencyRoot, 'node_modules')},dst=${join(worktreeDir, 'node_modules')},readonly`
+        ),
+        true
+      );
+      assert.equal(
+        realpathSync(dependencyRoot),
+        realpathSync(realDependencyRoot)
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('creates dependency mount points before mounting a read-only worktree', () => {
     const root = mkdtempSync(join(tmpdir(), 'baci-dependency-mount-'));
     const dependencyRoot = join(root, 'dependencies');

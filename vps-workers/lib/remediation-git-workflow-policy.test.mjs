@@ -36,7 +36,7 @@ describe('remediation git workflow policy and configuration', () => {
 
   it('blocks protected rename sources before PR creation', () => {
     const { calls, runner } = makeRunner({
-      statusOutput: 'R  apps/web/src/proxy.ts -> apps/web/src/proxy-safe.ts',
+      statusOutput: 'R  apps/web/src/proxy-safe.ts\0apps/web/src/proxy.ts\0',
     });
 
     const result = runRemediationAutofix({
@@ -53,8 +53,8 @@ describe('remediation git workflow policy and configuration', () => {
 
     assert.equal(result.type, 'policy_blocked');
     assert.deepEqual(result.changedFiles, [
-      'apps/web/src/proxy.ts',
       'apps/web/src/proxy-safe.ts',
+      'apps/web/src/proxy.ts',
     ]);
     assert.match(result.reasons.join('\n'), /protected path/);
     assert.equal(

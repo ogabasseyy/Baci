@@ -136,6 +136,34 @@ describe('destination-scoped mapping drafts', () => {
         )
     ).toBe(true);
   });
+
+  it('clears the parent draft when its selected business-client controls unmount', async () => {
+    const onDraftChange = vi.fn();
+    render(
+      <JumiaMappingDraftPanel
+        merchantId="merchant"
+        integrationId="integration"
+        onDraftChange={onDraftChange}
+      />
+    );
+    await screen.findByRole('option', { name: 'Nigeria (jumia-ng)' });
+    await mapCategory();
+    fireEvent.change(screen.getByLabelText('Enabled (required)'), {
+      target: { value: 'false' },
+    });
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          businessClientCode: 'jumia-ng',
+          categoryConfirmed: false,
+        })
+      )
+    );
+
+    chooseClient('');
+    await waitFor(() => expect(onDraftChange).toHaveBeenLastCalledWith(null));
+  });
+
   it('clears attributes and confirmation when category is replaced even with the same set SID', async () => {
     render(
       <JumiaMappingDraftPanel

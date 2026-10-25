@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { JumiaAttributeSetResponseSchema } from '@/schemas/jumia/catalog';
@@ -21,15 +21,22 @@ type Destination = {
   merchantId: string;
   integrationId: string;
   businessClientCode: string;
+  countryCode: string;
 };
 export type JumiaMappingDraft = Destination & {
   category: JumiaCategorySelection;
   brand: JumiaBrandItem;
   attributeSetId: string;
   attributes: JumiaDraftValues;
+  bullets: string[];
+  variation?: { sourceAttributeName: string };
   categoryConfirmed: boolean;
 };
-type Props = { merchantId: string; integrationId: string };
+type Props = {
+  merchantId: string;
+  integrationId: string;
+  onDraftChange?: (draft: JumiaMappingDraft | null) => void;
+};
 
 export function JumiaMappingDraftPanel(props: Props) {
   return (
@@ -40,7 +47,7 @@ export function JumiaMappingDraftPanel(props: Props) {
   );
 }
 
-function DestinationPanel({ merchantId, integrationId }: Props) {
+function DestinationPanel({ merchantId, integrationId, onDraftChange }: Props) {
   const id = useId();
   const [businessClientCode, setBusinessClientCode] = useState('');
   const query = new URLSearchParams({ merchantId, integrationId });
@@ -49,6 +56,9 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
     jumiaDestinationContextSchema,
     true
   );
+  useEffect(() => {
+    onDraftChange?.(null);
+  }, [onDraftChange]);
   const clients = context.data?.businessClients ?? [];
   // Only a fresh provider-authorized option can mount the mapping controls.
   const selectedClient = clients.find(
@@ -95,7 +105,9 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
           className="rounded-md border bg-background p-2"
           value={selectedClient?.code ?? ''}
           disabled={context.status !== 'success'}
-          onChange={(event) => setBusinessClientCode(event.target.value)}
+          onChange={(event) => {
+            setBusinessClientCode(event.target.value);
+          }}
         >
           <option value="">Choose an exact business client</option>
           {clients.map((client) => (
@@ -111,6 +123,8 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
           merchantId={merchantId}
           integrationId={integrationId}
           businessClientCode={selectedClient.code}
+          countryCode={selectedClient.countryCode}
+          onDraftChange={onDraftChange}
         />
       )}
       <p className="text-xs text-muted-foreground">
@@ -123,7 +137,12 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
   );
 }
 
-function MappingControls(destination: Destination) {
+function MappingControls({
+  onDraftChange,
+  ...destination
+}: Destination & {
+  onDraftChange?: (draft: JumiaMappingDraft | null) => void;
+}) {
   const [category, setCategory] = useState<JumiaCategorySelection | null>(null);
   const [brand, setBrand] = useState<JumiaBrandItem | null>(null);
   const [revision, setRevision] = useState(0);
@@ -137,6 +156,7 @@ function MappingControls(destination: Destination) {
           value={category?.code}
           onSelect={(next) => {
             setCategory(next);
+            onDraftChange?.(null);
             setRevision((value) => value + 1);
           }}
         />
@@ -163,6 +183,7 @@ function MappingControls(destination: Destination) {
           category={category}
           brand={brand}
           revision={revision}
+          onDraftChange={onDraftChange}
         />
       )}
     </>
@@ -174,15 +195,23 @@ function AttributeDraft({
   category,
   brand,
   revision,
+  onDraftChange,
 }: {
   destination: Destination;
   category: JumiaCategorySelection;
   brand: JumiaBrandItem | null;
   revision: number;
+  onDraftChange?: (draft: JumiaMappingDraft | null) => void;
 }) {
   const [values, setValues] = useState<JumiaDraftValues>({});
+  const [bulletText, setBulletText] = useState('');
+  const [variationAttributeName, setVariationAttributeName] = useState('');
   const [confirmation, setConfirmation] = useState<number | null>(null);
-  const query = new URLSearchParams(destination);
+  const query = new URLSearchParams({
+    merchantId: destination.merchantId,
+    integrationId: destination.integrationId,
+    businessClientCode: destination.businessClientCode,
+  });
   const metadata = useJumiaMetadata(
     `/api/marketplace/jumia/attribute-sets/${encodeURIComponent(category.attributeSetId)}?${query}`,
     JumiaAttributeSetResponseSchema,
@@ -198,6 +227,45 @@ function AttributeDraft({
         null
     );
   const confirmed = confirmation === revision && complete;
+  useEffect(() => {
+    if (!brand || metadata.status !== 'success' || !complete) {
+      onDraftChange?.(null);
+      return;
+    }
+    const bullets = bulletText
+      .split('\n')
+      .map((bullet) => bullet.trim())
+      .filter(Boolean);
+    const sourceAttributeName = variationAttributeName.trim();
+    onDraftChange?.({
+      merchantId: destination.merchantId,
+      integrationId: destination.integrationId,
+      businessClientCode: destination.businessClientCode,
+      countryCode: destination.countryCode,
+      category,
+      brand,
+      attributeSetId: category.attributeSetId,
+      attributes: values,
+      bullets,
+      ...(sourceAttributeName ? { variation: { sourceAttributeName } } : {}),
+      categoryConfirmed: confirmed,
+    });
+    return () => onDraftChange?.(null);
+  }, [
+    brand,
+    bulletText,
+    category,
+    complete,
+    confirmed,
+    destination.merchantId,
+    destination.integrationId,
+    destination.businessClientCode,
+    destination.countryCode,
+    metadata.status,
+    onDraftChange,
+    values,
+    variationAttributeName,
+  ]);
   return (
     <div className="grid gap-3">
       <p className="text-sm">
@@ -232,6 +300,34 @@ function AttributeDraft({
           setConfirmation(null);
         }}
       />
+      <div className="grid gap-1">
+        <Label htmlFor="jumia-product-bullets">
+          Product bullets (one per line)
+        </Label>
+        <textarea
+          id="jumia-product-bullets"
+          className="min-h-24 rounded-md border bg-background p-2 text-sm"
+          value={bulletText}
+          onChange={(event) => setBulletText(event.target.value)}
+          placeholder="Add four to seven plain-text product bullets"
+        />
+        <p className="text-xs text-muted-foreground">
+          These are mapping intent only. Product facts still come from the
+          frozen source selection.
+        </p>
+      </div>
+      <div className="grid gap-1">
+        <Label htmlFor="jumia-variation-attribute">
+          Variation source attribute (optional)
+        </Label>
+        <input
+          id="jumia-variation-attribute"
+          className="rounded-md border bg-background p-2 text-sm"
+          value={variationAttributeName}
+          onChange={(event) => setVariationAttributeName(event.target.value)}
+          placeholder="Exact source field name"
+        />
+      </div>
       <Button
         type="button"
         variant="outline"

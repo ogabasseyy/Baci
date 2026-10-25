@@ -75,7 +75,7 @@ const markerPattern = [...new Set([...isoCurrencies, ...Object.keys(aliases)])]
 // Bounded token grammar: no rescanning arbitrarily long numeric/comma runs.
 // Arabic-Indic and Eastern Arabic-Indic digits are supported alongside ASCII.
 const digitPattern = '[0-9\\u0660-\\u0669\\u06f0-\\u06f9]';
-const amountPattern = `(?:${digitPattern}{1,3}(?:[,\\u066c]${digitPattern}{3})+|${digitPattern}{1,3}(?:\\.${digitPattern}{3})+|${digitPattern}{1,2}(?:[,\\u066c]${digitPattern}{2})*[,\\u066c]${digitPattern}{3}|${digitPattern}{1,3}(?:[ '\\u2019\\u00a0\\u202f]${digitPattern}{3})+|${digitPattern}+)(?:(?:[.,]${digitPattern}{1,2})|(?:\\u066b${digitPattern}{1,3}))?(?:[kKmM])?`;
+const amountPattern = `(?:\\.${digitPattern}{1,2}|${digitPattern}{1,3}(?:[,\\u066c]${digitPattern}{3})+|${digitPattern}{1,3}(?:\\.${digitPattern}{3})+|${digitPattern}{1,2}(?:[,\\u066c]${digitPattern}{2})*[,\\u066c]${digitPattern}{3}|${digitPattern}{1,3}(?:[ '\\u2019\\u00a0\\u202f]${digitPattern}{3})+|${digitPattern}+)(?:(?:[.,]${digitPattern}{1,2})|(?:\\u066b${digitPattern}{1,3}))?(?:[kKmM])?`;
 const taggedPattern = new RegExp(
   `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(?:(?:(${isoPattern})\\s+)?(${markerPattern}|\\p{Sc})\\s*[:–—-]?\\s*(${amountPattern})(?:\\s*(${isoPattern}))?|(${amountPattern})\\s*[:–—-]?\\s*(${markerPattern}|\\p{Sc})(?:\\s*(${isoPattern}))?)(?![\\p{L}\\p{N}]|[.,\\u066b\\u066c](?=[\\p{N}]))`,
   'giu'
@@ -105,7 +105,8 @@ function parseAmount(raw: string): number | null {
     .replace(/[.,]+$/, '')
     .toLowerCase();
   const suffix = normalized.match(/[km]$/)?.[0] ?? '';
-  const amount = suffix ? normalized.slice(0, -1) : normalized;
+  let amount = suffix ? normalized.slice(0, -1) : normalized;
+  if (/^\\.\\d/.test(amount)) amount = `0${amount}`;
   if (usesArabicDecimalSeparator) {
     const parts = amount.split('.');
     if (parts.length !== 2) return null;

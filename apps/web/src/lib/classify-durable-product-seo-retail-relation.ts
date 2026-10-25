@@ -73,7 +73,7 @@ export function retailRelation(text: string, start: number): RetailRelation {
           : '');
   const predicate =
     possessivePrice ||
-    /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){1,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
+    /\b(?:prices?|costs?)(?:\s+(?:in|of|for)\s+(?:(?!(?:and|or|but|whose|which|that|where)\b)[\p{L}\p{N}'-]+\s*){0,8})?\s*(?:\b(?:is|was|are|were)\b|:)\s*$/iu.test(
       clause
     );
   const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);

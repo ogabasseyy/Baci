@@ -6,6 +6,21 @@ import YAML from 'yaml';
 
 const workflowUrl = new URL('../workflows/deploy.yml', import.meta.url);
 
+test('validates publication tooling and safety before building and again before publishing', async () => {
+  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
+  const steps = workflow.jobs['deploy-production'].steps;
+  const buildIndex = steps.findIndex(step => step.name === 'Build for Vercel');
+  const publishIndex = steps.findIndex(step => step.name === 'Deploy to Vercel (with retry)');
+  const checks = steps.map((step, index) => ({ step, index })).filter(({ step }) => step.run === '.github/scripts/refuse-publish-on-promote-overlap.sh');
+  assert.equal(checks.length, 2);
+  assert.ok(checks[0].index < buildIndex);
+  assert.ok(checks[1].index > buildIndex && checks[1].index < publishIndex);
+  for (const { step } of checks) {
+    assert.equal(step.env.GH_TOKEN, '${{ github.token }}');
+    assert.equal(step['continue-on-error'], undefined);
+  }
+});
+
 test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
   const steps = workflow.jobs['vps-drain-readiness'].steps;

@@ -81,7 +81,7 @@ export async function projectAdvertisedPhonePrices<
   const familyIds = [...new Set(families.map((product) => product.id))];
   const variantsByProduct = await loadVariants(merchantId, familyIds);
   const familyIdSet = new Set(familyIds);
-  return products.flatMap((product) => {
+  return products.flatMap<T & AdvertisedPhonePriceFacts>((product) => {
     if (!familyIdSet.has(product.id)) return [product];
     const value = Number(product.price);
     const parentStock = getEffectiveStock(product);

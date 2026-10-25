@@ -10,6 +10,7 @@ import { filterPublicBlogCategories } from '@/lib/public-blog-content-quality';
 import { asRoute } from '@/lib/routes';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildBlogClusterCollections } from '@/lib/storefront-content/build-blog-cluster-collections';
+import { loadClassifiedClusterPosts } from '@/lib/storefront-content/load-classified-cluster-posts';
 import {
   clampBlogSearchQuery,
   evaluateStorefrontSlugSafety,
@@ -171,17 +172,7 @@ export async function BlogPageContent({
   );
   const guideCollections = buildBlogClusterCollections({
     storeUrl: baseUrl,
-    posts: posts.map((post) => ({
-      slug: post.slug,
-      title: post.title,
-      excerpt: post.excerpt,
-      category: post.category,
-      tags: post.tags ?? null,
-      keywords: null,
-      featured_image_url: post.featured_image_url,
-      published_at: post.published_at,
-      reading_time_minutes: post.reading_time_minutes,
-    })),
+    posts: await loadClassifiedClusterPosts(merchant.id, posts),
   });
   if (!hideLiveFeatured) {
     preloadOgabasseyRootBlogListingHeroImage({

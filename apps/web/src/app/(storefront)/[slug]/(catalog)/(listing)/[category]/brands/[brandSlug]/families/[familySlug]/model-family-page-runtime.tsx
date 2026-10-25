@@ -1,6 +1,6 @@
-import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { cache } from 'react';
+import { StorefrontRouteNotFoundContent } from '@/app/(storefront)/[slug]/storefront-route-not-found-content';
 import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { modelFamilyAuthorityPageLoader } from '@/lib/storefront-category/load-model-family-authority-page';
 import { BrandAuthorityPageContent } from '../../brand-authority-page-content';
@@ -27,7 +27,6 @@ const loadIndexableModelFamilyPageData = cache(
       brandSlug,
       familySlug,
     });
-    if (!page) notFound();
     return { page, merchantSlug };
   }
 );
@@ -48,8 +47,19 @@ async function renderModelFamilyPage(props: ModelFamilyPageRouteProps) {
   const { page, merchantSlug } = await loadIndexableModelFamilyPage(props);
   const pathPrefix = await brandAuthorityPageLoader.getStorefrontPathPrefix(
     merchantSlug,
-    page.merchant.slug
+    page?.merchant.slug ?? merchantSlug
   );
+
+  if (!page || ('isIndexable' in page && !page.isIndexable)) {
+    return (
+      <StorefrontRouteNotFoundContent
+        backHref={pathPrefix || '/'}
+        message="This model family hub is unavailable or has moved."
+        title="Model family hub not found"
+      />
+    );
+  }
+
   return <BrandAuthorityPageContent page={{ ...page, pathPrefix }} />;
 }
 

@@ -1,7 +1,25 @@
 import { generateSlug } from '@/lib/seo-utils';
 import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 
+declare module '@/lib/storefront-category/category-hub-types' {
+  interface BrandAuthorityEntry {
+    brandSlug?: string;
+    intro?: string;
+  }
+}
+
 const BRAND_AUTHORITY_ENTRIES: readonly BrandAuthorityEntry[] = [
+  {
+    brandAliases: ['iPhone'],
+    brandKey: 'apple',
+    brandQueryValue: 'Apple',
+    brandSlug: 'apple',
+    categorySlug: 'smartphones',
+    displayName: 'Apple iPhone',
+    intro:
+      'Compare Apple iPhone smartphones at {merchantName} across Pro Max flagships, Pro models, base iPhones, and budget-friendly options.',
+    minimumProducts: 3,
+  },
   {
     brandKey: 'samsung',
     brandQueryValue: 'Samsung',
@@ -76,7 +94,10 @@ function getBrandAuthorityEntry(
     BRAND_AUTHORITY_ENTRIES.find(
       (entry) =>
         entry.categorySlug === normalizedCategory &&
-        entry.brandKey === normalizedBrand
+        (entry.brandKey === normalizedBrand ||
+          (entry.brandSlug
+            ? generateSlug(entry.brandSlug) === normalizedBrand
+            : false))
     ) ?? null
   );
 }

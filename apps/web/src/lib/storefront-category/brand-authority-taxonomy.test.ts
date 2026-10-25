@@ -91,4 +91,41 @@ describe('brand authority taxonomy', () => {
     });
     expect(redmiEntry).toBeNull();
   });
+
+  it('resolves Apple iPhone authority hub and matches Apple and iPhone products', () => {
+    // Act
+    const appleEntry = brandAuthorityTaxonomy.getEntry('smartphones', 'apple');
+    const appleEntryByAlias = brandAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'Apple'
+    );
+
+    // Assert
+    expect(appleEntry).toMatchObject({
+      brandAliases: ['iPhone'],
+      brandKey: 'apple',
+      brandQueryValue: 'Apple',
+      brandSlug: 'apple',
+      categorySlug: 'smartphones',
+      displayName: 'Apple iPhone',
+      minimumProducts: 3,
+    });
+    expect(appleEntryByAlias).toEqual(appleEntry);
+
+    if (!appleEntry) {
+      throw new Error('Expected Apple taxonomy entry');
+    }
+
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'Apple')).toBe(true);
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'iPhone')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'apple')).toBe(true);
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'iphone')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'Samsung')).toBe(
+      false
+    );
+  });
 });

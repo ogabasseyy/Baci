@@ -147,6 +147,36 @@ describe('loadPriceBandPage', () => {
     ).rejects.toBeInstanceOf(StorefrontReadUnavailableError);
   });
 
+  it('returns null immediately for an unknown price band slug without fetching category data', async () => {
+    const result = await loadPriceBandPage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      priceBandSlug: 'unknown-band',
+    });
+
+    expect(result).toBeNull();
+    expect(mockGetCachedCategoryPageData).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { categoryQueryFailed: true },
+    { productsQueryFailed: true },
+    { productIdsQueryFailed: true },
+  ])('throws when category query flags indicate failure (%o)', async (failureFlags) => {
+    mockGetCachedCategoryPageData.mockResolvedValueOnce({
+      ...categoryPageData,
+      ...failureFlags,
+    });
+
+    await expect(
+      loadPriceBandPage({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        priceBandSlug: 'under-1m',
+      })
+    ).rejects.toThrow('Price band inventory is temporarily unavailable');
+  });
+
   it('returns a canonical model for an eligible curated band', async () => {
     const result = await loadPriceBandPage({
       merchantSlug: 'ogabassey',

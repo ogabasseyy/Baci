@@ -14,13 +14,6 @@ const {
 }));
 
 const mockLoadPriceBandPage = vi.fn();
-const mockNotFound = vi.fn(() => {
-  throw new Error('NEXT_NOT_FOUND');
-});
-
-vi.mock('next/navigation', () => ({
-  notFound: () => mockNotFound(),
-}));
 
 vi.mock('next/server', () => ({
   connection: () => mockConnection(),
@@ -34,6 +27,24 @@ vi.mock('@/lib/seo-utils', () => ({
     'max-snippet': -1,
     'max-video-preview': -1,
   }),
+}));
+
+vi.mock('@/app/(storefront)/[slug]/storefront-route-not-found-content', () => ({
+  StorefrontRouteNotFoundContent: ({
+    title,
+    message,
+    backHref,
+  }: {
+    title: string;
+    message: string;
+    backHref: string;
+  }) => (
+    <div>
+      <h1>{title}</h1>
+      <p>{message}</p>
+      <a href={backHref}>Back</a>
+    </div>
+  ),
 }));
 
 vi.mock('@/lib/storefront-compare/load-price-band-page', () => ({
@@ -76,6 +87,10 @@ const priceBandPageModel = {
       description: 'Best midrange pick',
     },
   ],
+  merchant: {
+    slug: 'ogabassey',
+    business_name: 'Ogabassey',
+  },
   isIndexable: true,
   pathPrefix: '',
   payoutCurrency: 'NGN',
@@ -87,7 +102,6 @@ beforeEach(() => {
   mockGetPriceBandStorefrontPathPrefix.mockReset();
   mockGetPriceBandStorefrontPathPrefix.mockResolvedValue('');
   mockLoadPriceBandPage.mockReset();
-  mockNotFound.mockClear();
   mockPriceBandPageContent.mockReset();
   mockPriceBandPageContent.mockImplementation(() => (
     <div>Price band page content</div>
@@ -161,28 +175,101 @@ describe('price-band page metadata', () => {
     });
   });
 
-  it('calls notFound when the price-band loader returns null', async () => {
+  it('returns marker-free not-found metadata and renders fallback when loader returns null', async () => {
     mockLoadPriceBandPage.mockResolvedValueOnce(null);
-    const { generateMetadata } = await import('./page');
+    const { PriceBandPageRuntime, generateMetadata } = await import('./page');
 
-    await expect(
-      generateMetadata({
-        params: Promise.resolve({
-          slug: 'ogabassey',
-          category: 'smartphones',
-          priceBandSlug: 'under-500k',
-        }),
-      })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        slug: 'ogabassey',
+        category: 'smartphones',
+        priceBandSlug: 'under-500k',
+      }),
+    });
 
-    expect(mockNotFound).toHaveBeenCalledTimes(1);
+    expect(metadata).toEqual({
+      title: 'Price Band Guide Not Found',
+      description: 'This price band guide is unavailable.',
+      robots: { index: false, follow: true },
+      alternates: null,
+      openGraph: undefined,
+      twitter: undefined,
+    });
+
+    mockLoadPriceBandPage.mockResolvedValueOnce(null);
+    mockGetPriceBandStorefrontPathPrefix.mockResolvedValueOnce('/ogabassey');
+    const ui = await PriceBandPageRuntime({
+      params: Promise.resolve({
+        slug: 'ogabassey',
+        category: 'smartphones',
+        priceBandSlug: 'under-500k',
+      }),
+    });
+    render(ui);
+
+    expect(
+      screen.getByRole('heading', { name: 'Price band guide not found' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('This price band guide is unavailable or has moved.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
+      'href',
+      '/ogabassey'
+    );
   });
 
-  it('calls notFound when the price-band page model is not indexable', async () => {
+  it('returns marker-free not-found metadata and renders fallback with root backHref on a merchant subdomain when price-band is not indexable', async () => {
     mockLoadPriceBandPage.mockResolvedValueOnce({
       ...priceBandPageModel,
       isIndexable: false,
     });
+    const { PriceBandPageRuntime, generateMetadata } = await import('./page');
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({
+        slug: 'shop',
+        category: 'smartphones',
+        priceBandSlug: 'under-500k',
+      }),
+    });
+
+    expect(metadata).toEqual({
+      title: 'Price Band Guide Not Found',
+      description: 'This price band guide is unavailable.',
+      robots: { index: false, follow: true },
+      alternates: null,
+      openGraph: undefined,
+      twitter: undefined,
+    });
+
+    mockLoadPriceBandPage.mockResolvedValueOnce({
+      ...priceBandPageModel,
+      isIndexable: false,
+    });
+    mockGetPriceBandStorefrontPathPrefix.mockResolvedValueOnce('');
+    const ui = await PriceBandPageRuntime({
+      params: Promise.resolve({
+        slug: 'shop',
+        category: 'smartphones',
+        priceBandSlug: 'under-500k',
+      }),
+    });
+    render(ui);
+
+    expect(
+      screen.getByRole('heading', { name: 'Price band guide not found' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
+      'href',
+      '/'
+    );
+  });
+
+  it('rejects when loadPriceBandPage throws a database error', async () => {
+    mockLoadPriceBandPage.mockRejectedValue(
+      new Error('Price band inventory is temporarily unavailable')
+    );
     const { generateMetadata } = await import('./page');
 
     await expect(
@@ -193,8 +280,6 @@ describe('price-band page metadata', () => {
           priceBandSlug: 'under-500k',
         }),
       })
-    ).rejects.toThrow('NEXT_NOT_FOUND');
-
-    expect(mockNotFound).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow('Price band inventory is temporarily unavailable');
   });
 });

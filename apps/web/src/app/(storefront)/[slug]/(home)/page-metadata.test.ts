@@ -63,6 +63,19 @@ describe('storefront homepage metadata', () => {
     expect(metadata.robots).toEqual({ index: true, follow: true });
     expect(metadata.title).toEqual({ absolute: OGABASSEY_TITLE });
     expect(metadata.description).toBe(OGABASSEY_DESCRIPTION);
+    expect(metadata.applicationName).toBe('OgaBassey');
+    expect(metadata.authors).toEqual([{ name: 'OgaBassey' }]);
+    expect(metadata.keywords).toEqual([
+      'Buy Smartphones in Nigeria',
+      'Buy Laptops in Nigeria',
+      'iPhone Price in Nigeria',
+      'Samsung Price in Nigeria',
+      'PlayStation 5 Nigeria',
+      'MacBook Nigeria',
+      'Gadget Store Lagos',
+      'OgaBassey',
+      'Swap Phones Lagos',
+    ]);
     expect(metadata.alternates).toEqual({
       canonical: OGABASSEY_URL,
       languages: {
@@ -128,7 +141,7 @@ describe('storefront homepage metadata', () => {
     });
   });
 
-  it('does not leak OgaBassey utility keywords into generic storefront metadata', async () => {
+  it('does not leak OgaBassey keywords into generic storefront metadata', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       ...baseMerchant,
       business_name: 'Ada Fashion',

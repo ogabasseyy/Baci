@@ -1,6 +1,6 @@
-import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { cache } from 'react';
+import { StorefrontRouteNotFoundContent } from '@/app/(storefront)/[slug]/storefront-route-not-found-content';
 import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { BrandAuthorityPageContent } from './brand-authority-page-content';
 
@@ -22,10 +22,6 @@ const loadIndexableBrandAuthorityPageData = cache(
       },
       { includeRequestPathPrefix: false }
     );
-
-    if (!page) {
-      notFound();
-    }
 
     return { page, merchantSlug };
   }
@@ -49,8 +45,18 @@ async function renderBrandAuthorityPage(props: BrandAuthorityPageRouteProps) {
   const { page, merchantSlug } = await loadIndexableBrandAuthorityPage(props);
   const pathPrefix = await brandAuthorityPageLoader.getStorefrontPathPrefix(
     merchantSlug,
-    page.merchant.slug
+    page?.merchant.slug ?? merchantSlug
   );
+
+  if (!page || ('isIndexable' in page && !page.isIndexable)) {
+    return (
+      <StorefrontRouteNotFoundContent
+        backHref={pathPrefix || '/'}
+        message="This brand hub is unavailable or has moved."
+        title="Brand hub not found"
+      />
+    );
+  }
 
   return <BrandAuthorityPageContent page={{ ...page, pathPrefix }} />;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLlmsText, detectLlmsSurface } from './llms';
+import { buildLlmsText, createLlmsResponse, detectLlmsSurface } from './llms';
 
 describe('detectLlmsSurface()', () => {
   it('treats the root domain as the platform surface', () => {
@@ -57,6 +57,18 @@ describe('buildLlmsText()', () => {
     expect(result).toContain('https://ogabassey.com/sitemap.xml');
     expect(result).not.toContain('https://ogabassey.com/dashboard');
     expect(result).toContain('## Route Patterns');
+    expect(result).toContain(
+      '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons'
+    );
+    expect(result).toContain(
+      '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation'
+    );
+    expect(result).toContain(
+      '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs'
+    );
+    expect(result).toContain(
+      '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings'
+    );
   });
 
   it('includes machine-readable commerce links for storefront hosts', () => {
@@ -101,5 +113,20 @@ describe('buildLlmsText()', () => {
 
     expect(result).toContain('Do not trigger live checkout submissions');
     expect(result).toContain('Use the current host as canonical');
+  });
+
+  it('uses the Host header in createLlmsResponse when request.url is an internal localhost URL', async () => {
+    const request = new Request('http://localhost:3000/llms.txt', {
+      headers: { host: 'ogabassey.com' },
+    });
+
+    const response = createLlmsResponse(request, false);
+    const body = await response.text();
+
+    expect(body).toContain('# Baci Storefront');
+    expect(body).toContain('https://ogabassey.com/sitemap.xml');
+    expect(body).toContain(
+      '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons'
+    );
   });
 });

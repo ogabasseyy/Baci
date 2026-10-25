@@ -91,6 +91,10 @@ export function buildStorefrontHomeMarkdown(
     `- ${normalizedOrigin}/products/{productSlug}`,
     `- ${normalizedOrigin}/blog/index.html.md`,
     `- ${normalizedOrigin}/blog/{postSlug}.md`,
+    '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons',
+    '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation',
+    '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs',
+    '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings',
     '',
     '## Notes',
     '- `/checkout`, `/account`, and wallet or payment flows are stateful.',
@@ -248,6 +252,36 @@ export function buildCategoryMarkdown(
   ].join('\n');
 }
 
+const KEY_SPEC_FIELDS: ReadonlyArray<{
+  keys: readonly string[];
+  label: string;
+  suffix?: string;
+}> = [
+  { keys: ['chipset', 'processor'], label: 'Processor' },
+  { keys: ['ram_gb'], label: 'RAM', suffix: 'GB' },
+  { keys: ['storage_gb'], label: 'Storage', suffix: 'GB' },
+  {
+    keys: ['screen_size_inches', 'display_size_inches'],
+    label: 'Display Size',
+    suffix: ' inches',
+  },
+  { keys: ['display_type'], label: 'Display Type' },
+  { keys: ['battery_mah'], label: 'Battery', suffix: 'mAh' },
+  { keys: ['main_camera_mp'], label: 'Main Camera', suffix: 'MP' },
+  { keys: ['front_camera_mp'], label: 'Front Camera', suffix: 'MP' },
+  { keys: ['gpu'], label: 'Graphics' },
+  { keys: ['android_version', 'os'], label: 'Operating System' },
+  { keys: ['network_technology', 'network'], label: 'Network' },
+  { keys: ['sim_type'], label: 'SIM' },
+  { keys: ['warranty'], label: 'Warranty' },
+];
+
+function isNumericSpec(value: unknown): boolean {
+  if (typeof value === 'number') return !Number.isNaN(value);
+  if (typeof value === 'string') return /^-?\d+(\.\d+)?$/.test(value.trim());
+  return false;
+}
+
 export function buildProductMarkdown(
   merchant: CachedMerchant,
   origin: string,
@@ -283,11 +317,44 @@ export function buildProductMarkdown(
     ? sanitizeMarkdownText(product.images[0])
     : '';
 
+  const specs = product.product_key_specs as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  const specBullets: string[] = [];
+  if (specs && typeof specs === 'object') {
+    for (const { keys, label, suffix } of KEY_SPEC_FIELDS) {
+      const rawVal = keys
+        .map((key) => specs[key])
+        .find(
+          (val) =>
+            val !== null && val !== undefined && String(val).trim() !== ''
+        );
+      if (rawVal === null || rawVal === undefined) continue;
+      const strVal = String(rawVal).trim();
+      if (!strVal) continue;
+
+      let formattedValue: string;
+      if (suffix && isNumericSpec(rawVal)) {
+        const numStr = typeof rawVal === 'number' ? String(rawVal) : strVal;
+        formattedValue = `${numStr}${suffix}`;
+      } else {
+        formattedValue = strVal;
+      }
+
+      specBullets.push(`- ${label}: ${sanitizeMarkdownText(formattedValue)}`);
+    }
+  }
+
+  const keySpecsSection =
+    specBullets.length > 0 ? ['## Key Specifications', ...specBullets, ''] : [];
+
   return [
     `# ${productName}`,
     '',
     `> ${safeDescription}`,
     '',
+    ...keySpecsSection,
     '## Summary',
     `- Store: ${businessName}`,
     `- Category: ${category}`,

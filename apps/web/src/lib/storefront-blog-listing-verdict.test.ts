@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { BlogListingStatusIntent } from './cached-storefront-blog-listing-status';
 import { makeBlogListingRow as makeRow } from './storefront-blog-listing-status.test-utils';
-import { resolveBlogListingVerdict } from './storefront-blog-listing-verdict';
+import {
+  evaluateBlogListingRequest,
+  resolveBlogListingVerdict,
+} from './storefront-blog-listing-verdict';
 
 describe('resolveBlogListingVerdict — category-query (308 canonicalization)', () => {
   it('308-redirects a known clean ?category= to its clean hub', () => {
@@ -14,6 +17,75 @@ describe('resolveBlogListingVerdict — category-query (308 canonicalization)', 
       redirectPath: '/blog/category/smartphones',
       status: 308,
     });
+  });
+
+  it('308-redirects News to /blog/category/tech-news for Ogabassey tenants', () => {
+    const intent: BlogListingStatusIntent = {
+      kind: 'category-query',
+      category: 'News',
+    };
+    const row = makeRow({
+      categories: ['Tech News', 'Smartphones'],
+      category_counts: [5, 10],
+    });
+
+    expect(resolveBlogListingVerdict(intent, row, 'ogabassey')).toEqual({
+      kind: 'redirect',
+      redirectPath: '/blog/category/tech-news',
+      status: 308,
+    });
+    expect(
+      evaluateBlogListingRequest({
+        intent,
+        row,
+        identifier: 'ogabassey.com',
+      })
+    ).toEqual({
+      kind: 'redirect',
+      redirectPath: '/blog/category/tech-news',
+      status: 308,
+    });
+  });
+
+  it('308-redirects Review to /blog/category/reviews for Ogabassey tenants', () => {
+    const intent: BlogListingStatusIntent = {
+      kind: 'category-query',
+      category: 'Review',
+    };
+    const row = makeRow({
+      categories: ['Reviews', 'Smartphones'],
+      category_counts: [5, 10],
+    });
+
+    expect(resolveBlogListingVerdict(intent, row, 'ogabassey.com')).toEqual({
+      kind: 'redirect',
+      redirectPath: '/blog/category/reviews',
+      status: 308,
+    });
+  });
+
+  it('is a NOOP for News or Review aliases on non-Ogabassey tenants', () => {
+    const newsIntent: BlogListingStatusIntent = {
+      kind: 'category-query',
+      category: 'News',
+    };
+    const reviewIntent: BlogListingStatusIntent = {
+      kind: 'category-query',
+      category: 'Review',
+    };
+    const row = makeRow({
+      categories: ['Tech News', 'Reviews'],
+      category_counts: [5, 10],
+    });
+
+    expect(resolveBlogListingVerdict(newsIntent, row, 'other-store')).toEqual({
+      kind: 'noop',
+    });
+    expect(resolveBlogListingVerdict(reviewIntent, row, 'other-store')).toEqual(
+      {
+        kind: 'noop',
+      }
+    );
   });
 
   it('is a NOOP for a ?category= not among the published categories', () => {

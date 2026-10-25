@@ -110,14 +110,15 @@ export function assertRemovableLockPath(lockPath) {
 }
 
 // Pagination is manual and capped: one gh call per page, each holding at
-// most 100 full run objects (~400KB, inside the default 1MB spawn
-// buffer). gh's --paginate would concatenate the unbounded full
-// history through a single buffer until ENOBUFS blocks every release.
+// most 100 runs. Project identity fields inside gh before stdout is
+// captured: full run metadata already exceeds the default 1 MiB buffer
+// on real pages. Never concatenate unbounded history with --paginate.
 // Five pages (500 runs) generously cover the newest-first windows
 // every caller needs: the just-dispatched run, in-flight guards, and
 // concurrent siblings are all minutes old.
 export const RUNS_PAGE_SIZE = 100;
 export const RUNS_MAX_PAGES = 5;
+const RUN_LIST_FILTER = 'if (.workflow_runs | type) == "array" then {workflow_runs: [.workflow_runs[] | {id, head_sha, status, conclusion, event, display_title}]} else . end';
 
 export function slimWorkflowRun(run) {
   return {
@@ -163,7 +164,7 @@ export function readRuns(filter, paginate = false) {
   const lastPage = paginate ? RUNS_MAX_PAGES : 1;
   for (let page = 1; page <= lastPage; page++) {
     const endpoint = `repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${RUNS_PAGE_SIZE}&page=${page}&${filter}`;
-    const text = gh(['api', endpoint]);
+    const text = gh(['api', endpoint, '--jq', RUN_LIST_FILTER]);
     let payload;
     try {
       payload = JSON.parse(text);

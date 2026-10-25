@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { type AuthResult, authenticateApiRequest } from '@/lib/api-auth';
 import {
   revalidateFeatures,
   revalidateMerchant,
@@ -15,8 +15,7 @@ const json = (value: unknown, status = 200) =>
     status,
     headers: { 'Cache-Control': 'no-store' },
   });
-async function resolve(request: NextRequest) {
-  const auth = await authenticateApiRequest(request);
+async function resolve(request: NextRequest, auth: AuthResult) {
   if (auth.error || !auth.user || !auth.supabase)
     return { error: json({ error: 'Unauthorized' }, 401) };
   const merchant = await getMerchantForApiRequest(auth.supabase, auth.user.id, {
@@ -39,7 +38,10 @@ async function status(
 }
 export async function GET(request: NextRequest) {
   try {
-    const context = await resolve(request);
+    const context = await resolve(
+      request,
+      await authenticateApiRequest(request)
+    );
     if (context.error) return context.error;
     return await status(context.client, context.merchantId);
   } catch {
@@ -48,8 +50,9 @@ export async function GET(request: NextRequest) {
 }
 export async function PATCH(request: NextRequest) {
   try {
-    const context = await resolve(request);
-    if (context.error) return context.error;
+    const auth = await authenticateApiRequest(request);
+    if (auth.error || !auth.user || !auth.supabase)
+      return json({ error: 'Unauthorized' }, 401);
     const csrf = await checkCsrfProtection(request);
     if (!csrf.valid) return json({ error: 'Invalid request origin.' }, 403);
     let body: unknown;
@@ -61,6 +64,8 @@ export async function PATCH(request: NextRequest) {
     const parsed = chatgptAdsSettingsSchema.safeParse(body);
     if (!parsed.success)
       return json({ error: 'Enter a valid Pixel ID and server key.' }, 400);
+    const context = await resolve(request, auth);
+    if (context.error) return context.error;
     if (!parsed.data.disconnect) {
       const blocked = await requireMerchantFeatureAccess(
         context.client,

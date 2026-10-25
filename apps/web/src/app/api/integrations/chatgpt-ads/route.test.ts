@@ -81,21 +81,24 @@ describe('ChatGPT Ads setup API', () => {
   it('rejects unauthenticated users', async () => {
     mocks.auth.mockResolvedValue({ error: 'Unauthorized' });
     expect((await PATCH(request({ pixelId: 'pixel' }))).status).toBe(401);
+    expect(mocks.csrf).not.toHaveBeenCalled();
+    expect(mocks.merchant).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
-  it('rejects staff and caller-selected tenant IDs', async () => {
+  it('rejects staff', async () => {
     mocks.merchant.mockResolvedValue({
       merchantId: 'merchant',
       staffAccess: { isOwner: false },
     });
     expect((await PATCH(request({ pixelId: 'pixel' }))).status).toBe(403);
-    mocks.merchant.mockResolvedValue({
-      merchantId: 'merchant',
-      staffAccess: { isOwner: true },
-    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+  it('rejects caller-selected tenant IDs before resolving merchant', async () => {
     expect(
       (await PATCH(request({ pixelId: 'pixel', merchantId: 'victim' }))).status
     ).toBe(400);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.gate).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('rejects malformed JSON', async () => {
@@ -104,6 +107,8 @@ describe('ChatGPT Ads setup API', () => {
       { method: 'PATCH', body: '{' }
     );
     expect((await PATCH(req)).status).toBe(400);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.gate).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('allows explicit disconnect without requiring an active paid plan', async () => {
@@ -119,6 +124,8 @@ describe('ChatGPT Ads setup API', () => {
   it('rejects CSRF failures before writing settings', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
     expect((await PATCH(request({ pixelId: 'pixel' }))).status).toBe(403);
+    expect(mocks.merchant).not.toHaveBeenCalled();
+    expect(mocks.gate).not.toHaveBeenCalled();
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('returns a safe error when credential saving fails', async () => {

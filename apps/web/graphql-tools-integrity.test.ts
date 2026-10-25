@@ -232,6 +232,13 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
     expect(Object.prototype).not.toHaveProperty('polluted');
 
     esm.mergeIncrementalResult({
+      incrementalResult: { path: ['toString', 'safe'], data: true },
+      executionResult,
+    });
+    expect(executionResult.data).toMatchObject({ toString: { safe: true } });
+    expect(Object.prototype).not.toHaveProperty('safe');
+
+    esm.mergeIncrementalResult({
       incrementalResult: { path: ['safe'], data: { value: 1 } },
       executionResult,
     });
@@ -240,6 +247,7 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       executionResult,
     });
     expect(executionResult.data).toEqual({
+      toString: { safe: true },
       safe: { value: 1, other: 2 },
     });
   });

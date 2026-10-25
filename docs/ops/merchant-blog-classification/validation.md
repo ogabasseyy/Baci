@@ -5,8 +5,8 @@ Branch: `codex/merchant-blog-classification`. Initial base:
 `49c131fd8768f971802a926430397cf642b9afb1`; PR preparation incorporates main at
 `def9f0b7a5` before PR creation. The last two fast-forwards contain deployment
 tooling/documentation and independent Jumia work, not classification/replay inputs.
-No hosted schema change, backfill, credential change, publication, commit or push
-was performed during these checks.
+No hosted schema change, backfill, credential change or publication was performed.
+Implementation commit: `b9b70dd0631aa383d25e53a90cf512a7f6323478`.
 
 ## Passed
 
@@ -14,7 +14,7 @@ was performed during these checks.
   and detail adapters, explicit merchant intent, stale revisions, missing metadata
   and RPC failure fallback. Both listing and detail fixtures assert stable UUID
   revisions rather than mutable `updated_at` timestamps.
-- Complete monorepo typechecks passed after incorporating main at `7f711eea1f`:
+- Complete monorepo typechecks passed after incorporating main at `def9f0b7a5`:
   seven Turborepo tasks, including the complete web typecheck chain and Next type
   generation. A test fixture's excess-property error was corrected without a cast
   or changing its behavior; the 13-test loader suite passes.
@@ -96,16 +96,42 @@ this receipt does not claim a clean head-specific PR review or passing hosted CI
   pins were not changed. The existing Linux/AMD64 PR database quality gate must
   supply the authoritative chronological replay result, including the new schema
   assertion; an isolated fixture pass is not a substitute.
-- Full monorepo checks and hosted PR CI have not passed for this uncommitted work.
+- Full monorepo checks and hosted PR CI have not passed for this work.
+  The complete web run finished with 56,099 passing tests and six failures.
   The mobile-storefront standalone retry passed all 1,605 Jest suites/9,907 tests
   plus 64 native/config checks after the first concurrent run's process crash.
   Mobile-admin passed 930 suites/4,724 tests; shared passed 294 suites/1,921 tests.
   An event-governance timeout passed on retry; the unrelated browser presentation
   suite still hit its existing 60-second bound. Dirty-source inventory assertions
-  require rechecking after the implementation commit; no assertion was weakened.
+  passed after the implementation commit and snapshot regeneration (all 14
+  inventory/governance tests passed). The deferred crypto-dialog test also passed
+  on focused retry. A live event-boundary failure reports five credential paths
+  in the newly merged Jumia preflight route, unchanged by this classification PR.
+  No assertion was weakened.
 - Daily production writes require an approved, finite-expiry merchant-scoped
   authenticated identity and secure token refresh. No such configuration was
   provisioned; the writer deliberately reports unavailable without it.
 
 Use [the rollout guide](../merchant-blog-classification.md) for deployment order
 and the separate writer patch. Do not infer production readiness from local tests.
+
+## PR evidence follow-up
+
+[PR #3798](https://github.com/ogabasseyy/Baci/pull/3798) was created from implementation
+commit `b9b70dd0631aa383d25e53a90cf512a7f6323478`. Normal pre-commit lint and pre-push
+typecheck/behind-base hooks passed. The Linux/AMD64
+[DB Replay job](https://github.com/ogabasseyy/Baci/actions/runs/40223313900/job/121259439858)
+passed on that exact SHA, as did Disposable SQL Suites, Build, Lint and Typecheck.
+Web shard 4 failed only the stale source-bound inventory snapshot assertion;
+the live event-boundary test passed in that hosted shard.
+
+The source-bound inventory follow-up (all 584 rows unchanged, source/digest fields
+only), its matching expected digest test, and these updated notes are the CI fix.
+All 14 inventory/governance tests passed again on 2026-10-25. Their required
+CodeRabbit review returned another 43-minute rate
+limit at approximately 18:51 UTC and states that no org seat is assigned. The
+implementation review above completed successfully, but does not substitute for
+that follow-up gate. The owner explicitly approved a one-time CodeRabbit skip for
+this evidence-only follow-up on 2026-10-25. Normal Git hooks, CI and all other
+review gates remain enabled. New-head CI is required after pushing; the earlier
+passing checks certify only the implementation SHA above. Nothing was merged or deployed.

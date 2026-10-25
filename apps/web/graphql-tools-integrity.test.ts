@@ -140,7 +140,17 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       executionResult,
     });
     expect(executionResult).toEqual({ data: {} });
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype).not.toHaveProperty('polluted');
+
+    mergeIncrementalResult({
+      incrementalResult: {
+        path: [['__proto__'], 'polluted'],
+        data: true,
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(Object.prototype).not.toHaveProperty('polluted');
 
     mergeIncrementalResult({
       incrementalResult: {
@@ -150,7 +160,7 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       executionResult,
     });
     expect(executionResult).toEqual({ data: {} });
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype).not.toHaveProperty('polluted');
 
     mergeIncrementalResult({
       incrementalResult: {
@@ -199,7 +209,17 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       executionResult,
     });
     expect(executionResult).toEqual({ data: {} });
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype).not.toHaveProperty('polluted');
+
+    esm.mergeIncrementalResult({
+      incrementalResult: {
+        path: [['__proto__'], 'polluted'],
+        data: true,
+      },
+      executionResult,
+    });
+    expect(executionResult).toEqual({ data: {} });
+    expect(Object.prototype).not.toHaveProperty('polluted');
 
     esm.mergeIncrementalResult({
       incrementalResult: {
@@ -209,7 +229,7 @@ describe('@graphql-tools/utils mergeIncrementalResult integrity', () => {
       executionResult,
     });
     expect(executionResult).toEqual({ data: {} });
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype).not.toHaveProperty('polluted');
 
     esm.mergeIncrementalResult({
       incrementalResult: { path: ['safe'], data: { value: 1 } },

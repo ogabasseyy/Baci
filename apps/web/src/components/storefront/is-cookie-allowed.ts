@@ -4,7 +4,9 @@ import {
 } from './cookie-consent-types';
 
 /**
- * Check if a specific cookie category is allowed
+ * Imperative consent check for event handlers and effects only.
+ * Render consumers must use useCookieConsent, whose server snapshot keeps
+ * hydration deterministic and whose subscription follows consent changes.
  */
 export function isCookieAllowed(category: keyof CookiePreferences): boolean {
   if (typeof window === 'undefined') return false;

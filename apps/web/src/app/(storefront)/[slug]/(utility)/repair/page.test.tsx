@@ -94,10 +94,10 @@ describe('RepairPage', () => {
     const { container } = render(await callRepairPage('ogabassey'));
 
     expect(
-      screen.getByRole('heading', { name: 'A quick note before you start' })
+      screen.getByRole('heading', { name: 'Before you start' })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/include the model, symptoms/i)
+      screen.getByText(/include the model and symptoms/i)
     ).toBeInTheDocument();
     expect(screen.getByText('Repair booking wizard')).toHaveAttribute(
       'data-merchant-id',

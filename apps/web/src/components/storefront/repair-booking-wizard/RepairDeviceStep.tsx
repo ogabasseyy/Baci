@@ -149,7 +149,7 @@ export function RepairDeviceStep({
                         value={type.id}
                       />
                     </FormControl>
-                    <FormLabel className="flex min-h-28 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-store-border bg-store-background/70 p-4 text-center transition-colors hover:border-store-primary/60 hover:bg-store-primary/5 has-data-[state=checked]:border-store-primary has-data-[state=checked]:bg-store-primary/10 peer-data-[state=checked]:border-store-primary">
+                    <FormLabel className="flex min-h-28 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-store-border bg-store-background/70 p-4 text-center transition-colors hover:border-store-primary/60 hover:bg-store-primary/5 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary peer-data-[state=checked]:bg-store-primary/10">
                       <type.icon className="size-6 text-store-background-text/80" />
                       {type.label}
                     </FormLabel>

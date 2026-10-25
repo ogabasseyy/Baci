@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FacebookPixel } from '@/components/analytics/facebook-pixel';
 import { TikTokPixel } from '@/components/analytics/tiktok-pixel';
+import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
 import { getStoredConsent } from '@/lib/consent-mode';
 import { AboutPageClient } from './(content)/pages/about/about-page-client';
 import { ContactPageClient } from './(content)/pages/contact/contact-page-client';
@@ -17,7 +18,7 @@ import { PrivacyPageClient } from './(content)/pages/privacy/privacy-page-client
 import { TermsPageClient } from './(content)/pages/terms/terms-page-client';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 
-// Keep consent UI, storage, event subscriptions and both pixel gates real.
+// Keep consent UI, storage, event subscriptions and all three pixel gates real.
 // Script output is inert so tests never contact the advertising providers.
 vi.mock('next/link', () => ({
   default: ({
@@ -50,6 +51,7 @@ vi.mock('next/dynamic', async () => {
   };
 });
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/store/product',
   notFound: () => {
     throw new Error('NOT_FOUND');
   },
@@ -94,15 +96,23 @@ vi.mock('./storefront-layout-renderer', () => ({
 
 const merchant = {
   id: 'merchant-1',
+  user_id: 'user-1',
+  business_type: 'electronics',
   slug: 'store',
   business_name: 'Test Store',
 };
-const shellSnapshot = { merchant, routingMode: 'domain' as const };
+const shellSnapshot = {
+  merchant,
+  routingMode: 'domain',
+  basePath: '',
+  navigationCategories: [],
+  chatgptPixelId: 'configured-chatgpt-pixel',
+} satisfies StorefrontShellSnapshot;
 function shell(children: ReactNode) {
   return (
     <StorefrontShellFrame
       preloadHeroLcpImages={false}
-      shellSnapshot={shellSnapshot as never}
+      shellSnapshot={shellSnapshot}
     >
       {children}
     </StorefrontShellFrame>
@@ -114,6 +124,9 @@ function revealPrompt() {
 function expectNoPixels() {
   expect(screen.queryByTestId('facebook-pixel')).not.toBeInTheDocument();
   expect(screen.queryByTestId('tiktok-pixel')).not.toBeInTheDocument();
+  expect(
+    screen.queryByTestId('chatgpt-measurement-sdk')
+  ).not.toBeInTheDocument();
 }
 
 describe('storefront consent wiring', () => {
@@ -125,6 +138,7 @@ describe('storefront consent wiring', () => {
     cleanup();
     vi.restoreAllMocks();
     Reflect.deleteProperty(window, 'gtag');
+    Reflect.deleteProperty(window, 'oaiq');
     vi.useRealTimers();
   });
 
@@ -149,6 +163,7 @@ describe('storefront consent wiring', () => {
     expect(screen.getByTestId('tiktok-pixel')).toHaveTextContent(
       'configured-tiktok-pixel'
     );
+    expect(screen.getByTestId('chatgpt-measurement-sdk')).toBeInTheDocument();
     expect(getStoredConsent()).toMatchObject({
       analytics: true,
       marketing: true,
@@ -167,6 +182,7 @@ describe('storefront consent wiring', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId('facebook-pixel')).toBeInTheDocument();
     expect(screen.getByTestId('tiktok-pixel')).toBeInTheDocument();
+    expect(screen.getByTestId('chatgpt-measurement-sdk')).toBeInTheDocument();
   });
 
   it('keeps advertising denied after Necessary Only and a page reload', () => {

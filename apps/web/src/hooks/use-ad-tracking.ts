@@ -162,7 +162,7 @@ export function useAdTracking() {
    */
   const getTrackingForOrder = (eventId?: string): AdTrackingData => {
     return {
-      ...trackingData,
+      ...getAdTrackingData(),
       eventId: eventId || purchaseEventId || undefined,
       limitedDataUse: isCaliforniaUser,
     };

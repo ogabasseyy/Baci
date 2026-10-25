@@ -17,7 +17,7 @@ import { createStableAnalyticsClientId } from './stable-analytics-client-id';
 
 function configured(
   config: AnalyticsPlatformConfig,
-  destination: EventDestination
+  destination: Exclude<EventDestination, 'chatgpt'>
 ): boolean {
   if (destination === 'facebook') {
     return Boolean(config.facebook_pixel_id && config.facebook_capi_token);
@@ -31,7 +31,9 @@ function configured(
   return Boolean(config.google_analytics_id && config.ga4_api_secret);
 }
 
-function providerTarget(destination: EventDestination): AdPlatformTarget {
+function providerTarget(
+  destination: Exclude<EventDestination, 'chatgpt'>
+): AdPlatformTarget {
   return destination === 'ga4' ? 'google' : destination;
 }
 
@@ -165,7 +167,7 @@ function toClientConversion(event: DomainEventV1): ConversionEvent {
 export async function deliverAnalyticsEvent(
   supabase: ServiceRoleClient,
   event: DomainEventV1,
-  destination: EventDestination,
+  destination: Exclude<EventDestination, 'chatgpt'>,
   signal?: AbortSignal
 ): Promise<EventDestinationResult> {
   if (!event.merchant_id) {

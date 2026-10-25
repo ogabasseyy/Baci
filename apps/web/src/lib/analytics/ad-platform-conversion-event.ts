@@ -7,6 +7,9 @@ export interface ConversionEvent {
   occurred_at?: string;
   limited_data_use?: boolean;
   user_data: {
+    measurement_consent?: boolean;
+    oppref?: string;
+    obref?: string;
     city?: string;
     country?: string;
     email?: string;

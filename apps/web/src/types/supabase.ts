@@ -6070,6 +6070,46 @@ export type Database = {
           },
         ];
       };
+      merchant_chatgpt_ads_credentials: {
+        Row: {
+          capi_key: string;
+          merchant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          capi_key: string;
+          merchant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          capi_key?: string;
+          merchant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+        ];
+      };
       merchant_feature_settings: {
         Row: {
           about_page_enabled: boolean | null;
@@ -6078,6 +6118,7 @@ export type Database = {
           auto_generate_schema: boolean | null;
           blog_discover_image_validation_enabled: boolean;
           blog_enabled: boolean | null;
+          chatgpt_pixel_id: string | null;
           checkout_collect_phone: boolean | null;
           checkout_require_account: boolean | null;
           checkout_show_order_notes: boolean | null;
@@ -6161,6 +6202,7 @@ export type Database = {
           auto_generate_schema?: boolean | null;
           blog_discover_image_validation_enabled?: boolean;
           blog_enabled?: boolean | null;
+          chatgpt_pixel_id?: string | null;
           checkout_collect_phone?: boolean | null;
           checkout_require_account?: boolean | null;
           checkout_show_order_notes?: boolean | null;
@@ -6244,6 +6286,7 @@ export type Database = {
           auto_generate_schema?: boolean | null;
           blog_discover_image_validation_enabled?: boolean;
           blog_enabled?: boolean | null;
+          chatgpt_pixel_id?: string | null;
           checkout_collect_phone?: boolean | null;
           checkout_require_account?: boolean | null;
           checkout_show_order_notes?: boolean | null;
@@ -16272,6 +16315,15 @@ export type Database = {
           slug: string;
           sort_order: number;
         }[];
+      };
+      save_chatgpt_ads_settings: {
+        Args: {
+          p_capi_key?: string;
+          p_disconnect?: boolean;
+          p_merchant_id: string;
+          p_pixel_id?: string;
+        };
+        Returns: undefined;
       };
       blog_media_objects_present_v1: {
         Args: { p_paths: string[] };

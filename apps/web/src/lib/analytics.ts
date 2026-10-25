@@ -1,6 +1,7 @@
 'use client';
 
 import type { Product } from '@/lib/products';
+import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
 
 // Types for analytics events
@@ -38,19 +39,7 @@ interface PurchaseParams {
 // Window type extension for gtag and fbq is in consent-mode.ts
 
 // Check if analytics cookies are allowed
-export function isAnalyticsAllowed(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  try {
-    const consent = localStorage.getItem('baci-cookie-consent');
-    if (!consent) return false;
-
-    const parsed = JSON.parse(consent);
-    return parsed.analytics === true;
-  } catch {
-    return false;
-  }
-}
+export { isAnalyticsAllowed } from './analytics-consent';
 
 // Convert product to ecommerce item format
 function productToItem(

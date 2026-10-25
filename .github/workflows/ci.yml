@@ -510,6 +510,8 @@ jobs:
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
           --sql-check supabase/tests/vtu_intent_claim.sql
           --sql-check supabase/tests/vtu_intent_claim_concurrency.sql
+          --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
+          --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

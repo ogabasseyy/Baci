@@ -33,6 +33,12 @@ vi.mock('./twitter-pixel', () => ({
 }));
 
 describe('AnalyticsPixelProvider', () => {
+  it('leaves ChatGPT measurement to the persistent shell instead of mounting a second Pixel on the homepage', () => {
+    const { container } = render(
+      <AnalyticsPixelProvider merchant={{ chatgpt_pixel_id: 'pixel-shell' }} />
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
   it('renders merchant analytics pixels from an explicit merchant payload', () => {
     render(
       <AnalyticsPixelProvider

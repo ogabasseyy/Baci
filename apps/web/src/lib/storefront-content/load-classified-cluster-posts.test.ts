@@ -47,6 +47,53 @@ describe('loadClassifiedClusterPosts', () => {
     respond([classification]);
   });
 
+  it('canonicalizes lookup IDs without changing article order or duplicate cards', async () => {
+    const secondPost = {
+      ...post,
+      id: '2e4fe058-a2ce-4f14-b633-a80d14bfaeb2',
+      slug: 'iphone-comparison',
+    };
+    respond([
+      classification,
+      { ...classification, post_id: secondPost.id, intent: 'comparison' },
+    ]);
+    const input = [secondPost, post, secondPost];
+    const reversed = await loadClassifiedClusterPosts('merchant-1', input);
+    const forward = await loadClassifiedClusterPosts('merchant-1', [
+      post,
+      secondPost,
+    ]);
+
+    const lookup = {
+      p_merchant_id: 'merchant-1',
+      p_post_ids: [post.id, secondPost.id],
+    };
+    expect(rpc).toHaveBeenNthCalledWith(
+      1,
+      'get_storefront_blog_classifications_v1',
+      lookup
+    );
+    expect(rpc).toHaveBeenNthCalledWith(
+      2,
+      'get_storefront_blog_classifications_v1',
+      lookup
+    );
+    expect(reversed.map((item) => [item.slug, item.merchant_intent])).toEqual([
+      ['iphone-comparison', 'comparison'],
+      ['iphone-ownership', 'buying-guide'],
+      ['iphone-comparison', 'comparison'],
+    ]);
+    expect(forward.map((item) => item.slug)).toEqual([
+      'iphone-ownership',
+      'iphone-comparison',
+    ]);
+    expect(input.map((item) => item.id)).toEqual([
+      secondPost.id,
+      post.id,
+      secondPost.id,
+    ]);
+  });
+
   it('uses safe current classifications to make metadata-poor guides discoverable', async () => {
     const secondPost = {
       ...post,

@@ -124,7 +124,7 @@ export async function loadClassifiedClusterPosts(
         )
         .map((post) => post.id)
     ),
-  ];
+  ].sort();
   if (postIds.length === 0 || postIds.length > CLASSIFICATION_BATCH_LIMIT) {
     return projected;
   }

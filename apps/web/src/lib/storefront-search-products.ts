@@ -1,5 +1,8 @@
 import { cookies } from 'next/headers';
+import { projectAdvertisedPhonePrices } from './advertised-phone-price-projection';
+import { getPublicProductVariantsByProductIds } from './cached-data';
 import { type NormalizedProduct, normalizeProduct } from './normalize-product';
+import { projectStandardListingRows } from './project-standard-listing-rows';
 import { storefrontProductFilters } from './storefront-product-filters';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
 import {
@@ -22,6 +25,7 @@ async function hydrateRankedStorefrontProducts(args: {
   supabase: ReturnType<typeof createPublicClient>;
   merchantId: string;
   productIds: string[];
+  projectAdvertisedPrices?: boolean;
 }): Promise<NormalizedProduct[]> {
   const { data, error } = await args.supabase
     .from('products')
@@ -34,7 +38,11 @@ async function hydrateRankedStorefrontProducts(args: {
     throw error;
   }
 
-  const mapped = (data ?? []).map((row) => normalizeProduct(row as never));
+  const rawRows =
+    args.projectAdvertisedPrices === false
+      ? (data ?? [])
+      : await projectStandardListingRows(args.merchantId, data ?? []);
+  const mapped = rawRows.map((row) => normalizeProduct(row as never));
   const order = new Map(
     args.productIds.map((id, index) => [id, index] as const)
   );
@@ -123,6 +131,7 @@ export async function getStorefrontSearchProducts(args: {
     supabase: publicSupabase,
     merchantId: args.merchantId,
     productIds: candidates.productIds,
+    projectAdvertisedPrices: false,
   });
 
   const filteredProducts = hydrated.filter((product) =>
@@ -131,10 +140,32 @@ export async function getStorefrontSearchProducts(args: {
       conditionFilter ?? ''
     )
   );
-  const products = filteredProducts.slice(
+  const selectedWindow = filteredProducts.slice(
     requestedOffset,
     requestedOffset + requestedLimit
   );
+  const projectedWindow = await projectAdvertisedPhonePrices(
+    args.merchantId,
+    selectedWindow,
+    getPublicProductVariantsByProductIds,
+    { condition: conditionFilter ?? undefined }
+  );
+  const products = projectedWindow.map((product) => ({
+    ...product,
+    price: product.advertised_price ?? product.price,
+    condition: product.advertised_condition ?? product.condition,
+    compare_at_price:
+      product.advertised_price !== undefined
+        ? (product.advertised_compare_at_price ?? null)
+        : product.compare_at_price,
+    ...(product.advertised_image
+      ? {
+          image: product.advertised_image,
+          imageLarge: product.advertised_image,
+          images: [product.advertised_image],
+        }
+      : {}),
+  }));
 
   const result = {
     count: filteredProducts.length,

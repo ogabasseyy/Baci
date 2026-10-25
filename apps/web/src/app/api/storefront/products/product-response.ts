@@ -23,7 +23,9 @@ export function mapStorefrontProduct(p: RawDbProduct) {
   });
 
   type ImageInput = string | { url?: string; alt?: string; order?: number };
-  const rawImages = (p.images as ImageInput[]) || [];
+  const rawImages = p.advertised_image
+    ? [p.advertised_image]
+    : (p.images as ImageInput[]) || [];
   const processedImages = rawImages.map((img, index) => {
     if (typeof img === 'string') {
       return { url: img, alt: normalized.name, order: index };

@@ -45,7 +45,10 @@ function mapProduct(product: RawStorefrontProductRow) {
       | null
       | undefined,
   });
-  const rawImages = (product.images as ImageInput[]) || [];
+  const rawImages =
+    typeof product.advertised_image === 'string'
+      ? [product.advertised_image]
+      : (product.images as ImageInput[]) || [];
   const colorImageKeys =
     typeof product.color_images === 'object' &&
     product.color_images !== null &&

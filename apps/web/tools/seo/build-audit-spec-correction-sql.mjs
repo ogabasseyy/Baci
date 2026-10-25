@@ -38,10 +38,10 @@ export function buildAuditSpecCorrectionSql(records) {
       .join(' and ');
     return `update public.product_key_specs k set ${assignments.join(', ')} from public.products p where k.product_id=p.id and p.id=${quote(before.id)}::uuid and p.merchant_id=${quote(merchantId)}::uuid and p.slug=${quote(before.slug)} and ${guard};
 get diagnostics changed = row_count;
-if changed <> 1 then raise exception 'Concurrent or missing key specs: ${before.slug}'; end if;
+if changed <> 1 then raise exception ${quote(`Concurrent or missing key specs: ${before.slug}`)}; end if;
 update public.products set specifications=${quote(JSON.stringify(after.specifications))}::jsonb where id=${quote(before.id)}::uuid and merchant_id=${quote(merchantId)}::uuid and slug=${quote(before.slug)} and md5(specifications::text)=${quote(before.specifications_hash)};
 get diagnostics changed = row_count;
-if changed <> 1 then raise exception 'Concurrent or missing product: ${before.slug}'; end if;`;
+if changed <> 1 then raise exception ${quote(`Concurrent or missing product: ${before.slug}`)}; end if;`;
   });
   return `-- Bounded owner-requested catalog maintenance. No schema, price, stock or condition changes.\nbegin;\ndo $audit$\ndeclare changed integer;\nbegin\n${statements.join('\n')}\nend;\n$audit$;\ncommit;\n`;
 }

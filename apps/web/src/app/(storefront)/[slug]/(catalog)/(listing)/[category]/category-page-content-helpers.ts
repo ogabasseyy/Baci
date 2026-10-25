@@ -87,6 +87,12 @@ export function normalizeCategoryPageProducts(
       category: normalized.category,
       brand: normalized.brand ?? undefined,
       condition: CONDITION_MAP[normalized.condition] || 'New',
+      ...(typeof normalized.has_variants === 'boolean'
+        ? { has_variants: normalized.has_variants }
+        : {}),
+      ...(product.variant_model
+        ? { variant_model: normalized.variant_model }
+        : {}),
       stock: normalized.stock,
       category_slug: normalized.category_slug,
       product_key_specs: normalized.product_key_specs ?? undefined,

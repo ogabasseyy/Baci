@@ -40,10 +40,22 @@ export function applyApprovedPolicyFaqs<T extends { question: string; answer: st
 ): T[] {
   if (slug !== 'ogabassey') return faqs;
   return faqs.map((faq) => {
-    if (/return policy/i.test(faq.question)) {
+    const question = faq.question
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[?!.]+$/, '')
+      .trim();
+    if (
+      question === 'what is your return policy' ||
+      question === 'what is the return policy'
+    ) {
       return { ...faq, answer: OGABASSEY_RETURN_POLICY_SUMMARY };
     }
-    if (/warranty/i.test(faq.question)) {
+    if (
+      question === 'how does the warranty work' ||
+      question === 'how does your warranty work'
+    ) {
       return { ...faq, answer: OGABASSEY_WARRANTY_POLICY_SUMMARY };
     }
     return faq;

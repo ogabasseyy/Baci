@@ -28,6 +28,7 @@ export function nativeCartInput(line: Omit<CartItem, 'id'>): CartInputLine {
     item: {
       productId: line.product_id,
       ...(line.variant_id ? { variantId: line.variant_id } : {}),
+      ...(line.offer_id ? { offerId: line.offer_id } : {}),
       ...(condition && isNativeCondition(condition) ? { condition } : {}),
       ...(Object.keys(options).length ? { options } : {}),
     },
@@ -95,6 +96,7 @@ export async function hydrateNativeCart(
         brand: product?.brand,
         image_url: previous?.image_url ?? product?.image,
         variant_id: line.item.variantId,
+        offer_id: line.item.offerId,
         variant_attributes: line.item.options,
         color: line.item.options?.color,
         storage: line.item.options?.storage,

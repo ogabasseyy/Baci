@@ -33,6 +33,10 @@ it('preserves all option keys, condition and voucher identity without trusting c
     })
   ).toMatchObject({ quantity: 1, voucherToken: 'tok' });
   expect(() => nativeCartInput({ ...item, condition: 'mystery' })).toThrow();
+  const offerId = '44444444-4444-4444-8444-444444444444';
+  expect(nativeCartInput({ ...item, offer_id: offerId }).item.offerId).toBe(
+    offerId
+  );
 });
 it('renders server prices and blocks checkout metadata readiness on missing product hydration', async () => {
   const load = jest.fn().mockResolvedValue(null);
@@ -69,6 +73,34 @@ it('renders server prices and blocks checkout metadata readiness on missing prod
     name: 'Phone',
   });
   expect(load).toHaveBeenCalledWith('merchant-a', item.product_id);
+});
+it('restores the exact offer id from the server line', async () => {
+  const offerId = '44444444-4444-4444-8444-444444444444';
+  const result = await hydrateNativeCart(
+    {
+      merchantId: 'merchant-a',
+      cartId: 'cart',
+      version: 1,
+      state: 'active',
+      currency: 'NGN',
+      subtotalMinor: 600,
+      totalMinor: 600,
+      estimatedTotals: false,
+      expiresAt: '2099-01-01T00:00:00Z',
+      lines: [
+        {
+          id: 'server-line',
+          item: nativeCartInput({ ...item, offer_id: offerId }).item,
+          quantity: 1,
+          unitPriceMinor: 600,
+          lineTotalMinor: 600,
+        },
+      ],
+    },
+    [],
+    async () => null
+  );
+  expect(result.items[0]?.offer_id).toBe(offerId);
 });
 it('never renders a mismatched product projection returned by hydration', async () => {
   const snapshot = {

@@ -13,6 +13,7 @@ export const nativeCheckoutSnapshotSchema = z.object({
         id: z.string().min(1).max(64),
         productId: z.uuid(),
         variantId: z.uuid().nullable(),
+        offerId: z.uuid().nullish(),
         condition: z.string().nullable(),
         options: z.record(z.string(), z.string()),
         quantity: z.number().int().min(1).max(10),

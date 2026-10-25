@@ -47,6 +47,9 @@ function validateIdentity(item: CartItemIdentity): CartCommandIssue | null {
   if (!item.productId || item.productId.trim().length === 0) {
     return issue('A cart line requires a product.');
   }
+  if (item.offerId !== undefined && item.offerId.trim().length === 0) {
+    return issue('Offer references must not be blank.');
+  }
   return null;
 }
 

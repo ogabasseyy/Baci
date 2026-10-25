@@ -8,6 +8,7 @@ export interface CartCheckoutLine {
   productId: string;
   variantId: string | null;
   condition: string | null;
+  offerId?: string | null;
   options: Record<string, string>;
   quantity: number;
   negotiatedUnitPriceMinor: number | null;
@@ -126,6 +127,7 @@ function parseLine(value: unknown): CartCheckoutLine | null {
     available: value.available,
     condition: typeof value.condition === 'string' ? value.condition : null,
     effectiveUnitPriceMinor: value.effectiveUnitPriceMinor,
+    offerId: typeof value.offerId === 'string' ? value.offerId : null,
     hasAssurance: value.hasAssurance === true,
     id: value.id,
     lastUnitPriceMinor: isInteger(value.lastUnitPriceMinor)

@@ -3,6 +3,7 @@ import { z } from 'zod';
 const item = z.object({
   productId: z.uuid(),
   variantId: z.uuid().optional(),
+  offerId: z.uuid().optional(),
   condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
   options: z.record(z.string(), z.string()).optional(),
 });

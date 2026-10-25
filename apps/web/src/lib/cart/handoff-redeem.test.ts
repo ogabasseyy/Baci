@@ -5,6 +5,7 @@ import {
   hashHandoffToken,
   redeemCartHandoff,
 } from './handoff';
+import { parseConflicts } from './handoff-redeem';
 
 const SECRET = 'test-handoff-secret-min-32-chars!!!!';
 
@@ -229,4 +230,21 @@ it('passes opaque handoff selectors through to the scoped RPC without rewriting 
       p_expected_incoming_version: 3,
     })
   );
+});
+
+describe('parseConflicts', () => {
+  it('keeps an exact offer id on a merge conflict', () => {
+    const offerId = '55555555-5555-4555-8555-555555555555';
+    const conflicts = parseConflicts([
+      {
+        existing: { quantity: 1 },
+        incoming: { quantity: 1 },
+        item: {
+          offerId,
+          productId: '44444444-4444-4444-8444-444444444444',
+        },
+      },
+    ]);
+    expect(conflicts?.[0]?.item.offerId).toBe(offerId);
+  });
 });

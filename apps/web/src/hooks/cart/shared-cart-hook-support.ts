@@ -220,6 +220,7 @@ export function buildCommand(
     const item = cartItemToIdentity({
       condition: intent.options?.condition,
       id: intent.product.id,
+      offerId: intent.options?.offerId,
       selectedColor: intent.options?.color,
       selectedColorValue: intent.options?.colorValue,
       selectedStorage: intent.options?.storage,

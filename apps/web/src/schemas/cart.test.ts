@@ -96,6 +96,39 @@ describe('cartValidateSchema', () => {
 });
 
 describe('sharedCartMutationRequestSchema', () => {
+  it('keeps an exact offer id and rejects a non-uuid offer', () => {
+    const offerId = '44444444-4444-4444-8444-444444444444';
+    const parsed = sharedCartMutationRequestSchema.safeParse({
+      command: {
+        item: {
+          offerId,
+          productId: '11111111-1111-4111-8111-111111111111',
+        },
+        quantity: 1,
+        type: 'add',
+      },
+      expectedVersion: 1,
+      operationId: 'op-offer',
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.command).toMatchObject({ item: { offerId } });
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: {
+          item: {
+            offerId: 'not-an-offer',
+            productId: '11111111-1111-4111-8111-111111111111',
+          },
+          quantity: 1,
+          type: 'add',
+        },
+        expectedVersion: 1,
+        operationId: 'op-offer',
+      }).success
+    ).toBe(false);
+  });
+
   it('accepts a versioned add command with an operation id', () => {
     const result = sharedCartMutationRequestSchema.safeParse({
       command: {

@@ -216,6 +216,21 @@ describe('reviewedCheckoutItems', () => {
     });
   });
 
+  it('replaces a stale shell offer with the reviewed offer id', () => {
+    const offerId = '66666666-6666-4666-8666-666666666666';
+    const stale = reviewedCheckoutItems(
+      [{ ...shell, offerId: '55555555-5555-4555-8555-555555555555' }],
+      review
+    );
+    expect(stale?.[0]?.offerId).toBeUndefined();
+    const exact = reviewedCheckoutItems([shell], {
+      ...review,
+      lines: [{ ...line, offerId }],
+    });
+    expect(exact?.[0]?.offerId).toBe(offerId);
+    expect(buildCheckoutOrderItems(exact ?? [])[0]?.offer_id).toBe(offerId);
+  });
+
   it.each([
     'pending',
     'rejected',

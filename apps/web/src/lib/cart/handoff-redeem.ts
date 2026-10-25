@@ -93,6 +93,9 @@ export function parseConflicts(
     if (typeof entry.item.variantId === 'string') {
       item.variantId = entry.item.variantId;
     }
+    if (typeof entry.item.offerId === 'string' && entry.item.offerId.trim()) {
+      item.offerId = entry.item.offerId;
+    }
     if (
       entry.item.condition === 'new' ||
       entry.item.condition === 'used' ||

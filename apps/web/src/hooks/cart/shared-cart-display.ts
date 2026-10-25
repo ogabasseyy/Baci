@@ -95,6 +95,8 @@ export function confirmedLineToDisplay(
       Object.keys(options).length > 0 ? { ...options } : undefined,
     variantId: line.item.variantId,
   };
+  // The product shell can carry a stale PDP offer. The snapshot wins.
+  display.offerId = line.item.offerId;
   // Unconditional resets: the cached product shell may carry stale
   // negotiated or assurance fields that the server snapshot refutes.
   display.negotiatedPrice =
@@ -115,6 +117,7 @@ export function intentIdentity(
   return cartItemToIdentity({
     condition: intent.options?.condition,
     id: intent.product.id,
+    offerId: intent.options?.offerId,
     selectedColor: intent.options?.color,
     selectedColorValue: intent.options?.colorValue,
     selectedStorage: intent.options?.storage,

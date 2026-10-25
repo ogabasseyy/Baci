@@ -53,6 +53,7 @@ export function reviewedCheckoutItems(
           line.negotiationStatus === 'rejected')
           ? line.negotiationStatus
           : undefined,
+      offerId: line.offerId ?? undefined,
       price: line.validatedUnitPriceMinor / 100,
       quantity: line.quantity,
       // Voucher credentials come exclusively from the reviewed pair:

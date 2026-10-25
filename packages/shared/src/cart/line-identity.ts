@@ -4,7 +4,8 @@ import type { CartItemIdentity } from './types';
  * Stable identity key for one cart line.
  *
  * Normalization sorts option keys so ordering never splits a line and
- * matches PostgreSQL UUID case-insensitive equality for product/variant IDs.
+ * matches PostgreSQL UUID case-insensitive equality for product, variant,
+ * and offer IDs. An omitted offer stays distinct from any exact offer.
  * It preserves unknown option keys and values verbatim: normalization decides
  * identity, never catalog validity. The server validates values separately.
  */
@@ -18,6 +19,7 @@ export function cartLineIdentity(item: CartItemIdentity): string {
     item.productId.toLowerCase(),
     item.variantId?.toLowerCase() ?? null,
     item.condition ?? null,
+    item.offerId?.toLowerCase() ?? null,
     sortedOptions,
   ]);
 }

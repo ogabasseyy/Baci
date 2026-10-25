@@ -23,6 +23,19 @@ describe('display identity normalization', () => {
     });
     expect(source.variantAttributes).toEqual({ network: '5G' });
   });
+  it('keeps an exact offer id on the delegated identity', () => {
+    expect(
+      cartItemToIdentity({
+        id: 'phone',
+        condition: 'used',
+        offerId: '44444444-4444-4444-8444-444444444444',
+      })
+    ).toEqual({
+      productId: 'phone',
+      condition: 'used',
+      offerId: '44444444-4444-4444-8444-444444444444',
+    });
+  });
   it('omits unsupported conditions and empty optional identity fields', () => {
     expect(
       cartItemToIdentity({ id: 'phone', condition: 'unsupported' })

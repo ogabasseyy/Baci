@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         ? {
             edit: {
               productId: input.data.productId,
+              ...(input.data.offerId ? { offerId: input.data.offerId } : {}),
               quantity: input.data.quantity,
             },
           }

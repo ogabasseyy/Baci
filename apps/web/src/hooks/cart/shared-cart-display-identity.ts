@@ -5,6 +5,7 @@ export interface SharedCartIdentitySource {
   id: string;
   variantId?: string;
   condition?: string;
+  offerId?: string;
   variantAttributes?: Record<string, string>;
   selectedColor?: string;
   selectedColorValue?: string;
@@ -42,6 +43,7 @@ export function cartItemToIdentity(
   const identity: CartItemIdentity = { productId: item.id };
   if (item.variantId) identity.variantId = item.variantId;
   if (isCartCondition(item.condition)) identity.condition = item.condition;
+  if (item.offerId) identity.offerId = item.offerId;
   if (Object.keys(options).length > 0) identity.options = options;
   return identity;
 }

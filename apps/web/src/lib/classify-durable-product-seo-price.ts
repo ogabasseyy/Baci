@@ -5,6 +5,7 @@ const QUANTITY_UNIT =
   /^\s*(?:units?|items?|pieces?|photos?|songs?|files?|people|users?|models?|colou?rs?|options?|sizes?|picks?|years?|days?|hours?|cycles?|washes|uses|pixels?|nits?|mah|kwh|wh|mwh|gb|tb|mb|hz|khz|mhz|ghz|mp|watts?|volts?|amps?|lumens?|lit(?:er|re)s?|degrees?|celsius|fahrenheit|inch(?:es)?|cm|mm|kg|g|grams?|oz|lbs?|pounds?)\b/i;
 const STOCK_COUNT_CONTEXT =
   /^\s*(?:(?:items?|pieces?|units?|copies)\s+)?(?:left(?:\s+in\s+stock)?|in\s+stock|remaining)\b/i;
+const PERCENTAGE_QUANTITY = /^\s*%/;
 const CLOCK_TIME_TAIL =
   /^(?:[:.]\d{2}\s*(?:am|pm|gmt|utc|est|pst|cst|bst|cet)\b|:\d{2}\b|\s*(?:am|pm)\b)/i;
 const PIXEL_DIMENSION_PAIR =
@@ -128,6 +129,7 @@ export function isDurableSeoPrice(
   if (clockTime) return false;
   const quantity =
     QUANTITY_UNIT.test(tail) ||
+    PERCENTAGE_QUANTITY.test(tail) ||
     PIXEL_DIMENSION_PAIR.test(tail) ||
     hasUnitlessPixelDimension ||
     (/\d[\d,.]*\s*(?:[×x]|by)\s*$/i.test(nearbyPrefix) &&

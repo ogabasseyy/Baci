@@ -18,7 +18,7 @@ const BRAND_AUTHORITY_ENTRIES: readonly BrandAuthorityEntry[] = [
     displayName: 'Apple iPhone',
     intro:
       'Compare Apple iPhone smartphones at {merchantName} across Pro Max flagships, Pro models, base iPhones, and budget-friendly options.',
-    minimumProducts: 3,
+    minimumProducts: 5,
   },
   {
     brandKey: 'samsung',

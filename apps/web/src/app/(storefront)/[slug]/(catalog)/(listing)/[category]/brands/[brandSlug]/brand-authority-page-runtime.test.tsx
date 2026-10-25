@@ -1,28 +1,15 @@
-import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetStorefrontPathPrefix = vi.fn();
 const mockLoadBrandAuthorityPage = vi.fn();
 const mockBrandAuthorityPageContent = vi.fn();
 
-vi.mock('next/server', () => ({ connection: () => Promise.resolve() }));
-vi.mock('@/app/(storefront)/[slug]/storefront-route-not-found-content', () => ({
-  StorefrontRouteNotFoundContent: ({
-    title,
-    message,
-    backHref,
-  }: {
-    title: string;
-    message: string;
-    backHref: string;
-  }) => (
-    <div>
-      <h1>{title}</h1>
-      <p>{message}</p>
-      <a href={backHref}>Back</a>
-    </div>
-  ),
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('NEXT_NOT_FOUND');
+  },
 }));
+vi.mock('next/server', () => ({ connection: () => Promise.resolve() }));
 vi.mock('@/lib/storefront-category/load-brand-authority-page', () => ({
   brandAuthorityPageLoader: {
     getStorefrontPathPrefix: (...args: unknown[]) =>
@@ -80,38 +67,23 @@ describe('brandAuthorityPageRuntime', () => {
     });
   });
 
-  it('renders the not-found fallback with the resolved recovery link when the hub is thin', async () => {
+  it('returns not found before resolving a path prefix when the hub is thin', async () => {
     // Arrange
     mockLoadBrandAuthorityPage.mockResolvedValue(null);
-    mockGetStorefrontPathPrefix.mockResolvedValue('/ogabassey');
     const { brandAuthorityPageRuntime } = await import(
       './brand-authority-page-runtime'
     );
 
-    // Act
-    const element = await brandAuthorityPageRuntime.render({
-      params: Promise.resolve({
-        slug: 'ogabassey',
-        category: 'smartphones',
-        brandSlug: 'samsung',
-      }),
-    });
-    render(element);
-
-    // Assert
-    expect(mockGetStorefrontPathPrefix).toHaveBeenCalledWith(
-      'ogabassey',
-      'ogabassey'
-    );
-    expect(
-      screen.getByRole('heading', { name: 'Brand hub not found' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('This brand hub is unavailable or has moved.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/ogabassey'
-    );
+    // Act and assert
+    await expect(
+      brandAuthorityPageRuntime.render({
+        params: Promise.resolve({
+          slug: 'ogabassey',
+          category: 'smartphones',
+          brandSlug: 'samsung',
+        }),
+      })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+    expect(mockGetStorefrontPathPrefix).not.toHaveBeenCalled();
   });
 });

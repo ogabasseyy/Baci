@@ -4,23 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockLoad = vi.fn();
 const mockGetPathPrefix = vi.fn();
 const mockContent = vi.fn();
-vi.mock('@/app/(storefront)/[slug]/storefront-route-not-found-content', () => ({
-  StorefrontRouteNotFoundContent: ({
-    title,
-    message,
-    backHref,
-  }: {
-    title: string;
-    message: string;
-    backHref: string;
-  }) => (
-    <div>
-      <h1>{title}</h1>
-      <p>{message}</p>
-      <a href={backHref}>Back</a>
-    </div>
-  ),
-}));
+const mockNotFound = vi.fn(() => {
+  throw new Error('not found');
+});
 vi.mock('@/lib/storefront-category/load-model-family-authority-page', () => ({
   modelFamilyAuthorityPageLoader: {
     load: (...args: unknown[]) => mockLoad(...args),
@@ -38,6 +24,9 @@ vi.mock('../../brand-authority-page-content', () => ({
   },
 }));
 vi.mock('next/server', () => ({ connection: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  notFound: () => mockNotFound(),
+}));
 
 describe('model family page runtime', () => {
   beforeEach(() => {
@@ -76,15 +65,14 @@ describe('model family page runtime', () => {
     );
   });
 
-  it('renders the not-found fallback with the resolved recovery link when the family no longer qualifies', async () => {
+  it('returns not found when the family no longer qualifies', async () => {
     mockLoad.mockResolvedValue(null);
-    mockGetPathPrefix.mockResolvedValue('/store');
     const { modelFamilyPageRuntime } = await import(
       './model-family-page-runtime'
     );
 
-    render(
-      await modelFamilyPageRuntime.render({
+    await expect(
+      modelFamilyPageRuntime.render({
         params: Promise.resolve({
           slug: 'store',
           category: 'smartphones',
@@ -92,18 +80,8 @@ describe('model family page runtime', () => {
           familySlug: 'galaxy-z',
         }),
       })
-    );
-
-    expect(mockGetPathPrefix).toHaveBeenCalledWith('store', 'store');
-    expect(
-      screen.getByRole('heading', { name: 'Model family hub not found' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('This model family hub is unavailable or has moved.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/store'
-    );
+    ).rejects.toThrow('not found');
+    expect(mockNotFound).toHaveBeenCalledOnce();
+    expect(mockGetPathPrefix).not.toHaveBeenCalled();
   });
 });

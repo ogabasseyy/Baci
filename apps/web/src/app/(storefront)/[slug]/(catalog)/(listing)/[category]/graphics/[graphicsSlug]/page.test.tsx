@@ -1,35 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockCategoryPageContent, mockConnection, mockHeaders, mockLoadHub } =
-  vi.hoisted(() => ({
+const { mockCategoryPageContent, mockConnection, mockLoadHub } = vi.hoisted(
+  () => ({
     mockCategoryPageContent: vi.fn(),
     mockConnection: vi.fn(),
-    mockHeaders: vi.fn(() => Promise.resolve(new Headers())),
     mockLoadHub: vi.fn(),
-  }));
+  })
+);
 
-vi.mock('next/headers', () => ({ headers: mockHeaders }));
 vi.mock('next/server', () => ({ connection: mockConnection }));
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('NEXT_NOT_FOUND');
+  },
+}));
 vi.mock('@/lib/store-url', () => ({
   buildStoreUrl: () => 'https://ogabassey.com',
-}));
-vi.mock('@/app/(storefront)/[slug]/storefront-route-not-found-content', () => ({
-  StorefrontRouteNotFoundContent: ({
-    title,
-    message,
-    backHref,
-  }: {
-    title: string;
-    message: string;
-    backHref: string;
-  }) => (
-    <div>
-      <h1>{title}</h1>
-      <p>{message}</p>
-      <a href={backHref}>Back</a>
-    </div>
-  ),
 }));
 vi.mock('../../category-page-content', () => ({
   CategoryPageContent: (props: unknown) => {
@@ -56,7 +43,6 @@ describe('GamingGraphicsHubPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConnection.mockResolvedValue(undefined);
-    mockHeaders.mockResolvedValue(new Headers());
     mockLoadHub.mockResolvedValue({
       availableHubs: [{ slug: 'rtx-4070', model: '4070', label: 'RTX 4070' }],
       canonicalBaseUrl:
@@ -159,74 +145,18 @@ describe('GamingGraphicsHubPage', () => {
     );
   });
 
-  it('returns marker-free not-found metadata and renders fallback for an invalid page parameter', async () => {
-    const invalidProps = {
-      ...props,
-      searchParams: Promise.resolve({ page: 'invalid' }),
-    };
-
-    const metadata = await generateMetadata(invalidProps);
-    expect(metadata).toEqual({
-      title: 'Graphics Hub Not Found',
-      description: 'This graphics hub is unavailable.',
-      robots: { index: false, follow: true },
-      alternates: null,
-      openGraph: undefined,
-      twitter: undefined,
-    });
-
-    render(await GamingGraphicsHubRuntime(invalidProps));
-    expect(
-      screen.getByRole('heading', { name: 'Graphics hub not found' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('This graphics hub is unavailable or has moved.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/'
-    );
+  it('returns not found for an invalid page parameter', async () => {
+    await expect(
+      generateMetadata({
+        ...props,
+        searchParams: Promise.resolve({ page: 'invalid' }),
+      })
+    ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
-  it('returns marker-free not-found metadata and renders fallback when requested hub is not publishable', async () => {
+  it('returns not found when the requested hub is not publishable', async () => {
     mockLoadHub.mockResolvedValueOnce(null);
 
-    const metadata = await generateMetadata(props);
-    expect(metadata).toEqual({
-      title: 'Graphics Hub Not Found',
-      description: 'This graphics hub is unavailable.',
-      robots: { index: false, follow: true },
-      alternates: null,
-      openGraph: undefined,
-      twitter: undefined,
-    });
-
-    mockLoadHub.mockResolvedValueOnce(null);
-    mockHeaders.mockResolvedValueOnce(
-      new Headers({
-        host: 'shop.usebaci.com',
-        'x-merchant-slug': 'shop',
-      })
-    );
-    render(
-      await GamingGraphicsHubRuntime({
-        ...props,
-        params: Promise.resolve({
-          category: 'gaming-laptops',
-          graphicsSlug: 'rtx-4070',
-          slug: 'shop',
-        }),
-      })
-    );
-    expect(
-      screen.getByRole('heading', { name: 'Graphics hub not found' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('This graphics hub is unavailable or has moved.')
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/'
-    );
+    await expect(generateMetadata(props)).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });

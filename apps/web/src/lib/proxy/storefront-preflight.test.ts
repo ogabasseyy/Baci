@@ -238,13 +238,16 @@ describe('storefront preflight order', () => {
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it('ignores query-bearing requests to preserve search and filter variants', async () => {
+    it('returns 404 for unknown taxonomy slugs even when query parameters are present', async () => {
       const response = await runStorefrontPreflight(
         createPreflightArgs('/smartphones/brands/nonexistent-brand?page=2')
       );
 
-      expect(response).toBeNull();
-      expect(mockRpc).not.toHaveBeenCalled();
+      expect(response).not.toBeNull();
+      expect(response?.status).toBe(404);
+      expect(mockRpc).toHaveBeenCalledWith('resolve_storefront_auth_merchant', {
+        p_identifier: 'shop',
+      });
     });
   });
 });

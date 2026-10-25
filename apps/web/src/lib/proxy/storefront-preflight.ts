@@ -89,9 +89,6 @@ export async function resolveStorefrontTaxonomySubrouteHardStatus(
   if (!isEligibleForHardStatusPreflight(request, pathname)) {
     return null;
   }
-  if (request.nextUrl.search.length > 0) {
-    return null;
-  }
 
   const routeType = getRouteType(pathname);
   if (routeType !== 'storefront') {

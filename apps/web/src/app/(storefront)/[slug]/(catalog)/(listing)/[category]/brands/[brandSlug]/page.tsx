@@ -12,23 +12,10 @@ interface BrandAuthorityPageRouteProps {
   }>;
 }
 
-const BRAND_HUB_NOT_FOUND_METADATA: Metadata = {
-  title: 'Brand Hub Not Found',
-  description: 'This brand hub is unavailable.',
-  robots: { index: false, follow: true },
-  alternates: null,
-  openGraph: undefined,
-  twitter: undefined,
-};
-
 export async function generateMetadata(
   props: BrandAuthorityPageRouteProps
 ): Promise<Metadata> {
   const { page } = await brandAuthorityPageRuntime.loadIndexablePage(props);
-
-  if (!page || ('isIndexable' in page && !page.isIndexable)) {
-    return BRAND_HUB_NOT_FOUND_METADATA;
-  }
 
   return {
     title: { absolute: page.metaTitle },

@@ -108,7 +108,7 @@ describe('brand authority taxonomy', () => {
       brandSlug: 'apple',
       categorySlug: 'smartphones',
       displayName: 'Apple iPhone',
-      minimumProducts: 3,
+      minimumProducts: 5,
     });
     expect(appleEntryByAlias).toEqual(appleEntry);
 

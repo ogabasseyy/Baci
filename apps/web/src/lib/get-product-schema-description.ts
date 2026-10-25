@@ -1,3 +1,4 @@
+import { PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH } from '../config/product-schema';
 import { getDurableProductSeoText } from './get-durable-product-seo-text';
 import { generateMetaDescription } from './meta-description';
 import type { Product } from './products';
@@ -11,7 +12,10 @@ export function getProductSchemaDescription(
   for (const text of [product.description, product.meta_description]) {
     const durable = getDurableProductSeoText({ text, product });
     if (durable && !isUnsupportedSpecValue(durable)) {
-      return generateMetaDescription(durable, 500);
+      return generateMetaDescription(
+        durable,
+        PRODUCT_SCHEMA_DESCRIPTION_MAX_LENGTH
+      );
     }
   }
   return `Buy ${product.name} from ${merchantName}. Best prices, fast delivery, and secure payments.`;

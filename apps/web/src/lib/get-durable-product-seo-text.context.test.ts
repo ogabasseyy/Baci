@@ -295,4 +295,16 @@ describe('durable SEO monetary context', () => {
       })
     ).toBe('Available in 64, 128 or 256GB storage.');
   });
+
+  it.each([
+    'Price: 900, next day delivery',
+    'Buy for 350000, free shipping',
+  ])('rejects a bare price followed by a clause comma: %s', (text) => {
+    expect(
+      getDurableProductSeoText({
+        text,
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+  });
 });

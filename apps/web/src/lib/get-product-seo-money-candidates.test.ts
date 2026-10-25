@@ -80,6 +80,13 @@ describe('getProductSeoMoneyCandidates', () => {
     expect(getProductSeoMoneyCandidates('٩٫٥٠٠٠ AED')).toEqual([]);
   });
 
+  it.each([
+    'Price: 900, next day delivery',
+    'Buy for 350000, free shipping',
+  ])('tokenizes an explicitly cued bare price before sentence punctuation: %s', (text) => {
+    expect(getProductSeoMoneyCandidates(text)).toHaveLength(1);
+  });
+
   it('does not split amounts into model/specification suffixes', () => {
     expect(getProductSeoMoneyCandidates('RAM16GB 512GB 4,000mAh')).toEqual([]);
   });

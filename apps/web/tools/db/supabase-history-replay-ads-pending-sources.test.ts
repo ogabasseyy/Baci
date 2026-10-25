@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { URL as FileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 
@@ -68,7 +69,9 @@ describe('supabase history replay ads pending sources', () => {
       '20261024162000_chatgpt_ads_admin_destination.sql',
     ] as const;
     for (const name of names) {
-      const bytes = readFileSync(`../../supabase/migrations/${name}`);
+      const bytes = readFileSync(
+        new FileURL(`../../../../supabase/migrations/${name}`, import.meta.url)
+      );
       const hash = createHash('sha256').update(bytes).digest('hex');
       expect(rows.filter((row) => row.endsWith(` ${name}`))).toEqual([
         `${hash} ${name}`,

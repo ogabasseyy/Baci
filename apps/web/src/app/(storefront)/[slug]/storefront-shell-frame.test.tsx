@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
+import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 
 const notFound = vi.fn(() => {
@@ -47,17 +48,22 @@ vi.mock('./storefront-layout-renderer', () => ({
 const shellSnapshot = {
   merchant: {
     id: 'merchant-1',
+    user_id: 'user-1',
+    business_name: 'Ogabassey',
+    business_type: 'electronics',
     slug: 'ogabassey',
   },
-  routingMode: 'domain' as const,
-};
+  routingMode: 'domain',
+  basePath: '',
+  navigationCategories: [],
+} satisfies StorefrontShellSnapshot;
 
 describe('StorefrontShellFrame', () => {
   it('renders children inside the merchant shell', () => {
     render(
       <StorefrontShellFrame
         preloadHeroLcpImages={false}
-        shellSnapshot={shellSnapshot as never}
+        shellSnapshot={shellSnapshot}
       >
         <main>Shell body</main>
       </StorefrontShellFrame>
@@ -74,7 +80,7 @@ describe('StorefrontShellFrame', () => {
       shellSnapshot: {
         ...shellSnapshot,
         chatgptPixelId: 'pixel-landing',
-      } as never,
+      } satisfies StorefrontShellSnapshot,
     };
     const view = render(
       <StorefrontShellFrame {...props}>
@@ -117,14 +123,16 @@ describe('StorefrontShellFrame cart wiring', () => {
         preloadHeroLcpImages={false}
         shellSnapshot={
           {
+            ...shellSnapshot,
             merchant: {
+              ...shellSnapshot.merchant,
               id: 'merchant-1',
               plan_tier: 'free',
               premium_features: ['shared_cart'],
               slug: 'ogabassey',
             },
             routingMode: 'domain',
-          } as never
+          } satisfies StorefrontShellSnapshot
         }
       >
         <main>Shell body</main>
@@ -144,14 +152,16 @@ describe('StorefrontShellFrame cart wiring', () => {
         preloadHeroLcpImages={false}
         shellSnapshot={
           {
+            ...shellSnapshot,
             merchant: {
+              ...shellSnapshot.merchant,
               id: 'merchant-1',
               plan_tier: 'pro',
               premium_features: [],
               slug: 'ogabassey',
             },
             routingMode: 'domain',
-          } as never
+          } satisfies StorefrontShellSnapshot
         }
       >
         <main>Shell body</main>
@@ -179,7 +189,7 @@ it('wires anonymous derived capability hints into the storefront cart', () => {
             shared_cart_accounts_enabled: false,
             shared_cart_realtime_enabled: true,
           },
-        } as never
+        } satisfies StorefrontShellSnapshot
       }
     >
       <main>Public shell</main>

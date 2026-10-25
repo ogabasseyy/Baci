@@ -1,4 +1,6 @@
 'use client';
+
+// Owns the browser-only Pixel queue; keep window-backed tracking behind this client boundary.
 import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 
 type PixelQueue = ((...args: unknown[]) => void) & { q?: unknown[][] };

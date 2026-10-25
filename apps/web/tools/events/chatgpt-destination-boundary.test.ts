@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { URL as FileURL, fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { collectProductionImportClosure } from '../../src/lib/events/event-pipeline-import-closure';
+import { readGitSourceSnapshot } from './event-pipeline-git-source-snapshot';
 import { analyzeRpcSource } from './verify-event-pipeline-boundaries';
 
 const adapterPath = 'apps/web/src/lib/events/chatgpt-destination-adapter.ts';
 const urlPath = 'apps/web/src/lib/store-url.ts';
-const read = (path: string) => readFileSync(resolve('../..', path), 'utf8');
+const root = fileURLToPath(new FileURL('../../../../', import.meta.url));
+const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
 
 describe('ChatGPT worker database boundary', () => {
   it('permits only the declared worker reads in the real adapter', () => {
@@ -42,12 +45,12 @@ describe('ChatGPT worker database boundary', () => {
     );
   });
   it('keeps pure URL formatting independent of the storefront data loader', () => {
-    const sources = new Map([
-      [urlPath, read(urlPath)],
-      ['apps/web/src/lib/cached-data.ts', 'export const dataLoader = true;'],
-    ]);
-    expect(collectProductionImportClosure([urlPath], sources)).toEqual(
-      new Set([urlPath])
-    );
+    // Include every real local intermediate, so a helper or barrel cannot hide
+    // a transitive dependency on the storefront data loader.
+    const sources = readGitSourceSnapshot(root).filesystemSources;
+    expect(sources.has(urlPath)).toBe(true);
+    expect(sources.has('apps/web/src/lib/cached-data.ts')).toBe(true);
+    const closure = collectProductionImportClosure([urlPath], sources);
+    expect(closure.has('apps/web/src/lib/cached-data.ts')).toBe(false);
   });
 });

@@ -38,6 +38,22 @@ describe('isDurableSeoPrice', () => {
     expect(isDurableSeoPrice(candidate, text)).toBe(false);
   });
 
+  it('preserves PHP runtime versions as technical specifications', () => {
+    const text = 'Compatible with PHP 8.3 and MySQL 8';
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected a monetary-looking candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
+  it('preserves numeric values governed by a plain model predicate', () => {
+    const text = 'The model is 12345';
+    const candidate = getProductSeoMoneyCandidates(text)[0];
+    expect(candidate).toBeDefined();
+    if (!candidate) throw new Error('Expected a monetary-looking candidate');
+    expect(isDurableSeoPrice(candidate, text)).toBe(false);
+  });
+
   it.each([
     'Sale: COP 4500 cooling fan',
     'Price: COP 900 heating system',

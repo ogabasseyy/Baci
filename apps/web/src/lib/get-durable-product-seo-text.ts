@@ -94,18 +94,20 @@ export function getDurableProductSeoText({
   const denominations = /\b(?:gift[- ]cards?|vouchers?)\b/i.test(productName)
     ? getProductSeoMoneyCandidates(productName).filter((value) => value.marker)
     : [];
-  return getProductSeoMoneyCandidates(monetaryText).some((candidate) => {
-    return (
-      isDurableSeoPrice(candidate, monetaryText) &&
-      !isClearlyNonRetailSeoAmount(candidate, monetaryText) &&
-      !isDurableSeoDenomination(
-        candidate,
-        monetaryText,
-        productName,
-        denominations
-      )
-    );
-  })
-    ? ''
-    : plainText;
+  const hasRetailPrice = getProductSeoMoneyCandidates(monetaryText).some(
+    (candidate) => {
+      return (
+        isDurableSeoPrice(candidate, monetaryText) &&
+        !isClearlyNonRetailSeoAmount(candidate, monetaryText) &&
+        !isDurableSeoDenomination(
+          candidate,
+          monetaryText,
+          productName,
+          denominations
+        )
+      );
+    }
+  );
+  if (hasRetailPrice || !/[\p{L}\p{N}]/u.test(monetaryText)) return '';
+  return plainText;
 }

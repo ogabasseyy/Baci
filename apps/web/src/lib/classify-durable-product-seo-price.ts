@@ -81,18 +81,20 @@ export function isDurableSeoPrice(
     Math.max(0, candidate.start - 80),
     candidate.start
   );
+  const nearbyClause = nearbyPrefix.split(/[.!?;\n]/).at(-1) ?? '';
   const lastCueIndex = (pattern: RegExp) =>
     [...nearbyPrefix.matchAll(pattern)].at(-1)?.index ?? -1;
   const physicalPounds =
     ['POUND', 'POUNDS'].includes(candidate.marker.toUpperCase()) &&
-    lastCueIndex(
+    (lastCueIndex(
       /\b(?:weigh|weighs|weighing|weight|load(?:\s+capacity)?|payload(?:\s+capacity)?|capacity)\b/gi
     ) >
       lastCueIndex(
         /\b(?:cost|costs|price|prices|priced|buy|purchase|pay|sell)\b/gi
-      );
+      ) ||
+      (/^\s+of\b/i.test(text.slice(candidate.end)) &&
+        /\b(?:contains?|containing|comprises?|holds?)\b/i.test(nearbyClause)));
   if (physicalPounds && !relation.cue && !relation.predicate) return false;
-  const nearbyClause = nearbyPrefix.split(/[.!?;\n]/).at(-1) ?? '';
   const followingClause = tail.split(/[.!?;\n]/)[0] ?? '';
   const unitlessDimension = UNITLESS_PIXEL_DIMENSION_PAIR.exec(tail);
   const unitlessDimensionValue = unitlessDimension?.[1]
@@ -173,7 +175,15 @@ export function isDurableSeoPrice(
       return false;
   }
   if (!candidate.marker) {
-    if (relation.identifierPredicate && !relation.predicate) return false;
+    if (
+      relation.identifierPredicate &&
+      !relation.predicate &&
+      !relation.cue &&
+      !relation.strong &&
+      !relation.commercial &&
+      !relation.purchase
+    )
+      return false;
     if (
       (!relation.cue &&
         !relation.predicate &&
@@ -207,6 +217,17 @@ export function isDurableSeoPrice(
   if (
     candidate.marker.toUpperCase() === 'SAR' &&
     /^\s*W\s*\/\s*kg\b/i.test(tail)
+  )
+    return false;
+  // PHP followed by a runtime/version clause is a software requirement, not currency.
+  if (
+    candidate.marker.toUpperCase() === 'PHP' &&
+    /^\s+(?:and\s+)?(?:MySQL|runtime|version)\b/i.test(tail) &&
+    !relation.cue &&
+    !relation.strong &&
+    !relation.commercial &&
+    !relation.predicate &&
+    !relation.purchase
   )
     return false;
   // Heat-pump / HVAC coefficient of performance specifications are not Colombian pesos.

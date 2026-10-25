@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       source: 'web',
       trustLevel: context.trustLevel,
       eventData: {
+        targets: ['facebook'],
         currency: input.eventData.currency,
         value: input.eventData.value,
         items: input.eventData.products,

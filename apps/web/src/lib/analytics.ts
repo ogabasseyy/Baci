@@ -1,6 +1,7 @@
 'use client';
 
 import type { Product } from '@/lib/products';
+import { trackCartView } from './analytics/track-cart-view';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
 
@@ -70,41 +71,14 @@ function sendGA4Event(eventName: string, params: object) {
 }
 
 // Facebook Pixel Event Tracking
-function sendFBEvent(eventName: string, params?: object, eventId?: string) {
+function sendFBEvent(eventName: string, params?: object) {
   if (!isAnalyticsAllowed()) return;
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    if (eventId) {
-      window.fbq('track', eventName, facebookCatalogEvent(params), {
-        eventID: eventId,
-      });
-    } else {
-      window.fbq('track', eventName, facebookCatalogEvent(params));
-    }
+    window.fbq('track', eventName, facebookCatalogEvent(params));
   } else {
     window.fbq('track', eventName);
-  }
-}
-
-// Helper to dispatch server-side CAPI events
-async function dispatchCAPI(
-  provider: 'facebook-capi' | 'snapchat',
-  payload: object
-) {
-  try {
-    const response = await fetch(`/api/analytics/${provider}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
-      console.warn(provider, 'CAPI dispatch failed:', response.statusText);
-    }
-  } catch (err) {
-    // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
-    console.warn(provider, 'CAPI dispatch error:', err);
   }
 }
 
@@ -183,81 +157,7 @@ export const analytics = {
     });
   },
 
-  // View cart (GA4 standard event + CAPI)
-  viewCart: (
-    products: Array<{ product: Product; quantity: number }>,
-    currency: string = 'USD',
-    additionalData?: {
-      merchantId: string;
-      // biome-ignore lint/suspicious/noExplicitAny: userData is intentionally flexible for analytics payloads
-      userData?: any;
-    }
-  ) => {
-    if (!isAnalyticsAllowed()) return;
-    const eventId = crypto.randomUUID();
-    const value = products.reduce(
-      (sum, { product, quantity }) => sum + product.price * quantity,
-      0
-    );
-    const items = products.map(({ product, quantity }) =>
-      productToItem(product, quantity)
-    );
-
-    // Client-side GA4
-    sendGA4Event('view_cart', {
-      currency,
-      value,
-      items,
-    });
-
-    // Client-side FB Pixel (using InitiateCheckout as strict ViewCart doesn't exist/isn't standard)
-    // Actually, widespread practice is mapping ViewCart -> ViewContent (Category: Cart) or initiateCheckout for deeper intent.
-    // User requested "all CAPI structures".
-    // For FB CAPI, we'll map to 'ViewContent' or 'InitiateCheckout'.
-    // Given the flow sidebar -> checkout, 'InitiateCheckout' is strong.
-    // However, let's stick to ViewContent for "Viewing" to avoid inflating checkout starts.
-    sendFBEvent(
-      'ViewContent',
-      {
-        content_ids: products.map((p) => p.product.id),
-        content_type: 'product_group',
-        content_name: 'Shopping Cart',
-        value,
-        currency,
-        num_items: products.reduce((sum, p) => sum + p.quantity, 0),
-      },
-      eventId
-    );
-
-    // Server-side CAPI Dispatch (if merchantId provided)
-    if (additionalData?.merchantId) {
-      // Facebook CAPI
-      dispatchCAPI('facebook-capi', {
-        event: 'ViewContent',
-        eventId,
-        consent: true,
-        merchantId: additionalData.merchantId,
-        userData: additionalData.userData,
-        eventData: {
-          value,
-          currency,
-          products: products.map((p) => ({
-            id: p.product.id,
-            name: p.product.name,
-            quantity: p.quantity,
-            price: p.product.price,
-          })),
-        },
-        eventSourceUrl: window.location.href,
-      });
-
-      // Snapchat CAPI - No direct "View Cart", usually mapped to ADD_CART or START_CHECKOUT.
-      // We will skip Snapchat for *View* Cart to be safe, or could map to standard event if requested.
-      // User said "all capi structures". Let's map to 'move_to_checkout' equivalent or skip if invalid.
-      // Snapchat route supports: purchase, begin_checkout, add_to_cart.
-      // 'view_cart' doesn't map cleanly. We'll omit to prevent error 400 from endpoint.
-    }
-  },
+  viewCart: trackCartView,
 
   // View cart / Begin checkout
   beginCheckout: (

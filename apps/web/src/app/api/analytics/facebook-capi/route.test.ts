@@ -71,10 +71,31 @@ describe('storefront CAPI ingress', () => {
         eventType: 'product_view',
         eventData: expect.objectContaining({
           currency: 'NGN',
+          targets: ['facebook'],
           value: 200,
           items: payload.eventData.products,
         }),
       })
+    );
+  });
+  it('binds another merchant observation to that merchant alone', async () => {
+    const otherMerchantId = '22222222-2222-4222-8222-222222222222';
+    mocks.context.mockResolvedValue({
+      ok: true,
+      verified: true,
+      merchantId: otherMerchantId,
+      trustLevel: 'tenant_verified_client',
+    });
+    const response = await POST(
+      request({ ...payload, merchantId: otherMerchantId })
+    );
+    expect(response.status).toBe(202);
+    expect(mocks.ingress).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantId: otherMerchantId })
+    );
+    expect(mocks.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ merchantId: otherMerchantId })
     );
   });
   it('rejects a body-selected merchant that does not match the storefront', async () => {

@@ -74,8 +74,8 @@ html:has([data-storefront-shell]) *::after {
   font-size: 1.875rem !important;
   font-weight: 700 !important;
   line-height: 2.25rem !important;
-  margin: 0 0 1rem !important;
-  text-align: center;
+  margin: 0 !important;
+  text-align: left !important;
 }
 
 [data-cwv-lcp-copy="imei"] {
@@ -109,6 +109,13 @@ html:has([data-storefront-shell]) *::after {
   [data-cwv-lcp-copy="repairs"] {
     font-size: 3rem !important;
     line-height: 1 !important;
+  }
+}
+
+@media (min-width: 640px) {
+  [data-cwv-lcp-copy="repair"] {
+    font-size: 2.25rem !important;
+    line-height: 2.5rem !important;
   }
 }
 

@@ -12,6 +12,14 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       /\[data-repair-booking-lcp-fold\]\s*\{\s*min-height: 0;/
     );
   });
+  it('keeps the repair LCP heading aligned and sized like its hero', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="repair"\]\s*\{[^}]*font-size: 1\.875rem !important;[^}]*margin: 0 !important;[^}]*text-align: left !important;/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /@media \(min-width: 640px\)\s*\{\s*\[data-cwv-lcp-copy="repair"\]\s*\{\s*font-size: 2\.25rem !important;\s*line-height: 2\.5rem !important;/
+    );
+  });
   it('locks fallback fonts and first-paint sr-only clipping', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain('Inter Fallback');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('h1.sr-only');

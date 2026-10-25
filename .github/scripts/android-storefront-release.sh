@@ -12,6 +12,7 @@ case "$operation" in
     GRADLE_RELEASE_HOME="$(dirname "$RUNNER_TEMP")/gradle-user-home"
     umask 077
     mkdir -p "$GRADLE_RELEASE_HOME"
+    chmod 700 "$GRADLE_RELEASE_HOME"
     printf 'GRADLE_USER_HOME=%s\n' "$GRADLE_RELEASE_HOME" >> "$GITHUB_ENV"
     ;;
   expose-posthog-cli)

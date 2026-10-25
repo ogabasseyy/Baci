@@ -100,11 +100,13 @@ RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
 grep -Fxq "GRADLE_USER_HOME=$fixture_root/private-runner/gradle-user-home" "$private_env"
 [ -d "$fixture_root/private-runner/gradle-user-home" ]
 
-# Repeated setup preserves the isolated cache instead of deleting warm outputs.
+# Repeated setup repairs existing permissions without deleting warm outputs.
 touch "$fixture_root/private-runner/gradle-user-home/retained"
+chmod 755 "$fixture_root/private-runner/gradle-user-home"
 RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
   bash "$script" configure-gradle-home
 [ -f "$fixture_root/private-runner/gradle-user-home/retained" ]
+[ "$(LC_ALL=C ls -ld "$fixture_root/private-runner/gradle-user-home" | cut -c 1-10)" = "drwx------" ]
 
 if RUNNER_TEMP=relative/_temp GITHUB_ENV="$fixture_root/invalid-gradle-env" \
   bash "$script" configure-gradle-home >"$fixture_root/invalid-gradle-log" 2>&1; then

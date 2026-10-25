@@ -433,6 +433,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: .github/scripts/current-main-deploy-guard.mjs
+      - name: Verify publication tooling and worker barriers before build
+        # Catch missing CLI/auth/store prerequisites before an expensive build.
+        # The same guard still runs immediately before publish and each promote.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - uses: ./.github/actions/pnpm-install-cached
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block

@@ -143,7 +143,7 @@ test('fails closed when the superseding comparison is incomplete', async () => {
   );
 });
 
-test('rejects every web path declared by the deploy filter', async () => {
+test('rejects every web path declared by the deploy filter', async (context) => {
   const filters = YAML.parse(
     readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
   );
@@ -151,11 +151,12 @@ test('rejects every web path declared by the deploy filter', async () => {
     const representative = pattern
       .replaceAll('**', 'nested/example.js')
       .replaceAll('*', 'example');
-    await assert.rejects(
-      verifySupersededFile(representative),
-      /superseded deployment SHA/,
-      pattern
-    );
+    await context.test(pattern, async () => {
+      await assert.rejects(
+        verifySupersededFile(representative),
+        /superseded deployment SHA/
+      );
+    });
   }
 });
 

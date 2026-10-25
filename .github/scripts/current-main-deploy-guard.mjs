@@ -38,6 +38,8 @@ const WEB_WORKFLOW_FILES = new Set([
   '.github/scripts/refuse-publish-on-promote-overlap.sh',
   '.github/scripts/probe-gigl-hook-reload.sh',
   '.github/scripts/check-gigl-cutover-latch.sh',
+  '.github/scripts/refresh-gigl-cutover-latch.sh',
+  '.github/scripts/check-production-release-outcome.mjs',
   '.github/scripts/resolve-gigl-latch-identity.sh',
   '.github/scripts/smoke-gigl-worker-capability.sh',
   '.github/scripts/verify-gigl-fallback-token.sh',

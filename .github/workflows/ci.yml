@@ -621,6 +621,10 @@ jobs:
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
           .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-installed-equivalence.test.mjs
+          .github/scripts/deploy-gigl-recovery.test.mjs
+          .github/scripts/refresh-gigl-cutover-latch.test.mjs
+          .github/scripts/check-production-release-outcome.test.mjs
           .github/scripts/check-gigl-enforcement-migration-names.test.mjs
           .github/scripts/check-gigl-cutover-latch-scope.test.mjs
           .github/scripts/gigl-dotenv.test.mjs

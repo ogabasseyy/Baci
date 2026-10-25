@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import type React from 'react';
 import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
+import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
@@ -53,6 +54,7 @@ export function StorefrontShellFrame({
           <ChatgptPixel pixelId={shellSnapshot.chatgptPixelId} />
         ) : null}
         <DeferredPageViewTracker merchantId={merchant.id} />
+        <CookieConsent />
         {/*
           Global Layout Wrapper logic:
           - Keeps layout persistent across route changes (seamless navigation)

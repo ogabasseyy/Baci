@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import {
   appendFileSync,
   existsSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -35,6 +36,65 @@ function preserved(value, result) {
   );
 }
 describe('guarded GIGL cutover latch refresh', () => {
+  it('allows a complete canonical tracking poll and termination grace before timing out by default', () => {
+    const value = setup();
+    const flockPath = join(value.root, 'test-bin/flock');
+    const lockWaitRecord = join(value.root, 'lock-waits');
+    let originalFlock;
+    if (existsSync(flockPath)) {
+      originalFlock = join(value.root, 'test-bin/original-flock');
+      renameSync(flockPath, originalFlock);
+    } else {
+      originalFlock = execFileSync('sh', ['-c', 'command -v flock'], {
+        encoding: 'utf8',
+      }).trim();
+    }
+    // Record the real helper's allowance while retaining actual lock
+    // acquisition. No lock is held, so the regression never waits minutes.
+    writeFileSync(
+      flockPath,
+      '#!/usr/bin/env bash\nprintf "%s\\n" "$2" >> "$TEST_LOCK_WAIT_RECORD"\nexec "$TEST_ORIGINAL_FLOCK" "$@"\n',
+      { mode: 0o755 }
+    );
+    delete value.env.BACI_GIGL_LATCH_LOCK_WAIT_SECONDS;
+    const result = value.run({
+      TEST_LOCK_WAIT_RECORD: lockWaitRecord,
+      TEST_ORIGINAL_FLOCK: originalFlock,
+    });
+    assert.equal(result.status, 0, result.stderr);
+
+    const verifier = readFileSync(
+      new URL(
+        '../../vps-workers/bin/verify-gigl-direct-workers-installed.sh',
+        import.meta.url
+      ),
+      'utf8'
+    );
+    const canonicalTimeout = verifier.match(
+      /timeout --signal=TERM --kill-after=(\d+)([smh]) (\d+)([smh])/
+    );
+    assert.ok(canonicalTimeout, 'missing canonical tracking timeout contract');
+    const seconds = { s: 1, m: 60, h: 3600 };
+    const requiredWait =
+      Number(canonicalTimeout[1]) * seconds[canonicalTimeout[2]] +
+      Number(canonicalTimeout[3]) * seconds[canonicalTimeout[4]];
+    const waits = readFileSync(lockWaitRecord, 'utf8')
+      .trim()
+      .split('\n')
+      .map(Number);
+    assert.equal(
+      waits.length,
+      2,
+      'both deployment and tracking locks must be acquired'
+    );
+    for (const wait of waits) {
+      assert.ok(
+        wait >= requiredWait,
+        `default ${wait}s wait must cover the canonical ${requiredWait}s runtime and termination grace`
+      );
+    }
+  });
+
   for (const scope of ['enabled', 'disabled']) {
     it(
       'refreshes ' +

@@ -169,11 +169,11 @@ jobs:
         # would deploy without refreshing the worker. The enforcement
         # lives in the bypass term (manifest_drift closes it until
         # deploy.sh converges); this warning explains the resulting
-        # skip. The operator converges with a manual deploy.sh from
-        # current main.
+        # skip. The release coordinator converges workers from current main
+        # before the post-migration recovery smoke.
         if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
         run: >-
-          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed — production deploys stay gated until deploy.sh converges from current main plus a tracking push or dispatch re-smokes.'
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed. Converge the worker from current main with the release coordinator; once installed tracking code and manifests match this release, the post-migration recovery smoke can re-prove capability without an additional tracking push or dispatch.'
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via
@@ -350,8 +350,10 @@ jobs:
     # == 'false': manifests are deliberately outside the tracking smoke,
     # but the poller executes that dependency tree, so a manifest-only
     # push must not bypass while the installed tree predates HEAD's
-    # manifests. Recover the same way (deploy.sh from current main plus
-    # a tracking push or dispatch): the converge promote moves the
+    # manifests. Converge through the release coordinator (deploy.sh from
+    # current main). Once installed tracking code and manifests match the
+    # release, the post-migration recovery smoke can re-prove capability
+    # without an additional tracking push or dispatch. The promote moves the
     # installed SHA, which invalidates the latch binding until a fresh
     # smoke re-proves the new tree — so manifest changes end up
     # smoke-verified too, just outside the tracking gate. Steady-state

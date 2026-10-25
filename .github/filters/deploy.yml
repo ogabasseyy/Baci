@@ -81,9 +81,10 @@ tracking:
   # diffs the installed tree against HEAD over the manifests group and
   # the bypass term requires manifest_drift == 'false', so a
   # manifest-only push blocks the bypass until deploy.sh from current
-  # main converges the worker (plus a tracking push or dispatch to
-  # re-smoke the new tree). A transitive security fix the poller
-  # executes therefore cannot sit undeployed silently.
+  # main converges the worker. Once installed tracking code and manifests
+  # match the release, the post-migration recovery smoke can re-prove the
+  # tree without an additional tracking push or dispatch. A security fix
+  # the poller executes therefore cannot sit undeployed silently.
   # On-call triage for this window: the cutover runbook's
   # "Manifest-only drift triage (worker-stale-first)" section.
   # Deliberately untracked: apps/web/src/env.ts and

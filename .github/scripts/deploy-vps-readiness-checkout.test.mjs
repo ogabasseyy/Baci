@@ -103,6 +103,8 @@ test('delegates verification, smoke and latch persistence to one locked helper',
 
   assert.equal(refreshSteps.length, 1);
   assert.equal(refreshSteps[0].if, undefined);
+  assert.equal(refreshSteps[0]['continue-on-error'], undefined);
+  assert.equal(capability['continue-on-error'], undefined);
   assert.equal(capability.env.GIGL_ENV_FILE_AUTHORITATIVE, '1');
   assert.equal(typeof refreshSteps[0].env.BACI_EXPECTED_APP_SHA, 'string');
   assert.equal(

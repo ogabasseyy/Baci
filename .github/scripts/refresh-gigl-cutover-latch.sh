@@ -15,7 +15,8 @@ expected_sha="${BACI_EXPECTED_APP_SHA:-}"
 remote_dir="${VPS_WORKER_REMOTE_DIR:-/home/bassey/baci-workers}"
 # Test-only isolation; production always shares the deploy.sh promotion lock.
 deploy_lock="${BACI_GIGL_LATCH_TEST_DEPLOY_LOCK:-/tmp/baci-workers-deploy.lock}"
-lock_wait="${BACI_GIGL_LATCH_LOCK_WAIT_SECONDS:-60}"
+# The canonical poll allows 120 seconds plus 30 seconds termination grace.
+lock_wait="${BACI_GIGL_LATCH_LOCK_WAIT_SECONDS:-180}"
 [[ "$lock_wait" =~ ^[1-9][0-9]{0,2}$ ]] && [ "$lock_wait" -le 300 ] ||
   fail "Lock wait must be an integer from 1 to 300 seconds."
 command -v flock >/dev/null 2>&1 || fail "flock is required."

@@ -1155,3 +1155,18 @@
     display: none;
   }
 }
+
+/* Consent takes priority over promotional and assistant chrome. Keep these
+   rules in core so deferred widget styles cannot cause an overlapping flash. */
+body:has(.storefront-cookie-consent) .ogabassey-chat-anchor,
+body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
+body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
+    .ogabassey-chat-anchor {
+    display: none;
+  }
+}

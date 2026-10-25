@@ -74,3 +74,19 @@ describe('storefront-core OgaBassey navbar layering', () => {
     );
   });
 });
+
+describe('storefront overlay priority', () => {
+  it('hides competing chrome while the privacy dialog is visible', () => {
+    const selector = 'body:has(.storefront-cookie-consent)';
+    for (const widget of [
+      '.ogabassey-chat-anchor',
+      '.ogabassey-offer-popup',
+      '.ogabassey-newsletter-popup',
+    ]) {
+      expect(storefrontCoreCss).toContain(`${selector} ${widget}`);
+    }
+    expect(cssRuleFor(`${selector} .ogabassey-newsletter-popup`)).toContain(
+      'display: none'
+    );
+  });
+});

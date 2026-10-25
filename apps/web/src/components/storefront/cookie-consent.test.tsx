@@ -43,6 +43,15 @@ describe('CookieConsent', () => {
     expect(typeof useCookieConsent).toBe('function');
   });
 
+  it('keeps the mobile consent dialog inside the viewport', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    const dialog = screen.getByRole('dialog', { name: 'Cookie consent' });
+    expect(dialog).toHaveClass('w-auto', 'overflow-y-auto');
+    expect(dialog).not.toHaveClass('w-full');
+  });
+
   it('links the banner policy CTA to the canonical privacy route', () => {
     render(<CookieConsent />);
 

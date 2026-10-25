@@ -8,26 +8,24 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import { asRoute } from '@/lib/routes';
+import { CHAT_MOBILE_OFFSET_ATTRIBUTES } from '../../config/chat-mobile-offsets';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import { ChatMessageBubble } from './chat-message';
 import { ChatInput } from './chat-input';
 import { SUGGESTIONS, resolveSuggestionNavigationPath } from './types';
+import { getChatMobileOffset } from './get-chat-mobile-offset';
+import { useChatLauncherDrag } from './use-chat-launcher-drag';
 import { useOgabasseyChat } from './use-ogabassey-chat';
 
 export interface ChatWidgetProps {
   openOnMount?: boolean;
+  initialLauncherPosition?: { x: number; y: number };
 }
-
-const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
-  'data-mobile-offset-cart': '6.75rem',
-  'data-mobile-offset-default': '5.75rem',
-  'data-mobile-offset-product': '6.25rem',
-  'data-mobile-offset-screen': '1rem',
-} as const;
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
   openOnMount = false,
+  initialLauncherPosition,
 }) => {
   const { isCartOpen } = useCart();
   const { theme } = useV2Theme();
@@ -56,6 +54,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     storefrontSlug: merchant?.merchant?.slug,
   });
 
+  const drag = useChatLauncherDrag(initialLauncherPosition, isOpen);
+
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
   // storefront page instead of sending a chat message.
   const handleSuggestionClick = (label: string) => {
@@ -73,18 +73,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     handleSend(label);
   };
 
-  // Dynamic bottom positioning based on page type
-  const isProductPage =
-    pathname?.match(/\/[^/]+\/[^/]+\/[^/]+/) &&
-    !pathname?.includes('/cart') &&
-    !pathname?.includes('/checkout');
-  const isCartPage = pathname?.includes('/cart');
-
-  const footerOffset = isProductPage
-    ? 'product'
-    : isCartPage
-      ? 'cart'
-      : 'default';
+  const footerOffset = getChatMobileOffset(pathname);
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
   const anchorClasses = [
     'ogabassey-chat-anchor',
@@ -108,6 +97,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
   return (
     <div
+      ref={drag.anchorRef}
+      style={drag.anchorStyle}
       className={anchorClasses}
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
@@ -265,7 +256,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         )}
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          {...drag.buttonProps}
+          onClick={() => {
+            if (!drag.suppressClick()) setIsOpen(!isOpen);
+          }}
           className={buttonClasses}
           aria-label="Toggle chat"
         >

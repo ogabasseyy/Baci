@@ -81,7 +81,7 @@ export const PopupSystem: React.FC = () => {
     <>
       {/* --- 1. NEWSLETTER POPUP (Centered Overlay) --- */}
       {showNewsletter && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300">
+        <div className="ogabassey-newsletter-popup fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300">
           <button
             type="button"
             aria-label="Dismiss newsletter popup backdrop"
@@ -158,7 +158,7 @@ export const PopupSystem: React.FC = () => {
 
       {/* --- 2. AD POPUP (Bottom Left Slide-in) --- */}
       {showAdPopup && (
-        <div className="fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in">
+        <div className="ogabassey-offer-popup fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in">
           <div className="bg-white rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-gray-100 overflow-hidden max-w-[320px] md:max-w-[350px] relative">
             {/* Close Button */}
             <button

@@ -33,7 +33,7 @@ export function CookieConsent() {
   return (
     <div
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-50 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-5xl w-full',
+        'storefront-cookie-consent fixed bottom-4 left-4 right-4 z-50 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-5xl w-auto md:w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto',
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
@@ -47,7 +47,7 @@ export function CookieConsent() {
     >
       <div
         className={cn(
-          'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
+          'bg-background backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
           'transition-all duration-300 ease-in-out'
         )}
       >

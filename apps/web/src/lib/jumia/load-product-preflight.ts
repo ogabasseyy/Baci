@@ -1,10 +1,10 @@
-import { z } from 'zod';
 import {
   getAllBrands,
   getAllCategories,
   getAttributeSet,
 } from '@/lib/jumia/catalog';
 import type { JumiaClient } from '@/lib/jumia/client';
+import { jumiaProductPreflightSelectionPageSchema } from '@/schemas/jumia/product-preflight-selection-page';
 
 export type ProductPreflightRpcClient = {
   rpc: (
@@ -23,110 +23,6 @@ export type ProductPreflightPageInput = {
   sourcePage: { page: number; limit: number };
   products: readonly { productId: string; sourceVersion: string }[];
 };
-
-const pageSchema = z
-  .object({
-    selectionId: z.uuid(),
-    sourceCategoryId: z.uuid(),
-    total: z.number().int().nonnegative(),
-    page: z.number().int().positive(),
-    limit: z.number().int().positive(),
-    totalPages: z.number().int().nonnegative(),
-    products: z.array(
-      z
-        .object({
-          id: z.uuid(),
-          ordinal: z.number().int().positive(),
-          capturedSourceVersion: z.string(),
-          currentSourceVersion: z.string().nullable(),
-          available: z.boolean(),
-          unavailableReason: z.string().nullable(),
-          product: z.unknown().nullable(),
-        })
-        .passthrough()
-    ),
-  })
-  .passthrough();
-
-/** Exact v1 projection returned by `jumia_product_export_source_projection_v1`. */
-export const jumiaCanonicalProductProjectionSchema = z
-  .object({
-    contractVersion: z.literal(1),
-    product: z
-      .object({
-        id: z.uuid(),
-        merchantId: z.uuid(),
-        status: z.string(),
-        hasVariants: z.boolean().nullable(),
-        variantModel: z.string().nullable(),
-        updatedAt: z.string(),
-        name: z.string().nullable(),
-        description: z.string().nullable(),
-        sku: z.string().nullable(),
-        exportImages: z.unknown(),
-        price: z.number().nullable(),
-        stock: z.number().nullable(),
-        stockQuantity: z.number().nullable(),
-        manageStock: z.boolean().nullable(),
-        inventoryTrackingPolicy: z.string().nullable(),
-        inventoryAnchorVariantId: z.uuid().nullable(),
-        condition: z.string().nullable(),
-        weightValue: z.number().nullable(),
-        weightUnit: z.string().nullable(),
-        categoryId: z.uuid().nullable(),
-      })
-      .strict(),
-    categoryMemberships: z
-      .array(
-        z
-          .object({
-            id: z.uuid(),
-            name: z.string(),
-            isActive: z.boolean(),
-          })
-          .strict()
-      )
-      .max(100),
-    variants: z
-      .array(
-        z
-          .object({
-            id: z.uuid(),
-            attributes: z.record(z.string(), z.unknown()),
-            sku: z.string().nullable(),
-            priceOverride: z.number().nullable(),
-            stockQuantity: z.number().nullable(),
-            inventoryTrackingPolicy: z.string().nullable(),
-            condition: z.string().nullable(),
-            updatedAt: z.string(),
-            isInventoryAnchor: z.boolean(),
-          })
-          .strict()
-      )
-      .max(500),
-    images: z
-      .array(
-        z
-          .object({
-            id: z.uuid(),
-            variantId: z.uuid().nullable(),
-            status: z.string(),
-            verifiedUrl: z.string().nullable(),
-            verifiedFormat: z.string().nullable(),
-            isPrimary: z.boolean(),
-            position: z.number().int(),
-            verifiedAt: z.string().nullable(),
-            updatedAt: z.string(),
-          })
-          .strict()
-      )
-      .max(100),
-  })
-  .strict();
-
-export type JumiaCanonicalProductProjection = z.infer<
-  typeof jumiaCanonicalProductProjectionSchema
->;
 
 export type ProductPreflightMappingMetadataInput = {
   productId: string;
@@ -234,7 +130,7 @@ export async function loadProductPreflightPage(
     }
   );
   if (error || !data) return { success: false, code: 'source_unavailable' };
-  const parsed = pageSchema.safeParse(data);
+  const parsed = jumiaProductPreflightSelectionPageSchema.safeParse(data);
   if (!parsed.success)
     return { success: false, code: 'selection_page_inconsistent' };
   const page = parsed.data;

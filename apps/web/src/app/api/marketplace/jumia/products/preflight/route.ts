@@ -8,7 +8,6 @@ import {
 import { JumiaClient } from '@/lib/jumia/client';
 import { resolveJumiaMarketplaceCurrency } from '@/lib/jumia/jumia-marketplace-currency';
 import {
-  jumiaCanonicalProductProjectionSchema,
   loadProductPreflightMetadata,
   loadProductPreflightPage,
 } from '@/lib/jumia/load-product-preflight';
@@ -20,6 +19,7 @@ import {
   jumiaProductPreflightRequestSchema,
   jumiaProductPreflightResponseSchema,
 } from '@/schemas/jumia/product-preflight';
+import { jumiaCanonicalProductProjectionSchema } from '@/schemas/jumia/product-preflight-source';
 
 function safeError(error: string, status: number) {
   return NextResponse.json({ error }, { status });

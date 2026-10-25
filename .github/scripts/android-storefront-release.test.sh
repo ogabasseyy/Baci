@@ -114,4 +114,36 @@ if RUNNER_TEMP=relative/_temp GITHUB_ENV="$fixture_root/invalid-gradle-env" \
   exit 1
 fi
 [ ! -e "$fixture_root/invalid-gradle-env" ]
+
+# Compile native prerequisites separately; packaging retains the release target.
+mkdir -p "$fixture_root/gradle"
+cat > "$fixture_root/gradle/gradlew" <<'GRADLE'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$GRADLE_CAPTURE"
+exit "${GRADLE_EXIT_CODE:-0}"
+GRADLE
+chmod +x "$fixture_root/gradle/gradlew"
+(
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
+  GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
+)
+grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
+grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
+if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi
+grep -qx 'app:bundleRelease' "$fixture_root/bundle-args"
+for args in "$fixture_root/native-args" "$fixture_root/bundle-args"; do
+  grep -qx -- '--build-cache' "$args"
+  grep -qx -- '--max-workers=2' "$args"
+done
+
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/failed-native-args" GRADLE_EXIT_CODE=42 bash "$script" build-native
+); then
+  echo 'Expected native compilation failure to stop the release' >&2
+  exit 1
+else
+  test "$?" -eq 42
+fi
 echo 'Android storefront release script checks passed'

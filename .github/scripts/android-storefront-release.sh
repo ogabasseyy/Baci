@@ -104,8 +104,14 @@ case "$operation" in
     chmod 600 "$KEYSTORE_PATH"
     echo "ANDROID_STOREFRONT_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
     ;;
-  build)
-    GRADLE_ARGS="app:bundleRelease -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
+  build-native|build)
+    if [ "$operation" = build-native ]; then
+      # Compile the included source build before the app's packaging budget.
+      GRADLE_TASKS=":react-native:packages:react-native:ReactAndroid:assembleRelease :react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease"
+    else
+      GRADLE_TASKS="app:bundleRelease"
+    fi
+    GRADLE_ARGS="$GRADLE_TASKS -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
     # shellcheck disable=SC2086
     ./gradlew $GRADLE_ARGS
     ;;

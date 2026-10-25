@@ -49,18 +49,23 @@ test('does not borrow a timeout from an unnamed following step', () => {
   assert.ok(Number.isNaN(readBudgets(fixture).buildBudget));
 });
 
-test('source-built Android release has time for all ABIs plus publication and cleanup', () => {
-  // The measured cold build is still compiling its third ReactAndroid ABI
-  // and second Hermes ABI after 150 minutes on baci-android.
-  assert.ok(jobBudget >= 360, 'cold native builds need a six-hour job window');
-  assert.ok(
-    buildBudget >= 330,
-    'the native build step needs at least five and a half hours',
+test('cold native compilation and app packaging have independent budgets', () => {
+  const nativeStep =
+    workflow
+      .split('      - name: Compile patched React Native and Hermes')[1]
+      ?.split(/\n {6}- /)[0] ?? '';
+  const nativeBudget = Number(
+    nativeStep.match(/^ {8}timeout-minutes: (\d+)$/m)?.[1],
   );
+  assert.equal(nativeBudget, 360);
+  assert.ok(buildBudget >= 180 && buildBudget <= 360);
+  assert.ok(jobBudget >= nativeBudget + buildBudget + 30);
   assert.ok(
-    jobBudget - buildBudget >= 30,
-    'reserve at least 30 minutes for setup, Play upload and cleanup',
+    workflow.indexOf('      - name: Compile patched React Native and Hermes') <
+      workflow.indexOf('      - name: Decode keystore'),
   );
+  assert.match(nativeStep, /android-storefront-release\.sh" build-native/);
+  assert.doesNotMatch(nativeStep, /KEYSTORE|KEY_PASSWORD|SENTRY_AUTH_TOKEN/);
   assert.match(workflow, /runs-on: baci-android/);
 });
 

@@ -87,8 +87,19 @@ BEGIN
   );
   PERFORM pg_temp.check_cart_offer(
     result->>'ok' = 'true'
-      AND (SELECT quantity = 3 FROM public.commerce_cart_lines WHERE cart_id = cart AND offer_id = offer_a),
-    'same exact offer did not merge'
+      AND (
+        SELECT quantity = 3 AND last_unit_price_minor = 2000
+        FROM public.commerce_cart_lines
+        WHERE cart_id = cart AND offer_id = offer_a
+      ),
+    'same exact offer did not merge at that offer price'
+  );
+  -- 2940 is inside 2% of the other spelling (3000) and above this offer (2000).
+  -- A non-negotiable fixture product stays pending either way.
+  PERFORM pg_temp.check_cart_offer(
+    public.commerce_cart_negotiation_status(merchant, product, NULL, 'used', 2940, NULL, offer_a)
+      = 'pending',
+    'exact-offer negotiation band followed the other spelling'
   );
 
   result := public.commerce_cart_mutate(

@@ -1,0 +1,17 @@
+.flow {
+  /* Preserve room to scroll the OTP above a mobile keyboard. */
+  padding-bottom: clamp(12rem, 40svh, 22rem);
+}
+.confirmation {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #f1dfe1;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, #fffafa, #fff 45%);
+}
+.codeEntry {
+  padding-top: 1rem;
+  border-top: 1px solid #f1e5e6;
+  scroll-margin-block-start: 1.5rem;
+}

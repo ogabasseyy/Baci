@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { CartItem } from '@/hooks/cart';
 import { describe, expect, it, vi } from 'vitest';
+import type { CartItem } from '@/hooks/cart';
 import { CartPageLineItem } from './cart-page-line-item';
 
 vi.mock('next/link', () => ({
@@ -67,7 +67,10 @@ const cartItem = {
 function renderLineItem(
   overrides: Partial<CartItem> = {},
   propOverrides: Partial<
-    Pick<React.ComponentProps<typeof CartPageLineItem>, 'shippingInsuranceEnabled'>
+    Pick<
+      React.ComponentProps<typeof CartPageLineItem>,
+      'shippingInsuranceEnabled' | 'hasPriceNegotiation'
+    >
   > = {}
 ) {
   const props = {
@@ -147,6 +150,24 @@ describe('CartPageLineItem', () => {
 });
 
 it('shows the exact saved variant on the full cart page', () => {
-  renderLineItem({ variantAttributes: { storage: '512GB', sim_type: 'Physical + eSIM', color: 'Silver' } });
-  for (const value of ['Storage:', '512GB', 'SIM type:', 'Physical + eSIM', 'Condition:', 'Colour:', 'Silver']) expect(screen.getByText(value)).toBeVisible();
+  renderLineItem({
+    variantAttributes: {
+      storage: '512GB',
+      sim_type: 'Physical + eSIM',
+      color: 'Silver',
+    },
+  });
+  for (const value of ['512GB', 'Physical + eSIM', 'Silver'])
+    expect(screen.getByText(value)).toBeVisible();
+  expect(screen.getByText('Storage:')).toHaveClass('sr-only');
+});
+
+it('omits the empty extras area when protection and negotiation are unavailable', () => {
+  renderLineItem(
+    { hasAssurance: false },
+    { shippingInsuranceEnabled: false, hasPriceNegotiation: false }
+  );
+  expect(
+    screen.queryByRole('group', { name: 'Product extras' })
+  ).not.toBeInTheDocument();
 });

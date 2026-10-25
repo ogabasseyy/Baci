@@ -19,7 +19,12 @@ import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-finan
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
-export const CheckoutPage: React.FC = () => {
+export interface OxygenCheckoutSlots {
+  oxygenStep?: React.ReactNode;
+  oxygenSummary?: React.ReactNode;
+  oxygenMobileSummary?: React.ReactNode;
+}
+export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const {
     cart,
     clearCart,
@@ -295,5 +300,5 @@ export const CheckoutPage: React.FC = () => {
     },
   });
 
-  return <CheckoutScreen {...screenModel} />;
+  return <CheckoutScreen {...screenModel} {...oxygenSlots} />;
 };

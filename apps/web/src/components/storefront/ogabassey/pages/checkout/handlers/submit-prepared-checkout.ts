@@ -1,3 +1,4 @@
+import { oxygenLocalAttempt } from '../oxygen-local-attempt';
 import { captureCheckoutPaymentStarted } from '../capture-checkout-payment-started';
 import {
   clearCheckoutIdempotencyKey,
@@ -21,6 +22,12 @@ export async function submitPreparedCheckout(
   const { account, cart, contact, delivery, merchant, navigation, order, payment, processing } = context;
   const { session: paymentSession } = payment;
   const { method: paymentMethod, total, wallet, redvault } = paymentSession;
+  const localAttempt = paymentMethod === 'oxygen'
+    ? oxygenLocalAttempt(new URLSearchParams(window.location.search)) : null;
+  if (localAttempt) {
+    prepared = { ...prepared, identity: { ...prepared.identity,
+      checkoutFingerprint: `${prepared.identity.checkoutFingerprint}:oxygen-test:${localAttempt.attempt}` } };
+  }
   const { items: orderItems, checkoutFingerprint } = prepared.identity;
   const { firstName, lastName, customerEmail, customerPhone, newsletterOptIn } = contact;
   const customerName = `${firstName} ${lastName}`.trim();
@@ -58,7 +65,7 @@ export async function submitPreparedCheckout(
     lifecycle: {
       prepared,
       state: {
-        pendingOrder: order.pending,
+        pendingOrder: localAttempt ? null : order.pending,
         merchant,
         customer: {
           email: customerEmail,

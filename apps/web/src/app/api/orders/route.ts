@@ -96,6 +96,7 @@ import type {
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 
@@ -1825,14 +1826,15 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Service-role client: merchant_shipping_* tables have no anon grants
-      // (the SECURITY DEFINER storefront RPC is the only read path) and this
-      // endpoint serves unauthenticated guest checkouts. The id is
-      // Zod-validated (uuid) and the read is scoped to merchant_id.
+      // Published merchant rates are exposed through the anonymous-safe RPC.
+      // Verification must not depend on a privileged credential or read the
+      // underlying private tables. Recompute the fee and destination as before.
       let rateVerification: Awaited<ReturnType<typeof verifyOrderShippingRate>>;
       try {
         rateVerification = await verifyOrderShippingRate({
-          supabase: createAdminClient(),
+          supabase: createPublicClient({
+            clientInfo: 'baci-order-shipping-rate-verification',
+          }),
           merchantId: merchant_id,
           shippingRateId: body.shipping_rate_id,
           shippingAddress: {
@@ -2495,8 +2497,12 @@ export async function POST(request: NextRequest) {
     // Also read shipping_provider back: an idempotent merchant-rate REPLAY
     // whose first attempt failed the post-create stamp needs it to detect the
     // missing-metadata case and re-stamp (see the replay re-stamp block below).
+    // Oxygen checkout requires the signed-in customer and reads its own order
+    // through RLS. Never use the legacy privileged read-back for this flow.
+    const orderCurrencyClient =
+      effectivePaymentMethod === 'oxygen' ? supabase : createAdminClient();
     const { data: orderCurrencyRow, error: orderCurrencyError } =
-      await createAdminClient()
+      await orderCurrencyClient
         .from('orders')
         .select('currency, shipping_provider')
         .eq('id', order.id)

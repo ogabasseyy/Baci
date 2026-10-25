@@ -2,6 +2,7 @@ import { toast } from '@/hooks/use-toast';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from '../capture-checkout-payment-failed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
+import { oxygenLocalAttempt } from '../oxygen-local-attempt';
 import type { CheckoutPaymentDispatchContext } from './checkout-payment-dispatch-context';
 import { completeCheckoutOrder } from './complete-checkout-order';
 import { initializeCheckoutGateway } from './initialize-checkout-gateway';
@@ -45,6 +46,20 @@ export async function dispatchCheckoutPayment(
     redirect,
     payForMeDetails,
   } = context;
+  if (paymentMethod === 'oxygen') {
+    const query = new URLSearchParams({ oxygenOrderId: order.id });
+    const attempt = oxygenLocalAttempt(
+      new URLSearchParams(window.location.search)
+    );
+    if (attempt) {
+      query.set('oxygenTestAttempt', attempt.attempt);
+      if (attempt.source) query.set('oxygenDraftSource', attempt.source);
+    }
+    navigate(`/checkout?${query.toString()}`);
+    setIsProcessing(false);
+    isOrderInFlightRef.current = false;
+    return;
+  }
   if (paymentMethod === 'bank_transfer')
     return startCheckoutBankTransfer(context);
   if (paymentMethod === 'uba_redvault') return startCheckoutRedvault(context);

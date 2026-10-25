@@ -1,5 +1,6 @@
 'use client';
 
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
@@ -32,6 +33,15 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       toast({ title: 'Missing Information', description: 'Please fill in your name and email.', variant: 'destructive' });
       processing.isOrderInFlightRef.current = false;
       return;
+    }
+
+    if (paymentSession.method === 'oxygen') {
+      if (!isOxygenStorefrontStagingEnabled() || payment.currencyCode !== 'NGN' ||
+          paymentSession.wallet.amountUsed > 0 || !(await account.waitForResolvedCustomerAuth())) {
+        toast({ title: 'Payment plan unavailable', description: 'Sign in to continue with Oxygen. Wallet credit cannot be combined with this payment plan.', variant: 'destructive' });
+        processing.releaseSubmission();
+        return;
+      }
     }
 
     if (

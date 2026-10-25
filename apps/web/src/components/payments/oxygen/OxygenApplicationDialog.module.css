@@ -1,0 +1,105 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: calc(100% - 2rem);
+  max-width: 40rem;
+  height: fit-content;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 1.5rem;
+  outline: none;
+  background: white;
+  color: #111827;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 18%);
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog::backdrop {
+  background: rgb(17 24 39 / 45%);
+  backdrop-filter: blur(3px);
+}
+
+.body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 1.5rem;
+  padding-top: 1.25rem;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #f3f4f6;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.step[data-state="current"],
+.step[data-state="complete"] {
+  border-color: var(--store-primary, #dc2626);
+  color: #111827;
+}
+
+.number {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #f3f4f6;
+}
+
+.step[data-state="current"] .number,
+.step[data-state="complete"] .number {
+  background: var(--store-primary, #dc2626);
+  color: white;
+}
+
+@media (max-width: 639px) {
+  .dialog {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+/* Reuse the checkout's existing top-layer dialog for hosted payment. */
+.dialog.paymentDialog {
+  width: min(460px, calc(100% - 2rem));
+  max-width: 460px;
+  height: 726px;
+  max-height: calc(100dvh - 2rem);
+  border-radius: 1.5rem;
+}
+
+/* Give Oxygen's camera instructions room without adding another overlay. */
+.dialog.selfieDialog {
+  width: min(640px, calc(100% - 2rem));
+  max-width: 640px;
+  height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 2rem);
+}

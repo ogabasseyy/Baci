@@ -114,6 +114,8 @@
   }
 
   .ogabassey-storefront-main {
+    background: var(--ogabassey-surface);
+    color: var(--ogabassey-surface-text);
     flex: 1 1 auto;
     min-height: calc(100svh - 132px);
   }

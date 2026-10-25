@@ -148,8 +148,8 @@ export const CartSidebar: React.FC = () => {
 
   return (
     <>
-      {/* High Z-Index to cover Mobile Footer (z-40) */}
-      <div className="fixed inset-0 z-60 overflow-hidden">
+      {/* Keep all cart actions above the mobile footer (z-70). */}
+      <div className="fixed inset-0 z-80 overflow-hidden">
         {/* Backdrop */}
         <button
           type="button"
@@ -223,7 +223,7 @@ export const CartSidebar: React.FC = () => {
               )}
             </div>
 
-            {/* Footer / Checkout */}
+            {/* Cart totals; delivery costs are handled in checkout. */}
             {displayCart.length > 0 && (
               <CartSidebarFooter
                 total={displayCartTotal}

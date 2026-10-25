@@ -1,4 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
+import { useRouter } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mirrors the mock surface of checkout-page.test.tsx — the page pulls in the
@@ -180,6 +181,7 @@ import {
   FLAG,
   INTENTS_URL,
   placeBankTransferOrder,
+  placeOxygenOrder,
   stubFetch,
 } from './checkout-page.wallet-funded.support';
 
@@ -283,4 +285,27 @@ describe('CheckoutPage — wallet-funded bank transfer', () => {
     expect(screen.getByText(/pays this order from your wallet/i)).toBeDefined();
     expect(called(fetchMock, '/api/payments/initialize')).toBe(false);
   });
+});
+
+it('hands the actual checkout to Oxygen using the cookie session, without initializing payment', async () => {
+  vi.stubEnv('NODE_ENV', 'development');
+  vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost:3440/qa-backend');
+  vi.mocked(useAuthSafe).mockReturnValue(null);
+  const push = vi.fn();
+  vi.mocked(useRouter).mockReturnValue({
+    push,
+    back: vi.fn(),
+    replace: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  const fetchMock = stubFetch();
+  await placeOxygenOrder();
+  await waitFor(() =>
+    expect(push).toHaveBeenCalledWith(
+      '/ogabassey/checkout?oxygenOrderId=00000000-0000-4000-8000-0000000000a1'
+    )
+  );
+  expect(called(fetchMock, '/api/payments/initialize')).toBe(false);
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });

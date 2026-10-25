@@ -211,6 +211,7 @@ describe('durable SEO monetary context', () => {
     '1,920 x 1,080 display with HDR',
     'The weight was 900, now 800 grams',
     'Includes cashback of $50 on selected plans.',
+    'Contains 2 pounds of coffee.',
   ])('preserves numeric specifications despite nearby price vocabulary: %s', (text) => {
     expect(
       getDurableProductSeoText({
@@ -256,6 +257,8 @@ describe('durable SEO monetary context', () => {
     'Price range: 900–1,200',
     'Laptop US$900',
     'This phone has a price of 999',
+    'Available from 999',
+    'Starting at 999',
   ])('rejects low unlabelled amounts following explicit commerce headings: %s', (text) => {
     expect(
       getDurableProductSeoText({

@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { getDurableProductSeoText } from './get-durable-product-seo-text';
 
 describe('durable SEO amount ranges and localized prices', () => {
+  it('rejects a title reduced to a product name and delimiter after price removal', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'iPhone 13 — Current listed price is NGN 350,000',
+        product: { name: 'iPhone 13' },
+      })
+    ).toBe('');
+  });
+
   it('rejects a low unlabelled price range after product-name removal', () => {
     expect(
       getDurableProductSeoText({

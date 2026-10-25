@@ -61,7 +61,7 @@ export function retailRelation(text: string, start: number): RetailRelation {
         clause
       ));
   const cue =
-    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+range)?(?:\s+(?:is|from))?|costs?|priced\s+at|starts?\s+at|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
+    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+range)?(?:\s+(?:is|from))?|costs?|priced\s+at|start(?:s|ing)?\s+at|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
     )?.[1] ??
     (commerceHeading
@@ -78,11 +78,11 @@ export function retailRelation(text: string, start: number): RetailRelation {
     );
   const copula = /\b(?:is|was|are|were)\s*$/i.test(clause);
   const identifierPredicate =
-    /\b(?:model\s+(?:number|no\.?)|sku|part\s+(?:number|no\.?)|serial(?:\s+(?:number|no\.?))?|imei|item\s+(?:number|no\.?)|product\s+code)(?:\s+(?:is|was|are|were)|\s*:)\s*$/i.test(
+    /\b(?:model\s+(?:(?:number|no\.?)(?:\s+(?:is|was|are|were))?|is|was|are|were)|(?:sku|part\s+(?:number|no\.?)|serial(?:\s+(?:number|no\.?))?|imei|item\s+(?:number|no\.?)|product\s+code)(?:\s+(?:is|was|are|were))?)(?:\s*:)?\s*$/i.test(
       clause
     );
   const commercial =
-    /\b(?:sell(?:s|ing)?|sold|available|offered|retail(?:s|ed|ing)?)\b(?:\s+[^.!?;\n]{0,60})?\s+(?:at|for)\s*$/i.test(
+    /\b(?:sell(?:s|ing)?|sold|available|offered|retail(?:s|ed|ing)?)\b(?:\s+[^.!?;\n]{0,60})?\s+(?:at|for|from)\s*$/i.test(
       clause
     );
   return {

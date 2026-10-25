@@ -90,4 +90,28 @@ ANDROID_HOME="$valid_root" bash "$script" link-cmdline-tools-latest
 [ ! -L "$valid_root/cmdline-tools/latest" ]
 [ -x "$valid_root/cmdline-tools/latest/bin/sdkmanager" ]
 
+
+# Release builds must not share the default ~/.gradle cleanup target.
+runner_temp="$fixture_root/private-runner/_temp"
+mkdir -p "$runner_temp"
+private_env="$fixture_root/private-gradle-env"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+grep -Fxq "GRADLE_USER_HOME=$fixture_root/private-runner/gradle-user-home" "$private_env"
+[ -d "$fixture_root/private-runner/gradle-user-home" ]
+
+# Repeated setup repairs existing permissions without deleting warm outputs.
+touch "$fixture_root/private-runner/gradle-user-home/retained"
+chmod 755 "$fixture_root/private-runner/gradle-user-home"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+[ -f "$fixture_root/private-runner/gradle-user-home/retained" ]
+[ "$(LC_ALL=C ls -ld "$fixture_root/private-runner/gradle-user-home" | cut -c 1-10)" = "drwx------" ]
+
+if RUNNER_TEMP=relative/_temp GITHUB_ENV="$fixture_root/invalid-gradle-env" \
+  bash "$script" configure-gradle-home >"$fixture_root/invalid-gradle-log" 2>&1; then
+  echo 'Expected a relative runner temp directory to fail' >&2
+  exit 1
+fi
+[ ! -e "$fixture_root/invalid-gradle-env" ]
 echo 'Android storefront release script checks passed'

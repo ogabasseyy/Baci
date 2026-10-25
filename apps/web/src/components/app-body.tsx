@@ -65,56 +65,52 @@ export default function AppBody({
    */
   applyMerchantCoreThemeVariables?: boolean;
 }) {
-  const brandColors = merchant?.brand_colors
-    ? {
-        primary: merchant.brand_colors.primary ?? '',
-        background: merchant.brand_colors.background ?? '',
-        accent: merchant.brand_colors.accent ?? '',
-      }
-    : undefined;
-  const primaryTextColor = brandColors
-    ? getContrastingTextColor(brandColors.primary)
-    : undefined;
-  // Define CSS variables for the merchant's theme
-  const themeStyle = brandColors
-    ? {
-        ...(applyMerchantCoreThemeVariables
-          ? {
-              // Storefront-only: lock core tokens to merchant background
-              // to prevent an initial dashboard-theme flash during hydration.
-              '--background': hexToHslComponents(brandColors.background),
-              '--foreground': hexToHslComponents(
-                getContrastingTextColor(brandColors.background)
-              ),
-              '--card': hexToHslComponents(brandColors.background),
-              '--card-foreground': hexToHslComponents(
-                getContrastingTextColor(brandColors.background)
-              ),
-            }
-          : {}),
-        '--primary': hexToHslComponents(brandColors.primary),
-        '--primary-foreground': hexToHslComponents(
-          getContrastingTextColor(brandColors.primary)
-        ),
-        '--accent': hexToHslComponents(brandColors.accent),
-        '--accent-foreground': hexToHslComponents(
-          getContrastingTextColor(brandColors.accent)
-        ),
-        '--ring': hexToHslComponents(brandColors.primary),
-
-        // Legacy/Custom Baci variables
-        '--store-primary': brandColors.primary,
-        '--store-background': brandColors.background,
-        '--store-accent': brandColors.accent,
-        '--store-primary-text': primaryTextColor,
-        '--store-on-primary': primaryTextColor,
-        '--store-border': hexToRgba(brandColors.primary, STORE_BORDER_ALPHA),
-        '--store-background-text': getContrastingTextColor(
-          brandColors.background
-        ),
-        '--store-accent-text': getContrastingTextColor(brandColors.accent),
-      }
-    : {};
+  const brandColors = merchant?.brand_colors;
+  const themeStyle = {
+    ...(brandColors?.background && applyMerchantCoreThemeVariables
+      ? {
+          '--background': hexToHslComponents(brandColors.background),
+          '--foreground': hexToHslComponents(
+            getContrastingTextColor(brandColors.background)
+          ),
+          '--card': hexToHslComponents(brandColors.background),
+          '--card-foreground': hexToHslComponents(
+            getContrastingTextColor(brandColors.background)
+          ),
+        }
+      : {}),
+    ...(brandColors?.primary
+      ? {
+          '--primary': hexToHslComponents(brandColors.primary),
+          '--primary-foreground': hexToHslComponents(
+            getContrastingTextColor(brandColors.primary)
+          ),
+          '--ring': hexToHslComponents(brandColors.primary),
+          '--store-primary': brandColors.primary,
+          '--store-primary-text': getContrastingTextColor(brandColors.primary),
+          '--store-on-primary': getContrastingTextColor(brandColors.primary),
+          '--store-border': hexToRgba(brandColors.primary, STORE_BORDER_ALPHA),
+        }
+      : {}),
+    ...(brandColors?.background
+      ? {
+          '--store-background': brandColors.background,
+          '--store-background-text': getContrastingTextColor(
+            brandColors.background
+          ),
+        }
+      : {}),
+    ...(brandColors?.accent
+      ? {
+          '--accent': hexToHslComponents(brandColors.accent),
+          '--accent-foreground': hexToHslComponents(
+            getContrastingTextColor(brandColors.accent)
+          ),
+          '--store-accent': brandColors.accent,
+          '--store-accent-text': getContrastingTextColor(brandColors.accent),
+        }
+      : {}),
+  };
 
   return (
     <div

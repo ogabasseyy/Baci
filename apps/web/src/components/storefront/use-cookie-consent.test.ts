@@ -31,6 +31,11 @@ describe('useCookieConsent', () => {
   it.each([
     null,
     '{broken-json',
+    'null',
+    '[]',
+    JSON.stringify({ ...preferences, marketing: 'false' }),
+    JSON.stringify({ ...preferences, analytics: 1 }),
+    JSON.stringify({ analytics: true }),
   ])('returns no consent for absent or malformed storage %s', (saved) => {
     if (saved !== null) localStorage.setItem(COOKIE_CONSENT_KEY, saved);
     expect(renderHook(useCookieConsent).result.current).toBeNull();

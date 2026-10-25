@@ -5,6 +5,7 @@ import {
   COOKIE_CONSENT_KEY,
   type CookiePreferences,
 } from './cookie-consent-types';
+import { parseCookiePreferences } from './parse-cookie-preferences';
 
 // Listen for consent updates (saveConsent writes localStorage before
 // dispatching, so re-reading the snapshot always observes the new value)
@@ -38,7 +39,7 @@ export function useCookieConsent(): CookiePreferences | null {
   if (!savedConsent) return null;
 
   try {
-    return JSON.parse(savedConsent) as CookiePreferences;
+    return parseCookiePreferences(JSON.parse(savedConsent));
   } catch {
     return null;
   }

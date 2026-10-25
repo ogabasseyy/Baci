@@ -7,6 +7,7 @@ import {
   COOKIE_CONSENT_KEY,
   type CookiePreferences,
 } from './cookie-consent-types';
+import { parseCookiePreferences } from './parse-cookie-preferences';
 
 const defaultPreferences: CookiePreferences = {
   necessary: true,
@@ -27,7 +28,7 @@ export function useCookieConsentController() {
 
   useEffect(() => {
     // Check if consent has already been given
-    const savedConsent = getStoredConsent();
+    const savedConsent = parseCookiePreferences(getStoredConsent());
     if (!savedConsent) {
       // Small delay to prevent flash on page load
       const timer = setTimeout(() => setIsVisible(true), 1000);

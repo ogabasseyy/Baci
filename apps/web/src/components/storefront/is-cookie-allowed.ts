@@ -2,6 +2,7 @@ import {
   COOKIE_CONSENT_KEY,
   type CookiePreferences,
 } from './cookie-consent-types';
+import { parseCookiePreferences } from './parse-cookie-preferences';
 
 /**
  * Imperative consent check for event handlers and effects only.
@@ -14,8 +15,8 @@ export function isCookieAllowed(category: keyof CookiePreferences): boolean {
   try {
     const saved = localStorage.getItem(COOKIE_CONSENT_KEY);
     if (!saved) return false;
-    const consent = JSON.parse(saved) as CookiePreferences;
-    return consent[category] ?? false;
+    const consent = parseCookiePreferences(JSON.parse(saved));
+    return consent?.[category] === true;
   } catch {
     return false;
   }

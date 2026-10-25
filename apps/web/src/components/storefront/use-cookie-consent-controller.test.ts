@@ -93,6 +93,24 @@ describe('useCookieConsentController', () => {
     });
   });
 
+  it.each([
+    'null',
+    '[]',
+    JSON.stringify({
+      necessary: true,
+      analytics: false,
+      marketing: 'false',
+      functional: true,
+    }),
+    JSON.stringify({ analytics: true }),
+  ])('offers a fresh prompt for invalid stored preferences %s', (saved) => {
+    localStorage.setItem('baci-cookie-consent', saved);
+    const { result } = renderHook(useCookieConsentController);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(result.current.isVisible).toBe(true);
+    expect(result.current.preferences.marketing).toBe(false);
+  });
+
   it('cancels the pending prompt timer on unmount', () => {
     const { unmount } = renderHook(useCookieConsentController);
     expect(vi.getTimerCount()).toBe(1);

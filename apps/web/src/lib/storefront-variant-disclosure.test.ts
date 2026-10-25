@@ -3,6 +3,7 @@ import { getProductPriceRange } from './storefront-product-price-seo';
 import {
   filterDefaultAdvertisedVariants,
   isRestrictedWifiOnlyVariant,
+  resolveDefaultAdvertisedVariantSelection,
 } from './storefront-variant-disclosure';
 
 const variants = [
@@ -20,6 +21,21 @@ const variants = [
   },
 ];
 describe('restricted connectivity defaults', () => {
+  it('resolves the same lowest-priced eligible cellular default without mutating explicit variants', () => {
+    const selection = resolveDefaultAdvertisedVariantSelection(
+      { price: 600000, manage_stock: false, variants },
+      { name: 'iPhone 16' }
+    );
+    expect(selection?.variant.id).toBe('cellular');
+    expect(selection?.price).toBe(900000);
+    expect(variants).toHaveLength(2);
+    expect(
+      resolveDefaultAdvertisedVariantSelection(
+        { price: 600000, manage_stock: false, variants },
+        { name: 'iPad', category: 'Tablets' }
+      )?.variant.id
+    ).toBe('wifi');
+  });
   it('excludes Wi-Fi-only units from general cellular defaults without removing explicit variants', () => {
     expect(
       filterDefaultAdvertisedVariants(variants, { name: 'iPhone 16' }).map(

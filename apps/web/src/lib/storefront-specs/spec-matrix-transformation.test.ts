@@ -15,7 +15,7 @@ describe('buildProductComparisonMatrix transformation', () => {
     vi.clearAllMocks();
   });
 
-  it('preserves first duplicate values and fills missing product specs', () => {
+  it('reports conflicting values, retains repeated-section facts and distinguishes missing specs', () => {
     mocks.buildProductSpecData
       .mockReturnValueOnce({
         detailedSpecs: [
@@ -23,12 +23,12 @@ describe('buildProductComparisonMatrix transformation', () => {
             category: 'Memory',
             items: [
               { label: 'RAM', value: '8GB' },
-              { label: 'RAM', value: 'ignored' },
+              { label: 'RAM', value: '16GB' },
             ],
           },
           {
             category: 'Memory',
-            items: [{ label: 'Storage', value: 'ignored' }],
+            items: [{ label: 'Storage', value: '128GB' }],
           },
         ],
       })
@@ -49,11 +49,19 @@ describe('buildProductComparisonMatrix transformation', () => {
       {
         category: 'Memory',
         rows: [
-          { label: 'RAM', values: ['8GB', '—'], isDifferent: true },
-          { label: 'Storage', values: ['—', '256GB'], isDifferent: true },
+          {
+            label: 'RAM',
+            values: [
+              'Conflicting catalog values (verify): 8GB; 16GB',
+              'Not documented',
+            ],
+            isDifferent: false,
+          },
+          { label: 'Storage', values: ['128GB', '256GB'], isDifferent: true },
         ],
       },
     ]);
+    expect(matrix.differentiatingRowCount).toBe(1);
   });
 
   it('preserves ordered specification groups and difference counts', () => {
@@ -136,4 +144,26 @@ describe('buildProductComparisonMatrix transformation', () => {
       differentiatingRowCount: 3,
     });
   });
+});
+
+it('collects conflicts in repeated source sections without losing equivalent duplicates', () => {
+  mocks.buildProductSpecData.mockReturnValueOnce({
+    detailedSpecs: [
+      { category: 'Memory', items: [{ label: 'RAM', value: '8GB' }] },
+      { category: 'Memory', items: [{ label: 'RAM', value: '16GB' }] },
+      { category: 'Memory', items: [{ label: 'RAM', value: '8 GB' }] },
+      { category: 'Memory', items: [{ label: 'RAM', value: '32GB' }] },
+    ],
+  });
+  const matrix = buildProductComparisonMatrix({
+    products: [{ id: 'left', name: 'Left' }],
+  });
+  expect(matrix.flatRows).toEqual([
+    {
+      label: 'RAM',
+      values: ['Conflicting catalog values (verify): 8GB; 16GB; 32GB'],
+      isDifferent: false,
+    },
+  ]);
+  expect(matrix.differentiatingRowCount).toBe(0);
 });

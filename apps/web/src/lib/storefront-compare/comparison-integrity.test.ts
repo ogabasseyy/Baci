@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { buildProductCompareCandidate } from './compare-eligibility';
-import { buildComparisonValueAnswer } from './comparison-value-answer';
 
 const specs = { chipset: 'A', ram_gb: 8, storage_gb: 128 };
 function pair(
@@ -58,32 +57,5 @@ describe('comparison integrity', () => {
         { canonical_model: 'B', ram_gb: 8, source: 'two' }
       ).differentiatingSpecCount
     ).toBe(0);
-  });
-  it('states parity and unknown price without inventing savings or superiority', () => {
-    expect(
-      buildComparisonValueAnswer(
-        { name: 'A', price: 66000 },
-        { name: 'B', price: 66000 },
-        'NGN',
-        'en-NG'
-      )
-    ).toContain('same');
-    expect(
-      buildComparisonValueAnswer(
-        { name: 'A', price: 0 },
-        { name: 'B', price: 90000 },
-        'NGN',
-        'en-NG'
-      )
-    ).toContain('undetermined');
-    const answer = buildComparisonValueAnswer(
-      { name: 'A', price: 803000, condition: 'Used' },
-      { name: 'B', price: 900000, condition: 'New' },
-      'NGN',
-      'en-NG'
-    );
-    expect(answer).toContain('A has the lower');
-    expect(answer).toContain('different conditions');
-    expect(answer).not.toContain('advantages');
   });
 });

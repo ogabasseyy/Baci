@@ -59,10 +59,7 @@ const CANONICAL_SPEC_CATEGORIES: Record<string, string> = {
 
 function indexDetailedSpecs(input: ProductSpecSection[]) {
   const valuesByCategory = new Map<string, Map<string, Map<string, string>>>();
-  const seenSections = new Set<string>();
   for (const section of input) {
-    if (seenSections.has(section.category)) continue;
-    seenSections.add(section.category);
     for (const item of section.items) {
       const label = normalizeComparisonLabel(item.label);
       const category = CANONICAL_SPEC_CATEGORIES[label] ?? section.category;

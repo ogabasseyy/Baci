@@ -39,3 +39,9 @@ The large difference in decoded HTML did **not** establish a corresponding scrip
 ## Remaining verification
 
 Render the changed local category routes against representative published inventories and then verify raw/rendered production HTML after an authorized deployment. Field CWV, complete rich-result validation, a repeatable performance baseline, and production completion are separate from these local fixes and exploratory measurements.
+
+## Repository source-inventory snapshot refresh
+
+The full web suite correctly rejected the old checked-in edge inventory after storefront/API source changed. Regenerated `docs/superpowers/evidence/storefront-edge/task-1a-inventory.json` using the existing CLI against exact committed source `6118587d2b027bf5ec4810818b691e9ca36cb691`, the unchanged synthetic pilot candidate `baci-edge-pilot.usebaci.com`, and `/baci-relay`. Only source identity, route/API-input digests, and self-hash changed; all 584 classification rows, hostname binding, and policy content are identical. The repository test now asserts the regenerated exact digest `f86836a5fb2ca7e98558c063258b8407a9a2f9fc968e741def2285bfbb4d3d97`.
+
+This refresh is a repository regression snapshot and retains `directional_cost_screen_only` authority. It is not reviewed operational evidence, pilot qualification, traffic promotion, or deployment authorization. Source equality, dirty-source rejection, exact operational-source validation, and Proxy behavior remain unchanged.

@@ -14,41 +14,14 @@ import {
   Smartphone,
   Truck,
 } from 'lucide-react';
-import { parseLegacyFAQ, type FAQItem } from '@/types/faq';
+import { parseLegacyFAQ } from '@/types/faq';
 import type React from 'react';
 import { useState } from 'react';
-import { applyApprovedPolicyFaqs } from './approved-policy-faq';
-
-interface FaqItem {
-  question: string;
-  answer: string;
-}
-
-const FAQS: FaqItem[] = [
-  {
-    question: 'How do I track my order?',
-    answer:
-      "You can track your order by visiting the 'My Orders' section in your profile. Click on the specific order to see real-time status updates and tracking numbers if available.",
-  },
-  {
-    question: 'What is your return policy?',
-    answer: 'Contact customer support to confirm return eligibility, timing, method and any fees before sending an item back.',
-  },
-  {
-    question: 'How does the warranty work?',
-    answer: 'Contact customer support before purchase to confirm warranty coverage, exclusions and the claim process for your device.',
-  },
-  {
-    question: 'Do you offer installment payments?',
-    answer:
-      "Yes, we partner with selected financial institutions to offer 'Buy Now, Pay Later' options. You can select this option at checkout if you are eligible.",
-  },
-  {
-    question: 'Can I swap my old phone?',
-    answer:
-      "Absolutely! Use our 'Swap & Trade-in' feature to get an estimated value for your current device. You can use this value as a discount towards your new purchase.",
-  },
-];
+import {
+  applyApprovedPolicyFaqs,
+  FALLBACK_HELP_FAQS,
+  type FaqItem,
+} from './approved-policy-faq';
 
 interface MerchantInfo {
   business_name?: string;
@@ -91,7 +64,7 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
     displayFaqs = parseLegacyFAQ(merchant.pages.faq);
   } else {
     // Default FAQs if no content exists
-    displayFaqs = FAQS;
+    displayFaqs = FALLBACK_HELP_FAQS;
   }
 
   displayFaqs = applyApprovedPolicyFaqs(displayFaqs, merchant?.slug);

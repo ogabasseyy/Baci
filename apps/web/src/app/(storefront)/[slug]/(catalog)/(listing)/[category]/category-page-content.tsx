@@ -285,6 +285,7 @@ export async function CategoryPageContent({
           <CategoryPageDeferredCompareLinks
             storeUrl={requestScopedBaseUrl}
             merchantId={merchant.id}
+            merchantSlug={slug}
             categorySlug={category}
             categoryName={categoryName}
           />

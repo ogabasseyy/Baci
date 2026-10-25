@@ -100,6 +100,10 @@ function renderSelectors({
 }
 
 describe('ProductOptionSelectors — dependent variant filtering', () => {
+  it('explains selected restricted connectivity before purchase', () => {
+    renderSelectors({ selectedAttributes: { sim_type: 'Wi-Fi Only' } });
+    expect(screen.getByRole('note')).toHaveTextContent('Do not assume cellular service support');
+  });
   it('renders all storage options as enabled when no RAM is selected', () => {
     renderSelectors({ effectiveAxes: ['storage'] });
 

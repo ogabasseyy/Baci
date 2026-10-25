@@ -102,7 +102,8 @@ describe('buildProductContextParagraphs', () => {
     expect(paragraphs[0]).toContain('review the listed condition');
     expect(paragraphs[0]).toContain('with pricing shown on this page');
     expect(paragraphs[0]).not.toContain('current price');
-    expect(paragraphs[0]).toContain('may currently be out of stock');
+    expect(paragraphs[0]).not.toContain('may currently be out of stock');
+    expect(paragraphs[0]).toContain('selected variant');
     expect(paragraphs[1]).toContain('use the visible details on this page');
     expect(paragraphs[1]).toContain('region compatibility');
     expect(paragraphs[1]).not.toContain('related links on this page connect');

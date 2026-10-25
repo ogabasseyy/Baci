@@ -25,6 +25,7 @@ interface LegalProps {
 export const OgabasseyV2LegalDispute: React.FC<LegalProps> = ({ merchant }) => {
   const businessName = merchant?.business_name || 'Ogabassey Limited';
   const email = merchant?.email || 'support@ogabassey.com';
+  const supportEmail = merchant?.support_email?.trim() || email;
   const address = merchant?.business_address || '2 Olaide Tomori St, Ikeja, Lagos, Nigeria';
   const customContent = merchant?.pages?.terms;
 
@@ -75,10 +76,10 @@ export const OgabasseyV2LegalDispute: React.FC<LegalProps> = ({ merchant }) => {
               <strong>Step 1: Contact Support.</strong> Most issues can be
               resolved by our customer care team. Please email{' '}
               <a
-                href={`mailto:${email}`}
+                href={`mailto:${supportEmail}`}
                 className="text-red-600 font-bold"
               >
-                {email}
+                {supportEmail}
               </a>{' '}
               with your Order ID and details of the complaint.
             </li>
@@ -181,23 +182,22 @@ export const OgabasseyV2LegalDispute: React.FC<LegalProps> = ({ merchant }) => {
             </>
           )}
 
-          <div className="bg-red-50 rounded-2xl p-8 border border-red-100 mt-8">
-            <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
-              <AlertTriangle className="text-red-600" size={20} />
-              Important Note on Returns
-            </h3>
-            <p className="text-red-800 text-sm mb-4 leading-relaxed">
-              Please note that our <strong>7-Day Return Policy</strong> applies
-              strictly to devices with technical defects that were not disclosed
-              at the time of purchase. Physical damage, liquid damage, or
-              modification of the device software by the user voids all
-              warranties and return rights.
-            </p>
-            <div className="flex items-center gap-2 text-sm text-red-700 font-bold">
-              <CheckCircle2 size={16} /> All serial numbers are recorded to
-              prevent fraud.
+          {merchant?.slug === 'ogabassey' ? (
+            <div className="bg-red-50 rounded-2xl p-8 border border-red-100 mt-8">
+              <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
+                <AlertTriangle className="text-red-600" size={20} />
+                Important Note on Returns
+              </h3>
+              <p className="text-red-800 text-sm mb-4 leading-relaxed">
+                Please note that our <strong>14-Day Return Policy</strong> applies
+                strictly to devices with technical defects that were not disclosed
+                at the time of purchase. Contact customer support within 14 days of delivery before sending a device back to confirm eligibility, the return method and any fees. Non-defective items are not eligible.
+              </p>
+              <div className="flex items-center gap-2 text-sm text-red-700 font-bold">
+                <CheckCircle2 size={16} /> Keep your order details ready when contacting support.
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="border-t border-gray-100 pt-8 mt-8">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">

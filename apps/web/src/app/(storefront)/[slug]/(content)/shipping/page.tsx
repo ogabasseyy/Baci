@@ -32,10 +32,15 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Shipping Policy | ${context.merchant.business_name}`,
+    title: { absolute: `Shipping Policy | ${context.merchant.business_name}` },
     description,
     alternates: {
       canonical: canonicalUrl,
+    },
+    twitter: {
+      card: 'summary',
+      title: `Shipping Policy | ${context.merchant.business_name}`,
+      description: description,
     },
     openGraph: {
       title: `Shipping Policy | ${context.merchant.business_name}`,

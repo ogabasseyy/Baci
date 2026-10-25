@@ -37,8 +37,13 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Terms of Service | ${merchant.business_name}`,
+    title: { absolute: `Terms of Service | ${merchant.business_name}` },
     description,
+    twitter: {
+      card: 'summary',
+      title: `Terms of Service | ${merchant.business_name}`,
+      description: description,
+    },
     openGraph: {
       title: `Terms of Service | ${merchant.business_name}`,
       description,

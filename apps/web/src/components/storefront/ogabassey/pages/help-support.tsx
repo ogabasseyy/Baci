@@ -17,6 +17,7 @@ import {
 import { parseLegacyFAQ, type FAQItem } from '@/types/faq';
 import type React from 'react';
 import { useState } from 'react';
+import { applyApprovedPolicyFaqs } from './approved-policy-faq';
 
 interface FaqItem {
   question: string;
@@ -31,13 +32,11 @@ const FAQS: FaqItem[] = [
   },
   {
     question: 'What is your return policy?',
-    answer:
-      'We offer a 7-day return policy for defective items. The device must be in its original condition with all accessories. Please visit our Returns page for the full policy and to initiate a return.',
+    answer: 'Contact customer support to confirm return eligibility, timing, method and any fees before sending an item back.',
   },
   {
     question: 'How does the warranty work?',
-    answer:
-      'All new devices come with a standard 1-year manufacturer warranty. Used devices come with a 3-month warranty covering technical faults. Physical and liquid damage are not covered unless you purchased additional protection.',
+    answer: 'Contact customer support before purchase to confirm warranty coverage, exclusions and the claim process for your device.',
   },
   {
     question: 'Do you offer installment payments?',
@@ -58,6 +57,8 @@ interface MerchantInfo {
   support_phone?: string;
   phone?: string;
   address?: string;
+  business_address?: string;
+  slug?: string;
   faq_items?: { question: string; answer: string }[];
   pages?: { faq?: string };
 }
@@ -79,7 +80,7 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
     merchant?.support_phone?.trim() ||
     merchant?.phone?.trim() ||
     '+234 814 697 8921';
-  const address = merchant?.address || 'Lagos, Nigeria';
+  const address = merchant?.business_address?.trim() || merchant?.address?.trim();
 
   // Get FAQs from structured items or legacy content
   let displayFaqs: FaqItem[] = [];
@@ -92,6 +93,8 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
     // Default FAQs if no content exists
     displayFaqs = FAQS;
   }
+
+  displayFaqs = applyApprovedPolicyFaqs(displayFaqs, merchant?.slug);
 
   const toggleFaq = (index: number) => {
     setOpenFaqIndex(openFaqIndex === index ? null : index);
@@ -269,7 +272,7 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
                 <div className="absolute -top-10 -right-10 size-32 bg-red-600 rounded-full blur-3xl opacity-20" />
               </div>
 
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+              {address ? <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
                 <h3 className="font-bold text-gray-900 mb-3 text-sm">
                   Visit our Office
                 </h3>
@@ -282,14 +285,14 @@ export const OgabasseyV2HelpSupport: React.FC<HelpProps> = ({ merchant }) => {
                   </p>
                 </div>
                 <a
-                  href="https://maps.google.com"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block mt-4 text-xs font-bold text-red-600 hover:underline"
                 >
                   Get Directions
                 </a>
-              </div>
+              </div> : null}
             </div>
           </div>
         </div>

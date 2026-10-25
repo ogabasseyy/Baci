@@ -11,32 +11,6 @@ vi.mock('next/navigation', () => ({
   notFound: () => mockNotFound(),
 }));
 
-vi.mock(
-  '@/app/(storefront)/[slug]/(catalog)/(listing)/products/product-index-card',
-  () => ({
-    ProductIndexCard: ({
-      formattedPrice,
-      product,
-    }: {
-      formattedPrice: string;
-      product: {
-        name: string;
-        condition: string;
-        has_condition_offers?: boolean;
-      };
-    }) => (
-      <div>
-        <span>{product.name}</span>
-        <span>{product.condition}</span>
-        <span>{formattedPrice}</span>
-        <span>
-          {product.has_condition_offers ? 'offers' : 'single-condition'}
-        </span>
-      </div>
-    ),
-  })
-);
-
 vi.mock('@/lib/storefront-compare/load-price-band-page', () => ({
   loadPriceBandPage: (...args: unknown[]) => mockLoadPriceBandPage(...args),
 }));
@@ -65,7 +39,9 @@ const priceBandPageModel = {
     {
       id: 'product-c',
       slug: 'galaxy-a56',
-      name: 'Galaxy A56',
+      name: 'Galaxy A56 - 128GB - Refurbished',
+      variantId: 'variant-a56',
+      availabilityLabel: 'In stock',
       category: 'Smartphones',
       category_slug: 'smartphones',
       brand: 'Samsung',
@@ -81,6 +57,7 @@ const priceBandPageModel = {
       id: 'product-d',
       slug: 'iphone-16e',
       name: 'iPhone 16e',
+      availabilityLabel: 'Available to order — confirm fulfillment',
       category: 'Smartphones',
       category_slug: 'smartphones',
       brand: 'Apple',
@@ -134,9 +111,19 @@ describe('PriceBandPageContent', () => {
     expect(
       screen.getByText(/These are the strongest smartphone options/i)
     ).toBeInTheDocument();
-    expect(screen.getByText('Galaxy A56')).toBeInTheDocument();
-    expect(screen.getByText('Refurbished')).toBeInTheDocument();
-    expect(screen.getByText('offers')).toBeInTheDocument();
+    expect(
+      screen.getByText('Galaxy A56 - 128GB - Refurbished')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Galaxy A56/ })).toHaveAttribute(
+      'href',
+      'https://ogabassey.com/smartphones/galaxy-a56?variantId=variant-a56'
+    );
+    expect(screen.getByText('In stock')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'How to use this budget comparison' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Condition: Refurbished')).toBeInTheDocument();
+
     expect(
       screen.getByRole('link', { name: 'Best Phones in Nigeria' })
     ).toHaveAttribute(
@@ -165,6 +152,10 @@ describe('PriceBandPageContent', () => {
     expect(schemaScripts).toHaveLength(2);
     expect(schemaScripts[0]?.textContent).toContain('"@type":"BreadcrumbList"');
     expect(schemaScripts[1]?.textContent).toContain('"@type":"ItemList"');
+    expect(schemaScripts[1]?.textContent).toContain('variantId=variant-a56');
+    expect(schemaScripts[1]?.textContent).toContain(
+      'https://schema.org/RefurbishedCondition'
+    );
   });
 
   it('calls notFound when the price-band loader returns a non-indexable page', async () => {

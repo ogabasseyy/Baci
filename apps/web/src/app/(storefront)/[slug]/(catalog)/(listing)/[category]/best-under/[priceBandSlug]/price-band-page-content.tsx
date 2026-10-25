@@ -1,11 +1,12 @@
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import type { BreadcrumbList, ItemList } from 'schema-dts';
-import { ProductIndexCard } from '@/app/(storefront)/[slug]/(catalog)/(listing)/products/product-index-card';
 import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import type { NormalizedProduct } from '@/lib/normalize-product';
+import { getProductUrl } from '@/lib/seo-utils';
 import { buildPriceBandPageSchemas } from '@/lib/storefront-compare/compare-schema';
 import { loadPriceBandPage } from '@/lib/storefront-compare/load-price-band-page';
+import { buildStorefrontVariantUrl } from '@/lib/storefront-variant-disclosure';
 
 type LoadedPriceBandPage = NonNullable<
   Awaited<ReturnType<typeof loadPriceBandPage>>
@@ -18,33 +19,6 @@ interface PriceBandPageContentProps {
     category: string;
     priceBandSlug: string;
   }>;
-}
-
-function toProductIndexCardModel(
-  product: LoadedPriceBandPage['products'][number]
-): NormalizedProduct {
-  return {
-    id: product.id,
-    name: product.name,
-    slug: product.slug,
-    description: product.description,
-    image: product.image,
-    imageLarge: product.image,
-    images: product.image ? [product.image] : [],
-    category: product.category,
-    category_slug: product.category_slug,
-    brand: product.brand ?? null,
-    price: product.price,
-    compare_at_price: null,
-    condition: product.condition,
-    stock: product.stock,
-    rating: 0,
-    availability: product.availability,
-    product_key_specs: product.product_key_specs ?? null,
-    has_condition_offers: product.has_condition_offers,
-    available_conditions: [],
-    variant_model: 'legacy',
-  };
 }
 
 export async function PriceBandPageContent({
@@ -101,16 +75,84 @@ export async function PriceBandPageContent({
             </p>
           </header>
 
-          <ul className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {page.products.map((product) => (
-              <li key={product.id}>
-                <ProductIndexCard
-                  formattedPrice={formatProductPrice(product.price)}
-                  pathPrefix={page.pathPrefix}
-                  product={toProductIndexCardModel(product)}
-                />
-              </li>
-            ))}
+          <section
+            className="mt-8 max-w-3xl space-y-3"
+            aria-labelledby="budget-methodology"
+          >
+            <h2 id="budget-methodology" className="text-xl font-semibold">
+              How to use this budget comparison
+            </h2>
+            <p>
+              Sorted by price, lowest first, with one eligible priced option per
+              model. The ceiling is exclusive. Tracked options with no stock,
+              explicitly classified feature phones in smartphone guides, and
+              Wi-Fi-only phone options are excluded. These are catalog
+              comparisons, not hands-on reviews or performance rankings.
+            </p>
+            <p>
+              In stock means the selected option has tracked availability.
+              Available to order means inventory is not tracked; confirm
+              fulfillment, delivery, accessories and warranty before payment.
+              Prices and availability can change.
+            </p>
+            <p>
+              For the lowest listed item price, start at the top. Delivery and
+              other checkout charges are separate. Tradeoffs include the listed
+              condition and configuration: a lower price does not establish
+              better battery health, camera quality or suitability for demanding
+              workloads. Compare those details on the selected product page.
+            </p>
+            <a
+              href={page.breadcrumbItems[1]?.url}
+              className="text-store-primary underline"
+            >
+              Browse the full category
+            </a>
+          </section>
+          <h2 className="mt-8 text-2xl font-semibold">
+            Eligible priced options
+          </h2>
+          <ul className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+            {page.products.map((product) => {
+              const baseUrl = new URL(
+                `${page.pathPrefix}${getProductUrl(product)}`,
+                page.canonicalUrl
+              ).toString();
+              const href = product.variantId
+                ? buildStorefrontVariantUrl(baseUrl, { id: product.variantId })
+                : baseUrl;
+              return (
+                <li
+                  key={product.id}
+                  className="overflow-hidden rounded-2xl border border-store-border"
+                >
+                  <a href={href} className="block h-full p-4">
+                    <div className="relative aspect-square">
+                      <Image
+                        src={product.image}
+                        alt={product.name}
+                        fill
+                        sizes="(max-width: 768px) 50vw, 25vw"
+                        className="object-contain"
+                      />
+                    </div>
+                    <h3 className="mt-3 text-base font-semibold">
+                      {product.name}
+                    </h3>
+                    <p className="mt-2 font-bold">
+                      {formatProductPrice(product.price)}
+                    </p>
+                    <p className="mt-1 text-sm">
+                      Condition: {product.condition}
+                    </p>
+                    <p className="mt-1 text-sm">{product.availabilityLabel}</p>
+                    <p className="mt-2 text-sm text-store-primary">
+                      View this configuration
+                    </p>
+                  </a>
+                </li>
+              );
+            })}
           </ul>
 
           {page.guideLinks.length > 0 && (

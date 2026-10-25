@@ -33,6 +33,33 @@ const variantProduct = {
 } as unknown as Product;
 
 describe('critical variant selection helpers', () => {
+  it('opens ordinary phone pages on the eligible cellular variant and preserves an explicit restricted selection', () => {
+    const product = {
+      ...variantProduct,
+      name: 'iPhone 16',
+      variants: [
+        {
+          ...variantProduct.variants?.[0],
+          id: 'wifi',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 600000,
+        },
+        {
+          ...variantProduct.variants?.[1],
+          id: 'cellular',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 900000,
+        },
+      ],
+    } as Product;
+    expect(getInitialCriticalVariantSelection(product, {})).toHaveProperty(
+      'variantId',
+      'cellular'
+    );
+    expect(
+      getInitialCriticalVariantSelection(product, { variantId: 'wifi' })
+    ).toHaveProperty('variantId', 'wifi');
+  });
   it('uses the global lowest-priced variant for no-query critical defaults', () => {
     expect(getInitialCriticalVariantSelection(variantProduct, {})).toEqual({
       attributes: { storage: '128GB' },

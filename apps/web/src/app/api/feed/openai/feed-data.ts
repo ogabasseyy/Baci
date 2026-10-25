@@ -4,6 +4,9 @@ import { getEligibleConditionOffers } from '@/lib/eligible-condition-offers';
 import { createAnonClient } from '@/lib/supabase/anon';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import { fetchActiveFeedOffers } from '../google-merchant/fetch-active-feed-offers';
+import { fetchFeedVariants } from '../google-merchant/fetch-feed-variants';
+import { normalizeFeedVariantPrice } from '../google-merchant/normalize-feed-variant-price';
+import { normalizeFeedVariantStringAttributes } from '../google-merchant/normalize-feed-variant-string-attributes';
 import { fetchVerifiedOpenAIImageManifest } from './feed-image-manifest';
 import { hydrateOpenAIFeedProductsWithReviewSignals } from './feed-review-signals';
 
@@ -15,8 +18,7 @@ const OPENAI_FEED_PRODUCTS_SELECT = `id, name, description, slug, canonical_url,
        brand, gtin, mpn, sku, stock, stock_quantity, manage_stock, condition, has_condition_offers, google_product_category, category,
        weight_value, weight_unit, created_at, updated_at,
        categories:category_id(name, slug),
-       product_categories(categories(name, slug)),
-       variants:product_variants!product_variants_product_id_fkey(id, attributes, price_override, stock_quantity, sku, primary_image)`;
+       product_categories(categories(name, slug))`;
 
 export interface OpenAIFeedVariant {
   id: string;
@@ -25,6 +27,7 @@ export interface OpenAIFeedVariant {
   stock_quantity?: number;
   sku?: string;
   primary_image?: string;
+  condition?: 'new' | 'used' | 'uk_used' | 'open_box' | 'refurbished';
 }
 
 export interface OpenAIFeedProduct {
@@ -227,6 +230,40 @@ export async function getCachedOpenAIFeedData(
 
   const supabase = createAnonClient();
   const products = await fetchActiveOpenAIFeedProducts(supabase, merchantId);
+  // Public variant RPC carries the same merchant-scoped, selectable projection
+  // used by the Google feed. Embedded table joins can omit public variants.
+  const variants = await fetchFeedVariants(
+    supabase,
+    merchantId,
+    products.map((product) => product.id)
+  );
+  const variantsByProduct = new Map<string, OpenAIFeedVariant[]>();
+  const allowedProducts = new Set(products.map((product) => product.id));
+  for (const row of variants) {
+    if (!allowedProducts.has(row.product_id)) continue;
+    const list = variantsByProduct.get(row.product_id) ?? [];
+    list.push({
+      id: row.id,
+      attributes: {
+        ...(normalizeFeedVariantStringAttributes(row.attributes) ?? {}),
+        ...Object.fromEntries(
+          Object.entries(row.attributes ?? {})
+            .filter(
+              ([, value]) => typeof value === 'number' && Number.isFinite(value)
+            )
+            .map(([key, value]) => [key, String(value)])
+        ),
+      },
+      condition: row.condition ?? undefined,
+      price_override:
+        normalizeFeedVariantPrice(row.price_override) ?? undefined,
+      stock_quantity: row.stock_quantity ?? undefined,
+      sku: row.sku ?? undefined,
+    });
+    variantsByProduct.set(row.product_id, list);
+  }
+  for (const product of products)
+    product.variants = variantsByProduct.get(product.id) ?? [];
   // Offer-claimed image URLs must be excluded from product-level images,
   // mirroring the Google/Facebook/TikTok builders. Fetch offers only for
   // flagged products so the common no-offers case adds no queries.

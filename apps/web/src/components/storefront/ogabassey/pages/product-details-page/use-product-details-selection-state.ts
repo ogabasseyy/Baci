@@ -1,5 +1,7 @@
 'use client';
 
+import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
+
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
 import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
@@ -61,9 +63,10 @@ export function useProductDetailsSelectionState(
     offers: productData.offers,
   };
   // PDP-only price-first default; feeds/cart keep the shared resolver.
+  const defaultSelectionProduct = { ...variantResolutionProduct, variants: filterDefaultAdvertisedVariants(variantResolutionVariants, serverProduct) };
   const defaultVariantSelection =
-    resolveLowestPricedVariantSelection({ ...variantResolutionProduct }) ??
-    resolveDefaultVariantSelection({ ...variantResolutionProduct });
+    resolveLowestPricedVariantSelection(defaultSelectionProduct) ??
+    resolveDefaultVariantSelection(defaultSelectionProduct);
   const usesVariantConditions = hasVariantConditionAxis({
     ...variantResolutionProduct,
   });

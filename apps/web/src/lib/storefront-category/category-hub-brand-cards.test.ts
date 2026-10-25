@@ -113,7 +113,11 @@ describe('buildCategoryHubBrandCards', () => {
     });
 
     // Assert
-    expect(cards.map((card) => card.title)).toEqual(['Tecno', 'Apple', 'Oppo']);
+    expect(cards.map((card) => card.title)).toEqual([
+      'Tecno tecno-1',
+      'Apple apple-1',
+      'Oppo oppo-1',
+    ]);
   });
 
   it('adds the canonical comparison link to both compared brand cards', () => {

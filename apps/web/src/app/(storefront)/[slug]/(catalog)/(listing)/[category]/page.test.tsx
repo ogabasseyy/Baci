@@ -682,9 +682,9 @@ describe('category page route', () => {
     expect(
       screen.getByText('Best for: Best Budget Phones')
     ).toBeInTheDocument();
-    expect(screen.getByText('Brand: Apple')).toBeInTheDocument();
-    expect(screen.getByText('Brand: Samsung')).toBeInTheDocument();
-    expect(screen.getByText('Brand: Tecno')).toBeInTheDocument();
+    expect(screen.getByText('Brand: Apple Mini')).toBeInTheDocument();
+    expect(screen.getByText('Brand: Samsung A')).toBeInTheDocument();
+    expect(screen.getByText('Brand: Tecno Spark')).toBeInTheDocument();
     expect(
       screen.getByText('Price band: Best Smartphones Under ₦500,000')
     ).toBeInTheDocument();

@@ -3,6 +3,7 @@ import { StorefrontReadUnavailableError } from '@/lib/storefront-read-result';
 import { loadPriceBandPage } from './load-price-band-page';
 
 const mockGetMerchantByIdentifier = vi.fn();
+const mockGetPublicVariants = vi.fn();
 const mockGetCachedCategoryPageData = vi.fn();
 const mockGetCachedFeatureSettings = vi.fn();
 const mockGetPublishedClusterPosts = vi.fn();
@@ -13,6 +14,8 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('@/lib/cached-data', () => ({
+  getPublicProductVariantsByProductIds: (...args: unknown[]) =>
+    mockGetPublicVariants(...args),
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),
   getCachedCategoryPageData: (...args: unknown[]) =>
@@ -37,6 +40,13 @@ const categoryPageData = {
   isCollection: false,
   fallbackName: 'Smartphones',
   products: [
+    {
+      id: 'extra',
+      name: 'Extra phone',
+      brand: 'Nokia',
+      price: 510000,
+      category: 'Smartphones',
+    },
     {
       id: 'product-c',
       slug: 'galaxy-a56',
@@ -108,6 +118,8 @@ const categoryPageData = {
 describe('loadPriceBandPage', () => {
   beforeEach(() => {
     vi.stubEnv('NODE_ENV', 'development');
+    mockGetPublicVariants.mockReset();
+    mockGetPublicVariants.mockResolvedValue({});
     mockGetMerchantByIdentifier.mockReset();
     mockGetCachedCategoryPageData.mockReset();
     mockGetCachedFeatureSettings.mockReset();
@@ -189,27 +201,20 @@ describe('loadPriceBandPage', () => {
       'http://localhost:3000/ogabassey/smartphones/best-under/under-1m'
     );
     expect(result?.metaTitle).toBe(
-      'Best Smartphones Under ₦1,000,000 in Nigeria | Ogabassey'
+      'Compare Smartphones Under ₦1,000,000 in Nigeria | Ogabassey'
     );
     expect(result?.metaDescription).toBe(
-      'Compare the best smartphones under ₦1,000,000 in Nigeria. See live prices, stock, condition, and buying options from Ogabassey.'
+      'Compare smartphones under ₦1,000,000 in Nigeria. See priced configurations, condition, and ordering availability from Ogabassey.'
     );
     expect(result?.heading).toBe(
-      'Best Smartphones Under ₦1,000,000 in Nigeria'
+      'Compare Smartphones Under ₦1,000,000 in Nigeria'
     );
     expect(result?.intro).toBe(
-      'These are the strongest smartphones options under ₦1,000,000 in Nigeria, based on live Ogabassey inventory with price, condition, and availability details.'
+      'Browse smartphones priced strictly below ₦1,000,000 in Nigeria from Ogabassey. Compare the exact listed configuration and condition before choosing.'
     );
     expect(result?.products).toHaveLength(6);
     expect(result?.products).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          slug: 'iphone-16e',
-          availability: 'InStock',
-          stock: 0,
-          condition: 'New',
-          has_condition_offers: true,
-        }),
         expect.objectContaining({
           slug: 'galaxy-a56',
           condition: 'Refurbished',
@@ -222,6 +227,60 @@ describe('loadPriceBandPage', () => {
       categorySlug: 'smartphones',
       priceBandSlug: 'under-1m',
     });
+  });
+
+  it('uses safe hydrated options for budget membership and carries the precise identity', async () => {
+    mockGetCachedCategoryPageData.mockResolvedValueOnce({
+      ...categoryPageData,
+      products: [
+        {
+          id: 'iphone',
+          slug: 'iphone-14',
+          name: 'iPhone 14',
+          category: 'Smartphones',
+          price: 370000,
+          has_variants: true,
+          manage_stock: false,
+        },
+      ],
+    });
+    mockGetPublicVariants.mockResolvedValueOnce({
+      iphone: [
+        {
+          id: 'wifi',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 370000,
+          condition: 'used',
+          effective_policy: 'off',
+          stock_quantity: 0,
+        },
+        {
+          id: 'cell',
+          attributes: { storage: '128GB', sim_type: 'Physical + eSIM' },
+          price_override: 456500,
+          condition: 'used',
+          effective_policy: 'standard',
+          stock_quantity: 4,
+        },
+      ],
+    });
+    const result = await loadPriceBandPage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      priceBandSlug: 'under-500k',
+    });
+    expect(mockGetPublicVariants).toHaveBeenCalledWith('merchant-1', [
+      'iphone',
+    ]);
+    expect(result?.products).toHaveLength(1);
+    expect(result?.products[0]).toMatchObject({
+      variantId: 'cell',
+      price: 456500,
+      condition: 'used',
+      availabilityLabel: 'In stock',
+    });
+    expect(result?.products[0]?.name).toContain('128GB');
+    expect(result?.products[0]?.name).toContain('Physical + eSIM');
   });
 
   it('uses localized ceiling text in the heading and metadata title', async () => {
@@ -237,13 +296,11 @@ describe('loadPriceBandPage', () => {
       priceBandSlug: 'under-1m',
     });
 
-    expect(result?.heading).toBe('Best Smartphones Under $1,000,000');
+    expect(result?.heading).toBe('Compare Smartphones Under $1,000,000');
     expect(result?.metaTitle).toBe(
-      'Best Smartphones Under $1,000,000 | Ogabassey'
+      'Compare Smartphones Under $1,000,000 | Ogabassey'
     );
-    expect(result?.metaDescription).toContain(
-      'best smartphones under $1,000,000'
-    );
+    expect(result?.metaDescription).toContain('smartphones under $1,000,000');
   });
 
   it('returns a non-indexable model when the curated band is below threshold', async () => {
@@ -341,7 +398,7 @@ describe('loadPriceBandPage', () => {
         'ogabassey'
       );
       expect(result?.heading).toBe(
-        'Best Smartphones Under ₦1,000,000 in Nigeria'
+        'Compare Smartphones Under ₦1,000,000 in Nigeria'
       );
     });
   });

@@ -100,7 +100,7 @@ export function CategoryHubSections({
         ) : null}
 
         <CategoryHubCardGrid title="Best for" cards={hub.bestForCards} />
-        <CategoryHubCardGrid title="Popular brands" cards={hub.brandCards} />
+        <CategoryHubCardGrid title="Brands and product picks" cards={hub.brandCards} />
         <CategoryHubCardGrid
           title="Best price bands"
           cards={hub.priceBandCards}

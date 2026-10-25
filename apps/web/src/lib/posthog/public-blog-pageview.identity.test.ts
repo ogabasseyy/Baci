@@ -4,6 +4,9 @@ import {
   resetPublicBlogPageviewDedupeForTests,
 } from './public-blog-pageview';
 
+// Identity/storage fallback tests isolate consent; consent behavior has payload and tracker coverage.
+vi.mock('@/lib/analytics-consent', () => ({ isAnalyticsAllowed: () => true }));
+
 function parseFetchBody(fetch: ReturnType<typeof vi.fn>, index = 0) {
   const init = fetch.mock.calls[index]?.[1] as RequestInit | undefined;
   return JSON.parse(String(init?.body));

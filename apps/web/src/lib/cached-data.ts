@@ -281,7 +281,7 @@ async function getCachedPublicProductVariantsByProductIds(
   return variantsByProductId;
 }
 
-async function getPublicProductVariantsByProductIds(
+export async function getPublicProductVariantsByProductIds(
   merchantId: string,
   productIds: string[]
 ) {
@@ -1501,6 +1501,9 @@ const CATEGORY_PAGE_PRODUCT_BASE_SELECT = `
           category,
           brand,
           condition,
+          has_variants,
+          variant_model,
+          has_condition_offers,
           stock,
           stock_quantity,
           manage_stock,

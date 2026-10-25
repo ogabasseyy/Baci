@@ -1,5 +1,6 @@
 import type { ProductKeySpecs } from '@/lib/products';
 import { stripHtmlTags } from '@/lib/sanitize-core';
+import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { getFirstAcceptedSpecValue } from './get-first-accepted-spec-value';
 
 interface FeedDescriptionInput {
@@ -198,6 +199,12 @@ function trimDescription(value: string) {
 }
 
 export function buildFeedDescription(input: FeedDescriptionInput) {
+  const connectivityDisclosure = getVariantConnectivityDisclosure({
+    id: '',
+    attributes: input.variant_attributes,
+  });
+  if (connectivityDisclosure)
+    return `${normalizeText(input.name)}. ${connectivityDisclosure}`;
   const baseDescription = removeFeedOnlyBoilerplate(
     normalizeDescriptionText(input.description)
   );

@@ -236,3 +236,32 @@ describe('buildPriceBandPageSchemas', () => {
     ).toThrow('compare schema pageUrl must be an absolute URL');
   });
 });
+
+it('excludes undocumented and conflicting values from Product properties using shared semantics', () => {
+  const schema = buildProductCompareItemListSchema({
+    pageName: 'Comparison',
+    pageUrl: 'https://ogabassey.com/smartphones/compare/a-vs-b',
+    currency: 'NGN',
+    products: [
+      { id: 'a', slug: 'a', name: 'Phone A', category_slug: 'smartphones' },
+    ],
+    comparisonMatrix: {
+      columns: [{ productId: 'a', label: 'Phone A' }],
+      groups: [],
+      differentiatingRowCount: 0,
+      flatRows: [
+        'Not documented',
+        'Not specified',
+        'Unknown',
+        '—',
+        'Not applicable',
+        'Conflicting catalog values (verify): A; B',
+      ].map((value) => ({
+        label: 'Unsupported fact',
+        values: [value],
+        isDifferent: false,
+      })),
+    },
+  });
+  expect(schema.itemListElement[0]?.item.additionalProperty).toBeUndefined();
+});

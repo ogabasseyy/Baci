@@ -1,3 +1,9 @@
+import {
+  COMPARISON_CONFLICT_PREFIX,
+  isDocumentedComparisonValue,
+  normalizeComparisonLabel,
+  normalizeComparisonValue,
+} from './comparison-spec-semantics';
 import type { ProductSpecSection } from './spec-data';
 import { buildProductSpecData } from './spec-data';
 import type { ComparableProductKeySpecs } from './spec-taxonomy';
@@ -44,27 +50,53 @@ export interface ProductComparisonMatrix {
   differentiatingRowCount: number;
 }
 
+const CANONICAL_SPEC_CATEGORIES: Record<string, string> = {
+  'Water and dust resistance': 'Body',
+  'Refresh Rate': 'Display',
+  Storage: 'Memory',
+  'CPU / GPU': 'Platform',
+};
+
 function indexDetailedSpecs(input: ProductSpecSection[]) {
-  const categoryItems = new Map<string, Map<string, string>>();
-
+  const valuesByCategory = new Map<string, Map<string, Map<string, string>>>();
+  const seenSections = new Set<string>();
   for (const section of input) {
-    // Match the former Array.find behavior: only the first section with a
-    // category contributes values when legacy input repeats that category.
-    if (categoryItems.has(section.category)) {
-      continue;
-    }
-
-    const items = new Map<string, string>();
+    if (seenSections.has(section.category)) continue;
+    seenSections.add(section.category);
     for (const item of section.items) {
-      // Match the former item Array.find behavior for duplicate labels.
-      if (!items.has(item.label)) {
-        items.set(item.label, item.value);
+      const label = normalizeComparisonLabel(item.label);
+      const category = CANONICAL_SPEC_CATEGORIES[label] ?? section.category;
+      const items =
+        valuesByCategory.get(category) ??
+        new Map<string, Map<string, string>>();
+      const distinctValues = items.get(label) ?? new Map<string, string>();
+      const normalizedValue = normalizeComparisonValue(item.value);
+      if (!distinctValues.has(normalizedValue)) {
+        distinctValues.set(normalizedValue, item.value);
       }
+      items.set(label, distinctValues);
+      valuesByCategory.set(category, items);
     }
-    categoryItems.set(section.category, items);
   }
 
-  return categoryItems;
+  // Serialize only after collection so subsequent aliases are compared with
+  // source values, never with an already formatted conflict message.
+  return new Map(
+    [...valuesByCategory].map(([category, items]) => [
+      category,
+      new Map(
+        [...items].map(([label, distinctValues]) => {
+          const values = [...distinctValues.values()];
+          return [
+            label,
+            values.length > 1
+              ? `${COMPARISON_CONFLICT_PREFIX}${values.join('; ')}`
+              : (values[0] ?? 'Not documented'),
+          ];
+        })
+      ),
+    ])
+  );
 }
 
 export function buildProductComparisonMatrix(input: {
@@ -109,17 +141,25 @@ export function buildProductComparisonMatrix(input: {
 
       const rows = labels.map((label) => {
         const values = indexedSpecData.map(
-          (categoryItems) => categoryItems.get(category)?.get(label) || '—'
+          (categoryItems) =>
+            categoryItems.get(category)?.get(label) || 'Not documented'
         );
-        const presentValues = values.filter((value) => value !== '—');
-        const uniquePresentValues = new Set(presentValues);
+        const presentValues = values.filter(isDocumentedComparisonValue);
+        const uniquePresentValues = new Set(
+          presentValues.map((value) =>
+            label === 'Refresh Rate'
+              ? (value.match(/\d+(?:\.\d+)?(?=\s*hz)/i)?.[0] ??
+                normalizeComparisonValue(value))
+              : normalizeComparisonValue(value)
+          )
+        );
 
         return {
           label,
           values,
           isDifferent:
-            uniquePresentValues.size > 1 ||
-            (presentValues.length > 0 && values.includes('—')),
+            presentValues.length === values.length &&
+            uniquePresentValues.size > 1,
         };
       });
 

@@ -10,6 +10,7 @@ import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductCondition } from '@/lib/products';
 import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
+import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
 import {
   getVariantPrimaryImage,
   normalizeRouteProductVariants,
@@ -124,7 +125,7 @@ function getInitialRouteVariant(
 ) {
   const resolutionProduct = getRouteVariantResolutionProduct(
     cachedProduct,
-    variants
+    filterDefaultAdvertisedVariants(variants, cachedProduct)
   );
 
   // Keep the early preload aligned with the PDP's global cheapest-variant default.

@@ -60,7 +60,7 @@ export async function generateMetadata({
       title: `Device Repairs - ${merchant.business_name}`,
       fallback: 'Device Repairs',
     }).metadataTitle,
-    description: `Explore phone, laptop, and gadget repair services from ${merchant.business_name} with expert technicians and genuine parts.`,
+    description: `Explore phone, laptop, and gadget repair services from ${merchant.business_name} and confirm parts availability and repair terms before booking.`,
     alternates: {
       canonical: `${baseUrl}/repairs`,
     },

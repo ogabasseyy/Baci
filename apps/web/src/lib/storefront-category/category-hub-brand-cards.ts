@@ -16,7 +16,10 @@ function pickFirstBrandProduct(
   brand: string
 ): CategoryHubProduct | null {
   const brandProducts = products
-    .filter((product) => product.brand === brand)
+    .filter(
+      (product) =>
+        generateSlug(product.brand?.trim() ?? '') === generateSlug(brand)
+    )
     .sort(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)
@@ -109,10 +112,16 @@ export function buildCategoryHubBrandCards(input: {
         ? `${entry.count}+`
         : String(entry.count);
     const card: CategoryHubCard = {
-      title: entry.label,
-      description: `${productCountLabel} active ${entry.count === 1 ? 'product' : 'products'} in this category.`,
+      title: authorityEntry
+        ? entry.label
+        : (representative?.name ?? entry.label),
+      description: authorityEntry
+        ? `${productCountLabel} active ${entry.count === 1 ? 'product' : 'products'} ${explicitAuthorityEntries.length > 0 ? 'in this category' : 'on this page'}.`
+        : `${entry.count} ${entry.label} ${entry.count === 1 ? 'product' : 'products'} on this page.`,
       href,
-      eyebrow: priorityDefaults.brandHighlights.heading,
+      eyebrow: authorityEntry
+        ? priorityDefaults.brandHighlights.heading
+        : `${entry.label} product pick`,
     };
 
     if (

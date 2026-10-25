@@ -58,7 +58,7 @@ function buildCategoryChecklist(categorySlug: string, categoryName: string) {
 
 function buildAvailabilitySentence(stock: number | null | undefined) {
   if (stock != null && stock <= 0) {
-    return 'Availability should be rechecked because this item may currently be out of stock.';
+    return 'Confirm your selected variant’s availability and delivery timing at checkout.';
   }
 
   return 'Live stock, selected options and delivery timing should still be confirmed at checkout.';

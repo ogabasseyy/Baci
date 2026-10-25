@@ -5,16 +5,36 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 
-export const metadata: Metadata = {
-  title: 'Swap Your Device',
-  description:
-    'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  if (!isValidMerchantIdentifier(slug)) notFound();
+  const lookupKey = slug.toLowerCase();
+  const merchant = isDomainIdentifier(slug)
+    ? await getCachedMerchantByDomain(lookupKey)
+    : await getCachedMerchant(lookupKey);
+  if (merchant?.template_id !== 'ogabassey') notFound();
+  const title = `Swap Your Device | ${merchant.business_name}`;
+  const description =
+    'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.';
+  const url = `${buildStoreUrl(merchant)}/swap`;
+  return {
+    title: { absolute: title },
+    description,
+    alternates: { canonical: url },
+    openGraph: { title, description, url, type: 'website' },
+    twitter: { title, description, card: 'summary' },
+  };
+}
 
 export default async function SwapPage({
   params,

@@ -7,9 +7,12 @@ import {
   buildComparePageSchemas,
   buildProductCompareItemListSchema,
 } from '@/lib/storefront-compare/compare-schema';
+import { getComparisonReferenceSources } from '@/lib/storefront-compare/comparison-reference-sources';
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
+import { getStorefrontLocale } from '@/lib/storefront-localization';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { isDomainIdentifier } from '@/lib/validation';
+import { CompareOffers } from './compare-offers';
 import { CompareRelatedLinks } from './compare-related-links';
 import {
   type ProductCompareSchemaProduct,
@@ -114,6 +117,13 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
       : null;
   const [leftColumnLabel, rightColumnLabel] = getComparisonColumnLabels(page);
   const comparisonRowGroups = getComparisonRowGroups(page);
+  const referenceSources =
+    page.kind === 'product'
+      ? getComparisonReferenceSources([
+          page.leftProduct?.slug || '',
+          page.rightProduct?.slug || '',
+        ])
+      : [];
 
   return (
     <>
@@ -142,6 +152,15 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
               {page.summaryVerdict}
             </p>
           </header>
+
+          {page.kind === 'product' && (
+            <CompareOffers
+              products={[page.leftProduct, page.rightProduct]}
+              currency={resolveMerchantCurrencyConfig(page.merchant).code}
+              baseUrl={page.canonicalUrl}
+              locale={getStorefrontLocale(page.merchant.country)}
+            />
+          )}
 
           <section className="mt-8">
             <h2 className="text-xl font-semibold">Key Differences</h2>
@@ -172,6 +191,15 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
               </p>
             </div>
           </section>
+
+          <p className="mt-6 text-sm">
+            Not documented means a fact is missing from this listing; it does
+            not mean unsupported. No / Not supported and Not applicable are
+            explicit catalog statements. This comparison compiles catalog
+            specifications and current listing offers; it does not represent
+            hands-on testing or independent manufacturer verification. Confirm
+            exact model codes and configuration with the seller.
+          </p>
 
           <section className="mt-10 overflow-x-auto rounded-2xl border border-store-border bg-store-background shadow-sm">
             <table
@@ -225,6 +253,30 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
               ))}
             </table>
           </section>
+
+          {referenceSources.length > 0 && (
+            <section className="mt-8" aria-label="Manufacturer references">
+              <h2 className="text-xl font-semibold">Manufacturer references</h2>
+              <p className="mt-2 text-sm">
+                Use these references to check the exact model and configuration.
+                Listing specifications are supplied by the catalog and may
+                require reconciliation; a reference link is not a certification
+                of each table value.
+              </p>
+              <ul className="mt-3 space-y-2">
+                {referenceSources.map((source) => (
+                  <li key={source.href}>
+                    <a
+                      className="text-store-primary underline"
+                      href={source.href}
+                    >
+                      {source.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {page.faqItems.length > 0 && (
             <section className="mt-10 space-y-4">

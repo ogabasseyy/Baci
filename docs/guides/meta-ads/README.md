@@ -44,6 +44,8 @@ Ogabassey’s credential was confirmed present after reloading. The credential i
 
 In Meta, open the website Pixel’s **Test events** tab, select **Website**, enter your storefront URL, and select **Test events**. Keep Events Manager open.
 
+![Meta Test Events configured for the Ogabassey storefront](screenshots/05-meta-test-events.png)
+
 On the storefront, use the normal cookie-consent controls. Accept the relevant tracking categories to test enabled tracking. Browse a product and check that the expected browser events appear in Meta with the correct source. Also test **Necessary Only** separately: advertising tracking should remain disabled.
 
 If no consent prompt is available, fix that storefront wiring before expecting a fresh visitor’s Pixel to load.

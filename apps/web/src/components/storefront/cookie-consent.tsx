@@ -9,10 +9,8 @@ import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 import { useCookieConsentController } from './use-cookie-consent-controller';
 
-export {
-  isCookieAllowed,
-  useCookieConsent,
-} from './use-cookie-consent-controller';
+export { isCookieAllowed } from './is-cookie-allowed';
+export { useCookieConsent } from './use-cookie-consent';
 
 export function CookieConsent() {
   const {

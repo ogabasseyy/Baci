@@ -1,16 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getStoredConsent, updateConsentMode } from '@/lib/consent-mode';
 
-const COOKIE_CONSENT_KEY = 'baci-cookie-consent';
-
-interface CookiePreferences {
-  necessary: boolean; // Always true, required for site functionality
-  analytics: boolean; // Google Analytics, etc.
-  marketing: boolean; // Ad tracking, retargeting
-  functional: boolean; // Preferences, language settings
-}
+import {
+  COOKIE_CONSENT_KEY,
+  type CookiePreferences,
+} from './cookie-consent-types';
 
 const defaultPreferences: CookiePreferences = {
   necessary: true,
@@ -112,55 +108,4 @@ export function useCookieConsentController() {
     acceptNecessary,
     savePreferences,
   };
-}
-
-// Listen for consent updates (saveConsent writes localStorage before
-// dispatching, so re-reading the snapshot always observes the new value)
-function subscribeToConsentUpdates(callback: () => void) {
-  window.addEventListener('cookie-consent-updated', callback);
-  return () => window.removeEventListener('cookie-consent-updated', callback);
-}
-
-function getConsentSnapshot(): string | null {
-  return localStorage.getItem(COOKIE_CONSENT_KEY);
-}
-
-function getConsentServerSnapshot(): string | null {
-  return null;
-}
-
-/**
- * Hook to check cookie consent status
- */
-export function useCookieConsent(): CookiePreferences | null {
-  const savedConsent = useSyncExternalStore(
-    subscribeToConsentUpdates,
-    getConsentSnapshot,
-    getConsentServerSnapshot
-  );
-
-  if (!savedConsent) return null;
-
-  try {
-    return JSON.parse(savedConsent) as CookiePreferences;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if a specific cookie category is allowed
- */
-export function isCookieAllowed(category: keyof CookiePreferences): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const saved = localStorage.getItem(COOKIE_CONSENT_KEY);
-  if (!saved) return false;
-
-  try {
-    const consent = JSON.parse(saved) as CookiePreferences;
-    return consent[category] ?? false;
-  } catch {
-    return false;
-  }
 }

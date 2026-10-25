@@ -245,7 +245,7 @@ describe('prepareJumiaProductFeed', () => {
       attributes: [
         {
           code: 2,
-          name: 'storage',
+          name: 'Storage capacity',
           description: 'Storage',
           type: 0 as const,
           mandatory: true,
@@ -277,6 +277,7 @@ describe('prepareJumiaProductFeed', () => {
           parentSku: 'S-128',
           sellerSku: 'S-128',
           variation: '128 GB',
+          attributes: [{ name: 'Storage capacity', value: '128 GB' }],
           stock: 4,
           businessClients: [{ price: { currency: 'NGN', value: 320 } }],
         },
@@ -284,6 +285,7 @@ describe('prepareJumiaProductFeed', () => {
           parentSku: 'S-128',
           sellerSku: 'S-256',
           variation: '256 GB',
+          attributes: [{ name: 'Storage capacity', value: '256 GB' }],
           stock: 7,
           businessClients: [{ price: { currency: 'NGN', value: 300 } }],
         },
@@ -547,5 +549,306 @@ describe('prepareJumiaProductFeed', () => {
         expect.objectContaining({ code: 'duplicate_seller_sku' }),
       ]),
     });
+  });
+
+  it('blocks sibling families whose other canonical variant attributes differ', () => {
+    const base = input();
+    const variants = [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        attributes: { storage: '128 GB', color: 'Black' },
+        sku: 'S-128-B',
+        priceOverride: null,
+        stockQuantity: 7,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'new',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        attributes: { storage: '256 GB', color: 'White' },
+        sku: 'S-256-W',
+        priceOverride: null,
+        stockQuantity: 4,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'new',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+    ];
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 2,
+              name: 'storage',
+              description: 'Storage',
+              type: 0,
+              mandatory: true,
+              variation: true,
+              translatable: false,
+            },
+          ],
+          values: {},
+          variation: { sourceAttributeName: 'storage' },
+        },
+        source: {
+          ...base.source,
+          product: { ...base.source.product, hasVariants: true },
+          variants,
+        },
+      })
+    );
+    expect(result).toMatchObject({
+      success: false,
+      products: [],
+      errors: [
+        expect.objectContaining({
+          code: 'variant_attribute_difference_unsupported',
+          variantId: variants[1].id,
+        }),
+      ],
+    });
+  });
+
+  it('blocks siblings with different canonical conditions instead of treating condition as a variation axis', () => {
+    const base = input();
+    const variants = [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        attributes: { storage: '128 GB' },
+        sku: 'S-128',
+        priceOverride: null,
+        stockQuantity: 7,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'new',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        attributes: { storage: '256 GB' },
+        sku: 'S-256',
+        priceOverride: null,
+        stockQuantity: 4,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'refurbished',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+    ];
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 2,
+              name: 'storage',
+              description: 'Storage',
+              type: 0,
+              mandatory: true,
+              variation: true,
+              translatable: false,
+            },
+          ],
+          values: {},
+          variation: { sourceAttributeName: 'storage' },
+        },
+        source: {
+          ...base.source,
+          product: { ...base.source.product, hasVariants: true },
+          variants,
+        },
+      })
+    );
+    expect(result).toMatchObject({
+      success: false,
+      products: [],
+      errors: [
+        expect.objectContaining({
+          code: 'variant_condition_difference_unsupported',
+          variantId: variants[1].id,
+        }),
+      ],
+    });
+  });
+
+  it('reports local canonical and mapping errors even when external evidence is missing', () => {
+    const base = input();
+    const result = prepareJumiaProductFeed(
+      input({
+        source: {
+          ...base.source,
+          product: {
+            ...base.source.product,
+            price: 0,
+            stock: -1,
+            stockQuantity: -1,
+          },
+        },
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 8,
+              name: 'mandatory_model',
+              description: 'Model',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: {},
+        },
+        evidence: {
+          providerClassification: 'unknown',
+          globalPrice: null,
+          images: {},
+        },
+      })
+    );
+    expect(result).toMatchObject({
+      success: false,
+      products: [],
+      errors: expect.arrayContaining([
+        expect.objectContaining({ code: 'global_price_unproven' }),
+        expect.objectContaining({ code: 'classification_unproven' }),
+        expect.objectContaining({ code: 'canonical_price_invalid' }),
+        expect.objectContaining({ code: 'finite_managed_stock_required' }),
+        expect.objectContaining({ code: 'attribute_value_invalid' }),
+      ]),
+    });
+  });
+
+  it('does not misreport unavailable generated attributes when listing content is invalid', () => {
+    const base = input();
+    const result = prepareJumiaProductFeed(
+      input({
+        source: {
+          ...base.source,
+          product: { ...base.source.product, name: 'Short title' },
+        },
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 31,
+              name: 'name',
+              description: 'Product name',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+            {
+              code: 32,
+              name: 'description',
+              description: 'Description',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+            {
+              code: 33,
+              name: 'short_description',
+              description: 'Highlights',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: {},
+        },
+      })
+    );
+    expect(result).toMatchObject({
+      success: false,
+      errors: expect.arrayContaining([
+        expect.objectContaining({ code: 'content_invalid' }),
+      ]),
+    });
+    if (result.success) throw new Error('Invalid content should block output.');
+    const codes = result.errors.map((error) => error.code);
+    expect(codes).toContain('content_invalid');
+    expect(codes).not.toContain('attribute_value_invalid');
+  });
+
+  it('reports one correctly scoped required-attribute error per variant', () => {
+    const base = input();
+    const variants = [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        attributes: { storage: '128 GB' },
+        sku: 'S-128',
+        priceOverride: null,
+        stockQuantity: 7,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'new',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000003',
+        attributes: { storage: '256 GB' },
+        sku: 'S-256',
+        priceOverride: null,
+        stockQuantity: 4,
+        inventoryTrackingPolicy: 'inherit',
+        condition: 'new',
+        updatedAt: '2026-10-01T00:00:00Z',
+        isInventoryAnchor: false,
+      },
+    ];
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 2,
+              name: 'Storage capacity',
+              description: 'Storage',
+              type: 0,
+              mandatory: true,
+              variation: true,
+              translatable: false,
+            },
+            {
+              code: 3,
+              name: 'model_reference',
+              description: 'Model reference',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: {},
+          variation: { sourceAttributeName: 'storage' },
+        },
+        source: {
+          ...base.source,
+          product: { ...base.source.product, hasVariants: true },
+          variants,
+        },
+        evidence: { ...base.evidence, globalPrice: null },
+      })
+    );
+    if (result.success)
+      throw new Error('Missing required attributes must block.');
+    const attributeErrors = result.errors.filter(
+      (error) => error.code === 'attribute_value_invalid'
+    );
+    expect(attributeErrors).toEqual([
+      expect.objectContaining({ productId, variantId: variants[0].id }),
+      expect.objectContaining({ productId, variantId: variants[1].id }),
+    ]);
   });
 });

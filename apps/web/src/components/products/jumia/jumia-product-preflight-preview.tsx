@@ -121,6 +121,9 @@ export function JumiaProductPreflightPreview({
     mapping,
   ]);
   const [state, setState] = useState<PreviewState | null>(null);
+  const [confirmedScopeKey, setConfirmedScopeKey] = useState<string | null>(
+    null
+  );
   const operation = useRef<{
     generation: number;
     controller: AbortController | null;
@@ -134,6 +137,7 @@ export function JumiaProductPreflightPreview({
     operation.current.controller?.abort();
     operation.current.controller = null;
     setState(null);
+    setConfirmedScopeKey(null);
     return () => {
       operation.current.generation += 1;
       operation.current.controller?.abort();
@@ -208,7 +212,9 @@ export function JumiaProductPreflightPreview({
   const checkedCount = result?.scope.productIds.length ?? 0;
   const remainingCount = Math.max(0, selectedCount - checkedCount);
   const canCheck =
-    Boolean(parsedRequest?.success) && visibleState?.status !== 'loading';
+    Boolean(parsedRequest?.success) &&
+    confirmedScopeKey === requestKey &&
+    visibleState?.status !== 'loading';
 
   return (
     <section
@@ -232,6 +238,19 @@ export function JumiaProductPreflightPreview({
             ? 'Select at least one eligible product on this page before checking the preview.'
             : 'No selected product on this page still matches its frozen source version. Move to a page with selected products or refresh the frozen selection.'}
         </p>
+      ) : null}
+      {mapping?.categoryConfirmed &&
+      sameDestination &&
+      bulletsValid &&
+      currentPageSelection.length > 0 &&
+      confirmedScopeKey !== requestKey ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setConfirmedScopeKey(requestKey)}
+        >
+          Confirm mapping for this selected page
+        </Button>
       ) : null}
       {!mapping || !sameDestination ? (
         <p role="status" className="text-sm text-amber-700">

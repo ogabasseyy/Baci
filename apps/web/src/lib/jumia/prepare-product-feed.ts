@@ -136,6 +136,20 @@ function isHttpImageUrl(value: string | null): value is string {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
 
+function stableSourceValue(value: unknown): string {
+  if (Array.isArray(value))
+    return `[${value.map(stableSourceValue).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(
+        ([key, entry]) => `${JSON.stringify(key)}:${stableSourceValue(entry)}`
+      )
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
+}
+
 function serializeVariationValue(
   attribute: JumiaAttributeSetResponse['attributes'][number],
   raw: unknown
@@ -390,6 +404,34 @@ export function prepareJumiaProductFeed(
   const orderedVariants = [...sellableVariants].sort((left, right) =>
     left.id < right.id ? -1 : left.id > right.id ? 1 : 0
   );
+  if (orderedVariants.length > 1) {
+    const first = orderedVariants[0];
+    for (const sibling of orderedVariants.slice(1)) {
+      if (sibling.condition !== first.condition)
+        add(
+          'source.variants.condition',
+          'variant_condition_difference_unsupported',
+          sibling.id
+        );
+      const attributeNames = new Set([
+        ...Object.keys(first.attributes),
+        ...Object.keys(sibling.attributes),
+      ]);
+      for (const name of attributeNames) {
+        if (
+          name === mapping.variation?.sourceAttributeName.trim() ||
+          stableSourceValue(first.attributes[name]) ===
+            stableSourceValue(sibling.attributes[name])
+        )
+          continue;
+        add(
+          `source.variants.attributes.${name}`,
+          'variant_attribute_difference_unsupported',
+          sibling.id
+        );
+      }
+    }
+  }
   const sourceSkus = new Set<string>();
   for (const variant of orderedVariants) {
     if (!variant.sku?.trim())
@@ -500,10 +542,76 @@ export function prepareJumiaProductFeed(
       add(`evidence.images.${image.id}`, 'image_evidence_incomplete');
   }
 
-  if (errors.length) return failure();
+  // Validate local source stock/prices and ordinary mapping values before the
+  // external-evidence gate. A preview must not hide actionable local defects
+  // merely because the trusted global price/classification evidence is absent.
+  const preflightVariants: (CanonicalVariant | null)[] = orderedVariants.length
+    ? orderedVariants
+    : [null];
+  for (const variant of preflightVariants) {
+    const variantId = variant?.id;
+    const policy = variant
+      ? variant.inventoryTrackingPolicy
+      : product.inventoryTrackingPolicy;
+    if (
+      product.manageStock !== true ||
+      product.inventoryTrackingPolicy !== 'off' ||
+      !['off', 'inherit'].includes(policy ?? '')
+    )
+      add(
+        'source.inventoryTrackingPolicy',
+        'managed_stock_unproven',
+        variantId
+      );
+    const stock = variant
+      ? variant.stockQuantity
+      : getEffectiveStock({
+          stock: product.stock,
+          stock_quantity: product.stockQuantity,
+        });
+    if (typeof stock !== 'number' || !Number.isSafeInteger(stock) || stock < 0)
+      add('source.stock', 'finite_managed_stock_required', variantId);
+    if (
+      !variant &&
+      [product.stock, product.stockQuantity].some(
+        (rawStock) =>
+          rawStock !== null && (!Number.isSafeInteger(rawStock) || rawStock < 0)
+      )
+    )
+      add('source.stock', 'finite_managed_stock_required');
+    if (!variant && product.stockQuantity === null && product.stock === null)
+      add('source.stock', 'finite_managed_stock_required');
+    const canonicalPrice = variant?.priceOverride ?? product.price;
+    if (
+      typeof canonicalPrice !== 'number' ||
+      !Number.isFinite(canonicalPrice) ||
+      canonicalPrice <= 0
+    )
+      add('source.price', 'canonical_price_invalid', variantId);
+  }
+  const generatedAttributeNames = new Set([
+    'name',
+    'description',
+    'short_description',
+    variationAttribute?.name.trim().toLowerCase(),
+  ]);
+  const independentlyValidatableAttributes = mapping.attributes.filter(
+    (attribute) =>
+      !generatedAttributeNames.has(attribute.name.trim().toLowerCase())
+  );
+  if (independentlyValidatableAttributes.length) {
+    const independentlyValidated = validateJumiaAttributeValueSet(
+      independentlyValidatableAttributes,
+      mapping.values
+    );
+    if (!independentlyValidated.success) {
+      for (const variant of preflightVariants)
+        for (const error of independentlyValidated.errors)
+          add(`mapping.${error.field}`, 'attribute_value_invalid', variant?.id);
+    }
+  }
 
   const content = contentResult.success ? contentResult.content : null;
-  if (!content || !price) return failure();
   const orderedRecords = orderedVariants.length ? orderedVariants : [null];
   const familyRecords: JumiaCreateProduct[] = [];
   const familyKey = `${input.selectionId}:${productId}`;
@@ -525,6 +633,7 @@ export function prepareJumiaProductFeed(
       );
       continue;
     }
+    if (!content) continue;
     const policy = variant
       ? variant.inventoryTrackingPolicy
       : product.inventoryTrackingPolicy;
@@ -657,6 +766,7 @@ export function prepareJumiaProductFeed(
       return [{ name: definition.name, value: wireValue }];
     });
     if (errors.length) continue;
+    if (!content || !price) continue;
     const localPrice = effectivePrice;
     const candidate = {
       name: content.name,

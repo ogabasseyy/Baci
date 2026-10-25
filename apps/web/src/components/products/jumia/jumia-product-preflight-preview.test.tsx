@@ -90,6 +90,14 @@ function result(productIds: string[] = [PRODUCT_ID]) {
   };
 }
 
+function confirmSelectedPageMapping() {
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Confirm mapping for this selected page',
+    })
+  );
+}
+
 describe('JumiaProductPreflightPreview', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -110,6 +118,7 @@ describe('JumiaProductPreflightPreview', () => {
         '0 checked of 1 selected on this page · 2 selected products remain unpreviewed'
       )
     ).toBeInTheDocument();
+    confirmSelectedPageMapping();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Check selected products on this page',
@@ -164,6 +173,7 @@ describe('JumiaProductPreflightPreview', () => {
         mapping={mapping()}
       />
     );
+    confirmSelectedPageMapping();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Check selected products on this page',
@@ -203,6 +213,7 @@ describe('JumiaProductPreflightPreview', () => {
         mapping={mapping()}
       />
     );
+    confirmSelectedPageMapping();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Check selected products on this page',
@@ -229,6 +240,7 @@ describe('JumiaProductPreflightPreview', () => {
       mapping: mapping(),
     };
     const { rerender } = render(<JumiaProductPreflightPreview {...props} />);
+    confirmSelectedPageMapping();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Check selected products on this page',
@@ -273,6 +285,7 @@ describe('JumiaProductPreflightPreview', () => {
       mapping: mapping(),
     };
     const { rerender } = render(<JumiaProductPreflightPreview {...props} />);
+    confirmSelectedPageMapping();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Check selected products on this page',
@@ -301,5 +314,51 @@ describe('JumiaProductPreflightPreview', () => {
     expect(
       screen.getByText(/No selected product on this page still matches/)
     ).toBeInTheDocument();
+  });
+
+  it('requires fresh selected-page confirmation when selection/page scope changes', () => {
+    const props = {
+      merchantId: MERCHANT_ID,
+      integrationId: INTEGRATION_ID,
+      page: page(),
+      selectedDraft: draft([PRODUCT_ID, OTHER_PRODUCT_ID]),
+      mapping: mapping(),
+    };
+    const { rerender } = render(<JumiaProductPreflightPreview {...props} />);
+    confirmSelectedPageMapping();
+    expect(
+      screen.getByRole('button', {
+        name: 'Check selected products on this page',
+      })
+    ).toBeEnabled();
+
+    rerender(
+      <JumiaProductPreflightPreview
+        {...props}
+        page={page({
+          page: 2,
+          products: [
+            {
+              id: OTHER_PRODUCT_ID,
+              ordinal: 2,
+              available: true,
+              capturedSourceVersion: SOURCE_VERSION,
+              currentSourceVersion: SOURCE_VERSION,
+            },
+          ],
+        })}
+      />
+    );
+    expect(
+      screen.getByRole('button', {
+        name: 'Check selected products on this page',
+      })
+    ).toBeDisabled();
+    expect(fetchWithCsrf).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', {
+        name: 'Confirm mapping for this selected page',
+      })
+    ).toBeEnabled();
   });
 });

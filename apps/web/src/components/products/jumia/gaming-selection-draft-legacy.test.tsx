@@ -177,6 +177,11 @@ describe('Gaming draft and legacy publisher separation', () => {
       screen.getByRole('button', { name: 'Confirm draft category: Games' })
     );
     await screen.findByText(/Draft category confirmed: Games/);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Confirm mapping for this selected page',
+      })
+    );
     const checkButton = await screen.findByRole('button', {
       name: 'Check selected products on this page',
     });

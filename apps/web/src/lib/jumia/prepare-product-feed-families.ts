@@ -102,7 +102,7 @@ export function packJumiaProductFamilies(
       current = target;
       feeds.push(target);
     }
-    target.records.push(...family.map(({ record }) => ({ ...record })));
+    target.records.push(...family.map(({ record }) => structuredClone(record)));
   }
   return { success: true, feeds };
 }

@@ -183,6 +183,7 @@ function MappingControls({
           category={category}
           brand={brand}
           revision={revision}
+          onDraftRevision={() => setRevision((value) => value + 1)}
           onDraftChange={onDraftChange}
         />
       )}
@@ -195,12 +196,14 @@ function AttributeDraft({
   category,
   brand,
   revision,
+  onDraftRevision,
   onDraftChange,
 }: {
   destination: Destination;
   category: JumiaCategorySelection;
   brand: JumiaBrandItem | null;
   revision: number;
+  onDraftRevision: () => void;
   onDraftChange?: (draft: JumiaMappingDraft | null) => void;
 }) {
   const [values, setValues] = useState<JumiaDraftValues>({});
@@ -308,7 +311,11 @@ function AttributeDraft({
           id="jumia-product-bullets"
           className="min-h-24 rounded-md border bg-background p-2 text-sm"
           value={bulletText}
-          onChange={(event) => setBulletText(event.target.value)}
+          onChange={(event) => {
+            setBulletText(event.target.value);
+            setConfirmation(null);
+            onDraftRevision();
+          }}
           placeholder="Add four to seven plain-text product bullets"
         />
         <p className="text-xs text-muted-foreground">
@@ -324,7 +331,11 @@ function AttributeDraft({
           id="jumia-variation-attribute"
           className="rounded-md border bg-background p-2 text-sm"
           value={variationAttributeName}
-          onChange={(event) => setVariationAttributeName(event.target.value)}
+          onChange={(event) => {
+            setVariationAttributeName(event.target.value);
+            setConfirmation(null);
+            onDraftRevision();
+          }}
           placeholder="Exact source field name"
         />
       </div>

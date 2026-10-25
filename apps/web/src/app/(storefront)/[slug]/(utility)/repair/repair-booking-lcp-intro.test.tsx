@@ -18,8 +18,9 @@ describe('RepairBookingLcpIntro', () => {
     expect(
       document.querySelector('[data-cwv-lcp-support]')
     ).toBeInTheDocument();
-    expect(document.querySelector('[data-cwv-lcp-fold]')).toBeInTheDocument();
-    expect(document.querySelector('[data-cwv-lcp-fold]')).not.toContainElement(
+    const lcpFold = document.querySelector('[data-cwv-lcp-fold]');
+    expect(lcpFold).toHaveAttribute('data-repair-booking-lcp-fold');
+    expect(lcpFold).not.toContainElement(
       screen.getByText(/our team will help with the next step/i)
     );
     expect(

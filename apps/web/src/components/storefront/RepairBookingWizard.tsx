@@ -141,7 +141,7 @@ export function RepairBookingWizard({
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-3xl px-5 py-6 sm:px-8 sm:py-8">
       <RepairWizardProgressBar currentStep={currentStep} />
 
       {/* biome-ignore lint/suspicious/noExplicitAny: Workaround for react-hook-form/zod generic mismatch */}

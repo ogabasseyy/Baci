@@ -7,14 +7,14 @@ describe('RepairBookingPrepSection', () => {
     render(<RepairBookingPrepSection />);
 
     expect(
-      screen.getByRole('heading', { name: 'A quick note before you start' })
+      screen.getByRole('heading', { name: 'Before you start' })
     ).toBeInTheDocument();
     expect(
       screen.getByText(/final pricing is confirmed after inspection/i)
     ).toBeVisible();
     expect(
       screen
-        .getByRole('heading', { name: 'A quick note before you start' })
+        .getByRole('heading', { name: 'Before you start' })
         .closest('section')
     ).not.toHaveClass('sr-only');
   });

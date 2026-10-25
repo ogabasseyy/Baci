@@ -1,3 +1,5 @@
+import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
+
 /**
  * Committed LCP copy CSS. Keep this a TS string so Next does not emit a
  * render-blocking stylesheet request on Slow-4G (the former .css import
@@ -37,11 +39,6 @@ html:has([data-storefront-shell]) *::after {
   min-height: 0;
 }
 
-/* The repair booking title is followed by its form in the same viewport. */
-[data-repair-booking-lcp-fold] {
-  min-height: 0;
-}
-
 [data-cwv-lcp-copy] {
   font-family: "Inter Fallback", Arial, Helvetica, sans-serif !important;
   letter-spacing: normal !important;
@@ -69,14 +66,7 @@ html:has([data-storefront-shell]) *::after {
   margin: 0 !important;
 }
 
-[data-cwv-lcp-copy="repair"] {
-  color: var(--store-background-text, #111827) !important;
-  font-size: 1.875rem !important;
-  font-weight: 700 !important;
-  line-height: 2.25rem !important;
-  margin: 0 0 1rem !important;
-  text-align: center;
-}
+${REPAIR_BOOKING_LCP_CSS}
 
 [data-cwv-lcp-copy="imei"] {
   color: var(--store-background-text, #111827) !important;

@@ -12,6 +12,7 @@ import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-w
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
+import { EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './expected-merchant-classification-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -71,6 +72,7 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BUILDER_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {

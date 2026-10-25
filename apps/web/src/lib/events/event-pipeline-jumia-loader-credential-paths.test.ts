@@ -60,4 +60,25 @@ describe('eventPipelineJumiaLoaderCredentialPaths', () => {
       ENV_PATH,
     ]);
   });
+
+  it('registers the preflight route only for its exact loader path', () => {
+    const preflightRoute =
+      'apps/web/src/app/api/marketplace/jumia/products/preflight/route.ts';
+    expect(eventPipelineJumiaLoaderCredentialPaths).toContainEqual([
+      preflightRoute,
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/lib/jumia/jumia-client-config.ts',
+      'apps/web/src/lib/jumia/load-jumia-authorization-grant.ts',
+      LOADER_CLIENT,
+      'apps/web/src/lib/supabase/scoped-jwt.ts',
+      'apps/web/src/lib/agentic/jwt-signing-material.ts',
+      ENV_PATH,
+    ]);
+    expect(eventPipelineJumiaLoaderCredentialPaths).not.toContainEqual(
+      expect.arrayContaining([
+        'apps/web/src/app/api/marketplace/jumia/products/preflight-preview/route.ts',
+        LOADER_CLIENT,
+      ])
+    );
+  });
 });

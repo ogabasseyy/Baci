@@ -23,7 +23,7 @@ export const analyticsDeliveryAuthorityManifest = {
     'apps/web/src/app/api/analytics/ads/route.ts':
       'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
     'apps/web/src/app/api/analytics/facebook-capi/route.ts':
-      'f41e1de587645b8fdb2af8af180eb581b2bfeecae688670d7b5c7a80088b7c32',
+      '60fdca990691fa3d22793d0630f0bdf19f09e8a09fe52e0955156d7ad5de72af',
     'apps/web/src/app/api/analytics/ga4/route.ts':
       '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
     'apps/web/src/app/api/analytics/snapchat/route.ts':

@@ -40,6 +40,7 @@ const PUBLIC_FEATURE_SETTING_KEYS = [
   'credit_direct_min_amount',
   'discount_codes_enabled',
   'faq_page_enabled',
+  'facebook_pixel_id',
   'free_shipping_threshold',
   'google_analytics_id',
   'google_place_id',
@@ -191,6 +192,7 @@ export function toTemplateMerchantData(merchant: CachedMerchant): MerchantData {
     // payment/order paths stay authoritative.
     paystack_subaccount_configured: merchant.paystack_subaccount_configured,
     price_negotiation_enabled: merchant.price_negotiation_enabled,
+    growth_integrations_enabled: merchant.growth_integrations_enabled,
     shared_cart_enabled: merchant.shared_cart_enabled,
     shared_cart_accounts_enabled: merchant.shared_cart_accounts_enabled,
     shared_cart_realtime_enabled: merchant.shared_cart_realtime_enabled,

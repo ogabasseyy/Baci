@@ -70,3 +70,13 @@ A checkout visit, pending payment or partial payment is not evidence of a succes
 - Consent repair: prepared separately with 13 focused regression tests passing; production deployment not established by this guide.
 
 Complete these checks before describing the connection as live. For a video version, record the public setup and verification screens; stop recording before credential generation or entry, then resume on the saved configuration screen.
+
+## Delivery repair and acceptance checks
+
+The 25 October production retest after #3792 confirmed the consent banner works, but found two additional wiring failures: the public analytics builder received no private plan fields and suppressed the saved Pixel, and the visitor-side CAPI handler attempted to read private provider configuration, returning `404 Merchant not found`.
+
+The repair exposes only a derived `growth_integrations_enabled` capability, preserves the public Facebook ID through the template mapper, and queues validated, host-bound CAPI observations through Baci's existing ingress/router/delivery pipeline. Provider credentials remain in the delivery worker. The browser and queued server event use the same event ID. Client-supplied `Purchase` events are rejected; completed purchases remain server-confirmed.
+
+An HTTP `202` with `queued: true, sent: false` confirms durable acceptance only. Verify the corresponding delivery record and Meta receipt before calling it delivered. The router and delivery worker must be enabled for the intended merchant/destination; do not enable every merchant or platform merely to test one connection. No token regeneration is required for the Baci-side failures above.
+
+Run the public projection regression with `bash supabase/tests/run-storefront-growth-integration-hint-test.sh` against its disposable PostgreSQL container. The fixture covers paid, expired, explicitly granted, malformed and unpublished cases while asserting that private plan data and CAPI credentials stay absent.

@@ -70,12 +70,18 @@ function sendGA4Event(eventName: string, params: object) {
 }
 
 // Facebook Pixel Event Tracking
-function sendFBEvent(eventName: string, params?: object) {
+function sendFBEvent(eventName: string, params?: object, eventId?: string) {
   if (!isAnalyticsAllowed()) return;
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    window.fbq('track', eventName, facebookCatalogEvent(params));
+    if (eventId) {
+      window.fbq('track', eventName, facebookCatalogEvent(params), {
+        eventID: eventId,
+      });
+    } else {
+      window.fbq('track', eventName, facebookCatalogEvent(params));
+    }
   } else {
     window.fbq('track', eventName);
   }
@@ -187,6 +193,8 @@ export const analytics = {
       userData?: any;
     }
   ) => {
+    if (!isAnalyticsAllowed()) return;
+    const eventId = crypto.randomUUID();
     const value = products.reduce(
       (sum, { product, quantity }) => sum + product.price * quantity,
       0
@@ -208,20 +216,26 @@ export const analytics = {
     // For FB CAPI, we'll map to 'ViewContent' or 'InitiateCheckout'.
     // Given the flow sidebar -> checkout, 'InitiateCheckout' is strong.
     // However, let's stick to ViewContent for "Viewing" to avoid inflating checkout starts.
-    sendFBEvent('ViewContent', {
-      content_ids: products.map((p) => p.product.id),
-      content_type: 'product_group',
-      content_name: 'Shopping Cart',
-      value,
-      currency,
-      num_items: products.reduce((sum, p) => sum + p.quantity, 0),
-    });
+    sendFBEvent(
+      'ViewContent',
+      {
+        content_ids: products.map((p) => p.product.id),
+        content_type: 'product_group',
+        content_name: 'Shopping Cart',
+        value,
+        currency,
+        num_items: products.reduce((sum, p) => sum + p.quantity, 0),
+      },
+      eventId
+    );
 
     // Server-side CAPI Dispatch (if merchantId provided)
     if (additionalData?.merchantId) {
       // Facebook CAPI
       dispatchCAPI('facebook-capi', {
         event: 'ViewContent',
+        eventId,
+        consent: true,
         merchantId: additionalData.merchantId,
         userData: additionalData.userData,
         eventData: {

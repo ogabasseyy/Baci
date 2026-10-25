@@ -197,4 +197,23 @@ describe('price-band page metadata', () => {
 
     expect(mockNotFound).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects when loadPriceBandPage throws a database error', async () => {
+    mockLoadPriceBandPage.mockRejectedValueOnce(
+      new Error('Price band inventory is temporarily unavailable')
+    );
+    const { generateMetadata } = await import('./page');
+
+    await expect(
+      generateMetadata({
+        params: Promise.resolve({
+          slug: 'ogabassey',
+          category: 'smartphones',
+          priceBandSlug: 'under-500k',
+        }),
+      })
+    ).rejects.toThrow('Price band inventory is temporarily unavailable');
+
+    expect(mockNotFound).not.toHaveBeenCalled();
+  });
 });

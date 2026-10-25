@@ -128,6 +128,10 @@ function buildStorefrontLlms(baseUrl: string, full: boolean): string {
     `- ${baseUrl}/{category}: Category listing pages`,
     `- ${baseUrl}/{category}/{productSlug}: Canonical product detail pages`,
     `- ${baseUrl}/products/{productSlug}: Legacy or fallback product route on some storefronts`,
+    '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons',
+    '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation',
+    '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs',
+    '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings',
     '',
     '## Machine-Readable Commerce',
     `- [Agent Commerce Manifest](${baseUrl}${STOREFRONT_AGENT_ROUTES.manifest}): Capabilities, API version, policy links, checkout base URL, and feed URLs`,
@@ -178,9 +182,30 @@ export function createLlmsResponse(
   full: boolean
 ): NextResponse {
   const url = new URL(request.url);
+  const hostHeader =
+    request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
+    request.headers.get('host')?.trim();
+  let effectiveHostname = url.hostname;
+  let effectiveOrigin = `${url.protocol}//${url.host}`;
+
+  if (hostHeader) {
+    try {
+      const parsedHost = new URL(`http://${hostHeader}`);
+      effectiveHostname = parsedHost.hostname.toLowerCase();
+      const protocol =
+        effectiveHostname === 'localhost' || effectiveHostname === '127.0.0.1'
+          ? url.protocol
+          : 'https:';
+      const port = parsedHost.port ? `:${parsedHost.port}` : '';
+      effectiveOrigin = `${protocol}//${effectiveHostname}${port}`;
+    } catch {
+      // Fall back to request.url when the Host header is malformed.
+    }
+  }
+
   const body = buildLlmsText(
-    url.hostname,
-    `${url.protocol}//${url.host}`,
+    effectiveHostname,
+    effectiveOrigin,
     full,
     request.headers
   );

@@ -74,6 +74,7 @@ describe('search pending replay sources', () => {
       '20261023111630_repair_device_typeahead_search.sql',
       '20261024170000_repair_device_catalog_search_limit.sql',
       '20261024180000_repair_device_catalog_preserve_private_boundary.sql',
+      '20261024230000_ogabassey_seo_data_remediation.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

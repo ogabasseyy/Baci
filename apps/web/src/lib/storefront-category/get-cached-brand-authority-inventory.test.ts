@@ -23,25 +23,157 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
 describe('getCachedBrandAuthorityInventory', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('hydrates availability and marks a full qualifying page as a lower bound', async () => {
-    const products = Array.from({ length: 100 }, (_, index) => ({
-      id: `p-${index}`,
-      stock: 1,
-      manage_stock: true,
-      updated_at: '2026-01-01',
-    }));
-    mockRange.mockResolvedValue({ data: products, error: null });
-    mockHydrate.mockResolvedValue(products);
+  it('matches all 3 category representations and excludes non-matching products', async () => {
+    const rawProducts = [
+      {
+        id: 'p-1',
+        name: 'Phone with product_categories',
+        product_categories: [
+          {
+            categories: { id: 'c-1', name: 'Smartphones', slug: 'smartphones' },
+          },
+        ],
+        stock: 1,
+        manage_stock: true,
+        updated_at: '2026-01-01',
+      },
+      {
+        id: 'p-2',
+        name: 'Phone with category_id object',
+        categories: { id: 'c-2', name: 'Smartphones', slug: 'smartphones' },
+        stock: 1,
+        manage_stock: true,
+        updated_at: '2026-01-02',
+      },
+      {
+        id: 'p-3',
+        name: 'Phone with legacy category string',
+        category: 'Smartphones',
+        stock: 1,
+        manage_stock: true,
+        updated_at: '2026-01-03',
+      },
+      {
+        id: 'p-4',
+        name: 'Laptop in wrong category',
+        category: 'Laptops',
+        stock: 1,
+        manage_stock: true,
+        updated_at: '2026-01-04',
+      },
+    ];
+
+    mockRange.mockResolvedValueOnce({ data: rawProducts, error: null });
+    mockHydrate.mockImplementation(
+      async (_supabase, _merchantId, products) => products
+    );
+
     const { getCachedBrandAuthorityInventory } = await import(
       './get-cached-brand-authority-inventory'
     );
     const result = await getCachedBrandAuthorityInventory(
       'merchant-1',
       'smartphones',
-      { brandQueryValue: 'Samsung', minimumProducts: 5 } as never
+      {
+        brandKey: 'samsung',
+        brandQueryValue: 'Samsung',
+        minimumProducts: 3,
+      } as never
     );
-    expect(result.productCount).toBe(100);
-    expect(result.productCountIsLowerBound).toBe(true);
+
+    expect(mockHydrate).toHaveBeenCalledWith(
+      expect.anything(),
+      'merchant-1',
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'p-1' }),
+        expect.objectContaining({ id: 'p-2' }),
+        expect.objectContaining({ id: 'p-3' }),
+      ])
+    );
+    expect(mockHydrate).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'merchant-1',
+      expect.arrayContaining([expect.objectContaining({ id: 'p-4' })])
+    );
+    expect(result.productCount).toBe(3);
+    expect(result.productCountIsLowerBound).toBe(false);
+  });
+
+  it('exhaustively retrieves across multiple 100-row batches even after batch 1 exceeds 48 products', async () => {
+    const batch1 = Array.from({ length: 100 }, (_, index) => ({
+      id: `p-${index}`,
+      category: 'Smartphones',
+      stock: 1,
+      manage_stock: true,
+      updated_at: '2026-01-01',
+    }));
+    const batch2 = Array.from({ length: 20 }, (_, index) => ({
+      id: `p-${100 + index}`,
+      category: 'Smartphones',
+      stock: 1,
+      manage_stock: true,
+      updated_at: '2026-01-01',
+    }));
+
+    mockRange
+      .mockResolvedValueOnce({ data: batch1, error: null })
+      .mockResolvedValueOnce({ data: batch2, error: null });
+    mockHydrate.mockImplementation(
+      async (_supabase, _merchantId, products) => products
+    );
+
+    const { getCachedBrandAuthorityInventory } = await import(
+      './get-cached-brand-authority-inventory'
+    );
+    const result = await getCachedBrandAuthorityInventory(
+      'merchant-1',
+      'smartphones',
+      {
+        brandKey: 'samsung',
+        brandQueryValue: 'Samsung',
+        minimumProducts: 5,
+      } as never
+    );
+
+    expect(mockRange).toHaveBeenCalledTimes(2);
+    expect(mockRange).toHaveBeenNthCalledWith(1, 0, 99);
+    expect(mockRange).toHaveBeenNthCalledWith(2, 100, 199);
+    expect(result.productCount).toBe(120);
+    expect(result.productCountIsLowerBound).toBe(false);
+  });
+
+  it('throws when inventory scan reaches the 20-page ceiling on a full page', async () => {
+    const fullBatch = Array.from({ length: 100 }, (_, index) => ({
+      id: `p-${index}`,
+      category: 'Smartphones',
+      stock: 1,
+      manage_stock: true,
+      updated_at: '2026-01-01',
+    }));
+
+    // Mock 20 full batches
+    for (let i = 0; i < 20; i++) {
+      mockRange.mockResolvedValueOnce({ data: fullBatch, error: null });
+    }
+    mockHydrate.mockImplementation(
+      async (_supabase, _merchantId, products) => products
+    );
+
+    const { getCachedBrandAuthorityInventory } = await import(
+      './get-cached-brand-authority-inventory'
+    );
+
+    await expect(
+      getCachedBrandAuthorityInventory('merchant-1', 'smartphones', {
+        brandKey: 'samsung',
+        brandQueryValue: 'Samsung',
+        minimumProducts: 5,
+      } as never)
+    ).rejects.toThrow(
+      'Brand authority inventory scan exceeded maximum page ceiling'
+    );
+
+    expect(mockRange).toHaveBeenCalledTimes(20);
   });
 
   it('queries every curated brand alias for a combined authority hub', async () => {

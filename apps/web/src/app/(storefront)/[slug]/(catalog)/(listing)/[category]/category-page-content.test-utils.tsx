@@ -211,6 +211,7 @@ vi.mock('./category-page-content-helpers', () => ({
     mockNormalizeCategoryPageProducts(...args),
   resolveCategoryPageName: (...args: unknown[]) =>
     mockResolveCategoryPageName(...args),
+  toClientCategoryPageProducts: (products: unknown[]) => products,
   toCollectionSchemaProduct: (product: unknown) => product,
 }));
 

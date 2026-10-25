@@ -329,6 +329,11 @@ describe('sitemap-data', () => {
         lastModified: new Date('2026-06-01T00:00:00Z'),
       }),
       expect.objectContaining({
+        url: 'https://ogabassey.com/products',
+        priority: 0.9,
+        lastModified: new Date('2026-06-01T00:00:00Z'),
+      }),
+      expect.objectContaining({
         url: 'https://ogabassey.com/faq',
         priority: 0.5,
         lastModified: new Date('2026-06-01T00:00:00Z'),
@@ -348,7 +353,7 @@ describe('sitemap-data', () => {
       storeUrl: 'https://ogabassey.com',
     } as unknown as Parameters<typeof getStaticSitemapEntries>[0]);
 
-    expect(entries).toHaveLength(2);
+    expect(entries).toHaveLength(3);
     for (const entry of entries) {
       expect(entry.lastModified).toBeUndefined();
     }
@@ -1457,7 +1462,7 @@ describe('sitemap-data', () => {
     ]);
     expect(entries[0]?.lastModified).toEqual(new Date('2026-07-14T00:00:00Z'));
     expect(entries[1]?.lastModified).toBeUndefined();
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(7);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(8);
   });
 
   it('keeps successful authority hubs when a single brand query fails', async () => {

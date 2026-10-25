@@ -15,14 +15,11 @@ import {
   evaluateStorefrontSlugSafety,
 } from '@/lib/storefront-slug-safety';
 import { BlogCategoryGuide } from './blog-category-guide';
-import {
-  buildBlogCategoryHref,
-  isOgabasseyBlogStaticTenant,
-} from './blog-category-routing';
+import { isOgabasseyBlogStaticTenant } from './blog-category-routing';
 import { BlogDiscoverySection } from './blog-discovery-section';
 import {
   appendPreservedBlogCategoryRedirectParams,
-  findPublicCategoryLabel,
+  buildBlogListingCategoryRedirectHref,
 } from './blog-listing-category-redirect';
 import { preloadOgabasseyRootBlogListingHeroImage } from './blog-listing-hero-image-preload';
 import { parseBlogListingPage } from './blog-listing-page-params';
@@ -117,23 +114,22 @@ export async function BlogPageContent({
   const authorLinks = getBlogAuthorPageLinks(slug);
 
   if (!isCleanCategoryRoute && category && !search && currentPage === 1) {
-    const categoryLabel = findPublicCategoryLabel(publicCategories, category);
-    if (categoryLabel) {
-      const categoryHref = buildBlogCategoryHref(
-        basePath,
-        categoryLabel,
-        publicCategories
-      );
-      if (!categoryHref.includes('?')) {
-        permanentRedirect(
-          asRoute(
-            appendPreservedBlogCategoryRedirectParams(
-              categoryHref,
-              searchParamValues
-            )
+    const categoryHref = buildBlogListingCategoryRedirectHref({
+      basePath,
+      category,
+      page: currentPage,
+      publicCategories,
+      identifier: slug,
+    });
+    if (categoryHref) {
+      permanentRedirect(
+        asRoute(
+          appendPreservedBlogCategoryRedirectParams(
+            categoryHref,
+            searchParamValues
           )
-        );
-      }
+        )
+      );
     }
   }
 

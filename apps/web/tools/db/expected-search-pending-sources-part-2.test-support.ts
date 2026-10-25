@@ -164,4 +164,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES_PART_2 = [
       'supabase/migrations/20261024180000_repair_device_catalog_preserve_private_boundary.sql',
     sha256: 'a9c99935a58deeee1c5260fe500c95af00dc450de44ebbf7b68528190b12d391',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024230000_ogabassey_seo_data_remediation.sql',
+    sha256: '08fcd0c2acd8e0d60ce442bbcd3d3f4a3f21b03fe466fd915e27b0b3d18de91b',
+  },
 ];

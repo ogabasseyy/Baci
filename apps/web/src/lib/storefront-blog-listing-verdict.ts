@@ -1,7 +1,9 @@
 import {
   buildBlogCategoryHref,
   findBlogCategoryLabelBySlug,
+  findOgabasseyBlogCategoryAliasLabel,
   getBlogCategorySlug,
+  isOgabasseyBlogStaticTenant,
 } from '@/app/(storefront)/[slug]/(blog)/blog/blog-category-routing';
 import { buildBlogListingRouteHref } from '@/app/(storefront)/[slug]/(blog)/blog/blog-listing-route';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
@@ -49,19 +51,46 @@ function countForCategory(
   return index === -1 ? 0 : (row.category_counts[index] ?? 0);
 }
 
-function resolveCategoryQuery(
+export function resolveCategoryQuery(
+  rawCategory: string,
+  categories: string[],
+  identifier?: string | null
+): StorefrontBlogListingStatusResolution;
+export function resolveCategoryQuery(
   row: StorefrontBlogListingStatusRow,
-  rawCategory: string
+  rawCategory: string,
+  identifier?: string | null
+): StorefrontBlogListingStatusResolution;
+export function resolveCategoryQuery(
+  first: string | StorefrontBlogListingStatusRow,
+  second: string | string[],
+  identifier?: string | null
 ): StorefrontBlogListingStatusResolution {
+  let rawCategory: string;
+  let rawCategories: string[];
+
+  if (typeof first === 'string' && Array.isArray(second)) {
+    rawCategory = first;
+    rawCategories = second;
+  } else if (typeof first !== 'string' && typeof second === 'string') {
+    rawCategory = second;
+    rawCategories = first.categories;
+  } else {
+    return NOOP;
+  }
+
   const category = rawCategory.trim();
   if (!category) {
     return NOOP;
   }
-  const categories = filterPublicBlogCategories(row.categories);
-  const knownLabel = findBlogCategoryLabelBySlug(
-    categories,
-    getBlogCategorySlug(category)
-  );
+  const categories = filterPublicBlogCategories(rawCategories);
+  const targetSlug = getBlogCategorySlug(category);
+  let knownLabel = findBlogCategoryLabelBySlug(categories, targetSlug);
+
+  if (!knownLabel && identifier && isOgabasseyBlogStaticTenant(identifier)) {
+    knownLabel = findOgabasseyBlogCategoryAliasLabel(categories, category);
+  }
+
   if (!knownLabel) {
     return NOOP;
   }
@@ -142,6 +171,46 @@ function resolveAuthor(
   return NOOP;
 }
 
+export interface EvaluateBlogListingRequestOptions {
+  identifier?: string | null;
+  intent: BlogListingStatusIntent;
+  row: StorefrontBlogListingStatusRow;
+  categories?: string[];
+}
+
+export function evaluateBlogListingRequest(
+  opts: EvaluateBlogListingRequestOptions
+): StorefrontBlogListingStatusResolution {
+  if (opts.intent.kind === 'author') {
+    return resolveAuthor(opts.row, opts.intent.authorSlug, opts.intent.page);
+  }
+  if (!opts.row.blog_enabled) {
+    return NOOP;
+  }
+  switch (opts.intent.kind) {
+    case 'category-query':
+      return resolveCategoryQuery(
+        opts.intent.category,
+        opts.categories ?? opts.row.categories,
+        opts.identifier
+      );
+    case 'listing-page':
+      return resolveListingPage(
+        opts.row,
+        opts.intent.page,
+        opts.intent.category
+      );
+    case 'category-page':
+      return resolveCategoryPage(
+        opts.row,
+        opts.intent.categorySlug,
+        opts.intent.page
+      );
+    default:
+      return NOOP;
+  }
+}
+
 /**
  * Composes the hard-status verdict for a blog listing/category/author request
  * from the RPC's raw listing data, using the same TS helpers (and page size)
@@ -154,22 +223,12 @@ function resolveAuthor(
  */
 export function resolveBlogListingVerdict(
   intent: BlogListingStatusIntent,
-  row: StorefrontBlogListingStatusRow
+  row: StorefrontBlogListingStatusRow,
+  identifier?: string | null
 ): StorefrontBlogListingStatusResolution {
-  if (intent.kind === 'author') {
-    return resolveAuthor(row, intent.authorSlug, intent.page);
-  }
-  if (!row.blog_enabled) {
-    return NOOP;
-  }
-  switch (intent.kind) {
-    case 'category-query':
-      return resolveCategoryQuery(row, intent.category);
-    case 'listing-page':
-      return resolveListingPage(row, intent.page, intent.category);
-    case 'category-page':
-      return resolveCategoryPage(row, intent.categorySlug, intent.page);
-    default:
-      return NOOP;
-  }
+  return evaluateBlogListingRequest({
+    intent,
+    row,
+    identifier,
+  });
 }

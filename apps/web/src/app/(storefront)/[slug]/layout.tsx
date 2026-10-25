@@ -120,6 +120,10 @@ export async function generateMetadata({
     metadataBase,
     description,
     icons,
+    // Replace root metadata alternates so storefront pages never inherit the platform canonical.
+    alternates: null,
+    applicationName: merchant.business_name,
+    authors: [{ name: merchant.business_name }],
     // Emit explicit verification so platform-level google-adsense-account meta never bleeds onto merchant storefronts.
     verification: {
       google: verificationCode,

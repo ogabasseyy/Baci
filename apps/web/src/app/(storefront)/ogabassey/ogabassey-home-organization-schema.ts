@@ -1,3 +1,4 @@
+import { OGABASSEY_DESCRIPTION } from '@/config/ogabassey';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import {
   generateLocalBusinessSchema,
@@ -24,6 +25,7 @@ export function buildOrganizationGraphSchema(merchant: OgabasseyMerchant) {
   const description =
     merchant.site_description ||
     merchant.site_tagline ||
+    OGABASSEY_DESCRIPTION ||
     `Welcome to ${merchant.business_name}`;
 
   const businessData: LocalBusinessData = {
@@ -31,7 +33,7 @@ export function buildOrganizationGraphSchema(merchant: OgabasseyMerchant) {
     description,
     url: baseUrl,
     logo: merchant.logo_url || undefined,
-    telephone: merchant.phone || undefined,
+    telephone: trustProfile.supportPhone || merchant.phone || undefined,
     address: merchant.business_address
       ? {
           street: merchant.business_address,

@@ -19,7 +19,10 @@ export function getBlogCategorySlug(category: string): string {
 }
 
 const RESERVED_CLEAN_BLOG_CATEGORY_SLUGS = new Set(['product']);
-const OGABASSEY_BLOG_CATEGORY_SLUG_ALIASES = new Map([['review', 'reviews']]);
+const OGABASSEY_BLOG_CATEGORY_SLUG_ALIASES = new Map([
+  ['review', 'reviews'],
+  ['news', 'tech-news'],
+]);
 
 export function getCanonicalBlogCategorySlug(categorySlug: string): string {
   return categorySlug.toLowerCase();
@@ -30,6 +33,24 @@ export function getOgabasseyBlogCategoryAliasSlug(
 ): string | null {
   return (
     OGABASSEY_BLOG_CATEGORY_SLUG_ALIASES.get(categorySlug.toLowerCase()) ?? null
+  );
+}
+
+export function findOgabasseyBlogCategoryAliasLabel(
+  categories: string[],
+  rawCategoryOrSlug: string
+): string | null {
+  const aliasSlug = getOgabasseyBlogCategoryAliasSlug(
+    generateSlug(rawCategoryOrSlug)
+  );
+  if (!aliasSlug) {
+    return null;
+  }
+
+  return (
+    categories
+      .find((entry) => generateSlug(entry.trim()) === aliasSlug)
+      ?.trim() ?? null
   );
 }
 

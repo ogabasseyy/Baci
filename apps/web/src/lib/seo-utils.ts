@@ -1732,16 +1732,6 @@ export function generateCollectionPageSchema(
     .slice(0, 20);
   const absolutePageUrl = toAbsoluteSchemaUrl(data.url, data.url);
   const currency = data.currency || 'NGN';
-  const country = data.country || 'NG';
-  const shippingDetails = buildOfferShippingDetails(
-    country,
-    currency,
-    data.trustProfile
-  );
-  const hasMerchantReturnPolicy = buildMerchantReturnPolicy(
-    country,
-    data.trustProfile
-  );
 
   const schema: CollectionPageJsonLdSchema = {
     '@context': 'https://schema.org',
@@ -1782,8 +1772,6 @@ export function generateCollectionPageSchema(
               priceCurrency: currency,
               availability: getSchemaAvailability(product),
               url: productUrl || undefined,
-              shippingDetails,
-              ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
             },
           },
         };

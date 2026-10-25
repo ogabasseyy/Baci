@@ -1,3 +1,4 @@
+import { enrichImeiDeviceResult } from '@/lib/imei-device-catalog';
 import 'server-only';
 
 import { createHash } from 'node:crypto';
@@ -26,12 +27,14 @@ function pollDelayMs(attempt: number) {
 export async function resolveClaimedPetrockLookup({
   attempt = 1,
   encryptionKey,
+  merchantId,
   lookup,
   provider,
   supabaseAdmin,
 }: {
   attempt?: number;
   encryptionKey: string;
+  merchantId: string;
   lookup: ClaimedPetrockPoll;
   provider: PollProvider;
   supabaseAdmin: AdminClient;
@@ -102,6 +105,7 @@ export async function resolveClaimedPetrockLookup({
     outcome.kind === 'complete'
       ? {
           ...outcome.body,
+          data: await enrichImeiDeviceResult(merchantId, outcome.body.data),
           lookupId: lookup.id,
           status: 'complete' as const,
         }

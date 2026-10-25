@@ -47,7 +47,7 @@ describe('reconcilePetrockRemediationOrder', () => {
   it('merges a successful house check and immediately starts the next check', async () => {
     const reconcileState = state();
     const startNext = vi.fn().mockResolvedValue({
-      check: 'blacklist',
+      check: 'carrier_status',
       kind: 'pending',
     });
 
@@ -67,7 +67,14 @@ describe('reconcilePetrockRemediationOrder', () => {
       },
       decryptIdentifier: () => '490154203237518',
       loadProducts: vi.fn().mockResolvedValue([]),
-      order: order(),
+      order: order({
+        eligibility_evidence: {
+          blacklistStatus: 'Clean',
+          simLock: 'Locked',
+          carrier: 'Unknown',
+          device: 'iPhone 17 Pro Max',
+        },
+      }),
       origin: 'https://ogabassey.com',
       readProduct: vi.fn(),
       startNext,
@@ -84,7 +91,11 @@ describe('reconcilePetrockRemediationOrder', () => {
     expect(startNext).toHaveBeenCalledWith(
       expect.objectContaining({
         order: expect.objectContaining({
-          eligibilityEvidence: expect.objectContaining({ carrier: 'US AT&T' }),
+          eligibilityEvidence: expect.objectContaining({
+            carrier: 'US AT&T',
+            blacklistStatus: 'Clean',
+            simLock: 'Locked',
+          }),
         }),
       })
     );
@@ -259,7 +270,8 @@ describe('reconcilePetrockRemediationOrder', () => {
         getOrder: vi.fn().mockResolvedValue({
           data: {
             orderUuid: 'provider-order-1',
-            replay: 'Model: iPhone 17 Pro Max<br>Locked Carrier: US AT&T',
+            replay:
+              'Model: iPhone 17 Pro Max<br>Locked Carrier: US AT&T<br>USA Blacklist: Clean<br>SIMLock: Locked<br>Finance: Clean',
             status: 'success',
           },
           ok: true,
@@ -295,7 +307,7 @@ describe('reconcilePetrockRemediationOrder', () => {
     expect(result.kind).toBe('eligibility_advanced');
     expect(reconcileState.resolveEligibility).toHaveBeenCalledWith(
       expect.objectContaining({
-        failureReason: 'eligibility_incomplete',
+        failureReason: 'no_matching_product',
         status: 'suppressed',
       })
     );

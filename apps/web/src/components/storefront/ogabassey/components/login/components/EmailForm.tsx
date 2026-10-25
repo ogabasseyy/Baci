@@ -40,7 +40,7 @@ export function EmailForm({
         </Label>
         <div className="relative">
           <Mail
-            className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-gray-400"
+            className="pointer-events-none absolute left-4 top-1/2 z-20 -translate-y-1/2 size-4 text-gray-400"
             aria-hidden="true"
           />
           <Input
@@ -76,7 +76,7 @@ export function EmailForm({
             Sending code…
           </>
         ) : (
-          'Continue with email'
+          'Send sign-in code'
         )}
       </Button>
 

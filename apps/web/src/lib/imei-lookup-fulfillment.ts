@@ -3,7 +3,6 @@ import type { ImeiDeviceCategory } from '@baci/shared/imei';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { parseSickwResponse } from '@/app/api/storefront/imei-check/sickw-parser';
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
-import { getDeviceImage } from '@/lib/device-images';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import { isInsufficientWalletBalanceError } from '@/lib/vtu-fulfillment';
 import { resolveVtuCustomer } from '@/lib/vtu-pending-transaction';
@@ -268,7 +267,8 @@ export async function requestSickwCheck({
     simLock: parsed.simLock || 'Unknown',
     blacklistStatus: parsed.blacklistStatus || 'Unknown',
     carrier: parsed.carrier || 'Unknown',
-    deviceImage: getDeviceImage(device),
+    deviceImage: '',
+    deviceProfile: parsed.deviceProfile,
     score: parsed.score || 50,
     activationStatus: parsed.activationStatus,
     serialNumber: parsed.serialNumber,

@@ -57,16 +57,17 @@ export interface OtpCodeInputProps {
  * Props for the OTP verification form
  */
 export interface OtpVerificationFormProps {
-  email: string;
-  code: OtpCode;
-  onCodeChange: (index: number, value: string) => void;
-  onKeyDown: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onPaste: (e: React.ClipboardEvent) => void;
-  onResend: () => void;
+  continueHref: string;
+  code: string;
+  onCodeChange: (value: string) => void;
+  onComplete: (value: string) => Promise<void>;
+  onResend: () => Promise<boolean>;
   onChangeEmail: () => void;
   error: string;
   isVerifying: boolean;
   isSending: boolean;
+  verified: boolean;
+  sentAt?: number;
 }
 
 /**
@@ -84,28 +85,23 @@ export interface SocialSignInButtonsProps {
  * Return type for useOgabasseyLogin hook
  */
 export interface UseOgabasseyLoginReturn {
-  // State
   email: string;
-  code: OtpCode;
+  code: string;
   error: string;
   isSending: boolean;
   isVerifying: boolean;
+  verified: boolean;
+  codeSentAt?: number;
   isGoogleLoading: boolean;
   isAppleLoading: boolean;
   isCodeSent: boolean;
   sentToEmail: string | undefined;
-
-  // Handlers
   setEmail: (email: string) => void;
   handleSendCode: (e: React.FormEvent) => Promise<void>;
-  handleCodeChange: (index: number, value: string) => void;
-  handleKeyDown: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
-  handlePaste: (e: React.ClipboardEvent) => void;
-  handleResendCode: () => Promise<void>;
+  handleCodeChange: (value: string) => void;
+  handleCompleteCode: (value: string) => Promise<void>;
+  handleResendCode: () => Promise<boolean>;
   handleChangeEmail: () => void;
   handleGoogleSignIn: () => Promise<void>;
   handleAppleSignIn: () => Promise<void>;
-
-  // Refs
-  codeInputRefs: React.MutableRefObject<(HTMLInputElement | null)[]>;
 }

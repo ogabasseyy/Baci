@@ -209,6 +209,17 @@ export const ImeiResultSchema = z.object({
   blacklistStatus: z.string().min(1),
   carrier: z.string().min(1),
   deviceImage: z.string(),
+  deviceProfile: z
+    .object({
+      version: z.literal(1),
+      brand: z.string().nullable(),
+      model: z.string().nullable(),
+      color: z.string().nullable(),
+      storage: z.string().nullable(),
+      catalogProductId: z.string().optional(),
+      imageMatch: z.enum(['color', 'model', 'none']),
+    })
+    .optional(),
   score: z.number(),
   activationStatus: z.string().optional(),
   serialNumber: z.string().optional(),

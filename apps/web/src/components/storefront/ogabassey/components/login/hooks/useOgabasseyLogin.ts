@@ -12,9 +12,11 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { useOtpSuccessTransition } from '@/components/ui/otp-verification/use-otp-success-transition';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { asRoute } from '@/lib/routes';
-import type { OtpCode, UseOgabasseyLoginReturn } from '../types';
+import { CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
+import type { UseOgabasseyLoginReturn } from '../types';
 
 interface UseOgabasseyLoginOptions {
   initialEmail?: string;
@@ -57,17 +59,14 @@ export function useOgabasseyLogin({
   redirectTo,
 }: UseOgabasseyLoginOptions): UseOgabasseyLoginReturn {
   const router = useRouter();
-  const {
-    otpState,
-    sendOtp,
-    verifyOtp,
-    signInWithGoogle,
-    signInWithApple,
-  } = useCustomerAuth();
+  const { otpState, sendOtp, verifyOtp, signInWithGoogle, signInWithApple } =
+    useCustomerAuth();
 
   // Form state
   const [email, setEmail] = useState(initialEmail);
-  const [code, setCode] = useState<OtpCode>(['', '', '', '', '', '']);
+  const [code, setCode] = useState('');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const { verified, showSuccess } = useOtpSuccessTransition();
   const [error, setError] = useState('');
   const lastInitialEmailRef = useRef(initialEmail);
 
@@ -78,7 +77,12 @@ export function useOgabasseyLogin({
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   // Refs for OTP inputs
-  const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const codeRecipient = useRef(otpState?.email || initialEmail);
+  const verifyLock = useRef(false);
+  useEffect(() => {
+    if (otpState?.email) codeRecipient.current = otpState.email;
+  }, [otpState?.email]);
+  const sendLock = useRef(false);
 
   useEffect(() => {
     if (otpState?.codeSent) {
@@ -101,115 +105,93 @@ export function useOgabasseyLogin({
    */
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sendLock.current || verifyLock.current || verified) return;
+    sendLock.current = true;
     setError('');
     setIsSending(true);
-
-    const result = await sendOtp(email);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to send code');
+    try {
+      const result = await sendOtp(email);
+      if (result.success) {
+        codeRecipient.current = email;
+        setCode('');
+        setEditingEmail(false);
+      } else setError(result.error || 'Failed to send code');
+    } catch {
+      setError('Could not send a code. Please try again.');
+    } finally {
+      sendLock.current = false;
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
-  /**
-   * Verify OTP code
-   */
-  const verifyCode = async (codeString: string) => {
+  const handleCompleteCode = async (value: string) => {
+    if (
+      verifyLock.current ||
+      sendLock.current ||
+      verified ||
+      !/^\d{6}$/.test(value)
+    )
+      return;
+    if (otpState?.expiresAt !== undefined && Date.now() >= otpState.expiresAt) {
+      setError('This code has expired. Request a new code.');
+      return;
+    }
+    verifyLock.current = true;
     setError('');
     setIsVerifying(true);
-
-    const result = await verifyOtp(codeString);
-
-    if (!result.success) {
-      setError(result.error || 'Verification failed');
-      setCode(['', '', '', '', '', '']);
-      codeInputRefs.current[0]?.focus();
-    } else {
+    try {
+      const result = await verifyOtp(value);
+      setCode('');
+      if (!result.success) {
+        setError(result.error || 'Verification failed');
+        return;
+      }
+      // Only the server-confirmed response may start the success animation.
+      await showSuccess();
       router.push(asRoute(redirectTo));
-    }
-
-    setIsVerifying(false);
-  };
-
-  /**
-   * Handle single digit change in OTP input
-   */
-  const handleCodeChange = (index: number, value: string) => {
-    // Only allow single digits
-    if (value && !/^\d$/.test(value)) return;
-
-    const newCode = [...code] as OtpCode;
-    newCode[index] = value;
-    setCode(newCode);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      codeInputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when complete
-    if (newCode.every((d) => d) && newCode.join('').length === 6) {
-      verifyCode(newCode.join(''));
+    } catch {
+      setCode('');
+      setError('Could not verify your code. Please try again.');
+    } finally {
+      verifyLock.current = false;
+      setIsVerifying(false);
     }
   };
 
-  /**
-   * Handle backspace navigation in OTP input
-   */
-  const handleKeyDown = (
-    index: number,
-    e: React.KeyboardEvent<HTMLInputElement>
-  ) => {
-    if (e.key === 'Backspace' && !code[index] && index > 0) {
-      codeInputRefs.current[index - 1]?.focus();
+  const handleCodeChange = (value: string) => {
+    if (!verifyLock.current && !verified && /^\d{0,6}$/.test(value)) {
+      setCode(value);
+      setError('');
     }
   };
 
-  /**
-   * Handle paste in OTP input
-   */
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').slice(0, 6);
-    if (!/^\d+$/.test(pastedData)) return;
-
-    const newCode = [...code] as OtpCode;
-    for (let i = 0; i < pastedData.length && i < 6; i++) {
-      newCode[i] = pastedData[i];
-    }
-    setCode(newCode);
-
-    // Auto-submit when complete
-    if (newCode.every((d) => d) && newCode.join('').length === 6) {
-      verifyCode(newCode.join(''));
-    }
-  };
-
-  /**
-   * Resend OTP code
-   */
-  const handleResendCode = async () => {
+  const handleResendCode = async (): Promise<boolean> => {
+    if (sendLock.current || verifyLock.current || verified) return false;
+    sendLock.current = true;
     setError('');
     setIsSending(true);
-    setCode(['', '', '', '', '', '']);
-
-    const result = await sendOtp(otpState?.email || email);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to resend code');
+    try {
+      const result = await sendOtp(otpState?.email || email);
+      if (!result.success) {
+        setError(result.error || 'Failed to resend code');
+        return false;
+      }
+      setCode('');
+      return true;
+    } catch {
+      setError('Could not send a new code. Please try again.');
+      return false;
+    } finally {
+      sendLock.current = false;
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
-  /**
-   * Go back to email entry (change email)
-   */
   const handleChangeEmail = () => {
-    setCode(['', '', '', '', '', '']);
+    if (verifyLock.current || sendLock.current || verified) return;
+    setCode('');
     setError('');
+    setEditingEmail(true);
   };
 
   /**
@@ -251,21 +233,24 @@ export function useOgabasseyLogin({
     isVerifying,
     isGoogleLoading,
     isAppleLoading,
-    isCodeSent: otpState?.codeSent ?? false,
-    sentToEmail: otpState?.email,
+    isCodeSent:
+      !editingEmail && (Boolean(otpState?.codeSent) || isVerifying || verified),
+    verified,
+    // Preserve the existing sign-in window; Oxygen's default is five minutes.
+    codeSentAt:
+      otpState?.expiresAt !== undefined
+        ? otpState.expiresAt - CUSTOMER_OTP_TTL_SECONDS * 1000
+        : undefined,
+    sentToEmail: otpState?.email || codeRecipient.current || email,
 
     // Handlers
     setEmail,
     handleSendCode,
     handleCodeChange,
-    handleKeyDown,
-    handlePaste,
+    handleCompleteCode,
     handleResendCode,
     handleChangeEmail,
     handleGoogleSignIn,
     handleAppleSignIn,
-
-    // Refs
-    codeInputRefs,
   };
 }

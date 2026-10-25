@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
+import { CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
 import {
   commitCustomerAuthSession,
   loadCustomerSession,
@@ -176,7 +177,7 @@ export function CustomerAuthProvider({
       setOtpState({
         email,
         codeSent: true,
-        expiresAt: Date.now() + 10 * 60 * 1000,
+        expiresAt: Date.now() + CUSTOMER_OTP_TTL_SECONDS * 1000,
       });
 
       return { success: true };

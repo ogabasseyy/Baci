@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cacheLookupResponse } from './route-cache-helpers';
+import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
+import { enrichImeiDeviceResult } from '@/lib/imei-device-catalog';
+import {
+  cacheLookupResponse,
+  cacheSuccessfulLookup,
+} from './route-cache-helpers';
 
 type CacheUpdateResponse = {
   data: { id: string } | null;
@@ -21,6 +26,66 @@ describe('cacheLookupResponse', () => {
 
     return { eq, from, select, single, update };
   }
+
+  it('persists normalized identity and the colour image in the same completed lookup', async () => {
+    const { from, update } = mockCacheUpdate();
+    const data: ImeiCheckResult = {
+      imei: '490154203237518',
+      device: 'iPhone 17 Pro Max',
+      modelNumber: '',
+      status: 'Unknown',
+      icloud: 'Unknown',
+      icloudLock: 'ON',
+      simLock: 'Unknown',
+      blacklistStatus: 'Unknown',
+      carrier: 'Unknown',
+      deviceImage: 'https://cdn.example.com/silver.jpg',
+      score: 70,
+      deviceType: 'apple',
+      verdict: 'Find My is on',
+      verdictType: 'caution',
+      deviceProfile: {
+        version: 1,
+        brand: 'Apple',
+        model: 'iPhone 17 Pro Max',
+        color: 'Silver',
+        storage: '512GB',
+        imageMatch: 'color',
+      },
+    };
+    vi.mocked(enrichImeiDeviceResult).mockResolvedValueOnce(data);
+    await cacheSuccessfulLookup({
+      amount: 300,
+      customerId: 'customer-1',
+      merchantId: 'merchant-1',
+      lookupId: 'lookup-1',
+      latencyMs: 10,
+      tier: 'basic',
+      supabaseAdmin: { from } as never,
+      providerResult: {
+        ok: true,
+        status: 200,
+        sickwStatus: 'success',
+        rawResponseText: '{}',
+        body: {
+          success: true,
+          data: { ...data, deviceProfile: undefined, deviceImage: '' },
+          tier: { name: 'Quick ID', checksIncluded: ['device'] },
+        },
+      },
+    });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'completed',
+        cached_response: expect.objectContaining({
+          data: expect.objectContaining({
+            deviceProfile: data.deviceProfile,
+            deviceImage: data.deviceImage,
+          }),
+        }),
+      })
+    );
+  });
 
   it('caches a lookup response when exactly one row is updated', async () => {
     const { eq, from, select, single, update } = mockCacheUpdate();
@@ -129,3 +194,9 @@ describe('cacheLookupResponse', () => {
     expect(single).toHaveBeenCalled();
   });
 });
+
+vi.mock('@/lib/imei-device-catalog', () => ({
+  enrichImeiDeviceResult: vi.fn(
+    async (_merchantId: string, result: unknown) => result
+  ),
+}));

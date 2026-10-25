@@ -1,87 +1,55 @@
-/**
- * OtpVerificationForm Component
- *
- * 2026 Best Practices:
- * - Full accessibility
- * - Loading and error states
- * - Clear user feedback
- */
-
-import { Loader2 } from 'lucide-react';
+import { OtpVerificationField } from '@/components/ui/otp-verification';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
 import type { OtpVerificationFormProps } from '../types';
-import { OtpCodeInput } from './OtpCodeInput';
 
-/**
- * OTP verification form with resend option
- */
 export function OtpVerificationForm({
+  continueHref,
   code,
   onCodeChange,
-  onKeyDown,
-  onPaste,
+  onComplete,
   onResend,
   onChangeEmail,
   error,
   isVerifying,
   isSending,
-  inputRefs,
-}: OtpVerificationFormProps & {
-  inputRefs: React.MutableRefObject<(HTMLInputElement | null)[]>;
-}) {
+  verified,
+  sentAt,
+}: OtpVerificationFormProps) {
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <Label className="text-gray-700">Verification code</Label>
-        <OtpCodeInput
-          code={code}
-          onCodeChange={onCodeChange}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          isDisabled={isVerifying}
-          inputRefs={inputRefs}
-        />
-      </div>
-
-      {error && (
-        <p className="text-sm text-center text-primary" role="alert">
-          {error}
-        </p>
-      )}
-
-      {isVerifying && (
-        <output
-          className="flex items-center justify-center gap-2 text-gray-500"
-          aria-live="polite"
+      <OtpVerificationField
+        value={code}
+        onChange={onCodeChange}
+        onComplete={(value) => void onComplete(value)}
+        label="Email verification code"
+        pending={isVerifying && !verified}
+        verified={verified}
+        disabled={isSending}
+        error={error}
+        sentAt={sentAt}
+        ttlSeconds={CUSTOMER_OTP_TTL_SECONDS}
+        onResend={verified ? undefined : onResend}
+        successMessage="Signed in successfully."
+      />
+      {verified ? (
+        <a
+          href={continueHref}
+          className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[var(--store-primary)] px-4 font-semibold text-[var(--store-primary-text,#ffffff)]"
         >
-          <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
-          <span>Verifying…</span>
-        </output>
-      )}
-
-      <div className="text-center space-y-2">
-        <p className="text-sm text-gray-500">Didn't receive the code?</p>
+          Continue
+        </a>
+      ) : (
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
-          className="hover:bg-gray-100 text-primary"
-          onClick={onResend}
-          disabled={isSending}
+          variant="outline"
+          className="w-full h-12 bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl"
+          onClick={onChangeEmail}
+          disabled={isSending || isVerifying || verified}
         >
-          {isSending ? 'Sending...' : 'Resend code'}
+          Use a different email
         </Button>
-      </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full h-12 bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl"
-        onClick={onChangeEmail}
-      >
-        Use a different email
-      </Button>
+      )}
     </div>
   );
 }

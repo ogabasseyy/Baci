@@ -65,7 +65,7 @@ describe('POST /api/webhooks/petrock/imei/[token]', () => {
 
     const response = await POST(request, context());
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(admin.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         body_keys: ['order_uuid', 'status'],
@@ -86,7 +86,7 @@ describe('POST /api/webhooks/petrock/imei/[token]', () => {
       context()
     );
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(admin.insert).not.toHaveBeenCalled();
   });
 

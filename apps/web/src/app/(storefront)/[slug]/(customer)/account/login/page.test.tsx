@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import CustomerLoginPage from './page';
+import CustomerLoginPage from './customer-login-page';
 
 const mockPush = vi.fn();
 const mockSearchParams = new URLSearchParams();
@@ -66,6 +66,22 @@ describe('CustomerLoginPage', () => {
     });
   });
 
+  it.each([
+    '/\\evil.example',
+    '/\t/evil.example',
+    '/\n/evil.example',
+    '/\r/evil.example',
+  ])('rejects URL-parser-normalized external redirect %j', async (redirect) => {
+    mockSearchParams.set('redirect', redirect);
+    mockUseCustomerAuth.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+      otpState: null,
+    });
+    render(<CustomerLoginPage />);
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/account'));
+  });
+
   it('prefills a valid email query parameter', () => {
     mockSearchParams.set('email', '  BasseyBJohn@Yahoo.CO.UK  ');
 
@@ -106,5 +122,60 @@ describe('CustomerLoginPage', () => {
       '/api/storefront/receipts/claims/token_123/login-email',
       { headers: { accept: 'application/json' } }
     );
+  });
+  function renderCodeStep() {
+    const verifyOtp = vi.fn().mockResolvedValue({ success: true });
+    const sendOtp = vi.fn().mockResolvedValue({ success: true });
+    mockUseCustomerAuth.mockReturnValue({
+      isAuthenticated: false,
+      isLoading: false,
+      otpState: { codeSent: true, email: 'buyer@example.com' },
+      verifyOtp,
+      sendOtp,
+    });
+    mockSearchParams.set('redirect', '/imei-check');
+    render(<CustomerLoginPage />);
+    return { verifyOtp, sendOtp };
+  }
+
+  it('submits the entered six digits and redirects only after verification succeeds', async () => {
+    const { verifyOtp } = renderCodeStep();
+    const pending = Promise.withResolvers<{ success: boolean }>();
+    verifyOtp.mockReturnValueOnce(pending.promise);
+    for (let index = 0; index < 6; index++) {
+      fireEvent.change(screen.getByLabelText(`Digit ${index + 1} of 6`), {
+        target: { value: String(index + 1) },
+      });
+    }
+    expect(verifyOtp).toHaveBeenCalledWith('123456');
+    expect(mockPush).not.toHaveBeenCalled();
+    pending.resolve({ success: true });
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/imei-check'));
+  });
+
+  it('pastes a complete code, displays verification failure and clears the digits', async () => {
+    const { verifyOtp } = renderCodeStep();
+    verifyOtp.mockResolvedValueOnce({ success: false, error: 'Code expired' });
+    fireEvent.paste(screen.getByLabelText('Digit 1 of 6'), {
+      clipboardData: { getData: () => '123456' },
+    });
+    await waitFor(() => expect(screen.getByText('Code expired')).toBeVisible());
+    expect(verifyOtp).toHaveBeenCalledWith('123456');
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Digit 1 of 6')).toHaveValue('');
+    expect(screen.getByLabelText('Digit 1 of 6')).toHaveFocus();
+  });
+
+  it('resends to the challenge email and clears partial digits', async () => {
+    const { sendOtp } = renderCodeStep();
+    fireEvent.change(screen.getByLabelText('Digit 1 of 6'), {
+      target: { value: '1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+    await waitFor(() =>
+      expect(sendOtp).toHaveBeenCalledWith('buyer@example.com')
+    );
+    expect(screen.getByLabelText('Digit 1 of 6')).toHaveValue('');
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

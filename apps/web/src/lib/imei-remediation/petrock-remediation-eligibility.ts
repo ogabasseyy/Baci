@@ -1,4 +1,8 @@
 import {
+  canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
+} from '@baci/shared/imei';
+import {
   matchesPetrockModelScope,
   normalizePetrockDeviceModel,
   type PetrockModelScope,
@@ -32,17 +36,6 @@ function normalized(value: string | undefined) {
   return value?.trim().toLowerCase() ?? '';
 }
 
-function blacklistState(value: string | undefined) {
-  const status = normalized(value);
-  if (!status || status === 'unknown') return 'unknown';
-  const riskTerms = status.replace(/not blacklisted|not reported/g, '');
-  if (/blacklist|blocked|reported|stolen|lost/.test(riskTerms)) return 'risk';
-  if (/not blacklisted|not reported|\bclean\b|\bclear\b/.test(status)) {
-    return 'clean';
-  }
-  return 'unknown';
-}
-
 function simLockState(value: string | undefined) {
   const status = normalized(value);
   if (!status || status === 'unknown') return 'unknown';
@@ -53,13 +46,29 @@ function simLockState(value: string | undefined) {
 function statusSegment(value: string | undefined) {
   const status = normalized(value);
   if (!status || status === 'unknown') return null;
-  if (/blacklist|lost|stolen|blocked|unpaid/.test(status)) return 'risk';
-  if (/past due/.test(status)) return 'past_due';
-  if (/account[- ]?locked/.test(status)) return 'account_locked';
-  if (/wait\s*30/.test(status)) return 'wait_30_days';
-  if (/not active/.test(status)) return 'not_active';
-  if (/clean|eligible|paid|clear/.test(status)) return 'clean';
-  return null;
+  // Negative evidence wins over positive words, including contradictory reports.
+  if (
+    /blacklist|lost|stolen|blocked|\bunpaid\b|\bineligible\b|\bnot\s+(?:eligible|paid|clear|clean)\b/.test(
+      status
+    )
+  )
+    return 'risk';
+  if (status === 'past due') return 'past_due';
+  if (/^account[- ]?locked$/.test(status)) return 'account_locked';
+  if (/^wait\s*30(?:\s*days)?$/.test(status)) return 'wait_30_days';
+  if (status === 'not active') return 'not_active';
+  const positive = new Set([
+    'clean',
+    'eligible',
+    'paid',
+    'clear',
+    'paid off',
+    'fully paid',
+    'paid in full',
+  ]);
+  return status.split(/\s*[/,;&]\s*/).every((part) => positive.has(part))
+    ? 'clean'
+    : null;
 }
 
 export function getPetrockEligibilityRequiredChecks(
@@ -72,7 +81,7 @@ export function getPetrockEligibilityRequiredChecks(
   ) {
     checks.push('carrier_detection');
   }
-  if (blacklistState(result.blacklistStatus) === 'unknown') {
+  if (getImeiBlacklistState(result.blacklistStatus) === 'unknown') {
     checks.push('blacklist');
   }
   if (!statusSegment(result.financeStatus)) checks.push('carrier_status');
@@ -87,15 +96,20 @@ export function evaluatePetrockRemediationEligibility({
   result: EligibilityResult;
 }) {
   const carrier = normalizePetrockRemediationCarrier(result.carrier ?? '');
-  const blacklist = blacklistState(result.blacklistStatus);
+  const blacklist = getImeiBlacklistState(result.blacklistStatus);
   const finance = statusSegment(result.financeStatus);
   const checks = getPetrockEligibilityRequiredChecks(result);
-  if (checks.length > 0) {
-    return { checks, kind: 'checks_required' as const };
-  }
-
   if (blacklist === 'risk') {
     return { kind: 'suppressed' as const, reason: 'blacklist_risk' as const };
+  }
+  if (!canAssessImeiNetworkUnlock(result)) {
+    return {
+      kind: 'suppressed' as const,
+      reason:
+        blacklist === 'unknown'
+          ? ('blacklist_unknown' as const)
+          : ('not_carrier_locked' as const),
+    };
   }
   if (finance === 'risk') {
     return {
@@ -103,6 +117,10 @@ export function evaluatePetrockRemediationEligibility({
       reason: 'carrier_status_risk' as const,
     };
   }
+  if (checks.length > 0) {
+    return { checks, kind: 'checks_required' as const };
+  }
+
   if (simLockState(result.simLock) !== 'locked') {
     return {
       kind: 'suppressed' as const,

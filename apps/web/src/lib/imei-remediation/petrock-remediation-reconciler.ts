@@ -24,7 +24,10 @@ function pollDelay(attempt: number) {
 function stringEvidence(value: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(value).filter(
-      (entry): entry is [string, string] => typeof entry[1] === 'string'
+      (entry): entry is [string, string] =>
+        typeof entry[1] === 'string' &&
+        entry[1].trim().length > 0 &&
+        !/^(unknown|unknown device)$/i.test(entry[1].trim())
     )
   );
 }

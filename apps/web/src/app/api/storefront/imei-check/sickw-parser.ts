@@ -1,3 +1,4 @@
+import { getImeiDeviceProfile } from '@baci/shared/imei';
 import {
   type ProviderLabelInput,
   parseProviderLabelMap,
@@ -187,6 +188,12 @@ export function parseSickwResponse(
   });
 
   return {
+    deviceProfile: getImeiDeviceProfile({
+      device,
+      color: data.color || data.colour || data['device color'],
+      storage: data.storage || data.capacity || data['storage capacity'],
+      brand: data.brand || data.manufacturer,
+    }),
     device,
     modelNumber,
     status,

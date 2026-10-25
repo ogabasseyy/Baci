@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import {
+  canAssessImeiNetworkUnlock,
   isValidDeviceIdentifier,
   normalizeDeviceIdentifier,
 } from '@baci/shared/imei';
@@ -104,6 +105,17 @@ export async function POST(request: NextRequest) {
   });
   if (result.kind === 'not_found') {
     return NextResponse.json({ error: 'Lookup not found' }, { status: 404 });
+  }
+  if (
+    (result.kind === 'checks_required' || result.kind === 'eligible') &&
+    !canAssessImeiNetworkUnlock(result.evidence)
+  ) {
+    return NextResponse.json({
+      offers: [],
+      reason: 'unlock_evidence_required',
+      status: 'suppressed',
+      success: true,
+    });
   }
   if (result.kind === 'pending') {
     return NextResponse.json(

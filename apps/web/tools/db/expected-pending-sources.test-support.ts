@@ -39,6 +39,17 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
+      'supabase/migrations/20261025130000_imei_device_analytics.sql',
+    sha256: 'ad1153b281cbcf39363e260b4afd545bf213a977fec3ccb53e3a489909ccff4c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261025183000_petrock_guard_unsubmitted_refunds.sql',
+    sha256: '64786c82ec093b4e71fbe7ca2c93882687af47128f3865548625dedc4d950d3d',
+  },
+
+  {
+    repositoryPath:
       'supabase/migrations/20261024162000_chatgpt_ads_admin_destination.sql',
     sha256: 'e678d6ec10d05787fc0b66af71d1cda4bad2928f03716581e7b8ba62beb3ea6f',
   },

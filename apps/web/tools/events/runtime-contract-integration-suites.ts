@@ -1,5 +1,32 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-email-form.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-code-form.tsx':
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+  'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/use-customer-login-form.ts':
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+  'apps/web/src/components/ui/otp-verification/use-otp-expiry.ts':
+    'apps/web/src/components/ui/otp-verification/otp-expiry.test.tsx',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-1.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-2.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-3.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-4.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-5.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-6.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-7.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+  'apps/web/src/lib/imei-providers/petrock/check-catalog-data/types.ts':
+    'apps/web/src/lib/imei-providers/petrock/petrock-check-catalog.test.ts',
+
   'apps/web/src/app/dashboard/integrations/chatgpt/actions.ts':
     'apps/web/src/app/dashboard/integrations/chatgpt/page.test.tsx',
   'apps/web/src/components/storefront/portable/footer-presentation.tsx':

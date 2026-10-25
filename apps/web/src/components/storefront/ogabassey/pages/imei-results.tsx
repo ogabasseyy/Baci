@@ -1,5 +1,7 @@
 'use client';
 
+import { canAssessImeiNetworkUnlock } from '@baci/shared/imei';
+
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
 import { ScanBarcode, Smartphone } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -38,8 +40,12 @@ export function OgabasseyImeiResults({
     return null;
   }
 
-  const isClean = result.status === 'Clean';
-  const headerTone = isClean ? IMEI_TONES.safe : IMEI_TONES.danger;
+  const headerTone =
+    result.status === 'Unknown'
+      ? IMEI_TONES.warning
+      : result.status === 'Clean'
+        ? IMEI_TONES.safe
+        : IMEI_TONES.danger;
   const verdictTone = getVerdictTone(result.verdictType);
   const statusCards = getImeiResultStatusCards(
     result,
@@ -85,8 +91,24 @@ export function OgabasseyImeiResults({
                 </span>
               </div>
               <h2 className="text-xl font-bold text-[var(--store-text,#111827)] md:text-2xl">
-                {result.device}
+                {result.deviceProfile?.model ?? result.device}
               </h2>
+              {result.deviceProfile && (
+                <>
+                  <p className="mt-1 text-sm text-store-foreground">
+                    {[result.deviceProfile.color, result.deviceProfile.storage]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  {result.deviceProfile.imageMatch !== 'none' && (
+                    <p className="mt-1 text-xs text-store-foreground">
+                      {result.deviceProfile.imageMatch === 'color'
+                        ? `Catalog illustration · ${result.deviceProfile.color}`
+                        : 'Model illustration · colour may differ'}
+                    </p>
+                  )}
+                </>
+              )}
               <p className="mt-1 font-mono text-sm text-[var(--store-muted-text,#6b7280)]">
                 IMEI: {result.imei}
               </p>
@@ -127,7 +149,7 @@ export function OgabasseyImeiResults({
         </div>
       </div>
 
-      {lookupId ? (
+      {lookupId && canAssessImeiNetworkUnlock(result) ? (
         <ImeiRemediationOffer identifier={result.imei} lookupId={lookupId} />
       ) : null}
 

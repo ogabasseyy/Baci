@@ -14,7 +14,24 @@ const PETROCK_LABEL_ALIASES: Readonly<Record<string, string>> = {
 };
 
 export function parsePetrockReplay(replay: string): Partial<ImeiCheckResult> {
-  return parseSickwResponse(
+  const result = parseSickwResponse(
     parseProviderLabelMap(replay, PETROCK_LABEL_ALIASES)
   );
+  // Model/FMI-only services do not establish blacklist status.
+  if (
+    result.status === 'Clean' &&
+    (!result.blacklistStatus || result.blacklistStatus === 'Unknown')
+  ) {
+    return {
+      ...result,
+      status: 'Unknown',
+      verdictType:
+        result.verdictType === 'safe' ? 'caution' : result.verdictType,
+      verdict:
+        result.verdictType === 'safe'
+          ? 'Blacklist status was not checked. Verify the remaining checks before buying.'
+          : result.verdict,
+    };
+  }
+  return result;
 }

@@ -25,6 +25,27 @@ describe('ImeiCheckerError', () => {
     mocks.useMerchantSafe.mockReturnValue({ basePath: '/ogabassey' });
   });
 
+  it.each([
+    [
+      '/ogabassey',
+      '/ogabassey/account/login?redirect=%2Fogabassey%2Fimei-check',
+    ],
+    ['', '/account/login?redirect=%2Fimei-check'],
+  ])('links sign-in back to the checker for base path %s', (basePath, href) => {
+    mocks.useMerchantSafe.mockReturnValue({ basePath });
+    render(
+      <ImeiCheckerError
+        error="Please sign in to check this device."
+        needsWalletFunding={false}
+        needsSignIn
+      />
+    );
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute(
+      'href',
+      href
+    );
+  });
+
   it('renders a wallet funding link for an insufficient-balance error', () => {
     render(
       <ImeiCheckerError
@@ -36,9 +57,10 @@ describe('ImeiCheckerError', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Insufficient wallet balance'
     );
-    expect(
-      screen.getByRole('link', { name: /fund wallet/i })
-    ).toHaveAttribute('href', '/ogabassey/wallet?fund=1');
+    expect(screen.getByRole('link', { name: /fund wallet/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/wallet?fund=1'
+    );
   });
 
   it('keeps the funding link root-relative on domain storefronts', () => {
@@ -51,14 +73,18 @@ describe('ImeiCheckerError', () => {
       />
     );
 
-    expect(
-      screen.getByRole('link', { name: /fund wallet/i })
-    ).toHaveAttribute('href', '/wallet?fund=1');
+    expect(screen.getByRole('link', { name: /fund wallet/i })).toHaveAttribute(
+      'href',
+      '/wallet?fund=1'
+    );
   });
 
   it('does not render a funding link for other errors', () => {
     render(
-      <ImeiCheckerError error="Provider unavailable" needsWalletFunding={false} />
+      <ImeiCheckerError
+        error="Provider unavailable"
+        needsWalletFunding={false}
+      />
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Provider unavailable');

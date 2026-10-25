@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   finalize: vi.fn(),
+  enrich: vi.fn(),
   reschedule: vi.fn(),
+}));
+
+vi.mock('@/lib/imei-device-catalog', () => ({
+  enrichImeiDeviceResult: mocks.enrich,
 }));
 
 vi.mock('./petrock-lookup-state', () => ({
@@ -11,7 +16,9 @@ vi.mock('./petrock-lookup-state', () => ({
 }));
 
 import { encryptImeiIdentifier } from '@/lib/imei-identifier-crypto';
+import { createPetrockClient } from './petrock-client';
 import { resolveClaimedPetrockLookup } from './petrock-lookup-resolution';
+import { createPetrockProvider } from './petrock-provider';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const lookup = {
@@ -24,8 +31,50 @@ const lookup = {
 };
 
 describe('resolveClaimedPetrockLookup', () => {
+  it('finalizes the colour-matched identity returned by the public catalog', async () => {
+    const data = {
+      device: 'iPhone 17 Pro Max',
+      deviceImage: 'https://cdn.example.com/silver.jpg',
+      deviceProfile: {
+        version: 1,
+        brand: 'Apple',
+        model: 'iPhone 17 Pro Max',
+        color: 'Silver',
+        storage: '512GB',
+        imageMatch: 'color',
+      },
+    };
+    mocks.enrich.mockResolvedValueOnce(data);
+    await resolveClaimedPetrockLookup({
+      merchantId: 'merchant-1',
+      encryptionKey: KEY,
+      lookup,
+      supabaseAdmin: {} as never,
+      provider: {
+        poll: vi.fn().mockResolvedValue({
+          kind: 'complete',
+          status: 200,
+          providerStatus: 'success',
+          rawResponseText: '{}',
+          body: { success: true, data: { device: 'iPhone 17 Pro Max' } },
+        }),
+      },
+    });
+    expect(mocks.enrich).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ device: 'iPhone 17 Pro Max' })
+    );
+    expect(mocks.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalStatus: 'completed',
+        body: expect.objectContaining({ data }),
+      })
+    );
+  });
+
   it('refunds a claimed submission_unknown lookup that has no provider id', async () => {
     const result = await resolveClaimedPetrockLookup({
+      merchantId: 'merchant-1',
       encryptionKey: 'a'.repeat(64),
       lookup: {
         id: 'lookup-1',
@@ -48,6 +97,7 @@ describe('resolveClaimedPetrockLookup', () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.enrich.mockImplementation(async (_merchantId, data) => data);
     mocks.reschedule.mockResolvedValue(true);
     mocks.finalize.mockResolvedValue(true);
   });
@@ -63,6 +113,7 @@ describe('resolveClaimedPetrockLookup', () => {
 
     await expect(
       resolveClaimedPetrockLookup({
+        merchantId: 'merchant-1',
         encryptionKey: KEY,
         lookup,
         provider,
@@ -89,6 +140,7 @@ describe('resolveClaimedPetrockLookup', () => {
 
     await expect(
       resolveClaimedPetrockLookup({
+        merchantId: 'merchant-1',
         encryptionKey: KEY,
         lookup,
         provider,
@@ -113,6 +165,7 @@ describe('resolveClaimedPetrockLookup', () => {
     };
 
     const result = await resolveClaimedPetrockLookup({
+      merchantId: 'merchant-1',
       encryptionKey: KEY,
       lookup,
       provider,
@@ -151,11 +204,49 @@ describe('resolveClaimedPetrockLookup', () => {
 
     await expect(
       resolveClaimedPetrockLookup({
+        merchantId: 'merchant-1',
         encryptionKey: KEY,
         lookup,
         provider,
         supabaseAdmin: {} as never,
       })
     ).resolves.toMatchObject({ kind: 'lease_lost' });
+  });
+  it('finalizes the captured supplier-unavailable rejection as refunded_error', async () => {
+    const client = createPetrockClient({
+      baseUrl: 'https://provider.example/api/reseller/v1',
+      token: 'fixture-token',
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: 'success',
+            code: 200,
+            data: {
+              quantity: 1,
+              replay: 'Unable to check blacklist status.',
+              status: 'rejected',
+            },
+          })
+        )
+      ),
+    });
+    const result = await resolveClaimedPetrockLookup({
+      merchantId: 'merchant-1',
+      encryptionKey: KEY,
+      lookup,
+      provider: createPetrockProvider({ client }),
+      supabaseAdmin: {} as never,
+    });
+    expect(result).toMatchObject({
+      kind: 'failure',
+      status: 502,
+      body: { code: 'PETROCK_UNAVAILABLE' },
+    });
+    expect(mocks.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalStatus: 'refunded_error',
+        status: 502,
+      })
+    );
   });
 });

@@ -11,6 +11,7 @@ import { AnalyticsHeader } from './analytics-header';
 import { AnalyticsMerchantPerformance } from './analytics-merchant-performance';
 import { AnalyticsSummaryCards } from './analytics-summary-cards';
 import type { AnalyticsPeriod } from './analytics-types';
+import { ImeiCheckAnalyticsPanel } from './imei-check-analytics';
 
 const ANALYTICS_LOAD_ERROR =
   'Live analytics could not be loaded. No zero values are being shown in place of missing data.';
@@ -168,6 +169,8 @@ export default function AnalyticsPage() {
         <AnalyticsCharts chartData={chartData} loading={loading} />
         <AnalyticsMerchantPerformance analytics={analytics} loading={loading} />
       </div>
+
+      <ImeiCheckAnalyticsPanel period={period} />
 
       <OrderPipelineBreakdowns
         loading={loading}

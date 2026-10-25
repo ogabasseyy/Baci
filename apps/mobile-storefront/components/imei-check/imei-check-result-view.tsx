@@ -1,4 +1,5 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
+import { canAssessImeiNetworkUnlock } from '@baci/shared/imei';
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
@@ -84,8 +85,28 @@ export function ImeiCheckResultView({
               {currentTier.name}
             </Text>
             <Text style={[styles.deviceName, { color: colors.text }]}>
-              {result.device}
+              {result.deviceProfile?.model ?? result.device}
             </Text>
+            {result.deviceProfile && (
+              <>
+                <Text
+                  style={[styles.imeiText, { color: colors.textSecondary }]}
+                >
+                  {[result.deviceProfile.color, result.deviceProfile.storage]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+                {result.deviceProfile.imageMatch !== 'none' && (
+                  <Text
+                    style={[styles.imeiText, { color: colors.textSecondary }]}
+                  >
+                    {result.deviceProfile.imageMatch === 'color'
+                      ? `Catalog illustration · ${result.deviceProfile.color}`
+                      : 'Model illustration · colour may differ'}
+                  </Text>
+                )}
+              </>
+            )}
             <Text style={[styles.imeiText, { color: colors.textSecondary }]}>
               IMEI: {result.imei}
             </Text>
@@ -118,7 +139,7 @@ export function ImeiCheckResultView({
           </Text>
         </View>
 
-        {lookupId && apiBaseUrl ? (
+        {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
           <ImeiRemediationOffer
             accessToken={accessToken}
             apiBaseUrl={apiBaseUrl}
@@ -188,7 +209,12 @@ function TrustScore({
   const isClean = result.status === 'Clean';
   const cleanPalette = getVerdictColors('safe', colors);
   const dangerPalette = getVerdictColors('danger', colors);
-  const palette = isClean ? cleanPalette : dangerPalette;
+  const palette =
+    result.status === 'Unknown'
+      ? getVerdictColors('caution', colors)
+      : isClean
+        ? cleanPalette
+        : dangerPalette;
 
   return (
     <View style={[styles.scoreContainer, { backgroundColor: palette.bg }]}>

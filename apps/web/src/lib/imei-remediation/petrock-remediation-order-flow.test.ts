@@ -26,6 +26,15 @@ const input = {
     customerId: 'customer-1',
     id: 'order-1',
     merchantId: 'merchant-1',
+    eligibilityEvidence: {
+      blacklistStatus: 'Clean',
+      simLock: 'Locked',
+      carrier: 'AT&T',
+      device: 'iPhone 17 Pro Max',
+      financeStatus: 'Clean',
+    },
+    providerOrderId: null,
+    providerAttemptStartedAt: null,
     status: 'eligible' as const,
   },
   origin: 'https://ogabassey.com',
@@ -35,6 +44,9 @@ const input = {
     catalogCostUsd: 75,
     catalogOrderFieldName: 'IMEI',
     catalogSyncedAt: new Date().toISOString(),
+    carrier: 'AT&T',
+    modelScope: { kind: 'generic' },
+    statusSegment: 'clean',
     curatedProductId: '22222222-2222-4222-8222-222222222222',
     orderFieldName: 'IMEI',
     providerProductId: 'unlock-product',
@@ -250,4 +262,79 @@ describe('placePetrockRemediationOrder', () => {
     expect(orderState.prepare).not.toHaveBeenCalled();
     expect(getAccount).not.toHaveBeenCalled();
   });
+});
+
+it.each([
+  'eligible',
+  'payment_pending',
+  'paid',
+] as const)('revalidates stored negative evidence for a %s order before any debit or submission', async (status) => {
+  const orderState = state();
+  const client = { getAccount: vi.fn(), submitOrder: vi.fn() };
+  const result = await placePetrockRemediationOrder({
+    ...input,
+    client,
+    state: orderState,
+    order: {
+      ...input.order,
+      status,
+      eligibilityEvidence: {
+        blacklistStatus: 'Clean',
+        simLock: 'Locked',
+        carrier: 'AT&T',
+        device: 'iPhone 17 Pro Max',
+        financeStatus: 'Not Eligible',
+      },
+    },
+    product: {
+      ...input.product,
+      carrier: 'AT&T',
+      modelScope: { kind: 'generic' },
+      statusSegment: 'clean',
+    },
+  });
+  expect(result.kind).toBe(status === 'paid' ? 'failed' : 'eligibility_failed');
+  expect(client.getAccount).not.toHaveBeenCalled();
+  expect(client.submitOrder).not.toHaveBeenCalled();
+  expect(orderState.redeem).not.toHaveBeenCalled();
+  expect(orderState.begin).not.toHaveBeenCalled();
+  expect(orderState.failBeforeAcceptance).toHaveBeenCalledTimes(
+    status === 'paid' ? 1 : 0
+  );
+});
+
+it.each([
+  { providerOrderId: 'accepted-1', providerAttemptStartedAt: null },
+  { providerOrderId: null, providerAttemptStartedAt: '2026-10-25T18:00:00Z' },
+])('does not refund or resubmit an already-started order: %j', async (markers) => {
+  const orderState = state();
+  const client = { getAccount: vi.fn(), submitOrder: vi.fn() };
+  const result = await placePetrockRemediationOrder({
+    ...input,
+    client,
+    state: orderState,
+    order: {
+      ...input.order,
+      status: 'paid',
+      eligibilityEvidence: {},
+      ...markers,
+    },
+  });
+  expect(result.kind).toBe('already_started');
+  expect(orderState.failBeforeAcceptance).not.toHaveBeenCalled();
+  expect(client.submitOrder).not.toHaveBeenCalled();
+  expect(orderState.redeem).not.toHaveBeenCalled();
+});
+it('does not claim a refund when the atomic eligibility rejection loses a race', async () => {
+  const orderState = state();
+  orderState.failBeforeAcceptance.mockResolvedValue(false);
+  const client = { getAccount: vi.fn(), submitOrder: vi.fn() };
+  const result = await placePetrockRemediationOrder({
+    ...input,
+    client,
+    state: orderState,
+    order: { ...input.order, status: 'paid', eligibilityEvidence: {} },
+  });
+  expect(result.kind).toBe('already_started');
+  expect(client.submitOrder).not.toHaveBeenCalled();
 });

@@ -29,7 +29,7 @@ describe('IMEI service tiers', () => {
   it('exposes only primary service cards before expansion', () => {
     expect(getVisibleImeiServiceTierKeys('apple', false)).toEqual([
       'full',
-      'activation',
+      'basic',
       'blacklist',
       'carrier',
     ]);

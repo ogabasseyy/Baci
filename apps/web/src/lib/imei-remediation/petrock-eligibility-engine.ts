@@ -1,6 +1,10 @@
 import 'server-only';
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import {
+  canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
+} from '@baci/shared/imei';
 import type { createPetrockClient } from '@/lib/imei-providers/petrock/petrock-client';
 import { isDefinitivePetrockSubmissionRejection } from '@/lib/imei-providers/petrock/petrock-submission-outcome';
 import {
@@ -55,12 +59,12 @@ export interface PetrockEligibilitySubmissionState {
   }): Promise<boolean>;
 }
 
-const HOUSE_CHECK_PRODUCTS: Record<
-  Exclude<PetrockEligibilityCheckKind, 'carrier_status'>,
-  string
+const HOUSE_CHECK_PRODUCTS: Partial<
+  Record<Exclude<PetrockEligibilityCheckKind, 'carrier_status'>, string>
 > = {
-  blacklist: '1955',
-  carrier_detection: '693',
+  // No verified blacklist house-check replacement: never dispatch rejected 1955.
+  // Current carrier + SIM-lock product; the previous product 693 is no longer listed.
+  carrier_detection: '689',
 };
 
 function carrierStatusProduct(evidence: Record<string, string | undefined>) {
@@ -110,6 +114,14 @@ export async function submitNextPetrockEligibilityCheck({
   ) => Promise<EligibilityProductSnapshot | null>;
   state: PetrockEligibilitySubmissionState;
 }) {
+  if (
+    getImeiBlacklistState(order.eligibilityEvidence.blacklistStatus) === 'risk'
+  ) {
+    return suppress(state, order.id, 'blacklist_risk');
+  }
+  if (!canAssessImeiNetworkUnlock(order.eligibilityEvidence)) {
+    return suppress(state, order.id, 'unlock_evidence_required');
+  }
   const required = getPetrockEligibilityRequiredChecks(
     order.eligibilityEvidence
   );
@@ -129,6 +141,7 @@ export async function submitNextPetrockEligibilityCheck({
     : Number.POSITIVE_INFINITY;
   if (
     !product?.active ||
+    product.productId !== productId ||
     product.currency !== 'USD' ||
     !product.orderFieldName ||
     product.priceUsd === null ||

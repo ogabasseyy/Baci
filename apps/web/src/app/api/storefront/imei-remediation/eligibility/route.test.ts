@@ -182,8 +182,12 @@ describe('POST /api/storefront/imei-remediation/eligibility', () => {
 
   it('starts missing house checks without debiting the customer', async () => {
     mocks.loadEligibility.mockResolvedValue({
-      checks: ['carrier_detection', 'blacklist', 'carrier_status'],
-      evidence: { carrier: 'Unknown' },
+      checks: ['carrier_detection', 'carrier_status'],
+      evidence: {
+        carrier: 'Unknown',
+        blacklistStatus: 'Clean',
+        simLock: 'Locked',
+      },
       kind: 'checks_required',
     });
 
@@ -194,5 +198,20 @@ describe('POST /api/storefront/imei-remediation/eligibility', () => {
       expect.objectContaining({ customerId: 'customer-1' })
     );
     expect(mocks.startChecks).toHaveBeenCalled();
+  });
+  it('blocks direct assessment requests without explicit clean and locked evidence', async () => {
+    mocks.loadEligibility.mockResolvedValue({
+      checks: ['blacklist'],
+      evidence: { blacklistStatus: 'Unknown', simLock: 'Locked' },
+      kind: 'checks_required',
+    });
+    const response = await POST(request() as never);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'suppressed',
+      offers: [],
+    });
+    expect(mocks.createAssessment).not.toHaveBeenCalled();
+    expect(mocks.startChecks).not.toHaveBeenCalled();
   });
 });

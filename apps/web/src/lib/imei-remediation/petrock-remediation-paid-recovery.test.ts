@@ -87,6 +87,55 @@ describe('recoverPaidPetrockRemediationOrder', () => {
     expect(mocks.place).not.toHaveBeenCalled();
   });
 
+  it('does not report a refund when a concurrent submission defeats the refund guard', async () => {
+    mocks.fxRate = undefined;
+    mocks.createState.mockReturnValue({
+      failBeforeAcceptance: vi.fn().mockResolvedValue(false),
+    });
+    expect(
+      (
+        await recoverPaidPetrockRemediationOrder({
+          client: {} as never,
+          encryptionKey: 'key',
+          order: order as never,
+          origin: 'https://usebaci.com',
+          supabaseAdmin: {} as never,
+        })
+      ).kind
+    ).toBe('already_started');
+    expect(mocks.place).not.toHaveBeenCalled();
+  });
+
+  it('maps a final eligibility rejection into the paid recovery refund contract', async () => {
+    const failBeforeAcceptance = vi.fn().mockResolvedValue(true);
+    mocks.createState.mockReturnValue({ failBeforeAcceptance });
+    mocks.decrypt.mockReturnValue('490154203237518');
+    mocks.loadContext.mockResolvedValue({
+      identifierCiphertext: 'ciphertext',
+      order: {
+        status: 'paid',
+        providerOrderId: null,
+        providerAttemptStartedAt: null,
+      },
+      product: {},
+    });
+    mocks.place.mockResolvedValue({ kind: 'eligibility_failed' });
+    expect(
+      (
+        await recoverPaidPetrockRemediationOrder({
+          client: {} as never,
+          encryptionKey: 'key',
+          order: order as never,
+          origin: 'https://usebaci.com',
+          supabaseAdmin: {} as never,
+        })
+      ).kind
+    ).toBe('failed');
+    expect(failBeforeAcceptance).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'eligibility_evidence_invalid' })
+    );
+  });
+
   it('refunds a paid row when the current FX guard is unavailable', async () => {
     const failBeforeAcceptance = vi.fn().mockResolvedValue(true);
     mocks.fxRate = undefined;

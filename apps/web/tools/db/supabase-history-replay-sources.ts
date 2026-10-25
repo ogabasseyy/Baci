@@ -214,6 +214,9 @@ f2b640bac8c3f3d41158313bc910aec6de0058cf652c47f0595c635bd98ecee1 20260803120000_
 54feed9b89d28855d7d6f4bb83ea04d708f2d1e75c9cff814d6f49845d26e5bc 20260804120000_restore_storefront_order_private_schema_usage.sql
 ${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
+  'ad1153b281cbcf39363e260b4afd545bf213a977fec3ccb53e3a489909ccff4c 20261025130000_imei_device_analytics.sql',
+  '64786c82ec093b4e71fbe7ca2c93882687af47128f3865548625dedc4d950d3d 20261025183000_petrock_guard_unsubmitted_refunds.sql',
+
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,

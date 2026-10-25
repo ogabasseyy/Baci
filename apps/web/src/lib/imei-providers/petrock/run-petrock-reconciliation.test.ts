@@ -160,3 +160,9 @@ describe('runPetrockReconciliation', () => {
     consoleError.mockRestore();
   });
 });
+
+vi.mock('@/lib/imei-device-catalog', () => ({
+  enrichImeiDeviceResult: vi.fn(
+    async (_merchantId: string, result: unknown) => result
+  ),
+}));

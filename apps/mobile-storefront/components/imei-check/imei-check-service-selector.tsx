@@ -1,9 +1,11 @@
 import {
+  groupImeiServices,
   IMEI_SERVICE_TIERS,
   type ImeiServiceTierDefinition,
   type ImeiServiceTierKey,
 } from '@baci/shared/imei';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { BRAND, withAlpha } from '@/constants/Colors';
 import { formatServicePrice } from './format-service-price';
@@ -29,17 +31,68 @@ export function ImeiCheckServiceSelector({
   onTierSelect,
   onToggleServices,
 }: ImeiCheckServiceSelectorProps) {
+  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>(
+    {}
+  );
+  const groups = groupImeiServices(displayedTierKeys, selectedTier).map(
+    (group) =>
+      expandedGoals[group.id]
+        ? {
+            ...group,
+            tierKeys: displayedTierKeys.filter((key) =>
+              group.tierKeys.includes(key)
+            ),
+          }
+        : group
+  );
   return (
     <>
       <View style={styles.tierGrid}>
-        {displayedTierKeys.map((tierKey) => (
-          <TierCard
-            key={tierKey}
-            colors={colors}
-            isSelected={selectedTier === tierKey}
-            tier={IMEI_SERVICE_TIERS[tierKey]}
-            onPress={() => onTierSelect(tierKey)}
-          />
+        {groups.map((group) => (
+          <View key={group.id} style={styles.tierGrid}>
+            <Text
+              accessibilityRole="header"
+              style={[styles.sectionTitle, { color: colors.text }]}
+            >
+              {group.label}
+            </Text>
+            {(expandedGoals[group.id]
+              ? group.tierKeys
+              : group.tierKeys.slice(0, 1)
+            ).map((tierKey) => (
+              <TierCard
+                key={tierKey}
+                colors={colors}
+                isSelected={selectedTier === tierKey}
+                tier={IMEI_SERVICE_TIERS[tierKey]}
+                onPress={() => onTierSelect(tierKey)}
+              />
+            ))}
+            {group.tierKeys.length > 1 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Other options for ${group.label}`}
+                accessibilityState={{ expanded: !!expandedGoals[group.id] }}
+                onPress={() =>
+                  setExpandedGoals((current) => ({
+                    ...current,
+                    [group.id]: !current[group.id],
+                  }))
+                }
+              >
+                <Text
+                  style={[
+                    styles.expandServicesText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {expandedGoals[group.id]
+                    ? 'Hide other options'
+                    : 'Other options'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
         ))}
       </View>
 
@@ -52,7 +105,7 @@ export function ImeiCheckServiceSelector({
           onPress={onToggleServices}
         >
           <Text style={[styles.expandServicesText, { color: colors.text }]}>
-            {showAllServices ? 'Show key checks' : 'Show all services'}
+            {showAllServices ? 'Show key checks' : 'More checks'}
           </Text>
           <Ionicons
             name={showAllServices ? 'chevron-up' : 'chevron-down'}

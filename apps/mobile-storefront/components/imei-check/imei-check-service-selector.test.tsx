@@ -21,6 +21,21 @@ const baseProps = {
 };
 
 describe('ImeiCheckServiceSelector', () => {
+  it('groups similar checks and reveals alternatives only on request', () => {
+    render(
+      <ImeiCheckServiceSelector
+        {...baseProps}
+        displayedTierKeys={['basic', 'appleBasic', 'serialInfo', 'blacklist']}
+        selectedTier="basic"
+        showAllServices
+      />
+    );
+    expect(screen.getByText('Device details')).toBeTruthy();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    fireEvent.press(screen.getByLabelText('Other options for Device details'));
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
+  });
+
   it('renders the displayed tier cards', () => {
     render(<ImeiCheckServiceSelector {...baseProps} />);
 
@@ -49,8 +64,8 @@ describe('ImeiCheckServiceSelector', () => {
       />
     );
 
-    expect(screen.getByText('Show all services')).toBeTruthy();
-    fireEvent.press(screen.getByText('Show all services'));
+    expect(screen.getByText('More checks')).toBeTruthy();
+    fireEvent.press(screen.getByText('More checks'));
     expect(onToggleServices).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -68,7 +83,32 @@ describe('ImeiCheckServiceSelector', () => {
       <ImeiCheckServiceSelector {...baseProps} canToggleServices={false} />
     );
 
-    expect(screen.queryByText('Show all services')).toBeNull();
+    expect(screen.queryByText('More checks')).toBeNull();
     expect(screen.queryByText('Show key checks')).toBeNull();
   });
+});
+
+it('keeps comparison order stable after selecting an alternative', () => {
+  const keys = ['basic', 'appleBasic', 'serialInfo'] as const;
+  const { rerender } = render(
+    <ImeiCheckServiceSelector
+      {...baseProps}
+      displayedTierKeys={keys}
+      selectedTier="basic"
+    />
+  );
+  fireEvent.press(screen.getByLabelText('Other options for Device details'));
+  const before = screen
+    .getAllByRole('radio')
+    .map((e) => e.props.accessibilityLabel);
+  rerender(
+    <ImeiCheckServiceSelector
+      {...baseProps}
+      displayedTierKeys={keys}
+      selectedTier="appleBasic"
+    />
+  );
+  expect(
+    screen.getAllByRole('radio').map((e) => e.props.accessibilityLabel)
+  ).toEqual(before);
 });

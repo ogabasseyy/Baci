@@ -2,6 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { parsePetrockReplay } from './petrock-parser';
 
 describe('parsePetrockReplay', () => {
+  it('retains provider colour and storage for matching and analytics', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max<br>Color: Silver<br>Storage: 512GB'
+    );
+    expect(result.deviceProfile).toMatchObject({
+      brand: 'Apple',
+      model: 'iPhone 17 Pro Max',
+      color: 'Silver',
+      storage: '512GB',
+    });
+  });
+
+  it('does not infer a clean blacklist from the live Apple info response', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max 512GB Silver<br>Color: Silver<br>Find My iPhone: <span style="color:red;">ON</span>'
+    );
+    expect(result).toMatchObject({
+      device: 'iPhone 17 Pro Max 512GB Silver',
+      icloudLock: 'ON',
+      blacklistStatus: 'Unknown',
+      status: 'Unknown',
+      verdictType: 'caution',
+    });
+  });
+
+  it('does not recommend buying from a model/FMI-only report', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max<br>Find My iPhone: OFF'
+    );
+    expect(result.status).toBe('Unknown');
+    expect(result.verdictType).toBe('caution');
+    expect(result.verdict).toContain('Blacklist status was not checked');
+  });
+
   it('parses font and span color markup plus Petrock label aliases', () => {
     const result = parsePetrockReplay(
       [

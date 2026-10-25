@@ -41,6 +41,12 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => toastApi,
 }));
 
+vi.mock('./imei-check-analytics', () => ({
+  ImeiCheckAnalyticsPanel: ({ period }: { period: string }) => (
+    <div data-testid="imei-analytics-slot">Device checks: {period}</div>
+  ),
+}));
+
 import AnalyticsPage from '@/app/admin/analytics/page';
 
 const analyticsResponse = {

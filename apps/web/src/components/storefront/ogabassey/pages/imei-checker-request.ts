@@ -18,6 +18,7 @@ interface ImeiCheckOutcome {
   keepRequestIdentity: boolean;
   lookupId: string | null;
   needsWalletFunding: boolean;
+  needsSignIn: boolean;
   pending: { lookupId: string; pollAfterMs: number } | null;
 }
 
@@ -93,6 +94,7 @@ export async function performImeiCheck(
         error: null,
         keepRequestIdentity: true,
         lookupId: data.lookupId,
+        needsSignIn: false,
         needsWalletFunding: false,
         pending: {
           lookupId: data.lookupId,
@@ -115,6 +117,7 @@ export async function performImeiCheck(
         error: describeCheckFailure(outcome),
         keepRequestIdentity: outcome.shouldPreserveIdempotencyKey,
         lookupId: null,
+        needsSignIn: outcome.shouldRedirectToLogin,
         needsWalletFunding:
           response.status === 402 && data.code === 'WALLET_INSUFFICIENT',
         pending: null,
@@ -126,6 +129,7 @@ export async function performImeiCheck(
       error: null,
       keepRequestIdentity: false,
       lookupId: data.lookupId ?? null,
+      needsSignIn: false,
       needsWalletFunding: false,
       pending: null,
     };
@@ -136,6 +140,7 @@ export async function performImeiCheck(
       error: 'Network error. Please check your connection and try again.',
       keepRequestIdentity: true,
       lookupId: null,
+      needsSignIn: false,
       needsWalletFunding: false,
       pending: null,
     };

@@ -1,0 +1,171 @@
+.slots {
+  --gap: clamp(0.375rem, 2vw, 0.625rem);
+  display: grid;
+  grid-template-columns: repeat(var(--otp-count, 6), minmax(0, 1fr));
+  gap: var(--gap);
+  position: relative;
+  width: min(
+    100%,
+    calc(var(--otp-count, 6) * 3.75rem + (var(--otp-count, 6) - 1) * var(--gap))
+  );
+  margin-inline: auto;
+}
+.slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 2px solid
+    color-mix(
+      in srgb,
+      var(--store-foreground, #111827) 40%,
+      var(--store-surface, #fff)
+    );
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0.875rem;
+  background: var(--store-surface, #fff);
+  color: var(--store-foreground, #111827);
+  font-size: 1.375rem;
+  font-weight: 600;
+  transition:
+    transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 180ms ease-out;
+}
+.slot[data-filled="true"] {
+  background: var(--store-option-secondary, #f9fafb);
+}
+.slots[data-state="idle"] .slot[data-active="true"] {
+  border-color: var(--store-primary, #dc2626);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--store-primary, #dc2626) 12%, transparent);
+}
+.caret {
+  width: 2px;
+  height: 1.25rem;
+  background: currentColor;
+}
+.slot > span {
+  position: relative;
+  z-index: 2;
+}
+.slots[data-state="pending"] .slot {
+  border-color: color-mix(
+    in srgb,
+    var(--store-foreground, #111827) 40%,
+    var(--store-surface, #fff)
+  );
+  transition: none;
+}
+.slots[data-state="pending"] .slot::before {
+  content: "";
+  position: absolute;
+  inset: -80%;
+  background: conic-gradient(
+    transparent 65%,
+    color-mix(in srgb, var(--store-accent, #dc2626) 45%, transparent) 80%,
+    var(--store-accent, #dc2626) 90%,
+    transparent
+  );
+  will-change: transform;
+  animation: orbit 1.4s linear var(--delay) infinite;
+}
+.slots[data-state="pending"] .slot::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 0.65rem;
+  background: var(--store-surface, #fff);
+}
+.success {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  width: calc(
+    (100% - (var(--otp-count, 6) - 1) * var(--gap)) /
+    var(--otp-count, 6)
+  );
+  aspect-ratio: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.875rem;
+  border: 2px solid #16a34a;
+  color: var(--storefront-dark-success, #047857);
+  background: color-mix(in srgb, #16a34a 12%, var(--store-surface, #fff));
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.85);
+  transition:
+    opacity 180ms ease-out 100ms,
+    transform 240ms cubic-bezier(0.23, 1, 0.32, 1) 100ms;
+}
+.slots[data-state="verified"] .slot {
+  border-color: var(--store-accent, #dc2626);
+  animation:
+    stack 420ms cubic-bezier(0.23, 1, 0.32, 1) forwards,
+    hideSlots 180ms ease-out 420ms forwards;
+}
+.slots[data-state="verified"] .success {
+  animation: showSuccess 180ms ease-out 420ms forwards;
+}
+@keyframes hideSlots {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes showSuccess {
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes stack {
+  from {
+    border-color: var(--store-accent, #dc2626);
+    transform: none;
+  }
+  to {
+    border-color: var(--store-accent, #dc2626);
+    transform: translateX(
+        calc(var(--travel) * (100% + var(--gap)) + var(--stack))
+      )
+      rotate(var(--tilt)) scale(0.84);
+  }
+}
+@keyframes orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot,
+  .success,
+  .slots[data-state="pending"] .slot,
+  .slots[data-state="pending"] .slot::before,
+  .slots[data-state="pending"] .slot > span {
+    animation: none;
+    transition: none;
+    will-change: auto;
+  }
+  .slots[data-state="pending"] .slot {
+    transform: none;
+  }
+}
+.slots[data-error="true"] .slot {
+  border-color: #ef4444;
+  background: color-mix(in srgb, #ef4444 8%, var(--store-surface, #fff));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slots[data-state="verified"] .slot {
+    animation: none;
+    opacity: 0;
+    transform: none;
+  }
+  .slots[data-state="verified"] .success {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}

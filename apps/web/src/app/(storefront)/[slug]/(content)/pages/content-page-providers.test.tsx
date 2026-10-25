@@ -29,11 +29,19 @@ vi.mock('@/components/app-body', () => ({
     showCookieConsent = true,
     children,
   }: {
-    merchant: { slug: string; business_name: string };
+    merchant: {
+      slug: string;
+      business_name: string;
+      brand_colors?: { primary?: string };
+    };
     showCookieConsent?: boolean;
     children: ReactNode;
   }) => (
-    <div data-testid="app-body" data-merchant={merchant.business_name}>
+    <div
+      data-testid="app-body"
+      data-merchant={merchant.business_name}
+      data-primary={merchant.brand_colors?.primary}
+    >
       {showCookieConsent && <div role="dialog" aria-label="Cookie consent" />}
       {children}
     </div>
@@ -42,7 +50,11 @@ vi.mock('@/components/app-body', () => ({
 
 describe('ContentPageProviders', () => {
   it('forwards merchant identity and nests content without adding another consent prompt', () => {
-    const merchant = { slug: 'test-store', business_name: 'Test Store' };
+    const merchant = {
+      slug: 'test-store',
+      business_name: 'Test Store',
+      brand_colors: { primary: '#1D4ED8' },
+    };
     render(
       <ContentPageProviders merchant={merchant}>
         <main>Contact our store</main>
@@ -55,6 +67,7 @@ describe('ContentPageProviders', () => {
     );
     const appBody = within(storefrontProvider).getByTestId('app-body');
     expect(appBody).toHaveAttribute('data-merchant', 'Test Store');
+    expect(appBody).toHaveAttribute('data-primary', '#1D4ED8');
     expect(within(appBody).getByRole('main')).toHaveTextContent(
       'Contact our store'
     );

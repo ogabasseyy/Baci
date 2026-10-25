@@ -24,6 +24,23 @@ const merchantWithBrandColors: MerchantData = {
 };
 
 describe('AppBody', () => {
+  it('renders a partial merchant theme without requiring merchant account fields', () => {
+    const { container } = render(
+      <AppBody merchant={{ brand_colors: { primary: '#1D4ED8' } }}>
+        <main>Content with partial branding</main>
+      </AppBody>
+    );
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(screen.getByRole('main')).toHaveTextContent(
+      'Content with partial branding'
+    );
+    expect(wrapper.style.getPropertyValue('--store-primary')).toBe('#1D4ED8');
+    expect(wrapper.style.getPropertyValue('--store-primary-text')).toBe(
+      '#FFFFFF'
+    );
+    expect(wrapper.style.getPropertyValue('--background')).toBe('0 0% 0%');
+  });
+
   it('applies core theme variables when merchant core theme override is enabled', () => {
     const { container } = render(
       <AppBody merchant={merchantWithBrandColors}>

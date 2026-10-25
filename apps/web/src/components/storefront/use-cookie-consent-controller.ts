@@ -23,7 +23,7 @@ export function useCookieConsentController() {
   const [hasStorageError, setHasStorageError] = useState(false);
   const [preferences, setPreferences] =
     useState<CookiePreferences>(defaultPreferences);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Check if consent has already been given

@@ -62,3 +62,16 @@ it('leaves server delivery off when there is no merchant context', () => {
   trackCartView([], 'NGN');
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it('does not create a rejected empty-cart observation', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({ analytics: true })
+  );
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  window.fbq = vi.fn();
+  trackCartView([], 'NGN', { merchantId });
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(window.fbq).not.toHaveBeenCalled();
+});

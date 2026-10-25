@@ -13,7 +13,7 @@ export function trackCartView(
   currency = 'USD',
   context?: CartContext
 ): void {
-  if (!isAnalyticsAllowed()) return;
+  if (!isAnalyticsAllowed() || products.length === 0) return;
   const eventId = crypto.randomUUID();
   const value = products.reduce(
     (total, item) => total + item.product.price * item.quantity,

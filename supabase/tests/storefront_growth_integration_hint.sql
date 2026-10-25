@@ -36,7 +36,7 @@ BEGIN
    END IF;
    IF output ?| ARRAY['plan_tier','plan_expires_at','premium_features']
      OR settings ? 'facebook_capi_token' THEN RAISE EXCEPTION 'private data leaked'; END IF;
-   IF settings->>'facebook_pixel_id' <> '2099259280261589' THEN RAISE EXCEPTION 'public pixel lost'; END IF;
+   IF settings->>'facebook_pixel_id' IS DISTINCT FROM '2099259280261589' THEN RAISE EXCEPTION 'public pixel lost'; END IF;
  END LOOP;
  PERFORM set_config('test.merchant','{"is_published":false,"plan_tier":"pro","plan_expires_at":null}',false);
  SELECT merchant_data, feature_settings INTO STRICT output,settings

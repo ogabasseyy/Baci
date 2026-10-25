@@ -10,8 +10,11 @@ node .github/scripts/release-production.mjs --approve-production --approve-prebu
 
 This replaces the manual worker-update, verification, dispatch, workflow-watch,
 and live-alias verification sequence. It does not activate REDVAULT or send payments.
-The fallback flag approves the existing GitHub-hosted prebuilt application build,
-not a Vercel cloud build.
+Production now builds on the approved VPS runner and publishes prebuilt output.
+The legacy `--approve-prebuilt-fallback` flag remains required by the coordinator's
+CLI contract; it does not change the runner or authorize a GitHub-hosted build.
+Any future emergency change to a GitHub-hosted builder requires explicit owner
+approval. Vercel cloud builds remain outside this flow.
 
 The coordinator requires authenticated GitHub and Vercel CLIs, working SSH access
 to the approved VPS, and the existing worker deployment prerequisites. The Vercel

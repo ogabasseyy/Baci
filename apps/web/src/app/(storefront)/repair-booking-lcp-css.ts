@@ -9,6 +9,7 @@ export const REPAIR_BOOKING_LCP_CSS = `
   color: var(--store-background-text, #111827) !important;
   font-size: 1.875rem !important;
   font-weight: 700 !important;
+  letter-spacing: -0.025em !important;
   line-height: 2.25rem !important;
   margin: 0 !important;
   text-align: left !important;

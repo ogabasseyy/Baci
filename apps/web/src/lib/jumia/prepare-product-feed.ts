@@ -711,7 +711,7 @@ export function prepareJumiaProductFeed(
     };
     const byName = new Map(
       mapping.attributes.map((attribute) => [
-        attribute.name.toLowerCase(),
+        attribute.name.trim().toLowerCase(),
         attribute,
       ])
     );
@@ -729,7 +729,7 @@ export function prepareJumiaProductFeed(
     const currentVariation = variationValue?.wireValue ?? '...';
     if (variationAttribute)
       generated.set(
-        variationAttribute.name.toLowerCase(),
+        variationAttribute.name.trim().toLowerCase(),
         variationValue?.draftValue ?? currentVariation
       );
     for (const [name, value] of generated) {
@@ -738,7 +738,7 @@ export function prepareJumiaProductFeed(
       const code = String(attribute.code);
       const supplied = generatedValues[code];
       const wireValue =
-        name === variationAttribute?.name.toLowerCase()
+        name === variationAttribute?.name.trim().toLowerCase()
           ? currentVariation
           : String(value);
       const suppliedWireValue =

@@ -141,6 +141,108 @@ describe('prepareJumiaProductFeed', () => {
     expect(request).toEqual(before);
   });
 
+  it('matches generated attributes when provider names contain surrounding whitespace', () => {
+    const base = input();
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            { ...base.mapping.attributes[0], name: ' short_description ' },
+            {
+              code: 2,
+              name: ' Name ',
+              description: 'Product name',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+        },
+      })
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      products: [
+        {
+          attributes: [
+            {
+              name: ' short_description ',
+              value: expect.stringContaining('<li>'),
+            },
+            { name: ' Name ', value: 'Nintendo Switch OLED Console' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('keeps padded variation names while generating canonical and conflict-checked values', () => {
+    const base = input();
+    const variant = {
+      id: '00000000-0000-4000-8000-000000000002',
+      attributes: { storage: '128 GB' },
+      sku: 'S-128',
+      priceOverride: null,
+      stockQuantity: 4,
+      inventoryTrackingPolicy: 'inherit',
+      condition: 'new',
+      updatedAt: '2026-10-01T00:00:00Z',
+      isInventoryAnchor: false,
+    };
+    const mapping = {
+      ...base.mapping,
+      attributes: [
+        {
+          code: 2,
+          name: ' Storage capacity ',
+          description: 'Storage',
+          type: 0 as const,
+          mandatory: true,
+          variation: true,
+          translatable: false,
+        },
+      ],
+      values: {},
+      variation: { sourceAttributeName: 'storage' },
+    };
+    const source = {
+      ...base.source,
+      product: { ...base.source.product, hasVariants: true },
+      variants: [variant],
+    };
+    const prepared = prepareJumiaProductFeed(input({ mapping, source }));
+    expect(prepared).toMatchObject({
+      success: true,
+      products: [
+        {
+          variation: '128 GB',
+          attributes: [{ name: ' Storage capacity ', value: '128 GB' }],
+        },
+      ],
+    });
+
+    const conflict = prepareJumiaProductFeed(
+      input({
+        mapping: { ...mapping, values: { '2': '256 GB' } },
+        source,
+      })
+    );
+    expect(conflict).toMatchObject({
+      success: false,
+      products: [],
+      errors: [
+        expect.objectContaining({
+          variantId: variant.id,
+          field: 'mapping.values.2',
+          code: 'special_attribute_conflict',
+        }),
+      ],
+    });
+  });
+
   it('blocks absent trusted global price, unproven image quality, and unknown classification all-or-nothing', () => {
     const result = prepareJumiaProductFeed(
       input({

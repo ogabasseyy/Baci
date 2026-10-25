@@ -8,6 +8,7 @@ import {
   getCachedProductRatingStats,
   getCachedProductReviews,
 } from '@/lib/cached-data';
+import { generateStorefrontProductSchema } from '@/lib/generate-storefront-product-schema';
 import { isKorapayConfigured } from '@/lib/korapay';
 import { isPaystackConfigured } from '@/lib/paystack';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
@@ -15,7 +16,6 @@ import {
   buildStorefrontAcceptedPaymentMethods,
   generateBreadcrumbSchema,
   generateFAQSchema,
-  generateProductSchema,
   generateSlug,
   getValidatedProductUrl,
 } from '@/lib/seo-utils';
@@ -65,7 +65,7 @@ export async function ProductPageRuntime({
   // identity for crawlers on the critical path. Live review signals
   // (aggregateRating + review) are NOT inlined here — they stream below as a
   // url-matched enhancement so this block never awaits the reviews query.
-  const productSchema = generateProductSchema(
+  const productSchema = generateStorefrontProductSchema(
     product,
     merchant.business_name || 'Baci Store',
     currency,

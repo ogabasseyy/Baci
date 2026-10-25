@@ -116,7 +116,9 @@ export function mapHomeProductsToTemplateProducts(
   products: StorefrontHomeProduct[]
 ): Product[] {
   return products.map((product) => {
-    const images = mapHomeProductImages(product);
+    const images = product.advertised_image
+      ? [{ url: product.advertised_image, alt: product.name, order: 0 }]
+      : mapHomeProductImages(product);
     const primaryImage = images[0]?.url || '';
     const category = mapHomeProductCategory(product);
 
@@ -126,8 +128,12 @@ export function mapHomeProductsToTemplateProducts(
       slug: product.slug ?? undefined,
       description: product.description || '',
       status: PRODUCT_STATUS_ACTIVE,
-      price: getPriceNumber(product.price),
-      compare_at_price: getNullableNumber(product.compare_at_price),
+      price: product.advertised_price ?? getPriceNumber(product.price),
+      compare_at_price: getNullableNumber(
+        product.advertised_price !== undefined
+          ? product.advertised_compare_at_price
+          : product.compare_at_price
+      ),
       manage_stock: product.manage_stock ?? false,
       stock: product.stock_quantity ?? product.stock ?? 0,
       image: primaryImage,
@@ -141,10 +147,20 @@ export function mapHomeProductsToTemplateProducts(
       category: product.category ?? undefined,
       category_slug: category?.slug,
       categories: category,
-      condition: isProductCondition(product.condition)
-        ? product.condition
+      condition: isProductCondition(
+        product.advertised_condition ?? product.condition
+      )
+        ? ((product.advertised_condition ??
+            product.condition) as ProductCondition)
         : undefined,
       ...(product.has_condition_offers ? { has_condition_offers: true } : {}),
+      ...(typeof product.has_variants === 'boolean'
+        ? { has_variants: product.has_variants }
+        : {}),
+      ...(product.variant_model === 'sku_matrix' ||
+      product.variant_model === 'legacy'
+        ? { variant_model: product.variant_model }
+        : {}),
       images,
       low_stock_threshold: getNullableNumber(product.low_stock_threshold),
     };

@@ -15,6 +15,23 @@ export interface CommercialSupportLink {
   label: string;
 }
 
+/** Build navigation only after the destination loader confirms public eligibility. */
+export function buildPriceBandGuideLink(input: {
+  storeUrl: string;
+  categorySlug: string;
+  priceBandSlug: string;
+  isIndexable: boolean;
+}): CommercialSupportLink | null {
+  const band = getCuratedPriceBands(input.categorySlug).find(
+    (entry) => entry.slug === input.priceBandSlug
+  );
+  if (!input.isIndexable || !band) return null;
+  return {
+    href: `${input.storeUrl.replace(/\/$/, '')}/${input.categorySlug}/best-under/${band.slug}`,
+    label: band.label.replace(/^Best /, 'Compare '),
+  };
+}
+
 interface CommercialSupportProduct {
   slug: string;
   name: string;

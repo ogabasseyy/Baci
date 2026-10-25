@@ -47,6 +47,7 @@ vi.mock('./price-band-page-content', () => ({
 }));
 
 const priceBandPageModel = {
+  merchant: { business_name: 'Ogabassey' },
   canonicalUrl: 'https://ogabassey.com/smartphones/best-under/under-500k',
   metaTitle: 'Best Smartphones Under ₦500,000 | Ogabassey',
   metaDescription:
@@ -149,6 +150,18 @@ describe('price-band page metadata', () => {
     );
     expect(metadata.title).toEqual({ absolute: priceBandPageModel.metaTitle });
     expect(metadata.description).toBe(priceBandPageModel.metaDescription);
+    expect(metadata.openGraph).toMatchObject({
+      title: priceBandPageModel.metaTitle,
+      description: priceBandPageModel.metaDescription,
+      url: priceBandPageModel.canonicalUrl,
+      siteName: 'Ogabassey',
+      images: ['https://cdn.example.com/a56.jpg'],
+    });
+    expect(metadata.twitter).toMatchObject({
+      title: priceBandPageModel.metaTitle,
+      description: priceBandPageModel.metaDescription,
+      images: ['https://cdn.example.com/a56.jpg'],
+    });
     expect(metadata.alternates?.canonical).toContain(
       '/smartphones/best-under/under-500k'
     );

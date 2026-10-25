@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { ContentRouteLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd } from '@/components/seo/json-ld';
+import { applyApprovedPolicyFaqs } from '@/components/storefront/ogabassey/pages/approved-policy-faq';
 import { OgabasseyV2HelpSupport } from '@/components/storefront/ogabassey/pages/help-support';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import {
@@ -54,8 +55,13 @@ export async function generateMetadata({
   const canonicalUrl = `${buildStoreUrl(merchant)}/faq`;
 
   return {
-    title: `FAQ | ${merchant.business_name}`,
+    title: { absolute: `FAQ | ${merchant.business_name}` },
     description: `Frequently asked questions about ${merchant.business_name}.`,
+    twitter: {
+      card: 'summary',
+      title: `FAQ | ${merchant.business_name}`,
+      description: `Frequently asked questions about ${merchant.business_name}.`,
+    },
     openGraph: {
       title: `FAQ | ${merchant.business_name}`,
       description: `Find answers to common questions about ${merchant.business_name}.`,
@@ -91,7 +97,10 @@ async function FAQJsonLd({ params }: PageProps) {
 
   if (!merchant) return null;
 
-  const faqItems = extractFaqItems(merchant);
+  const faqItems = applyApprovedPolicyFaqs(
+    extractFaqItems(merchant),
+    merchant.slug
+  );
   if (faqItems.length === 0) return null;
 
   const faqSchema = generateFAQSchema(faqItems);
@@ -107,7 +116,10 @@ async function FAQContent({ params }: PageProps) {
     notFound();
   }
 
-  const faqItems = extractFaqItems(merchant);
+  const faqItems = applyApprovedPolicyFaqs(
+    extractFaqItems(merchant),
+    merchant.slug
+  );
 
   // Resolve template component server-side for SEO (H1 in SSR HTML).
   // Only the Ogabassey template defines a Help page; import it directly so

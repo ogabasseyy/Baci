@@ -42,10 +42,15 @@ export async function generateMetadata({
   const seoDescription = generateMetaDescription(description);
 
   return {
-    title: `About Us | ${merchant.business_name}`,
+    title: { absolute: `About Us | ${merchant.business_name}` },
     description: seoDescription,
+    twitter: {
+      card: 'summary',
+      title: `About Us | ${merchant.business_name}`,
+      description: seoDescription,
+    },
     openGraph: {
-      title: `About ${merchant.business_name}`,
+      title: `About Us | ${merchant.business_name}`,
       description: seoDescription,
       type: 'website',
       url: canonicalUrl,

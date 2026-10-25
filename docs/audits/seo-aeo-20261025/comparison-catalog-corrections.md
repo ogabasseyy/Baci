@@ -1,0 +1,16 @@
+# Pending catalog fact reconciliation
+
+Prepared 2026-10-25 from Audit 03's saved production GET evidence. This is a correction proposal, not a catalog update or a claim of physical inspection. No database writes were made. Record keys below are public product slugs on ogabassey.com; resolve them under the authorized merchant before any update.
+
+| Exact listing slug | Pending correction and primary evidence |
+| --- | --- |
+| `macbook-pro-16-inch-m3-max-2023` | Reconcile researched specifications and legacy specification rows against [Apple's 16-inch November 2023 model](https://support.apple.com/en-us/117737). Remove the conflicting 14.2-inch, 3024×1964, 96W, 1620g and 14-inch base-variant dimensions. Apple specifies 16.2 inches, 3456×2234 and a 140W adapter for this model. Do not infer configured memory, core count or storage from a family sheet. |
+| `macbook-pro-16-inch-m2-max-2023` | Remove M3 Pro configuration claims only after reconciling the exact M2 Max sale configuration and the relevant manufacturer sheet. No replacement core count or memory is approved here. |
+| `jbl-go-4` | Replace unsupported 2800mAh and 89×75×42mm researched/legacy rows with 850mAh at 3.8V (3.23Wh), 94.3×75.7×42.2mm after checking the [JBL Go 4 specification PDF](https://www.jbl.cl/on/demandware.static/-/Sites-masterCatalog_Harman/default/dwec5ad861/pdfs/JBL%20Go%204_%20Specsheet_EN.pdf). Preserve units and source URL. |
+| `jbl-go-3` | Quarantine the unsupported 2700mAh claim pending exact primary documentation. No corrected mAh value was established by this audit. |
+| `airpods-4` | Reconcile unexplained 43g and unsupported 380mAh. [Apple](https://support.apple.com/en-us/121203) specifies 4.3g per earbud and 32.3g case. Label the measurement basis; do not substitute an assumed complete-set figure. Add documented listening-time and charging data at the same evidence boundary. |
+| `apple-airpods-4-anc` | Reconcile unexplained 50g and unsupported 380mAh. [Apple](https://support.apple.com/en-us/121204) specifies 4.3g per earbud and 34.7g case. Preserve explicit ANC and ANC-on/off runtime distinctions. Its audited starting condition was Used, versus New for `airpods-4`; do not imply equal-condition prices. |
+| `hp-omen-transcend-14-fb1018nia`, `omen-transcend-laptop-14-fb1018nia` | Both audited PDPs reported model 14-fb1018nia and part D0DE0EA, 32GB/1TB and New, with different prices. Reconcile catalog identity or document a genuine offer/configuration distinction before restoring any model comparison. Do not merge inventory based solely on this report. |
+| `lg-oled-smart-tv`, `lg-uhd-4k-hdr-smart-tv` | Obtain manufacturer model code, year and size before publishing fixed panel size or refresh rate as model facts. These family listings cannot substantiate one exact configuration. |
+
+Apply corrections to the actual researched-data source and remove superseded legacy aliases in the same authorized update. Recheck both PDP HTML and comparison HTML/JSON-LD after publication; changing comparison presentation alone cannot repair upstream facts. Store source URL and actual verification timestamp when a human or authorized process performs verification. Do not manufacture a reviewer, test experience or review date.

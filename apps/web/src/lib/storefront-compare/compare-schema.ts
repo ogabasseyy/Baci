@@ -1,10 +1,13 @@
+import { toSchemaItemConditionUri } from '@baci/shared/lib/product-condition';
 import { sanitizeText } from '@/lib/sanitize-core';
 import {
   generateBreadcrumbSchema,
   generateMetaDescription,
   getProductUrl,
 } from '@/lib/seo-utils';
+import { isDocumentedComparisonValue } from '@/lib/storefront-specs/comparison-spec-semantics';
 import type { ProductComparisonMatrix } from '@/lib/storefront-specs/spec-matrix';
+import { buildStorefrontVariantUrl } from '@/lib/storefront-variant-disclosure';
 
 interface BreadcrumbItem {
   name: string;
@@ -40,6 +43,8 @@ function normalizeAbsolutePageUrl(pageUrl: string) {
 
 interface PriceBandSchemaProduct {
   id: string;
+  variantId?: string;
+  condition?: string;
   name: string;
   slug: string;
   category: string;
@@ -87,7 +92,7 @@ export function buildProductCompareItemListSchema(input: {
         .map((row) => {
           const value = row.values[index];
 
-          if (!value || value === '—') {
+          if (!isDocumentedComparisonValue(value)) {
             return null;
           }
 
@@ -163,6 +168,14 @@ export function buildPriceBandPageSchemas(input: {
             ? 'https://schema.org/OutOfStock'
             : 'https://schema.org/InStock';
 
+        const baseProductUrl = new URL(
+          getProductUrl(product),
+          pageUrl
+        ).toString();
+        const productUrl = product.variantId
+          ? buildStorefrontVariantUrl(baseProductUrl, { id: product.variantId })
+          : baseProductUrl;
+
         return {
           '@type': 'ListItem',
           position: index + 1,
@@ -171,12 +184,16 @@ export function buildPriceBandPageSchemas(input: {
             name: product.name,
             image: product.image || undefined,
             description: sanitizedDescription || undefined,
-            url: new URL(getProductUrl(product), pageUrl).toString(),
+            url: productUrl,
             offers: {
               '@type': 'Offer',
               price: product.price,
               priceCurrency: input.currency,
               availability,
+              url: productUrl,
+              itemCondition: product.condition
+                ? toSchemaItemConditionUri(product.condition)
+                : undefined,
             },
           },
         };

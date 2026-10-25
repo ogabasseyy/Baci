@@ -207,8 +207,8 @@ function getPolicyGuidance(
       return {
         heading: 'How warranty support works',
         paragraphs: [
-          `Use this page to confirm the warranty coverage available from ${merchantName} before you complete a purchase or request service support. Warranty handling can vary by product condition, manufacturer policy and evidence supplied with the claim.`,
-          'Keep your order receipt, product identifier where applicable and photos or videos showing the fault. Warranty support usually excludes accidental damage, liquid damage and unauthorized repairs unless the product page or written policy says otherwise.',
+          `Use this page to confirm the warranty coverage available from ${merchantName} before you complete a purchase or request service support. Read the published coverage and exclusions, and contact support if you need clarification for your device.`,
+          'Keep your order receipt, product identifier where applicable and photos or videos showing the fault. Support can explain the claim process and the coverage stated in the published warranty policy.',
         ],
       };
   }

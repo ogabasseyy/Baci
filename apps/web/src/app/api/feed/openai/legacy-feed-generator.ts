@@ -1,3 +1,4 @@
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
@@ -6,12 +7,16 @@ import {
   buildAgentProductUrl,
   trimTrailingSlash,
 } from '@/lib/storefront-agent-urls';
+import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
+import {
+  buildStorefrontVariantTitle,
+  buildStorefrontVariantUrl,
+  getStorefrontVariantOptions,
+  getVariantConnectivityDisclosure,
+} from '@/lib/storefront-variant-disclosure';
 import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
-import {
-  DEFAULT_RETURN_DAYS,
-  PRODUCT_DESCRIPTION_MAX_LENGTH,
-} from './feed-constants';
+import { PRODUCT_DESCRIPTION_MAX_LENGTH } from './feed-constants';
 import type { OpenAIFeedVariant } from './feed-data';
 import type { Merchant, OpenAIFeedItem, Product } from './feed-types';
 import { resolveLegacyFeedImages } from './legacy-feed-images';
@@ -39,19 +44,6 @@ function buildPlainDescription(product: Product) {
     .slice(0, PRODUCT_DESCRIPTION_MAX_LENGTH);
 }
 
-function buildVariantTitle(product: Product, variant: OpenAIFeedVariant) {
-  const color = variant.attributes?.color || variant.attributes?.Color;
-  const size = variant.attributes?.size || variant.attributes?.Size;
-  const storage = variant.attributes?.storage || variant.attributes?.Storage;
-  const titleParts = [product.name];
-
-  if (color) titleParts.push(color);
-  if (size) titleParts.push(size);
-  if (storage) titleParts.push(storage);
-
-  return titleParts.join(' - ');
-}
-
 function buildVariantFeedItem({
   product,
   variant,
@@ -60,6 +52,7 @@ function buildVariantFeedItem({
   currency,
   merchantUrl,
   imageManifest,
+  returnDays,
 }: {
   product: Product;
   variant: OpenAIFeedVariant;
@@ -68,6 +61,7 @@ function buildVariantFeedItem({
   currency: string;
   merchantUrl: string;
   imageManifest: ImageManifestMap;
+  returnDays?: number;
 }): OpenAIFeedItem | null {
   const finalPrice = variant.price_override ?? product.price;
   const itemId = variant.sku || variant.id;
@@ -88,12 +82,20 @@ function buildVariantFeedItem({
     enable_checkout: true,
     id: itemId,
     item_group_id: product.id,
+    listing_has_variations: true,
+    variant_dict: getStorefrontVariantOptions(variant),
     gtin: identifiers.gtin,
     mpn: identifiers.mpn,
-    title: buildVariantTitle(product, variant),
-    description: buildPlainDescription(product),
-    link: buildAgentProductUrl({ baseUrl, product }),
-    condition: product.condition || 'new',
+    title: buildStorefrontVariantTitle(product.name, variant),
+    description:
+      getVariantConnectivityDisclosure(variant) ??
+      buildPlainDescription(product),
+    link: buildStorefrontVariantUrl(
+      buildAgentProductUrl({ baseUrl, product }),
+      variant
+    ),
+    condition:
+      toGoogleListingCondition(variant.condition ?? product.condition) || 'new',
     product_type: product.category || product.google_product_category,
     brand: product.brand || merchant.business_name,
     ...resolveLegacyFeedImages(product, variant, imageManifest),
@@ -105,7 +107,7 @@ function buildVariantFeedItem({
     merchant_name: merchant.business_name,
     merchant_url: merchantUrl,
     ...buildAgentPolicyUrls(baseUrl),
-    return_days: DEFAULT_RETURN_DAYS,
+    return_days: returnDays,
   };
 }
 
@@ -116,6 +118,7 @@ function buildSimpleFeedItem({
   currency,
   merchantUrl,
   imageManifest,
+  returnDays,
 }: {
   product: Product;
   merchant: Merchant;
@@ -123,6 +126,7 @@ function buildSimpleFeedItem({
   currency: string;
   merchantUrl: string;
   imageManifest: ImageManifestMap;
+  returnDays?: number;
 }): OpenAIFeedItem | null {
   const itemId = product.sku || product.id;
 
@@ -173,7 +177,7 @@ function buildSimpleFeedItem({
     merchant_name: merchant.business_name,
     merchant_url: merchantUrl,
     ...buildAgentPolicyUrls(baseUrl),
-    return_days: DEFAULT_RETURN_DAYS,
+    return_days: returnDays,
   };
 }
 
@@ -193,6 +197,8 @@ export function generateOpenAIFeed(
 ): string[] {
   const currency = resolveMerchantCurrencyConfig(merchant).code;
   const merchantUrl = trimTrailingSlash(baseUrl);
+  const returnDays =
+    buildMerchantTrustProfile(merchant).returnPolicy?.windowDays;
   const feedItems: string[] = [];
   const validProducts = products.filter(
     (product) => product.name && product.name.trim() !== ''
@@ -209,6 +215,7 @@ export function generateOpenAIFeed(
           currency,
           merchantUrl,
           imageManifest,
+          returnDays,
         });
 
         if (feedItem) {
@@ -226,6 +233,7 @@ export function generateOpenAIFeed(
       currency,
       merchantUrl,
       imageManifest,
+      returnDays,
     });
 
     if (feedItem) {

@@ -32,6 +32,11 @@ export interface RawDbProduct {
   merchant_id?: string;
   status?: string;
   has_condition_offers?: boolean;
+  has_variants?: boolean | null;
+  advertised_price?: number;
+  advertised_condition?: string | null;
+  advertised_compare_at_price?: number | null;
+  advertised_image?: string;
   available_conditions?: string[] | null;
   variant_model?: 'legacy' | 'sku_matrix' | null;
   // Allow additional fields

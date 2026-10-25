@@ -30,10 +30,15 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Contact Us | ${merchant.business_name}`,
+    title: { absolute: `Contact Us | ${merchant.business_name}` },
     description,
+    twitter: {
+      card: 'summary',
+      title: `Contact Us | ${merchant.business_name}`,
+      description: description,
+    },
     openGraph: {
-      title: `Contact ${merchant.business_name}`,
+      title: `Contact Us | ${merchant.business_name}`,
       description,
       type: 'website',
       url: canonicalUrl,

@@ -43,4 +43,13 @@ describe('Ogabassey help support contacts', () => {
       screen.getByRole('link', { name: '+2348000000000' })
     ).toHaveAttribute('href', 'tel:+2348000000000');
   });
+  it('uses the published business address and destination-specific directions', () => {
+    const address = '2 Olaide Tomori Street, Ikeja, Lagos, 100001';
+    render(<OgabasseyV2HelpSupport merchant={{ business_address: address }} />);
+    expect(screen.getByText(address)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Get Directions' })).toHaveAttribute(
+      'href', `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`
+    );
+  });
+
 });

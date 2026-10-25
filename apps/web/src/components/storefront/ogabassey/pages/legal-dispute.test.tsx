@@ -35,8 +35,8 @@ describe('OgabasseyV2LegalDispute', () => {
       ).toHaveTextContent('Legal & Dispute Resolution');
     });
 
-    it('always renders the returns note regardless of content mode', () => {
-      render(<OgabasseyV2LegalDispute />);
+    it('renders the approved returns note for Ogabassey', () => {
+      render(<OgabasseyV2LegalDispute merchant={{ slug: 'ogabassey' }} />);
 
       expect(
         screen.getByRole('heading', { name: /important note on returns/i }),

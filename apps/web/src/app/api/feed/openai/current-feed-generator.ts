@@ -1,3 +1,4 @@
+import { toGoogleListingCondition } from '@baci/shared/lib';
 import { collectOfferClaimedImageUrls } from '@/lib/collect-offer-claimed-image-urls';
 import {
   resolveGmcAdditionalImages,
@@ -11,10 +12,16 @@ import {
   getStorefrontAgentAvailability,
 } from '@/lib/storefront-agent-availability';
 import { buildAgentProductUrl } from '@/lib/storefront-agent-urls';
+import {
+  buildStorefrontVariantTitle,
+  buildStorefrontVariantUrl,
+  getStorefrontVariantOptions,
+  getVariantConnectivityDisclosure,
+} from '@/lib/storefront-variant-disclosure';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import { PRODUCT_DESCRIPTION_MAX_LENGTH } from './feed-constants';
-import type { OpenAIFeedVariant } from './feed-data';
 import type { CurrentOpenAIFeedItem, Merchant, Product } from './feed-types';
+import { resolveLegacyFeedImages } from './legacy-feed-images';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -66,27 +73,12 @@ function getCurrentFeedCategoryValue(product: Product): string {
   return product.category || product.google_product_category || 'Products';
 }
 
-function buildCurrentFeedVariantTitle(
-  product: Product,
-  variant: OpenAIFeedVariant
-): string {
-  const titleParts = [product.name];
-  const color = variant.attributes?.color || variant.attributes?.Color;
-  const size = variant.attributes?.size || variant.attributes?.Size;
-  const storage = variant.attributes?.storage || variant.attributes?.Storage;
-
-  if (color) titleParts.push(color);
-  if (size) titleParts.push(size);
-  if (storage) titleParts.push(storage);
-
-  return titleParts.join(' - ');
-}
-
 function buildCurrentFeedVariants(
   product: Product,
   url: string,
   currency: string,
-  productAvailability: ReturnType<typeof getStorefrontAgentAvailability>
+  productAvailability: ReturnType<typeof getStorefrontAgentAvailability>,
+  imageManifest: ImageManifestMap
 ): CurrentOpenAIFeedItem['variants'] {
   if (!product.variants?.length) {
     return [
@@ -117,7 +109,7 @@ function buildCurrentFeedVariants(
 
   return product.variants.flatMap((variant) => {
     const price = variant.price_override ?? product.price;
-    if (price <= 0) {
+    if (!Number.isFinite(price) || price <= 0) {
       return [];
     }
 
@@ -129,8 +121,28 @@ function buildCurrentFeedVariants(
     return [
       {
         id: variant.sku || variant.id,
-        title: buildCurrentFeedVariantTitle(product, variant),
-        url,
+        title: buildStorefrontVariantTitle(product.name, variant),
+        url: buildStorefrontVariantUrl(url, variant),
+        variant_options: Object.entries(
+          getStorefrontVariantOptions(variant)
+        ).map(([name, value]) => ({ name, value })),
+        description: {
+          plain:
+            getVariantConnectivityDisclosure(variant) ??
+            stripHtmlTags(product.description || '')
+              .trim()
+              .slice(0, PRODUCT_DESCRIPTION_MAX_LENGTH),
+        },
+        media: (() => {
+          const images = resolveLegacyFeedImages(
+            product,
+            variant,
+            imageManifest
+          );
+          return [images.image_link, ...(images.additional_image_links ?? [])]
+            .filter(Boolean)
+            .map((url) => ({ type: 'image' as const, url }));
+        })(),
         price: { amount: price, currency },
         list_price:
           product.compare_at_price && product.compare_at_price > price
@@ -141,7 +153,10 @@ function buildCurrentFeedVariants(
           status: availability.availability,
           quantity: availability.quantity_available,
         },
-        condition: [product.condition || 'new'],
+        condition: [
+          toGoogleListingCondition(variant.condition ?? product.condition) ||
+            'new',
+        ],
         categories: [
           {
             value: getCurrentFeedCategoryValue(product),
@@ -202,7 +217,8 @@ export function generateCurrentOpenAIProductFeed(
           product,
           url,
           currency,
-          availability
+          availability,
+          imageManifest
         ),
       };
 

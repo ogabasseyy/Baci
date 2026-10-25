@@ -125,13 +125,11 @@ describe('OgabasseyV2AboutUs', () => {
   });
 
   describe('static sections', () => {
-    it('renders the stats strip with all four stats labels', () => {
+    it('omits unsubstantiated customer, sales and certification claims', () => {
       render(<OgabasseyV2AboutUs />);
-
-      expect(screen.getByText('Happy Customers')).toBeInTheDocument();
-      expect(screen.getByText('Gadgets Sold')).toBeInTheDocument();
-      expect(screen.getByText('Years of Trust')).toBeInTheDocument();
-      expect(screen.getByText('Team Members')).toBeInTheDocument();
+      expect(screen.queryByText('Happy Customers')).not.toBeInTheDocument();
+      expect(screen.queryByText('120k+')).not.toBeInTheDocument();
+      expect(screen.queryByText('Certified Pre-Owned Devices')).not.toBeInTheDocument();
     });
 
     it('renders the three core value headings', () => {

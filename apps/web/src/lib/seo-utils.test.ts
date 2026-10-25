@@ -654,7 +654,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(variants[1].image).toEqual(['https://cdn.example.com/parent.avif']);
   });
 
-  it('includes shippingDetails and returnPolicy on variant Offers (2026 best practice)', () => {
+  it('omits unknown optional shipping and return objects on variant offers', () => {
     const product = makeProduct({
       variants: [
         {
@@ -674,21 +674,8 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     // priceValidUntil is a YYYY-MM-DD string
     expect(offer.priceValidUntil).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
-    // shippingDetails
-    const shipping = offer.shippingDetails as Record<string, unknown>;
-    expect(shipping['@type']).toBe('OfferShippingDetails');
-    const dest = shipping.shippingDestination as Record<string, unknown>;
-    expect(dest.addressCountry).toBe('NG');
-
-    // returnPolicy
-    const returnPolicy = offer.hasMerchantReturnPolicy as Record<
-      string,
-      unknown
-    >;
-    expect(returnPolicy['@type']).toBe('MerchantReturnPolicy');
-    expect(returnPolicy.applicableCountry).toBe('NG');
-    expect(returnPolicy.returnPolicyCountry).toBe('NG');
-    expect(returnPolicy.merchantReturnDays).toBe(7);
+    expect(offer).not.toHaveProperty('shippingDetails');
+    expect(offer).not.toHaveProperty('hasMerchantReturnPolicy');
   });
 
   it('uses structured trust profile shipping and return settings instead of hardcoded defaults', () => {
@@ -740,6 +727,11 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const handlingTime = deliveryTime.handlingTime as Record<string, unknown>;
     const transitTime = deliveryTime.transitTime as Record<string, unknown>;
 
+    expect(shipping.shippingRate).toEqual({
+      '@type': 'MonetaryAmount',
+      value: 0,
+      currency: 'NGN',
+    });
     expect(handlingTime.minValue).toBe(2);
     expect(handlingTime.maxValue).toBe(4);
     expect(transitTime.minValue).toBe(6);

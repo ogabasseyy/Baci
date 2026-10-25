@@ -27,6 +27,10 @@ import {
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import {
+  isDecisionSpec,
+  isDocumentedComparisonValue,
+} from '@/lib/storefront-specs/comparison-spec-semantics';
+import {
   buildProductComparisonMatrix,
   type ProductComparisonMatrix,
 } from '@/lib/storefront-specs/spec-matrix';
@@ -47,6 +51,8 @@ import {
   loadCompareGraphProducts,
 } from './compare-page-link-helpers';
 import { parseCompareSlug } from './compare-slugs';
+import { buildComparisonValueAnswer } from './comparison-value-answer';
+import { filterComparisonGuides } from './filter-comparison-guides';
 import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
@@ -180,7 +186,13 @@ function buildDifferenceSummaries(
   rightName: string,
   rows: ComparisonRow[]
 ) {
-  const differingRows = rows.filter((row) => row.leftValue !== row.rightValue);
+  const differingRows = rows.filter(
+    (row) =>
+      isDecisionSpec(row.label) &&
+      isDocumentedComparisonValue(row.leftValue) &&
+      isDocumentedComparisonValue(row.rightValue) &&
+      row.leftValue !== row.rightValue
+  );
 
   if (differingRows.length === 0) {
     return [
@@ -202,7 +214,9 @@ function summarizeDifferenceLabels(keyDifferences: string[]) {
     .filter((label): label is string => Boolean(label))
     .slice(0, 2);
 
-  return labels.length > 0 ? labels.join(' and ') : 'price and specifications';
+  return keyDifferences.some((item) => item.includes(':'))
+    ? labels.join(' and ')
+    : 'documented specifications and selected listing condition';
 }
 
 function formatPriceRange(
@@ -574,11 +588,14 @@ async function applyComparePageOverlay(
   return {
     ...pageModel,
     guideLinks: overlay.guideBuildContext
-      ? buildCommercialGuideLinks({
-          storeUrl: overlay.storeUrl,
-          posts: guidePosts,
-          context: overlay.guideBuildContext,
-        })
+      ? filterComparisonGuides(
+          buildCommercialGuideLinks({
+            storeUrl: overlay.storeUrl,
+            posts: guidePosts,
+            context: overlay.guideBuildContext,
+          }),
+          [overlay.leftProduct.name, overlay.rightProduct.name]
+        )
       : [],
     relatedCompareLinks,
     isCanonicalSlugIndexable:
@@ -802,7 +819,13 @@ async function getCachedComparePageModel(
     const keyDifferences = buildDifferenceSummaries(
       leftDetails.name,
       rightDetails.name,
-      comparisonRows
+      comparisonMatrix.flatRows
+        .filter((row) => row.isDifferent)
+        .map((row) => ({
+          label: row.label,
+          leftValue: row.values[0] || 'Not documented',
+          rightValue: row.values[1] || 'Not documented',
+        }))
     );
     const leftComparableKeySpecs =
       extractComparableKeySpecs(leftDetails.product_key_specs) ||
@@ -826,6 +849,12 @@ async function getCachedComparePageModel(
       },
     });
     const differenceLabels = summarizeDifferenceLabels(keyDifferences);
+    const valueAnswer = buildComparisonValueAnswer(
+      leftDetails,
+      rightDetails,
+      resolveMerchantCurrencyConfig(merchant).code,
+      getStorefrontLocale(merchant.country)
+    );
     const breadcrumbItems = [
       { name: merchant.business_name, url: storeUrl },
       { name: categoryName, url: `${storeUrl}/${args.categorySlug}` },
@@ -864,7 +893,7 @@ async function getCachedComparePageModel(
       }).title,
       metaDescription: `Compare ${leftDetails.name} vs ${rightDetails.name}${countrySuffix} by price, specs, condition, warranty, delivery, and buying priorities on ${merchant.business_name}.`,
       heading: compareLabel,
-      summaryVerdict: `${leftDetails.name} and ${rightDetails.name} both target ${categoryName.toLowerCase()} buyers${countrySuffix}, but the deciding factors are ${differenceLabels}.`,
+      summaryVerdict: `${valueAnswer} Review the documented specification differences below for your intended use; missing facts are not evidence of a weaker product.`,
       keyDifferences,
       comparisonRows,
       comparisonMatrix,
@@ -875,7 +904,7 @@ async function getCachedComparePageModel(
         },
         {
           question: `Which has better value for the price${countrySuffix}?`,
-          answer: `${leftDetails.name} is the better fit if its advantages in ${differenceLabels.split(' and ')[0] || 'key specifications'} matter more than the savings on ${rightDetails.name}; otherwise compare current prices and availability before buying.`,
+          answer: valueAnswer,
         },
       ],
       breadcrumbItems,

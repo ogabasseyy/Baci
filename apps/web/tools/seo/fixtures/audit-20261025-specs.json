@@ -1,0 +1,614 @@
+[
+  {
+    "id": "4f44572f-cc89-4bc1-a5e7-042d31da6d0e",
+    "slug": "airpods-4",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Model",
+            "value": "Apple AirPods 4"
+          },
+          {
+            "label": "Brand",
+            "value": "Apple"
+          },
+          {
+            "label": "Category",
+            "value": "Earbuds"
+          }
+        ],
+        "category": "Product details"
+      },
+      {
+        "items": [
+          {
+            "label": "Audio platform / chipset",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Speaker setup",
+            "value": "Speaker setup not marked stereo in key specs"
+          },
+          {
+            "label": "Headphone jack",
+            "value": "No / not applicable"
+          }
+        ],
+        "category": "Audio and drivers"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery",
+            "value": "380mAh"
+          },
+          {
+            "label": "Charging / power",
+            "value": "Charging details not published in current key specs"
+          },
+          {
+            "label": "Wireless charging",
+            "value": "No / not listed"
+          }
+        ],
+        "category": "Battery and charging"
+      },
+      {
+        "items": [
+          {
+            "label": "Bluetooth",
+            "value": "5.3"
+          },
+          {
+            "label": "Wi-Fi",
+            "value": "Not published / not applicable"
+          },
+          {
+            "label": "USB / port",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Durability",
+            "value": "IP54"
+          }
+        ],
+        "category": "Connectivity and durability"
+      },
+      {
+        "items": [
+          {
+            "label": "Variant check",
+            "value": "Confirm colour, package contents, regional model and live availability before checkout."
+          },
+          {
+            "label": "Source policy",
+            "value": "This table is normalized from existing researched key specs; missing values are not invented."
+          }
+        ],
+        "category": "Buying notes"
+      }
+    ],
+    "specifications_hash": "24d550c2ca54c0dea9d62888874e9007",
+    "key_specs": {
+      "gpu": null,
+      "chipset": null,
+      "weight_g": 43,
+      "cpu_cores": null,
+      "battery_mah": 380,
+      "charging_watt": 0,
+      "dimensions_mm": null,
+      "display_resolution": null,
+      "screen_size_inches": null
+    }
+  },
+  {
+    "id": "78ddc60b-ce0e-4d8d-9f51-d808423902cc",
+    "slug": "apple-airpods-4-anc",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Model",
+            "value": "Apple AirPods 4 ANC"
+          },
+          {
+            "label": "Brand",
+            "value": "Apple"
+          },
+          {
+            "label": "Category",
+            "value": "Earbuds"
+          }
+        ],
+        "category": "Product details"
+      },
+      {
+        "items": [
+          {
+            "label": "Audio platform / chipset",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Speaker setup",
+            "value": "Speaker setup not marked stereo in key specs"
+          },
+          {
+            "label": "Headphone jack",
+            "value": "No / not applicable"
+          }
+        ],
+        "category": "Audio and drivers"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery",
+            "value": "380mAh"
+          },
+          {
+            "label": "Charging / power",
+            "value": "Charging details not published in current key specs"
+          },
+          {
+            "label": "Wireless charging",
+            "value": "Yes"
+          }
+        ],
+        "category": "Battery and charging"
+      },
+      {
+        "items": [
+          {
+            "label": "Bluetooth",
+            "value": "5.3"
+          },
+          {
+            "label": "Wi-Fi",
+            "value": "Not published / not applicable"
+          },
+          {
+            "label": "USB / port",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Durability",
+            "value": "IP54"
+          }
+        ],
+        "category": "Connectivity and durability"
+      },
+      {
+        "items": [
+          {
+            "label": "Variant check",
+            "value": "Confirm colour, package contents, regional model and live availability before checkout."
+          },
+          {
+            "label": "Source policy",
+            "value": "This table is normalized from existing researched key specs; missing values are not invented."
+          }
+        ],
+        "category": "Buying notes"
+      }
+    ],
+    "specifications_hash": "6fe2b4d7bea2139dfc478c56bfb0b48b",
+    "key_specs": {
+      "gpu": null,
+      "chipset": null,
+      "weight_g": 50,
+      "cpu_cores": null,
+      "battery_mah": 380,
+      "charging_watt": 0,
+      "dimensions_mm": null,
+      "display_resolution": null,
+      "screen_size_inches": null
+    }
+  },
+  {
+    "id": "0c701311-ba35-4235-aac9-9075d960b8e7",
+    "slug": "jbl-go-3",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Model",
+            "value": "JBL Go 3"
+          },
+          {
+            "label": "Brand",
+            "value": "JBL"
+          },
+          {
+            "label": "Category",
+            "value": "Audio"
+          }
+        ],
+        "category": "Product details"
+      },
+      {
+        "items": [
+          {
+            "label": "Audio platform / chipset",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Speaker setup",
+            "value": "Speaker setup not marked stereo in key specs"
+          },
+          {
+            "label": "Headphone jack",
+            "value": "No / not applicable"
+          }
+        ],
+        "category": "Audio and drivers"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery",
+            "value": "2700mAh"
+          },
+          {
+            "label": "Charging / power",
+            "value": "Charging details not published in current key specs"
+          },
+          {
+            "label": "Wireless charging",
+            "value": "No / not listed"
+          }
+        ],
+        "category": "Battery and charging"
+      },
+      {
+        "items": [
+          {
+            "label": "Bluetooth",
+            "value": "5.1"
+          },
+          {
+            "label": "Wi-Fi",
+            "value": "Not published / not applicable"
+          },
+          {
+            "label": "USB / port",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Durability",
+            "value": "IP67"
+          }
+        ],
+        "category": "Connectivity and durability"
+      },
+      {
+        "items": [
+          {
+            "label": "Variant check",
+            "value": "Confirm colour, package contents, regional model and live availability before checkout."
+          },
+          {
+            "label": "Source policy",
+            "value": "This table is normalized from existing researched key specs; missing values are not invented."
+          }
+        ],
+        "category": "Buying notes"
+      }
+    ],
+    "specifications_hash": "370d83c693ff8b79c09ec16cf8cd41d4",
+    "key_specs": {
+      "gpu": null,
+      "chipset": null,
+      "weight_g": 209,
+      "cpu_cores": null,
+      "battery_mah": 2700,
+      "charging_watt": null,
+      "dimensions_mm": "87.5 x 75 x 41.3",
+      "display_resolution": null,
+      "screen_size_inches": null
+    }
+  },
+  {
+    "id": "80a065dd-1b6e-4283-9381-64c20292ee12",
+    "slug": "jbl-go-4",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Model",
+            "value": "JBL Go 4"
+          },
+          {
+            "label": "Brand",
+            "value": "JBL"
+          },
+          {
+            "label": "Category",
+            "value": "Audio"
+          }
+        ],
+        "category": "Product details"
+      },
+      {
+        "items": [
+          {
+            "label": "Audio platform / chipset",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Speaker setup",
+            "value": "Speaker setup not marked stereo in key specs"
+          },
+          {
+            "label": "Headphone jack",
+            "value": "No / not applicable"
+          }
+        ],
+        "category": "Audio and drivers"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery",
+            "value": "2800mAh"
+          },
+          {
+            "label": "Charging / power",
+            "value": "Charging details not published in current key specs"
+          },
+          {
+            "label": "Wireless charging",
+            "value": "No / not listed"
+          }
+        ],
+        "category": "Battery and charging"
+      },
+      {
+        "items": [
+          {
+            "label": "Bluetooth",
+            "value": "5.3"
+          },
+          {
+            "label": "Wi-Fi",
+            "value": "Not published / not applicable"
+          },
+          {
+            "label": "USB / port",
+            "value": "Not published in current key specs"
+          },
+          {
+            "label": "Durability",
+            "value": "IP67"
+          }
+        ],
+        "category": "Connectivity and durability"
+      },
+      {
+        "items": [
+          {
+            "label": "Variant check",
+            "value": "Confirm colour, package contents, regional model and live availability before checkout."
+          },
+          {
+            "label": "Source policy",
+            "value": "This table is normalized from existing researched key specs; missing values are not invented."
+          }
+        ],
+        "category": "Buying notes"
+      }
+    ],
+    "specifications_hash": "24a3cab2a6e30cfe548b43bbc865cdc1",
+    "key_specs": {
+      "gpu": null,
+      "chipset": null,
+      "weight_g": 192,
+      "cpu_cores": null,
+      "battery_mah": 2800,
+      "charging_watt": null,
+      "dimensions_mm": "89 x 75 x 42",
+      "display_resolution": null,
+      "screen_size_inches": null
+    }
+  },
+  {
+    "id": "66d19478-90ac-4837-b162-3b4e1fb08dc7",
+    "slug": "macbook-pro-16-inch-m2-max-2023",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Chip options",
+            "value": "Apple M2 Pro, Apple M2 Max, and listed late-2023 Apple M3 Pro variants"
+          },
+          {
+            "label": "CPU / GPU",
+            "value": "M2 Pro up to 12-core CPU and 19-core GPU; M2 Max up to 12-core CPU and 38-core GPU; M3 Pro variants up to 12-core CPU and 18-core GPU"
+          },
+          {
+            "label": "Unified memory",
+            "value": "Variant-dependent: 16GB, 18GB, 32GB, 36GB, 64GB, 96GB or higher configured options"
+          },
+          {
+            "label": "SSD storage",
+            "value": "Variant-dependent 512GB, 1TB, 2TB, 4TB or 8TB SSD options"
+          }
+        ],
+        "category": "Performance"
+      },
+      {
+        "items": [
+          {
+            "label": "Display",
+            "value": "16.2-inch Liquid Retina XDR display"
+          },
+          {
+            "label": "Resolution",
+            "value": "3456 x 2234 at 254 ppi"
+          },
+          {
+            "label": "Refresh rate",
+            "value": "ProMotion adaptive refresh up to 120Hz"
+          },
+          {
+            "label": "Brightness",
+            "value": "1000 nits sustained XDR, 1600 nits peak HDR; SDR brightness depends on variant"
+          }
+        ],
+        "category": "Display"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery",
+            "value": "Up to 22 hours Apple TV app movie playback on supported 16-inch 2023 configurations"
+          },
+          {
+            "label": "Battery capacity",
+            "value": "100Wh class lithium-polymer battery"
+          },
+          {
+            "label": "Charging",
+            "value": "140W USB-C Power Adapter with MagSafe 3 fast-charge support"
+          },
+          {
+            "label": "Weight",
+            "value": "About 2.14kg to 2.16kg depending on chip configuration"
+          }
+        ],
+        "category": "Power and design"
+      },
+      {
+        "items": [
+          {
+            "label": "Ports",
+            "value": "MagSafe 3, three Thunderbolt 4 ports, HDMI, SDXC card slot and 3.5mm headphone jack"
+          },
+          {
+            "label": "Wireless",
+            "value": "Wi-Fi 6E and Bluetooth 5.3 on 2023 models"
+          },
+          {
+            "label": "External displays",
+            "value": "Display support depends on chip: Pro-class variants support more displays than base configurations"
+          }
+        ],
+        "category": "Ports and connectivity"
+      }
+    ],
+    "specifications_hash": "8f50f51c5fad989d5012ef3c749395a6",
+    "key_specs": {
+      "gpu": "19-core, 30-core, 38-core or 18-core GPU depending on variant",
+      "chipset": "Apple M2 Pro / M2 Max / M3 Pro",
+      "weight_g": null,
+      "cpu_cores": null,
+      "battery_mah": null,
+      "charging_watt": 140,
+      "dimensions_mm": null,
+      "display_resolution": "3456 x 2234",
+      "screen_size_inches": 16.2
+    }
+  },
+  {
+    "id": "8e05d9e5-5cd6-469b-95f7-c4780c9c259f",
+    "slug": "macbook-pro-16-inch-m3-max-2023",
+    "specifications": [
+      {
+        "items": [
+          {
+            "label": "Display",
+            "value": "14.2-inch or 16.2-inch Liquid Retina XDR display, depending on selected variant"
+          },
+          {
+            "label": "Resolution",
+            "value": "3024 x 1964 on 14-inch; 3456 x 2234 on 16-inch"
+          },
+          {
+            "label": "Refresh rate",
+            "value": "ProMotion adaptive refresh up to 120Hz"
+          },
+          {
+            "label": "Brightness",
+            "value": "1000 nits sustained XDR, 1600 nits peak HDR, 600 nits SDR"
+          },
+          {
+            "label": "Finish colors",
+            "value": "Space Black, Silver"
+          }
+        ],
+        "category": "Display and design"
+      },
+      {
+        "items": [
+          {
+            "label": "Chip",
+            "value": "Apple M3 Max"
+          },
+          {
+            "label": "CPU/GPU",
+            "value": "M3 Max configurations include 14-core or 16-core CPU and up to 40-core GPU"
+          },
+          {
+            "label": "Unified memory",
+            "value": "Available variants list 36GB, 48GB and 64GB after official-spec correction"
+          },
+          {
+            "label": "Storage",
+            "value": "Available variants list 1TB SSD"
+          }
+        ],
+        "category": "Performance"
+      },
+      {
+        "items": [
+          {
+            "label": "Battery life",
+            "value": "Apple lists battery life by exact 14-inch or 16-inch model configuration"
+          },
+          {
+            "label": "Ports",
+            "value": "MagSafe 3, three Thunderbolt 4 ports, HDMI, SDXC card slot, 3.5 mm headphone jack"
+          },
+          {
+            "label": "Wireless",
+            "value": "Wi-Fi 6E and Bluetooth 5.3"
+          }
+        ],
+        "category": "Battery, ports and connectivity"
+      },
+      {
+        "items": [
+          {
+            "label": "Camera",
+            "value": "1080p FaceTime HD camera"
+          },
+          {
+            "label": "Audio",
+            "value": "Six-speaker sound system with force-cancelling woofers; studio-quality three-mic array"
+          },
+          {
+            "label": "Security",
+            "value": "Touch ID"
+          },
+          {
+            "label": "Operating system",
+            "value": "macOS"
+          }
+        ],
+        "category": "Media and security"
+      }
+    ],
+    "specifications_hash": "dd0596502b12fe2d7079f1c1a56c682f",
+    "key_specs": {
+      "gpu": "M3 Max up to 40-core GPU",
+      "chipset": "Apple M3 Max",
+      "weight_g": 1620,
+      "cpu_cores": "M3 Max 14-core or 16-core CPU options",
+      "battery_mah": null,
+      "charging_watt": 96,
+      "dimensions_mm": "312.6 x 221.2 x 15.5 mm (base 14-inch listed variant)",
+      "display_resolution": "3024x1964",
+      "screen_size_inches": 14.2
+    }
+  }
+]

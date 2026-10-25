@@ -58,6 +58,24 @@ export async function generateMetadata(
       canonical: page.canonicalUrl,
     },
     robots: getIndexableRobotsMetadata(),
+    openGraph: {
+      type: 'website',
+      title: page.metaTitle,
+      description: page.metaDescription,
+      url: page.canonicalUrl,
+      siteName: page.merchant.business_name,
+      images: page.products[0]?.image
+        ? [new URL(page.products[0].image, page.canonicalUrl).toString()]
+        : [],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.metaTitle,
+      description: page.metaDescription,
+      images: page.products[0]?.image
+        ? [new URL(page.products[0].image, page.canonicalUrl).toString()]
+        : [],
+    },
   };
 }
 

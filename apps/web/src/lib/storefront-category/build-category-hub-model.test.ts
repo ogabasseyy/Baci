@@ -247,9 +247,9 @@ describe('buildCategoryHubModel', () => {
     ]);
 
     expect(model.brandCards.map((card) => card.title)).toEqual([
-      'Apple',
-      'Samsung',
-      'Tecno',
+      'Apple Mini',
+      'Samsung A',
+      'Tecno C',
     ]);
     expect(model.brandCards.map((card) => card.href)).toEqual([
       'https://store.test/smartphones/apple-mini',
@@ -395,8 +395,8 @@ describe('buildCategoryHubModel', () => {
 
     expect(model.brandCards.map((card) => card.title)).toEqual([
       'Samsung',
-      'Tecno',
-      'Infinix',
+      'Tecno 0',
+      'Infinix 0',
     ]);
     expect(model.brandCards[0]?.href).toBe(
       'https://ogabassey.com/smartphones/brands/samsung'

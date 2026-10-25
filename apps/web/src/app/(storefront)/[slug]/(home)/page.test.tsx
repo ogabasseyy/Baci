@@ -203,11 +203,17 @@ describe('Storefront homepage structured data', () => {
         '@type': 'MerchantReturnPolicy',
         applicableCountry: 'NG',
         returnPolicyCountry: 'NG',
-        merchantReturnDays: 7,
-        returnMethod: 'https://schema.org/ReturnByMail',
-        returnFees: 'https://schema.org/FreeReturn',
+        merchantReturnDays: 14,
+        returnPolicyCategory:
+          'https://schema.org/MerchantReturnFiniteReturnWindow',
       },
     });
+    expect(organization?.hasMerchantReturnPolicy).not.toHaveProperty(
+      'returnMethod'
+    );
+    expect(organization?.hasMerchantReturnPolicy).not.toHaveProperty(
+      'returnFees'
+    );
     expect(organization).toMatchObject({
       sameAs: expect.arrayContaining([
         'https://facebook.com/ogabasseyyy',

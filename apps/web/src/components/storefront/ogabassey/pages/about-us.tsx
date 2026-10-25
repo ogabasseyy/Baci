@@ -5,10 +5,7 @@ import {
   Award,
   CheckCircle2,
   ChevronRight,
-  ShieldCheck,
-  Smile,
   Target,
-  TrendingUp,
   Users,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -19,17 +16,10 @@ import { SafeHtml } from '@/components/ui/safe-html';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 
-const stats = [
-  { label: 'Happy Customers', value: '50k+', icon: Smile },
-  { label: 'Gadgets Sold', value: '120k+', icon: TrendingUp },
-  { label: 'Years of Trust', value: '5+', icon: ShieldCheck },
-  { label: 'Team Members', value: '45', icon: Users },
-];
-
 const values = [
   {
     title: 'Quality First',
-    desc: 'We never compromise. Every device is rigorously tested to ensure it meets our premium standards.',
+    desc: 'Ask our team about the condition and inspection details of the device you are considering.',
     icon: Award,
     color: 'bg-blue-50 text-blue-600',
   },
@@ -87,29 +77,6 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
         {/* ... */}
       </div>
 
-      {/* Stats Strip - Keep hardcoded for now or make dynamic later */}
-      <div className="bg-gray-50 border-b border-gray-100">
-        {/* ... (Keep existing stats code) ... */}
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-200/50">
-            {stats.map((stat) => (
-              <div
-                key={stat.label}
-                className="py-8 md:py-12 flex flex-col items-center text-center px-4 hover:bg-gray-100/50 transition-colors"
-              >
-                <stat.icon className="size-8 text-red-600 mb-3 opacity-80" />
-                <span className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-1">
-                  {stat.value}
-                </span>
-                <span className="text-xs md:text-sm text-gray-500 font-medium uppercase tracking-wide">
-                  {stat.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-16 md:py-24">
         {/* Mission & Vision */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 md:gap-20 items-center mb-24">
@@ -117,7 +84,7 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
             <div className="relative rounded-3xl overflow-hidden shadow-2xl group aspect-video">
               <Image
                 src={aboutPage.image_url || "/placeholder.png"}
-                alt="Our Team"
+                alt={aboutPage.image_url ? `${businessName} store` : "Store illustration"}
                 fill sizes="(max-width: 1024px) 100vw, 50vw"
                 className="object-cover transition-transform duration-700 group-hover:scale-105"
               />
@@ -138,9 +105,8 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
 
               <ul className="space-y-3 pt-2">
                 {[
-                  'Certified Pre-Owned Devices',
-                  '12-Month Warranty on New Items',
-                  '7-Day Return Policy',
+                  'New and Pre-Owned Devices',
+                  ...(merchant?.slug === 'ogabassey' ? ['1-Year Ogabassey Warranty', '14-Day Returns for Defective Items'] : []),
                   'Secure Payment & Wallet System',
                 ].map((item) => (
                   <li
@@ -155,6 +121,8 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
                   </li>
                 ))}
               </ul>
+              {merchant?.slug === 'ogabassey' ? <><Link href={asRoute(`${basePath}/warranty`)} className="text-red-600 underline">Read warranty coverage and exclusions</Link>
+              <Link href={asRoute(`${basePath}/returns`)} className="block text-red-600 underline">Read return eligibility and instructions</Link></> : null}
             </div>
           </div>
         </div>
@@ -200,8 +168,7 @@ export const OgabasseyV2AboutUs: React.FC<AboutProps> = ({ merchant }) => {
               Ready to upgrade?
             </h2>
             <p className="text-red-100 text-lg mb-8 max-w-xl mx-auto">
-              Join thousands of satisfied customers and experience the
-              difference today.
+              Explore new and pre-owned devices and find your next upgrade.
             </p>
             <Link
               href={asRoute(basePath)}

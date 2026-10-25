@@ -27,6 +27,7 @@ import {
   mockReviewsIn,
   mockReviewsOrder,
   mockReviewsRange,
+  mockVariantsRpc,
   resetFeedDataHarness,
 } from './feed-data.test-helpers';
 
@@ -36,6 +37,42 @@ beforeEach(() => {
 });
 
 describe('getCachedOpenAIFeedData', () => {
+  it('hydrates selectable variants via the public RPC when the embedded product relation is empty', async () => {
+    if (harness.productsResult.data)
+      harness.productsResult.data[0].variants = [];
+    mockVariantsRpc.mockResolvedValue({
+      data: [
+        {
+          id: 'actual-variant',
+          product_id: 'prod-1',
+          condition: 'new',
+          attributes: { ram: '24GB', storage: '1TB' },
+          price_override: '2915000',
+          stock_quantity: 2,
+        },
+      ],
+      error: null,
+    });
+    const { getCachedOpenAIFeedData } = await import('./feed-data');
+    const result = await getCachedOpenAIFeedData('merchant-1');
+    expect(result.products[0].variants).toEqual([
+      expect.objectContaining({
+        id: 'actual-variant',
+        condition: 'new',
+        price_override: 2915000,
+      }),
+    ]);
+  });
+  it('fails closed when public variant hydration fails', async () => {
+    mockVariantsRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'not available' },
+    });
+    const { getCachedOpenAIFeedData } = await import('./feed-data');
+    await expect(getCachedOpenAIFeedData('merchant-1')).rejects.toThrow(
+      'Failed to fetch product variants'
+    );
+  });
   it('returns products with correct shape including manage_stock and variants', async () => {
     const { getCachedOpenAIFeedData } = await import('./feed-data');
     const result = await getCachedOpenAIFeedData('merchant-1');
@@ -58,11 +95,13 @@ describe('getCachedOpenAIFeedData', () => {
         sku: 'SKU-RED',
       })
     );
-    expect(mockProductSelect).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'variants:product_variants!product_variants_product_id_fkey('
-      )
+    expect(mockProductSelect).not.toHaveBeenCalledWith(
+      expect.stringContaining('variants:product_variants')
     );
+    expect(mockVariantsRpc).toHaveBeenCalledWith('get_feed_product_variants', {
+      p_merchant_id: 'merchant-1',
+      p_product_ids: ['prod-1'],
+    });
     expect(mockReviewSelect).not.toHaveBeenCalled();
     expect(mockReviewsIn).not.toHaveBeenCalled();
   });

@@ -51,6 +51,7 @@ import type {
   MerchantTrustProfileReturnFee,
   MerchantTrustProfileReturnMethod,
 } from './storefront-trust/merchant-trust-profile-types';
+import { getVariantConnectivityDisclosure } from './storefront-variant-disclosure';
 import { productManufacturerIdentifiers } from './variant-product-identifiers';
 
 const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
@@ -334,23 +335,36 @@ function buildContactPoint(
 
 function buildMerchantReturnPolicy(
   country: string,
-  trustProfile?: MerchantTrustProfile,
-  fallbackDays = 7
-): MerchantReturnPolicy {
+  trustProfile?: MerchantTrustProfile
+): MerchantReturnPolicy | undefined {
   const returnPolicy = trustProfile?.returnPolicy;
+  const windowDays = returnPolicy?.windowDays;
+  if (
+    windowDays === undefined ||
+    !Number.isInteger(windowDays) ||
+    windowDays < 0
+  )
+    return undefined;
+  if (windowDays === 0)
+    return {
+      '@type': 'MerchantReturnPolicy',
+      applicableCountry: country,
+      returnPolicyCountry: country,
+      returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
+    };
 
   return {
     '@type': 'MerchantReturnPolicy',
     applicableCountry: country,
     returnPolicyCountry: country,
     returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? fallbackDays,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
+    merchantReturnDays: windowDays,
+    ...(returnPolicy?.returnMethod && {
+      returnMethod: mapReturnMethodToSchemaUrl(returnPolicy.returnMethod),
+    }),
+    ...(returnPolicy?.returnFees && {
+      returnFees: mapReturnFeeToSchemaUrl(returnPolicy.returnFees),
+    }),
   };
 }
 
@@ -358,20 +372,38 @@ function buildOfferShippingDetails(
   country: string,
   currency: string,
   trustProfile?: MerchantTrustProfile
-): OfferShippingDetails {
+): OfferShippingDetails | undefined {
   const shippingPolicy = trustProfile?.shippingPolicy;
-  const handlingMin = shippingPolicy?.handlingDaysMin ?? 0;
-  const handlingMax = shippingPolicy?.handlingDaysMax ?? 1;
-  const transitMin = shippingPolicy?.transitDaysMin ?? 1;
-  const transitMax = shippingPolicy?.transitDaysMax ?? 5;
+  // This projection has no numeric shipping charge. Only an explicitly free,
+  // exact country policy with complete confirmed timings can form this object.
+  // Conditional local offers cannot establish a country-wide shipping rate.
+  if (
+    shippingPolicy?.shippingFeeType !== 'free' ||
+    !shippingPolicy.regions.some(
+      (region) => region.trim().toUpperCase() === country.toUpperCase()
+    )
+  )
+    return undefined;
+  const handlingMin = shippingPolicy.handlingDaysMin;
+  const handlingMax = shippingPolicy.handlingDaysMax;
+  const transitMin = shippingPolicy.transitDaysMin;
+  const transitMax = shippingPolicy.transitDaysMax;
+  if (
+    handlingMin === undefined ||
+    handlingMax === undefined ||
+    transitMin === undefined ||
+    transitMax === undefined ||
+    ![handlingMin, handlingMax, transitMin, transitMax].every(
+      (value) => Number.isInteger(value) && value >= 0
+    ) ||
+    handlingMin > handlingMax ||
+    transitMin > transitMax
+  )
+    return undefined;
 
   return {
     '@type': 'OfferShippingDetails',
-    shippingRate: {
-      '@type': 'MonetaryAmount',
-      value: 0,
-      currency,
-    },
+    shippingRate: { '@type': 'MonetaryAmount', value: 0, currency },
     shippingDestination: {
       '@type': 'DefinedRegion',
       addressCountry: country,
@@ -391,26 +423,6 @@ function buildOfferShippingDetails(
         unitCode: 'DAY',
       },
     },
-  };
-}
-
-function buildMerchantReturnPolicyFromTrustProfile(
-  country: string,
-  trustProfile?: MerchantTrustProfile
-): MerchantReturnPolicy {
-  const returnPolicy = trustProfile?.returnPolicy;
-  return {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: country,
-    returnPolicyCountry: country,
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: returnPolicy?.windowDays ?? 7,
-    returnMethod:
-      mapReturnMethodToSchemaUrl(returnPolicy?.returnMethod) ??
-      'https://schema.org/ReturnInStore',
-    returnFees:
-      mapReturnFeeToSchemaUrl(returnPolicy?.returnFees) ??
-      'https://schema.org/FreeReturn',
   };
 }
 
@@ -668,7 +680,7 @@ export function generateProductSchema(
     currency,
     trustProfile
   );
-  const hasMerchantReturnPolicy = buildMerchantReturnPolicyFromTrustProfile(
+  const hasMerchantReturnPolicy = buildMerchantReturnPolicy(
     country,
     trustProfile
   );
@@ -734,8 +746,8 @@ export function generateProductSchema(
             priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
               .toISOString()
               .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           }))
         : {
             '@type': 'Offer',
@@ -754,8 +766,8 @@ export function generateProductSchema(
             priceValidUntil: new Date(Date.now() + THIRTY_DAYS_MS)
               .toISOString()
               .substring(0, 10),
-            shippingDetails,
-            hasMerchantReturnPolicy,
+            ...(shippingDetails && { shippingDetails }),
+            ...(hasMerchantReturnPolicy && { hasMerchantReturnPolicy }),
           },
   };
 
@@ -1007,7 +1019,7 @@ export function generateProductSchema(
       trustProfile
     );
 
-    const variantReturnPolicy = buildMerchantReturnPolicyFromTrustProfile(
+    const variantReturnPolicy = buildMerchantReturnPolicy(
       country,
       trustProfile
     );
@@ -1041,6 +1053,12 @@ export function generateProductSchema(
         if (filtered.length > 0) variantImages = filtered;
       }
 
+      if (variant.primary_image?.trim()) {
+        variantImages = [
+          ...new Set([variant.primary_image, ...(variantImages ?? [])]),
+        ];
+      }
+
       if (!variantImages) {
         variantImages = finalImages;
       }
@@ -1048,7 +1066,8 @@ export function generateProductSchema(
       return {
         '@type': 'Product',
         name: variantName,
-        description: safeDescription,
+        description:
+          getVariantConnectivityDisclosure(variant) ?? safeDescription,
         ...(variantUrl && { url: variantUrl }),
         ...(variantImages && { image: variantImages }),
         brand: {
@@ -1077,8 +1096,12 @@ export function generateProductSchema(
             name: safeMerchantName,
           },
           ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
-          shippingDetails: variantShippingDetails,
-          hasMerchantReturnPolicy: variantReturnPolicy,
+          ...(variantShippingDetails && {
+            shippingDetails: variantShippingDetails,
+          }),
+          ...(variantReturnPolicy && {
+            hasMerchantReturnPolicy: variantReturnPolicy,
+          }),
         },
       };
     });

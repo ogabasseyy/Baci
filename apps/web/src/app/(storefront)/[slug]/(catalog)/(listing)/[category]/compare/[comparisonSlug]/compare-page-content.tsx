@@ -8,8 +8,11 @@ import {
   buildProductCompareItemListSchema,
 } from '@/lib/storefront-compare/compare-schema';
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
+import { getStorefrontLocale } from '@/lib/storefront-localization';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { isDomainIdentifier } from '@/lib/validation';
+import { CompareMethodology } from './compare-methodology';
+import { CompareOffers } from './compare-offers';
 import { CompareRelatedLinks } from './compare-related-links';
 import {
   type ProductCompareSchemaProduct,
@@ -143,6 +146,15 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
             </p>
           </header>
 
+          {page.kind === 'product' && (
+            <CompareOffers
+              products={[page.leftProduct, page.rightProduct]}
+              currency={resolveMerchantCurrencyConfig(page.merchant).code}
+              baseUrl={page.canonicalUrl}
+              locale={getStorefrontLocale(page.merchant.country)}
+            />
+          )}
+
           <section className="mt-8">
             <h2 className="text-xl font-semibold">Key Differences</h2>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-store-background-text/70 sm:text-base">
@@ -152,26 +164,15 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
             </ul>
           </section>
 
-          <section className="mt-8 rounded-2xl border border-store-border bg-store-background-text/5 p-5">
-            <h2 className="text-xl font-semibold">
-              How to use this comparison
-            </h2>
-            <div className="mt-3 space-y-3 text-sm text-store-background-text/70 sm:text-base">
-              <p>
-                Check the verdict first, then review the differences and table
-                rows for {leftColumnLabel} and {rightColumnLabel}. Prioritize
-                the specs, price range, condition, warranty and delivery details
-                that affect how you plan to use this product category.
-              </p>
-              <p>
-                Before checkout, confirm live availability, selected variant,
-                regional compatibility and included accessories on the product
-                page. Similar model names can hide different storage, platform,
-                display or bundle details, so use the table as a shortlist
-                before opening the final product listing.
-              </p>
-            </div>
-          </section>
+          <CompareMethodology
+            leftLabel={leftColumnLabel}
+            rightLabel={rightColumnLabel}
+            productSlugs={
+              page.kind === 'product'
+                ? [page.leftProduct?.slug || '', page.rightProduct?.slug || '']
+                : []
+            }
+          />
 
           <section className="mt-10 overflow-x-auto rounded-2xl border border-store-border bg-store-background shadow-sm">
             <table

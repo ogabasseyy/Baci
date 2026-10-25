@@ -1,6 +1,12 @@
+import {
+  isDecisionSpec,
+  isDocumentedComparisonValue,
+  normalizeComparisonValue,
+} from '@/lib/storefront-specs/comparison-spec-semantics';
 import { generateSlug } from '../seo-utils';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
+import { isCompatibleProductPair } from './compatible-product-pair';
 
 const MIN_BRAND_COMPARE_PRODUCTS = 3;
 const MIN_PRICE_BAND_PRODUCTS = 6;
@@ -91,7 +97,7 @@ function compareProductKeySpecValues(left: unknown, right: unknown) {
     );
   }
 
-  return left !== right;
+  return normalizeComparisonValue(left) !== normalizeComparisonValue(right);
 }
 
 export function buildProductCompareCandidate(input: {
@@ -103,7 +109,14 @@ export function buildProductCompareCandidate(input: {
   const rightSpecs = input.rightProduct.product_key_specs ?? {};
   const overlappingKeys = Array.from(
     new Set([...Object.keys(leftSpecs), ...Object.keys(rightSpecs)])
-  ).filter((key) => key in leftSpecs && key in rightSpecs);
+  ).filter(
+    (key) =>
+      key in leftSpecs &&
+      key in rightSpecs &&
+      isDecisionSpec(key) &&
+      isDocumentedComparisonValue(leftSpecs[key]) &&
+      isDocumentedComparisonValue(rightSpecs[key])
+  );
   const differentiatingSpecCount = overlappingKeys.filter((key) =>
     compareProductKeySpecValues(leftSpecs[key], rightSpecs[key])
   ).length;
@@ -112,12 +125,14 @@ export function buildProductCompareCandidate(input: {
     leftProduct: input.leftProduct,
     rightProduct: input.rightProduct,
     differentiatingSpecCount,
-    isIndexable: canPublishProductComparePage({
-      categorySlug: input.categorySlug,
-      leftCategorySlug: input.leftProduct.category_slug || '',
-      rightCategorySlug: input.rightProduct.category_slug || '',
-      differentiatingSpecCount,
-    }),
+    isIndexable:
+      isCompatibleProductPair(input.leftProduct, input.rightProduct) &&
+      canPublishProductComparePage({
+        categorySlug: input.categorySlug,
+        leftCategorySlug: input.leftProduct.category_slug || '',
+        rightCategorySlug: input.rightProduct.category_slug || '',
+        differentiatingSpecCount,
+      }),
   };
 }
 

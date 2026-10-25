@@ -6,6 +6,7 @@ import type {
   MerchantTrustProfileRouteLinks,
   MerchantTrustProfileSource,
 } from './merchant-trust-profile-types';
+import { buildOgabasseyApprovedPolicyDraft } from './ogabassey-approved-policy';
 
 function normalizeString(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -177,7 +178,7 @@ export function buildMerchantTrustProfile(
   merchant: MerchantTrustProfileSource,
   baseUrl?: string
 ): MerchantTrustProfile {
-  const trustProfile = merchant.trust_profile ?? {};
+  const trustProfile = buildOgabasseyApprovedPolicyDraft(merchant);
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 
   const result: MerchantTrustProfile = {

@@ -5,6 +5,7 @@ import {
 } from '@/lib/storefront-link-modules/compare-link-graph';
 import { buildCategoryCompareGraphSlugSet } from '@/lib/storefront-link-modules/compare-maintained-slug';
 import { PDP_SEMANTIC_INVENTORY_LIMIT } from '@/lib/storefront-product/pdp-semantic-inventory-limit';
+import { buildProductCompareCandidate } from './compare-eligibility';
 import { parseCompareSlug } from './compare-slugs';
 
 const ANCHORED_COMPARE_ROUTE_LIMIT = 8;
@@ -22,23 +23,26 @@ export function getMaintainedCompareRouteManifest(
   const activeProducts = input.products.filter((product) =>
     isActiveCompareProduct(product, input.productsAreKnownActive ?? false)
   );
-  const activeProductSlugs = new Set(
-    activeProducts
-      .map((product) => product.slug?.trim())
-      .filter((slug): slug is string => Boolean(slug))
+  const productsBySlug = new Map(
+    activeProducts.map((product) => [product.slug?.trim(), product])
   );
   const slugs = new Set<string>();
 
   for (const slug of input.curatedSlugs) {
     const parsed = parseCompareSlug(slug);
-
+    if (!parsed) continue;
+    const leftProduct = productsBySlug.get(parsed.leftKey);
+    const rightProduct = productsBySlug.get(parsed.rightKey);
     if (
-      parsed &&
-      activeProductSlugs.has(parsed.leftKey) &&
-      activeProductSlugs.has(parsed.rightKey)
-    ) {
+      leftProduct &&
+      rightProduct &&
+      buildProductCompareCandidate({
+        categorySlug: input.categorySlug,
+        leftProduct: { ...leftProduct, slug: parsed.leftKey },
+        rightProduct: { ...rightProduct, slug: parsed.rightKey },
+      }).isIndexable
+    )
       slugs.add(parsed.canonicalSlug);
-    }
   }
 
   for (const slug of buildCategoryCompareGraphSlugSet(input)) {

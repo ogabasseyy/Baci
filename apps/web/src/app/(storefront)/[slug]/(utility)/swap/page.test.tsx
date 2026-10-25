@@ -24,7 +24,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: SwapPage, metadata } = await import('./page');
+const { default: SwapPage, generateMetadata } = await import('./page');
 
 describe('SwapPage', () => {
   beforeEach(() => {
@@ -53,8 +53,23 @@ describe('SwapPage', () => {
     expect(screen.getByText(/exact model, storage size/i)).toBeInTheDocument();
   });
 
-  it('uses a service-focused meta description', () => {
+  it('uses merchant titles, canonical and aligned social metadata', async () => {
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      template_id: 'ogabassey',
+      slug: 'ogabassey',
+      business_name: 'Ogabassey',
+      custom_domain: 'ogabassey.com',
+    } as unknown as Awaited<ReturnType<typeof getCachedMerchant>>);
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+    expect(metadata.title).toEqual({
+      absolute: 'Swap Your Device | Ogabassey',
+    });
     expect(metadata.description).toContain('eligible phone, laptop');
+    expect(metadata.alternates?.canonical).toBe('https://ogabassey.com/swap');
+    expect(metadata.openGraph?.title).toBe('Swap Your Device | Ogabassey');
+    expect(metadata.twitter?.title).toBe('Swap Your Device | Ogabassey');
   });
 
   it('throws notFound for non-ogabassey templates', async () => {

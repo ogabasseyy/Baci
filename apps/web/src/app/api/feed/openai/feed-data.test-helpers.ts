@@ -100,8 +100,11 @@ export const mockReviewsIn = vi.fn();
 export const mockReviewsOrder = vi.fn();
 export const mockReviewsRange = vi.fn();
 
+export const mockVariantsRpc = vi.fn();
+
 export function createMockSupabase() {
   return {
+    rpc: mockVariantsRpc,
     from: (table: string) => {
       if (table === 'products') {
         return {
@@ -229,6 +232,18 @@ export function resetFeedDataHarness() {
   mockReviewsIn.mockReset();
   mockReviewsOrder.mockReset();
   mockReviewsRange.mockReset();
+  mockVariantsRpc.mockReset();
+  mockVariantsRpc.mockImplementation(() =>
+    Promise.resolve({
+      data: (harness.productsResult.data ?? []).flatMap((product) =>
+        product.variants.map((variant) => ({
+          ...variant,
+          product_id: product.id,
+        }))
+      ),
+      error: null,
+    })
+  );
   harness.productQueryMode = 'non_null';
   mockProductsLimit.mockImplementation(() =>
     Promise.resolve(

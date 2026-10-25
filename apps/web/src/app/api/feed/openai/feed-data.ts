@@ -6,6 +6,7 @@ import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import { fetchActiveFeedOffers } from '../google-merchant/fetch-active-feed-offers';
 import { fetchVerifiedOpenAIImageManifest } from './feed-image-manifest';
 import { hydrateOpenAIFeedProductsWithReviewSignals } from './feed-review-signals';
+import { hydrateOpenAIFeedProductVariants } from './hydrate-feed-product-variants';
 
 const OPENAI_FEED_PRODUCTS_PAGE_SIZE = 1000;
 // Keep parity with Google feed product coverage until variant hydration supports
@@ -15,8 +16,7 @@ const OPENAI_FEED_PRODUCTS_SELECT = `id, name, description, slug, canonical_url,
        brand, gtin, mpn, sku, stock, stock_quantity, manage_stock, condition, has_condition_offers, google_product_category, category,
        weight_value, weight_unit, created_at, updated_at,
        categories:category_id(name, slug),
-       product_categories(categories(name, slug)),
-       variants:product_variants!product_variants_product_id_fkey(id, attributes, price_override, stock_quantity, sku, primary_image)`;
+       product_categories(categories(name, slug))`;
 
 export interface OpenAIFeedVariant {
   id: string;
@@ -25,6 +25,7 @@ export interface OpenAIFeedVariant {
   stock_quantity?: number;
   sku?: string;
   primary_image?: string;
+  condition?: 'new' | 'used' | 'uk_used' | 'open_box' | 'refurbished';
 }
 
 export interface OpenAIFeedProduct {
@@ -227,6 +228,7 @@ export async function getCachedOpenAIFeedData(
 
   const supabase = createAnonClient();
   const products = await fetchActiveOpenAIFeedProducts(supabase, merchantId);
+  await hydrateOpenAIFeedProductVariants(supabase, merchantId, products);
   // Offer-claimed image URLs must be excluded from product-level images,
   // mirroring the Google/Facebook/TikTok builders. Fetch offers only for
   // flagged products so the common no-offers case adds no queries.

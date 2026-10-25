@@ -1,3 +1,4 @@
+import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import {
   buildPostHogCaptureUrl,
   isLikelyBotUserAgent,
@@ -11,6 +12,11 @@ import {
   readPostHogPersistedIdentity,
   readPostHogPersistenceRecord,
 } from '@/lib/posthog/persisted-identity';
+
+import {
+  getPublicBlogAttribution,
+  resetPublicBlogAttribution,
+} from './public-blog-attribution';
 
 const DEFAULT_PUBLIC_BLOG_URL_BASE = 'https://usebaci.com';
 const LEGACY_PUBLIC_BLOG_DISTINCT_ID_KEY = 'baci_public_blog_distinct_id';
@@ -67,6 +73,23 @@ function writeStorageValue(key: string, value: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+function hasPostHogOptedOut(projectToken: string): boolean {
+  const key = `__ph_opt_in_out_${projectToken}`;
+  const isDenied = (value: string | undefined) =>
+    value === '0' || value === 'false' || value === 'no';
+  if (isDenied(readStorageValue(key))) return true;
+  try {
+    return (
+      globalThis.document?.cookie?.split(';').some((cookie) => {
+        const [name, value] = cookie.trim().split('=');
+        return name === key && isDenied(value);
+      }) ?? false
+    );
+  } catch {
+    return true;
   }
 }
 
@@ -140,7 +163,15 @@ export function capturePublicBlogPageview(
 ): void {
   const projectToken = env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim();
 
-  if (!projectToken || !currentUrl || isLikelyBotUserAgent()) {
+  if (
+    !projectToken ||
+    !currentUrl ||
+    isLikelyBotUserAgent() ||
+    !isAnalyticsAllowed() ||
+    hasPostHogOptedOut(projectToken)
+  ) {
+    resetPublicBlogAttribution();
+    resetPublicBlogPageviewDedupe();
     return;
   }
 
@@ -148,6 +179,9 @@ export function capturePublicBlogPageview(
     return;
   }
 
+  const attribution = getPublicBlogAttribution(
+    new URL(currentUrl, getBrowserOrigin() ?? DEFAULT_PUBLIC_BLOG_URL_BASE)
+  );
   lastCapturedPublicBlogPageviewUrl = currentUrl;
 
   const url = buildSanitizedUrl(currentUrl);
@@ -167,6 +201,7 @@ export function capturePublicBlogPageview(
       $host: url.hostname,
       $pathname: url.pathname,
       $process_person_profile: false,
+      ...attribution,
       ...tenantContext,
       app_surface: 'web',
       capture_mode: 'public_blog_lightweight',
@@ -185,4 +220,5 @@ export function resetPublicBlogPageviewDedupe(): void {
 export function resetPublicBlogPageviewDedupeForTests(): void {
   resetPublicBlogPageviewDedupe();
   inMemoryPublicBlogDistinctIds.clear();
+  resetPublicBlogAttribution();
 }

@@ -42,10 +42,15 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Warranty Policy | ${context.merchant.business_name}`,
+    title: { absolute: `Warranty Policy | ${context.merchant.business_name}` },
     description,
     alternates: {
       canonical: canonicalUrl,
+    },
+    twitter: {
+      card: 'summary',
+      title: `Warranty Policy | ${context.merchant.business_name}`,
+      description: description,
     },
     openGraph: {
       title: `Warranty Policy | ${context.merchant.business_name}`,

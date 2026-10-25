@@ -1,3 +1,8 @@
+const listingVariants = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock('@/lib/cached-data', () => ({
+  getPublicProductVariantsByProductIds: listingVariants,
+}));
+
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storefrontProductsRouteTestHarness } from './route.test-helpers';
@@ -436,5 +441,64 @@ describe('GET /api/storefront/products cached filter execution', () => {
     expect(body.products).toEqual([]);
     expect(queries).toHaveLength(21);
     expect(queries.at(-1)?.range).toHaveBeenCalledWith(960, 1007);
+  });
+});
+
+describe('standard listing cellular phone prices', () => {
+  beforeEach(() => {
+    storefrontProductsRouteTestHarness.reset();
+    listingVariants.mockReset();
+  });
+  it('renders the eligible cellular price and retains the existing options-selection guard', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const phone = storefrontProductsRouteTestHarness.createRawProduct({
+      id: 'iphone16',
+      name: 'iPhone 16',
+      category: 'Smartphones',
+      price: 600000,
+      has_variants: true,
+      variant_model: 'sku_matrix',
+      manage_stock: false,
+    });
+    storefrontProductsRouteTestHarness.mockProductsResults.current = [
+      { data: [phone], error: null },
+    ];
+    listingVariants.mockResolvedValue({
+      iphone16: [
+        {
+          id: 'wifi',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Wi-Fi Only' },
+          price_override: 600000,
+          condition: 'used',
+          stock_quantity: 0,
+        },
+        {
+          id: 'cellular',
+          product_id: 'iphone16',
+          attributes: { sim_type: 'Physical + eSIM' },
+          price_override: 900000,
+          condition: 'new',
+          stock_quantity: 0,
+        },
+      ],
+    });
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/storefront/products?merchant_id=${merchantId}&limit=1`
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.products[0]).toMatchObject({
+      price: 900000,
+      condition: 'new',
+      has_variants: true,
+    });
+    expect(body.products[0]).not.toHaveProperty('variants');
+    expect(listingVariants).toHaveBeenCalledExactlyOnceWith(merchantId, [
+      'iphone16',
+    ]);
+    expect(phone.price).toBe(600000);
   });
 });

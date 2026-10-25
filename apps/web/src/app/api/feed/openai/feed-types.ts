@@ -16,6 +16,7 @@ export interface Merchant {
   payout_currency?: string;
   slug: string;
   logo_url?: string;
+  trust_profile?: import('@baci/shared').MerchantTrustProfileDraft | null;
 }
 
 /**
@@ -41,6 +42,8 @@ export interface OpenAIFeedItem {
   availability: 'in_stock' | 'out_of_stock' | 'preorder';
   quantity?: number;
   item_group_id?: string;
+  listing_has_variations?: boolean;
+  variant_dict?: Record<string, string>;
   color?: string;
   size?: string;
   shipping_weight?: string;
@@ -79,6 +82,9 @@ export interface CurrentOpenAIFeedItem {
       quantity: number | null;
     };
     condition: ProductCondition[];
+    description?: { plain: string };
+    media?: Array<{ type: 'image'; url: string }>;
+    variant_options?: Array<{ name: string; value: string }>;
     categories: Array<{ value: string; taxonomy: 'merchant' }>;
   }>;
 }

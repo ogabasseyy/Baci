@@ -58,6 +58,8 @@ export interface NormalizedProduct {
   merchant_id?: string;
   status?: string;
   has_condition_offers?: boolean;
+  has_variants?: boolean;
+  manage_stock?: boolean | null;
   available_conditions: string[];
   variant_model: 'legacy' | 'sku_matrix';
   canonical_url?: string | null;
@@ -144,7 +146,7 @@ export function normalizeProduct(
   raw: RawDbProduct,
   options: NormalizeProductOptions = {}
 ): NormalizedProduct {
-  const primaryImage = extractPrimaryImage(raw.images);
+  const primaryImage = raw.advertised_image || extractPrimaryImage(raw.images);
   const normalizedImages = normalizeImages(raw.images);
   const joinedCategories = getJoinedCategories(raw);
   const preferredCategory = options.preferredCategorySlug
@@ -191,13 +193,24 @@ export function normalizeProduct(
     description: raw.description || '',
     image: primaryImage,
     imageLarge: primaryImage,
-    images: normalizedImages.length > 0 ? normalizedImages : [primaryImage],
+    images: raw.advertised_image
+      ? [raw.advertised_image]
+      : normalizedImages.length > 0
+        ? normalizedImages
+        : [primaryImage],
     category: categoryName,
     category_slug: categorySlug,
     brand: raw.brand || null,
-    price: raw.price,
-    compare_at_price: raw.compare_at_price ?? null,
-    condition: raw.condition || 'New',
+    price:
+      typeof raw.advertised_price === 'number' &&
+      Number.isFinite(raw.advertised_price)
+        ? raw.advertised_price
+        : raw.price,
+    compare_at_price:
+      raw.advertised_price !== undefined
+        ? (raw.advertised_compare_at_price ?? null)
+        : (raw.compare_at_price ?? null),
+    condition: raw.advertised_condition || raw.condition || 'New',
     stock,
     rating: raw.rating ?? 0,
     availability,
@@ -207,6 +220,12 @@ export function normalizeProduct(
     merchant_id: raw.merchant_id,
     status: raw.status,
     has_condition_offers: raw.has_condition_offers ?? false,
+    ...(typeof raw.has_variants === 'boolean'
+      ? { has_variants: raw.has_variants }
+      : {}),
+    ...(raw.manage_stock !== undefined
+      ? { manage_stock: raw.manage_stock }
+      : {}),
     available_conditions:
       Array.isArray(raw.available_conditions) &&
       raw.available_conditions.every((value) => typeof value === 'string')

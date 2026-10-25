@@ -8,6 +8,7 @@ import {
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
+import { filterDefaultAdvertisedVariants } from '@/lib/storefront-variant-disclosure';
 import {
   canonicalizeVariantAxis,
 } from '@/components/storefront/ogabassey/variant-attributes';
@@ -69,19 +70,20 @@ export function OgabasseyPdpCriticalCommerceProvider({
   // explicit condition. Preserve URL intent first, then fall back to the
   // PDP-only price-first default; feeds/cart keep the shared condition-first
   // resolver.
+  const defaultSelectionProduct = { ...selectionCartProduct, variants: filterDefaultAdvertisedVariants(variants, selectionCartProduct) };
   const conditionDefaultVariantSelection =
     selectionCartProduct.has_variants && explicitVariantCondition
-      ? resolveDefaultVariantSelection(selectionCartProduct, {
+      ? resolveDefaultVariantSelection(defaultSelectionProduct, {
           condition: explicitVariantCondition,
         })
       : null;
   const priceDefaultVariantSelection = selectionCartProduct.has_variants
-    ? resolveLowestPricedVariantSelection(selectionCartProduct)
+    ? resolveLowestPricedVariantSelection(defaultSelectionProduct)
     : null;
   const defaultVariantSelection = selectionCartProduct.has_variants
     ? (conditionDefaultVariantSelection ??
       priceDefaultVariantSelection ??
-      resolveDefaultVariantSelection(selectionCartProduct, {
+      resolveDefaultVariantSelection(defaultSelectionProduct, {
         condition: explicitVariantCondition,
       }))
     : null;

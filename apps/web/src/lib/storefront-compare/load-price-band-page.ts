@@ -3,12 +3,9 @@ import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import {
   getCachedCategoryPageData,
   getMerchantByIdentifier,
+  getPublicProductVariantsByProductIds,
 } from '@/lib/cached-data';
-import {
-  normalizeProduct,
-  type ProductKeySpecsRecord,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
@@ -23,24 +20,8 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { buildPriceBandCandidate } from './compare-eligibility';
+import { selectPriceBandOffer } from './price-band-offer';
 import { getCuratedPriceBands } from './price-band-taxonomy';
-
-interface PriceBandPageProduct {
-  id: string;
-  name: string;
-  slug: string;
-  category: string;
-  category_slug: string;
-  brand: string | null;
-  price: number;
-  condition: string;
-  stock: number;
-  availability: 'InStock' | 'OutOfStock';
-  has_condition_offers: boolean;
-  product_key_specs?: ProductKeySpecsRecord | null;
-  image: string;
-  description: string;
-}
 
 function isRawDbProduct(value: unknown): value is RawDbProduct {
   return Boolean(
@@ -50,14 +31,6 @@ function isRawDbProduct(value: unknown): value is RawDbProduct {
       'name' in value &&
       'price' in value
   );
-}
-
-function isWithinBand(
-  price: number,
-  floor: number | undefined,
-  ceiling: number
-) {
-  return price <= ceiling && (floor ? price > floor : true);
 }
 
 export async function getPriceBandStorefrontPathPrefix(
@@ -159,39 +132,37 @@ export async function loadPriceBandPage(
   const rawProducts = ((categoryData.products ?? []) as unknown[]).filter(
     isRawDbProduct
   );
-  const normalizedProducts = rawProducts.map((product) =>
-    normalizeProduct(product, { preferredCategorySlug: args.categorySlug })
+  const variantsByProductId = await getPublicProductVariantsByProductIds(
+    merchant.id,
+    rawProducts.map((product) => product.id)
   );
+  const products = rawProducts
+    .map((product) =>
+      selectPriceBandOffer(
+        { ...product, product_variants: variantsByProductId[product.id] ?? [] },
+        args.categorySlug,
+        band.ceiling,
+        band.floor
+      )
+    )
+    .filter(
+      (product): product is NonNullable<typeof product> => product !== null
+    )
+    .sort(
+      (left, right) =>
+        left.price - right.price || left.id.localeCompare(right.id)
+    );
 
   const bandCandidate = buildPriceBandCandidate({
     categorySlug: args.categorySlug,
     band,
-    products: normalizedProducts.map((product) => ({
+    products: products.map((product) => ({
       slug: product.slug,
       name: product.name,
       brand: product.brand,
       price: product.price,
     })),
   });
-
-  const products: PriceBandPageProduct[] = normalizedProducts
-    .filter((product) => isWithinBand(product.price, band.floor, band.ceiling))
-    .map((product) => ({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      category: product.category,
-      category_slug: product.category_slug,
-      brand: product.brand,
-      price: product.price,
-      condition: product.condition,
-      stock: product.stock,
-      availability: product.availability,
-      has_condition_offers: product.has_condition_offers ?? false,
-      product_key_specs: product.product_key_specs,
-      image: product.image,
-      description: product.description,
-    }));
 
   const storeUrl = buildStoreUrl(merchant);
   const supportedClusterCategory = getSupportedClusterCategory(
@@ -214,7 +185,7 @@ export async function loadPriceBandPage(
   const ceilingText = priceFormatter.format(band.ceiling);
   const countryContext = getCountryShoppingContext(merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `Best ${categoryName} Under ${ceilingText}${countrySuffix}`;
+  const heading = `Compare ${categoryName} Under ${ceilingText}${countrySuffix}`;
   return {
     merchant,
     canonicalUrl,
@@ -223,9 +194,9 @@ export async function loadPriceBandPage(
       suffix: merchant.business_name,
       fallback: categoryName,
     }).title,
-    metaDescription: `Compare the best ${categoryName.toLowerCase()} under ${ceilingText}${countrySuffix}. See live prices, stock, condition, and buying options from ${merchant.business_name}.`,
+    metaDescription: `Compare ${categoryName.toLowerCase()} under ${ceilingText}${countrySuffix}. See priced configurations, condition, and ordering availability from ${merchant.business_name}.`,
     heading,
-    intro: `These are the strongest ${categoryName.toLowerCase()} options under ${ceilingText}${countrySuffix}, based on live ${merchant.business_name} inventory with price, condition, and availability details.`,
+    intro: `Browse ${categoryName.toLowerCase()} priced strictly below ${ceilingText}${countrySuffix} from ${merchant.business_name}. Compare the exact listed configuration and condition before choosing.`,
     breadcrumbItems: [
       { name: merchant.business_name, url: storeUrl },
       { name: categoryName, url: `${storeUrl}/${args.categorySlug}` },

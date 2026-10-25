@@ -600,9 +600,21 @@ export function prepareJumiaProductFeed(
       !generatedAttributeNames.has(attribute.name.trim().toLowerCase())
   );
   if (independentlyValidatableAttributes.length) {
+    const generatedAttributeCodes = new Set(
+      mapping.attributes
+        .filter((attribute) =>
+          generatedAttributeNames.has(attribute.name.trim().toLowerCase())
+        )
+        .map((attribute) => String(attribute.code))
+    );
+    const independentlySuppliedValues = Object.fromEntries(
+      Object.entries(mapping.values).filter(
+        ([code]) => !generatedAttributeCodes.has(code)
+      )
+    );
     const independentlyValidated = validateJumiaAttributeValueSet(
       independentlyValidatableAttributes,
-      mapping.values
+      independentlySuppliedValues
     );
     if (!independentlyValidated.success) {
       for (const variant of preflightVariants)

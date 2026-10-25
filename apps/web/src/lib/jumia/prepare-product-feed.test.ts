@@ -780,6 +780,157 @@ describe('prepareJumiaProductFeed', () => {
     expect(codes).not.toContain('attribute_value_invalid');
   });
 
+  it('accepts matching canonical special values beside ordinary supplied attributes', () => {
+    const base = input();
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 31,
+              name: 'name',
+              description: 'Product name',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+            {
+              code: 32,
+              name: 'model_reference',
+              description: 'Model reference',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: { '31': 'Nintendo Switch OLED Console', '32': 'SWITCH-OLED' },
+        },
+      })
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      products: [
+        {
+          name: { value: 'Nintendo Switch OLED Console' },
+          attributes: [
+            { name: 'name', value: 'Nintendo Switch OLED Console' },
+            { name: 'model_reference', value: 'SWITCH-OLED' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('accepts a matching supplied variation value beside ordinary attributes', () => {
+    const base = input();
+    const variant = {
+      id: '00000000-0000-4000-8000-000000000011',
+      attributes: { storage: '128 GB' },
+      sku: 'SWITCH-128',
+      priceOverride: null,
+      stockQuantity: 5,
+      inventoryTrackingPolicy: 'inherit' as const,
+      condition: 'new' as const,
+      updatedAt: '2026-10-01T00:00:00Z',
+      isInventoryAnchor: false,
+    };
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 2,
+              name: 'Storage capacity',
+              description: 'Storage',
+              type: 0,
+              mandatory: true,
+              variation: true,
+              translatable: false,
+            },
+            {
+              code: 3,
+              name: 'model_reference',
+              description: 'Model reference',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: { '2': '128 GB', '3': 'SWITCH-128' },
+          variation: { sourceAttributeName: 'storage' },
+        },
+        source: {
+          ...base.source,
+          product: { ...base.source.product, hasVariants: true },
+          variants: [variant],
+        },
+      })
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      products: [
+        {
+          variation: '128 GB',
+          attributes: [
+            { name: 'Storage capacity', value: '128 GB' },
+            { name: 'model_reference', value: 'SWITCH-128' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('continues rejecting unknown supplied keys when generated fields are omitted from preliminary validation', () => {
+    const base = input();
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 31,
+              name: 'name',
+              description: 'Product name',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+            {
+              code: 32,
+              name: 'model_reference',
+              description: 'Model reference',
+              type: 0,
+              mandatory: true,
+              variation: false,
+              translatable: false,
+            },
+          ],
+          values: {
+            '31': 'Nintendo Switch OLED Console',
+            '32': 'SWITCH-OLED',
+            '999': 'not-a-provider-attribute',
+          },
+        },
+      })
+    );
+
+    expect(result).toMatchObject({ success: false, products: [] });
+    if (result.success) throw new Error('Unknown keys must block the family.');
+    expect(
+      result.errors
+        .filter((error) => error.code === 'attribute_value_invalid')
+        .map((error) => error.field)
+    ).toEqual(['mapping.values.999']);
+  });
+
   it('reports one correctly scoped required-attribute error per variant', () => {
     const base = input();
     const variants = [

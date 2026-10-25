@@ -87,6 +87,39 @@ describe('packJumiaProductFamilies', () => {
     });
   });
 
+  it('rejects configured feed limits outside the inclusive 1–1000 range', () => {
+    for (const limit of [0, 1001, Number.NaN, 1.5])
+      expect(packJumiaProductFamilies([], limit)).toEqual({
+        success: false,
+        errors: [{ code: 'invalid_feed_limit' }],
+      });
+  });
+
+  it('accepts a complete 1000-record family and rejects the same family at 1001', () => {
+    const family = (size: number) =>
+      Array.from({ length: size }, (_, index) => ({
+        familyKey: 'large-family',
+        businessClientCode: 'NG',
+        categoryCode: 2,
+        attributeSetId: 'set',
+        record: record(`SKU-${index}`),
+      }));
+
+    const atLimit = packJumiaProductFamilies(family(1000), 1000);
+    expect(atLimit.success).toBe(true);
+    if (atLimit.success) {
+      expect(atLimit.feeds).toHaveLength(1);
+      expect(atLimit.feeds[0].records).toHaveLength(1000);
+    }
+
+    expect(packJumiaProductFamilies(family(1001), 1000)).toEqual({
+      success: false,
+      errors: [
+        { code: 'family_exceeds_feed_limit', familyKey: 'large-family' },
+      ],
+    });
+  });
+
   it('isolates nested feed records from both input and returned output mutation', () => {
     const sourceRecord = record('ISOLATED');
     sourceRecord.images[0].url = 'https://example.test/original.jpg';

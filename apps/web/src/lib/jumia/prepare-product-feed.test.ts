@@ -350,6 +350,88 @@ describe('prepareJumiaProductFeed', () => {
     });
   });
 
+  it.each([
+    { suppliedOptionId: 42, succeeds: true },
+    { suppliedOptionId: 43, succeeds: false },
+  ])('compares a generated variation to the typed option $suppliedOptionId', ({
+    suppliedOptionId,
+    succeeds,
+  }) => {
+    const base = input();
+    const variant = {
+      id: '00000000-0000-4000-8000-000000000021',
+      attributes: { storage: '128 GB' },
+      sku: 'SWITCH-128',
+      priceOverride: null,
+      stockQuantity: 5,
+      inventoryTrackingPolicy: 'inherit' as const,
+      condition: 'new' as const,
+      updatedAt: '2026-10-01T00:00:00Z',
+      isInventoryAnchor: false,
+    };
+    const result = prepareJumiaProductFeed(
+      input({
+        mapping: {
+          ...base.mapping,
+          attributes: [
+            {
+              code: 2,
+              name: 'Storage capacity',
+              description: 'Storage',
+              type: 4,
+              mandatory: true,
+              variation: true,
+              translatable: false,
+              options: [
+                {
+                  id: 42,
+                  sid: 'a6a6dd33-a9d8-4f71-a668-a95d33578f42',
+                  name: '128 GB',
+                  position: 1,
+                  isDefault: false,
+                  status: 'ACTIVE',
+                },
+                {
+                  id: 43,
+                  sid: 'a6a6dd33-a9d8-4f71-a668-a95d33578f43',
+                  name: '256 GB',
+                  position: 2,
+                  isDefault: false,
+                  status: 'ACTIVE',
+                },
+              ],
+            },
+          ],
+          values: { '2': suppliedOptionId },
+          variation: { sourceAttributeName: 'storage' },
+        },
+        source: {
+          ...base.source,
+          product: { ...base.source.product, hasVariants: true },
+          variants: [variant],
+        },
+      })
+    );
+
+    if (succeeds) {
+      expect(result).toMatchObject({
+        success: true,
+        products: [
+          {
+            variation: '128 GB',
+            attributes: [{ name: 'Storage capacity', value: '128 GB' }],
+          },
+        ],
+      });
+      return;
+    }
+    expect(result).toMatchObject({
+      success: false,
+      products: [],
+      errors: [expect.objectContaining({ code: 'special_attribute_conflict' })],
+    });
+  });
+
   it('blocks undocumented multi-selection serialization and returns no partial records', () => {
     const base = input();
     const result = prepareJumiaProductFeed(

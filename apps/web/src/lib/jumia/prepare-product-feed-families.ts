@@ -19,6 +19,7 @@ export type JumiaFamilyPackingResult =
   | {
       success: false;
       errors: (
+        | { code: 'invalid_feed_limit' }
         | { code: 'family_exceeds_feed_limit'; familyKey: string }
         | { code: 'duplicate_seller_sku'; sellerSku: string }
         | { code: 'family_group_mismatch'; familyKey: string }
@@ -31,8 +32,12 @@ export function packJumiaProductFamilies(
   products: readonly JumiaPreparedFamilyRecord[],
   maximumRecordsPerFeed = 1000
 ): JumiaFamilyPackingResult {
-  if (!Number.isInteger(maximumRecordsPerFeed) || maximumRecordsPerFeed < 1)
-    return { success: false, errors: [] };
+  if (
+    !Number.isInteger(maximumRecordsPerFeed) ||
+    maximumRecordsPerFeed < 1 ||
+    maximumRecordsPerFeed > 1000
+  )
+    return { success: false, errors: [{ code: 'invalid_feed_limit' }] };
 
   const families = new Map<string, JumiaPreparedFamilyRecord[]>();
   for (const item of products) {

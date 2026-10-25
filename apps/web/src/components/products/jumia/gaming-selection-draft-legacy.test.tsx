@@ -24,7 +24,7 @@ vi.mock('./use-gaming-selection-preview', () => ({
       selectionId: '00000000-0000-4000-8000-000000000020',
       sourceCategoryId: '00000000-0000-4000-8000-000000000010',
       page: 1,
-      total: 1,
+      total: 2,
       limit: 50,
       totalPages: 1,
       legacyUnmappedCount: 0,
@@ -36,7 +36,22 @@ vi.mock('./use-gaming-selection-preview', () => ({
           unavailableReason: null,
           capturedSourceVersion: 'a'.repeat(64),
           currentSourceVersion: 'a'.repeat(64),
-          product: { product: { name: 'Draft Gamepad' } },
+          product: {
+            product: { name: 'Draft Gamepad', hasVariants: true },
+            variants: [
+              { id: 'variant-128', attributes: { storage: '128 GB' } },
+              { id: 'variant-256', attributes: { storage: '256 GB' } },
+            ],
+          },
+        },
+        {
+          id: '00000000-0000-4000-8000-000000000002',
+          ordinal: 2,
+          available: true,
+          unavailableReason: null,
+          capturedSourceVersion: 'b'.repeat(64),
+          currentSourceVersion: 'b'.repeat(64),
+          product: { product: { name: 'Draft Console', hasVariants: false } },
         },
       ],
     },
@@ -232,6 +247,183 @@ describe('Gaming draft and legacy publisher separation', () => {
     expect(body.mappings[0]).not.toHaveProperty('providerClassification');
     expect(screen.getByText('canSubmit: false')).toBeInTheDocument();
     expect(vi.mocked(fetchWithCsrf).mock.calls).toHaveLength(1);
+  });
+
+  it('previews differently named products with generated required attributes and variation siblings', async () => {
+    const secondId = '00000000-0000-4000-8000-000000000002';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('mapped-product-ids'))
+          return Response.json({ mappings: [] });
+        if (url.includes('destination-context'))
+          return Response.json({
+            businessClients: [
+              { code: 'NG-RETAIL', name: 'Nigeria Retail', countryCode: 'NG' },
+            ],
+          });
+        if (url.includes('attribute-sets'))
+          return Response.json({
+            attributes: [
+              {
+                code: 10,
+                name: 'name',
+                description: 'Product name',
+                type: 0,
+                mandatory: true,
+                variation: false,
+                translatable: false,
+              },
+              {
+                code: 11,
+                name: 'description',
+                description: 'Description',
+                type: 0,
+                mandatory: true,
+                variation: false,
+                translatable: false,
+              },
+              {
+                code: 12,
+                name: 'short_description',
+                description: 'Highlights',
+                type: 0,
+                mandatory: true,
+                variation: false,
+                translatable: false,
+              },
+              {
+                code: 13,
+                name: 'Storage capacity',
+                description: 'Storage',
+                type: 0,
+                mandatory: true,
+                variation: true,
+                translatable: false,
+              },
+              {
+                code: 14,
+                name: 'Compatible',
+                description: 'Compatibility',
+                type: 6,
+                mandatory: true,
+                variation: false,
+                translatable: false,
+              },
+            ],
+          });
+        return Response.json({ products: [] });
+      })
+    );
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      Response.json({
+        scope: {
+          selectionId: '00000000-0000-4000-8000-000000000020',
+          sourceCategoryId: '00000000-0000-4000-8000-000000000010',
+          sourcePage: { page: 1, limit: 50 },
+          productIds: ['00000000-0000-4000-8000-000000000001', secondId],
+        },
+        digest: `jumia-preflight-v1:${'b'.repeat(64)}`,
+        products: [
+          {
+            productId: '00000000-0000-4000-8000-000000000001',
+            sourceVersion: 'a'.repeat(64),
+            locallyValid: false,
+            blockers: ['evidence.globalPrice:global_price_unproven'],
+            recordCount: 0,
+          },
+          {
+            productId: secondId,
+            sourceVersion: 'b'.repeat(64),
+            locallyValid: false,
+            blockers: ['evidence.globalPrice:global_price_unproven'],
+            recordCount: 0,
+          },
+        ],
+        canSubmit: false,
+      })
+    );
+    render(
+      <PublishProductsDialog
+        integrationId="00000000-0000-4000-8000-000000000031"
+        merchantId="00000000-0000-4000-8000-000000000032"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Select Draft Gamepad for draft' })
+    );
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Select Draft Console for draft' })
+    );
+    await screen.findByRole('option', { name: 'Nigeria Retail (NG-RETAIL)' });
+    fireEvent.change(
+      screen.getByLabelText('Draft destination business client'),
+      { target: { value: 'NG-RETAIL' } }
+    );
+    const mappingDraft = screen.getByRole('region', {
+      name: 'Jumia mapping draft',
+    });
+    fireEvent.click(within(mappingDraft).getByText('Choose category'));
+    fireEvent.click(within(mappingDraft).getByText('Choose brand'));
+    await screen.findByLabelText('Compatible (required)');
+    expect(screen.queryByLabelText('name (required)')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('description (required)')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('short_description (required)')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Storage capacity (required)')
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Compatible (required)'), {
+      target: { value: 'false' },
+    });
+    fireEvent.change(
+      screen.getByLabelText('Variation source attribute (optional)'),
+      {
+        target: { value: 'storage' },
+      }
+    );
+    fireEvent.change(screen.getByLabelText('Product bullets (one per line)'), {
+      target: { value: 'One\nTwo\nThree\nFour' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Confirm draft category: Games' })
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Confirm mapping for this selected page',
+      })
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Check selected products on this page',
+      })
+    );
+
+    await screen.findAllByText('evidence.globalPrice:global_price_unproven');
+    const previewBody = JSON.parse(
+      String(vi.mocked(fetchWithCsrf).mock.calls[0][1]?.body)
+    );
+    expect(previewBody.products).toEqual([
+      {
+        productId: '00000000-0000-4000-8000-000000000001',
+        sourceVersion: 'a'.repeat(64),
+      },
+      { productId: secondId, sourceVersion: 'b'.repeat(64) },
+    ]);
+    expect(previewBody.mappings).toHaveLength(2);
+    expect(previewBody.mappings[0].attributes).toEqual({ '14': false });
+    expect(previewBody.mappings[1].attributes).toEqual({ '14': false });
+    expect(previewBody.mappings[0].variation).toEqual({
+      sourceAttributeName: 'storage',
+    });
+    expect(screen.getByText('canSubmit: false')).toBeInTheDocument();
   });
 
   it('never submits draft IDs through the legacy action and preserves legacy submission', async () => {

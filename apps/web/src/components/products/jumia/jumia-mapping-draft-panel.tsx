@@ -12,10 +12,25 @@ import {
 } from './category-selector';
 import { JumiaAttributeFields } from './jumia-attribute-fields';
 import {
+  type JumiaDraftAttribute,
   type JumiaDraftValues,
   validateAttributeValue,
 } from './jumia-attribute-values';
 import { useJumiaMetadata } from './use-jumia-metadata';
+
+function getMerchantAttributeValues(
+  attributes: JumiaDraftAttribute[],
+  values: JumiaDraftValues
+): JumiaDraftValues {
+  const merchantCodes = new Set(
+    attributes
+      .filter(isMerchantSuppliedAttribute)
+      .map((attribute) => String(attribute.code))
+  );
+  return Object.fromEntries(
+    Object.entries(values).filter(([code]) => merchantCodes.has(code))
+  );
+}
 
 type Destination = {
   merchantId: string;
@@ -23,6 +38,22 @@ type Destination = {
   businessClientCode: string;
   countryCode: string;
 };
+const generatedAttributeNames = new Set([
+  'name',
+  'description',
+  'short_description',
+]);
+
+function isMerchantSuppliedAttribute(attribute: {
+  name: string;
+  variation: boolean;
+}): boolean {
+  return (
+    !attribute.variation &&
+    !generatedAttributeNames.has(attribute.name.trim().toLowerCase())
+  );
+}
+
 export type JumiaMappingDraft = Destination & {
   category: JumiaCategorySelection;
   brand: JumiaBrandItem;
@@ -224,11 +255,13 @@ function AttributeDraft({
   const complete =
     Boolean(brand) &&
     metadata.status === 'success' &&
-    attributes.every(
-      (attribute) =>
-        validateAttributeValue(attribute, values[String(attribute.code)]) ===
-        null
-    );
+    attributes
+      .filter(isMerchantSuppliedAttribute)
+      .every(
+        (attribute) =>
+          validateAttributeValue(attribute, values[String(attribute.code)]) ===
+          null
+      );
   const confirmed = confirmation === revision && complete;
   useEffect(() => {
     if (!brand || metadata.status !== 'success' || !complete) {
@@ -248,7 +281,7 @@ function AttributeDraft({
       category,
       brand,
       attributeSetId: category.attributeSetId,
-      attributes: values,
+      attributes: getMerchantAttributeValues(attributes, values),
       bullets,
       ...(sourceAttributeName ? { variation: { sourceAttributeName } } : {}),
       categoryConfirmed: confirmed,
@@ -260,6 +293,7 @@ function AttributeDraft({
     category,
     complete,
     confirmed,
+    attributes,
     destination.merchantId,
     destination.integrationId,
     destination.businessClientCode,
@@ -296,7 +330,7 @@ function AttributeDraft({
         <p>No attributes returned for this category.</p>
       )}
       <JumiaAttributeFields
-        attributes={attributes}
+        attributes={attributes.filter(isMerchantSuppliedAttribute)}
         values={values}
         onChange={(code, value) => {
           setValues((current) => ({ ...current, [code]: value }));

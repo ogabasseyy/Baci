@@ -741,7 +741,14 @@ export function prepareJumiaProductFeed(
         name === variationAttribute?.name.toLowerCase()
           ? currentVariation
           : String(value);
-      if (supplied !== undefined && String(supplied) !== wireValue) {
+      const suppliedWireValue =
+        supplied === undefined || !attribute
+          ? undefined
+          : serializeAttributeValue(attribute, supplied);
+      if (
+        supplied !== undefined &&
+        (suppliedWireValue === null || suppliedWireValue !== wireValue)
+      ) {
         add(`mapping.values.${code}`, 'special_attribute_conflict', variantId);
       }
       generatedValues[code] = value;

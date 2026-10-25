@@ -61,7 +61,7 @@ export function retailRelation(text: string, start: number): RetailRelation {
         clause
       ));
   const cue =
-    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+range)?(?:\s+(?:is|from))?|costs?|priced\s+at|start(?:s|ing)?\s+at|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
+    /\b(msrp(?:\s+(?:is|was|are|were))?|rrp(?:\s+(?:is|was|are|were))?|prices?(?:\s+range)?(?:\s+(?:is|from))?|costs?|priced\s+at|start(?:s|ing)?\s+(?:at|from)|now\s+at|pay(?:\s+only)?|only|from|for|at)\s*[:–—-]?\s*(?:(?:just|only|about|around|approximately)\s+){0,2}$/i.exec(
       clause
     )?.[1] ??
     (commerceHeading

@@ -37,4 +37,31 @@ describe('getDurableProductSeoText price classification', () => {
       })
     ).toBe('');
   });
+
+  it('rejects a bare price before a non-price now clause', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Buy for 900, now available',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+  });
+
+  it('rejects low-value prices introduced by starts from', () => {
+    expect(
+      getDurableProductSeoText({
+        text: 'Price starts from 900',
+        product: { name: 'Device' },
+      })
+    ).toBe('');
+  });
+
+  it.each([
+    'Rated for 10,000-hour use.',
+    'Only 6.1-inch display.',
+  ])('preserves hyphenated physical quantities: %s', (text) => {
+    expect(
+      getDurableProductSeoText({ text, product: { name: 'Device' } })
+    ).toBe(text);
+  });
 });

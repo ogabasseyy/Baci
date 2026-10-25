@@ -87,7 +87,7 @@ const fallbackTaggedPattern = useBoundedIsoFallback
     )
   : null;
 const barePattern = new RegExp(
-  `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(${amountPattern})(?![\\p{L}\\p{N}]|,[\\s]*(?:[\\p{N}]|now\\b)|[.\\u066b\\u066c](?=[\\p{N}]))`,
+  `(?<![\\p{L}\\p{N},.\\u066b\\u066c])(${amountPattern})(?![\\p{L}\\p{N}]|,[\\s]*(?:[\\p{N}]|now\\b(?=\\s*(?:at\\s*)?(?:[\\p{Sc}\\p{L}]{1,5}\\s*)?[\\p{N}]))|[.\\u066b\\u066c](?=[\\p{N}]))`,
   'giu'
 );
 

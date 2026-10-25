@@ -26,6 +26,7 @@ permissions:
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 # TURBO_TOKEN/TURBO_TEAM (Vercel Remote Cache secrets) are scoped to the `deploy`
 # job's env below — the only job that builds — instead of the workflow level, so
@@ -373,6 +374,7 @@ jobs:
     concurrency:
       group: production-prebuilt-deploy
       cancel-in-progress: false
+      queue: max
     runs-on: baci-deploy
     environment:
       name: production
@@ -491,6 +493,10 @@ jobs:
         # Vercel remains the runtime source of the sensitive Production value.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.production.local --generate-es256-jwk-standin
       - name: Build for Vercel
+        env:
+          # TypeScript 7 is a Go binary; NODE_OPTIONS cannot budget its heap.
+          # This is a soft GC budget, with host swap headroom as protection.
+          GOMEMLIMIT: 6GiB
         run: .github/scripts/run-pinned-vercel.sh build --yes --prod
       # Every production deploy replaces content-hashed _next/static chunk
       # filenames. Clients that already loaded HTML from a previous

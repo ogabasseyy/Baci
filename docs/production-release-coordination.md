@@ -72,6 +72,47 @@ in the clean release checkout; do not disable global hooks to make an old checko
 
 ## Safety and evidence
 
+### Shared VPS build resources
+
+The production build and both Android release jobs share the job-level
+`production-prebuilt-deploy` concurrency group. `queue: max` keeps pending jobs
+instead of replacing another app's release; it supports up to 100 pending jobs.
+Each outer release workflow also preserves its pending runs. Existing worker,
+current-main, migration and publication gates still apply when a queued job starts.
+This takes effect for new workflow runs after merge; it does not change runs
+already queued or running with the previous workflow. Reconcile those older
+runs before treating the shared queue as the host's complete build boundary.
+
+The pinned actionlint release does not recognize GitHub's `concurrency.queue`.
+Its exact unsupported-key diagnostic is suppressed only for these three files;
+the Actionlint workflow first validates the queue values, cancellation policy,
+shared group and allowed locations using `vps-build-resource-queue.test.mjs`.
+Other workflow diagnostics remain enforced. Remove that compatibility exception
+when the pinned actionlint version gains queue support.
+
+The VPS deploy runner's CPU budget is two cores (`CPUQuota=200%`,
+`CPUWeight=100`). Apply both runtime and persistent systemd properties without
+restarting the service; verify `cpu.max` is `200000 100000` and the service PID
+and start time remain unchanged. Do not restart an active release runner.
+
+The October 25 interruptions at 17:41 and 18:55 UTC were global kernel OOM
+kills of the native TypeScript compiler. Systemd's `OOMPolicy=stop` then
+stopped the runner, which surfaced as a Ctrl-C cancellation. Preserve that
+containment policy. Production Next.js checks use `tsconfig.build.json`,
+which retains every non-test source and all strict compiler settings but
+omits test roots. The normal `pnpm turbo typecheck` still uses the complete
+application-and-test configuration. The scope regression test enforces this
+separation and the explicit `ignoreBuildErrors: false` setting.
+The production build also supplies `GOMEMLIMIT=6GiB` to the native Go
+compiler. This is a soft garbage-collection budget, not a hard memory cap;
+`NODE_OPTIONS` only budgets Node.js. The host has 24 GiB swap after adding
+an 8 GiB root-owned mode-0600 `/swapfile-baci-build`, registered in
+`/etc/fstab`; `/etc/fstab.baci-build-20261025` preserves the prior file.
+Do not disable the OOM policy or type checking to hide a build failure.
+
+GitHub queue reference: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
+Actionlint compatibility issue: https://github.com/rhysd/actionlint/issues/657
+
 - Preserve the worker capability smoke, immutable checkout, cron quiescence,
   promotion records, deployment locks, migration ordering and rollback paths.
 - A successful workflow is insufficient if its publishing job was skipped.

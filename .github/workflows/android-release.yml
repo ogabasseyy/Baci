@@ -11,6 +11,7 @@ on:
       - 'pnpm-workspace.yaml'
       - '.npmrc'
       - '.github/workflows/android-release.yml'
+      - '.github/scripts/refuse-superseded-android-build.sh'
     tags:
       # Tag pushes bypass the paths filter above (GitHub Actions behaviour).
       - 'v*-admin'
@@ -27,10 +28,10 @@ on:
         type: boolean
 
 concurrency:
-  # Serialize admin release runs only. Cross-app serialization is avoided because
-  # GitHub preserves only one pending run per concurrency group.
+  # Preserve each queued release; shared VPS resource ownership is job-scoped.
   group: android-admin-release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -57,6 +58,12 @@ jobs:
   build-and-deploy:
     name: Build AAB & Upload to Play Store
     runs-on: baci-android
+    # Both Android releases and production share one four-core VPS.
+    # queue:max preserves pending releases instead of replacing another app.
+    concurrency:
+      group: production-prebuilt-deploy
+      cancel-in-progress: false
+      queue: max
     timeout-minutes: 90
 
     steps:
@@ -64,6 +71,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Refuse superseded main release before build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: bash .github/scripts/refuse-superseded-android-build.sh
 
       - name: Pre-run cleanup of stale secrets
         run: |

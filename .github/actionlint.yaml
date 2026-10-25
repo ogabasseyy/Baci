@@ -4,3 +4,12 @@ self-hosted-runner:
     - baci-deploy
     - baci-lighthouse
     - baci-cwv-measurement
+
+# actionlint 1.7.12 predates GitHub's concurrency.queue support (upstream #657).
+# Only suppress that unsupported-key diagnostic in the three queued workflows.
+# The Actionlint workflow separately runs vps-build-resource-queue.test.mjs to
+# validate every queue location, value, grouping and cancellation policy.
+paths:
+  .github/workflows/{deploy,android-release,android-storefront-release}.yml:
+    ignore:
+      - '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'

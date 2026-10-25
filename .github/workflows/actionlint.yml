@@ -7,12 +7,22 @@ on:
       - ".github/workflows/**"
       - ".github/actionlint.yml"
       - ".github/actionlint.yaml"
+      - ".github/scripts/vps-build-resource-queue.test.mjs"
+      - ".github/scripts/refuse-superseded-android-build.sh"
+      - ".github/scripts/production-typecheck-scope.test.mjs"
+      - "apps/web/next.config.ts"
+      - "apps/web/tsconfig*.json"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/**"
       - ".github/actionlint.yml"
       - ".github/actionlint.yaml"
+      - ".github/scripts/vps-build-resource-queue.test.mjs"
+      - ".github/scripts/refuse-superseded-android-build.sh"
+      - ".github/scripts/production-typecheck-scope.test.mjs"
+      - "apps/web/next.config.ts"
+      - "apps/web/tsconfig*.json"
   workflow_dispatch:
 
 permissions:
@@ -91,6 +101,11 @@ jobs:
             echo "::error::Deprecated runner label 'baci-vps' found. Use a current dedicated runner label instead."
             exit 1
           fi
+
+      - name: Setup workspace tooling for queue validation
+        uses: ./.github/actions/pnpm-install-cached
+      - name: Validate queued VPS build contracts
+        run: node --test .github/scripts/vps-build-resource-queue.test.mjs .github/scripts/production-typecheck-scope.test.mjs
 
       - name: Run actionlint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12

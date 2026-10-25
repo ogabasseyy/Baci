@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if (($# > 0)); then
+  printf 'Unsupported argument: %s\nUsage: bash supabase/tests/run-merchant-blog-classification.sh\n' "$1" >&2
+  exit 2
+fi
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 container="baci-merchant-classification-test-$$"
 cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
@@ -33,10 +37,6 @@ run_sql "$root/supabase/tests/merchant_blog_classification_fixture.sql"
 run_sql "$root/supabase/migrations/20260823163000_optimize_storefront_cluster_guide_classifier_ordered_core.sql"
 run_sql "$root/supabase/migrations/20260823163001_optimize_storefront_cluster_guide_classifier_ordered_rpc.sql"
 for migration in "$root"/supabase/migrations/*_merchant_blog_classification_*.sql; do
-  if [[ "${1:-}" == '--before-guides' && "$migration" == *_merchant_blog_classification_guides.sql ]]; then continue; fi
-  if [[ "${1:-}" == '--before-snapshot' && "$migration" == *_merchant_blog_classification_snapshot.sql ]]; then continue; fi
-  if [[ "${1:-}" == '--before-snapshot' && "$migration" == *_merchant_blog_classification_revision.sql ]]; then continue; fi
-  if [[ "${1:-}" == '--before-private-boundary' && "$migration" == *_merchant_blog_classification_private_boundary.sql ]]; then continue; fi
   run_sql "$migration"
 done
 run_sql "$root/supabase/tests/merchant_blog_classification_security.sql"

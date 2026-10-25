@@ -135,3 +135,40 @@ that follow-up gate. The owner explicitly approved a one-time CodeRabbit skip fo
 this evidence-only follow-up on 2026-10-25. Normal Git hooks, CI and all other
 review gates remain enabled. New-head CI is required after pushing; the earlier
 passing checks certify only the implementation SHA above. Nothing was merged or deployed.
+
+## Review follow-up — linked product guides
+
+All hosted checks, including shard 4 and full DB replay, passed on evidence head
+`50739cdfd1f8b4914481c549dfee6774f2670020`. Later review identified a separate
+product-linked guide path that did not load classification metadata. Three new
+assertions failed before the fix: linked news was returned, comparison metadata
+was absent, and a priority news post rendered as a buying guide. The linked path
+now loads the safe, revision-bound overlay outside its product-keyed cache and
+excludes current news; the renderer also rejects trusted priority news. Missing,
+stale and untrusted metadata keep the legacy fallback. An RPC-failure/recovery
+regression also verifies fallback followed by correct news exclusion.
+
+Luna strengthened the SQL tenant assertion with valid rules and a classified
+second-merchant positive control. The disposable runner now rejects unused
+`--before-*` debug arguments before creating resources, while its default path
+still applies every migration and executes every suite/schema contract. Its
+tests inspect actual SQL payloads sent to the fake database boundary. The real
+isolated PostgreSQL suite passed; no migration bytes changed.
+
+The cache-invalidation suggestion was already implemented in both packaged
+Python write paths: both call the authenticated revalidation endpoint after CAS.
+The classification writer tests passed 24/24 on recheck. The runtime pre-commit
+CodeRabbit review completed with one trivial request for an RPC-failure test;
+that test was added and passed. It reported no critical/high issues. The earlier
+one-time review waiver was not used for these runtime fixes.
+
+Before base refresh, affected storefront suites passed 1,070 tests across 172
+files, final focused regressions passed 23/23, inventory contracts passed 7/7,
+and web lint/typecheck passed (six existing lint warnings). Main's independent
+consent change `4f9e26b86d` was then incorporated, preserving all task changes.
+The inventory snapshot was regenerated from committed combined route source
+`c774f6f8023d2a12501f7c30e1bf7bf340b29f2b`, retaining all 584 rows. Post-rebase
+validation passed 1,079 tests across 174 files (including inventory contracts)
+and web lint/typecheck, with the same six existing warnings. Fresh pushed-head
+CI/reviews remain required; prior head-specific checks do not certify the
+rebased result.

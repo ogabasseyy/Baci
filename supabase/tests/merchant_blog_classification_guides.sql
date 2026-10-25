@@ -25,9 +25,22 @@ SELECT test.assert((SELECT merchant_intent='buying-guide' AND merchant_intent_so
   '10000000-0000-0000-0000-000000000001','smartphones',
   '[{"rule_order":0,"category_slug":"smartphones","category_names":["Smartphones"],"article_tokens":["iphone"]}]',
   'iphone',64)), 'persisted guide intent reaches actual RPC without guide keywords in title');
-SELECT test.assert((SELECT count(*)=0 FROM public.get_storefront_cluster_guide_candidates_v2(
-  '10000000-0000-0000-0000-000000000002','smartphones','[]','iphone',64)),
-  'invalid rules do not expose another merchant classification');
+RESET ROLE;
+INSERT INTO public.blog_posts(id,merchant_id,title,content,slug,category,status,published_at,search_vector)
+VALUES('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002',
+  'iPhone options','<p>Other merchant article.</p>','other-merchant-iphone-guide','Smartphones',
+  'published',now(),to_tsvector('english','iphone'));
+INSERT INTO public.merchant_blog_classifications(post_id,merchant_id,intent,source,classifier_version,input_fingerprint)
+SELECT id,merchant_id,'buying-guide','merchant_declared','test-v1',
+  private.merchant_blog_input_fingerprint_v1(p)
+FROM public.blog_posts p WHERE id='40000000-0000-0000-0000-000000000001';
+SET LOCAL ROLE anon;
+SELECT test.assert((SELECT count(*)=1 AND bool_and(slug='other-merchant-iphone-guide')
+  AND NOT bool_or(slug='classified-iphone-1')
+  FROM public.get_storefront_cluster_guide_candidates_v2(
+    '10000000-0000-0000-0000-000000000002','smartphones',
+    '[{"rule_order":0,"category_slug":"smartphones","category_names":["Smartphones"],"article_tokens":["iphone"]}]',
+    'iphone',64)), 'valid rules return only the requested merchant guide, not another merchant guide or news');
 RESET ROLE;
 UPDATE public.blog_posts SET content='<p>Rewritten news requires reclassification.</p>'
 WHERE slug='classified-iphone-71';

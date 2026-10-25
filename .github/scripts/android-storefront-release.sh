@@ -4,6 +4,16 @@ set -euo pipefail
 operation="${1:-}"
 
 case "$operation" in
+  configure-gradle-home)
+    if [[ "${RUNNER_TEMP:-}" != /*/_temp ]]; then
+      echo "::error::Expected an absolute runner-owned _temp directory" >&2
+      exit 1
+    fi
+    GRADLE_RELEASE_HOME="$(dirname "$RUNNER_TEMP")/gradle-user-home"
+    umask 077
+    mkdir -p "$GRADLE_RELEASE_HOME"
+    printf 'GRADLE_USER_HOME=%s\n' "$GRADLE_RELEASE_HOME" >> "$GITHUB_ENV"
+    ;;
   expose-posthog-cli)
     POSTHOG_CLI_BIN="$GITHUB_WORKSPACE/node_modules/.bin/posthog-cli"
     if [ ! -x "$POSTHOG_CLI_BIN" ]; then

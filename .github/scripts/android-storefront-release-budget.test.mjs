@@ -63,3 +63,15 @@ test('source-built Android release has time for all ABIs plus publication and cl
   );
   assert.match(workflow, /runs-on: baci-android/);
 });
+
+test('configures runner-owned Gradle storage before setup-gradle', () => {
+  const privateHome = workflow.indexOf(
+    '      - name: Configure dedicated Gradle home',
+  );
+  const setupGradle = workflow.indexOf('      - name: Setup Gradle');
+  assert.ok(privateHome >= 0 && privateHome < setupGradle);
+  assert.match(
+    workflow,
+    /android-storefront-release\.sh" configure-gradle-home/,
+  );
+});

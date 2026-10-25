@@ -12,9 +12,11 @@ import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
 import { GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-gigl-tracking-pending-sources';
 import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
+import { IMEI_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-imei-sources';
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
+import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
@@ -33,12 +35,10 @@ import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-rep
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
 import { STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-tail-pending-sources';
+import { STOREFRONT_SEMANTIC_PENDING_SOURCE_ROWS } from './supabase-history-replay-storefront-semantic-sources';
 import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
 import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
 
-const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc 20260831153000_optimize_storefront_pdp_semantic_reads.sql`;
-const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
-const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
 const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
 const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
 const TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES = `8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c 20260923150000_include_tracking_order_method_and_import_source.sql`;
@@ -214,9 +214,7 @@ f2b640bac8c3f3d41158313bc910aec6de0058cf652c47f0595c635bd98ecee1 20260803120000_
 54feed9b89d28855d7d6f4bb83ea04d708f2d1e75c9cff814d6f49845d26e5bc 20260804120000_restore_storefront_order_private_schema_usage.sql
 ${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
-  'ad1153b281cbcf39363e260b4afd545bf213a977fec3ccb53e3a489909ccff4c 20261025130000_imei_device_analytics.sql',
-  '64786c82ec093b4e71fbe7ca2c93882687af47128f3865548625dedc4d950d3d 20261025183000_petrock_guard_unsubmitted_refunds.sql',
-
+  IMEI_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,
@@ -241,9 +239,7 @@ const PENDING_SOURCES = [
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,
-  STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES,
-  STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES,
-  STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES,
+  STOREFRONT_SEMANTIC_PENDING_SOURCE_ROWS,
   STOREFRONT_PAYMENT_SETTINGS_INSURANCE_PENDING_SOURCES,
   SEARCH_CONDITION_MATCH_HYPHEN_PENDING_SOURCES,
   STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS,
@@ -284,6 +280,7 @@ const PENDING_SOURCES = [
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
   BLOG_PENDING_REPLAY_SOURCE_ROWS,
+  MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,

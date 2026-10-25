@@ -325,6 +325,8 @@ jobs:
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
+      - name: Test merchant blog classification permissions and lifecycle
+        run: bash supabase/tests/run-merchant-blog-classification.sh
       # The loyalty aggregator enroll_customer_loyalty.sql \ir-includes
       # every sibling enroll_customer_loyalty*.sql suite as a part in
       # one transaction (guarded by
@@ -440,6 +442,7 @@ jobs:
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
+          --sql-check supabase/tests/merchant_blog_classification_schema_contract.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/migrations/tests/storefront_product_request_canonical_idempotency.sql

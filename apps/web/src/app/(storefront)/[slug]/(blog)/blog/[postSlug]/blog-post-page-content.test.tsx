@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // via `vi.hoisted` so the factories can safely resolve the identifiers at
 // hoist time (rather than relying on the factory body being called lazily).
 const {
+  mockBlogClassificationRead,
   mockBlogPostBodyFallback,
   mockDraftMode,
   mockHeaders,
@@ -21,6 +22,7 @@ const {
   mockBlogPostBody,
   mockHasBlogAuthorPage,
 } = vi.hoisted(() => ({
+  mockBlogClassificationRead: vi.fn(),
   mockBlogPostBodyFallback: vi.fn((_props: unknown) => null as ReactNode),
   mockDraftMode: vi.fn(),
   mockHeaders: vi.fn(),
@@ -121,6 +123,16 @@ vi.mock('@/lib/cached-data', () => ({
 vi.mock('@/lib/live-blog-post', () => ({
   getLiveBlogPost: (...args: unknown[]) => mockGetLiveBlogPost(...args),
 }));
+
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => ({
+    rpc: () => ({
+      abortSignal: () => ({ retry: () => mockBlogClassificationRead() }),
+    }),
+  }),
+}));
+
+vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 
 vi.mock('@/lib/blog-post-redirects', () => ({
   getBlogPostRedirect: (...args: unknown[]) => mockGetBlogPostRedirect(...args),
@@ -247,6 +259,7 @@ const smartphoneGuideBlogPost = {
       'https://cdn.ogabassey.com/merchants/ogabassey/authors/bolakale.jpg',
     published_at: '2026-03-16T10:05:33.654Z',
     updated_at: '2026-03-16T10:05:33.654Z',
+    classification_revision: '11111111-1111-4111-8111-111111111111',
     seo_title: null,
     seo_description: null,
     keywords: ['android', 'battery', 'smartphones'],
@@ -260,6 +273,7 @@ const smartphoneGuideBlogPost = {
 describe('BlogPostPageContent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBlogClassificationRead.mockResolvedValue({ data: [], error: null });
     mockBlogPostBody.mockReset();
     mockBlogPostBodyFallback.mockReset();
     mockGenerateBlogPostSchema.mockReset();
@@ -295,6 +309,36 @@ describe('BlogPostPageContent', () => {
       ],
       featuredProducts: [],
     });
+  });
+
+  it('matches detail classification by stable revision despite a counter-updated timestamp', async () => {
+    mockBlogClassificationRead.mockResolvedValue({
+      data: [
+        {
+          post_id: smartphoneGuideBlogPost.post.id,
+          // A view-count write updates this timestamp without changing article content.
+          post_updated_at: '2026-03-17T10:05:33.654Z',
+          post_revision: smartphoneGuideBlogPost.post.classification_revision,
+          intent: 'repair-guide',
+          source: 'reviewed',
+        },
+      ],
+      error: null,
+    });
+    await BlogPostPageContent({
+      params: Promise.resolve({
+        slug: 'ogabassey',
+        postSlug: 'best-phones-in-nigeria',
+      }),
+    });
+    expect(mockBuildInformationalClusterModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        post: expect.objectContaining({
+          merchant_intent: 'repair-guide',
+          merchant_intent_source: 'reviewed',
+        }),
+      })
+    );
   });
 
   it('renders crawlable commerce links and passes the canonicalized locale', async () => {

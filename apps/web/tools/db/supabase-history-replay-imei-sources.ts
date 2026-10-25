@@ -1,0 +1,3 @@
+// Pending IMEI migrations; never registered as applied production migrations.
+export const IMEI_PENDING_REPLAY_SOURCE_ROWS = `ad1153b281cbcf39363e260b4afd545bf213a977fec3ccb53e3a489909ccff4c 20261025130000_imei_device_analytics.sql
+64786c82ec093b4e71fbe7ca2c93882687af47128f3865548625dedc4d950d3d 20261025183000_petrock_guard_unsubmitted_refunds.sql`;

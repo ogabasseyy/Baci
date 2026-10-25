@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import type { JumiaProductExportEligiblePage } from '@/schemas/jumia/eligible-page';
 import { jumiaGamingDraftPageSchema } from '@/schemas/jumia/selection-draft';
 import { GamingSelectionPreviewProducts } from './gaming-selection-preview-products';
-import type { JumiaMappingDraft } from './jumia-mapping-draft-panel';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { JumiaProductPreflightPreview } from './jumia-product-preflight-preview';
 import { useGamingSelectionDraft } from './use-gaming-selection-draft';
 

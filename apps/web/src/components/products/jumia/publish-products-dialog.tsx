@@ -18,8 +18,8 @@ import { Label } from '@/components/ui/label';
 import { JumiaBrandSelector } from './brand-selector';
 import { JumiaCategorySelector } from './category-selector';
 import { GamingSelectionPreview } from './gaming-selection-preview';
-import type { JumiaMappingDraft } from './jumia-mapping-draft-panel';
 import { JumiaMappingDraftPanel } from './jumia-mapping-draft-panel';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { usePublishProductsDialog } from './use-publish-products-dialog';
 
 interface PublishProductsDialogProps {

@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { jumiaPreviewMessages } from './constants';
 import { GamingSelectionDraft } from './gaming-selection-draft';
-import type { JumiaMappingDraft } from './jumia-mapping-draft-panel';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { useGamingSelectionPreview } from './use-gaming-selection-preview';
 
 export function GamingSelectionPreview({

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { JumiaGamingDraftPage } from '@/schemas/jumia/selection-draft';
-import type { JumiaMappingDraft } from './jumia-mapping-draft-panel';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { JumiaProductPreflightPreview } from './jumia-product-preflight-preview';
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));

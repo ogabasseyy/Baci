@@ -20,10 +20,7 @@ import {
   jumiaProductPreflightResponseSchema,
 } from '@/schemas/jumia/product-preflight';
 import { jumiaCanonicalProductProjectionSchema } from '@/schemas/jumia/product-preflight-source';
-
-function safeError(error: string, status: number) {
-  return NextResponse.json({ error }, { status });
-}
+import { preflightRouteError as safeError } from './route-response';
 
 export async function POST(request: NextRequest) {
   const auth = await authenticateApiRequest(request);

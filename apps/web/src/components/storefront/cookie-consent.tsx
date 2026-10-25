@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { updateConsentMode } from '@/lib/consent-mode';
+import { getStoredConsent, updateConsentMode } from '@/lib/consent-mode';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +30,7 @@ export function CookieConsent() {
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [hasStorageError, setHasStorageError] = useState(false);
   const [preferences, setPreferences] =
     useState<CookiePreferences>(defaultPreferences);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -38,7 +39,7 @@ export function CookieConsent() {
 
   useEffect(() => {
     // Check if consent has already been given
-    const savedConsent = localStorage.getItem(COOKIE_CONSENT_KEY);
+    const savedConsent = getStoredConsent();
     if (!savedConsent) {
       // Small delay to prevent flash on page load
       const timer = setTimeout(() => setIsVisible(true), 1000);
@@ -54,13 +55,20 @@ export function CookieConsent() {
   }, []);
 
   const saveConsent = (prefs: CookiePreferences) => {
-    localStorage.setItem(
-      COOKIE_CONSENT_KEY,
-      JSON.stringify({
-        ...prefs,
-        timestamp: new Date().toISOString(),
-      })
-    );
+    try {
+      localStorage.setItem(
+        COOKIE_CONSENT_KEY,
+        JSON.stringify({
+          ...prefs,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    } catch {
+      // Do not grant tracking consent until the choice is persisted.
+      setHasStorageError(true);
+      return;
+    }
+    setHasStorageError(false);
 
     // Trigger exit animation, then unmount after it completes
     setIsClosing(true);
@@ -123,6 +131,12 @@ export function CookieConsent() {
           'transition-all duration-300 ease-in-out'
         )}
       >
+        {hasStorageError && (
+          <p role="alert" className="mb-3 text-sm text-destructive">
+            Unable to save your cookie preferences. Please try again. Optional
+            tracking remains disabled.
+          </p>
+        )}
         {!showDetails ? (
           // Simple View - Horizontal Floating Bar
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">

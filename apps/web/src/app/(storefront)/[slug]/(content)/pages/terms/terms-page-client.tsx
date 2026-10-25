@@ -33,6 +33,7 @@ export function TermsPageClient({ merchant, content }: TermsPageClientProps) {
     <MerchantProvider slug={merchant.slug}>
       <StorefrontProvider>
         <AppBody
+          showCookieConsent={false}
           merchant={merchant as Parameters<typeof AppBody>[0]['merchant']}
         >
           <div className="flex flex-col min-h-screen">

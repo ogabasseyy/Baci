@@ -8,6 +8,11 @@ const mockHasPermission = vi.fn();
 const mockGetQuotes = vi.fn();
 const FIXED_QUOTE_EXPIRY = '2099-01-01T00:00:00.000Z';
 
+// Share rate fixture data across the separate public and admin mock clients.
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => mockCreateAdminClient(),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));

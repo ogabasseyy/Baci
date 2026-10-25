@@ -89,7 +89,7 @@ export function applySecurityHeaders(
   const isCheckoutRoute =
     routeType === 'storefront' && /\/checkout(\/|$)/.test(pathname);
   const cameraAllowlist = isCheckoutRoute
-    ? 'camera=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")'
+    ? `camera=(self ${isLocal ? '"https://staging.d1l1k5yxed9cvn.amplifyapp.com" ' : ''}"https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")`
     : 'camera=(), microphone=()';
   response.headers.set(
     'Permissions-Policy',

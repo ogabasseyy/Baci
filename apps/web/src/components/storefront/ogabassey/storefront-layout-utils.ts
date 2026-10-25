@@ -11,8 +11,9 @@ import {
 } from '@/lib/color-utils';
 
 const DEFAULT_PRIMARY_COLOR = '#d62027';
-const DEFAULT_BACKGROUND_HSL = '0 0% 6%';
-const DEFAULT_FOREGROUND_HSL = '0 0% 98%';
+// Content controls use light surfaces; the header/footer have separate chrome tokens.
+const DEFAULT_BACKGROUND_HSL = '0 0% 100%';
+const DEFAULT_FOREGROUND_HSL = '240 10% 3.9%';
 const STORE_BORDER_ALPHA = 0.24;
 
 export type OgabasseyChromeSection = 'header' | 'footer' | 'overlay';

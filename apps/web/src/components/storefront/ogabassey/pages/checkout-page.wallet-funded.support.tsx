@@ -122,3 +122,12 @@ export function called(
 ): boolean {
   return fetchMock.mock.calls.some(([input]) => String(input) === url);
 }
+
+export async function placeOxygenOrder() {
+  render(<CheckoutPage />);
+  fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
+  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pay in Installments' }));
+  fireEvent.click(await screen.findByRole('radio', { name: /Oxygen/ }));
+  fireEvent.click(screen.getAllByRole('button', { name: /begin process/i }).find(button => !button.hasAttribute('disabled')) as HTMLButtonElement);
+}

@@ -143,6 +143,10 @@ vi.mock('@/lib/receipt-pdf-generator', () => ({
   resolveReceiptLogoDataUri: mockResolveReceiptLogoDataUri,
 }));
 
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: vi.fn(() => mockCreateAdminClient()),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));
@@ -10395,6 +10399,26 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
       error: 'Not authenticated',
       supabase: null,
     });
+  });
+
+  it('verifies the selected merchant rate through the public RPC even when the admin credential rejects JWTs', async () => {
+    primeAdminShippingRateClient(shippingRatesRpcPayload(), {
+      ratesError: { code: 'PGRST301', message: 'Admin credential unavailable' },
+    });
+    await primeStorefrontClient();
+    const publicRates = {
+      rpc: vi
+        .fn()
+        .mockResolvedValue({ data: shippingRatesRpcPayload(), error: null }),
+    };
+    const { createPublicClient } = await import('@/lib/supabase/public');
+    vi.mocked(createPublicClient).mockReturnValueOnce(publicRates as never);
+    const response = await POST(rateOrderRequest());
+    expect(response.status).toBe(201);
+    expect(publicRates.rpc).toHaveBeenCalledWith(
+      'get_storefront_shipping_rates',
+      { p_merchant_id: MERCHANT_ID }
+    );
   });
 
   it('accepts a valid merchant rate, passes the server-computed fee with nulled provider/quote id, and stamps the provider', async () => {

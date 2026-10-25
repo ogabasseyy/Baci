@@ -13,9 +13,11 @@ interface VariantDetailsItem {
 export function CartVariantDetails({
   item,
   className = 'text-store-background-text/70',
+  presentation = 'list',
 }: {
   item: VariantDetailsItem;
   className?: string;
+  presentation?: 'list' | 'chips';
 }) {
   const attributes: Record<string, string> = {};
   for (const [key, value] of Object.entries(item.variantAttributes ?? {})) {
@@ -74,12 +76,24 @@ export function CartVariantDetails({
   return (
     <dl
       aria-label="Selected variant"
-      className={`mt-1 space-y-0.5 text-xs ${className}`}
+      className={`${presentation === 'chips' ? 'mt-2 flex flex-wrap gap-1.5' : 'mt-1 space-y-0.5'} text-xs ${className}`}
     >
       {details.map(([label, value]) => (
-        <div className="flex flex-wrap gap-x-1" key={label}>
-          <dt>{label}:</dt>
-          <dd className="break-words">{value}</dd>
+        <div
+          className={
+            presentation === 'chips'
+              ? 'inline-flex max-w-full items-center rounded-md bg-store-background-text/5 px-2 py-1 text-[11px] leading-tight ring-1 ring-inset ring-store-background-text/8'
+              : 'flex flex-wrap gap-x-1'
+          }
+          key={label}
+        >
+          <dt className={presentation === 'chips' ? 'sr-only' : undefined}>
+            {label}:
+          </dt>
+          <dd className="break-words">
+            {value}
+            {presentation === 'chips' && label === 'RAM' ? ' RAM' : ''}
+          </dd>
         </div>
       ))}
     </dl>

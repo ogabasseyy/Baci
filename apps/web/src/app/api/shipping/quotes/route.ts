@@ -7,6 +7,7 @@ import {
   type QuoteRequest,
 } from '@/lib/shipping/types';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createPublicClient } from '@/lib/supabase/public';
 import { QuoteRequestSchema } from '@/schemas/shipping';
 import { postAdminOrderGiglQuote } from './admin-order-gigl-quote';
 import {
@@ -92,13 +93,16 @@ export async function POST(request: NextRequest) {
 
     const includeMerchantRateQuotes = data.supports_merchant_rates === true;
     const merchantQuotesPromise = merchantContext.merchantId
-      ? getMerchantRateQuotes(supabase, {
-          merchantId: merchantContext.merchantId,
-          receiverCountryCode: data.receiver.countryCode,
-          receiverState: data.receiver.state,
-          merchantCurrency,
-          cartSubtotal: data.cart_subtotal,
-        })
+      ? getMerchantRateQuotes(
+          createPublicClient({ clientInfo: 'baci-public-shipping-rates' }),
+          {
+            merchantId: merchantContext.merchantId,
+            receiverCountryCode: data.receiver.countryCode,
+            receiverState: data.receiver.state,
+            merchantCurrency,
+            cartSubtotal: data.cart_subtotal,
+          }
+        )
       : Promise.resolve<MerchantRateQuoteResult>({ quotes: [] });
 
     // Every registered carrier (Topship/GIGL) is Nigerian and quotes are

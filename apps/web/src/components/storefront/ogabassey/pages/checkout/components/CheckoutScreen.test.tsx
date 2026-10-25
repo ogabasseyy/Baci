@@ -186,6 +186,28 @@ beforeEach(() => {
 });
 
 describe('CheckoutScreen', () => {
+  it('keeps the saved Oxygen application and its summaries inside checkout', () => {
+    render(
+      <CheckoutScreen
+        {...createProps()}
+        oxygenStep={<section aria-label="Saved Oxygen application" />}
+        oxygenSummary={<aside aria-label="Selected payment plan" />}
+        oxygenMobileSummary={<aside aria-label="Mobile selected plan" />}
+      />
+    );
+    expect(
+      screen.getByRole('region', { name: 'Saved Oxygen application' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('complementary', { name: 'Selected payment plan' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('complementary', { name: 'Mobile selected plan' })
+    ).toBeVisible();
+    expect(screen.queryByTestId('steps')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('discount')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-summary')).not.toBeInTheDocument();
+  });
   it('maps mobile and desktop summaries and forwards discount actions', () => {
     const props = createProps();
     render(<CheckoutScreen {...props} />);

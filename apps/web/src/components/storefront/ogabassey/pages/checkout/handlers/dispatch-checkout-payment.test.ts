@@ -27,6 +27,18 @@ vi.mock('./start-checkout-redvault', () => ({
 
 describe('dispatchCheckoutPayment', () => {
   beforeEach(() => vi.resetAllMocks());
+  it('opens the existing Oxygen order without initializing payment or clearing cart', async () => {
+    const context = paymentDispatchContext();
+    context.paymentMethod = 'oxygen';
+    await dispatchCheckoutPayment(context);
+    expect(context.navigate).toHaveBeenCalledWith(
+      '/checkout?oxygenOrderId=order-1'
+    );
+    expect(initializeCheckoutGateway).not.toHaveBeenCalled();
+    expect(completeCheckoutOrder).not.toHaveBeenCalled();
+    expect(context.clearCart).not.toHaveBeenCalled();
+    expect(context.isOrderInFlightRef.current).toBe(false);
+  });
   it.each([
     'paystack',
     'korapay',

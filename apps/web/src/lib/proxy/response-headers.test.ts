@@ -160,3 +160,35 @@ describe('proxy response headers', () => {
     expect(response.headers.get('Vercel-Cache-Tag')).toBeNull();
   });
 });
+
+it('only delegates the Oxygen staging camera on local checkout, never microphone or production', () => {
+  const host = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
+  const local = applySecurityHeaders(
+    NextResponse.next(),
+    '/savings-synthetic/checkout',
+    'Mozilla',
+    'storefront',
+    true
+  );
+  const live = applySecurityHeaders(
+    NextResponse.next(),
+    '/checkout',
+    'Mozilla',
+    'storefront',
+    false
+  );
+  const product = applySecurityHeaders(
+    NextResponse.next(),
+    '/products/phone',
+    'Mozilla',
+    'storefront',
+    true
+  );
+  expect(local.headers.get('Content-Security-Policy')).toContain(host);
+  expect(live.headers.get('Content-Security-Policy')).not.toContain(host);
+  const policy = local.headers.get('Permissions-Policy') ?? '';
+  expect(policy.split(', microphone=')[0]).toContain(host);
+  expect(policy.split(', microphone=')[1]).not.toContain(host);
+  expect(live.headers.get('Permissions-Policy')).not.toContain(host);
+  expect(product.headers.get('Permissions-Policy')).toContain('camera=()');
+});

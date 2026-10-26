@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest';
+import { readStorefrontFile } from './storefront-css-partition-read';
+
+const overlayCss = readStorefrontFile('storefront-chat-overlay-priority.css');
+
+describe('storefront chat overlay priority CSS', () => {
+  it('loads with core storefront CSS to avoid a deferred-style overlap flash', () => {
+    expect(readStorefrontFile('storefront-core.css')).toMatch(
+      /@import\s+["']\.\/storefront-chat-overlay-priority\.css["']/
+    );
+    expect(overlayCss.split('\n').length).toBeLessThanOrEqual(300);
+  });
+
+  it('keeps the non-modal consent banner clear of an open conversation', () => {
+    expect(overlayCss).toMatch(
+      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.storefront-cookie-consent\s*\{\s*display:\s*none/
+    );
+  });
+
+  it('hides the launcher and promotional overlays for visible consent', () => {
+    expect(overlayCss).toMatch(
+      /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(\s*:focus-within\s*\):not\(\s*\[data-chat-launcher-dragging\]\s*\)/
+    );
+    expect(overlayCss).toMatch(
+      /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
+    );
+  });
+
+  it('protects an open or keyboard-focused chat from promotional overlays', () => {
+    expect(overlayCss).toMatch(
+      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)[\s\S]*?\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
+    );
+    expect(overlayCss).toMatch(
+      /body:has\(\.ogabassey-chat-anchor:focus-within\)\s+\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
+    );
+  });
+
+  it('limits launcher suppression for the offer to narrow viewports', () => {
+    expect(overlayCss).toMatch(
+      /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
+    );
+  });
+});

@@ -264,9 +264,8 @@ export function useChatLauncherDrag(
       event,
       suppressedDragClick.current,
     );
-    // A subsequent activation is a new interaction: only this click may
-    // consume the drag correlation, including pointerless keyboard clicks.
-    suppressedDragClick.current = null;
+    // Keyboard clicks keep the token; pointer clicks and pointerdown clear it.
+    if (event.detail > 0) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }

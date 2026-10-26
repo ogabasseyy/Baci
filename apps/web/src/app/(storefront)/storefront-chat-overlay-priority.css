@@ -1,0 +1,45 @@
+/* Imported with storefront core so deferred widget styles cannot cause an
+   overlapping flash. The non-modal privacy banner waits for an open chat;
+   dismissible promotional overlays yield to active assistant chrome. */
+body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
+.storefront-cookie-consent {
+  display: none;
+}
+
+body:has(.storefront-cookie-consent)
+  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
+    :focus-within
+  ):not([data-chat-launcher-dragging]),
+body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
+body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
+  display: none;
+}
+
+body:has(.ogabassey-newsletter-popup)
+  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
+    :focus-within
+  ):not([data-chat-launcher-dragging]) {
+  display: none;
+}
+
+/* Keep promotional overlays from covering an active conversation. */
+body:has(.ogabassey-chat-anchor .ogabassey-chat-window) .ogabassey-offer-popup,
+body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
+  .ogabassey-newsletter-popup {
+  display: none;
+}
+
+body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-offer-popup,
+body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
+  display: none;
+}
+
+/* The offer spans the launcher corner only on narrow phones. */
+@media (max-width: 423px) {
+  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
+    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
+      :focus-within
+    ):not([data-chat-launcher-dragging]) {
+    display: none;
+  }
+}

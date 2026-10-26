@@ -1,5 +1,6 @@
 @import "./storefront-ogabassey-dark-mode.css";
 @import "./storefront-header-loading.css";
+@import "./storefront-chat-overlay-priority.css";
 /* Deferred with this sheet so first-paint CSS has no woff2 url() for Lantern. */
 @import "../inter-naira-font.css";
 
@@ -1152,54 +1153,6 @@
       main
     )
     ~ .storefront-ppr-static-shell__fallback {
-    display: none;
-  }
-}
-
-/* Consent takes priority over promotional and assistant chrome. Keep these
-   rules in core so deferred widget styles cannot cause an overlapping flash.
-   If an overlay appears first, its own dismiss control remains the keyboard
-   path; the launcher becomes available again when the overlay closes. An open
-   conversation takes priority over this non-modal banner. */
-body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
-.storefront-cookie-consent {
-  display: none;
-}
-
-body:has(.storefront-cookie-consent)
-  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
-    :focus-within
-  ):not([data-chat-launcher-dragging]),
-body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
-body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
-  display: none;
-}
-
-body:has(.ogabassey-newsletter-popup)
-  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
-    :focus-within
-  ):not([data-chat-launcher-dragging]) {
-  display: none;
-}
-
-/* Keep promotional overlays from covering an active conversation. */
-body:has(.ogabassey-chat-anchor .ogabassey-chat-window) .ogabassey-offer-popup,
-body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
-  .ogabassey-newsletter-popup {
-  display: none;
-}
-
-body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-offer-popup,
-body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
-  display: none;
-}
-
-/* The offer spans the launcher corner only on narrow phones. */
-@media (max-width: 423px) {
-  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
-    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
-      :focus-within
-    ):not([data-chat-launcher-dragging]) {
     display: none;
   }
 }

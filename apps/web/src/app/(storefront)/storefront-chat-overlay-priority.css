@@ -30,7 +30,7 @@ body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
   display: none;
 }
 
-/* Do not reveal a timed overlay over the control reached by keyboard focus. */
+/* Keep overlays transparent until keyboard focus reaches one of their controls. */
 body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
   :has(.ogabassey-newsletter-popup :focus-visible)
 )
@@ -39,7 +39,8 @@ body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
     :has(.ogabassey-newsletter-popup :focus-visible)
   )
   .ogabassey-newsletter-popup {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The offer spans the launcher corner only on narrow phones. */

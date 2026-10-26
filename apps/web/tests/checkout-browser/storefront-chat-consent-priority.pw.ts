@@ -30,7 +30,7 @@ test('consent remains available above an already-open conversation', async ({
   await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
 });
 
-test('timed promotion stays hidden after keyboard focus leaves the launcher', async ({
+test('keyboard can reach and dismiss a timed newsletter after focusing a page control', async ({
   page,
 }) => {
   await page.setContent(`
@@ -40,20 +40,36 @@ test('timed promotion stays hidden after keyboard focus leaves the launcher', as
       .ogabassey-offer-popup { position: fixed; inset: 0; z-index: 80; }
     </style>
     <main>
+      <button id="page-control">Page control</button>
       <div class="ogabassey-chat-anchor">
         <button class="ogabassey-chat-button">Assistant</button>
       </div>
-      <button id="page-control">Page control</button>
     </main>
-    <div class="ogabassey-offer-popup"><button>Close offer</button></div>
   `);
 
-  const offer = page.locator('.ogabassey-offer-popup');
-  await expect(offer).toBeVisible();
   await page.keyboard.press('Tab');
-  await expect(page.locator('.ogabassey-chat-button')).toBeFocused();
-  await expect(offer).toBeHidden();
+  const pageControl = page.locator('#page-control');
+  await expect(pageControl).toBeFocused();
+  await page.evaluate(() => {
+    const popup = document.createElement('div');
+    popup.className = 'ogabassey-newsletter-popup';
+    popup.innerHTML = `
+      <button type="button" tabindex="-1" aria-label="Dismiss newsletter popup backdrop">Backdrop</button>
+      <button type="button" aria-label="Close newsletter">Close newsletter</button>
+    `;
+    popup
+      .querySelector('button[aria-label="Close newsletter"]')
+      ?.addEventListener('click', () => popup.remove());
+    document.body.append(popup);
+  });
+  const popup = page.locator('.ogabassey-newsletter-popup');
+  const close = page.getByRole('button', { name: 'Close newsletter' });
+  await expect(popup).toHaveCSS('opacity', '0');
+
   await page.keyboard.press('Tab');
-  await expect(page.locator('#page-control')).toBeFocused();
-  await expect(offer).toBeHidden();
+  await expect(close).toBeFocused();
+  await expect(popup).toHaveCSS('opacity', '1');
+  await close.click();
+  await expect(popup).toBeHidden();
+  await expect(page.locator('.ogabassey-chat-button')).toBeVisible();
 });

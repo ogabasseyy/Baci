@@ -94,39 +94,47 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   useEffect(() => {
     if (!isVisible) return;
 
-    const chatAnchor = document.querySelector<HTMLElement>(
-      '.ogabassey-chat-anchor:has(.ogabassey-chat-window)'
-    );
-    if (!chatAnchor?.querySelector('.ogabassey-chat-window')) return;
-
-    let chatWasOpen = true;
+    const chatWasOpen = new WeakMap<HTMLElement, boolean>();
+    document
+      .querySelectorAll<HTMLElement>('.ogabassey-chat-anchor')
+      .forEach((anchor) => {
+        chatWasOpen.set(
+          anchor,
+          Boolean(anchor.querySelector('.ogabassey-chat-window'))
+        );
+      });
     const observer = new MutationObserver(() => {
-      const chatIsOpen = Boolean(
-        chatAnchor.querySelector('.ogabassey-chat-window')
-      );
-      if (chatWasOpen && !chatIsOpen) {
-        const currentFocus = document.activeElement;
-        if (
-          !currentFocus ||
-          currentFocus === document.body ||
-          !(currentFocus instanceof HTMLElement) ||
-          !currentFocus.isConnected ||
-          currentFocus.closest('.ogabassey-chat-anchor')
-        ) {
-          const launcher = chatAnchor.querySelector<HTMLButtonElement>(
-            '.ogabassey-chat-button'
+      document
+        .querySelectorAll<HTMLElement>('.ogabassey-chat-anchor')
+        .forEach((chatAnchor) => {
+          const chatIsOpen = Boolean(
+            chatAnchor.querySelector('.ogabassey-chat-window')
           );
-          if (launcher && !restoreFocusRef.current)
-            restoreFocusRef.current = launcher;
-          bannerRef.current
-            ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
-            ?.focus();
-          bannerHasFocusRef.current = true;
-        }
-      }
-      chatWasOpen = chatIsOpen;
+          const wasOpen = chatWasOpen.get(chatAnchor) ?? false;
+          if (wasOpen && !chatIsOpen) {
+            const currentFocus = document.activeElement;
+            if (
+              !currentFocus ||
+              currentFocus === document.body ||
+              !(currentFocus instanceof HTMLElement) ||
+              !currentFocus.isConnected ||
+              currentFocus.closest('.ogabassey-chat-anchor')
+            ) {
+              const launcher = chatAnchor.querySelector<HTMLButtonElement>(
+                '.ogabassey-chat-button'
+              );
+              if (launcher && !restoreFocusRef.current)
+                restoreFocusRef.current = launcher;
+              bannerRef.current
+                ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+                ?.focus();
+              bannerHasFocusRef.current = true;
+            }
+          }
+          chatWasOpen.set(chatAnchor, chatIsOpen);
+        });
     });
-    observer.observe(chatAnchor, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [isVisible]);
 

@@ -31,9 +31,7 @@ export function useChatLauncherDrag(
   isHidden = false,
   constraintKey: string | boolean = false,
 ) {
-  const [position, setPosition] = useState<Position | undefined>(
-    initialPosition,
-  );
+  const [position, setPosition] = useState<Position | undefined>(initialPosition);
   const positionRef = useRef(position);
   const anchorRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -63,7 +61,7 @@ export function useChatLauncherDrag(
 
   function reclampPosition() {
     const current = positionRef.current;
-    if (isOpenRef.current || isHiddenRef.current || !current) return;
+    if (isOpenRef.current || isHiddenRef.current || gesture.current || !current) return;
     const button = buttonRef.current;
     const rect = button?.getBoundingClientRect();
     if (!button || !rect || rect.width === 0 || rect.height === 0) return;
@@ -83,6 +81,7 @@ export function useChatLauncherDrag(
   }
 
   function scheduleViewportReclamp() {
+    if (gesture.current) return;
     if (viewportFrame.current !== null) return;
     viewportFrame.current = requestAnimationFrame(() => {
       viewportFrame.current = null;
@@ -91,12 +90,10 @@ export function useChatLauncherDrag(
   }
 
   function handleOverflowAnimationEnd(event: Event) {
-    if (
-      event.target instanceof Element &&
-      event.target.matches('[data-chat-launcher-overflow]')
-    ) {
-      scheduleViewportReclamp();
-    }
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.matches('[data-chat-launcher-overflow]')) return;
+    scheduleViewportReclamp();
   }
 
   useEffect(() => {
@@ -136,13 +133,8 @@ export function useChatLauncherDrag(
   }, [constraintKey, isHidden, isOpen, overflowKey, position]);
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
-    if (
-      isOpen ||
-      gesture.current ||
-      event.button !== 0 ||
-      event.isPrimary === false
-    )
-      return;
+    if (isOpen || gesture.current) return;
+    if (event.button !== 0 || event.isPrimary === false) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const bottomSafeArea = readChatLauncherSafeArea(safeAreaProbe.current);
     const mobileOffset = readChatLauncherMobileOffset(anchorRef.current);

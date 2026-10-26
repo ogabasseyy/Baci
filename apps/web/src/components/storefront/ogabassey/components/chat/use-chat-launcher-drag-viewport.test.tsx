@@ -11,7 +11,7 @@ afterEach(() => {
 
 describe('launcher viewport changes while chat is open', () => {
   it('batches rapid window resize re-clamps into one animation frame', () => {
-    const view = setup();
+    const view = setup({ initialPosition: { x: 100, y: 200 } });
 
     act(() => {
       window.dispatchEvent(new Event('resize'));
@@ -50,6 +50,34 @@ describe('launcher viewport changes while chat is open', () => {
     view.rerender(<Harness />);
 
     expect(screen.getByTestId('anchor').style.transform).toBe(saved);
+    view.unmount();
+  });
+
+  it('does not re-clamp a saved position during an active drag', () => {
+    const viewport = Object.assign(new EventTarget(), {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 320,
+      height: 480,
+    }) as unknown as VisualViewport;
+    vi.stubGlobal('visualViewport', viewport);
+    const view = setup({ initialPosition: { x: 100, y: 200 } });
+    view.pointer('pointerdown', 220, 320);
+    view.pointer('pointermove', 260, 360);
+    view.flush();
+
+    Object.defineProperty(viewport, 'height', { configurable: true, value: 300 });
+    act(() => viewport.dispatchEvent(new Event('resize')));
+    expect(window.requestAnimationFrame).not.toHaveBeenCalledTimes(2);
+    view.flush();
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(140px, 240px, 0)'
+    );
+    view.pointer('pointerup', 260, 360);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(240px, 194px, 0)'
+    );
     view.unmount();
   });
 

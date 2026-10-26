@@ -111,3 +111,15 @@ it('moves focus to consent when an open chat closes without holding focus', asyn
 
   expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
 });
+
+it('observes chat opened after consent appears', async () => {
+  render(<ConsentFocusHarness />);
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
+  screen.getByRole('button', { name: 'Chat input' }).focus();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
+});

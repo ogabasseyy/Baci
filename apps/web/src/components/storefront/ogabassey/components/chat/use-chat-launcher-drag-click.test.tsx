@@ -24,6 +24,17 @@ describe('drag click sequencing', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('suppresses a pointer-id-less compatibility click at the release point', () => {
+    const { pointer, click, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+
+    click(120, 220, 1, null);
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('allows the next genuine tap when a drag produced no click', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
@@ -49,11 +60,13 @@ describe('drag click sequencing', () => {
   });
 
   it('allows an independent assistive click without a correlated pointer id', () => {
+    vi.useFakeTimers();
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
 
+    vi.advanceTimersByTime(251);
     click(120, 220, 1, null);
 
     expect(onOpen).toHaveBeenCalledOnce();

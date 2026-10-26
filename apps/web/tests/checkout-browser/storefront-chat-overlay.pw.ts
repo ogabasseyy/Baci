@@ -171,7 +171,17 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       await page.getByRole('button', { name: 'Close newsletter' }).click();
       await page.waitForTimeout(10100);
       await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
-      await expect(page.getByTestId('runtime-launcher')).toBeHidden();
+      await expect(page.getByTestId('deferred-launcher')).toBeHidden();
+      await expect(
+        page.locator('button[aria-label="Assistant launcher"]')
+      ).not.toBeFocused();
+      await page.getByRole('button', { name: 'Close ad' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
+      await expect(page.getByTestId('deferred-launcher')).toBeVisible();
+      await page.getByRole('button', { name: 'Assistant launcher' }).focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByTestId('chat-window')).toBeVisible();
     }
   }
 });

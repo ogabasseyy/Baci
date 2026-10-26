@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { useState } from 'react';
 import { expect, it } from 'vitest';
 import { useCookieConsentFocus } from './use-cookie-consent-focus';
@@ -73,10 +79,12 @@ it('moves focus to consent when an open chat covering it closes', async () => {
   expect(screen.getByRole('button', { name: 'Chat input' })).toHaveFocus();
 
   fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Dismiss consent' })
+    ).toHaveFocus()
+  );
   const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
-  expect(dismiss).toHaveFocus();
   fireEvent.click(dismiss);
   expect(
     screen.getByRole('button', { name: 'Assistant launcher' })
@@ -92,10 +100,12 @@ it('moves focus to consent when the launcher toggle closes an open chat', async 
   expect(launcher).toHaveFocus();
 
   fireEvent.click(launcher);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Dismiss consent' })
+    ).toHaveFocus()
+  );
   const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
-  expect(dismiss).toHaveFocus();
   fireEvent.click(dismiss);
   expect(launcher).toHaveFocus();
 });
@@ -107,9 +117,11 @@ it('moves focus to consent when an open chat closes without holding focus', asyn
   expect(document.activeElement).toBe(document.body);
 
   fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Dismiss consent' })
+    ).toHaveFocus()
+  );
 });
 
 it('observes chat opened after consent appears', async () => {
@@ -117,9 +129,11 @@ it('observes chat opened after consent appears', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
   fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
   screen.getByRole('button', { name: 'Chat input' }).focus();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await act(async () => Promise.resolve());
   fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Dismiss consent' })
+    ).toHaveFocus()
+  );
 });

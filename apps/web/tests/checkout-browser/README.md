@@ -7,7 +7,7 @@ routes are outside the customer application and are never deployed with it.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @baci/web exec playwright install chromium webkit
+pnpm --filter @baci/web exec playwright install chromium webkit firefox
 pnpm --filter @baci/web test:checkout:build
 pnpm --filter @baci/web test:checkout:browser
 ```

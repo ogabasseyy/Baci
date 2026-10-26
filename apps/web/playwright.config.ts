@@ -33,7 +33,7 @@ export default defineConfig({
       use: {
         browserName: 'firefox',
         launchOptions: {
-          env: { HOME: firefoxHome },
+          env: { ...process.env, HOME: firefoxHome },
         },
       },
     },

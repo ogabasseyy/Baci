@@ -10,6 +10,22 @@ afterEach(() => {
 });
 
 describe('launcher viewport changes while chat is open', () => {
+  it('batches rapid window resize re-clamps into one animation frame', () => {
+    const view = setup();
+
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(view.measure).not.toHaveBeenCalled();
+    view.flush();
+    expect(view.measure).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
   it('preserves the saved closed position through a temporary viewport shrink', () => {
     const viewport = Object.assign(new EventTarget(), {
       offsetLeft: 0,

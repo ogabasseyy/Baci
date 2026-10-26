@@ -96,7 +96,7 @@ export function useChatLauncherDrag(
       'height:env(safe-area-inset-bottom, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
     document.body.append(probe);
     safeAreaProbe.current = probe;
-    window.addEventListener('resize', reclampPosition);
+    window.addEventListener('resize', scheduleViewportReclamp);
     const anchor = anchorRef.current;
     const button = buttonRef.current;
     const observer =
@@ -109,7 +109,7 @@ export function useChatLauncherDrag(
     visualViewport?.addEventListener('resize', scheduleViewportReclamp);
     visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
     return () => {
-      window.removeEventListener('resize', reclampPosition);
+      window.removeEventListener('resize', scheduleViewportReclamp);
       anchor?.removeEventListener('animationend', handleOverflowAnimationEnd, true);
       visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
       visualViewport?.removeEventListener('scroll', scheduleViewportReclamp);

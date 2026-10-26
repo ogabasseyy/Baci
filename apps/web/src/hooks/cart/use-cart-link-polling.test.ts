@@ -84,3 +84,33 @@ it('replays a retryable terminal provisioning failure', async () => {
     expect(ensureCart.mock.calls.length).toBeGreaterThanOrEqual(3)
   );
 });
+
+it('fails the import when terminal provisioning exhausts its retries', async () => {
+  const terminal = snapshot({ state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([cartItem()] as never);
+  const dispatch = vi.fn();
+  const ensureCart = vi.fn().mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  });
+  renderHook(() =>
+    useCartLinkPolling(
+      context({
+        dispatch,
+        ensureCart,
+        stateRef: { current: { confirmed: terminal } },
+      }) as never
+    )
+  );
+  await waitFor(() =>
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'import/failed' })
+    )
+  );
+});

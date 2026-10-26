@@ -35,9 +35,15 @@ export function CheckoutCartCapacityGate({
     cart.sharedCartRef == null &&
     (cart.syncStatus === 'pending' ||
       (cart.syncStatus === 'synced' && !cart.isHydrated));
+  const capacityBlocked =
+    !validatedResume &&
+    cart.sharedCartEnabled &&
+    (cart.importWarnings?.includes('import_capacity_exceeded') ?? false);
+  // Only an actual render of the checkout children counts as revealed:
+  // a capacity-blocked render must not arm the in-place branch.
   useEffect(() => {
-    if (!initialUnresolved) revealed.current = true;
-  }, [initialUnresolved]);
+    if (!initialUnresolved && !capacityBlocked) revealed.current = true;
+  }, [initialUnresolved, capacityBlocked]);
   if (initialUnresolved && !revealed.current) {
     return (
       <p role="status" aria-label="Loading your cart">
@@ -45,13 +51,11 @@ export function CheckoutCartCapacityGate({
       </p>
     );
   }
-  if (
-    !validatedResume &&
-    cart.sharedCartEnabled &&
-    cart.importWarnings?.includes('import_capacity_exceeded')
-  ) {
+  if (capacityBlocked) {
     // Once checkout has mounted, never swap it out from under the
     // shopper: surface the recovery in place above the live form.
+    // The checkout child keeps a stable sibling position (after the
+    // recovery slot) so toggling the panel cannot remount it.
     if (revealed.current)
       return (
         <>
@@ -74,5 +78,12 @@ export function CheckoutCartCapacityGate({
       </>
     );
   }
-  return children;
+  // Keep the same fragment shape as the in-place recovery branch so
+  // the checkout child stays at a stable position across toggles.
+  return (
+    <>
+      {null}
+      {children}
+    </>
+  );
 }

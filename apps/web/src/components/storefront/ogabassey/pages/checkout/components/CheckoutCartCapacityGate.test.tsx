@@ -186,3 +186,40 @@ it('surfaces capacity recovery in place once checkout has mounted', () => {
     screen.getByRole('region', { name: 'Cart import capacity' })
   ).toBeVisible();
 });
+
+it('keeps payment controls absent when rerendered with capacity warnings unchanged', () => {
+  cart.importWarnings = ['import_capacity_exceeded'];
+  const view = render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  expect(
+    screen.getByRole('region', { name: 'Cart import capacity' })
+  ).toBeVisible();
+});
+
+it('preserves checkout DOM state when capacity recovery appears after mount', () => {
+  const view = render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <input aria-label="Shipping name" />
+    </CheckoutCartCapacityGate>
+  );
+  const input = screen.getByLabelText('Shipping name');
+  fireEvent.change(input, { target: { value: 'Ada' } });
+  cart.importWarnings = ['import_capacity_exceeded'];
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <input aria-label="Shipping name" />
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByLabelText('Shipping name')).toBe(input);
+  expect((input as HTMLInputElement).value).toBe('Ada');
+});

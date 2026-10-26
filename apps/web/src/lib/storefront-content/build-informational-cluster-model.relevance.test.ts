@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildInformationalClusterModel } from './build-informational-cluster-model';
-import {
-  smartphoneCategoryData,
-  smartphoneGuidePost,
-} from './build-informational-cluster-model.test-fixtures';
 
 vi.mock(
   '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely',
@@ -53,6 +49,7 @@ describe('buildInformationalClusterModel relevance', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     const model = await buildInformationalClusterModel({
@@ -123,6 +120,7 @@ describe('buildInformationalClusterModel relevance', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     const model = await buildInformationalClusterModel({
@@ -184,6 +182,7 @@ describe('buildInformationalClusterModel relevance', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     // 1. Unrelated Oppo Reno camera article

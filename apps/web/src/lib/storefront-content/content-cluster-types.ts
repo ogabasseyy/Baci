@@ -104,6 +104,8 @@ export interface InformationalClusterModel {
 }
 
 export interface InformationalClusterCategoryData {
+  /** Only set by a loader that already applied destination eligibility; test seams set this explicitly. Production callers must omit it so hub/compare gating runs. */
+  destinationVerified?: boolean;
   merchant?: { id: string; business_name: string; slug: string };
   category?: { slug?: string | null; name?: string | null };
   products?: Array<{

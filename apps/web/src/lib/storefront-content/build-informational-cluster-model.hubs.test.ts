@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildInformationalClusterModel } from './build-informational-cluster-model';
-import {
-  smartphoneCategoryData,
-  smartphoneGuidePost,
-} from './build-informational-cluster-model.test-fixtures';
 
 vi.mock(
   '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely',
@@ -76,6 +72,7 @@ describe('buildInformationalClusterModel hub links', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     const model = await buildInformationalClusterModel({
@@ -128,6 +125,7 @@ describe('buildInformationalClusterModel hub links', () => {
         category: { slug: 'smartphones', name: 'Smartphones' },
         products,
         isCollection: false,
+        destinationVerified: true,
       },
     });
     const links = model?.commerceLinks.map((link) => link.href) ?? [];
@@ -195,6 +193,7 @@ describe('buildInformationalClusterModel hub links', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     const model = await buildInformationalClusterModel({
@@ -263,6 +262,7 @@ describe('buildInformationalClusterModel hub links', () => {
         },
       ],
       isCollection: false,
+      destinationVerified: true,
     };
 
     const model = await buildInformationalClusterModel({

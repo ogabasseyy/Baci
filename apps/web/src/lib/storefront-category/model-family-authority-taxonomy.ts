@@ -158,7 +158,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-a',
     'Samsung Galaxy A',
-    /^(?:Samsung )?Galaxy A(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?A(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+A(?=\s|\d|$)/i,
       /(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)/i,
@@ -168,7 +168,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-s',
     'Samsung Galaxy S',
-    /^(?:Samsung )?Galaxy S(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?S(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+S(?=\s|\d|$)/i,
       /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?S[0-9]{2}\b/i,
@@ -178,7 +178,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-z',
     'Samsung Galaxy Z',
-    /^(?:Samsung )?Galaxy Z(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?Z\s*(?:Fold|Flip)/i,
     [/\bGalaxy\s+Z(?=\s|\d|$)/i, /\b(?:Z\s*(?:Fold|Flip)[0-9]?)\b/i]
   ),
   fam(

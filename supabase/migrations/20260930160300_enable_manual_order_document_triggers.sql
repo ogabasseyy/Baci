@@ -40,6 +40,12 @@ DECLARE
 BEGIN
   SELECT count(*) INTO v_scanned FROM public.orders AS o
   WHERE o.manual_document_notification_eligible
+    -- Mirror the enqueue provenance triple below: a bare flag also matches
+    -- imports/marketplace rows the enqueue early-returns for, so counting
+    -- them would trip the fence on rows that can never mail.
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n
       WHERE n.order_id = o.id
@@ -57,6 +63,11 @@ SELECT count(*) FROM (
   SELECT private.enqueue_manual_order_document(o.id)
   FROM public.orders AS o
   WHERE o.manual_document_notification_eligible
+    -- Same provenance triple as the fence above: skip rows the enqueue
+    -- early-returns for so the reported scan count matches callable rows.
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n
       WHERE n.order_id = o.id

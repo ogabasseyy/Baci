@@ -28,9 +28,12 @@ Activation backfill is bounded by construction plus an abort budget:
 pre-existing orders carry `manual_document_notification_eligible = false`,
 so the postdeploy backfill only sees staff-recorded orders created during
 the deploy's own predeploy-to-postdeploy window that never got an outbox
-row. Each scanned order runs the enqueue function (which re-validates and
-early-returns for ineligible rows), the `NOT EXISTS` anti-join makes
-retries idempotent, and the 120s statement timeout fails the migration
+row: the scan filters on the same provenance triple the enqueue
+early-returns for (`recorded_by_user_id` set, no import job, blank
+external source), so the 500-row fence counts callable rows, not rows
+that can never mail. Each scanned order runs the enqueue function (which
+re-validates and early-returns for ineligible rows), the `NOT EXISTS`
+anti-join makes retries idempotent, and the 120s statement timeout fails the migration
 loud rather than stalling postdeploy. Past a 500-row scan the migration
 aborts outright (it never silently strands rows): a gap that large means
 the predeploy-to-postdeploy window stretched far past minutes, so split

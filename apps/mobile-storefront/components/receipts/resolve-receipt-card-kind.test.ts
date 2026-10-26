@@ -46,6 +46,12 @@ describe('resolveReceiptCardKind', () => {
     );
   });
 
+  it('demotes a paid receipt with an unsettled balance', () => {
+    expect(resolveReceiptCardKind({ ...manualItem, amount_paid: 50000 })).toBe(
+      'invoice'
+    );
+  });
+
   it('keeps a non-manual receipt kind untouched', () => {
     expect(
       resolveReceiptCardKind({ ...manualItem, recorded_by_user_id: null })

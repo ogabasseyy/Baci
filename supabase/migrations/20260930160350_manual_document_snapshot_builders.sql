@@ -4,12 +4,15 @@
 -- selection must stay in lockstep with the sender-side builders in
 -- apps/web/src/lib/manual-order-document-dispatch-items.ts.
 -- Safe predeploy: pure reads (CREATE OR REPLACE FUNCTION, no data change).
+-- Every function pins an empty search_path with fully-qualified table
+-- references, matching the manual-document migration convention, so a
+-- later unqualified edit cannot resolve through a hijacked path.
 CREATE OR REPLACE FUNCTION private.manual_document_item_snapshot(p_order_id uuid)
 RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, private
+SET search_path = ''
 AS $$
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
@@ -33,7 +36,7 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, private
+SET search_path = ''
 AS $$
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'vat_category_code', ts.vat_category_code, 'vat_rate', ts.vat_rate,
@@ -55,7 +58,7 @@ RETURNS jsonb
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, private
+SET search_path = ''
 AS $$
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'amount', t.amount, 'created_at', t.created_at,
@@ -85,7 +88,7 @@ RETURNS TABLE (
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path = public, private
+SET search_path = ''
 AS $$
   SELECT opa.account_number, opa.bank_name, opa.account_name
   FROM public.order_payment_accounts AS opa

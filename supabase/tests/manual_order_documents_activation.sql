@@ -21,9 +21,11 @@ SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_o
 \ir ../migrations/20260930160300_enable_manual_order_document_triggers.sql
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox), 'enable step backfills exactly the window order');
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009' AND event_type = 'manual_order_receipt'), 'window order gets its receipt after enable');
--- The window case is proven; remove its row so the suite below keeps its
--- empty-outbox precondition for global count assertions.
+-- The window case is proven; remove its rows so the suite below keeps its
+-- empty-outbox precondition (and exact fence count) for global assertions.
 DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000009';
+DELETE FROM public.order_items WHERE order_id = '10000000-0000-4000-8000-000000000009';
+DELETE FROM public.orders WHERE id = '10000000-0000-4000-8000-000000000009';
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox), 'window test leaves a clean outbox');
 COMMIT;
 -- Abort path: a gap past the 500-row burst fence fails loud with the
@@ -45,17 +47,28 @@ ALTER TABLE public.customers DISABLE TRIGGER reset_manual_markers_after_customer
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
 SELECT gen_random_uuid(), '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'bulk@example.com', 'paid', 100
 FROM generate_series(1, 501);
+-- Import/marketplace rows carry the flag default but can never mail: the
+-- fence must not count them toward the burst budget.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, import_job_id, customer_email, payment_status, amount_paid)
+SELECT gen_random_uuid(), '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', gen_random_uuid(), 'imported@example.com', 'paid', 100
+FROM generate_series(1, 3);
 DO $$
 DECLARE
   v_scanned integer;
 BEGIN
   SELECT count(*) INTO v_scanned FROM public.orders AS o
   WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n
       WHERE n.order_id = o.id
         AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     );
+  IF v_scanned <> 501 THEN
+    RAISE EXCEPTION 'FAIL: fence counted % rows, want 501 (3 import rows must be excluded)', v_scanned;
+  END IF;
   IF v_scanned > 500 THEN
     RAISE EXCEPTION 'manual-order activation backfill scanned % eligible orders (budget 500)', v_scanned;
   END IF;

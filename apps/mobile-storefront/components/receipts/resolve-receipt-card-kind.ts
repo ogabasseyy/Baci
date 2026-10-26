@@ -10,6 +10,11 @@ import type { ReceiptListItem } from '@/types/receipt';
 // is intentionally demote-only: a stale cached invoice stays an invoice
 // until the list refetches — promoting it here would badge money
 // received on data the promotion inputs have not re-validated.
+// List-depth boundary: the list payload carries no per-transaction
+// payments array, so transaction-level settled validity stays with the
+// detail loader (which gates the preview on detail transactions); the
+// card enforces every settled signal the list carries (payable status,
+// settled total-vs-paid balance, non-terminal shipping).
 export function resolveReceiptCardKind(
   item: ReceiptListItem
 ): ReceiptListItem['document_kind'] {

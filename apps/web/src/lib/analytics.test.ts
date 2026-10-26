@@ -97,8 +97,8 @@ it('shares the browser event ID with the real cart CAPI envelope', () => {
   const pixelCall = vi.mocked(window.fbq).mock.calls[0];
   const payload = JSON.parse(fetcher.mock.calls[0][1].body);
   expect(pixelCall[4]).toEqual({ eventID: expect.any(String) });
-  expect(pixelCall[4]).toEqual({ eventID: payload.eventId });
-  expect(payload.consent).toBe(true);
+  expect(pixelCall[4]).toEqual({ eventID: payload.event_id });
+  expect(payload.analytics_consent).toBe(true);
   vi.unstubAllGlobals();
 });
 

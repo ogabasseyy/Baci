@@ -147,33 +147,38 @@ export async function buildInformationalClusterModel(
     );
   }
 
-  const { brandHubLinks, familyHubLinks } = await buildClusterHubLinks({
-    post: input.post,
-    inferredBrands: inferred.brands,
-    categorySlug,
-    categoryName,
-    storeUrl: input.storeUrl,
-    merchantId: input.merchantId,
-    products,
-    skipDestinationVerification:
-      input.categoryDataOverride?.destinationVerified === true,
-  });
-
-  const approvedCompareSlugs =
-    input.categoryDataOverride?.destinationVerified === true
-      ? undefined
-      : await loadMaintainedCompareRouteManifestSafely({
+  const destinationVerified =
+    input.categoryDataOverride?.destinationVerified === true;
+  const [
+    { brandHubLinks, familyHubLinks },
+    approvedCompareSlugs,
+    compareInventory,
+  ] = await Promise.all([
+    buildClusterHubLinks({
+      post: input.post,
+      inferredBrands: inferred.brands,
+      categorySlug,
+      categoryName,
+      storeUrl: input.storeUrl,
+      merchantId: input.merchantId,
+      products,
+      skipDestinationVerification: destinationVerified,
+    }),
+    destinationVerified
+      ? Promise.resolve(undefined)
+      : loadMaintainedCompareRouteManifestSafely({
           merchantId: input.merchantId,
           categorySlug,
           storeSlug: input.merchantSlug,
           storeUrl: input.storeUrl,
-        });
-  const compareInventory = input.categoryDataOverride
-    ? null
-    : await loadCompareCategoryInventorySafely({
-        merchantId: input.merchantId,
-        categorySlug,
-      });
+        }),
+    input.categoryDataOverride
+      ? Promise.resolve(null)
+      : loadCompareCategoryInventorySafely({
+          merchantId: input.merchantId,
+          categorySlug,
+        }),
+  ]);
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,

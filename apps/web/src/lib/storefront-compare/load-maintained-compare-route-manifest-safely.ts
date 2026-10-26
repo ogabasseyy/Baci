@@ -12,13 +12,22 @@ export async function loadMaintainedCompareRouteManifestSafely(args: {
   storeSlug: string;
   storeUrl: string;
 }): Promise<ReadonlySet<string>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const slugs = await getCachedMaintainedCompareRouteManifest(
-      args.merchantId,
-      args.categorySlug,
-      args.storeSlug,
-      args.storeUrl
-    );
+    const slugs = await Promise.race([
+      getCachedMaintainedCompareRouteManifest(
+        args.merchantId,
+        args.categorySlug,
+        args.storeSlug,
+        args.storeUrl
+      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('maintained manifest timeout')),
+          3_000
+        );
+      }),
+    ]);
     return new Set(slugs);
   } catch (error) {
     console.warn('Failed to load maintained compare route manifest', {
@@ -27,5 +36,9 @@ export async function loadMaintainedCompareRouteManifestSafely(args: {
       error,
     });
     return new Set();
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }

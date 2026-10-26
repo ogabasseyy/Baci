@@ -27,10 +27,20 @@ class TestResizeObserver implements ResizeObserver {
   }
 }
 
-function Harness({ position }: { position?: Position }) {
+function Harness({
+  position,
+  withOverflow = false,
+}: {
+  position?: Position;
+  withOverflow?: boolean;
+}) {
   const anchorRef = useRef<HTMLDivElement>(null);
   useChatLauncherOfferCollision(anchorRef, position);
-  return <div ref={anchorRef} data-testid="launcher-anchor" />;
+  return (
+    <div ref={anchorRef} data-testid="launcher-anchor">
+      {withOverflow && <div data-chat-launcher-overflow data-testid="overflow" />}
+    </div>
+  );
 }
 
 it('marks and clears actual offer overlap after a moved launcher changes position', () => {
@@ -194,4 +204,56 @@ it('rechecks overlap when the launcher anchor becomes visible again', async () =
   expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
   offer.remove();
   vi.unstubAllGlobals();
+});
+
+it('detects an offer overlapping only the launcher overflow bubble', async () => {
+  const { getByTestId } = render(
+    <Harness position={{ x: 10, y: 10 }} withOverflow />,
+  );
+  const anchor = getByTestId('launcher-anchor');
+  const bubble = getByTestId('overflow');
+  const offer = document.createElement('div');
+  offer.className = 'ogabassey-offer-popup';
+  document.body.append(offer);
+  vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue({
+    left: 500,
+    top: 500,
+    right: 556,
+    bottom: 556,
+    width: 56,
+    height: 56,
+    x: 500,
+    y: 500,
+    toJSON: () => ({}),
+  });
+  vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+    left: 100,
+    top: 100,
+    right: 220,
+    bottom: 160,
+    width: 120,
+    height: 60,
+    x: 100,
+    y: 100,
+    toJSON: () => ({}),
+  });
+  vi.spyOn(offer, 'getBoundingClientRect').mockReturnValue({
+    left: 180,
+    top: 120,
+    right: 300,
+    bottom: 220,
+    width: 120,
+    height: 100,
+    x: 180,
+    y: 120,
+    toJSON: () => ({}),
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+
+  expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
+  offer.remove();
 });

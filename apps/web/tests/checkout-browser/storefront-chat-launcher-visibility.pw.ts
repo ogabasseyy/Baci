@@ -89,3 +89,43 @@ test('a dragged-away launcher remains visible when the mobile offer appears', as
   await expect(anchor).toBeVisible();
   await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
 });
+
+test('offer collision includes a visible launcher overflow bubble', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  const initial = await launcher.boundingBox();
+  if (!initial) throw new Error('Chat launcher is missing its layout box');
+  await page.mouse.move(initial.x + 28, initial.y + 28);
+  await page.mouse.down();
+  await page.mouse.move(228, 228, { steps: 4 });
+  await page.mouse.up();
+  await launcher.evaluate((button) => button.blur());
+
+  const anchor = page.locator('.ogabassey-chat-anchor');
+  await anchor.evaluate((element) => {
+    const button = element.querySelector('.ogabassey-chat-button');
+    if (!button) throw new Error('Launcher button is missing');
+    const buttonRect = button.getBoundingClientRect();
+    const anchorRect = element.getBoundingClientRect();
+    const bubble = document.createElement('div');
+    bubble.dataset.chatLauncherOverflow = '';
+    bubble.style.cssText = `position:absolute;left:${buttonRect.left - anchorRect.left - 110}px;top:${buttonRect.top - anchorRect.top - 40}px;width:100px;height:35px`;
+    element.append(bubble);
+    const bubbleRect = bubble.getBoundingClientRect();
+    const offer = document.createElement('div');
+    offer.className = 'ogabassey-offer-popup';
+    offer.textContent = 'Sponsored offer';
+    offer.style.cssText = `position:fixed;left:${bubbleRect.left}px;top:${bubbleRect.top}px;width:${bubbleRect.width}px;height:${bubbleRect.height}px`;
+    document.body.append(offer);
+  });
+
+  await expect(anchor).toHaveAttribute(
+    'data-chat-launcher-offer-collision',
+    ''
+  );
+  await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
+  await expect(launcher).toBeVisible();
+});

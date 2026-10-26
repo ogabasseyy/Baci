@@ -101,7 +101,15 @@ export function DeferredChatWidget({
           className={buttonClasses}
           aria-label="Open AI chat assistant"
           aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+          aria-describedby="ogabassey-deferred-chat-keyboard-help"
         >
+          <span
+            id="ogabassey-deferred-chat-keyboard-help"
+            className="sr-only"
+          >
+            Use arrow keys to move the assistant launcher. Hold Shift for
+            48-pixel steps.
+          </span>
           {isSanta ? (
             <div className="relative w-full h-full">
               <img

@@ -47,32 +47,35 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it('suppresses a trusted pointerless drag click but allows a new pointer activation', () => {
+  it('allows an independent trusted pointerless activation after a missed drag click', () => {
     const { pointer, trustedClick, onOpen } = setup();
     pointer('pointerdown', 220, 320, 7);
     pointer('pointermove', 120, 220, 7);
     pointer('pointerup', 120, 220, 7);
     trustedClick(120, 220);
-    expect(onOpen).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenCalledOnce();
 
     pointer('pointerdown', 120, 220, 8);
     pointer('pointerup', 120, 220, 8);
     trustedClick(120, 220);
-    expect(onOpen).toHaveBeenCalledOnce();
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
   it('allows an independent pointer-id-less click at the drag release point', () => {
-    const { pointer, click, onOpen } = setup();
+    const { pointer, click, trustedClick, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
     click(120, 220, 1, null);
     expect(onOpen).toHaveBeenCalledOnce();
 
+    trustedClick(120, 220, 7);
+    expect(onOpen).toHaveBeenCalledTimes(2);
+
     pointer('pointerdown', 120, 220);
     pointer('pointerup', 120, 220);
     click(120, 220);
-    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenCalledTimes(3);
   });
 
   it('clears pointer-id-less suppression on a new interaction', () => {

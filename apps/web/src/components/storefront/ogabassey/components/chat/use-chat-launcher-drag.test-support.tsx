@@ -174,7 +174,11 @@ export function setup() {
         detail: 1,
         clientX: x,
         clientY: y,
-        nativeEvent: { ...(pointerId === undefined ? {} : { pointerId }), isTrusted: true },
+        nativeEvent: {
+          ...(pointerId === undefined ? {} : { pointerId }),
+          ...(pointerId === 0 ? { pointerType: 'touch' } : {}),
+          isTrusted: true,
+        },
       };
       if (!suppressClick?.(
         event as unknown as ReactMouseEvent<HTMLButtonElement>,

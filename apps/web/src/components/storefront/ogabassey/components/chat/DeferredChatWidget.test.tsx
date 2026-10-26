@@ -46,6 +46,11 @@ describe('DeferredChatWidget', () => {
       'aria-keyshortcuts',
       'ArrowUp ArrowDown ArrowLeft ArrowRight',
     );
+    expect(
+      screen.getByRole('button', { name: 'Open AI chat assistant' }),
+    ).toHaveAccessibleDescription(
+      'Use arrow keys to move the assistant launcher. Hold Shift for 48-pixel steps.',
+    );
     expect(loadChatWidget).not.toHaveBeenCalled();
     expect(screen.queryByText('Loaded chat runtime')).not.toBeInTheDocument();
   });

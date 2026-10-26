@@ -74,6 +74,8 @@ export async function buildClusterHubLinks(args: {
     storeUrl: args.storeUrl,
     categorySlug: args.categorySlug,
     products: args.products,
+    // Callers supply the category-scoped semantic/override pool.
+    assumeCategoryScoped: true,
   });
 
   // Only brands the article actually matches can emit links, so only those

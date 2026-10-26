@@ -1,5 +1,6 @@
 import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
+import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
 import type {
@@ -154,12 +155,21 @@ export async function buildInformationalClusterModel(
     skipDestinationVerification: Boolean(input.categoryDataOverride),
   });
 
+  const approvedCompareSlugs = input.categoryDataOverride
+    ? undefined
+    : await loadMaintainedCompareRouteManifestSafely({
+        merchantId: input.merchantId,
+        categorySlug,
+        storeSlug: input.merchantSlug,
+        storeUrl: input.storeUrl,
+      });
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,
     categoryName,
     products,
     inferredBrands: inferred.brands,
+    approvedCompareSlugs,
   });
 
   const combinedLinkCandidates = [

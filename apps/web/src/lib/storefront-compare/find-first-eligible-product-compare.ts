@@ -1,4 +1,5 @@
 import { buildProductCompareCandidate } from './compare-eligibility';
+import { buildCanonicalProductCompareSlug } from './compare-slugs';
 import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
 import { normalizeInferredBrands } from './normalize-inferred-brands';
 import type { CommercialSupportBrandProduct } from './resolve-canonical-brand-key';
@@ -9,8 +10,14 @@ export function findFirstEligibleProductCompare<
 >(
   categorySlug: string,
   products: T[],
-  inferredBrands?: string[]
+  inferredBrands?: string[],
+  approvedCompareSlugs?: ReadonlySet<string>
 ): { leftProduct: T; rightProduct: T } | null {
+  const isApproved = (left: T, right: T) =>
+    !approvedCompareSlugs ||
+    approvedCompareSlugs.has(
+      buildCanonicalProductCompareSlug(left.slug, right.slug)
+    );
   const normalizedInferredBrands = normalizeInferredBrands(
     categorySlug,
     inferredBrands
@@ -51,7 +58,7 @@ export function findFirstEligibleProductCompare<
             rightProduct,
           });
 
-          if (candidate.isIndexable) {
+          if (candidate.isIndexable && isApproved(leftProduct, rightProduct)) {
             return {
               leftProduct,
               rightProduct,
@@ -79,7 +86,7 @@ export function findFirstEligibleProductCompare<
         rightProduct,
       });
 
-      if (candidate.isIndexable) {
+      if (candidate.isIndexable && isApproved(leftProduct, rightProduct)) {
         return {
           leftProduct,
           rightProduct,

@@ -71,12 +71,14 @@ export function buildCategorySupportLinks(input: {
   includeBrandCompareLink?: boolean;
   products: CommercialSupportProduct[];
   inferredBrands?: string[];
+  approvedCompareSlugs?: ReadonlySet<string>;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
   const firstEligibleProductCompare = findFirstEligibleProductCompare(
     input.categorySlug,
     input.products,
-    input.inferredBrands
+    input.inferredBrands,
+    input.approvedCompareSlugs
   );
 
   if (firstEligibleProductCompare) {

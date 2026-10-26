@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
   CART_REQUEST_TIMEOUT_MS,
@@ -11,6 +11,15 @@ import {
   resetPendingCartDeviceRevocationsForTests,
   revokeCartDeviceSession,
 } from './shared-cart-session-revoke-client';
+
+// The global setup installs a LockManager mock; these suites exercise
+// the synchronous no-Web-Locks fallback path instead.
+beforeEach(() => {
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: undefined,
+  });
+});
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
 let retirement: ReturnType<typeof beginCartSessionRetirement> | undefined;

@@ -10,7 +10,14 @@ import {
 import { cartItem } from '@/hooks/cart/shared-cart-provisioning.test-support';
 import { DeviceCartCapacityItems } from './device-cart-capacity-items';
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => {
+  window.localStorage.clear();
+  // Exercise the synchronous no-Web-Locks fallback (see setup mock).
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: undefined,
+  });
+});
 it('removes a chosen saved item while preserving other lines and merchant caches', () => {
   saveCartToStorage(
     [

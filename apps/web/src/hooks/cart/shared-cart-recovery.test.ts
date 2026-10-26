@@ -1,7 +1,16 @@
 import { renderHook } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { createCartRecovery } from './shared-cart-recovery';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
+
+// The global setup installs a LockManager mock; these suites exercise
+// the synchronous no-Web-Locks fallback path instead.
+beforeEach(() => {
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: undefined,
+  });
+});
 
 it('retries the original failed operation in the live generation', () => {
   const { result } = renderHook(() =>

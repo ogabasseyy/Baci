@@ -4,6 +4,14 @@ import { beginCartSessionRetirement } from './cart-session-write-fence';
 import { bootstrapSharedCart } from './shared-cart-bootstrap-client';
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
+// The global setup installs a LockManager mock; these suites exercise
+// the synchronous no-Web-Locks fallback path instead.
+beforeEach(() => {
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: undefined,
+  });
+});
 beforeEach(() => {
   vi.mocked(fetchWithCsrf).mockReset();
 });

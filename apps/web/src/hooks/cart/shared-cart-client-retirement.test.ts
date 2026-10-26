@@ -10,6 +10,14 @@ import { resetPendingCartDeviceRevocationsForTests } from './shared-cart-session
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
 const fetchMock = vi.fn();
+// The global setup installs a LockManager mock; these suites exercise
+// the synchronous no-Web-Locks fallback path instead.
+beforeEach(() => {
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: undefined,
+  });
+});
 beforeEach(() => vi.stubGlobal('fetch', fetchMock));
 afterEach(() => vi.unstubAllGlobals());
 function jsonResponse(payload: unknown) {

@@ -67,6 +67,13 @@ export type WindowCounter = { count: number; resetTime: number };
 
 export const memoryCounters = new Map<string, WindowCounter>();
 
+/**
+ * Bootstrap gets its own degraded fallback store: anonymous churn must
+ * never consume the capacity authenticated shoppers need to read or
+ * update their carts during a quota-store outage.
+ */
+export const bootstrapMemoryCounters = new Map<string, WindowCounter>();
+
 export function hashSubject(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -100,26 +107,30 @@ function parseCounterStrict(value: unknown, min: number): number | null {
  */
 export const MEMORY_COUNTER_MAX_ENTRIES = 4096;
 
-function pruneMemoryCounters(now: number): void {
-  for (const [key, counter] of memoryCounters) {
-    if (now > counter.resetTime) memoryCounters.delete(key);
+function pruneMemoryCounters(
+  store: Map<string, WindowCounter>,
+  now: number
+): void {
+  for (const [key, counter] of store) {
+    if (now > counter.resetTime) store.delete(key);
   }
 }
 
 export function incrementMemoryCounter(
   key: string,
-  windowMs: number
+  windowMs: number,
+  store: Map<string, WindowCounter> = memoryCounters
 ): WindowCounter {
   const now = Date.now();
-  if (memoryCounters.size >= MEMORY_COUNTER_MAX_ENTRIES) {
-    pruneMemoryCounters(now);
+  if (store.size >= MEMORY_COUNTER_MAX_ENTRIES) {
+    pruneMemoryCounters(store, now);
   }
-  const existing = memoryCounters.get(key);
-  if (!existing && memoryCounters.size >= MEMORY_COUNTER_MAX_ENTRIES) {
+  const existing = store.get(key);
+  if (!existing && store.size >= MEMORY_COUNTER_MAX_ENTRIES) {
     // Never discard a live budget to admit a new subject: subject churn
     // must not reset exhausted authenticated quotas during an outage.
     let resetTime = now + windowMs;
-    for (const counter of memoryCounters.values()) {
+    for (const counter of store.values()) {
       resetTime = Math.min(resetTime, counter.resetTime);
     }
     return { count: Number.POSITIVE_INFINITY, resetTime };
@@ -128,7 +139,7 @@ export function incrementMemoryCounter(
     existing && now <= existing.resetTime
       ? { count: existing.count + 1, resetTime: existing.resetTime }
       : { count: 1, resetTime: now + windowMs };
-  memoryCounters.set(key, next);
+  store.set(key, next);
   return next;
 }
 
@@ -165,7 +176,8 @@ function warnQuotaDegraded(): void {
 export async function incrementWindowCounter(
   key: string,
   windowMs: number,
-  allowMemoryFallback = true
+  allowMemoryFallback = true,
+  counterStore: Map<string, WindowCounter> = memoryCounters
 ): Promise<WindowCounterResult> {
   const redis = getRedis();
   if (redis) {
@@ -216,7 +228,10 @@ export async function incrementWindowCounter(
       degraded: true,
     };
   }
-  return { ...incrementMemoryCounter(key, windowMs), degraded: true };
+  return {
+    ...incrementMemoryCounter(key, windowMs, counterStore),
+    degraded: true,
+  };
 }
 
 /**
@@ -263,7 +278,8 @@ export async function checkCartQuota(
   const counter = await incrementWindowCounter(
     quotaKey(input),
     budget.windowMs,
-    !requiresSharedStore
+    !requiresSharedStore,
+    input.operation === 'bootstrap' ? bootstrapMemoryCounters : memoryCounters
   );
   const failClosed = counter.degraded && requiresSharedStore;
   return {
@@ -279,5 +295,6 @@ export function __resetCartQuotaStoreForTesting(): void {
     throw new Error('__resetCartQuotaStoreForTesting should only run in tests');
   }
   memoryCounters.clear();
+  bootstrapMemoryCounters.clear();
   lastQuotaDegradationWarnAt = 0;
 }

@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import type * as NextImageModule from 'next/image';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { OgabasseyPdpCriticalShell } from './critical-shell';
@@ -7,7 +8,7 @@ import type { OgabasseyPdpCriticalProduct } from './critical-product';
 vi.mock('next/image', async (importOriginal) => ({
   // Keep the REAL getImageProps for the migrated <picture>/AVIF path while the
   // default export stays this suite's attribute-exposing test double.
-  ...(await importOriginal<typeof import('next/image')>()),
+  ...(await importOriginal<typeof NextImageModule>()),
   default: ({
     alt,
     fetchPriority,
@@ -74,6 +75,16 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+
+const isBefore = (
+  first: Element | null | undefined,
+  second: Element | null | undefined
+): boolean =>
+  Boolean(
+    first &&
+      second &&
+      first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING
+  );
 
 const defaultProduct: OgabasseyPdpCriticalProduct = {
   brand: 'Samsung',
@@ -214,10 +225,17 @@ describe('OgabasseyPdpCriticalShell', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('does not render filled stars for products without reviews', () => {
-    renderCriticalShell();
+  it('omits the rating row and "No reviews yet" copy when a product has no reviews or ratings', () => {
+    const { container } = renderCriticalShell({
+      rating: 0,
+      ratingCount: 0,
+      reviewCount: 0,
+    });
 
-    expect(screen.getByText('No reviews yet')).toBeInTheDocument();
+    expect(
+      container.querySelector('[data-ogabassey-pdp-rating-row]')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('No reviews yet')).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/out of 5 stars/i)).not.toBeInTheDocument();
     expect(screen.queryByText('★★★★★')).not.toBeInTheDocument();
   });
@@ -240,7 +258,11 @@ describe('OgabasseyPdpCriticalShell', () => {
   });
 
   it('renders rating-count-only aggregate ratings as ratings, not reviews', () => {
-    renderCriticalShell({ rating: 4.5, ratingCount: 12, reviewCount: 0 });
+    const { rerender } = renderCriticalShell({
+      rating: 4.5,
+      ratingCount: 12,
+      reviewCount: 0,
+    });
 
     expect(
       screen.getByRole('img', { name: '4.5 out of 5 stars' })
@@ -248,6 +270,23 @@ describe('OgabasseyPdpCriticalShell', () => {
     expect(screen.getByText('12 Ratings')).toBeInTheDocument();
     expect(screen.queryByText('No reviews yet')).not.toBeInTheDocument();
     expect(screen.queryByText('12 Reviews')).not.toBeInTheDocument();
+
+    rerender(
+      <OgabasseyPdpCriticalShell
+        basePath=""
+        product={{
+          ...defaultProduct,
+          rating: 4,
+          ratingCount: 1,
+          reviewCount: 0,
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole('img', { name: '4 out of 5 stars' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('1 Rating')).toBeInTheDocument();
   });
 
   it('displays review count when both reviews and ratings exist', () => {
@@ -258,6 +297,64 @@ describe('OgabasseyPdpCriticalShell', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('5 Reviews')).toBeInTheDocument();
     expect(screen.queryByText('12 Ratings')).not.toBeInTheDocument();
+  });
+
+  it('renders brand, title, rating row, price, and visible summary in the expected summary DOM order', () => {
+    const { container } = renderCriticalShell({
+      brand: 'Samsung',
+      name: 'Samsung Galaxy Z TriFold',
+      price: 5_800_000,
+      rating: 4.5,
+      reviewCount: 10,
+      visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
+    });
+
+    const summary = container.querySelector('[data-ogabassey-pdp-summary]');
+    expect(summary).not.toBeNull();
+
+    const brand = summary?.querySelector('[data-ogabassey-pdp-brand]');
+    const title = summary?.querySelector('h1[data-ogabassey-pdp-title]');
+    const ratingRow = summary?.querySelector('[data-ogabassey-pdp-rating-row]');
+    const price = summary?.querySelector('[data-ogabassey-pdp-price]');
+    const visibleSummary = summary?.querySelector(
+      '[data-ogabassey-pdp-visible-summary]'
+    );
+
+    expect(brand).toBeInTheDocument();
+    expect(title).toBeInTheDocument();
+    expect(ratingRow).toBeInTheDocument();
+    expect(price).toBeInTheDocument();
+    expect(visibleSummary).toBeInTheDocument();
+
+    expect(isBefore(brand, title)).toBe(true);
+    expect(isBefore(title, ratingRow)).toBe(true);
+    expect(isBefore(ratingRow, price)).toBe(true);
+    expect(isBefore(price, visibleSummary)).toBe(true);
+  });
+
+  it('renders summaryCommerce ahead of visible summary when provided', () => {
+    const { container } = render(
+      <OgabasseyPdpCriticalShell
+        basePath=""
+        product={{
+          ...defaultProduct,
+          visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
+        }}
+        summaryCommerce={
+          <div data-testid="summary-commerce">Commerce Options</div>
+        }
+      />
+    );
+
+    const summary = container.querySelector('[data-ogabassey-pdp-summary]');
+    const commerce = summary?.querySelector('[data-testid="summary-commerce"]');
+    const visibleSummary = summary?.querySelector(
+      '[data-ogabassey-pdp-visible-summary]'
+    );
+
+    expect(commerce).toBeInTheDocument();
+    expect(visibleSummary).toBeInTheDocument();
+    expect(isBefore(commerce, visibleSummary)).toBe(true);
   });
 
   it('shows review count without a rating signal when rating is zero', () => {

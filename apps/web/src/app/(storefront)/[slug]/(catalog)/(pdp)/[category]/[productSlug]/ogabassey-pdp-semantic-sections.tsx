@@ -1,6 +1,7 @@
 import { ProductSemanticSections } from '@/components/storefront/ogabassey/seo/product-semantic-sections';
 import type { Product } from '@/lib/products';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
+import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 import {
   buildCompareLinkGraph,
   MAX_PRODUCT_COMPARE_LINKS,
@@ -11,6 +12,7 @@ import {
   getCachedProductSeoLinkData,
   type ProductSeoLinkData,
 } from '@/lib/storefront-product/get-cached-product-seo-link-data';
+import { loadPdpBrandHubEligibilityInventorySafely } from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 
 interface OgabasseyPdpSemanticMerchant {
@@ -48,18 +50,26 @@ export async function OgabasseyPdpSemanticSections({
   // route error boundary. Warm cache failures serve last-good data via
   // stale-while-revalidate and do not reach this catch.
   let seoLinkData: ProductSeoLinkData;
+  let hubEligibilityInventory: EligibleHubProductInput[];
 
   try {
-    seoLinkData = await getCachedProductSeoLinkData({
-      blogEnabled: Boolean(merchant.feature_settings?.blog_enabled),
-      categorySlug,
-      merchantId: merchant.id,
-      productBrand: product.brand,
-      productId: String(product.id || ''),
-      productName: product.name,
-      productSlug: product.slug || String(product.id || ''),
-      storeSlug,
-    });
+    [seoLinkData, hubEligibilityInventory] = await Promise.all([
+      getCachedProductSeoLinkData({
+        blogEnabled: Boolean(merchant.feature_settings?.blog_enabled),
+        categorySlug,
+        merchantId: merchant.id,
+        productBrand: product.brand,
+        productId: String(product.id || ''),
+        productName: product.name,
+        productSlug: product.slug || String(product.id || ''),
+        storeSlug,
+      }),
+      loadPdpBrandHubEligibilityInventorySafely({
+        merchantId: merchant.id,
+        categorySlug,
+        productBrand: product.brand,
+      }),
+    ]);
   } catch (error) {
     console.warn('Failed to load Ogabassey PDP semantic links', {
       merchantId: merchant.id,
@@ -103,6 +113,7 @@ export async function OgabasseyPdpSemanticSections({
     countryCode: merchant.country,
     currentProduct,
     inventory,
+    hubEligibilityInventory,
     guidePosts,
     priorityGuidePostSlugs,
   });

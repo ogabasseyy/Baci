@@ -111,18 +111,17 @@ export function OgabasseyPdpCriticalShell({
     product.reviewCount,
     product.ratingCount
   );
+  const hasRatingRow = aggregateRatingCount > 0;
   const hasRatingSignal = aggregateRatingCount > 0 && product.rating > 0;
   const ratingText = formatRating(product.rating);
   const reviewCountText =
-    aggregateRatingCount === 0
-      ? 'No reviews yet'
-      : product.reviewCount > 0
-        ? `${product.reviewCount} ${
-            product.reviewCount === 1 ? 'Review' : 'Reviews'
-          }`
-        : `${aggregateRatingCount} ${
-            aggregateRatingCount === 1 ? 'Rating' : 'Ratings'
-          }`;
+    product.reviewCount > 0
+      ? `${product.reviewCount} ${
+          product.reviewCount === 1 ? 'Review' : 'Reviews'
+        }`
+      : `${aggregateRatingCount} ${
+          aggregateRatingCount === 1 ? 'Rating' : 'Ratings'
+        }`;
   return (
     <section data-ogabassey-pdp-critical-shell>
       <div data-ogabassey-pdp-critical-inner>
@@ -158,21 +157,20 @@ export function OgabasseyPdpCriticalShell({
           <div data-ogabassey-pdp-summary>
             <p data-ogabassey-pdp-brand>{product.brand}</p>
             <h1 data-ogabassey-pdp-title>{product.name}</h1>
-            <OgabasseyPdpProductVisibleSummary
-              summary={product.visibleSummary || null}
-            />
-            <div data-ogabassey-pdp-rating-row>
-              {hasRatingSignal ? (
-                <span
-                  data-ogabassey-pdp-stars
-                  aria-label={`${ratingText} out of 5 stars`}
-                  role="img"
-                >
-                  {ratingText} ★
-                </span>
-              ) : null}
-              <span data-ogabassey-pdp-review-count>{reviewCountText}</span>
-            </div>
+            {hasRatingRow ? (
+              <div data-ogabassey-pdp-rating-row>
+                {hasRatingSignal ? (
+                  <span
+                    data-ogabassey-pdp-stars
+                    aria-label={`${ratingText} out of 5 stars`}
+                    role="img"
+                  >
+                    {ratingText} ★
+                  </span>
+                ) : null}
+                <span data-ogabassey-pdp-review-count>{reviewCountText}</span>
+              </div>
+            ) : null}
             {summaryCommerce || (
               <div data-ogabassey-pdp-price>
                 <span data-ogabassey-pdp-price-static>
@@ -180,6 +178,9 @@ export function OgabasseyPdpCriticalShell({
                 </span>
               </div>
             )}
+            <OgabasseyPdpProductVisibleSummary
+              summary={product.visibleSummary || null}
+            />
           </div>
           <div data-ogabassey-pdp-commerce-slot>
             {children}

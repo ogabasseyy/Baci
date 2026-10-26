@@ -89,12 +89,18 @@ describe('ChatLauncher', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveAttribute(
+    const launcher = screen.getByRole('button', { name: 'Toggle chat' });
+    expect(launcher).toHaveAttribute(
       'aria-keyshortcuts',
       'ArrowUp ArrowDown ArrowLeft ArrowRight',
     );
-    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveAccessibleDescription(
+    expect(launcher).toHaveAccessibleDescription(
       'Use arrow keys to move the assistant launcher. Hold Shift for 48-pixel steps.',
     );
+    expect(
+      launcher.contains(
+        screen.getByText(/Use arrow keys to move the assistant launcher/),
+      ),
+    ).toBe(false);
   });
 });

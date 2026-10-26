@@ -46,5 +46,11 @@ describe('storefront chat overlay priority CSS', () => {
     expect(overlayCss).toMatch(
       /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\):not\([\s\S]*?data-chat-promotion-focus-handoff[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
     );
+    const narrowOfferRule = overlayCss.slice(
+      overlayCss.indexOf('@media (max-width: 423px)')
+    );
+    expect(narrowOfferRule).toMatch(
+      /\.ogabassey-chat-anchor[\s\S]*?:not\(\s*\[data-chat-launcher-positioned\]\s*\)/
+    );
   });
 });

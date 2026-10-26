@@ -1,0 +1,91 @@
+import { readFileSync } from 'node:fs';
+import { expect, test } from '@playwright/test';
+
+const overlayCss = readFileSync(
+  'src/app/(storefront)/storefront-chat-overlay-priority.css',
+  'utf8'
+);
+const chatCss = readFileSync(
+  'src/app/(storefront)/storefront-chat.css',
+  'utf8'
+);
+
+test('mobile offer suppression keeps a moved launcher reachable', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.setContent(`
+    <style>${overlayCss}\n${chatCss}</style>
+    <div class="ogabassey-chat-anchor" data-chat-launcher-positioned>
+      <button class="ogabassey-chat-button">Assistant</button>
+    </div>
+    <div class="ogabassey-offer-popup">Sponsored offer</div>
+  `);
+
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
+  await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
+  await page.locator('.ogabassey-chat-anchor').evaluate((anchor) => {
+    anchor.setAttribute('data-chat-launcher-offer-collision', '');
+  });
+  await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
+});
+
+test('launcher help is announced and keyboard movement preserves position', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await expect(launcher).toHaveAttribute(
+    'aria-keyshortcuts',
+    'ArrowUp ArrowDown ArrowLeft ArrowRight'
+  );
+  const helpId = await launcher.getAttribute('aria-describedby');
+  expect(helpId).toBeTruthy();
+  const descriptionIsInsideButton = await launcher.evaluate((button) => {
+    const help = document.getElementById(
+      button.getAttribute('aria-describedby') ?? ''
+    );
+    return help !== null && button.contains(help);
+  });
+  expect(descriptionIsInsideButton).toBe(false);
+  const initialBounds = await launcher.boundingBox();
+  if (!initialBounds)
+    throw new Error('Chat launcher is missing its layout box');
+
+  await launcher.focus();
+  await page.keyboard.press('ArrowDown');
+
+  const movedBounds = await launcher.boundingBox();
+  if (!movedBounds) throw new Error('Chat launcher lost its layout box');
+  expect(movedBounds.y).toBe(initialBounds.y);
+});
+
+test('a dragged-away launcher remains visible when the mobile offer appears', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  const initial = await launcher.boundingBox();
+  if (!initial) throw new Error('Chat launcher is missing its layout box');
+  await page.mouse.move(initial.x + 28, initial.y + 28);
+  await page.mouse.down();
+  await page.mouse.move(80, 120, { steps: 4 });
+  await page.mouse.up();
+  await launcher.evaluate((button) => button.blur());
+
+  const anchor = page.locator('.ogabassey-chat-anchor');
+  await expect(anchor).toHaveAttribute('data-chat-launcher-positioned', '');
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div class="ogabassey-offer-popup">Sponsored offer</div>'
+    );
+  });
+
+  await expect(anchor).toBeVisible();
+  await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
+});

@@ -63,7 +63,7 @@ body:has(.ogabassey-chat-anchor[data-chat-launcher-offer-collision])
     )
     .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
       :focus-within
-    ):not([data-chat-launcher-dragging]) {
+    ):not([data-chat-launcher-dragging]):not([data-chat-launcher-positioned]) {
     display: none;
   }
   body:has(.ogabassey-offer-popup :focus-visible)

@@ -23,7 +23,7 @@ export function useChatLauncherOfferCollision(
         '.ogabassey-offer-popup',
       );
       if (offer !== observedOffer) {
-        resizeObserver?.disconnect();
+        if (observedOffer) resizeObserver?.unobserve(observedOffer);
         observedOffer?.removeEventListener('animationend', syncCollision);
         observedOffer = offer;
         if (offer) resizeObserver?.observe(offer);

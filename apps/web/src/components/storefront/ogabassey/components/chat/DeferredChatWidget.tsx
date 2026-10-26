@@ -120,6 +120,7 @@ export function DeferredChatWidget({
       ref={drag.anchorRef}
       style={drag.anchorStyle}
       className={anchorClasses}
+      data-chat-launcher-positioned={drag.position ? '' : undefined}
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >
@@ -146,22 +147,6 @@ export function DeferredChatWidget({
               : 'ogabassey-deferred-chat-keyboard-help'
           }
         >
-          <span
-            id="ogabassey-deferred-chat-keyboard-help"
-            className="sr-only"
-          >
-            Use arrow keys to move the assistant launcher. Hold Shift for
-            48-pixel steps.
-          </span>
-          {loadFailed && (
-            <span
-              id="ogabassey-deferred-chat-load-error"
-              className="sr-only"
-              role="status"
-            >
-              Chat did not load. Activate again to retry.
-            </span>
-          )}
           {loadFailed ? (
             <span
               className="ogabassey-chat-retry-indicator"
@@ -193,6 +178,22 @@ export function DeferredChatWidget({
             </>
           )}
         </button>
+        <span
+          id="ogabassey-deferred-chat-keyboard-help"
+          className="sr-only"
+        >
+          Use arrow keys to move the assistant launcher. Hold Shift for
+          48-pixel steps.
+        </span>
+        {loadFailed && (
+          <span
+            id="ogabassey-deferred-chat-load-error"
+            className="sr-only"
+            role="status"
+          >
+            Chat did not load. Activate again to retry.
+          </span>
+        )}
       </div>
     </div>
   );

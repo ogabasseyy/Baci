@@ -8,13 +8,20 @@ const resizeObservers: Array<TestResizeObserver> = [];
 
 class TestResizeObserver implements ResizeObserver {
   private callback: ResizeObserverCallback;
+  readonly observed = new Set<Element>();
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
     resizeObservers.push(this);
   }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  observe(target: Element) {
+    this.observed.add(target);
+  }
+  unobserve(target: Element) {
+    this.observed.delete(target);
+  }
+  disconnect() {
+    this.observed.clear();
+  }
   trigger() {
     this.callback([], this);
   }
@@ -169,6 +176,8 @@ it('rechecks overlap when the launcher anchor becomes visible again', async () =
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
   expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
+  expect(resizeObservers.at(-1)?.observed.has(anchor)).toBe(true);
+  expect(resizeObservers.at(-1)?.observed.has(offer)).toBe(true);
 
   vi.mocked(anchor.getBoundingClientRect).mockReturnValue(rect(500, 500));
   act(() => resizeObservers.at(-1)?.trigger());

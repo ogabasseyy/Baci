@@ -151,9 +151,13 @@ describe('DeferredChatWidget', () => {
     launcher.focus();
     await user.keyboard('{Enter}');
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
+    const loadError = await screen.findByRole('status');
+    expect(loadError).toHaveTextContent(
       'Chat did not load. Activate again to retry.',
     );
+    expect(
+      screen.getByRole('button', { name: 'Chat did not load. Activate to retry.' }).contains(loadError),
+    ).toBe(false);
     expect(await screen.findByText('Retry')).toBeVisible();
     expect(launcher).toHaveAttribute(
       'aria-label',

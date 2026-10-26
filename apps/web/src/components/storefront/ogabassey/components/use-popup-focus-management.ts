@@ -78,13 +78,29 @@ export function usePopupFocusManagement(
       return true;
     };
     if (!tryRestoreFocus()) {
-      observer = new MutationObserver(() => {
-        if (tryRestoreFocus()) observer?.disconnect();
+      const containsPromotion = (node: Node) =>
+        node instanceof Element &&
+        (node.matches('.ogabassey-offer-popup, .ogabassey-newsletter-popup') ||
+          node.querySelector(
+            '.ogabassey-offer-popup, .ogabassey-newsletter-popup',
+          ) !== null);
+      observer = new MutationObserver((records) => {
+        const visibilityChanged = records.some((record) =>
+          record.type === 'attributes' ||
+          [...record.addedNodes, ...record.removedNodes].some(containsPromotion),
+        );
+        if (visibilityChanged && tryRestoreFocus()) observer?.disconnect();
       });
       observer.observe(document.body, {
         subtree: true,
+        childList: true,
         attributes: true,
-        attributeFilter: ['class', 'style'],
+        attributeFilter: [
+          'class',
+          'style',
+          'data-chat-launcher-offer-collision',
+          'data-chat-promotion-focus-handoff',
+        ],
       });
       document.addEventListener('pointerdown', cancelPendingRestore, true);
       document.addEventListener('keydown', cancelPendingRestore, true);

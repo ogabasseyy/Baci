@@ -74,12 +74,6 @@ export function ChatLauncher({
           isOpen ? undefined : 'ArrowUp ArrowDown ArrowLeft ArrowRight'
         }
       >
-        {!isOpen && (
-          <span id="ogabassey-chat-launcher-keyboard-help" className="sr-only">
-            Use arrow keys to move the assistant launcher. Hold Shift for
-            48-pixel steps.
-          </span>
-        )}
         {isOpen ? (
           <X size={28} />
         ) : (
@@ -107,6 +101,12 @@ export function ChatLauncher({
           </>
         )}
       </button>
+      {!isOpen && (
+        <span id="ogabassey-chat-launcher-keyboard-help" className="sr-only">
+          Use arrow keys to move the assistant launcher. Hold Shift for
+          48-pixel steps.
+        </span>
+      )}
     </div>
   );
 }

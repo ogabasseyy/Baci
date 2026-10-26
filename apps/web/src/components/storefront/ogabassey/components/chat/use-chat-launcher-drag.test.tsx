@@ -99,13 +99,14 @@ describe('useChatLauncherDrag', () => {
   });
 
   it('keeps the icon reachable after the viewport shrinks', () => {
-    const { pointer, measure } = setup();
+    const { pointer, measure, flush } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 2000, 2000);
     pointer('pointerup', 2000, 2000);
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
     fireEvent(window, new Event('resize'));
+    flush();
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(248px, 358px, 0)',
     );

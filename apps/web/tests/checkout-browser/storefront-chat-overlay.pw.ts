@@ -41,6 +41,15 @@ test('focused launcher remains reachable and pauses promotional overlays', async
       .locator('.ogabassey-chat-anchor')
       .evaluate((anchor) => getComputedStyle(anchor, '::after').height);
     expect(offset).toBe(width < 768 ? '92px' : '0px');
+    if (width >= 768) {
+      await expect
+        .poll(() =>
+          page
+            .locator('.ogabassey-chat-anchor')
+            .evaluate((anchor) => getComputedStyle(anchor).bottom)
+        )
+        .toBe('16px');
+    }
 
     await page.evaluate(() => {
       document.body.insertAdjacentHTML(
@@ -142,7 +151,11 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     await launcher.evaluate((button) => {
       const state = window as typeof window & {
         lastLauncherPointerUpId?: number;
-        lastLauncherClick?: { isPointerEvent: boolean; pointerId?: number };
+        lastLauncherClick?: {
+          isPointerEvent: boolean;
+          isTrusted: boolean;
+          pointerId?: number;
+        };
       };
       button.addEventListener('pointerup', (event) => {
         state.lastLauncherPointerUpId = (event as PointerEvent).pointerId;
@@ -151,6 +164,7 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
         const click = event as PointerEvent;
         state.lastLauncherClick = {
           isPointerEvent: event instanceof PointerEvent,
+          isTrusted: event.isTrusted,
           pointerId: click.pointerId,
         };
       });
@@ -175,6 +189,10 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     if (testInfo.project.use.browserName === 'webkit') {
       expect(browserClick.click?.isPointerEvent).toBe(true);
       expect(browserClick.click?.pointerId).toBe(browserClick.pointerUpId);
+    }
+    if (testInfo.project.use.browserName === 'firefox') {
+      expect(browserClick.click?.isPointerEvent).toBe(true);
+      expect(browserClick.click?.isTrusted).toBe(true);
     }
 
     const dragPosition = await page

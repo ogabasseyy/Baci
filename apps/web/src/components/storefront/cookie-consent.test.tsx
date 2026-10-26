@@ -110,6 +110,26 @@ describe('CookieConsent', () => {
     expect(input).toHaveFocus();
   });
 
+  it('keeps focus on the chat toggle when consent appears during an open chat', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <div className="ogabassey-chat-window">
+          <input aria-label="Chat message" />
+        </div>
+        <button className="ogabassey-chat-button" type="button">
+          Close chat
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const toggle = screen.getByRole('button', { name: 'Close chat' });
+    toggle.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(toggle).toHaveFocus();
+  });
+
   it('moves focus from the bubble dismiss control into consent and restores it', () => {
     render(
       <div className="ogabassey-chat-anchor">

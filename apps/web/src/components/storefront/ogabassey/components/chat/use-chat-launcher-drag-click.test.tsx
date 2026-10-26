@@ -7,6 +7,15 @@ afterEach(() => {
 });
 
 describe('useChatLauncherDrag click correlation', () => {
+  it('allows an untrusted pointerId-zero assistive click after a pointerId-zero drag', () => {
+    const { pointer, click, onOpen } = setup();
+    pointer('pointerdown', 220, 320, 0);
+    pointer('pointermove', 120, 220, 0);
+    pointer('pointerup', 120, 220, 0);
+    click(120, 220, 1, 0);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
   it('allows an independent pointer-id-less click at the drag release point', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);

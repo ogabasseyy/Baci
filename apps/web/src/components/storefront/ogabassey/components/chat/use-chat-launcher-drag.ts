@@ -258,8 +258,14 @@ export function useChatLauncherDrag(
       event.detail > 0 &&
       Math.abs(event.clientX - pending.x) <= 2 &&
       Math.abs(event.clientY - pending.y) <= 2;
+    const matchesPointer = Boolean(
+      pending &&
+        ((nativeEvent.pointerId === pending.pointerId &&
+          (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted)) ||
+          (nativeEvent.pointerId === 0 && nativeEvent.isTrusted)),
+    );
     const suppress = Boolean(
-      matchesRelease && nativeEvent.pointerId === pending.pointerId,
+      matchesRelease && matchesPointer,
     );
     if (pending) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;

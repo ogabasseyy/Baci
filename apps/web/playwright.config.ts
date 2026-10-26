@@ -4,6 +4,7 @@ import { defineConfig } from '@playwright/test';
 
 const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
 const port = Number(configuredPort || 3217);
+const firefoxHome = process.getuid?.() === 0 ? '/root' : os.homedir();
 export default defineConfig({
   testDir: './tests/checkout-browser',
   testMatch: '**/*.pw.ts',
@@ -32,7 +33,7 @@ export default defineConfig({
       use: {
         browserName: 'firefox',
         launchOptions: {
-          env: { ...process.env, HOME: os.homedir() },
+          env: { ...process.env, HOME: firefoxHome },
         },
       },
     },

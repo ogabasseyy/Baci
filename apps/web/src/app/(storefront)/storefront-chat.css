@@ -162,6 +162,7 @@
 
   @media (min-width: 768px) {
     .ogabassey-chat-anchor,
+    .ogabassey-chat-anchor[data-mobile-offset="default"],
     .ogabassey-chat-anchor[data-mobile-offset="cart"],
     .ogabassey-chat-anchor[data-mobile-offset="product"] {
       bottom: 1rem;

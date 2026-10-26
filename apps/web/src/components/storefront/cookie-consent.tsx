@@ -38,11 +38,10 @@ export function CookieConsent() {
         activeElement instanceof HTMLElement
           ? activeElement.closest('.ogabassey-chat-anchor')
           : null;
-      if (
-        activeElement instanceof HTMLElement &&
-        chatAnchor &&
-        !activeElement.closest('.ogabassey-chat-window')
-      ) {
+      const chatIsOpen = Boolean(
+        chatAnchor?.querySelector('.ogabassey-chat-window')
+      );
+      if (activeElement instanceof HTMLElement && chatAnchor && !chatIsOpen) {
         restoreFocusRef.current = activeElement;
         dialogRef.current
           ?.querySelector<HTMLButtonElement>('button:not(:disabled)')

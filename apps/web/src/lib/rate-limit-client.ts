@@ -14,6 +14,112 @@ function isValidIP(ip: string): boolean {
   return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
 }
 
+// Published Cloudflare egress ranges (https://www.cloudflare.com/ips-v4
+// and /ips-v6, fetched 2026-10-26). They authenticate the immediate
+// peer: CF-Connecting-IP is only meaningful when the platform-verified
+// connecting address is itself a Cloudflare egress, because Cloudflare
+// overwrites that header at its edge. A direct-to-origin caller's peer
+// address is their own, so forged CF headers from them are ignored.
+const CLOUDFLARE_IPV4_RANGES = [
+  '173.245.48.0/20',
+  '103.21.244.0/22',
+  '103.22.200.0/22',
+  '103.31.4.0/22',
+  '141.101.64.0/18',
+  '108.162.192.0/18',
+  '190.93.240.0/20',
+  '188.114.96.0/20',
+  '197.234.240.0/22',
+  '198.41.128.0/17',
+  '162.158.0.0/15',
+  '104.16.0.0/13',
+  '104.24.0.0/14',
+  '172.64.0.0/13',
+  '131.0.72.0/22',
+] as const;
+const CLOUDFLARE_IPV6_RANGES = [
+  '2400:cb00::/32',
+  '2606:4700::/32',
+  '2803:f800::/32',
+  '2405:b500::/32',
+  '2405:8100::/32',
+  '2a06:98c0::/29',
+  '2c0f:f248::/32',
+] as const;
+
+function ipv4ToBigInt(ip: string): bigint | null {
+  if (!IPV4_REGEX.test(ip)) return null;
+  return ip
+    .split('.')
+    .reduce((acc, part) => (acc << 8n) | BigInt(Number(part)), 0n);
+}
+
+function ipv6ToBigInt(ip: string): bigint | null {
+  if (!IPV6_REGEX.test(ip)) return null;
+  let value = ip;
+  const lastColon = value.lastIndexOf(':');
+  const tail = value.slice(lastColon + 1);
+  if (IPV4_REGEX.test(tail)) {
+    const v4 = ipv4ToBigInt(tail);
+    if (v4 === null) return null;
+    value =
+      value.slice(0, lastColon + 1) +
+      `${Number((v4 >> 16n) & 0xffffn).toString(16)}:${Number(v4 & 0xffffn).toString(16)}`;
+  }
+  const [head, rest] = value.split('::');
+  const headGroups = head ? head.split(':') : [];
+  const tailGroups = rest ? rest.split(':') : [];
+  if (rest === undefined && headGroups.length !== 8) return null;
+  const missing = 8 - headGroups.length - tailGroups.length;
+  if (missing < 0) return null;
+  const groups = [
+    ...headGroups,
+    ...Array.from({ length: missing }, () => '0'),
+    ...tailGroups,
+  ];
+  if (groups.length !== 8) return null;
+  let result = 0n;
+  for (const group of groups) {
+    const parsed = Number.parseInt(group, 16);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
+      return null;
+    }
+    result = (result << 16n) | BigInt(parsed);
+  }
+  return result;
+}
+
+function ipInCidr(
+  address: bigint,
+  cidr: string,
+  parse: (ip: string) => bigint | null,
+  bits: bigint
+): boolean {
+  const [base, prefixText] = cidr.split('/');
+  const baseValue = base ? parse(base) : null;
+  const prefix = BigInt(Number(prefixText));
+  if (baseValue === null || prefix < 0n || prefix > bits) return false;
+  if (prefix === 0n) return true;
+  const shift = bits - prefix;
+  return address >> shift === baseValue >> shift;
+}
+
+function isCloudflarePeer(ip: string): boolean {
+  const v4 = ipv4ToBigInt(ip);
+  if (v4 !== null) {
+    return CLOUDFLARE_IPV4_RANGES.some((cidr) =>
+      ipInCidr(v4, cidr, ipv4ToBigInt, 32n)
+    );
+  }
+  const v6 = ipv6ToBigInt(ip);
+  if (v6 !== null) {
+    return CLOUDFLARE_IPV6_RANGES.some((cidr) =>
+      ipInCidr(v6, cidr, ipv6ToBigInt, 128n)
+    );
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Client identifier (IP)
 // ---------------------------------------------------------------------------
@@ -70,25 +176,32 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     process.env.VERCEL === '1' ||
     process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
   if (proxyGuaranteed) {
+    const realIp = request.headers.get('x-real-ip');
     // Behind Cloudflare, the platform x-real-ip is a shared Cloudflare
     // egress address, so keying anonymous budgets on it collapses many
-    // customers into one 30/hour bootstrap bucket and mass-produces
-    // "cart sync was interrupted" failures. Cloudflare overwrites
-    // CF-Connecting-IP with the visitor address at its edge; require a
-    // CF-Ray header as evidence the request actually traversed
-    // Cloudflare before trusting it, and keep the platform address as
-    // the fallback. Origin access should still be restricted to
-    // Cloudflare (Authenticated Origin Pulls) so direct-to-origin
-    // callers cannot forge these headers to rotate budgets.
+    // customers into one bootstrap bucket and mass-produces "cart sync
+    // was interrupted" failures. CF-Connecting-IP names the visitor,
+    // but it is an ordinary header: trust it only when the immediate
+    // platform-verified peer (request.ip, else x-real-ip) is itself
+    // inside Cloudflare's published egress ranges and a CF-Ray header
+    // is present. A direct-to-origin caller forging both headers has a
+    // non-Cloudflare peer address and keeps the platform identity.
+    const peerIp =
+      requestIp && isValidIP(requestIp)
+        ? requestIp
+        : realIp && isValidIP(realIp)
+          ? realIp
+          : null;
     const cloudflareIp = request.headers.get('cf-connecting-ip');
     if (
+      peerIp &&
+      isCloudflarePeer(peerIp) &&
       request.headers.get('cf-ray') &&
       cloudflareIp &&
       isValidIP(cloudflareIp)
     ) {
       return cloudflareIp;
     }
-    const realIp = request.headers.get('x-real-ip');
     if (realIp && isValidIP(realIp)) return realIp;
   }
 

@@ -39,7 +39,7 @@ export const CART_QUOTA_BUDGETS: Record<
   // The budget must stay far above legitimate shared-address traffic
   // (carrier NAT and corporate egress put many shoppers behind one
   // client address); it bounds scripted proof minting, not shoppers.
-  bootstrap: { limit: 300, windowMs: 60 * 60 * 1000 },
+  bootstrap: { limit: 120, windowMs: 60 * 60 * 1000 },
   // A bootstrap proof should create about once; retries need headroom.
   create: { limit: 10, windowMs: 60 * 60 * 1000 },
   // Burst-friendly for quantity taps, bounded per principal.
@@ -225,12 +225,13 @@ export async function incrementWindowCounter(
  * these fail closed rather than multiplying limits per instance.
  */
 const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
-  // Bootstrap and create are deliberately NOT fail-closed: bootstrap is
-  // a stateless proof mint and create is bounded by its database
-  // operation receipt, while a Redis outage that hard-blocks them
-  // blanks every shopper's cart (the 2026-10-26 quota incident). They
-  // degrade to the per-instance memory budget like authenticated
-  // operations, still bounded by the proxy per-IP rate limit.
+  // Bootstrap is deliberately NOT fail-closed: it is a stateless proof
+  // mint, and hard-blocking it during a Redis outage blanks every
+  // shopper's cart at the first step. It degrades to the per-instance
+  // memory budget, still bounded by the proxy per-IP rate limit.
+  // Create stays fail-closed because it materializes carts/grants from
+  // anonymous capabilities.
+  'create',
   'handoff_preview',
   'handoff_redeem',
   // Credential-minting and account-linking operations also fail

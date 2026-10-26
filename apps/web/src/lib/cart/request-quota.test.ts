@@ -138,12 +138,12 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
-  it('keeps bootstrap and create on the degraded memory budget in production', async () => {
+  it('keeps bootstrap on the degraded memory budget in production while create fails closed', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');
-    // A Redis outage must not blank every shopper's cart: bootstrap is
-    // a stateless proof mint and create is bounded by its database
-    // operation receipt, so both degrade like authenticated reads.
+    // Bootstrap is a stateless proof mint, so a Redis outage must not
+    // blank every shopper's cart at the first step. Create materializes
+    // carts from anonymous capabilities, so it stays fail-closed.
     await expect(
       checkCartQuota({
         merchantId: MERCHANT_ID,
@@ -157,7 +157,7 @@ describe('checkCartQuota degraded store', () => {
         operation: 'create',
         subject: 'ip-degraded',
       })
-    ).resolves.toMatchObject({ allowed: true });
+    ).resolves.toMatchObject({ allowed: false });
   });
 
   it('fails revocation closed in production without Redis', async () => {

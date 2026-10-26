@@ -10,6 +10,8 @@ export async function sendXEvent(
 ): Promise<EventDestinationResult> {
   if (!/^[A-Za-z0-9]{1,64}$/.test(pixelId))
     return { success: false, errorCode: 'invalid_destination_payload' };
+  // X documents the Events Manager token header for this endpoint here:
+  // https://docs.x.com/x-ads-api/measurement/gtm-server-side#access-token
   const url = `https://ads-api.x.com/12/measurement/conversions/${pixelId}`;
   try {
     const response = await fetch(url, {

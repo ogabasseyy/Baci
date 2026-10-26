@@ -74,8 +74,16 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setDestChecked(false);
     setDestinationError(null);
     const result = await fetchDestinationCart(slug, signal);
-    // A superseded refresh must not overwrite destination state.
-    if (signal?.aborted) return;
+    // An aborted refresh here is the bounded deadline expiring (the
+    // only signal source): surface a retryable destination error
+    // instead of stranding the screen on its loading state.
+    if (signal?.aborted) {
+      setDestChecked(true);
+      setDestinationError(
+        'Could not check your existing cart. Please try again.'
+      );
+      return;
+    }
     if (result.status === 'error') {
       setDestinationError(
         'Could not check your existing cart. Please try again.'

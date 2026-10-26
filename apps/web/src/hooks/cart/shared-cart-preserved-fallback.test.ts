@@ -21,6 +21,8 @@ vi.mock('./shared-cart-preserved-session', () => ({
 function context() {
   return {
     adoptOutcomeRef: { current: null },
+    dispatch: vi.fn(),
+    generationRef: { current: 3 },
     createAttemptedRef: { current: true },
     createOpRef: { current: 'op' },
     createRequestRef: { current: { id: 'req' } },
@@ -71,4 +73,25 @@ it('adopts a live preserved snapshot', async () => {
     adoptPreservedFallback(ctx as never, 'shop', () => true, vi.fn())
   ).resolves.toEqual({ ok: true });
   expect(adoptPreservedCart).toHaveBeenCalledWith(ctx, snap);
+});
+
+it('resets the pending import before retrying after a terminal preserved cart', async () => {
+  const terminal = snapshot({ state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([] as never);
+  vi.mocked(getSharedCartImportReceipt).mockReturnValue(null as never);
+  const retryProvisioning = vi.fn().mockResolvedValue({ ok: true });
+  const ctx = context();
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, retryProvisioning)
+  ).resolves.toEqual({ ok: true });
+  expect(ctx.dispatch).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'import/failed' })
+  );
+  expect(retryProvisioning).toHaveBeenCalledOnce();
+  expect(ctx.createAttemptedRef.current).toBe(false);
 });

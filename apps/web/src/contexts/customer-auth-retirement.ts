@@ -31,7 +31,6 @@ export async function retirePreviousAccountCartAuthority(
     // the previous account's cache is verifiably gone; otherwise the
     // new account could adopt the surviving parked cart.
     const erased = eraseRetiredCartCache(merchantSlug, previousUserId);
-    clearCartStorage(merchantSlug, previousUserId);
     if (!erased) {
       // Retirement is not complete: retain the retiring identity so
       // a later retry can target its user-scoped keys, and let the
@@ -39,6 +38,7 @@ export async function retirePreviousAccountCartAuthority(
       setRememberedCustomerUserId(merchantSlug, previousUserId);
       return false;
     }
+    clearCartStorage(merchantSlug, previousUserId);
     clearCartDeviceRevocationPending?.(merchantSlug);
     setRememberedCustomerUserId(merchantSlug, null);
     return true;

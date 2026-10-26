@@ -71,6 +71,14 @@ export async function adoptPreservedFallback(
       preserved.snapshot.cartId
     );
     if (checkpoint) saveSharedCartImportReceipt(merchantSlug, checkpoint);
+    // The rejected create already dispatched import/started: reset
+    // the pending import so provisioning re-plans the preserved lines
+    // instead of sending an empty replacement create.
+    context.dispatch({
+      code: 'unauthorized',
+      generation: context.generationRef.current,
+      type: 'import/failed',
+    });
     context.retiredCartIdRef.current = preserved.snapshot.cartId;
     context.adoptOutcomeRef.current = 'expired';
     context.createRequestRef.current = null;

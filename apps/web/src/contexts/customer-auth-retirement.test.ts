@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { eraseRetiredCartCache } from '@/hooks/cart/retired-cart-cache';
 import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
+import { clearCartStorage } from '@/hooks/use-cart';
 import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import { getRememberedCustomerUserId } from './customer-auth-storage';
 
@@ -35,6 +36,8 @@ it('retains the retiring identity when cache erasure fails', async () => {
     retirePreviousAccountCartAuthority('shop', 'old-user')
   ).resolves.toBe(false);
   expect(getRememberedCustomerUserId('shop')).toBe('old-user');
+  // A failed erasure must preserve the saved cart for the rollback.
+  expect(clearCartStorage).not.toHaveBeenCalled();
 });
 
 it('completes retirement when revocation and erasure succeed', async () => {
@@ -43,5 +46,6 @@ it('completes retirement when revocation and erasure succeed', async () => {
   await expect(
     retirePreviousAccountCartAuthority('shop', 'old-user')
   ).resolves.toBe(true);
+  expect(clearCartStorage).toHaveBeenCalledWith('shop', 'old-user');
   expect(getRememberedCustomerUserId('shop')).toBeNull();
 });

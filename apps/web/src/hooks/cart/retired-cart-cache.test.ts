@@ -79,3 +79,21 @@ it('reports failure instead of throwing when storage is unavailable', () => {
     removeItem.mockRestore();
   }
 });
+
+it('erases slug-scoped account keys on merchant-less retirement without touching other merchants guest keys', () => {
+  localStorage.clear();
+  const user = '11111111-1111-4111-8111-111111111111';
+  for (const key of [
+    `baci-cart-shop-${user}`,
+    `baci-cart-other-${user}`,
+    'baci-cart-shop-guest',
+    'baci-cart-other-guest',
+  ])
+    localStorage.setItem(key, 'saved');
+  eraseRetiredCartCache(undefined, user);
+  expect(localStorage.getItem(`baci-cart-shop-${user}`)).toBeNull();
+  expect(localStorage.getItem(`baci-cart-other-${user}`)).toBeNull();
+  // Guest device carts are not account-owned and survive.
+  expect(localStorage.getItem('baci-cart-shop-guest')).toBe('saved');
+  expect(localStorage.getItem('baci-cart-other-guest')).toBe('saved');
+});

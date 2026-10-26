@@ -44,7 +44,15 @@ export function createInitialCartProvisioner(
     }
     // A null result means a parallel bootstrap/create owns provisioning
     // (or the session moved on): that owner resolves the import, so a
-    // slow-but-healthy in-flight attempt must not flip to failed.
+    // slow-but-healthy in-flight attempt must not flip to failed. Once
+    // retries are exhausted, though, a null with no owner in this tab
+    // must not strand the import pending behind the checkout gate.
+    if (!result)
+      runtime.dispatch({
+        generation,
+        code: 'temporarily_unavailable',
+        type: 'import/failed',
+      });
     if (result && !result.ok)
       runtime.dispatch({
         generation,

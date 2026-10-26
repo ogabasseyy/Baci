@@ -29,7 +29,13 @@ export function eraseRetiredCartCache(
         suffix === 'guest' ||
         suffix === 'group-negotiation' ||
         suffix === 'shared-import' ||
-        (retiringUserId != null && suffix === retiringUserId)
+        (retiringUserId != null && suffix === retiringUserId) ||
+        // Merchant-less retirement cannot name the slug, but the
+        // retiring account's slug-scoped keys are still attributable
+        // by their user-id suffix; other merchants' guest keys are not.
+        (!slug &&
+          retiringUserId != null &&
+          suffix.endsWith(`-${retiringUserId}`))
       )
         remove(key);
     }

@@ -75,6 +75,9 @@ export async function captureInterestRawDelivery(input: {
 }): Promise<Response | null> {
   const classification = classifyRawWebhook(input.rawBody);
   if (!input.families.includes('interest')) {
+    // A provider may use one key for both families, but it must be explicitly
+    // configured for interest capture too. The legacy inbox stores redacted
+    // fields, not replayable signed bytes; falling through would lose them.
     return classification.kind === 'explicit-interest'
       ? retryableCaptureFailure()
       : null;

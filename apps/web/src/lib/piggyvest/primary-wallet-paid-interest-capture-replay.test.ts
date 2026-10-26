@@ -13,8 +13,8 @@ import { paidInterestFixture as fixture } from './primary-wallet-paid-interest.t
 import { getCaptureHarness } from './primary-wallet-paid-interest-capture-replay.test-support';
 import { applyPrimaryWalletSignedPaidInterest } from './primary-wallet-paid-interest-signed';
 
-const secret = 'capture-test-secret';
 const harness = getCaptureHarness();
+const secret = harness.secret;
 let postWebhook: typeof import('@/app/api/webhooks/piggyvest/route').POST;
 let drainInbox: typeof import('./primary-wallet-paid-interest-inbox-worker').drainPrimaryWalletPaidInterestInbox;
 const env: NodeJS.ProcessEnv = {

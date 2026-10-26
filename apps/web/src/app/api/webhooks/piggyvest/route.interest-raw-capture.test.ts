@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   processEvent: vi.fn(),
   families: ['interest'] as string[],
+  secret: globalThis.crypto.randomUUID(),
 }));
 
 vi.mock('@/env', () => ({
@@ -24,7 +25,7 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
     }) => {
       const secret = actual.matchPiggyvestWebhookSecret({
         ...input,
-        secrets: ['synthetic-interest-capture'],
+        secrets: [mocks.secret],
       });
       return secret
         ? { status: 'verified' as const, secret, families: mocks.families }
@@ -41,7 +42,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 
 import { POST } from './route';
 
-const secret = 'synthetic-interest-capture';
+const secret = mocks.secret;
 const rawBody =
   '{ "eventType":"interest-payout.success", "eventData":null, "x":"opaque" }';
 

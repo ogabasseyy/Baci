@@ -3,6 +3,10 @@ import { router } from 'expo-router';
 import { BRAND } from '@/constants/Colors';
 import { SavingsPlansScreen } from './SavingsPlansScreen';
 
+const mockUseRequireAuth = jest.fn(() => ({
+  isLoading: false,
+  redirectTo: null as string | null,
+}));
 const mockRefetch = jest.fn();
 let mockQuery: {
   data?: { wallet: { savings_goals: typeof goals } };
@@ -27,10 +31,18 @@ const goals = [
     status: 'paused',
   },
 ];
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  Redirect: ({ href }: { href: string }) =>
+    jest.requireActual<typeof import('react')>('react').createElement('View', {
+      testID: 'savings-plans-redirect',
+      accessibilityLabel: href,
+      href,
+    }),
+  router: { push: jest.fn() },
+}));
 jest.mock('@/hooks/use-wallet', () => ({ useWallet: () => mockQuery }));
 jest.mock('@/hooks/use-auth-guard', () => ({
-  useRequireAuth: () => ({ isLoading: false, redirectTo: null }),
+  useRequireAuth: () => mockUseRequireAuth(),
 }));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'dark',
@@ -38,6 +50,7 @@ jest.mock('@/components/useColorScheme', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUseRequireAuth.mockReturnValue({ isLoading: false, redirectTo: null });
   mockQuery = {
     data: { wallet: { savings_goals: goals } },
     isLoading: false,
@@ -45,6 +58,25 @@ beforeEach(() => {
     isRefetching: false,
     refetch: mockRefetch,
   };
+});
+it('redirects an initially signed-out deep link to login with its return path', () => {
+  mockUseRequireAuth.mockReturnValue({
+    isLoading: false,
+    redirectTo: '/auth/login?returnTo=%2Fwallet%2Fsavings',
+  });
+  render(<SavingsPlansScreen />);
+  expect(screen.getByTestId('savings-plans-redirect')).toHaveProp(
+    'href',
+    '/auth/login?returnTo=%2Fwallet%2Fsavings'
+  );
+  expect(screen.queryByLabelText('Checking sign in')).toBeNull();
+  expect(screen.queryByText('Your savings plans')).toBeNull();
+});
+it('keeps the initialization spinner while auth is loading', () => {
+  mockUseRequireAuth.mockReturnValue({ isLoading: true, redirectTo: null });
+  render(<SavingsPlansScreen />);
+  expect(screen.getByLabelText('Checking sign in')).toBeOnTheScreen();
+  expect(screen.queryByText('Your savings plans')).toBeNull();
 });
 it('shows separate balances and opens the chosen plan rather than the featured one', () => {
   render(<SavingsPlansScreen />);

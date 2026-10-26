@@ -128,17 +128,19 @@ export function SavingsNotificationList({
       keyExtractor={(notification) => notification.id}
       ListEmptyComponent={renderEmpty}
       ListHeaderComponent={
-        <Text
-          accessibilityRole="header"
-          style={[styles.heading, { color: colors.text }]}
-        >
-          Recent updates
-        </Text>
-      }
-      ListFooterComponent={
-        preferences ? (
-          <View style={styles.preferences}>{preferences}</View>
-        ) : null
+        <View>
+          {preferences ? (
+            <View style={styles.preferences}>{preferences}</View>
+          ) : null}
+          {notifications.length > 0 ? (
+            <Text
+              accessibilityRole="header"
+              style={[styles.heading, { color: colors.text }]}
+            >
+              Recent updates
+            </Text>
+          ) : null}
+        </View>
       }
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
@@ -159,7 +161,7 @@ export function SavingsNotificationList({
 
 const styles = StyleSheet.create({
   heading: { fontSize: 18, fontWeight: '700', marginBottom: SPACING.md },
-  preferences: { marginTop: SPACING.lg },
+  preferences: { marginBottom: SPACING.md },
   content: {
     flexGrow: 1,
     gap: SPACING.sm,

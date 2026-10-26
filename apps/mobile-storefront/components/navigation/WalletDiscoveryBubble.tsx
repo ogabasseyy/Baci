@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router, usePathname } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -13,10 +13,12 @@ export function WalletDiscoveryBubble({
   walletCenter,
   availableWidth,
   homeFocused,
+  onVisibilityChange,
 }: {
   walletCenter: number;
   availableWidth: number;
   homeFocused: boolean;
+  onVisibilityChange: (visible: boolean) => void;
 }) {
   const pathname = usePathname();
   const { userId, customerUserId, merchantId, initialized } = useAuthStore(
@@ -45,9 +47,13 @@ export function WalletDiscoveryBubble({
     !!userId &&
     (!customerUserId || customerUserId === userId);
   const hint = useWalletDiscoveryHint({ enabled, userId, merchantId });
+  const visible = enabled && hint.visible;
+  useLayoutEffect(() => {
+    onVisibilityChange(visible);
+  }, [onVisibilityChange, visible]);
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  if (!enabled || !hint.visible) return null;
+  if (!visible) return null;
   const width = Math.min(280, availableWidth - 16);
   const left = Math.max(
     8,

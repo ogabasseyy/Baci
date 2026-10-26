@@ -67,7 +67,7 @@ const notification = {
 };
 
 describe('SavingsNotificationList', () => {
-  it('shows the updates heading before notification preferences', () => {
+  it('shows notification preferences above the history heading', () => {
     const { Text } = require('react-native') as typeof import('react-native');
     render(
       <SavingsNotificationList
@@ -89,10 +89,31 @@ describe('SavingsNotificationList', () => {
         )
         .map((item) => item.props.children)
     ).toEqual([
+      'Notification preferences',
       'Recent updates',
       notification.title,
-      'Notification preferences',
     ]);
+  });
+
+  it.each([
+    ['loading', true, null],
+    ['error', false, 'Offline'],
+    ['empty', false, null],
+  ])('keeps preferences visible and hides the history heading in the %s state', (_state, isLoading, requestError) => {
+    const { Text } = require('react-native') as typeof import('react-native');
+    render(
+      <SavingsNotificationList
+        preferences={<Text>Notification preferences</Text>}
+        isLoading={isLoading}
+        notifications={[]}
+        onOpen={jest.fn<(item: SavingsNotification) => void>()}
+        onRetry={jest.fn<() => void>()}
+        requestError={requestError}
+      />
+    );
+
+    expect(screen.getByText('Notification preferences')).toBeOnTheScreen();
+    expect(screen.queryByText('Recent updates')).toBeNull();
   });
 
   it('preserves a readable row when NativeWind drops callback styles', () => {

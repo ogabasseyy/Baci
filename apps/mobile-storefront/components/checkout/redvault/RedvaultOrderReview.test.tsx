@@ -7,7 +7,6 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import type { ReactNode } from 'react';
 import { createOrder } from '@/services/orders';
 import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import type { FetchImplementation } from '@/types/fetch';
@@ -20,14 +19,20 @@ import {
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
 }));
+jest.mock('@/hooks/useTheme', () => ({
+  useTheme: () => ({ colors: require('@/constants/Colors').default.light }),
+}));
+jest.mock(
+  'react-native-safe-area-context',
+  () =>
+    jest.requireActual<
+      typeof import('react-native-safe-area-context/jest/mock')
+    >('react-native-safe-area-context/jest/mock').default
+);
 jest.mock('@/components/ui/ModalSheet', () => ({
-  ModalSheet: ({
-    children,
-    visible,
-  }: {
-    children: ReactNode;
-    visible: boolean;
-  }) => (visible ? children : null),
+  ModalSheet: jest.requireActual<
+    typeof import('./redvault-order-review-sheet.test-utils')
+  >('./redvault-order-review-sheet.test-utils').RedvaultReviewTestSheet,
 }));
 jest.mock('@/services/orders-auth', () => ({
   resolveCheckoutAuth: async () => ({
@@ -74,6 +79,7 @@ jest.mock('@/services/analytics', () => ({
   trackEvent: jest.fn(),
   trackError: jest.fn(),
   trackCheckoutPaymentStarted: jest.fn(),
+  trackCheckoutOrderCreated: jest.fn(),
 }));
 
 const mockFetch = jest.fn<FetchImplementation>();

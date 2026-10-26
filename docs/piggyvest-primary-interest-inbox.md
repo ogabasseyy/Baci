@@ -188,3 +188,14 @@ legacy/bank/custody handlers still receive known events authorized by their own
 matching key families. Configure and verify durable intake and its drain before
 pointing live delivery at this receiver; a 503 is not durable retention and a
 finite provider retry budget cannot replace receiver availability.
+
+The interest family does not require a second provider-issued secret. A business
+signing key may be explicitly configured for both the legacy and interest
+families; the union then authorizes both, and the interest inbox independently
+verifies that key before storing the original bytes. Do not infer interest
+authority merely because a key verified as legacy. A legacy-only payout remains
+retryable until interest authority, durable storage and its drain are configured.
+The legacy inbox's redacted fields are not a replayable replacement for the raw
+monthly request. `interest-raw-capture.signing.test.ts` covers shared-key capture,
+missing authority, disabled/unscheduled intake and storage failure without
+changing production configuration or permitting an acknowledgement before storage.

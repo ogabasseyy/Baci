@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -30,8 +30,9 @@ export function SavingsPlansScreen() {
     0
   );
   const activeCount = goals.filter((goal) => goal.status === 'active').length;
-  if (auth.isLoading || auth.redirectTo)
+  if (auth.isLoading)
     return <ActivityIndicator accessibilityLabel="Checking sign in" />;
+  if (auth.redirectTo) return <Redirect href={auth.redirectTo} />;
   return (
     <ScrollView
       contentContainerStyle={styles.content}

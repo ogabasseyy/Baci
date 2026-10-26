@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { vi } from 'vitest';
 
 type CaptureHarness = {
+  secret: string;
   records: Map<
     string,
     { rawHex: string; signature: string; digest: string; state: string }
@@ -18,6 +19,7 @@ type CaptureHarness = {
 
 const harness = vi.hoisted(() => {
   const state: CaptureHarness = {
+    secret: globalThis.crypto.randomUUID(),
     records: new Map(),
     dispatch: vi.fn(),
     finishFailure: false,
@@ -57,7 +59,7 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async () => {
       rawBody: Uint8Array;
       signature: string | null;
     }) => {
-      const expected = createHmac('sha512', 'capture-test-secret')
+      const expected = createHmac('sha512', harness.secret)
         .update(rawBody)
         .digest();
       const supplied =
@@ -68,7 +70,7 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async () => {
       return valid
         ? {
             status: 'verified',
-            secret: 'capture-test-secret',
+            secret: harness.secret,
             families: ['interest'],
           }
         : { status: 'invalid' };
@@ -80,7 +82,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
     integrationId: '00000000-0000-4000-8000-000000000004',
     environment: 'production',
     businessId: 'capture-test-business',
-    webhookSecret: 'capture-test-secret',
+    webhookSecret: harness.secret,
     retainedWebhookSecrets: [],
     database: {
       host: 'capture.invalid',
@@ -158,7 +160,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-runtime', () => ({
     environment: 'production',
     businessId: 'capture-test-business',
     providerToken: 'provider-test-token',
-    webhookSecret: 'capture-test-secret',
+    webhookSecret: harness.secret,
     retainedWebhookSecrets: [],
     database: {
       host: 'capture.invalid',

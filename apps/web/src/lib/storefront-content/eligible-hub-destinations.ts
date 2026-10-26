@@ -1,3 +1,4 @@
+import { generateSlug } from '@/lib/seo-utils';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 
@@ -22,6 +23,7 @@ export interface EligibleHubProductInput {
   product_key_specs?: Record<string, unknown> | null;
   is_parent?: boolean | null;
   parent_product_id?: string | null;
+  manage_stock?: boolean | null;
 }
 
 export interface ResolveEligibleCategoryHubDestinationsInput {
@@ -48,9 +50,13 @@ export function resolveEligibleCategoryHubDestinations(
   // parent or standalone rows (is_parent=true or no parent), never variants.
   const availableProducts = input.products.filter(
     (product) =>
-      (product.stock == null || product.stock > 0) &&
-      (product.category_slug === categorySlug ||
-        (product.category_slugs ?? []).includes(categorySlug) ||
+      (product.manage_stock === false ||
+        product.stock == null ||
+        product.stock > 0) &&
+      (generateSlug(product.category_slug ?? '') === categorySlug ||
+        (product.category_slugs ?? []).some(
+          (slug) => generateSlug(slug) === categorySlug
+        ) ||
         // No category info counts only for explicitly scoped pools.
         (input.assumeCategoryScoped === true &&
           product.category_slug == null &&

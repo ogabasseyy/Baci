@@ -18,6 +18,7 @@ export async function loadBrandAuthorityInventorySafely(args: {
   entry: BrandAuthorityEntry;
   timeoutMs?: number;
 }): Promise<BrandAuthorityInventory | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       getCachedBrandAuthorityInventory(
@@ -26,7 +27,7 @@ export async function loadBrandAuthorityInventorySafely(args: {
         args.entry
       ),
       new Promise<never>((_, reject) => {
-        setTimeout(
+        timer = setTimeout(
           () => reject(new Error('destination inventory timeout')),
           args.timeoutMs ?? DESTINATION_INVENTORY_TIMEOUT_MS
         );
@@ -39,5 +40,9 @@ export async function loadBrandAuthorityInventorySafely(args: {
       error,
     });
     return null;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }

@@ -213,6 +213,24 @@ describe('model family authority taxonomy', () => {
     }
   });
 
+  it('keeps Galaxy Z TriFold in the Galaxy Z family', () => {
+    const galaxyZ = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-z'
+    );
+    if (!galaxyZ) throw new Error('Expected Galaxy Z family entry');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z TriFold'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Galaxy Z Fold 6')
+    ).toBe(true);
+  });
+
   it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
     const phantom = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

@@ -94,6 +94,7 @@ describe('getCachedProductSemanticInventory', () => {
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
         is_parent: null,
         parent_product_id: null,
+        manage_stock: null,
       },
     ]);
   });

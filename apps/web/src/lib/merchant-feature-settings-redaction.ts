@@ -30,7 +30,7 @@ function redactZohoCampaignSettingsRecord(settings: JsonRecord): JsonRecord {
 
 export function redactMerchantFeatureSettingsResponse<T>(settings: T): T {
   if (!isRecord(settings)) return settings;
-  const safe = { ...settings };
+  const safe: JsonRecord = { ...settings };
   for (const key of INTEGRATION_SECRET_FIELDS) {
     if (!(key in safe)) continue;
     safe[`${key}_configured`] =

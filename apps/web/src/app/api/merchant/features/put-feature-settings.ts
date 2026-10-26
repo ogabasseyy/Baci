@@ -101,7 +101,9 @@ export function createPutFeatureSettings(
       const { data: existingSettings, error: existingSettingsError } =
         await auth.supabase
           .from('merchant_feature_settings')
-          .select(`custom_settings, ${INTEGRATION_SECRET_FIELDS.join(', ')}`)
+          .select(
+            'custom_settings, facebook_capi_token, tiktok_access_token, snapchat_capi_token, ga4_api_secret'
+          )
           .eq('merchant_id', access.merchantId)
           .maybeSingle();
       if (existingSettingsError) {

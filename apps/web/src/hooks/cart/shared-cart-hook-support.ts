@@ -42,6 +42,7 @@ export interface UseSharedCartResult {
   cart: SharedCartDisplayItem[];
   cartId: string | null;
   version: number | null;
+  isTerminal: boolean;
   cartCount: number;
   cartTotal: number;
   isHydrated: boolean;

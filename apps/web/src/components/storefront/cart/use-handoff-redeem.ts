@@ -22,7 +22,7 @@ export interface HandoffRedeemWiring {
   setConflicts(value: MergeConflictView[]): void;
   setResolutions(value: Record<string, 'incoming' | 'existing'>): void;
   setLoadError(value: string | null): void;
-  refreshPreview(): Promise<unknown>;
+  refreshPreview(signal?: AbortSignal): Promise<unknown>;
 }
 
 /**

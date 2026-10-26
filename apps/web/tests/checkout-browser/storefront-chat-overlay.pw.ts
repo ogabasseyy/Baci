@@ -179,7 +179,11 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     const browserClick = await page.evaluate(() => {
       const state = window as typeof window & {
         lastLauncherPointerUpId?: number;
-        lastLauncherClick?: { isPointerEvent: boolean; pointerId?: number };
+        lastLauncherClick?: {
+          isPointerEvent: boolean;
+          isTrusted: boolean;
+          pointerId?: number;
+        };
       };
       return {
         pointerUpId: state.lastLauncherPointerUpId,

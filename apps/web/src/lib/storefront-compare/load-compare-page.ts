@@ -11,6 +11,7 @@ import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { hasMaintainedProductCompareRoute } from '@/lib/storefront-compare/has-maintained-product-compare-route';
+import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
   BuildCommercialGuideLinksContext,
@@ -939,10 +940,14 @@ async function getCachedComparePageModel(
   const leftBrandKey = generateSlug(brandCandidate.leftBrand);
   const rightBrandKey = generateSlug(brandCandidate.rightBrand);
   const leftBrandProducts = normalizedProducts.filter(
-    (product) => generateSlug(product.brand || '') === leftBrandKey
+    (product) =>
+      resolveCanonicalBrandKey(args.categorySlug, product.brand) ===
+      leftBrandKey
   );
   const rightBrandProducts = normalizedProducts.filter(
-    (product) => generateSlug(product.brand || '') === rightBrandKey
+    (product) =>
+      resolveCanonicalBrandKey(args.categorySlug, product.brand) ===
+      rightBrandKey
   );
   const comparisonRows: ComparisonRow[] = [
     {

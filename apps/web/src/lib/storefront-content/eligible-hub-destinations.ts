@@ -28,6 +28,8 @@ export interface ResolveEligibleCategoryHubDestinationsInput {
   storeUrl?: string;
   categorySlug: string;
   products: EligibleHubProductInput[];
+  /** Set only when the caller supplies an already category-scoped pool. */
+  assumeCategoryScoped?: boolean;
 }
 
 export interface ResolvedEligibleCategoryHubDestinations {
@@ -48,8 +50,9 @@ export function resolveEligibleCategoryHubDestinations(
       (product.stock == null || product.stock > 0) &&
       (product.category_slug === categorySlug ||
         (product.category_slugs ?? []).includes(categorySlug) ||
-        // No category info at all: caller supplied a category-scoped pool.
-        (product.category_slug == null &&
+        // No category info counts only for explicitly scoped pools.
+        (input.assumeCategoryScoped === true &&
+          product.category_slug == null &&
           (product.category_slugs == null ||
             product.category_slugs.length === 0))) &&
       (product.is_parent === true || product.parent_product_id == null)

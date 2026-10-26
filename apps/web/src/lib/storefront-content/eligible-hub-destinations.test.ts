@@ -16,6 +16,7 @@ describe('eligible-hub-destinations', () => {
         storeUrl: 'https://ogabassey.com',
         categorySlug: 'smartphones',
         products,
+        assumeCategoryScoped: true,
       });
 
       expect(result.brandHubs).toHaveLength(1);
@@ -66,6 +67,7 @@ describe('eligible-hub-destinations', () => {
         storeUrl: 'https://ogabassey.com',
         categorySlug: 'smartphones',
         products,
+        assumeCategoryScoped: true,
       });
 
       expect(result.brandHubs).toHaveLength(1);
@@ -107,6 +109,7 @@ describe('eligible-hub-destinations', () => {
       const result = resolveEligibleCategoryHubDestinations({
         categorySlug: 'smartphones',
         products,
+        assumeCategoryScoped: true,
       });
 
       expect(result.brandHubs).toHaveLength(1);
@@ -185,6 +188,7 @@ describe('eligible-hub-destinations', () => {
       const result = resolveEligibleCategoryHubDestinations({
         categorySlug: 'smartphones',
         products,
+        assumeCategoryScoped: true,
       });
       expect(result.brandHubs).toHaveLength(1);
     });

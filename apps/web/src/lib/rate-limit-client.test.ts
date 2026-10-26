@@ -63,6 +63,54 @@ describe('getTrustedClientIdentifier', () => {
     ).toBe('unknown');
   });
 
+  it('prefers cf-connecting-ip over the shared Cloudflare egress x-real-ip on Vercel', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('203.0.113.9');
+  });
+
+  it('ignores cf-connecting-ip without evidence the request traversed Cloudflare', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+
+  it('ignores Cloudflare headers without a proxy guarantee and invalid values', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+        })
+      )
+    ).toBe('unknown');
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': 'not-an-ip',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+
   it('uses x-real-ip when the platform guarantees it', () => {
     vi.stubEnv('VERCEL', '1');
     expect(

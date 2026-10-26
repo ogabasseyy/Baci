@@ -19,6 +19,7 @@ set -euo pipefail
 review_file="${RUNNER_TEMP}/muse-review-body.md"
 model_file="${RUNNER_TEMP}/muse-model-ids.txt"
 capture_file="${RUNNER_TEMP}/muse-jsonl-summary.json"
+jsonl_file="${RUNNER_TEMP}/muse-stream.jsonl"
 session_export="${RUNNER_TEMP}/muse-session-export.json"
 stderr_file="${RUNNER_TEMP}/muse-stderr.log"
 export XDG_DATA_HOME="${RUNNER_TEMP}/muse-data"
@@ -27,7 +28,7 @@ export XDG_DATA_HOME="${RUNNER_TEMP}/muse-data"
 
 cleanup() {
   rm -rf "${XDG_DATA_HOME}"
-  rm -f "${session_export}" "${stderr_file}"
+  rm -f "${session_export}" "${stderr_file}" "${jsonl_file}"
 }
 trap cleanup EXIT
 
@@ -68,48 +69,49 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --disable-shell \
   --output-schema "${SCRIPT_DIR}/schema.json" \
   "${model_args[@]}" \
-  </dev/null 2>"${stderr_file}" \
-  | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
-run_status=("${PIPESTATUS[@]}")
-muse_rc="${run_status[0]}"
-jq_rc="${run_status[1]}"
-run_rc=0
-if (( muse_rc != 0 )); then
-  run_rc="$muse_rc"
-elif (( jq_rc != 0 )); then
-  # A malformed JSONL stream must fail loudly instead of leaving a
-  # partial capture_file that later validation might misread.
-  echo "::warning::Muse JSONL capture failed (jq exit ${jq_rc}); stderr tail follows"
+  </dev/null >"${jsonl_file}" 2>"${stderr_file}"
+muse_rc=$?
+# The capture runs as a separate command (not a pipeline) so a
+# malformed JSONL stream fails loudly instead of leaving a partial
+# capture_file that later validation might misread.
+if (( muse_rc == 0 )); then
+  if jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" <"${jsonl_file}" >"${capture_file}" 2>/dev/null; then
+    :
+  else
+    echo "::warning::Muse JSONL capture failed; stderr tail follows"
+    redact "$(cat "${stderr_file}" 2>/dev/null || true)" | tail -c 4000
+    exit 5
+  fi
+else
+  echo "::warning::Muse exec failed; stderr tail follows"
   redact "$(cat "${stderr_file}" 2>/dev/null || true)" | tail -c 4000
-  run_rc="$jq_rc"
+  exit "$muse_rc"
 fi
 set -e
 
 echo "review_file=${review_file}" >> "${GITHUB_OUTPUT}"
 
 capture_rc=0
-if (( run_rc == 0 )); then
-  if ! jq -e '.text | type == "string"' "${capture_file}" >/dev/null; then
-    echo "::warning::Muse JSONL capture did not contain a completed answer."
-    capture_rc=1
-  else
-    jq -r '.text' "${capture_file}" > "${review_file}"
-    set +e
-    env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" export --last --out "${session_export}" --redacted >/dev/null 2>"${stderr_file}"
-    export_rc=$?
-    set -e
-    if (( export_rc == 0 )); then
-      if ! jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${session_export}" > "${model_file}"; then
-        : > "${model_file}"
-        echo "::notice::Muse session export could not be parsed; exact model ID is unavailable."
-      fi
-    else
-      echo "::notice::Muse completed, but its temporary session export was unavailable; exact model ID is unavailable."
+if ! jq -e '.text | type == "string"' "${capture_file}" >/dev/null; then
+  echo "::warning::Muse JSONL capture did not contain a completed answer."
+  capture_rc=1
+else
+  jq -r '.text' "${capture_file}" > "${review_file}"
+  set +e
+  env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" export --last --out "${session_export}" --redacted >/dev/null 2>"${stderr_file}"
+  export_rc=$?
+  set -e
+  if (( export_rc == 0 )); then
+    if ! jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${session_export}" > "${model_file}"; then
+      : > "${model_file}"
+      echo "::notice::Muse session export could not be parsed; exact model ID is unavailable."
     fi
+  else
+    echo "::notice::Muse completed, but its temporary session export was unavailable; exact model ID is unavailable."
   fi
 fi
 
-if (( run_rc == 0 && capture_rc == 0 )); then
+if (( capture_rc == 0 )); then
   if [[ -s "${model_file}" ]]; then
     model_ids="$(awk 'NF { printf "%s%s", sep, $0; sep=", " } END { print "" }' "${model_file}")"
     echo "::notice::Muse model(s) used: ${model_ids}"
@@ -120,8 +122,8 @@ else
   echo "::warning::Could not extract Muse's structured output or model ID."
 fi
 
-if (( run_rc != 0 || capture_rc != 0 )); then
-  echo "::warning::Muse exec or JSONL capture failed (pipeline=${run_rc}, capture=${capture_rc}); stderr tail follows"
+if (( capture_rc != 0 )); then
+  echo "::warning::Muse structured-output capture failed (capture=${capture_rc}); stderr tail follows"
   # Redact-then-truncate like review bodies: the raw tail could carry
   # secrets a misbehaving model echoed to stderr.
   redact "$(cat "${stderr_file}" 2>/dev/null || true)" | tail -c 4000

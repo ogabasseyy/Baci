@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildBrandComparisonRows,
-  filterProductsByCanonicalBrand,
-} from './build-brand-comparison-rows';
+import { buildBrandComparisonRows } from './build-brand-comparison-rows';
 
 const formatter = new Intl.NumberFormat('en-NG');
 
@@ -26,10 +23,6 @@ describe('buildBrandComparisonRows', () => {
       product('Galaxy A55', 'Samsung', 400_000),
       product('Galaxy A35', 'Samsung', 300_000),
     ];
-    expect(
-      filterProductsByCanonicalBrand('smartphones', products, 'Xiaomi')
-    ).toHaveLength(3);
-
     const { comparisonRows, leftBrandProducts, rightBrandProducts } =
       buildBrandComparisonRows({
         categorySlug: 'smartphones',

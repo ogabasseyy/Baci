@@ -16,36 +16,66 @@ describe('compare eligibility candidate builders', () => {
             name: 'iPhone 17 Pro Max',
             brand: 'Apple',
             price: 2100000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-17',
             name: 'iPhone 17',
             brand: 'Apple',
             price: 1500000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-16',
             name: 'iPhone 16',
             brand: 'Apple',
             price: 1250000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'samsung-galaxy-z-trifold',
             name: 'Samsung Galaxy Z TriFold',
             brand: 'Samsung',
             price: 7150000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-s26-ultra',
             name: 'Galaxy S26 Ultra',
             brand: 'Samsung',
             price: 2500000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a56',
             name: 'Galaxy A56',
             brand: 'Samsung',
             price: 480000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
         ],
       })
@@ -66,36 +96,66 @@ describe('compare eligibility candidate builders', () => {
             name: 'iPhone 17 Pro Max',
             brand: 'Apple',
             price: 2100000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-17',
             name: 'iPhone 17',
             brand: 'apple',
             price: 1500000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-16',
             name: 'iPhone 16',
             brand: 'APPLE',
             price: 1250000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'galaxy-s26-ultra',
             name: 'Galaxy S26 Ultra',
             brand: 'Samsung',
             price: 2500000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a56',
             name: 'Galaxy A56',
             brand: 'samsung',
             price: 480000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a36',
             name: 'Galaxy A36',
             brand: 'SAMSUNG',
             price: 360000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
         ],
       })

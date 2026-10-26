@@ -10,17 +10,28 @@ type BrandAuthorityInventory = Awaited<
  * Hub links are supplemental SEO content — a transient destination-inventory
  * failure must not error the page, so it degrades to null (no hub link).
  */
+const DESTINATION_INVENTORY_TIMEOUT_MS = 3_000;
+
 export async function loadBrandAuthorityInventorySafely(args: {
   merchantId: string;
   categorySlug: string;
   entry: BrandAuthorityEntry;
+  timeoutMs?: number;
 }): Promise<BrandAuthorityInventory | null> {
   try {
-    return await getCachedBrandAuthorityInventory(
-      args.merchantId,
-      args.categorySlug,
-      args.entry
-    );
+    return await Promise.race([
+      getCachedBrandAuthorityInventory(
+        args.merchantId,
+        args.categorySlug,
+        args.entry
+      ),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error('destination inventory timeout')),
+          args.timeoutMs ?? DESTINATION_INVENTORY_TIMEOUT_MS
+        );
+      }),
+    ]);
   } catch (error) {
     console.warn('Failed to load brand authority inventory for hub check', {
       categorySlug: args.categorySlug,

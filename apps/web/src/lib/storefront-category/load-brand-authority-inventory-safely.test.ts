@@ -28,6 +28,18 @@ describe('loadBrandAuthorityInventorySafely', () => {
     ).resolves.toEqual(inventory);
   });
 
+  it('returns null when the destination inventory exceeds the timeout', async () => {
+    mockGet.mockImplementation(() => new Promise(() => undefined) as never);
+    await expect(
+      loadBrandAuthorityInventorySafely({
+        merchantId: 'merchant-1',
+        categorySlug: 'smartphones',
+        entry,
+        timeoutMs: 10,
+      })
+    ).resolves.toBeNull();
+  });
+
   it('returns null instead of throwing on failure', async () => {
     mockGet.mockRejectedValue(new Error('scan ceiling'));
     await expect(

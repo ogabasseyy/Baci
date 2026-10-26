@@ -37,6 +37,7 @@ export interface ResolvedEligibleCategoryHubDestinations {
   familyHubs: EligibleHubItem[];
 }
 
+/** Provisional eligibility from caller-supplied rows (raw stock). Callers must re-verify against destination inventory before emitting links (see verifyEligibleHubsAgainstDestination), unless the pool is destination-verified. */
 export function resolveEligibleCategoryHubDestinations(
   input: ResolveEligibleCategoryHubDestinationsInput
 ): ResolvedEligibleCategoryHubDestinations {

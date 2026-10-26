@@ -14,11 +14,17 @@ export async function loadCompareCategoryInventorySafely(args: {
   merchantId: string;
   categorySlug: string;
 }): Promise<CompareCategoryInventory | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await getCachedCompareCategoryInventory(
-      args.merchantId,
-      args.categorySlug
-    );
+    return await Promise.race([
+      getCachedCompareCategoryInventory(args.merchantId, args.categorySlug),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('compare inventory timeout')),
+          3_000
+        );
+      }),
+    ]);
   } catch (error) {
     console.warn('Failed to load compare category inventory', {
       categorySlug: args.categorySlug,
@@ -26,5 +32,9 @@ export async function loadCompareCategoryInventorySafely(args: {
       error,
     });
     return null;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }

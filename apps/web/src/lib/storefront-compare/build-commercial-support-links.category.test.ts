@@ -205,3 +205,43 @@ describe('buildCategorySupportLinks brand relevance', () => {
     );
   });
 });
+
+describe('buildCategorySupportLinks price-band relevance', () => {
+  it('still emits a band link for a single-brand article when the destination band is indexable and contains that brand', () => {
+    const products = [
+      ...Array.from({ length: 3 }, (_, index) => ({
+        slug: `iphone-band-${index}`,
+        name: `iPhone Band ${index}`,
+        brand: 'Apple',
+        price: 300_000 + index * 10_000,
+        category_slug: 'smartphones',
+        product_key_specs: { chipset: 'A', ram_gb: 8, storage_gb: 128 },
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        slug: `galaxy-band-${index}`,
+        name: `Galaxy Band ${index}`,
+        brand: 'Samsung',
+        price: 320_000 + index * 10_000,
+        category_slug: 'smartphones',
+        product_key_specs: { chipset: 'S', ram_gb: 12, storage_gb: 256 },
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        slug: `tecno-band-${index}`,
+        name: `Tecno Band ${index}`,
+        brand: 'Tecno',
+        price: 340_000 + index * 10_000,
+        category_slug: 'smartphones',
+        product_key_specs: { chipset: 'T', ram_gb: 8, storage_gb: 128 },
+      })),
+    ];
+    const links = buildCategorySupportLinks({
+      storeUrl: 'https://store.test',
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      products,
+      inferredBrands: ['apple'],
+      requireInferredBrandRelevance: true,
+    });
+    expect(links.some((link) => link.href.includes('/best-under/'))).toBe(true);
+  });
+});

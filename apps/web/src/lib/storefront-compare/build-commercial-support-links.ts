@@ -45,7 +45,7 @@ export function buildCategoryPriceBandCandidates(
   );
 }
 
-function buildFirstEligiblePriceBandLink(input: {
+function _buildFirstEligiblePriceBandLink(input: {
   storeUrl: string;
   categorySlug: string;
   products: CommercialSupportProduct[];
@@ -139,21 +139,31 @@ export function buildCategorySupportLinks(input: {
     }
   }
 
-  const priceBandProducts =
-    brandRelevanceRequired && hasInferredBrand
-      ? filterProductsByBrandSlugs(
-          input.categorySlug,
-          input.compareProducts ?? input.products,
-          normalizedInferred
-        )
-      : brandRelevanceRequired
-        ? []
-        : (input.compareProducts ?? input.products);
-  const priceBandLink = buildFirstEligiblePriceBandLink({
-    storeUrl: input.storeUrl,
-    categorySlug: input.categorySlug,
-    products: priceBandProducts,
-  });
+  // Destination eligibility uses the full pool; relevance only requires
+  // the chosen band to contain inferred-brand products.
+  const fullPool = input.compareProducts ?? input.products;
+  const priceBandLink = (() => {
+    if (brandRelevanceRequired && !hasInferredBrand) return null;
+    const candidates = buildCategoryPriceBandCandidates(
+      input.categorySlug,
+      fullPool
+    );
+    const chosen = candidates.find((candidate) => {
+      if (!candidate.isIndexable) return false;
+      if (!brandRelevanceRequired) return true;
+      const bandProducts = filterProductsByBrandSlugs(
+        input.categorySlug,
+        candidate.products,
+        normalizedInferred
+      );
+      return bandProducts.length > 0;
+    });
+    if (!chosen) return null;
+    return {
+      href: `${input.storeUrl}/${input.categorySlug}/best-under/${chosen.band.slug}`,
+      label: chosen.band.label,
+    };
+  })();
 
   if (priceBandLink) {
     links.push(priceBandLink);

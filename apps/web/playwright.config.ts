@@ -5,8 +5,8 @@ import { defineConfig } from '@playwright/test';
 const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
 const port = Number(configuredPort || 3217);
 const firefoxHome = process.getuid?.() === 0 ? '/root' : os.homedir();
-// Firefox runs with only its runtime variables to avoid passing CI secrets.
-// The hosted checkout-browser job validates this allowlist on Ubuntu.
+// Hosted CI gives Firefox only its runtime variables to avoid passing secrets.
+// Local Firefox runs inherit the developer's environment.
 const firefoxEnv = Object.fromEntries(
   [
     'PATH',

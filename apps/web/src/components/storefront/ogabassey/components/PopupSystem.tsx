@@ -77,11 +77,18 @@ export const PopupSystem: React.FC = () => {
     }, 10000);
   };
 
+  const clearChatPromotionFocusHandoff = () => {
+    delete document.body.dataset.chatPromotionFocusHandoff;
+  };
+
   return (
     <>
       {/* --- 1. NEWSLETTER POPUP (Centered Overlay) --- */}
       {showNewsletter && (
-        <div className="ogabassey-newsletter-popup fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300">
+        <div
+          className="ogabassey-newsletter-popup fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300"
+          onFocusCapture={clearChatPromotionFocusHandoff}
+        >
           <button
             type="button"
             aria-label="Dismiss newsletter popup backdrop"
@@ -158,12 +165,18 @@ export const PopupSystem: React.FC = () => {
 
       {/* --- 2. AD POPUP (Bottom Left Slide-in) --- */}
       {showAdPopup && (
-        <div className="ogabassey-offer-popup fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in">
+        <div
+          className="ogabassey-offer-popup fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in"
+          onFocusCapture={clearChatPromotionFocusHandoff}
+        >
           <div className="bg-white rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-gray-100 overflow-hidden max-w-[320px] md:max-w-[350px] relative">
             {/* Close Button */}
             <button
               type="button"
-              onClick={() => setShowAdPopup(false)}
+              onClick={() => {
+                clearChatPromotionFocusHandoff();
+                setShowAdPopup(false);
+              }}
               className="absolute top-2 right-2 size-6 bg-white/80 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-white transition-colors z-20 shadow-sm"
               aria-label="Close ad"
             >

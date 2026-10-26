@@ -1,0 +1,67 @@
+import { expect, test } from '@playwright/test';
+
+test('timed newsletter yields to page focus after keyboard leaves the launcher', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+
+  const origin = page.getByRole('button', { name: 'Focus origin' });
+  await origin.click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await expect(launcher).toBeFocused();
+
+  const newsletter = page.locator('.ogabassey-newsletter-popup');
+  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('button', { name: 'Page control after assistant' })
+  ).toBeFocused();
+  await expect(newsletter).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-chat-promotion-focus-handoff',
+    'true'
+  );
+  await expect(newsletter).toHaveCSS('opacity', '0');
+  await expect(launcher).toBeVisible();
+
+  const close = page.getByRole('button', { name: 'Close newsletter' });
+  await page.keyboard.press('Shift+Tab');
+  await expect(launcher).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(
+    page.getByRole('button', { name: 'Show newsletter' })
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await expect(newsletter).toHaveCSS('opacity', '1');
+  await close.click();
+  await expect(newsletter).toBeHidden();
+  await expect(launcher).toBeVisible();
+});
+
+test('unrelated keyboard focus does not hide or disable a timed newsletter', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+  const origin = page.getByRole('button', { name: 'Focus origin' });
+  await origin.click();
+
+  const newsletter = page.locator('.ogabassey-newsletter-popup');
+  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await expect(newsletter).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('button', { name: 'Enable timed promotions' })
+  ).toBeFocused();
+  await expect(newsletter).toBeVisible();
+  await expect(newsletter).toHaveCSS('opacity', '1');
+  await expect(newsletter).toHaveCSS('pointer-events', 'auto');
+});

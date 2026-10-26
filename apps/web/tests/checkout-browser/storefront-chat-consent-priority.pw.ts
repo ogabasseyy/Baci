@@ -30,7 +30,7 @@ test('consent remains available above an already-open conversation', async ({
   await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
 });
 
-test('keyboard can reach and dismiss a timed newsletter after focusing a page control', async ({
+test('unrelated keyboard focus leaves a timed newsletter visible and interactive', async ({
   page,
 }) => {
   await page.setContent(`
@@ -64,11 +64,9 @@ test('keyboard can reach and dismiss a timed newsletter after focusing a page co
   });
   const popup = page.locator('.ogabassey-newsletter-popup');
   const close = page.getByRole('button', { name: 'Close newsletter' });
-  await expect(popup).toHaveCSS('opacity', '0');
+  await expect(popup).toHaveCSS('opacity', '1');
 
   await page.keyboard.press('Tab');
-  await expect(close).toBeFocused();
-  await expect(popup).toHaveCSS('opacity', '1');
   await close.click();
   await expect(popup).toBeHidden();
   await expect(page.locator('.ogabassey-chat-button')).toBeVisible();

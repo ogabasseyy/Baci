@@ -11,10 +11,16 @@ body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
   display: none;
 }
 
-body:has(.ogabassey-newsletter-popup)
+body:has(.ogabassey-newsletter-popup):not(
+    [data-chat-promotion-focus-handoff="true"]
+  )
   .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
     :focus-within
   ):not([data-chat-launcher-dragging]) {
+  display: none;
+}
+body:has(.ogabassey-newsletter-popup :focus-visible)
+  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
   display: none;
 }
 
@@ -30,14 +36,15 @@ body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
   display: none;
 }
 
-/* Keep overlays transparent until keyboard focus reaches one of their controls. */
-body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
-  :has(.ogabassey-newsletter-popup :focus-visible)
-)
+/* If keyboard focus leaves the launcher, keep a timed popup out of the new
+   focus target. Its controls remain tabbable and reveal the popup on focus. */
+body[data-chat-promotion-focus-handoff="true"]:not(
+  :has(.ogabassey-offer-popup :focus-visible)
+):not(:has(.ogabassey-newsletter-popup :focus-visible))
 .ogabassey-offer-popup,
-body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
-    :has(.ogabassey-newsletter-popup :focus-visible)
-  )
+body[data-chat-promotion-focus-handoff="true"]:not(
+    :has(.ogabassey-offer-popup :focus-visible)
+  ):not(:has(.ogabassey-newsletter-popup :focus-visible))
   .ogabassey-newsletter-popup {
   opacity: 0;
   pointer-events: none;
@@ -45,10 +52,16 @@ body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
 
 /* The offer spans the launcher corner only on narrow phones. */
 @media (max-width: 423px) {
-  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
+  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent)):not(
+      [data-chat-promotion-focus-handoff="true"]
+    )
     .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
       :focus-within
     ):not([data-chat-launcher-dragging]) {
+    display: none;
+  }
+  body:has(.ogabassey-offer-popup :focus-visible)
+    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
     display: none;
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
+import { RotateCw, Sparkles } from 'lucide-react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -65,6 +65,7 @@ export function DeferredChatWidget({
     'ogabassey-chat-button',
     isSanta && 'ogabassey-chat-button--santa',
     isLoading && 'ogabassey-chat-button--loading',
+    loadFailed && 'ogabassey-chat-button--retry',
   ]
     .filter(Boolean)
     .join(' ');
@@ -115,7 +116,14 @@ export function DeferredChatWidget({
           onClick={activateChat}
           disabled={isLoading}
           className={buttonClasses}
-          aria-label="Open AI chat assistant"
+          aria-label={
+            loadFailed
+              ? 'Chat did not load. Activate to retry.'
+              : 'Open AI chat assistant'
+          }
+          title={
+            loadFailed ? 'Chat did not load. Activate to retry.' : undefined
+          }
           aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
           aria-describedby={
             loadFailed
@@ -139,7 +147,15 @@ export function DeferredChatWidget({
               Chat did not load. Activate again to retry.
             </span>
           )}
-          {isSanta ? (
+          {loadFailed ? (
+            <span
+              className="ogabassey-chat-retry-indicator"
+              aria-hidden="true"
+            >
+              <RotateCw size={15} />
+              <span>Retry</span>
+            </span>
+          ) : isSanta ? (
             <div className="relative w-full h-full">
               <img
                 src="/african-santa-head.svg"

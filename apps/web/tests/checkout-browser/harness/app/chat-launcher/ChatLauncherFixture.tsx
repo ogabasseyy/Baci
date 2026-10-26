@@ -66,6 +66,7 @@ export function ChatLauncherFixture() {
         )}
         {showPromotions && <PopupSystem />}
         <DeferredChatWidget loadChatWidget={loadChatWidget} />
+        <button type="button">Page control after assistant</button>
       </main>
     </V2ThemeProvider>
   );

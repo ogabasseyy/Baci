@@ -35,9 +35,16 @@ describe('storefront chat overlay priority CSS', () => {
     );
   });
 
+  it('limits popup focus suppression to keyboard handoff from the chat launcher', () => {
+    expect(overlayCss).toMatch(
+      /body\[data-chat-promotion-focus-handoff=["']true["']\][\s\S]*?\.ogabassey-offer-popup\s*,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*opacity:\s*0;\s*pointer-events:\s*none/
+    );
+    expect(overlayCss).not.toMatch(/body:has\(:focus-visible\)/);
+  });
+
   it('limits launcher suppression for the offer to narrow viewports', () => {
     expect(overlayCss).toMatch(
-      /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
+      /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\):not\([\s\S]*?data-chat-promotion-focus-handoff[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
     );
   });
 });

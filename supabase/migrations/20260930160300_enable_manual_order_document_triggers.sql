@@ -44,9 +44,12 @@ BEGIN
   WHERE o.manual_document_notification_eligible
     -- Mirror the enqueue provenance triple below: a bare flag also matches
     -- imports/marketplace rows the enqueue early-returns for, so counting
-    -- them would trip the fence on rows that can never mail.
+    -- them would trip the fence on rows that can never mail. The customer
+    -- link completes the provenance: customerless rows never enqueue
+    -- (the FK guarantees a linked id references a real customer record).
     AND o.recorded_by_user_id IS NOT NULL
     AND o.import_job_id IS NULL
+    AND o.customer_id IS NOT NULL
     AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n
@@ -69,6 +72,7 @@ SELECT count(*) FROM (
     -- early-returns for so the reported scan count matches callable rows.
     AND o.recorded_by_user_id IS NOT NULL
     AND o.import_job_id IS NULL
+    AND o.customer_id IS NOT NULL
     AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n
@@ -104,6 +108,7 @@ SELECT count(*) FROM (
   WHERE o.manual_document_notification_eligible
     AND o.recorded_by_user_id IS NOT NULL
     AND o.import_job_id IS NULL
+    AND o.customer_id IS NOT NULL
     AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
     AND NOT EXISTS (
       SELECT 1 FROM public.order_notification_outbox AS n

@@ -150,6 +150,40 @@ describe('generateReceiptHtml VAT summary', () => {
     expect(html).toContain('ZR (Exported goods)');
   });
 
+  it('reconciles the VAT-free assurance premium into the breakdown', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        payment_status: 'unpaid',
+        amount_paid: 0,
+        balance: 104000,
+        subtotal: 100000,
+        shipping_fee: 0,
+        discount_amount: 0,
+        items: [
+          {
+            product_name: 'Pixel 10 Pro XL',
+            quantity: 1,
+            price: 100000,
+            assurance_fee: 4000,
+          },
+        ],
+        tax_subtotals: [
+          {
+            vat_category_code: 'S',
+            vat_rate: 7.5,
+            taxable_amount: 100000,
+            tax_amount: 7500,
+            exemption_reason: null,
+          },
+        ],
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).toContain('VAT Breakdown');
+    expect(html).toContain('Insurance premium');
+  });
+
   it('omits the VAT breakdown on paid receipts', () => {
     const html = generateReceiptHtml(
       createReceiptOrder({

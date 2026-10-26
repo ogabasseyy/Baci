@@ -17,6 +17,12 @@ export {
   type ManualOrderReceiptItemFinancialField,
 } from './manual-order-document-gates';
 export {
+  ASSURANCE_TAX_EXEMPTION_REASON,
+  type AssuranceTaxSubtotalRow,
+  reconcileAssuranceTaxSubtotals,
+  sumAssuranceFeeTotals,
+} from './receipt-assurance';
+export {
   type ReceiptCompletionCandidate,
   selectReceiptCompletionDate,
 } from './receipt-completion-date';

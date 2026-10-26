@@ -1,6 +1,7 @@
 -- Atomically validate the rendered snapshot and mark dispatch start:
--- app-code check-then-mark races the marker. Lock order (items/txns,
--- parents, tax, advisory gates) matches the triggers and stays acyclic.
+-- app-code check-then-mark races the marker. Lock order (order, children,
+-- parents, tax, advisory gates) matches the staff-edit path (order first)
+-- and stays acyclic.
 -- Mid-dispatch edits abort instead of sending stale; the worker
 -- retries and converges. The snapshot covers every rendered input and
 -- the sent kind lands in metadata for claim previews. DROP before
@@ -110,20 +111,23 @@ BEGIN
   -- Receipts render no payment instructions and no subtotal breakdown:
   -- bank, virtual-account, and tax compares run for invoices only.
   v_compare_invoice_only := p_document_kind <> 'receipt';
-  -- Lock order (child, parent, advisory); the outbox seed is re-validated below.
+  -- Lock order (parent, children, advisory): the order row locks before
+  -- its items/transactions so a concurrent staff edit (order FOR UPDATE,
+  -- then item DML) blocks on the order instead of deadlocking against a
+  -- child-first dispatch. The outbox seed is re-validated below.
   SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
   FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('status', 'lease_lost');
   END IF;
+  SELECT o.* INTO v_order FROM public.orders AS o
+  WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
+  FOR SHARE;
   PERFORM 1 FROM public.order_items AS oi
   WHERE oi.order_id = v_order_id FOR SHARE OF oi;
   PERFORM 1 FROM public.transactions AS t
   WHERE t.order_id = v_order_id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success') FOR SHARE OF t;
-  SELECT o.* INTO v_order FROM public.orders AS o
-  WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
-  FOR SHARE;
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.tax_identification_number,
     m.vat_registration_status, m.vat_rate,
@@ -144,7 +148,7 @@ BEGIN
   PERFORM 1 FROM public.customers AS c
   WHERE c.id = v_order.customer_id FOR SHARE OF c;
   -- Tax locks AFTER the parent (the tax-rebuild trigger runs
-  -- parent-to-child); items/transactions stay child-first per above.
+  -- parent-to-child), like items/transactions above.
   PERFORM 1 FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order_id FOR SHARE OF ts;
   -- Advisory gates last: writers take the same keys after row locks.

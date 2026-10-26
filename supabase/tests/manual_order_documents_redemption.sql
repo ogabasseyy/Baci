@@ -285,6 +285,13 @@ SELECT pg_temp.assert_true((SELECT NOT (p ? 'customer_email') AND (p ? 'customer
 -- The login-hint function is service-role-only: direct anon/authenticated
 -- PostgREST callers can never reach the raw recipient address, while the
 -- server resolves the live claim email through the service-role key.
+-- Baseline images may carry direct API-role grants that a PUBLIC-only
+-- revoke would leave in place, so reproduce those grants here and prove
+-- the migration's explicit revoke clears them.
+GRANT EXECUTE ON FUNCTION public.get_receipt_claim_login_hint(text) TO anon, authenticated;
+SELECT pg_temp.assert_true((SELECT has_function_privilege('anon', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'baseline anon grant reproduces');
+SELECT pg_temp.assert_true((SELECT has_function_privilege('authenticated', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'baseline authenticated grant reproduces');
+REVOKE ALL ON FUNCTION public.get_receipt_claim_login_hint(text) FROM PUBLIC, anon, authenticated;
 SELECT pg_temp.assert_true((SELECT NOT has_function_privilege('anon', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'anon cannot execute the login-hint function');
 SELECT pg_temp.assert_true((SELECT NOT has_function_privilege('authenticated', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'authenticated cannot execute the login-hint function');
 SELECT pg_temp.assert_true((SELECT has_function_privilege('service_role', 'public.get_receipt_claim_login_hint(text)', 'EXECUTE')), 'service_role can execute the login-hint function');

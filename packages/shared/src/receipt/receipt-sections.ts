@@ -1,6 +1,10 @@
 import { escapeHtml, escapeJsString } from './escape-html';
 import { canonicalizeTransactionPaymentMethod } from './manual-order-document-gates';
 import {
+  reconcileAssuranceTaxSubtotals,
+  sumAssuranceFeeTotals,
+} from './receipt-assurance';
+import {
   getReceiptDisplaySubtotal,
   getReceiptVatRate,
   type MoneyFormatter,
@@ -138,7 +142,24 @@ export function renderVatBreakdownHtml(
   // Receipts never render it; absent rows render nothing.
   const rows = Array.isArray(order.tax_subtotals) ? order.tax_subtotals : [];
   if (isPaid || rows.length === 0) return '';
-  const body = rows
+  // VAT-free assurance premiums never appear in the stored subtotals:
+  // reconcile a copy like the emailed PDF so preview totals match it
+  // exactly. Idempotent — pre-reconciled rows pass through untouched.
+  const reconciled = rows.map((row) => ({
+    ...(typeof row === 'object' && row !== null ? row : {}),
+  }));
+  reconcileAssuranceTaxSubtotals(
+    reconciled,
+    Number(
+      (
+        (order.subtotal ?? 0) +
+        (order.shipping_fee ?? 0) -
+        (order.discount_amount ?? 0)
+      ).toFixed(2)
+    ),
+    sumAssuranceFeeTotals(Array.isArray(order.items) ? order.items : [])
+  );
+  const body = reconciled
     .map((row) => {
       if (row == null || typeof row !== 'object') return '';
       const category =

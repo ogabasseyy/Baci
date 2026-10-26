@@ -15,10 +15,16 @@ import {
 import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-slug';
 import { selectInvoicePaymentAccountForRows } from '@/lib/invoice-payment-account';
 import { loadManualDocumentDispatch } from '@/lib/load-manual-document-dispatch';
-import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
+import {
+  buildManualOrderDocumentEmailContent,
+  resolveManualDocumentFromName,
+} from '@/lib/manual-order-document-email';
 import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
 import { resolveNotificationReplyTo } from '@/lib/order-notification-recipient';
-import { prepareManualDocumentClaim } from '@/lib/prepare-manual-document-claim';
+import {
+  prepareManualDocumentClaim,
+  recordManualDocumentAcceptedToken,
+} from '@/lib/prepare-manual-document-claim';
 import {
   ManualDocumentValidationError,
   renderManualOrderDocumentPdf,
@@ -27,6 +33,7 @@ import { reportFailedManualDocumentSend } from '@/lib/report-failed-manual-docum
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
+import { MANUAL_DOC_FALLBACK_CEILING_MS } from '@/lib/zeptomail-send-budget';
 
 export type ManualOrderDocumentEventType =
   | 'manual_order_receipt'
@@ -211,11 +218,11 @@ export async function sendManualOrderDocument({
       // failures reschedule via markFailedOrRetry; the platform-sender
       // fallback still applies once on definite rejections.
       maxAttemptsPerSender: 1,
+      // Static fallback ceiling: without a caller deadline the platform
+      // fallback would run unbounded past the 60s worker.
+      fallbackDeadlineMs: Date.now() + MANUAL_DOC_FALLBACK_CEILING_MS,
       fromName: sanitizeEmailDisplayName(
-        merchant.email_sender_name ||
-          merchant.business_name ||
-          merchant.slug ||
-          ''
+        resolveManualDocumentFromName(merchant)
       ),
       // merchant.email is the private login address: never a reply target.
       replyTo: resolveNotificationReplyTo(merchant.support_email),
@@ -235,21 +242,13 @@ export async function sendManualOrderDocument({
       );
     }
     providerAccepted = true;
-    // The provider accepted this attempt's mail: record its hash as
-    // known-delivered on EVERY post-acceptance path — including stale
-    // and failed outcomes below — so later rotations cannot orphan the
-    // link the customer already holds.
-    const recordAcceptedToken = async () => {
-      const { data: markedClaimId, error: markError } = await supabase.rpc(
-        'mark_manual_document_claim_sent',
-        {
-          p_claim_id: prepared.claim_id,
-          p_merchant_id: row.merchant_id,
-          p_mailed_token_hash: claim.tokenHash,
-        }
-      );
-      return !markError && markedClaimId === prepared.claim_id;
-    };
+    const recordAcceptedToken = () =>
+      recordManualDocumentAcceptedToken({
+        supabase,
+        claimId: prepared.claim_id,
+        merchantId: row.merchant_id,
+        mailedTokenHash: claim.tokenHash,
+      });
     // A data change reset the marker after dispatch: the PDF is stale,
     // so fail for a bounded corrective retry instead of recording sent.
     const lease = await checkManualDocumentDispatchLease(

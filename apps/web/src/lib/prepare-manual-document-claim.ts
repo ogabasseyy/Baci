@@ -64,3 +64,24 @@ export async function prepareManualDocumentClaim(input: {
   // the claim URL cannot disagree with the snapshot the mark compares.
   return { status: 'ready', prepared, claim, customDomain: claimDomain };
 }
+
+/**
+ * Records the accepted mail's token as known-delivered on every
+ * post-acceptance path, so later rotations cannot orphan the link.
+ */
+export async function recordManualDocumentAcceptedToken(input: {
+  supabase: SupabaseClient;
+  claimId: string;
+  merchantId: string;
+  mailedTokenHash: string;
+}): Promise<boolean> {
+  const { data: markedClaimId, error: markError } = await input.supabase.rpc(
+    'mark_manual_document_claim_sent',
+    {
+      p_claim_id: input.claimId,
+      p_merchant_id: input.merchantId,
+      p_mailed_token_hash: input.mailedTokenHash,
+    }
+  );
+  return !markError && markedClaimId === input.claimId;
+}

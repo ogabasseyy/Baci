@@ -13,6 +13,21 @@ import { sanitizeUrl } from '@/lib/sanitize-core';
 import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
 import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
+/**
+ * Sender display name for the manual document mail: sender name, then
+ * business name, then slug. Split out so the dispatch module stays
+ * under its line budget.
+ */
+export function resolveManualDocumentFromName(merchant: {
+  email_sender_name: string | null | undefined;
+  business_name: string | null | undefined;
+  slug: string | null | undefined;
+}): string {
+  return (
+    merchant.email_sender_name || merchant.business_name || merchant.slug || ''
+  );
+}
+
 interface ManualDocumentEmailInput {
   merchantName: string;
   customerName: string;

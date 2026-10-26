@@ -15,6 +15,7 @@ vi.mock('@/lib/receipt-pdf-generator', async (importOriginal) => {
 
 import { database, row } from './manual-order-document.test-utils';
 import { sendManualOrderDocument } from './send-manual-order-document';
+import { MANUAL_DOC_FALLBACK_CEILING_MS } from './zeptomail-send-budget';
 
 describe('send manual order document', () => {
   beforeEach(() => {
@@ -37,6 +38,12 @@ describe('send manual order document', () => {
     });
     const message = sendEmail.mock.calls[0][0];
     expect(message.to).toBe('ada@example.com');
+    // The platform fallback is bounded by a static single-attempt ceiling
+    // past the 60s worker: without it the fallback would run unbounded.
+    expect(message.fallbackDeadlineMs).toBeGreaterThan(Date.now());
+    expect(message.fallbackDeadlineMs).toBeLessThanOrEqual(
+      Date.now() + MANUAL_DOC_FALLBACK_CEILING_MS
+    );
     expect(message.subject).toBe('Your receipt is ready - #ORD-42');
     expect(message.htmlContent).toMatch(
       /https:\/\/ogabassey.usebaci.com\/receipts\/claim\/[a-f0-9]{64}/

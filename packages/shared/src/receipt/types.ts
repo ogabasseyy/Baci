@@ -106,6 +106,7 @@ export interface ReceiptOrder {
     description?: string | null;
     quantity: number;
     price: number;
+    assurance_fee?: number | null;
     line_extension_amount?: number;
     unit_code?: string | null;
     vat_category_code?: string | null;

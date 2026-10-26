@@ -205,10 +205,13 @@ LANGUAGE sql
 SECURITY DEFINER
 SET search_path = ''
 AS $$ SELECT private.get_receipt_claim_login_hint(p_token_hash); $$;
+-- Revoke the API roles explicitly, not just PUBLIC: baseline images may
+-- hold direct anon/authenticated grants that a PUBLIC-only revoke leaves
+-- in place, which would expose the raw recipient address to PostgREST.
 REVOKE ALL ON FUNCTION private.get_receipt_claim_login_hint(text)
-  FROM PUBLIC;
+  FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_receipt_claim_login_hint(text)
-  FROM PUBLIC;
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.get_receipt_claim_login_hint(text)
   TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_receipt_claim_login_hint(text)

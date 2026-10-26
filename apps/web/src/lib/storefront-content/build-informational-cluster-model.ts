@@ -1,19 +1,13 @@
 import { formatCurrencyCompact } from '@/lib/currency';
-import { generateSlug } from '@/lib/seo-utils';
-import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
-import type { ModelFamilyAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
-import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import { buildClusterHubLinks } from './build-cluster-hub-links';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
   InformationalClusterModel,
-  PublishedClusterPost,
 } from './content-cluster-types';
-import { resolveEligibleCategoryHubDestinations } from './eligible-hub-destinations';
 import { inferContentClusterContext } from './infer-content-cluster-context';
-import { verifyEligibleHubsAgainstDestination } from './verify-eligible-hubs-against-destination';
 
 interface CategoryInventoryProduct {
   slug: string;
@@ -108,22 +102,6 @@ function buildFeaturedProducts(
     }));
 }
 
-function postMatchesModelFamily(
-  post: PublishedClusterPost,
-  familyEntry: ModelFamilyAuthorityEntry
-): boolean {
-  const haystacks = [
-    post.title,
-    post.slug.replace(/[-_]/g, ' '),
-    post.excerpt ?? '',
-    ...(post.tags ?? []),
-    ...(post.keywords ?? []),
-  ];
-  return haystacks.some((text) =>
-    modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, text)
-  );
-}
-
 export async function buildInformationalClusterModel(
   input: BuildInformationalClusterModelInput
 ): Promise<InformationalClusterModel | null> {
@@ -165,101 +143,16 @@ export async function buildInformationalClusterModel(
     );
   }
 
-  const brandHubLinks: Array<{ href: string; label: string }> = [];
-  const familyHubLinks: Array<{ href: string; label: string }> = [];
-
-  if (inferred.brands.length > 0) {
-    const resolvedHubs = resolveEligibleCategoryHubDestinations({
-      storeUrl: input.storeUrl,
-      categorySlug,
-      products,
-    });
-    // Only brands the article actually matches can emit links, so only
-    // those hubs need destination verification (family hubs follow parent).
-    const matchedBrandKeys = new Set<string>();
-    for (const inferredBrand of inferred.brands) {
-      const hub = resolvedHubs.brandHubs.find((candidate) => {
-        if (
-          generateSlug(candidate.brand_key ?? '') ===
-          generateSlug(inferredBrand)
-        ) {
-          return true;
-        }
-        const entry = brandAuthorityTaxonomy.getEntry(
-          categorySlug,
-          candidate.brand_key ?? ''
-        );
-        return entry
-          ? brandAuthorityTaxonomy.matchesBrand(entry, inferredBrand)
-          : false;
-      });
-      if (hub?.brand_key) {
-        matchedBrandKeys.add(hub.brand_key);
-      }
-    }
-    // Override data is caller-authoritative; the live path must agree with
-    // the destination pages' hydrated inventory before linking to a hub.
-    const eligibleHubs = input.categoryDataOverride
-      ? resolvedHubs
-      : await verifyEligibleHubsAgainstDestination({
-          merchantId: input.merchantId,
-          categorySlug,
-          hubs: {
-            brandHubs: resolvedHubs.brandHubs.filter(
-              (hub) => hub.brand_key && matchedBrandKeys.has(hub.brand_key)
-            ),
-            familyHubs: resolvedHubs.familyHubs.filter(
-              (hub) => hub.brand_key && matchedBrandKeys.has(hub.brand_key)
-            ),
-          },
-        });
-    for (const inferredBrand of inferred.brands) {
-      const matchingBrandHub = eligibleHubs.brandHubs.find((hub) => {
-        if (generateSlug(hub.brand_key ?? '') === generateSlug(inferredBrand)) {
-          return true;
-        }
-        const entry = brandAuthorityTaxonomy.getEntry(
-          categorySlug,
-          hub.brand_key ?? ''
-        );
-        return entry
-          ? brandAuthorityTaxonomy.matchesBrand(entry, inferredBrand)
-          : false;
-      });
-
-      if (matchingBrandHub) {
-        if (matchingBrandHub.brand_key) {
-          matchedBrandKeys.add(matchingBrandHub.brand_key);
-        }
-        const entry = brandAuthorityTaxonomy.getEntry(
-          categorySlug,
-          matchingBrandHub.brand_key ?? ''
-        );
-        const displayName = entry?.displayName ?? inferredBrand;
-        brandHubLinks.push({
-          href: matchingBrandHub.href,
-          label: `Explore ${displayName} ${categoryName.toLowerCase()}`,
-        });
-      }
-    }
-
-    for (const familyHub of eligibleHubs.familyHubs) {
-      if (!familyHub.brand_key || !matchedBrandKeys.has(familyHub.brand_key)) {
-        continue;
-      }
-      const familyEntry = modelFamilyAuthorityTaxonomy.getEntry(
-        categorySlug,
-        familyHub.brand_key,
-        familyHub.family_key ?? ''
-      );
-      if (familyEntry && postMatchesModelFamily(input.post, familyEntry)) {
-        familyHubLinks.push({
-          href: familyHub.href,
-          label: `Explore ${familyEntry.displayName}`,
-        });
-      }
-    }
-  }
+  const { brandHubLinks, familyHubLinks } = await buildClusterHubLinks({
+    post: input.post,
+    inferredBrands: inferred.brands,
+    categorySlug,
+    categoryName,
+    storeUrl: input.storeUrl,
+    merchantId: input.merchantId,
+    products,
+    skipDestinationVerification: Boolean(input.categoryDataOverride),
+  });
 
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,

@@ -1,5 +1,4 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import type { StorefrontSitemapContext } from './sitemap-data';
 
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
@@ -1463,14 +1462,9 @@ describe('sitemap-data', () => {
     ]);
     expect(entries[0]?.lastModified).toEqual(new Date('2026-07-14T00:00:00Z'));
     expect(entries[1]?.lastModified).toBeUndefined();
-    const expectedCuratedEntries = brandAuthorityTaxonomy
-      .getSupportedCategories()
-      .flatMap((categorySlug) =>
-        brandAuthorityTaxonomy.getEntries(categorySlug)
-      ).length;
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(
-      expectedCuratedEntries
-    );
+    // Pin the curated authority set explicitly (9 smartphone brands +
+    // laptops Apple) so taxonomy edits cannot silently expand sitemap fan-out.
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(10);
   });
 
   it('keeps successful authority hubs when a single brand query fails', async () => {

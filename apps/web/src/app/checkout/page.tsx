@@ -1314,7 +1314,7 @@ function CheckoutPageContent() {
           currencyCode // Merchant-resolved currency (payout_currency → country → NGN)
         );
 
-        // Server-side tracking for GA4, Facebook, TikTok, Snapchat
+        // Complementary GA4/Facebook observation; trackEvent owns the social queue.
         trackServerSideBeginCheckout(
           merchant.id,
           cartTotal,
@@ -1331,7 +1331,7 @@ function CheckoutPageContent() {
             };
           }),
           undefined,
-          { eventSourceUrl: window.location.href }
+          { eventSourceUrl: window.location.href, socialAlreadyQueued: true }
         ).catch((err) => {
           console.warn('Server-side analytics error:', err);
         });

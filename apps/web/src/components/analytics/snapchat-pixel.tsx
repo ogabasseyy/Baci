@@ -1,8 +1,10 @@
 'use client';
 
 import Script from 'next/script';
-import { useSyncExternalStore } from 'react';
+import { useLayoutEffect, useSyncExternalStore } from 'react';
+import { socialPixelContext } from '@/lib/analytics/social-pixel-context';
 import { getStoredConsent } from '@/lib/consent-mode';
+import { isMarketingAllowed } from '@/lib/marketing-consent';
 
 interface SnapchatPixelProps {
   pixelId: string;
@@ -32,26 +34,46 @@ function getMarketingConsentServerSnapshot(): boolean {
 /**
  * Snapchat Pixel Component with Consent Mode Support
  *
- * Implements Snapchat's tracking pixel with:
- * - Cookie consent integration
- * - User hashing for advanced matching
- * - E-commerce event tracking
- *
  * @see https://businesshelp.snapchat.com/s/article/snap-pixel-about
  */
 export function SnapchatPixel({ pixelId }: SnapchatPixelProps) {
+  const validPixelId =
+    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+      pixelId
+    );
   const isAllowed = useSyncExternalStore(
     subscribeMarketingConsent,
     getMarketingConsentSnapshot,
     getMarketingConsentServerSnapshot
   );
 
-  if (!pixelId || !isAllowed) {
+  useLayoutEffect(() => {
+    if (!validPixelId || !isAllowed) return;
+    return socialPixelContext.activate('snapchat', pixelId);
+  }, [pixelId, validPixelId, isAllowed]);
+
+  function notifyPixelReady() {
+    if (
+      !isMarketingAllowed() ||
+      socialPixelContext.get('snapchat')?.id !== pixelId
+    )
+      return;
+    socialPixelContext.markReady('snapchat', pixelId);
+    window.dispatchEvent(new Event('baci-snapchat-ready'));
+  }
+
+  if (!validPixelId || !isAllowed) {
     return null;
   }
 
   return (
-    <Script id="snapchat-pixel" strategy="afterInteractive">
+    // biome-ignore lint/correctness/useInlineScriptId: A per-pixel id is present; the rule misreads the onReady attribute.
+    <Script
+      key={pixelId}
+      strategy="afterInteractive"
+      onReady={notifyPixelReady}
+      id={`snapchat-pixel-${pixelId}`}
+    >
       {`
         (function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function()
         {a.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};
@@ -60,10 +82,8 @@ export function SnapchatPixel({ pixelId }: SnapchatPixelProps) {
         u.parentNode.insertBefore(r,u);})(window,document,
         'https://sc-static.net/scevent.min.js');
 
-        snaptr('init', '${pixelId}', {
-          'user_email': '__INSERT_USER_EMAIL__'
-        });
-        snaptr('track', 'PAGE_VIEW');
+        snaptr('init', '${pixelId}');
+        snaptr('track', '${pixelId}', 'PAGE_VIEW');
       `}
     </Script>
   );
@@ -73,30 +93,63 @@ export function SnapchatPixel({ pixelId }: SnapchatPixelProps) {
  * Snapchat E-commerce Event Tracking
  */
 export const snapchatEvents = {
-  /**
-   * Track product view
-   */
-  viewContent: (productId: string, price: number, currency: string = 'USD') => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+  /** Product view. */
+  viewContent: (
+    productId: string,
+    price: number,
+    currency: string = 'USD',
+    eventId?: string,
+    productIds: string[] = [productId]
+  ) => {
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'VIEW_CONTENT', {
-      item_ids: [productId],
-      price,
-      currency,
-    });
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'VIEW_CONTENT',
+      {
+        item_ids: productIds,
+        price,
+        currency,
+        client_dedup_id: eventId,
+      }
+    );
   },
 
-  /**
-   * Track add to cart
-   */
-  addToCart: (productId: string, price: number, currency: string = 'USD') => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+  /** Add to cart. */
+  addToCart: (
+    productId: string,
+    price: number,
+    currency: string = 'USD',
+    eventId?: string,
+    quantity = 1
+  ) => {
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'ADD_CART', {
-      item_ids: [productId],
-      price,
-      currency,
-    });
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'ADD_CART',
+      {
+        item_ids: [productId],
+        price: price * quantity,
+        number_items: quantity,
+        currency,
+        client_dedup_id: eventId,
+      }
+    );
   },
 
   /**
@@ -105,15 +158,28 @@ export const snapchatEvents = {
   startCheckout: (
     value: number,
     currency: string = 'USD',
-    productIds: string[] = []
+    productIds: string[] = [],
+    eventId?: string
   ) => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'START_CHECKOUT', {
-      item_ids: productIds,
-      price: value,
-      currency,
-    });
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'START_CHECKOUT',
+      {
+        item_ids: productIds,
+        price: value,
+        currency,
+        client_dedup_id: eventId,
+      }
+    );
   },
 
   /**
@@ -125,34 +191,66 @@ export const snapchatEvents = {
     currency: string = 'USD',
     productIds: string[] = []
   ) => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'PURCHASE', {
-      item_ids: productIds,
-      price: value,
-      currency,
-      transaction_id: orderId,
-    });
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'PURCHASE',
+      {
+        item_ids: productIds,
+        price: value,
+        currency,
+        transaction_id: orderId,
+      }
+    );
   },
 
   /**
    * Track search
    */
   search: (searchTerm: string) => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'SEARCH', {
-      search_string: searchTerm,
-    });
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'SEARCH',
+      {
+        search_string: searchTerm,
+      }
+    );
   },
 
   /**
    * Track sign up
    */
   signUp: () => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
-    window.snaptr('track', 'SIGN_UP');
+    window.snaptr(
+      'track',
+      socialPixelContext.get('snapchat')?.id ?? '',
+      'SIGN_UP'
+    );
   },
 
   /**
@@ -161,7 +259,13 @@ export const snapchatEvents = {
    * This is called automatically if you pass user data to the PAGE_VIEW event.
    */
   setUserData: (pixelId: string, email?: string, phone?: string) => {
-    if (typeof window === 'undefined' || !window.snaptr) return;
+    if (
+      !isMarketingAllowed() ||
+      !socialPixelContext.get('snapchat')?.ready ||
+      typeof window === 'undefined' ||
+      !window.snaptr
+    )
+      return;
 
     const userData: Record<string, string> = {};
     if (email) userData.user_email = email;
@@ -184,6 +288,12 @@ declare global {
         userData?: Record<string, string>
       ): void;
       (action: 'track', event: string, params?: Record<string, unknown>): void;
+      (
+        action: 'track',
+        pixelId: string,
+        event: string,
+        params?: Record<string, unknown>
+      ): void;
     };
   }
 }

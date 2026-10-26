@@ -63,3 +63,38 @@ describe('fetchDashboardMerchantContext', () => {
     ).rejects.toThrow('Invalid dashboard merchant context');
   });
 });
+
+it('never serializes legacy or nested provider credentials from caller-bound context', async () => {
+  const result = await fetchDashboardMerchantContext({
+    rpc: vi.fn().mockResolvedValue({
+      error: null,
+      data: {
+        merchant: {
+          id: 'own',
+          facebook_capi_token: 'legacy-private',
+          feature_settings: {
+            facebook_capi_token: 'nested-private',
+            ga4_api_secret: 'ga-private',
+            reviews_enabled: true,
+          },
+        },
+        primaryDomain: null,
+        staffAccess: {
+          isStaff: false,
+          isOwner: true,
+          role: null,
+          permissions: {},
+        },
+      },
+    }),
+  } as never);
+  expect(JSON.stringify(result)).not.toMatch(
+    /legacy-private|nested-private|ga-private/
+  );
+  expect(result.merchant?.feature_settings).toMatchObject({
+    facebook_capi_token: null,
+    facebook_capi_token_configured: true,
+    ga4_api_secret_configured: true,
+    reviews_enabled: true,
+  });
+});

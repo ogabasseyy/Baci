@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import type { ConversionEvent } from '@/lib/analytics/send-to-ad-platforms';
+import { clientMarketingTargets } from '@/lib/events/client-marketing-targets';
 import type { AnalyticsEventRequest } from '@/schemas/analytics-event';
 
 function conversionContents(input: AnalyticsEventRequest) {
@@ -61,7 +62,13 @@ export function buildLegacyAdPlatformFanoutEvent(input: {
     event_type: input.eventType,
     merchant_id: input.resolvedMerchantId,
     source: input.input.source ?? 'web',
+    targets: clientMarketingTargets({
+      analytics: input.input.analytics_consent,
+      marketing: input.input.marketing_consent,
+    }),
     user_data: {
+      analytics_consent: input.input.analytics_consent === true,
+      marketing_consent: input.input.marketing_consent === true,
       email: input.input.user_data?.em,
       external_id: input.input.user_data?.external_id,
       fbc:

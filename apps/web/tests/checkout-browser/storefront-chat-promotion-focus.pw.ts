@@ -30,6 +30,23 @@ test('timed newsletter yields to page focus after keyboard leaves the launcher',
   await expect(newsletter).toHaveCSS('opacity', '0');
   await expect(launcher).toBeVisible();
 
+  const beforeDrag = await launcher.boundingBox();
+  if (!beforeDrag) throw new Error('Chat launcher has no layout box');
+  await page.mouse.move(beforeDrag.x + 28, beforeDrag.y + 28);
+  await page.mouse.down();
+  await page.mouse.move(beforeDrag.x - 30, beforeDrag.y - 30, { steps: 5 });
+  await page.mouse.up();
+  const afterDrag = await launcher.boundingBox();
+  if (!afterDrag) throw new Error('Chat launcher lost its layout box');
+  expect(afterDrag.x).toBeLessThan(beforeDrag.x - 20);
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-chat-promotion-focus-handoff',
+    'true'
+  );
+  await page
+    .getByRole('button', { name: 'Page control after assistant' })
+    .focus();
+
   const close = page.getByRole('button', { name: 'Close newsletter' });
   await page.keyboard.press('Shift+Tab');
   await expect(launcher).toBeFocused();

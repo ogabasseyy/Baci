@@ -23,6 +23,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   const bannerRef = useRef<HTMLDivElement>(null);
   const bannerHasFocusRef = useRef(false);
   const bannerFocusOriginRef = useRef<HTMLElement | null>(null);
+  const bannerFocusStartedInChatRef = useRef(false);
   const dismissThroughBannerRef = useRef(false);
   const viewChangeFocusRef = useRef(false);
   const previousViewKeyRef = useRef(viewKey);
@@ -66,6 +67,10 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     if (isVisible) {
       if (!wasVisibleRef.current) {
         const activeElement = document.activeElement;
+        bannerFocusStartedInChatRef.current = Boolean(
+          activeElement instanceof HTMLElement &&
+            activeElement.closest('.ogabassey-chat-anchor')
+        );
         if (
           activeElement instanceof HTMLElement &&
           activeElement !== document.body &&
@@ -125,8 +130,10 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     const focusOrigin = bannerFocusOriginRef.current;
     if (bannerHasFocusRef.current && canReceiveFocus(focusOrigin))
       focusOrigin.focus();
-    else if (bannerHasFocusRef.current) focusTarget?.focus();
+    else if (bannerHasFocusRef.current && bannerFocusStartedInChatRef.current)
+      focusTarget?.focus();
     bannerFocusOriginRef.current = null;
+    bannerFocusStartedInChatRef.current = false;
     bannerHasFocusRef.current = false;
     dismissThroughBannerRef.current = false;
   }, [isVisible, viewKey]);
@@ -144,6 +151,9 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
         !previous.closest('.ogabassey-offer-popup, .ogabassey-newsletter-popup')
       ) {
         bannerFocusOriginRef.current = previous;
+        bannerFocusStartedInChatRef.current = Boolean(
+          previous.closest('.ogabassey-chat-anchor')
+        );
       }
       bannerHasFocusRef.current = true;
     },

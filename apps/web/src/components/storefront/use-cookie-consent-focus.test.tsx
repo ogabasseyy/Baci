@@ -196,6 +196,24 @@ it('restores focus to an ordinary control that was active before consent appeare
   expect(newsletter).toHaveFocus();
 });
 
+it('does not redirect focus to chat when consent started without a focus origin', () => {
+  render(<ConsentFocusHarness />);
+  document.body.tabIndex = -1;
+  document.body.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.focusIn(dismiss, { relatedTarget: document.body });
+  fireEvent.click(dismiss);
+
+  expect(document.activeElement).toBe(document.body);
+  expect(
+    screen.getByRole('button', { name: 'Assistant launcher' })
+  ).not.toHaveFocus();
+  document.body.removeAttribute('tabindex');
+});
+
 it('keeps the original page control as origin while focus moves inside consent', () => {
   render(<ConsentFocusHarness />);
   const origin = screen.getByRole('button', { name: 'Show newsletter' });

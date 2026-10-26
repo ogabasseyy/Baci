@@ -117,39 +117,12 @@ export function useChatLauncherDrag(
     scheduleViewportReclamp();
   }
   useEffect(() => {
-    let tabbingFromLauncher = false;
-    const clearPromotionHandoff = () => {
-      delete document.body.dataset.chatPromotionFocusHandoff;
-      tabbingFromLauncher = false;
-    };
-    const trackKeyboardTab = (event: KeyboardEvent) => {
-      tabbingFromLauncher =
-        event.key === 'Tab' &&
-        event.target instanceof Element &&
-        event.target.matches('.ogabassey-chat-anchor .ogabassey-chat-button');
-    };
-    const trackFocusHandoff = (event: FocusEvent) => {
-      const next = event.target;
-      if (
-        tabbingFromLauncher &&
-        next instanceof HTMLElement &&
-        !next.closest(
-          '.ogabassey-chat-anchor, .ogabassey-offer-popup, .ogabassey-newsletter-popup'
-        )
-      ) {
-        document.body.dataset.chatPromotionFocusHandoff = 'true';
-      }
-      tabbingFromLauncher = false;
-    };
     const probe = document.createElement('div');
     probe.style.cssText =
       'height:env(safe-area-inset-bottom, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
     document.body.append(probe);
     safeAreaProbe.current = probe;
     window.addEventListener('resize', scheduleViewportReclamp);
-    document.addEventListener('keydown', trackKeyboardTab, true);
-    document.addEventListener('focusin', trackFocusHandoff, true);
-    document.addEventListener('pointerdown', clearPromotionHandoff, true);
     const anchor = anchorRef.current;
     const button = buttonRef.current;
     const observer =
@@ -163,10 +136,6 @@ export function useChatLauncherDrag(
     visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
     return () => {
       window.removeEventListener('resize', scheduleViewportReclamp);
-      document.removeEventListener('keydown', trackKeyboardTab, true);
-      document.removeEventListener('focusin', trackFocusHandoff, true);
-      document.removeEventListener('pointerdown', clearPromotionHandoff, true);
-      delete document.body.dataset.chatPromotionFocusHandoff;
       anchor?.removeEventListener('animationend', handleOverflowAnimationEnd, true);
       visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
       visualViewport?.removeEventListener('scroll', scheduleViewportReclamp);

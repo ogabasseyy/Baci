@@ -12,6 +12,7 @@ import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import type { ChatWidgetProps } from './ChatWidget';
 import { getChatMobileOffset } from './get-chat-mobile-offset';
 import { useChatLauncherDrag } from './use-chat-launcher-drag';
+import { useChatPromotionFocusHandoff } from './use-chat-promotion-focus-handoff';
 
 interface ChatWidgetModule {
   ChatWidget: React.ComponentType<ChatWidgetProps>;
@@ -29,6 +30,7 @@ const loadDefaultChatWidget = () => import('./ChatWidget');
 export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
+  useChatPromotionFocusHandoff();
   const { isCartOpen } = useCart();
   const { theme } = useV2Theme();
   const pathname = usePathname();

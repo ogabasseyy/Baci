@@ -1158,24 +1158,27 @@
 
 /* Consent takes priority over promotional and assistant chrome. Keep these
    rules in core so deferred widget styles cannot cause an overlapping flash. */
-body:has(.storefront-cookie-consent) .ogabassey-chat-anchor,
+body:has(.storefront-cookie-consent)
+.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)),
 body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
 body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
   display: none;
 }
 
-body:has(.ogabassey-newsletter-popup) .ogabassey-chat-anchor {
+body:has(.ogabassey-newsletter-popup)
+  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
   display: none;
 }
 
-/* Keep delayed offer chrome from covering an active conversation. */
-body:has(.ogabassey-chat-anchor .ogabassey-chat-window) .ogabassey-offer-popup {
+/* Keep promotional overlays from covering an active conversation. */
+body:has(.ogabassey-chat-anchor .ogabassey-chat-window) .ogabassey-offer-popup,
+body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
+  .ogabassey-newsletter-popup {
   display: none;
 }
 
-@media (max-width: 767px) {
-  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
-    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
-    display: none;
-  }
+/* Keep the draggable launcher clear of the bottom-left offer at every width. */
+body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
+.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
+  display: none;
 }

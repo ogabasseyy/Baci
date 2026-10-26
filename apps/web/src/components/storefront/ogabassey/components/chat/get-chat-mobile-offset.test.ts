@@ -6,6 +6,7 @@ describe('getChatMobileOffset', () => {
     [null, 'default'],
     ['/ogabassey', 'default'],
     ['/store/cart', 'cart'],
+    ['/store/category/cart', 'cart'],
     ['/store/category/product', 'product'],
     ['/store/category/cart-organizer', 'product'],
     ['/store/checkout/payment', 'default'],

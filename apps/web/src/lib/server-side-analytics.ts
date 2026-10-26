@@ -18,6 +18,7 @@
  */
 
 import { getAppUrl } from '@/env';
+import { sendFacebookClientObservation } from './analytics/send-facebook-client-observation';
 
 export interface ServerAnalyticsUserData {
   email?: string;
@@ -51,6 +52,7 @@ interface AnalyticsResult {
   success: boolean;
   error?: string;
   sent: boolean;
+  queued?: boolean;
 }
 
 /**
@@ -155,35 +157,17 @@ export async function sendServerSideAnalytics(
           : 'ViewContent';
 
   requests.push(
-    fetch(`${baseUrl}/api/analytics/facebook-capi`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: fbEvent,
-        merchantId,
-        userData: commonUserData,
-        eventData: commonEventData,
-        eventSourceUrl: options?.eventSourceUrl,
-        eventId: options?.eventId,
-      }),
+    sendFacebookClientObservation({
+      baseUrl,
+      event: fbEvent,
+      merchantId,
+      userData: commonUserData,
+      eventData: commonEventData,
+      eventSourceUrl: options?.eventSourceUrl,
+      eventId: options?.eventId,
+    }).then((result) => {
+      results.push(result);
     })
-      .then(async (res) => {
-        const data = await res.json();
-        results.push({
-          platform: 'Facebook',
-          success: data.success ?? false,
-          error: data.error,
-          sent: data.sent !== false,
-        });
-      })
-      .catch((error) => {
-        results.push({
-          platform: 'Facebook',
-          success: false,
-          error: error.message,
-          sent: false,
-        });
-      })
   );
 
   // 3. TikTok Events API

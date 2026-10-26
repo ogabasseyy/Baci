@@ -18,10 +18,15 @@ describe('Server-Side Analytics Service', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('fetch', vi.fn());
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({ analytics: true })
+    );
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.clear();
   });
 
   describe('sendServerSideAnalytics', () => {
@@ -58,14 +63,21 @@ describe('Server-Side Analytics Service', () => {
         harness.mockEventData
       );
 
-      expect(global.fetch).toHaveBeenCalledTimes(4);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
       const calls = harness.getFetchCalls();
       expect(
         calls.every(([url]) =>
           url.startsWith('http://localhost:3000/api/analytics/')
         )
       ).toBe(true);
-      expect(results.every((result) => result.success === true)).toBe(true);
+      expect(
+        results
+          .filter((result) => result.platform !== 'Facebook')
+          .every((result) => result.success)
+      ).toBe(true);
+      expect(
+        results.find((result) => result.platform === 'Facebook')
+      ).toMatchObject({ sent: false, error: 'consent_required' });
     });
 
     it('handles failures from some platforms gracefully', async () => {
@@ -294,5 +306,57 @@ describe('Server-Side Analytics Service', () => {
         });
       }
     });
+  });
+});
+
+describe('Meta durable ingress compatibility', () => {
+  afterEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+  it('forwards actual consent and reports accepted checkout observations as queued, not delivered', async () => {
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({ analytics: true })
+    );
+    const fetcher = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          url.includes('facebook-capi')
+            ? { queued: true, sent: false }
+            : { success: true },
+      })
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const results = await trackServerSideBeginCheckout(
+      harness.merchantId,
+      200,
+      'NGN',
+      harness.mockEventData.products
+    );
+    const request = fetcher.mock.calls.find(([url]) =>
+      url.includes('facebook-capi')
+    );
+    expect(JSON.parse(request?.[1].body).consent).toBe(true);
+    expect(
+      results.find((result) => result.platform === 'Facebook')
+    ).toMatchObject({ success: true, sent: false });
+  });
+  it('does not post Meta observations when the visitor has not consented', async () => {
+    localStorage.clear();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    vi.stubGlobal('fetch', fetcher);
+    await trackServerSideBeginCheckout(
+      harness.merchantId,
+      200,
+      'NGN',
+      harness.mockEventData.products
+    );
+    expect(
+      fetcher.mock.calls.some(([url]) => url.includes('facebook-capi'))
+    ).toBe(false);
   });
 });

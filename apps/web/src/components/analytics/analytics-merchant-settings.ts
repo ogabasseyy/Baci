@@ -25,6 +25,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function hasGrowthIntegrationAccess(merchant: Record<string, unknown>) {
+  // Public snapshots carry a derived hint, never private billing fields.
+  if (typeof merchant.growth_integrations_enabled === 'boolean') {
+    return merchant.growth_integrations_enabled;
+  }
   const premiumFeatures = Array.isArray(merchant.premium_features)
     ? new Set(
         merchant.premium_features

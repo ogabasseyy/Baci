@@ -4,8 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
-import { eventPipelineCredentialPaths } from './event-pipeline-credential-paths';
+import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
+import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
@@ -15,6 +16,7 @@ import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyves
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
+import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),
@@ -32,7 +34,218 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       ...eventPipelineCartCredentialPaths,
-      ...eventPipelineCredentialPaths,
+      // One host-verified public observation may mint only the existing
+      // short-lived event-ingress capability; it cannot read provider credentials.
+      [
+        'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+        'apps/web/src/lib/events/event-ingress-capability.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+
+      [
+        'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/product/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/search/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/payments/initialize/route.ts',
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/redvault-payment-attempt-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/orders/route.ts',
+        'apps/web/src/lib/order-notification-dispatch.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/orders/route.ts',
+        'apps/web/src/lib/checkout/storefront-order-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/checkout/storefront-order-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/quiz/attempts/[attemptId]/answers/route.ts',
+        'apps/web/src/app/api/quiz/attempts/[attemptId]/answers/legacy-route.ts',
+        'apps/web/src/lib/quiz/quiz-award-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/quiz/attempts/[attemptId]/answers/legacy-route.ts',
+        'apps/web/src/lib/quiz/quiz-award-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/quiz/quiz-award-rpc-client.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/orders/route.ts',
+        'apps/web/src/lib/order-notification-dispatch.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/order-notification-dispatch.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/order-notification-dispatch.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/invoice-notifications.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/invoice-notifications.ts',
+        'apps/web/src/lib/expo-push.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/(platform)/onboarding/actions.ts',
+        'apps/web/src/app/(platform)/onboarding/submit-onboarding-workflow.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/(platform)/onboarding/submit-onboarding-workflow.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/storefront-product-purge-hostnames.ts',
+        'apps/web/src/lib/cloudflare-purge.ts',
+        'apps/web/src/env.ts',
+      ],
+      ...eventPipelineGiglCredentialPaths,
+      [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+        'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+        'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+        'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/product/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/search/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      ...eventPipelineDvaCredentialPaths,
+      [
+        'apps/web/src/app/api/chat/route.ts',
+        'apps/web/src/app/api/chat/ollama-chat-tool-runtime.ts',
+        'apps/web/src/ai/chat-order-cancellation.ts',
+        'apps/web/src/lib/agentic/scoped-supabase.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/chat/run-chat-provider-chain.ts',
+        'apps/web/src/app/api/chat/chat-tool-runtime.ts',
+        'apps/web/src/ai/chat-order-cancellation.ts',
+        'apps/web/src/lib/agentic/scoped-supabase.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      ...eventPipelineVtuReplayCredentialPaths,
       ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelinePiggyvestCredentialPaths,

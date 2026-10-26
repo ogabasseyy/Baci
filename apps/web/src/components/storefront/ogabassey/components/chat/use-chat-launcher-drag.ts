@@ -28,6 +28,10 @@ type Gesture = {
   next: Position;
 };
 
+function clampAxis(value: number, min: number, max: number, fallback: number) {
+  return min <= max ? Math.max(min, Math.min(value, max)) : Math.max(0, Math.min(value, fallback));
+}
+
 function clamp(
   x: number,
   y: number,
@@ -36,24 +40,23 @@ function clamp(
   bottomSafeArea = 0,
   overflow: Overflow = { left: 0, top: 0, right: 0, bottom: 0 },
 ): Position {
+  const minX = EDGE_GAP + overflow.left;
+  const maxX = window.innerWidth - width - EDGE_GAP - overflow.right;
+  const minY = EDGE_GAP + overflow.top;
+  const maxY =
+    window.innerHeight -
+    height -
+    EDGE_GAP -
+    bottomSafeArea -
+    overflow.bottom;
+
   return {
-    x: Math.max(
-      EDGE_GAP + overflow.left,
-      Math.min(
-        x,
-        window.innerWidth - width - EDGE_GAP - overflow.right,
-      ),
-    ),
-    y: Math.max(
-      EDGE_GAP + overflow.top,
-      Math.min(
-        y,
-        window.innerHeight -
-          height -
-          EDGE_GAP -
-          bottomSafeArea -
-          overflow.bottom,
-      ),
+    x: clampAxis(x, minX, maxX, window.innerWidth - width),
+    y: clampAxis(
+      y,
+      minY,
+      maxY,
+      window.innerHeight - height - bottomSafeArea,
     ),
   };
 }
@@ -84,8 +87,7 @@ export function useChatLauncherDrag(
   function readBottomSafeArea() {
     const anchor = anchorRef.current;
     if (!anchor) return 0;
-    // Custom properties preserve env() as an unresolved token in some
-    // browsers. A pseudo-element's normal height property resolves the inset.
+    // A pseudo-element's height resolves env() where custom properties do not.
     const value = window.getComputedStyle(anchor, '::before').height;
     if (Number.isFinite(Number.parseFloat(value))) {
       return Number.parseFloat(value);
@@ -165,7 +167,6 @@ export function useChatLauncherDrag(
       event.isPrimary === false
     )
       return;
-    // Measure once, before writing styles. The move path uses cached geometry.
     const rect = event.currentTarget.getBoundingClientRect();
     const bottomSafeArea = readBottomSafeArea();
     const overflow = readOverflow(event.currentTarget, rect);
@@ -234,7 +235,6 @@ export function useChatLauncherDrag(
     frame.current = null;
     const start = gesture.current;
     gesture.current = null;
-    // Commit once at release, including when release beats the queued frame.
     if (start && dragged.current) {
       setPosition(start.next);
       clearClickSuppressionTimer();

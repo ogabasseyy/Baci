@@ -11,6 +11,33 @@ afterEach(() => {
 });
 
 describe('chat launcher overflow clamp', () => {
+  it('keeps the launcher reachable when its bubble cannot fit in a narrow viewport', () => {
+    const { pointer, button } = setup();
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(260);
+    const bubble = document.createElement('div');
+    bubble.dataset.chatLauncherOverflow = '';
+    button.parentElement?.append(bubble);
+    vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 300,
+      width: 320,
+      height: 50,
+      right: 320,
+      bottom: 350,
+      x: 0,
+      y: 300,
+      toJSON: () => ({}),
+    });
+
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', -2000, 320);
+    pointer('pointerup', -2000, 320);
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(0px, 300px, 0)',
+    );
+  });
+
   it.each([
     [
       'top-left',

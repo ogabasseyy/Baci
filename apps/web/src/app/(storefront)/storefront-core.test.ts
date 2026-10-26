@@ -103,5 +103,18 @@ describe('storefront overlay priority', () => {
     expect(storefrontCoreCss).toMatch(
       /body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\)\s*\{\s*display:\s*none/
     );
+    const offerSelector =
+      'body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))';
+    const offerRuleIndex = storefrontCoreCss.indexOf(offerSelector);
+    const consentRulesStart = storefrontCoreCss.indexOf(
+      '/* Consent takes priority over promotional and assistant chrome.'
+    );
+    expect(storefrontCoreCss).toMatch(
+      /@media \(max-width: 640px\)[\s\S]*\n\}\n\n\/\* Consent takes priority over promotional and assistant chrome\./
+    );
+    expect(offerRuleIndex).toBeGreaterThan(consentRulesStart);
+    expect(
+      storefrontCoreCss.slice(consentRulesStart, offerRuleIndex)
+    ).not.toContain('@media');
   });
 });

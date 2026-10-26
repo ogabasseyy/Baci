@@ -14,9 +14,31 @@ export const eventPipelineAuthorityServicePaths = [
   // Only the token-scoped login-email route may drive the branded
   // receipt login-hint client (PR #3580; see the temporary exception in
   // AGENTS.md). The 256-bit claim Bearer [REDACTED] is the only credential on this
-  // path; the raw address is masked before responding.
+  // path; the raw address is masked before responding. The loader builds
+  // the client lazily after anon preview validation, so every loader
+  // importer shares the transitive edge below (none constructs it).
   [
     'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+    'apps/web/src/lib/receipts/server-login-hint-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+    'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+    'apps/web/src/lib/receipts/server-login-hint-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/receipts/claims/[token]/route.ts',
+    'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+    'apps/web/src/lib/receipts/server-login-hint-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/receipts/claims/[token]/app-download-click/route.ts',
+    'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+    'apps/web/src/lib/receipts/server-login-hint-client.ts',
+  ],
+  [
+    'apps/web/src/app/(storefront)/[slug]/(customer)/receipts/claim/[token]/page.tsx',
+    'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
     'apps/web/src/lib/receipts/server-login-hint-client.ts',
   ],
   [

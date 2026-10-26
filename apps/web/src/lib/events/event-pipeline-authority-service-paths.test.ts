@@ -17,6 +17,26 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/lib/receipts/server-login-hint-client.ts',
       ],
       [
+        'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+        'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+        'apps/web/src/lib/receipts/server-login-hint-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/storefront/receipts/claims/[token]/route.ts',
+        'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+        'apps/web/src/lib/receipts/server-login-hint-client.ts',
+      ],
+      [
+        'apps/web/src/app/api/storefront/receipts/claims/[token]/app-download-click/route.ts',
+        'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+        'apps/web/src/lib/receipts/server-login-hint-client.ts',
+      ],
+      [
+        'apps/web/src/app/(storefront)/[slug]/(customer)/receipts/claim/[token]/page.tsx',
+        'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
+        'apps/web/src/lib/receipts/server-login-hint-client.ts',
+      ],
+      [
         'apps/web/src/app/api/orders/route.ts',
         'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',
         'apps/web/src/lib/checkout/resolve-loyalty-checkout-code.ts',

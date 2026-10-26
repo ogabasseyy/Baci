@@ -67,6 +67,9 @@ function toCategoryInventoryProduct(
   };
 }
 
+// Featured picks link to PDPs, which resolve regardless of stock state;
+// raw-pool availability is the intentional gate here (hub indexability
+// thresholds are what destination verification protects).
 function isInStock(product: CategoryInventoryProduct) {
   return isAvailableProduct(product);
 }

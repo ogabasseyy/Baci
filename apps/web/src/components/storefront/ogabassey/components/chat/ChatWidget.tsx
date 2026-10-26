@@ -106,13 +106,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       {/* Chat Window */}
       {isOpen && (
         <div
-          className={`w-[calc(100vw-32px)] md:w-[400px] h-[400px] md:h-[500px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border ${isSanta ? 'border-red-200' : 'border-gray-200'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-black/5`}
+          className={`ogabassey-chat-window w-[calc(100vw-32px)] md:w-[400px] h-[400px] md:h-[500px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border ${isSanta ? 'border-red-200' : 'border-gray-200'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-black/5`}
         >
           {/* Header */}
           <div
-            className={`relative flex items-center justify-between p-4 border-b ${isSanta
-              ? 'bg-red-600 text-white border-red-500'
-              : 'bg-white text-gray-800 border-gray-100'
+            className={`relative flex items-center justify-between p-4 border-b ${
+              isSanta
+                ? 'bg-red-600 text-white border-red-500'
+                : 'bg-white text-gray-800 border-gray-100'
             }`}
           >
             {isSanta && (
@@ -139,13 +140,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <h3 className="text-base font-semibold flex items-center gap-1">
                   {isSanta ? (
                     <>
-                      Santa AI <span className="text-xs ml-1">{'\u{1F384}'}</span>
+                      Santa AI{' '}
+                      <span className="text-xs ml-1">{'\u{1F384}'}</span>
                     </>
                   ) : (
                     'Ogabassey AI'
                   )}
                 </h3>
-                <p className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}>Online</p>
+                <p
+                  className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}
+                >
+                  Online
+                </p>
               </div>
             </div>
             <button
@@ -240,7 +246,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         {/* Proactive Nudge Bubble (Standard Mode) */}
         {!isOpen && !isSanta && proactiveMsg && (
           <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-red-50 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
-            <div className="text-gray-800 text-xs font-medium leading-relaxed">{proactiveMsg}</div>
+            <div className="text-gray-800 text-xs font-medium leading-relaxed">
+              {proactiveMsg}
+            </div>
             <div className="absolute -bottom-1.5 -right-1 size-4 bg-white rotate-45 border-r border-b border-red-50" />
             <button
               type="button"
@@ -285,9 +293,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               )}
               <span className="ogabassey-chat-badge">
                 <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">
-                  AI
-                </span>
+                <span className="ogabassey-chat-badge__label">AI</span>
               </span>
             </>
           )}

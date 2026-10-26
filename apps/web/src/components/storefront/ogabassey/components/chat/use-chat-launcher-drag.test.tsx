@@ -47,12 +47,15 @@ function setup() {
   const pointer = (type: string, x: number, y: number) =>
     fireEvent(
       button,
-      new MouseEvent(type, {
-        bubbles: true,
-        clientX: x,
-        clientY: y,
-        button: 0,
-      }),
+      Object.assign(
+        new MouseEvent(type, {
+          bubbles: true,
+          clientX: x,
+          clientY: y,
+          button: 0,
+        }),
+        { pointerId: 1, isPrimary: true },
+      ),
     );
   return {
     ...view,
@@ -119,6 +122,51 @@ describe('useChatLauncherDrag', () => {
     fireEvent(window, new Event('resize'));
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(248px, 408px, 0)',
+    );
+  });
+
+  it('keeps click suppression after pointer capture is released on pointerup', () => {
+    const { pointer, button, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    const lostCapture = new MouseEvent('lostpointercapture', { bubbles: true });
+    Object.defineProperty(lostCapture, 'pointerId', { value: 1 });
+    fireEvent(button, lostCapture);
+    fireEvent.click(button);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('restores the previous transform when a drag is cancelled', () => {
+    const { pointer, flush } = setup();
+    const anchor = screen.getByTestId('anchor');
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    flush();
+    expect(anchor.style.transform).not.toBe('');
+    pointer('pointercancel', 120, 220);
+    expect(anchor.style.transform).toBe('');
+  });
+
+  it('does not replace the saved position with zero bounds while hidden', () => {
+    const { pointer, measure } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent(window, new Event('resize'));
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(100px, 200px, 0)',
     );
   });
 

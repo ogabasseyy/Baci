@@ -79,7 +79,7 @@ describe('storefront overlay priority', () => {
   it('hides competing chrome while the privacy dialog is visible', () => {
     const selector = 'body:has(.storefront-cookie-consent)';
     for (const widget of [
-      '.ogabassey-chat-anchor',
+      '.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window))',
       '.ogabassey-offer-popup',
       '.ogabassey-newsletter-popup',
     ]) {

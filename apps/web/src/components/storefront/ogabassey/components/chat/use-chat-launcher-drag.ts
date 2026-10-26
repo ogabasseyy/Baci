@@ -48,7 +48,7 @@ export function useChatLauncherDrag(
   useEffect(() => {
     const resize = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!rect || rect.width === 0 || rect.height === 0) return;
       setPosition((current) =>
         current
           ? clamp(current.x, current.y, rect.width, rect.height)
@@ -109,6 +109,18 @@ export function useChatLauncherDrag(
     });
   }
 
+  function cancelGesture() {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    gesture.current = null;
+    dragged.current = false;
+    if (anchorRef.current) {
+      anchorRef.current.style.transform = position
+        ? `translate3d(${position.x}px, ${position.y}px, 0)`
+        : '';
+    }
+  }
+
   function finishGesture() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
@@ -154,10 +166,11 @@ export function useChatLauncherDrag(
       onPointerMove,
       onPointerUp,
       onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
-        onPointerUp(event);
-        dragged.current = false;
+        if (gesture.current?.pointerId === event.pointerId) cancelGesture();
       },
-      onLostPointerCapture: finishGesture,
+      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+        if (gesture.current?.pointerId === event.pointerId) cancelGesture();
+      },
       style: {
         touchAction: isOpen ? 'auto' : 'none',
         userSelect: 'none',

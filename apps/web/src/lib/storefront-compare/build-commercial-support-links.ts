@@ -1,4 +1,3 @@
-import { generateSlug } from '../seo-utils';
 import {
   buildBrandCompareCandidate,
   buildPriceBandCandidate,
@@ -196,13 +195,16 @@ export function buildProductSupportLinks(input: {
       categorySlug: input.categorySlug,
       products: input.products,
     });
-    const currentBrandKey = generateSlug(currentProduct.brand || '');
+    const currentBrandKey = resolveCanonicalBrandKey(
+      input.categorySlug,
+      currentProduct.brand
+    );
 
     if (
       brandCandidate?.isIndexable &&
       currentBrandKey &&
       [brandCandidate.leftBrand, brandCandidate.rightBrand]
-        .map((brand) => generateSlug(brand))
+        .map((brand) => resolveCanonicalBrandKey(input.categorySlug, brand))
         .includes(currentBrandKey)
     ) {
       links.push({

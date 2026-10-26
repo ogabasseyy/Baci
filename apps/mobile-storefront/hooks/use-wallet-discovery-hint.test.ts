@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
-it('waits for the home screen to settle, then shows once for a customer with no plans', async () => {
+it('waits for Home to settle, then marks seen after the bubble stays visible', async () => {
   const { result } = renderHook(() => useWalletDiscoveryHint(props));
   expect(result.current.visible).toBe(false);
   expect(list).not.toHaveBeenCalled();
@@ -31,12 +31,45 @@ it('waits for the home screen to settle, then shows once for a customer with no 
     jest.advanceTimersByTime(2000);
   });
   expect(result.current.visible).toBe(true);
+  expect(write).not.toHaveBeenCalled();
+  await act(async () => {
+    jest.advanceTimersByTime(2000);
+  });
   expect(write).toHaveBeenCalledWith(
     'wallet-savings-discovery:v1:merchant-one:user-one',
     'seen'
   );
   act(() => result.current.dismiss());
   expect(result.current.visible).toBe(false);
+  expect(write).toHaveBeenCalledTimes(1);
+});
+
+it('marks seen when the customer deliberately dismisses before the dwell completes', async () => {
+  const { result } = renderHook(() => useWalletDiscoveryHint(props));
+  await act(async () => {
+    jest.advanceTimersByTime(2000);
+  });
+  act(() => result.current.dismiss());
+  expect(write).toHaveBeenCalledWith(
+    'wallet-savings-discovery:v1:merchant-one:user-one',
+    'seen'
+  );
+  expect(write).toHaveBeenCalledTimes(1);
+});
+
+it('does not mark seen when the bubble is removed before the dwell completes', async () => {
+  const { rerender } = renderHook(
+    (input: typeof props) => useWalletDiscoveryHint(input),
+    { initialProps: props }
+  );
+  await act(async () => {
+    jest.advanceTimersByTime(2000);
+  });
+  rerender({ ...props, enabled: false });
+  await act(async () => {
+    jest.advanceTimersByTime(2000);
+  });
+  expect(write).not.toHaveBeenCalled();
 });
 
 it('stays dismissed after remounting the app', async () => {

@@ -7,6 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { NativeModules } from 'react-native';
 import { supabase } from '../lib/supabase';
 import type { AuthState } from './auth-store.types';
 import { createInitializeAction } from './auth-store-initialize';
@@ -196,6 +197,39 @@ describe('auth startup network recovery', () => {
     await initialize();
     expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(state.session).toBeNull();
+  });
+
+  it('clears the savings activity synchronously on SIGNED_OUT before deferred auth cleanup', async () => {
+    const clearActivity = jest.fn();
+    NativeModules.SavingsLiveActivity = { clear: clearActivity };
+    jest.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: session.user },
+      error: null,
+    });
+    await initialize();
+    clearActivity.mockClear();
+    listener('SIGNED_OUT', null);
+
+    expect(clearActivity).toHaveBeenCalledTimes(1);
+    expect(state.user?.id).toBe(session.user.id);
+  });
+
+  it('ignores a signed-out callback from an obsolete auth listener before clearing the current activity', async () => {
+    const clearActivity = jest.fn();
+    NativeModules.SavingsLiveActivity = { clear: clearActivity };
+    jest.mocked(supabase.auth.getUser).mockResolvedValue({
+      data: { user: session.user },
+      error: null,
+    });
+    await initialize();
+    clearActivity.mockClear();
+    state._initGen += 1;
+
+    listener('SIGNED_OUT', null);
+
+    expect(clearActivity).not.toHaveBeenCalled();
+    await jest.runOnlyPendingTimersAsync();
+    expect(state.user?.id).toBe(session.user.id);
   });
 
   it('fences the prior identity while switched-account cart retirement is pending', async () => {

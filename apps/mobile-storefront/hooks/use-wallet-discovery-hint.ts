@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WALLET_DISCOVERY } from '@/constants/wallet-discovery';
 import { listSavingsGoals } from '@/lib/customer-savings';
 import { asyncStorage } from '@/lib/storage';
@@ -14,6 +14,7 @@ export function useWalletDiscoveryHint({
 }) {
   const scope = userId && merchantId ? `${merchantId}:${userId}` : '';
   const [visibleScope, setVisibleScope] = useState<string | null>(null);
+  const markedScope = useRef<string | null>(null);
 
   useEffect(() => {
     setVisibleScope(null);
@@ -31,7 +32,6 @@ export function useWalletDiscoveryHint({
           });
           if (controller.signal.aborted || result.goals.length > 0) return;
           setVisibleScope(scope);
-          await asyncStorage.setItem(key, 'seen');
         } catch {
           if (!controller.signal.aborted) setVisibleScope(null);
         }
@@ -44,8 +44,36 @@ export function useWalletDiscoveryHint({
     };
   }, [enabled, merchantId, scope]);
 
+  useEffect(() => {
+    if (!enabled || !scope || visibleScope !== scope) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      if (!active || markedScope.current === scope) return;
+      markedScope.current = scope;
+      void asyncStorage.setItem(
+        `${WALLET_DISCOVERY.storagePrefix}${scope}`,
+        'seen'
+      );
+    }, WALLET_DISCOVERY.delayMs);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [enabled, scope, visibleScope]);
+
+  function dismiss() {
+    if (visibleScope === scope && scope && markedScope.current !== scope) {
+      markedScope.current = scope;
+      void asyncStorage.setItem(
+        `${WALLET_DISCOVERY.storagePrefix}${scope}`,
+        'seen'
+      );
+    }
+    setVisibleScope(null);
+  }
+
   return {
     visible: enabled && !!scope && visibleScope === scope,
-    dismiss: () => setVisibleScope(null),
+    dismiss,
   };
 }

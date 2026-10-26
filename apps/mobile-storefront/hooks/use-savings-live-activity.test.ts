@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import { NativeModules } from 'react-native';
+import { setSavingsActivityOwner } from '../services/savings-activity-lifecycle';
 import { useSavingsLiveActivity } from './use-savings-live-activity';
 import type { WalletActiveSavingsGoal } from './wallet-query';
 
@@ -20,6 +21,8 @@ const goal: WalletActiveSavingsGoal = {
 beforeEach(() => {
   jest.clearAllMocks();
   NativeModules.SavingsLiveActivity = { sync, clear };
+  setSavingsActivityOwner('user');
+  jest.clearAllMocks();
 });
 
 it('updates the exact goal when its credited balance changes', () => {
@@ -33,6 +36,7 @@ it('updates the exact goal when its credited balance changes', () => {
 });
 
 it('clears financial information on sign-out and ignores invalid balances', () => {
+  setSavingsActivityOwner(null);
   renderHook(() => useSavingsLiveActivity(goal, null));
   expect(clear).toHaveBeenCalled();
   renderHook(() =>
@@ -48,6 +52,14 @@ it('does not fail on builds without the native extension', () => {
   ).not.toThrow();
 });
 
+it('denies activity before auth initializes an owner', () => {
+  setSavingsActivityOwner(null);
+  jest.clearAllMocks();
+  renderHook(() => useSavingsLiveActivity(goal, 'user'));
+  expect(sync).not.toHaveBeenCalled();
+  expect(clear).not.toHaveBeenCalled();
+});
+
 it('does not send invalid target amounts to the lock-screen activity', () => {
   renderHook(() =>
     useSavingsLiveActivity({ ...goal, target_amount: Number.NaN }, 'user')
@@ -59,6 +71,7 @@ it('does not send invalid target amounts to the lock-screen activity', () => {
 });
 
 it('clears inherited activity when an authenticated identity initializes before wallet data loads', () => {
+  setSavingsActivityOwner('new-user');
   renderHook(() => useSavingsLiveActivity(null, 'new-user'));
   expect(clear).toHaveBeenCalledTimes(1);
   expect(sync).not.toHaveBeenCalled();
@@ -79,13 +92,13 @@ it('retains same-user activity while loading and clears once when the goal is kn
   );
 
   rerender({ currentGoal: undefined });
-  expect(clear).toHaveBeenCalledTimes(1);
+  expect(clear).not.toHaveBeenCalled();
   expect(sync).toHaveBeenLastCalledWith(goal.id, 'Phone', 107.33, 250000);
 
   rerender({ currentGoal: null });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).toHaveBeenCalledTimes(1);
   rerender({ currentGoal: null });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).toHaveBeenCalledTimes(1);
 });
 
 it('clears once when a synced goal amount becomes invalid', () => {
@@ -96,9 +109,9 @@ it('clears once when a synced goal amount becomes invalid', () => {
   );
 
   rerender({ amount: Number.NaN });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).toHaveBeenCalledTimes(1);
   rerender({ amount: Number.POSITIVE_INFINITY });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).toHaveBeenCalledTimes(1);
 });
 
 it('clears and resets tracking on user change before unknown goal data returns', () => {
@@ -118,8 +131,34 @@ it('clears and resets tracking on user change before unknown goal data returns',
     }
   );
 
+  setSavingsActivityOwner('next-user');
+  jest.clearAllMocks();
   rerender({ currentGoal: undefined, userId: 'next-user' });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).not.toHaveBeenCalled();
   rerender({ currentGoal: null, userId: 'next-user' });
-  expect(clear).toHaveBeenCalledTimes(2);
+  expect(clear).not.toHaveBeenCalled();
+});
+
+it('does not let a stale prior-owner effect clear activity tracked by the new owner', () => {
+  const { rerender } = renderHook(
+    ({
+      currentGoal,
+      userId,
+    }: {
+      currentGoal: WalletActiveSavingsGoal | null | undefined;
+      userId: string;
+    }) => useSavingsLiveActivity(currentGoal, userId),
+    { initialProps: { currentGoal: goal, userId: 'user' } }
+  );
+
+  setSavingsActivityOwner('new-user');
+  jest.clearAllMocks();
+  rerender({ currentGoal: undefined, userId: 'user' });
+  expect(clear).not.toHaveBeenCalled();
+  expect(sync).not.toHaveBeenCalled();
+
+  rerender({ currentGoal: goal, userId: 'new-user' });
+  expect(sync).toHaveBeenCalledTimes(1);
+  expect(sync).toHaveBeenCalledWith(goal.id, 'Phone', 107.33, 250000);
+  expect(clear).not.toHaveBeenCalled();
 });

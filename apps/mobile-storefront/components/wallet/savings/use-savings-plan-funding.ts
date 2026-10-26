@@ -109,7 +109,7 @@ export function useSavingsPlanFunding({
       ) {
         setStatusCode(error.code);
         setPhase('unprepared');
-        return;
+        return 'unprepared' as const;
       }
       setFundingError(
         getErrorMessage(error, 'Unable to load the plan account.')

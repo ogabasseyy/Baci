@@ -7,6 +7,7 @@ import { getStoredPushToken } from '../lib/push-token-storage';
 import { clearQueryCachePreservingObservers } from '../lib/query-cache-observer-safety';
 import { queryClient } from '../lib/query-client';
 import { supabase } from '../lib/supabase';
+import { setSavingsActivityOwner } from '../services/savings-activity-lifecycle';
 import type { AuthStoreGet, AuthStoreSet } from './auth-store.types';
 import { createDateOfBirthAction } from './auth-store-account-date-of-birth';
 import { createProfileActions } from './auth-store-account-profile';
@@ -46,6 +47,9 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
     signOut: async () => {
       try {
         set({ isLoading: true });
+        // Fence queued activity work synchronously before any provider or
+        // storage await; signOut may fail or have no auth listener installed.
+        setSavingsActivityOwner(null);
         // Fence old cart callbacks before any Auth/network await.
         const retireCart = retireSharedCartWriter();
         void retireCart.catch(() => undefined);
@@ -111,6 +115,8 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         if (error)
           return { success: false, error: getDeleteAccountErrorMessage(error) };
 
+        // Deletion is committed; clear the prior identity before local teardown.
+        setSavingsActivityOwner(null);
         const retireCart = retireSharedCartWriter();
         void retireCart.catch(() => undefined);
         const storedToken = await getStoredPushToken();

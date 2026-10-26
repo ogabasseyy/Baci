@@ -26,6 +26,7 @@ export function WalletSavingsContributionPreparation({
   const scopeRef = useRef(scope);
   const mountedRef = useRef(true);
   const attemptedRef = useRef(false);
+  const [attemptedScope, setAttemptedScope] = useState<string | null>(null);
   const [earnInterest, setEarnInterest] = useState(false);
   if (scopeRef.current !== scope) {
     scopeRef.current = scope;
@@ -60,10 +61,11 @@ export function WalletSavingsContributionPreparation({
   const canPrepare =
     funding.planFundingPhase === 'unprepared' &&
     !funding.planFundingRequiresBvn &&
-    !attemptedRef.current;
+    attemptedScope !== scope;
   const prepare = () => {
     if (!enabled || !isCurrent() || !canPrepare || attemptedRef.current) return;
     attemptedRef.current = true;
+    setAttemptedScope(scope);
     void funding.fetchPlanFunding('', { enableInterestAccrual: earnInterest });
   };
   if (!enabled)
@@ -127,8 +129,14 @@ export function WalletSavingsContributionPreparation({
             accessibilityState={{ disabled: loading, busy: loading }}
             disabled={loading}
             onPress={() => {
-              if (isCurrent() && !loading)
-                void funding.fetchExistingPlanFunding();
+              if (isCurrent() && !loading) {
+                void funding.fetchExistingPlanFunding().then((result) => {
+                  if (result === 'unprepared' && isCurrent()) {
+                    attemptedRef.current = false;
+                    setAttemptedScope(null);
+                  }
+                });
+              }
             }}
             style={[
               styles.secondaryButton,

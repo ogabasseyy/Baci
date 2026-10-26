@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { NativeModules } from 'react-native';
+import { isSavingsActivityOwnerCurrent } from '../services/savings-activity-lifecycle';
 import type { WalletActiveSavingsGoal } from './wallet-query';
 
 type SavingsActivityModule = {
@@ -24,12 +25,13 @@ export function useSavingsLiveActivity(
       | SavingsActivityModule
       | undefined;
     if (!module) return;
+    // Auth transitions clear centrally. A queued effect for a prior owner must
+    // not clear the new owner's activity or reset this hook's bookkeeping.
+    if (!userId || !isSavingsActivityOwnerCurrent(userId)) return;
     if (previousUserId.current !== userId) {
-      module.clear();
       previousUserId.current = userId;
       lastSyncedGoalId.current = null;
     }
-    if (!userId) return;
     if (goalIsUnknown) return;
     if (
       goalIsAbsent ||

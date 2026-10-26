@@ -210,6 +210,7 @@ it('checks status after a lost preparation response instead of creating again', 
   expect(
     screen.queryByRole('button', { name: 'Show plan account' })
   ).toBeNull();
+  recover.mockResolvedValueOnce({ status: 'pending' });
   fireEvent.press(check());
   await act(async () => {});
   expect(check()).toBeEnabled();

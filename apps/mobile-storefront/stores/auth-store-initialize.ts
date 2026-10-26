@@ -5,6 +5,7 @@ import { clearQueryCachePreservingObservers } from '../lib/query-cache-observer-
 import { queryClient } from '../lib/query-client';
 import { supabase } from '../lib/supabase';
 import { MerchantRowSchema } from '../lib/validation';
+import { setSavingsActivityOwner } from '../services/savings-activity-lifecycle';
 import {
   initTimeout,
   isInitTimeoutError,
@@ -123,6 +124,7 @@ export function createInitializeAction({
       }
 
       if (session?.user) {
+        setSavingsActivityOwner(session.user.id);
         set({
           user: session.user,
           session,
@@ -142,6 +144,7 @@ export function createInitializeAction({
           });
         }
       } else {
+        setSavingsActivityOwner(null);
         set({
           user: null,
           session: null,
@@ -163,7 +166,13 @@ export function createInitializeAction({
     if (get()._initGen !== initGen) return;
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (get()._initGen !== initGen) return;
         const { merchantId, user: previousUser } = get();
+        if (event === 'SIGNED_OUT' || !session?.user) {
+          setSavingsActivityOwner(null);
+        } else if (session.user.id !== previousUser?.id) {
+          setSavingsActivityOwner(session.user.id);
+        }
         deferAuthStateChange(async () => {
           if (get()._initGen !== initGen) return;
           const retireDeviceCartSafely = async () => {

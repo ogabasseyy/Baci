@@ -52,14 +52,21 @@ export function WalletSavingsCarousel({
               <WalletSavingsPlanCard
                 goal={goal}
                 colors={colors}
-                onOpen={() =>
-                  goal.id === featuredGoalId
-                    ? onOpenFeatured()
-                    : router.push({
-                        pathname: '/wallet',
-                        params: { action: 'savings', savingsGoalId: goal.id },
-                      })
-                }
+                onOpen={() => {
+                  if (
+                    goal.status === 'completed' &&
+                    !goal.selection_unresolved
+                  ) {
+                    router.push('/wallet/savings/start');
+                  } else if (goal.id === featuredGoalId) {
+                    onOpenFeatured();
+                  } else {
+                    router.push({
+                      pathname: '/wallet',
+                      params: { action: 'savings', savingsGoalId: goal.id },
+                    });
+                  }
+                }}
               />
             </View>
           ))}

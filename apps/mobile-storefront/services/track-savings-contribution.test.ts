@@ -1,4 +1,5 @@
 import { NativeModules } from 'react-native';
+import { setSavingsActivityOwner } from './savings-activity-lifecycle';
 import { trackSavingsContribution } from './track-savings-contribution';
 
 let mockOwner = 'user';
@@ -20,6 +21,7 @@ const goal = {
 
 beforeEach(() => {
   mockOwner = 'user';
+  setSavingsActivityOwner('user');
   track.mockClear();
   NativeModules.SavingsLiveActivity = { track };
 });
@@ -61,8 +63,26 @@ it('never announces success for a pending result or ambiguous failure', async ()
 it('does not recreate financial activity after the initiating user signs out', async () => {
   await trackSavingsContribution(goal, async () => {
     mockOwner = 'other-user';
+    setSavingsActivityOwner(null);
     return { status: 'confirmed' };
   });
+  expect(track).toHaveBeenCalledTimes(1);
+});
+
+it('fences a delayed contribution completion when the account switches', async () => {
+  let finish!: (value: { status: string }) => void;
+  const pending = trackSavingsContribution(
+    goal,
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  expect(track).toHaveBeenCalledTimes(1);
+  setSavingsActivityOwner('next-user');
+  mockOwner = 'next-user';
+  finish({ status: 'confirmed' });
+  await pending;
   expect(track).toHaveBeenCalledTimes(1);
 });
 

@@ -1,6 +1,10 @@
 import { NativeModules } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { useAuthStore } from '@/stores/auth-store';
+import {
+  captureSavingsActivityGeneration,
+  isSavingsActivityGenerationCurrent,
+} from './savings-activity-lifecycle';
 
 export async function trackSavingsContribution<Result>(
   goal: WalletActiveSavingsGoal,
@@ -9,9 +13,14 @@ export async function trackSavingsContribution<Result>(
 ): Promise<Result> {
   const activity = NativeModules.SavingsLiveActivity;
   const owner = useAuthStore.getState?.().user?.id;
+  const lifecycleGeneration = captureSavingsActivityGeneration(owner);
   let observedGoal = goal;
   const update = (phase: string) => {
-    if (!owner || owner !== useAuthStore.getState?.().user?.id) return;
+    if (
+      !isSavingsActivityGenerationCurrent(owner, lifecycleGeneration) ||
+      owner !== useAuthStore.getState?.().user?.id
+    )
+      return;
     try {
       activity?.track?.(
         goal.id,

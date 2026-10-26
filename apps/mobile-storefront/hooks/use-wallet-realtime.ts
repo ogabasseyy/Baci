@@ -39,6 +39,19 @@ export function useWalletRealtime(scope: {
   }, [resetToken, reset]);
   useEffect(() => {
     if (!enabled) return;
+    // A numbers-only refresh preserves the full snapshot's age. Observe its
+    // successful write separately so a recovered realtime error can clear.
+    return client.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        event.action.type === 'success' &&
+        JSON.stringify(event.query.queryKey) === keyId
+      )
+        reset();
+    });
+  }, [client, enabled, keyId, reset]);
+  useEffect(() => {
+    if (!enabled) return;
     const queryKey = JSON.parse(keyId) as WalletQueryKey;
     let active = true;
     let running = false;

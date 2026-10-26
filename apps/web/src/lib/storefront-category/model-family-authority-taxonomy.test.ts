@@ -192,6 +192,18 @@ describe('model family authority taxonomy', () => {
     ).toBe(true);
     expect(
       modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyS,
+        'Galaxy S Pen tips and tricks'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'Galaxy A new era of phones'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
         galaxyA,
         'Samsung Galaxy A55 review'
       )
@@ -226,6 +238,15 @@ describe('model family authority taxonomy', () => {
       modelFamilyAuthorityTaxonomy.matchesProduct(
         air,
         'Apple 13-inch MacBook Air M3'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(air, '2024 MacBook Air M3')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        pro,
+        '2024 Apple MacBook Pro 14'
       )
     ).toBe(true);
   });

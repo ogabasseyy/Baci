@@ -141,13 +141,13 @@ const APPLE_MACBOOK_MODEL_FAMILIES: readonly ModelFamilyAuthorityEntry[] = [
   makeMacbook(
     'macbook-air',
     'MacBook Air',
-    /^(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
+    /^(?:20\d{2}\s+)?(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
     /\b(?:Apple\s+)?MacBook\s+Air\b/i
   ),
   makeMacbook(
     'macbook-pro',
     'MacBook Pro',
-    /^(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
+    /^(?:20\d{2}\s+)?(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
     /\b(?:Apple\s+)?MacBook\s+Pro\b/i
   ),
 ];
@@ -160,14 +160,14 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'galaxy-a',
     'Samsung Galaxy A',
     /^(?:Samsung )?(?:Galaxy )?A(?=\d|\s+\d|\s+(?:Series|Ultra|Plus|FE)\b|$)/i,
-    [/\bGalaxy\s+A(?=\s|\d|$)/i]
+    [/\bGalaxy\s+A(?=\d|\s+\d|\s+(?:Series|Ultra|Plus|FE)\b)/i]
   ),
   fam(
     'samsung',
     'galaxy-s',
     'Samsung Galaxy S',
     /^(?:Samsung )?(?:Galaxy )?S(?=\d|\s+\d|\s+(?:Ultra|Plus|FE)\b|$)/i,
-    [/\bGalaxy\s+S(?=\s|\d|$)/i]
+    [/\bGalaxy\s+S(?=\d|\s+\d|\s+(?:Series|Ultra|Plus|FE)\b)/i]
   ),
   fam(
     'samsung',

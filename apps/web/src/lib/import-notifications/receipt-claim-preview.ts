@@ -163,8 +163,7 @@ export async function loadReceiptClaimLoginEmailHint({
     return record;
   }
 
-  const hintSupabase =
-    serviceSupabase ?? createReceiptLoginHintServiceClient();
+  const hintSupabase = serviceSupabase ?? createReceiptLoginHintServiceClient();
 
   // The recipient address travels through the branded single-RPC
   // login-hint handle so the anon preview payload never carries it, and
@@ -178,10 +177,11 @@ export async function loadReceiptClaimLoginEmailHint({
   });
 
   if (!hintResult.error) {
-    rawEmail =
-      typeof hintResult.data === 'string' ? hintResult.data : null;
+    rawEmail = typeof hintResult.data === 'string' ? hintResult.data : null;
   } else if (!isMissingLoginHintFunction(hintResult.error)) {
-    throw new Error(`Failed to load receipt claim: ${hintResult.error.message}`);
+    throw new Error(
+      `Failed to load receipt claim: ${hintResult.error.message}`
+    );
   }
 
   return {

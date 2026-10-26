@@ -11,6 +11,14 @@ export const eventPipelineAuthorityServicePaths = [
     'apps/web/src/app/api/storefront/discount/validate/route.ts',
     'apps/web/src/lib/loyalty/server-resolver-client.ts',
   ],
+  // Only the token-scoped login-email route may drive the branded
+  // receipt login-hint client (PR #3580; see the temporary exception in
+  // AGENTS.md). The 256-bit claim Bearer [REDACTED] is the only credential on this
+  // path; the raw address is masked before responding.
+  [
+    'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+    'apps/web/src/lib/receipts/server-login-hint-client.ts',
+  ],
   [
     'apps/web/src/app/api/orders/route.ts',
     'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',

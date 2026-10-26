@@ -99,7 +99,15 @@ export async function reclaimStaleManualDocumentDispatchMarker(
     .select('dispatch_started_at, last_error')
     .match({ id: row.id, locked_by: row.claim_owner, status: 'processing' })
     .maybeSingle();
-  if (readError || !current) throw new Error('dispatch_marker_clear_failed');
+  // An unclassified read failure (or a vanished row) must not report the
+  // stranded-marker sentinel: nothing was verified, so the worker routes
+  // these through the ordinary attempt budget instead of the corrective
+  // one. The sentinel stays reserved for a confirmed stranded marker.
+  if (readError)
+    throw new Error(
+      `dispatch_marker_reclaim_read_failed: ${readError.message}`
+    );
+  if (!current) throw new Error('dispatch_marker_reclaim_row_missing');
   if (
     current.dispatch_started_at == null ||
     current.last_error !== 'dispatch_marker_clear_failed'

@@ -17,6 +17,10 @@ export {
   type ManualOrderReceiptItemFinancialField,
 } from './manual-order-document-gates';
 export {
+  type ReceiptCompletionCandidate,
+  selectReceiptCompletionDate,
+} from './receipt-completion-date';
+export {
   appendReceiptFulfillmentDescription,
   getReceiptFulfillmentRows,
   getReceiptFulfillmentRowsFromDetails,

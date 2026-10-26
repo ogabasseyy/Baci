@@ -194,13 +194,13 @@ describe('reclaimStaleManualDocumentDispatchMarker', () => {
     expect(client.update).not.toHaveBeenCalled();
   });
 
-  it('preserves the signal when the reclaim read fails', async () => {
+  it('routes an unclassified reclaim read failure to the ordinary budget', async () => {
     const client = queuedClient([
       { data: null, error: new Error('network lost') },
     ]);
     await expect(
       reclaimStaleManualDocumentDispatchMarker(client as never, row)
-    ).rejects.toThrow('dispatch_marker_clear_failed');
+    ).rejects.toThrow('dispatch_marker_reclaim_read_failed');
   });
 
   it('preserves the signal when the reclaim clear fails', async () => {

@@ -68,7 +68,9 @@ export function formatPrice(
   } catch (error) {
     if (code === 'NGN') throw error;
     // Unassigned on Hermes: prefix the code like Node's ICU and the PDF.
-    return `${code} ${price.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+    // Fraction digits pinned like the primary formatter so grouping and
+    // rounding match it exactly on well-formed-but-unassigned codes.
+    return `${code} ${price.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   }
 }
 

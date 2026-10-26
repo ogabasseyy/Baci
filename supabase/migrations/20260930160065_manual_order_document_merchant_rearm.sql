@@ -85,6 +85,23 @@ RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
 $function$;
 REVOKE ALL ON FUNCTION private.resolved_merchant_bank_name(text, text)
   FROM PUBLIC, anon, authenticated;
+-- Render-normalized brand primary (SQL twin of normalizeReceiptColor,
+-- lowercased for paint-equality): trimmed, short-hex expanded, safe-hex
+-- gated with the default fallback, so case-only or unsupported-value
+-- edits paint identically and must not reset an in-flight marker.
+CREATE OR REPLACE FUNCTION private.normalized_receipt_brand_color(p_colors jsonb)
+RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
+  SELECT lower(CASE
+    WHEN btrim(COALESCE(p_colors->>'primary', '')) ~ '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'
+    THEN CASE WHEN length(btrim(COALESCE(p_colors->>'primary', ''))) = 4
+      THEN '#' || repeat(substring(btrim(COALESCE(p_colors->>'primary', '')) from 2 for 1), 2)
+                 || repeat(substring(btrim(COALESCE(p_colors->>'primary', '')) from 3 for 1), 2)
+                 || repeat(substring(btrim(COALESCE(p_colors->>'primary', '')) from 4 for 1), 2)
+      ELSE btrim(COALESCE(p_colors->>'primary', '')) END
+    ELSE '#1a1a2e' END);
+$function$;
+REVOKE ALL ON FUNCTION private.normalized_receipt_brand_color(jsonb)
+  FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -130,8 +147,13 @@ BEGIN
   LIMIT 1;
   v_slug_renders :=
     NOT private.manual_document_domain_is_safe(v_active_domain)
-    OR COALESCE(NULLIF(OLD.email_sender_name, ''), NULLIF(OLD.business_name, '')) IS NULL
-    OR COALESCE(NULLIF(NEW.email_sender_name, ''), NULLIF(NEW.business_name, '')) IS NULL
+    -- The body wordmark is business_name || slug || 'Store': whenever
+    -- business_name is blank on either side the slug prints in the email
+    -- body regardless of sender_name (which only feeds the From header,
+    -- never the wordmark). A sender-covered slug change under a blank
+    -- business name would otherwise send a stale wordmark un-rearmed.
+    OR NULLIF(OLD.business_name, '') IS NULL
+    OR NULLIF(NEW.business_name, '') IS NULL
     OR (OLD.slug = 'ogabassey') IS DISTINCT FROM (NEW.slug = 'ogabassey');
   v_shared_changed :=
     (v_slug_changed AND v_slug_renders)
@@ -144,7 +166,12 @@ BEGIN
       IS DISTINCT FROM COALESCE(NULLIF(NEW.support_phone, ''), NULLIF(NEW.phone, ''))
     OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
     OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
-    OR (OLD.brand_colors->>'primary') IS DISTINCT FROM (NEW.brand_colors->>'primary');
+    -- Brand primary compares render-normalized (trimmed, short-hex
+    -- expanded, lowercased): '#ABCDEF' and '#abcdef' paint identically,
+    -- and two unsupported values both fall back to the default, so a
+    -- spelling-only edit must not reset an in-flight marker.
+    OR private.normalized_receipt_brand_color(OLD.brand_colors)
+      IS DISTINCT FROM private.normalized_receipt_brand_color(NEW.brand_colors);
   v_business_address_changed :=
     OLD.business_address IS DISTINCT FROM NEW.business_address;
   -- Invoices print the RESOLVED line (registered when nonempty, else the

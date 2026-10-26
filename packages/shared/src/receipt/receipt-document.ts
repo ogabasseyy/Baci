@@ -20,6 +20,7 @@ export interface ReceiptDocumentParams {
   itemRows: string;
   logoHtml: string;
   invoiceTermsHtml: string;
+  vatBreakdownHtml: string;
   paymentHistoryHtml: string;
   qrHtml: string;
   socialItems: string[];
@@ -47,6 +48,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
     itemRows,
     logoHtml,
     invoiceTermsHtml,
+    vatBreakdownHtml,
     paymentHistoryHtml,
     qrHtml,
     socialItems,
@@ -145,6 +147,7 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
     </div>
 
     ${invoiceTermsHtml}
+    ${vatBreakdownHtml}
     ${paymentHistoryHtml}
     ${bankDetailsHtml}
     ${qrHtml}

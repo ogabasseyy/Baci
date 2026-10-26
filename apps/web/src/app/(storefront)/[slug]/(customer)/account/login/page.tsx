@@ -18,10 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import {
-  fetchCustomerLoginEmailHintForRedirect,
-  sanitizeCustomerLoginEmailPrefill,
-} from '@/lib/customer-login-prefill';
+import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
+import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
 
 // Validate redirect URL to prevent open redirect vulnerabilities
@@ -96,7 +94,7 @@ function DefaultLoginPage() {
   } = useCustomerAuth();
 
   const [email, setEmail] = useState(prefillEmail);
-  const [emailHint, setEmailHint] = useState('');
+  const emailHint = useReceiptClaimLoginHint(redirectTo, prefillEmail);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -111,29 +109,6 @@ function DefaultLoginPage() {
       router.push(asRoute(redirectTo));
     }
   }, [authLoading, isAuthenticated, router, redirectTo]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (prefillEmail) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    // The claim login hint is masked guidance (never the full address):
-    // display it so the customer knows which inbox to open, but never
-    // place it in the input — the OTP code must go to the real address.
-    void fetchCustomerLoginEmailHintForRedirect(redirectTo).then((hint) => {
-      if (!cancelled && hint) {
-        setEmailHint(hint);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [prefillEmail, redirectTo]);
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();

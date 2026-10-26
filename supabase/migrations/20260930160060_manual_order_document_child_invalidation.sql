@@ -112,6 +112,20 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.rearm_invalid_manual_documents_for_order(uuid, text)
   FROM PUBLIC, anon, authenticated;
+-- SQL twin of the shared canonicalizeTransactionPaymentMethod: null and
+-- non-scalar methods resolve to NULL, anything else to its text form, so
+-- the invalidation trigger compares the rendered payment label instead
+-- of each shadowed source column.
+CREATE OR REPLACE FUNCTION private.canonical_transaction_payment_method(p_metadata jsonb)
+RETURNS text LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path = '' AS $$
+  SELECT CASE
+    WHEN p_metadata IS NULL THEN NULL
+    WHEN jsonb_typeof(p_metadata->'payment_method') IN ('null', 'object', 'array') THEN NULL
+    ELSE p_metadata->>'payment_method'
+  END
+$$;
+REVOKE ALL ON FUNCTION private.canonical_transaction_payment_method(jsonb)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -182,8 +196,19 @@ BEGIN
   -- marker must not reset it into a corrective duplicate-send retry.
   IF v_old_in_snapshot AND v_new_in_snapshot
     AND OLD.amount IS NOT DISTINCT FROM NEW.amount
-    AND OLD.description IS NOT DISTINCT FROM NEW.description
-    AND (OLD.metadata->>'payment_method') IS NOT DISTINCT FROM (NEW.metadata->>'payment_method')
+    -- Resolved payment label, not each shadowed source: the document
+    -- prints canonicalized-method || description || 'Payment', so a
+    -- description edit under a set method (or a method-shape edit that
+    -- canonicalizes identically, e.g. object to array) changes no
+    -- rendered row and must not reset an in-flight marker.
+    AND COALESCE(
+          NULLIF(private.canonical_transaction_payment_method(OLD.metadata), ''),
+          NULLIF(OLD.description, ''),
+          'Payment')
+      IS NOT DISTINCT FROM COALESCE(
+          NULLIF(private.canonical_transaction_payment_method(NEW.metadata), ''),
+          NULLIF(NEW.description, ''),
+          'Payment')
     AND OLD.created_at IS NOT DISTINCT FROM NEW.created_at
     AND OLD.order_id IS NOT DISTINCT FROM NEW.order_id THEN
     RETURN NEW;

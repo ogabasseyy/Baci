@@ -128,6 +128,50 @@ export function renderPaymentHistoryHtml(
       </div>`;
 }
 
+export function renderVatBreakdownHtml(
+  order: ReceiptOrder,
+  formatMoney: MoneyFormatter,
+  isPaid: boolean
+): string {
+  // Like the emailed PDF (VAT Breakdown table): invoices and proformas
+  // with stored subtotal rows show category totals plus exemption text.
+  // Receipts never render it; absent rows render nothing.
+  const rows = Array.isArray(order.tax_subtotals) ? order.tax_subtotals : [];
+  if (isPaid || rows.length === 0) return '';
+  const body = rows
+    .map((row) => {
+      if (row == null || typeof row !== 'object') return '';
+      const category =
+        typeof row.vat_category_code === 'string' &&
+        row.vat_category_code.trim() !== ''
+          ? row.vat_category_code
+          : '-';
+      const rate =
+        typeof row.vat_rate === 'number' && Number.isFinite(row.vat_rate)
+          ? `${row.vat_rate.toFixed(2)}%`
+          : '-';
+      const label =
+        typeof row.exemption_reason === 'string' &&
+        row.exemption_reason.trim() !== ''
+          ? `${category} (${row.exemption_reason.trim()})`
+          : category;
+      const money = (value: unknown) =>
+        typeof value === 'number' && Number.isFinite(value)
+          ? formatMoney(value)
+          : '-';
+      return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(rate)}</td><td style="text-align:right;">${money(row.taxable_amount)}</td><td style="text-align:right;">${money(row.tax_amount)}</td></tr>`;
+    })
+    .join('');
+  return `
+      <div class="section-block">
+        <div class="section-label">VAT Breakdown</div>
+        <table class="tx-table">
+          <thead><tr><th>Category</th><th>Rate</th><th style="text-align:right;">Taxable Amount</th><th style="text-align:right;">Tax Amount</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+}
+
 export function renderInvoiceTermsHtml(
   order: ReceiptOrder,
   isPaid: boolean

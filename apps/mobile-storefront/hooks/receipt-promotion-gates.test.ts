@@ -115,6 +115,14 @@ describe('isPromotedManualReceipt', () => {
     ['empty items', { items: [] }],
     ['null item entry', { items: [null] }],
     ['nameless item', { items: [{ quantity: 1, price: 500 }] }],
+    [
+      'boolean quantity',
+      { items: [{ name: 'Phone', quantity: true, price: 500 }] },
+    ],
+    [
+      'array quantity',
+      { items: [{ name: 'Phone', quantity: [2], price: 500 }] },
+    ],
     ['bad currency', { currency: 'NAIRA' }],
     ['numeric payment status', { paymentStatus: 7 }],
     ['numeric shipping status', { shippingStatus: 3 }],

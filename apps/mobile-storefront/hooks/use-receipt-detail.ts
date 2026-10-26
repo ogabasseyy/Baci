@@ -16,9 +16,13 @@ import {
   DETAIL_ITEM_MONEY_FIELDS,
   receiptMoneyOverrides,
 } from './receipt-detail-money';
-import { isReceiptInvoiceTaxValid } from './receipt-invoice-tax-gate';
+import {
+  fetchReceiptInvoiceTaxSubtotals,
+  type ReceiptInvoiceTaxSubtotal,
+} from './receipt-invoice-tax-gate';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
 import {
+  hasValidSettledPayments,
   isPromotableManualDocument,
   isPromotedManualReceipt,
 } from './receipt-promotion-gates';
@@ -171,14 +175,15 @@ async function fetchReceiptDetail(
     !paidLabel &&
     !settledBalance;
   // Deliverable manual invoices gate on the sender-validated tax
-  // breakdown before the preview opens; invalid rows stay unexposed.
-  if (
-    manualOrder &&
-    !isPaidOrder &&
-    isPromotableManualDocument(promotionInput, true) &&
-    !(await isReceiptInvoiceTaxValid(orderId))
-  )
-    return null;
+  // breakdown before the preview opens; sender-ineligible rows rendering
+  // as fallback invoices skip the lookup so a transient tax RPC failure
+  // cannot block the only surface that shows them. Valid rows ride along
+  // for the preview's VAT Breakdown section.
+  let invoiceTaxSubtotals: ReceiptInvoiceTaxSubtotal[] | null = null;
+  if (manualOrder && requiresPaymentHistory) {
+    invoiceTaxSubtotals = await fetchReceiptInvoiceTaxSubtotals(orderId);
+    if (invoiceTaxSubtotals == null) return null;
+  }
   // Independent RPCs (same args, combined downstream) fire together; the
   // error checks below keep the sequential semantics (account throws first).
   // biome-ignore format: parallel RPCs preserve the 300-line gate.
@@ -199,6 +204,11 @@ async function fetchReceiptDetail(
   }
 
   const transactions = mapCustomerTransactionRpcRows(transactionRows);
+
+  // Sender parity: settled payments the sender rejects (negative,
+  // non-decimal) fail the manual document closed instead of printing
+  // them — the list and preview gates already demote such rows.
+  if (manualOrder && !hasValidSettledPayments(transactions)) return null;
 
   // Corrupt money must fail the detail closed, never mask to a zero
   // balance: null trips the required-number schema below and the
@@ -236,6 +246,7 @@ async function fetchReceiptDetail(
       order.payment_status
     ),
     transactions: transactions ?? [],
+    tax_subtotals: invoiceTaxSubtotals,
   };
 
   const result = ReceiptDetailSchema.safeParse(detail);

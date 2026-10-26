@@ -78,7 +78,7 @@ export interface ReceiptOrder {
   firs_csid?: string | null;
   is_credit_order?: boolean;
   customer_name: string;
-  customer_email: string;
+  customer_email: string | null;
   customer_phone: string | null;
   shipping_address?: {
     address_line1?: string;
@@ -135,6 +135,15 @@ export interface ReceiptOrder {
     description: string | null;
     metadata: { payment_method?: string } | null;
   }>;
+  // Stored VAT subtotal rows (order_tax_subtotals): invoices and
+  // proformas render the category breakdown like the emailed PDF.
+  tax_subtotals?: Array<{
+    vat_category_code?: string | null;
+    vat_rate?: number | null;
+    taxable_amount?: number | null;
+    tax_amount?: number | null;
+    exemption_reason?: string | null;
+  } | null> | null;
 }
 
 export type ReceiptDocumentKind = 'receipt' | 'invoice' | 'proforma';

@@ -119,9 +119,9 @@ function hasValidContent(
     if (
       typeof label !== 'string' ||
       !isValidMoney(row.price) ||
-      row.quantity === null ||
-      row.quantity === undefined ||
-      !Number.isFinite(Number(row.quantity)) ||
+      // Strict decimal: bare Number() coerces true to 1 and [2] to 2,
+      // promoting corrupt quantities the sender rejects.
+      !isDecimalMoney(row.quantity) ||
       Number(row.quantity) <= 0
     ) {
       return false;

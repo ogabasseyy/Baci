@@ -184,8 +184,8 @@ BEGIN
   INTO v_transactions;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
-    OR v_order.customer_name IS DISTINCT FROM p_customer_name
-    OR v_order.customer_phone IS DISTINCT FROM p_customer_phone
+    OR NULLIF(v_order.customer_name, '') IS DISTINCT FROM NULLIF(p_customer_name, '')
+    OR NULLIF(v_order.customer_phone, '') IS DISTINCT FROM NULLIF(p_customer_phone, '')
     OR v_order.recorded_by_user_id IS DISTINCT FROM p_recorded_by_user_id
     OR v_order.import_job_id IS DISTINCT FROM p_import_job_id
     OR v_order.external_source IS DISTINCT FROM p_external_source
@@ -195,24 +195,34 @@ BEGIN
     OR v_order.tax_amount IS DISTINCT FROM p_tax_amount
     OR v_order.discount_amount IS DISTINCT FROM p_discount_amount
     OR v_order.amount_paid IS DISTINCT FROM p_amount_paid
-    OR v_order.currency IS DISTINCT FROM p_currency
+    OR upper(btrim(COALESCE(v_order.currency, '')))
+      IS DISTINCT FROM upper(btrim(COALESCE(p_currency, '')))
     OR v_order.order_number IS DISTINCT FROM p_order_number
-    OR v_order.payment_status IS DISTINCT FROM p_payment_status
-    OR v_order.payment_method IS DISTINCT FROM p_payment_method
+    OR lower(btrim(COALESCE(v_order.payment_status, '')))
+      IS DISTINCT FROM lower(btrim(COALESCE(p_payment_status, '')))
+    OR lower(btrim(COALESCE(v_order.payment_method, '')))
+      IS DISTINCT FROM lower(btrim(COALESCE(p_payment_method, '')))
     -- Shipping renders nowhere: only terminal transitions abort (trigger parity).
     OR (lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
       IS DISTINCT FROM (lower(btrim(COALESCE(p_shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
-    OR (v_compare_invoice_only AND (v_order.invoice_type_code IS DISTINCT FROM p_invoice_type_code
-      OR v_order.invoice_note IS DISTINCT FROM p_invoice_note
-      OR v_order.notes IS DISTINCT FROM p_notes
+    OR (v_compare_invoice_only AND (COALESCE(NULLIF(btrim(v_order.invoice_type_code), ''), '380')
+        IS DISTINCT FROM COALESCE(NULLIF(btrim(p_invoice_type_code), ''), '380')
+      OR NULLIF(btrim(COALESCE(NULLIF(v_order.invoice_note, ''), NULLIF(v_order.notes, ''))), '')
+        IS DISTINCT FROM NULLIF(btrim(COALESCE(NULLIF(p_invoice_note, ''), NULLIF(p_notes, ''))), '')
       OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date))
-    OR v_order.transaction_date IS DISTINCT FROM p_transaction_date
+    -- Effective per-kind document date (trigger parity): a lone
+    -- transaction/creation drift aborts only when some kind still reads
+    -- the fallback — the invoice side when no issue date is set, the
+    -- receipt side when the settled-payment snapshot is empty.
+    OR ((v_order.transaction_date IS DISTINCT FROM p_transaction_date
+        OR v_order.created_at IS DISTINCT FROM p_order_created_at)
+      AND (v_order.invoice_issue_date IS NULL OR p_invoice_issue_date IS NULL
+        OR v_txn_count = 0))
     OR (v_compare_invoice_only AND (v_order.payment_due_date IS DISTINCT FROM p_payment_due_date
       OR v_order.payment_terms IS DISTINCT FROM p_payment_terms
       OR v_order.buyer_reference IS DISTINCT FROM p_buyer_reference
       OR v_order.firs_irn IS DISTINCT FROM p_firs_irn
       OR v_order.firs_csid IS DISTINCT FROM p_firs_csid))
-    OR v_order.created_at IS DISTINCT FROM p_order_created_at
     OR private.rendered_shipping_address(v_order.shipping_address)
       IS DISTINCT FROM private.rendered_shipping_address(p_shipping_address)
     OR v_item_count IS DISTINCT FROM p_item_count::bigint

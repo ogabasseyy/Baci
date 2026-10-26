@@ -105,6 +105,8 @@ describe('transformStorefrontOrdersForDisplay', () => {
     });
     expect(entry.balance).toBe(0);
     expect(entry.is_manual_order).toBe(true);
+    expect(entry.is_credit_order).toBe(false);
+    expect(entry.tax_subtotals).toEqual([]);
     expect(entry.customer_name).toBe('Ada Lovelace');
     expect(entry.customer_email).toBe('ada@example.com');
     expect(entry.customer_phone).toBe('+2348000000003');
@@ -115,6 +117,53 @@ describe('transformStorefrontOrdersForDisplay', () => {
         product_slug: 'pixel-10-pro-xl',
         category_slug: 'smartphones',
       }),
+    ]);
+  });
+
+  it('projects the credit flag and stored VAT subtotals for the preview', () => {
+    const [entry] = transformStorefrontOrdersForDisplay(
+      [
+        {
+          id: 'order-2',
+          order_number: 'ORD-43',
+          created_at: '2026-09-22T10:00:00.000Z',
+          total: 100000,
+          amount_paid: 0,
+          currency: 'NGN',
+          payment_status: 'unpaid',
+          is_credit_order: true,
+          order_items: [],
+        },
+      ],
+      {
+        transactionsByOrderId: new Map(),
+        paymentAccountsByOrderId: new Map(),
+        taxSubtotalsByOrderId: new Map([
+          [
+            'order-2',
+            [
+              {
+                vat_category_code: 'SR',
+                vat_rate: '7.5',
+                taxable_amount: '100000',
+                tax_amount: '7500',
+                exemption_reason: null,
+              },
+            ],
+          ],
+        ]),
+      }
+    );
+
+    expect(entry.is_credit_order).toBe(true);
+    expect(entry.tax_subtotals).toEqual([
+      {
+        vat_category_code: 'SR',
+        vat_rate: 7.5,
+        taxable_amount: 100000,
+        tax_amount: 7500,
+        exemption_reason: null,
+      },
     ]);
   });
 

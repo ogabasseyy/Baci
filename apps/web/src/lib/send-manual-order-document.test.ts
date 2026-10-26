@@ -162,6 +162,28 @@ describe('send manual order document', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('keeps the normal retry budget when the send fails before dispatch starts', async () => {
+    // A pre-dispatch failure (missing token, render throw) leaves the
+    // marker null: no cleanup RPC runs, so the row retries on its normal
+    // attempts instead of burning the corrective budget.
+    const db = database();
+    sendEmail.mockImplementationOnce(async () => ({
+      success: false,
+      error: 'missing ZeptoMail token',
+    }));
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'missing ZeptoMail token',
+    });
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).not.toContain(
+      'mark_manual_document_dispatch_started'
+    );
+  });
+
   it('fails a send whose claim was superseded before the snapshot', async () => {
     // A re-arm stole the claim between claim and send: the snapshot RPC
     // returns null, and the sender fails for a bounded retry (the row is

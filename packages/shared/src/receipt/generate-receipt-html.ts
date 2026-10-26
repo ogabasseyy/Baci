@@ -18,6 +18,7 @@ import {
   renderPaymentHistoryHtml,
   renderQrHtml,
   renderTermsHtml,
+  renderVatBreakdownHtml,
 } from './receipt-sections';
 import { buildSocialItems } from './receipt-social';
 import { getReceiptStatusConfig } from './receipt-status';
@@ -194,6 +195,7 @@ export function generateReceiptHtml(
     ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
     invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid),
+    vatBreakdownHtml: renderVatBreakdownHtml(order, formatMoney, isPaid),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),
     socialItems: buildSocialItems(merchant.social_media),

@@ -154,7 +154,19 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       discount_amount: receiptDetail.discount_amount,
       amount_paid: receiptDetail.amount_paid,
       balance: receiptDetail.balance,
-      payment_status: isPaidReceipt ? 'paid' : receiptDetail.payment_status,
+      // A gate-rejected paid label must not reach the renderer: the
+      // generator derives Receipt from payment_status directly, so a
+      // stored 'paid' the promotion gate demoted would print a Receipt
+      // the modal, card, and sender all call an invoice. Demote the
+      // renderer input to 'unpaid' to match the classified kind.
+      payment_status: isPaidReceipt
+        ? 'paid'
+        : normalizeStatus(receiptDetail.payment_status) === 'paid'
+          ? 'unpaid'
+          : receiptDetail.payment_status,
+      // Validated VAT subtotals ride the detail for gated deliverable
+      // invoices so the preview renders the breakdown the email shows.
+      tax_subtotals: receiptDetail.tax_subtotals ?? null,
       payment_method: receiptDetail.payment_method,
       // Invoice-only terms/notes/FIRS mirror the emailed attachment.
       invoice_note: receiptDetail.invoice_note,

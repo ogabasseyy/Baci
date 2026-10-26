@@ -220,6 +220,10 @@ export async function fetchReceiptListItems(
         // Settled payment history from the orders API: partial manual
         // invoices preview the same Payment table as the emailed document.
         transactions: (order.transactions as ReceiptOrder['transactions']) ?? [],
+        // Stored VAT subtotals from the orders API: the modal renders the
+        // same VAT Breakdown as the emailed attachment.
+        tax_subtotals:
+          (order.tax_subtotals as ReceiptOrder['tax_subtotals']) ?? null,
       };
 
       const statusLabel =

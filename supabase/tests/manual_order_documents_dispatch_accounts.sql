@@ -189,3 +189,41 @@ UPDATE public.merchants SET registered_address = '{"street": "13"}' WHERE id = '
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'registered street edit re-arms dispatch');
 UPDATE public.merchants SET registered_address = '{"city": "Lagos"}' WHERE id = '10000000-0000-4000-8000-000000000001';
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+-- Sibling shipping rows share the outbox table: a manual edit resets the
+-- manual marker but must never wipe a shipping dispatch lease (a wiped
+-- lease reads as abandoned downstream and resends).
+INSERT INTO public.order_notification_outbox (order_id, merchant_id, event_type, status, locked_by, locked_at, dispatch_started_at, fulfillment_cycle_id) SELECT order_id, merchant_id, 'order_shipped', 'processing', 'ship-worker', now(), now(), fulfillment_cycle_id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET customer_name = 'Buyer Scoped' WHERE id = '10000000-0000-4000-8000-000000000017';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'manual edit resets the manual marker');
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'order_shipped'), 'manual edit preserves the shipping lease');
+DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'order_shipped';
+-- Spelling-only edits reset nothing: the renderer cannot see them, so an
+-- in-flight marker survives. The fixture leaves a partially-paid label, so
+-- normalize to the lowercase spelling first (a real rendered change that
+-- resets the marker), re-mark across two statements (the dispatch-boundary
+-- trigger clears the marker on a status transition), then prove the
+-- casing-only flip keeps it.
+UPDATE public.orders SET payment_status = 'unpaid' WHERE id = '10000000-0000-4000-8000-000000000017';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET payment_status = 'UNPAID' WHERE id = '10000000-0000-4000-8000-000000000017';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'casing-only status edit preserves the marker');
+UPDATE public.orders SET customer_name = NULL WHERE id = '10000000-0000-4000-8000-000000000017';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'null name edit still resets the marker');
+UPDATE public.orders SET payment_status = 'unpaid', customer_name = 'Buyer' WHERE id = '10000000-0000-4000-8000-000000000017';
+-- Scalar-type validity flip: city 'Lagos' to 12 renders identically but
+-- fails sender validation, so the marker resets; the repair re-arms.
+-- Two statements per mark: the dispatch-boundary trigger clears the marker
+-- on a status transition, and the address write below flips an unmarked
+-- processing row back to pending via the snapshot path.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.orders SET shipping_address = '{"city": "Lagos"}' WHERE id = '10000000-0000-4000-8000-000000000003';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.orders SET shipping_address = shipping_address || '{"city": 12}' WHERE id = '10000000-0000-4000-8000-000000000003';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'scalar city type flip resets the marker');
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.orders SET shipping_address = '{"city": "Lagos"}' WHERE id = '10000000-0000-4000-8000-000000000003';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'scalar city repair re-arms the marker');

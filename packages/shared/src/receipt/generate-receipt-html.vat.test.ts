@@ -117,4 +117,55 @@ describe('generateReceiptHtml VAT summary', () => {
     expect(html).toContain('₦70,125.00');
     expect(html).toContain('₦1,005,125.00');
   });
+
+  it('renders the stored VAT breakdown on invoices like the emailed PDF', () => {
+    const subtotals = [
+      {
+        vat_category_code: 'SR',
+        vat_rate: 7.5,
+        taxable_amount: 935000,
+        tax_amount: 70125,
+        exemption_reason: null,
+      },
+      {
+        vat_category_code: 'ZR',
+        vat_rate: 0,
+        taxable_amount: 100000,
+        tax_amount: 0,
+        exemption_reason: 'Exported goods',
+      },
+    ];
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        payment_status: 'unpaid',
+        amount_paid: 0,
+        balance: 1035000,
+        tax_subtotals: subtotals,
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).toContain('VAT Breakdown');
+    expect(html).toContain('7.50%');
+    expect(html).toContain('ZR (Exported goods)');
+  });
+
+  it('omits the VAT breakdown on paid receipts', () => {
+    const html = generateReceiptHtml(
+      createReceiptOrder({
+        tax_subtotals: [
+          {
+            vat_category_code: 'SR',
+            vat_rate: 7.5,
+            taxable_amount: 935000,
+            tax_amount: 70125,
+            exemption_reason: null,
+          },
+        ],
+      }),
+      createReceiptMerchant()
+    );
+
+    expect(html).not.toContain('VAT Breakdown');
+  });
 });

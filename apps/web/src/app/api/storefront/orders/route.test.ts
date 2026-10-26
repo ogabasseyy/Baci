@@ -196,6 +196,8 @@ describe('GET /api/storefront/orders', () => {
           shipping_address: { city: 'Lagos' },
           tracking_number: 'TRACK-1',
           transactions: [],
+          tax_subtotals: [],
+          is_credit_order: false,
           shipping_provider: 'GIGL',
           payment_method: 'card',
           virtual_account: null,

@@ -227,8 +227,12 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
+      // Clear the marker only when it was actually started: a
+      // pre-dispatch failure (missing token, render throw) leaves it
+      // null, and clearing a null marker reports a false faulty cleanup
+      // that burns the corrective budget instead of the normal attempts.
       return reportFailedManualDocumentSend(result, () =>
-        persistDispatch(false)
+        dispatchStarted ? persistDispatch(false) : Promise.resolve()
       );
     }
     providerAccepted = true;

@@ -65,6 +65,10 @@ BEGIN
   UPDATE public.order_notification_outbox AS n
   SET dispatch_started_at = NULL, updated_at = now()
   WHERE n.order_id = p_order_id
+    -- Manual markers only: sibling shipping/fulfillment rows share this
+    -- table, and a manual contact edit must never wipe their dispatch
+    -- evidence (a wiped lease reads as abandoned downstream and resends).
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     AND (NOT p_invoice_only OR n.event_type = 'manual_order_invoice')
     AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   IF NOT v_order_found OR NOT v_order.manual_document_notification_eligible
@@ -160,6 +164,24 @@ REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid, boolean)
 -- builders do not read) never reach the document, so edits confined to
 -- them must not invalidate an identical render. The control-character
 -- separator keeps key-boundary collisions from masking a real change.
+-- Scalar-type signature per resolved slot: ->> coerces, so city 12 and
+-- '12' render identically while sender validation sees different types,
+-- and a validity flip must re-arm. Blank strings collapse like absent
+-- (the falsy filter agrees); every other type reports, so the check
+-- stays invisible to value-identical edits.
+CREATE OR REPLACE FUNCTION private.shipping_address_slot_type(p_address jsonb, p_primary text, p_fallback text)
+RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
+  SELECT COALESCE(
+    CASE WHEN p_address->p_primary IS NULL THEN NULL
+         WHEN jsonb_typeof(p_address->p_primary) = 'string' AND btrim(p_address->>p_primary) = '' THEN NULL
+         ELSE jsonb_typeof(p_address->p_primary) END,
+    CASE WHEN p_fallback IS NULL OR p_address->p_fallback IS NULL THEN NULL
+         WHEN jsonb_typeof(p_address->p_fallback) = 'string' AND btrim(p_address->>p_fallback) = '' THEN NULL
+         ELSE jsonb_typeof(p_address->p_fallback) END,
+    'null');
+$function$;
+REVOKE ALL ON FUNCTION private.shipping_address_slot_type(jsonb, text, text)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.rendered_shipping_address(p_address jsonb)
 RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
   SELECT concat_ws(chr(31),
@@ -168,7 +190,13 @@ RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
     NULLIF(p_address->>'city', ''),
     NULLIF(p_address->>'state', ''),
     COALESCE(NULLIF(p_address->>'postal_code', ''), NULLIF(p_address->>'postalCode', '')),
-    NULLIF(p_address->>'country', ''));
+    NULLIF(p_address->>'country', ''),
+    private.shipping_address_slot_type(p_address, 'address_line1', 'address'),
+    private.shipping_address_slot_type(p_address, 'address_line2', NULL),
+    private.shipping_address_slot_type(p_address, 'city', NULL),
+    private.shipping_address_slot_type(p_address, 'state', NULL),
+    private.shipping_address_slot_type(p_address, 'postal_code', 'postalCode'),
+    private.shipping_address_slot_type(p_address, 'country', NULL));
 $function$;
 REVOKE ALL ON FUNCTION private.rendered_shipping_address(jsonb)
   FROM PUBLIC, anon, authenticated;
@@ -224,7 +252,11 @@ BEGIN
   -- reset. Every other listed field renders on both kinds or gates
   -- eligibility, so those reset both.
   v_both_kind_changed :=
-    NEW.payment_status IS DISTINCT FROM OLD.payment_status
+    -- Rendered-equality, not raw equality: the sender reads status
+    -- trimmed+lowercased, so a spelling-only edit the renderer cannot
+    -- see must not reset an in-flight marker.
+    lower(btrim(COALESCE(NEW.payment_status, '')))
+      IS DISTINCT FROM lower(btrim(COALESCE(OLD.payment_status, '')))
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
     OR NEW.total IS DISTINCT FROM OLD.total
     OR NEW.subtotal IS DISTINCT FROM OLD.subtotal
@@ -241,19 +273,40 @@ BEGIN
       IS DISTINCT FROM (COALESCE(jsonb_typeof(NEW.shipping_address), 'null') IN ('object', 'null'))
     OR lower(trim(both from COALESCE(NEW.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(OLD.customer_email, '')))
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
-    OR NEW.customer_name IS DISTINCT FROM OLD.customer_name
-    OR NEW.customer_phone IS DISTINCT FROM OLD.customer_phone
-    OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
-    OR NEW.created_at IS DISTINCT FROM OLD.created_at
-    OR NEW.currency IS DISTINCT FROM OLD.currency
+    -- NULL and '' are both absent to every falsy renderer chain; a bare
+    -- space renders, so only the empty string normalizes to NULL here.
+    OR NULLIF(NEW.customer_name, '') IS DISTINCT FROM NULLIF(OLD.customer_name, '')
+    OR NULLIF(NEW.customer_phone, '') IS DISTINCT FROM NULLIF(OLD.customer_phone, '')
+    -- Effective per-kind document date, not each shadowed fallback
+    -- column. Invoices date from the issue date (an issue-date edit is
+    -- invoice-only below); receipts date from the completing payment,
+    -- falling back to transaction, then creation. A lone
+    -- transaction/creation edit changes a rendered document only when
+    -- some kind still reads the fallback: the invoice side when no
+    -- issue date is set, the receipt side when no settled payment
+    -- exists in the ledger.
+    OR ((NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
+        OR NEW.created_at IS DISTINCT FROM OLD.created_at)
+      AND (NEW.invoice_issue_date IS NULL OR OLD.invoice_issue_date IS NULL
+        OR NOT EXISTS (SELECT 1 FROM public.transactions AS t
+                       WHERE t.order_id = NEW.id
+                         AND t.transaction_type = 'payment'
+                         AND t.status IN ('completed', 'success'))))
+    OR upper(btrim(COALESCE(NEW.currency, '')))
+      IS DISTINCT FROM upper(btrim(COALESCE(OLD.currency, '')))
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
     OR NEW.import_job_id IS DISTINCT FROM OLD.import_job_id
     OR NEW.external_source IS DISTINCT FROM OLD.external_source
     OR (lower(btrim(COALESCE(OLD.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
       IS DISTINCT FROM (lower(btrim(COALESCE(NEW.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'));
   v_invoice_only_changed :=
-    NEW.payment_method IS DISTINCT FROM OLD.payment_method
-    OR NEW.invoice_type_code IS DISTINCT FROM OLD.invoice_type_code
+    -- Method reads lowercased+trimmed; a casing-only edit renders
+    -- nothing. Codes read blank-normalized with a 380 default, so
+    -- NULL and the default are the same rendered 325.
+    lower(btrim(COALESCE(NEW.payment_method, '')))
+      IS DISTINCT FROM lower(btrim(COALESCE(OLD.payment_method, '')))
+    OR COALESCE(NULLIF(btrim(NEW.invoice_type_code), ''), '380')
+      IS DISTINCT FROM COALESCE(NULLIF(btrim(OLD.invoice_type_code), ''), '380')
     -- Receipts date from the completing payment, never the issue date.
     OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
     -- The renderer prints invoice_note || notes trimmed: compare the

@@ -238,3 +238,42 @@ SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at
 UPDATE public.merchants SET support_phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'support-phone removal resets the invoice marker');
 UPDATE public.merchants SET phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
+-- Render-normalized brand primary: case-only and unsupported-value edits
+-- paint identically and keep the marker; a real color change resets it.
+UPDATE public.merchants SET brand_colors = '{"primary": "#ABCDEF"}' WHERE id = '10000000-0000-4000-8000-000000000001';
+-- The NULL-to-color write above re-arms the row to pending via the snapshot
+-- path, so the re-mark splits lease acquisition from the dispatch marker:
+-- the dispatch-boundary trigger clears dispatch_started_at on any
+-- pending-to-processing transition, and a single statement would wipe the
+-- marker it just set.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET brand_colors = '{"primary": "#abcdef"}' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'case-only brand color keeps the marker');
+UPDATE public.merchants SET brand_colors = '{"primary": "notacolor"}' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET brand_colors = '{"primary": "alsonotacolor"}' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'unsupported brand color keeps the marker');
+UPDATE public.merchants SET brand_colors = '{"primary": "#123456"}' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'real brand color change resets the marker');
+UPDATE public.merchants SET brand_colors = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
+-- Body wordmark under a safe domain: with business_name blank the slug
+-- prints (sender_name only feeds From), so a rename resets the marker.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+INSERT INTO public.domains (merchant_id, domain, domain_type, status, is_primary) VALUES ('10000000-0000-4000-8000-000000000001', 'shop.example.com', 'custom', 'active', true);
+UPDATE public.merchants SET business_name = '' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.merchants SET slug = 'wordmark-probe' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'blank-name slug rename resets the marker');
+UPDATE public.merchants SET business_name = 'Fixture', slug = 'fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
+DELETE FROM public.domains WHERE merchant_id = '10000000-0000-4000-8000-000000000001';
+-- Resolved payment label: a description edit under a set method changes no
+-- rendered row and keeps the marker; a method change resets it.
+INSERT INTO public.transactions (id, order_id, transaction_type, amount, status, description, metadata) VALUES ('10000000-0000-4000-8000-000000000c05', '10000000-0000-4000-8000-000000000069', 'payment', 100, 'completed', 'Old note', '{"payment_method": "card"}');
+-- Split lease acquisition from the dispatch marker: the dispatch-boundary
+-- trigger clears dispatch_started_at on a pending-to-processing transition.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt';
+UPDATE public.transactions SET description = 'New note' WHERE id = '10000000-0000-4000-8000-000000000c05';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt'), 'shadowed description edit keeps the marker');
+UPDATE public.transactions SET metadata = '{"payment_method": "transfer"}' WHERE id = '10000000-0000-4000-8000-000000000c05';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt'), 'method change resets the marker');

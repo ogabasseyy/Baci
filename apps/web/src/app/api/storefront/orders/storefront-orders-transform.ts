@@ -67,6 +67,7 @@ export interface StorefrontOrderListRowInput {
   customer_name?: string | null;
   customer_email?: string | null;
   customer_phone?: string | null;
+  is_credit_order?: boolean | null;
   order_items?: readonly StorefrontOrderListItemInput[] | null;
 }
 
@@ -81,9 +82,11 @@ export interface StorefrontOrderListLookups {
   taxSubtotalsByOrderId: ReadonlyMap<
     string,
     readonly {
+      vat_category_code?: unknown;
       vat_rate?: unknown;
       taxable_amount?: unknown;
       tax_amount?: unknown;
+      exemption_reason?: unknown;
     }[]
   >;
 }
@@ -195,6 +198,22 @@ export function transformStorefrontOrdersForDisplay(
             ? { payment_method: transaction.payment_method }
             : null,
         })),
+      // Stored VAT subtotals for the preview's VAT Breakdown section:
+      // same rows the emailed PDF renders, so the modal agrees with it.
+      tax_subtotals: (lookups.taxSubtotalsByOrderId.get(order.id) ?? []).map(
+        (subtotal) => ({
+          vat_category_code: subtotal.vat_category_code ?? null,
+          vat_rate:
+            subtotal.vat_rate == null ? null : Number(subtotal.vat_rate),
+          taxable_amount:
+            subtotal.taxable_amount == null
+              ? null
+              : Number(subtotal.taxable_amount),
+          tax_amount:
+            subtotal.tax_amount == null ? null : Number(subtotal.tax_amount),
+          exemption_reason: subtotal.exemption_reason ?? null,
+        })
+      ),
       total: order.total,
       subtotal: order.subtotal,
       shipping_fee: order.shipping_fee,
@@ -219,6 +238,7 @@ export function transformStorefrontOrdersForDisplay(
       customer_name: order.customer_name,
       customer_email: order.customer_email,
       customer_phone: order.customer_phone,
+      is_credit_order: order.is_credit_order ?? false,
       virtual_account: lookups.paymentAccountsByOrderId.get(order.id) ?? null,
       balance: Math.max(
         0,

@@ -10,11 +10,13 @@
 -- file cleanly (ENABLE TRIGGER is idempotent; the backfill anti-join
 -- skips already-enqueued rows). Enabling is not retroactive, so the
 -- backfill covers eligible orders created while the triggers were
--- disabled. Re-runnable: orders that already have a manual row are
--- skipped, and the enqueue function re-validates all eligibility. The
--- reported count is scanned orders, not enqueued rows: the void function
--- early-returns for ineligible orders but SELECT still emits one row per
--- scanned order.
+-- disabled — plus a catch-up sweep AFTER the enables for staff writes
+-- that commit in the seconds between the scan and the enables (they
+-- miss both otherwise, with no future trigger fire to save them).
+-- Re-runnable: orders that already have a manual row are skipped, and
+-- the enqueue function re-validates all eligibility. The reported count
+-- is scanned orders, not enqueued rows: the void function early-returns
+-- for ineligible orders but SELECT still emits one row per scanned order.
 -- Backfill: the eligible set is staff-recorded orders created while the
 -- triggers were disabled (manual volume only — imports and marketplace
 -- rows never set the flag), each a single enqueue call that early-returns
@@ -89,3 +91,24 @@ ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transa
 ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
 ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
 ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
+-- Catch-up sweep: staff writes committed between the backfill scan and the
+-- enables above missed both (scan already passed, triggers still
+-- disabled). With triggers live, re-run the same idempotent sweep — the
+-- anti-join skips everything already enqueued, so only gap-stranded rows
+-- enqueue now. Unfenced: the first fence already bounded the gap, and this
+-- sweep covers seconds of writes under the same statement timeout.
+SET statement_timeout = '120s';
+SELECT count(*) FROM (
+  SELECT private.enqueue_manual_order_document(o.id)
+  FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    )
+) AS reswept;
+RESET statement_timeout;

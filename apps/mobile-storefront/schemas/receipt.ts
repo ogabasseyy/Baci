@@ -155,7 +155,10 @@ export const ReceiptDetailSchema = z.object({
   // falls back to email like the emailed document, so rejecting here
   // would blank a card whose documents are valid.
   customer_name: z.string().nullable(),
-  customer_email: z.string(),
+  // The orders column permits NULL (import payloads, email-less
+  // accounts): a missing snapshotted email must not fail the preview
+  // closed — the generator renders it only when present.
+  customer_email: z.string().nullable(),
   customer_phone: z.string().nullable(),
   shipping_address: ReceiptShippingAddressSchema.nullable(),
   // Stored Peppol type code (orders.invoice_type_code, default 380):
@@ -175,6 +178,20 @@ export const ReceiptDetailSchema = z.object({
   items: z.array(OrderItemSchema),
   virtual_account: VirtualAccountSchema.nullable(),
   transactions: z.array(TransactionSchema),
+  // Validated VAT subtotal rows for the preview's VAT Breakdown section;
+  // absent except on gated deliverable manual invoices.
+  tax_subtotals: z
+    .array(
+      z.object({
+        vat_category_code: z.string().nullable(),
+        vat_rate: z.number().nullable(),
+        taxable_amount: z.number().nullable(),
+        tax_amount: z.number().nullable(),
+        exemption_reason: z.string().nullable(),
+      })
+    )
+    .nullable()
+    .optional(),
 });
 
 // ============================================

@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
         customer_name,
         customer_email,
         customer_phone,
+        is_credit_order,
         order_items (
           id,
           line_id,
@@ -179,7 +180,13 @@ export async function GET(request: NextRequest) {
     }
     const taxSubtotalsByOrderId = new Map<
       string,
-      { vat_rate?: unknown; taxable_amount?: unknown; tax_amount?: unknown }[]
+      {
+        vat_category_code?: unknown;
+        vat_rate?: unknown;
+        taxable_amount?: unknown;
+        tax_amount?: unknown;
+        exemption_reason?: unknown;
+      }[]
     >();
     for (const subtotal of taxSubtotals ?? []) {
       const orderSubtotals = taxSubtotalsByOrderId.get(subtotal.order_id) ?? [];

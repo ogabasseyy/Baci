@@ -164,6 +164,30 @@ describe('useReceiptPreview document kind', () => {
     expect(result.current.html).not.toContain('Proforma Invoice');
   });
 
+  it('renders the VAT breakdown for an invoice with stored subtotals', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      tax_subtotals: [
+        {
+          vat_category_code: 'SR',
+          vat_rate: 7.5,
+          taxable_amount: 500,
+          tax_amount: 37.5,
+          exemption_reason: null,
+        },
+      ],
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).toContain('VAT Breakdown');
+    expect(result.current.html).toContain('7.50%');
+  });
+
   it('preserves an explicit stored type code instead of deriving proforma', () => {
     mockReceiptDetail = {
       ...unpaidProformaDetail('NGN'),

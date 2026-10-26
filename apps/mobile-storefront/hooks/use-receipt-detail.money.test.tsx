@@ -141,6 +141,46 @@ describe('receipt detail string money', () => {
     });
   });
 
+  it('opens detail when the snapshotted order email is null', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder({ customer_email: null }),
+      error: null,
+    });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as { customer_email: unknown } | null;
+
+    expect(detail).not.toBeNull();
+    expect(detail?.customer_email).toBeNull();
+  });
+
+  it('fails detail closed on sender-rejected settled payments instead of printing them', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder(),
+      error: null,
+    });
+    mockTxRows = [
+      {
+        order_id: 'order-9',
+        transaction_type: 'payment',
+        status: 'completed',
+        amount: -50,
+        created_at: '2026-05-24T10:00:00.000Z',
+        description: null,
+        gateway: 'paystack',
+      },
+    ];
+
+    const detail = await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn();
+
+    expect(detail).toBeNull();
+  });
+
   it('fails detail closed on unparseable item money instead of masking zero', async () => {
     const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
     mockSingle.mockResolvedValue({

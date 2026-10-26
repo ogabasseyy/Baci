@@ -152,3 +152,37 @@ describe('X durable paid-order wiring', () => {
     expect(provider).not.toHaveBeenCalled();
   });
 });
+
+it('loads token authentication only from the paid merchant private projection', async () => {
+  const base = transport();
+  const db = vi.fn<typeof fetch>(async (input, init) =>
+    String(input).includes('/merchant_x_ads_credentials?')
+      ? Response.json({
+          pixel_token: 'synthetic-token',
+          consumer_key: null,
+          consumer_secret: null,
+          access_token: null,
+          access_token_secret: null,
+        })
+      : base(input, init)
+  );
+  const provider = vi
+    .fn()
+    .mockResolvedValue(Response.json({ data: { conversions_processed: 1 } }));
+  vi.stubGlobal('fetch', provider);
+  expect(
+    await deliverDomainEvent({
+      supabase: createEventPipelineServiceRoleTestClient(db),
+      destination: 'x',
+      event,
+    })
+  ).toMatchObject({ success: true, terminalOutcome: 'delivered' });
+  expect(provider.mock.calls[0][1].headers).toEqual({
+    'X-Pixel-Token': 'synthetic-token',
+    'Content-Type': 'application/json',
+  });
+  const credentialRead = db.mock.calls.find(([input]) =>
+    String(input).includes('/merchant_x_ads_credentials?')
+  );
+  expect(String(credentialRead?.[0])).toContain(event.merchant_id);
+});

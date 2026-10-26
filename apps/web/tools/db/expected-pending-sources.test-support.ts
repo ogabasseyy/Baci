@@ -1,4 +1,5 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
+import { EXPECTED_ADS_PENDING_SOURCES } from './expected-ads-pending-sources.test-support';
 import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
 import { EXPECTED_BUILDER_PENDING_SOURCES } from './expected-builder-pending-sources.test-support';
 import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.test-support';
@@ -38,31 +39,7 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
-  {
-    repositoryPath:
-      'supabase/migrations/20261026060604_x_ads_conversion_settings_and_destination.sql',
-    sha256: '62f9c97c017443b4a1adeaaf52b1fd69e45502557dc527d9c793b6930cc1e986',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261025220509_storefront_growth_integration_hint.sql',
-    sha256: 'bb39579411334105589c3cdd42447a7706accdc16d654937560b970b4d9b1427',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261024162000_chatgpt_ads_admin_destination.sql',
-    sha256: 'e678d6ec10d05787fc0b66af71d1cda4bad2928f03716581e7b8ba62beb3ea6f',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261024160000_chatgpt_ads_settings_and_destination.sql',
-    sha256: 'e85d9c2a0490784d6a4b9a3fe010f7f5bce4b2731d6386c88bbb93049171eccc',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261024160100_validate_chatgpt_event_destination.sql',
-    sha256: 'dec225fa7dc511181d6e64afea8c9a8192ad6005ef9dd5a3818584ebc628e7e8',
-  },
+  ...EXPECTED_ADS_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20261023131010_merchant_onboarding_delivery_pause.sql',

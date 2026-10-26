@@ -75,3 +75,22 @@ it('keeps lost responses indeterminate', async () => {
     requestMayHaveBeenSent: true,
   });
 });
+it('uses only the pixel token header for Events Manager credentials', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(Response.json({ data: { conversions_processed: 1 } }));
+  vi.stubGlobal('fetch', fetcher);
+  expect(
+    await sendXEvent('abc', { pixelToken: 'synthetic-pixel-token' }, event)
+  ).toMatchObject({ success: true });
+  expect(fetcher.mock.calls[0][1].headers).toEqual({
+    'X-Pixel-Token': 'synthetic-pixel-token',
+    'Content-Type': 'application/json',
+  });
+  expect(fetcher.mock.calls[0][0]).toBe(
+    'https://ads-api.x.com/12/measurement/conversions/abc'
+  );
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+    conversions: [event],
+  });
+});

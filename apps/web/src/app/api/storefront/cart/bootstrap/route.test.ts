@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import { CART_QUOTA_BUDGETS } from '@/lib/cart/request-quota';
 import { getCart } from '@/lib/cart/service';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
@@ -315,7 +316,11 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     let response = await postBootstrap({ body: {} });
     expect(response.status).toBe(201);
 
-    for (let attempt = 1; attempt < 30; attempt++) {
+    for (
+      let attempt = 1;
+      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
+      attempt++
+    ) {
       response = await postBootstrap({ body: {} });
       expect(response.status).toBe(201);
     }
@@ -325,7 +330,11 @@ describe('POST /api/storefront/cart/bootstrap', () => {
   });
 
   it('performs no merchant resolution once the pre-resolution quota is exhausted', async () => {
-    for (let attempt = 0; attempt < 30; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
+      attempt++
+    ) {
       const response = await postBootstrap({ body: {} });
       expect(response.status).toBe(201);
     }

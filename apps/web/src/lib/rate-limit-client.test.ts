@@ -38,7 +38,54 @@ describe('getClientIdentifier', () => {
   });
 });
 
+describe('getClientIdentifier behind Cloudflare', () => {
+  it('uses the visitor address when the peer is a Cloudflare egress', () => {
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '172.68.1.20',
+          'x-forwarded-for': '203.0.113.9, 172.68.1.20',
+        })
+      )
+    ).toBe('203.0.113.9');
+  });
+
+  it('ignores forged Cloudflare headers from a non-Cloudflare peer', () => {
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'anything',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+});
+
 describe('getTrustedClientIdentifier', () => {
+  it('uses the visitor address when request.ip is the Cloudflare peer', () => {
+    vi.stubEnv('VERCEL', '1');
+    const request = requestWith({
+      'cf-connecting-ip': '203.0.113.9',
+      'cf-ray': 'a509c917eae1b920-AMS',
+    });
+    Object.defineProperty(request, 'ip', { value: '172.68.1.20' });
+    expect(getTrustedClientIdentifier(request)).toBe('203.0.113.9');
+  });
+
+  it('keeps request.ip when it is not a Cloudflare peer', () => {
+    vi.stubEnv('VERCEL', '1');
+    const request = requestWith({
+      'cf-connecting-ip': '203.0.113.9',
+      'cf-ray': 'anything',
+    });
+    Object.defineProperty(request, 'ip', { value: '192.0.2.44' });
+    expect(getTrustedClientIdentifier(request)).toBe('192.0.2.44');
+  });
+
   it('never trusts x-forwarded-for', () => {
     expect(
       getTrustedClientIdentifier(

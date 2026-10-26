@@ -124,16 +124,53 @@ function isCloudflarePeer(ip: string): boolean {
 // Client identifier (IP)
 // ---------------------------------------------------------------------------
 
+/**
+ * Visitor address from CF-Connecting-IP, but only when the immediate
+ * platform-verified peer is itself a Cloudflare egress and a CF-Ray
+ * header is present. Cloudflare overwrites CF-Connecting-IP at its
+ * edge, so a Cloudflare peer authenticates the header; a
+ * direct-to-origin caller forging both headers has a non-Cloudflare
+ * peer address and gets null here.
+ */
+function verifiedCloudflareVisitorIp(
+  request: NextRequest,
+  peerIp: string | null
+): string | null {
+  const cloudflareIp = request.headers.get('cf-connecting-ip');
+  if (
+    peerIp &&
+    isCloudflarePeer(peerIp) &&
+    request.headers.get('cf-ray') &&
+    cloudflareIp &&
+    isValidIP(cloudflareIp)
+  ) {
+    return cloudflareIp;
+  }
+  return null;
+}
+
 export function getClientIdentifier(request: NextRequest): string {
   // Prefer Next.js/Vercel trusted IP
   const requestWithIp = request as NextRequest & { ip?: string };
   const requestIp = requestWithIp.ip;
+  const realIp = request.headers.get('x-real-ip');
+  const forwarded = request.headers.get('x-forwarded-for');
+
+  // Behind Cloudflare the platform address is a shared egress, not the
+  // visitor: prefer the authenticated visitor address so per-IP rate
+  // limiting also buckets per customer instead of per egress.
+  const peerIp =
+    requestIp && isValidIP(requestIp)
+      ? requestIp
+      : realIp && isValidIP(realIp)
+        ? realIp
+        : null;
+  const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+  if (visitorIp) return visitorIp;
+
   if (requestIp && isValidIP(requestIp)) {
     return requestIp;
   }
-
-  const realIp = request.headers.get('x-real-ip');
-  const forwarded = request.headers.get('x-forwarded-for');
 
   if (realIp && isValidIP(realIp)) return realIp;
 
@@ -163,9 +200,6 @@ export function getClientIdentifier(request: NextRequest): string {
 export function getTrustedClientIdentifier(request: NextRequest): string {
   const requestWithIp = request as NextRequest & { ip?: string };
   const requestIp = requestWithIp.ip;
-  if (requestIp && isValidIP(requestIp)) {
-    return requestIp;
-  }
 
   // x-real-ip is only trustworthy when the platform guarantees the
   // edge overwrites it: on Vercel, or where the operator explicitly
@@ -177,33 +211,24 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
   if (proxyGuaranteed) {
     const realIp = request.headers.get('x-real-ip');
-    // Behind Cloudflare, the platform x-real-ip is a shared Cloudflare
-    // egress address, so keying anonymous budgets on it collapses many
+    // Behind Cloudflare, the platform address is a shared Cloudflare
+    // egress, so keying anonymous budgets on it collapses many
     // customers into one bootstrap bucket and mass-produces "cart sync
-    // was interrupted" failures. CF-Connecting-IP names the visitor,
-    // but it is an ordinary header: trust it only when the immediate
-    // platform-verified peer (request.ip, else x-real-ip) is itself
-    // inside Cloudflare's published egress ranges and a CF-Ray header
-    // is present. A direct-to-origin caller forging both headers has a
-    // non-Cloudflare peer address and keeps the platform identity.
+    // was interrupted" failures. Prefer the authenticated visitor
+    // address when the immediate peer proves Cloudflare traversal.
     const peerIp =
       requestIp && isValidIP(requestIp)
         ? requestIp
         : realIp && isValidIP(realIp)
           ? realIp
           : null;
-    const cloudflareIp = request.headers.get('cf-connecting-ip');
-    if (
-      peerIp &&
-      isCloudflarePeer(peerIp) &&
-      request.headers.get('cf-ray') &&
-      cloudflareIp &&
-      isValidIP(cloudflareIp)
-    ) {
-      return cloudflareIp;
-    }
+    const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+    if (visitorIp) return visitorIp;
     if (realIp && isValidIP(realIp)) return realIp;
   }
 
+  if (requestIp && isValidIP(requestIp)) {
+    return requestIp;
+  }
   return 'unknown';
 }

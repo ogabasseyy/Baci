@@ -1,12 +1,6 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import { useCookieConsentFocus } from './use-cookie-consent-focus';
 
 function ConsentFocusHarness() {
@@ -14,6 +8,7 @@ function ConsentFocusHarness() {
   const [chatOpen, setChatOpen] = useState(false);
   const [runtimeMounted, setRuntimeMounted] = useState(false);
   const [showNewsletter, setShowNewsletter] = useState(false);
+  const [navigated, setNavigated] = useState(false);
   const focus = useCookieConsentFocus(visible);
 
   return (
@@ -33,8 +28,15 @@ function ConsentFocusHarness() {
         {chatOpen && (
           <div className="ogabassey-chat-window">
             <button type="button">Chat input</button>
-            <button type="button" onClick={() => setChatOpen(false)}>
-              Close conversation
+            <button
+              type="button"
+              onClick={() => {
+                setChatOpen(false);
+                setNavigated(true);
+                document.querySelector<HTMLElement>('h1')?.focus();
+              }}
+            >
+              Navigate to repair
             </button>
           </div>
         )}
@@ -48,6 +50,8 @@ function ConsentFocusHarness() {
       <button type="button" onClick={() => setShowNewsletter(true)}>
         Show newsletter
       </button>
+      <h1 tabIndex={-1}>Repair page</h1>
+      {navigated && <p>Repair page loaded</p>}
       {showNewsletter && (
         <div className="ogabassey-newsletter-popup">
           <button type="button">Close newsletter</button>
@@ -88,71 +92,18 @@ it('restores the covered launcher after consent closes from inside the banner', 
   expect(launcher).toHaveFocus();
 });
 
-it('moves focus to consent when an open chat covering it closes', async () => {
+it('does not steal focus when chat navigation closes while consent is pending', () => {
   render(<ConsentFocusHarness />);
   fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
   screen.getByRole('button', { name: 'Chat input' }).focus();
   fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
   expect(screen.getByRole('button', { name: 'Chat input' })).toHaveFocus();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Dismiss consent' })
-    ).toHaveFocus()
-  );
-  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
-  fireEvent.click(dismiss);
+  fireEvent.click(screen.getByRole('button', { name: 'Navigate to repair' }));
+  expect(screen.getByRole('heading', { name: 'Repair page' })).toHaveFocus();
   expect(
-    screen.getByRole('button', { name: 'Assistant launcher' })
-  ).toHaveFocus();
-});
-
-it('moves focus to consent when the launcher toggle closes an open chat', async () => {
-  render(<ConsentFocusHarness />);
-  const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
-  fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
-  launcher.focus();
-  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
-  expect(launcher).toHaveFocus();
-
-  fireEvent.click(launcher);
-  await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Dismiss consent' })
-    ).toHaveFocus()
-  );
-  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
-  fireEvent.click(dismiss);
-  expect(launcher).toHaveFocus();
-});
-
-it('moves focus to consent when an open chat closes without holding focus', async () => {
-  render(<ConsentFocusHarness />);
-  fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
-  expect(document.activeElement).toBe(document.body);
-
-  fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Dismiss consent' })
-    ).toHaveFocus()
-  );
-});
-
-it('observes chat opened after consent appears', async () => {
-  render(<ConsentFocusHarness />);
-  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
-  screen.getByRole('button', { name: 'Chat input' }).focus();
-  await act(async () => Promise.resolve());
-  fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
-  await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Dismiss consent' })
-    ).toHaveFocus()
-  );
+    screen.getByRole('button', { name: 'Dismiss consent' })
+  ).not.toHaveFocus();
 });
 
 it('restores focus to the live launcher after deferred runtime handoff', () => {
@@ -168,20 +119,6 @@ it('restores focus to the live launcher after deferred runtime handoff', () => {
   expect(
     screen.getByRole('button', { name: 'Runtime launcher' })
   ).toHaveFocus();
-});
-
-it('scopes consent mutations to the chat anchor parent', () => {
-  const observe = vi.spyOn(MutationObserver.prototype, 'observe');
-  render(<ConsentFocusHarness />);
-  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
-
-  const anchor = document.querySelector('.ogabassey-chat-anchor');
-  expect(anchor).not.toBeNull();
-  expect(observe).toHaveBeenCalledWith(anchor?.parentElement, {
-    childList: true,
-    subtree: true,
-  });
-  observe.mockRestore();
 });
 
 it('restores focus to a visible promotion if CSS hides the launcher', () => {

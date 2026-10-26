@@ -141,13 +141,14 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     if (width === 375) {
       await page.evaluate(() => localStorage.clear());
       await page.goto('/chat-launcher');
-      await page.waitForTimeout(100);
       await page.getByRole('button', { name: 'Show mobile footer' }).click();
-      await page.waitForTimeout(4100);
-      await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible();
+      await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible({
+        timeout: 15_000,
+      });
       await page.getByRole('button', { name: 'Close newsletter' }).click();
-      await page.waitForTimeout(10100);
-      await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
+      await expect(page.locator('.ogabassey-offer-popup')).toBeVisible({
+        timeout: 15_000,
+      });
       await expect(page.getByTestId('deferred-launcher')).toBeHidden();
       await expect(
         page.locator('button[aria-label="Assistant launcher"]')
@@ -238,8 +239,9 @@ test('newsletter appearing during touch drag waits until the gesture ends', asyn
     type: 'touchMove',
     touchPoints: [{ id: 1, x: bounds.x + 70, y: bounds.y + 65 }],
   });
-  await page.waitForTimeout(4100);
-  await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible();
+  await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByTestId('deferred-launcher')).toBeVisible();
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',

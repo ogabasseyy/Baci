@@ -39,5 +39,16 @@ describe('getChatLauncherKeyboardPosition', () => {
         noOverflow,
       ),
     ).toBeNull();
+    expect(
+      getChatLauncherKeyboardPosition(
+        'constructor',
+        false,
+        { x: 100, y: 120 },
+        icon,
+        0,
+        0,
+        noOverflow,
+      ),
+    ).toBeNull();
   });
 });

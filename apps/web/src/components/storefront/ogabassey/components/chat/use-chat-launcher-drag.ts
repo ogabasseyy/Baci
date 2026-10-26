@@ -50,8 +50,10 @@ export function useChatLauncherDrag(
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
-  isOpenRef.current = isOpen;
-  isHiddenRef.current = isHidden;
+  useLayoutEffect(() => {
+    isOpenRef.current = isOpen;
+    isHiddenRef.current = isHidden;
+  }, [isOpen, isHidden]);
 
   function reclampPosition() {
     if (isOpenRef.current || isHiddenRef.current) return;
@@ -164,6 +166,7 @@ export function useChatLauncherDrag(
 
   function onKeyboardMove(event: ReactKeyboardEvent<HTMLButtonElement>) {
     if (isOpen || isHidden) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
     const rect = event.currentTarget.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const next = getChatLauncherKeyboardPosition(
@@ -233,6 +236,9 @@ export function useChatLauncherDrag(
     gesture.current = null;
     anchorRef.current?.removeAttribute('data-chat-launcher-dragging');
     if (start && dragged.current) {
+      if (anchorRef.current) {
+        anchorRef.current.style.transform = `translate3d(${start.next.x}px, ${start.next.y}px, 0)`;
+      }
       setPosition(start.next);
       suppressedDragClick.current = {
         pointerId: start.pointerId,

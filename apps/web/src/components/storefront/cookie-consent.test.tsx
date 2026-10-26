@@ -90,6 +90,38 @@ describe('CookieConsent', () => {
     expect(launcher).toHaveFocus();
   });
 
+  it('keeps keyboard focus within consent when switching preference views', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+
+    const customize = screen.getByRole('button', { name: 'Customize' });
+    customize.focus();
+    fireEvent.click(customize);
+    const closeDetails = screen.getByRole('button', { name: 'Close details' });
+    expect(closeDetails).toHaveFocus();
+
+    closeDetails.focus();
+    fireEvent.click(closeDetails);
+    const customizeAgain = screen.getByRole('button', { name: 'Customize' });
+    expect(customizeAgain).toHaveFocus();
+
+    fireEvent.click(customizeAgain);
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    cancel.focus();
+    fireEvent.click(cancel);
+    expect(screen.getByRole('button', { name: 'Customize' })).toHaveFocus();
+  });
+
   it('does not steal focus back after the shopper moves outside consent', () => {
     render(
       <>

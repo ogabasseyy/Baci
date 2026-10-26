@@ -60,4 +60,18 @@ describe('launcher viewport changes while chat is open', () => {
       'translate3d(184px, 300px, 0)',
     );
   });
+
+  it('preserves browser shortcuts when arrow keys have modifiers', () => {
+    const { button } = setup();
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowLeft',
+      altKey: true,
+    });
+    button.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.getByTestId('anchor').style.transform).toBe('');
+  });
 });

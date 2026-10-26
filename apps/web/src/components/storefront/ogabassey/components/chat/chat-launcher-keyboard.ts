@@ -8,6 +8,10 @@ const KEY_MOVEMENT = {
   ArrowUp: [0, -1],
 } as const;
 
+function isMovementKey(key: string): key is keyof typeof KEY_MOVEMENT {
+  return Object.hasOwn(KEY_MOVEMENT, key);
+}
+
 export function getChatLauncherKeyboardPosition(
   key: string,
   shiftKey: boolean,
@@ -17,8 +21,8 @@ export function getChatLauncherKeyboardPosition(
   mobileOffset: number,
   overflow: Overflow,
 ) {
-  const movement = KEY_MOVEMENT[key as keyof typeof KEY_MOVEMENT];
-  if (!movement) return null;
+  if (!isMovementKey(key)) return null;
+  const movement = KEY_MOVEMENT[key];
   const step = shiftKey ? 48 : 16;
   return clampChatLauncherPosition(
     current.x + movement[0] * step,

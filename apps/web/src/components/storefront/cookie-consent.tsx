@@ -28,7 +28,7 @@ export function CookieConsent() {
   } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
-  const consentFocus = useCookieConsentFocus(isVisible);
+  const consentFocus = useCookieConsentFocus(isVisible, showDetails);
 
   if (!isVisible) return null;
 
@@ -90,7 +90,7 @@ export function CookieConsent() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowDetails(true)}
+                onClick={consentFocus.switchView(() => setShowDetails(true))}
                 className="text-muted-foreground hover:text-foreground h-9"
                 type="button"
               >
@@ -132,7 +132,7 @@ export function CookieConsent() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowDetails(false)}
+                onClick={consentFocus.switchView(() => setShowDetails(false))}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
                 aria-label="Close details"
               >
@@ -241,7 +241,7 @@ export function CookieConsent() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowDetails(false)}
+                onClick={consentFocus.switchView(() => setShowDetails(false))}
                 className="text-muted-foreground h-9"
               >
                 Cancel

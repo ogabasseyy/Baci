@@ -7,6 +7,7 @@ function Harness({
   open = false,
   hasOverflow = false,
   hidden = false,
+  initialPosition,
   onRender = () => {},
   onOpen = () => {},
   onOverflowMount,
@@ -16,6 +17,7 @@ function Harness({
   open?: boolean;
   hasOverflow?: boolean;
   hidden?: boolean;
+  initialPosition?: { x: number; y: number };
   onRender?: () => void;
   onOpen?: () => void;
   onOverflowMount?: (bubble: HTMLDivElement) => void;
@@ -25,7 +27,7 @@ function Harness({
   constraintKey?: string;
 }) {
   const drag = useChatLauncherDrag(
-    undefined,
+    initialPosition,
     open,
     hasOverflow,
     hidden,
@@ -69,7 +71,7 @@ function Harness({
   );
 }
 
-export function setup() {
+export function setup(options: { initialPosition?: { x: number; y: number } } = {}) {
   let frame: FrameRequestCallback | undefined;
   let notifyResizeObserver: ResizeObserverCallback | undefined;
   vi.stubGlobal(
@@ -109,6 +111,7 @@ export function setup() {
   });
   const view = render(
     <Harness
+      initialPosition={options.initialPosition}
       onRender={onRender}
       onOpen={onOpen}
       onSuppressClick={(suppress) => {

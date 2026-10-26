@@ -16,6 +16,15 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
+  it('allows a trusted pointerId-zero click after a nonzero-pointer drag', () => {
+    const { pointer, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320, 7);
+    pointer('pointermove', 120, 220, 7);
+    pointer('pointerup', 120, 220, 7);
+    trustedClick(120, 220, 0);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
   it('allows an independent pointer-id-less click at the drag release point', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);

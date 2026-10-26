@@ -29,7 +29,7 @@ export default defineConfig({
     })),
     {
       name: 'firefox-chat-drag',
-      testMatch: '**/storefront-chat-overlay.pw.ts',
+      testMatch: '**/storefront-chat-overlay*.pw.ts',
       use: {
         browserName: 'firefox',
         launchOptions: {

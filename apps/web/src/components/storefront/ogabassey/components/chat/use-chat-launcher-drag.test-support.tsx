@@ -9,6 +9,7 @@ function Harness({
   onRender = () => {},
   onOpen = () => {},
   onOverflowMount,
+  onSuppressClick,
   constraintKey = 'screen',
 }: {
   open?: boolean;
@@ -17,6 +18,7 @@ function Harness({
   onRender?: () => void;
   onOpen?: () => void;
   onOverflowMount?: (bubble: HTMLDivElement) => void;
+  onSuppressClick?: (suppress: typeof drag.suppressClick) => void;
   constraintKey?: string;
 }) {
   const drag = useChatLauncherDrag(
@@ -26,6 +28,7 @@ function Harness({
     hidden,
     constraintKey,
   );
+  onSuppressClick?.(drag.suppressClick);
   onRender();
   return (
     <div
@@ -85,6 +88,7 @@ export function setup() {
   });
   const onRender = vi.fn();
   const onOpen = vi.fn();
+  let suppressClick: ((event: never) => boolean) | undefined;
   const getComputedStyle = window.getComputedStyle.bind(window);
   vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
     if (element instanceof HTMLDivElement && element.style.position === 'fixed') {
@@ -98,7 +102,15 @@ export function setup() {
     }
     return getComputedStyle(element);
   });
-  const view = render(<Harness onRender={onRender} onOpen={onOpen} />);
+  const view = render(
+    <Harness
+      onRender={onRender}
+      onOpen={onOpen}
+      onSuppressClick={(suppress) => {
+        suppressClick = suppress as (event: never) => boolean;
+      }}
+    />,
+  );
   const button = screen.getByRole('button', { name: 'Chat' });
   const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
     left: 200,
@@ -146,6 +158,15 @@ export function setup() {
     ...view,
     button,
     click,
+    trustedClick: (x: number, y: number, pointerId: number) => {
+      const event = {
+        detail: 1,
+        clientX: x,
+        clientY: y,
+        nativeEvent: { pointerId, isTrusted: true },
+      };
+      if (!suppressClick?.(event as never)) onOpen();
+    },
     measure,
     onOpen,
     onRender,

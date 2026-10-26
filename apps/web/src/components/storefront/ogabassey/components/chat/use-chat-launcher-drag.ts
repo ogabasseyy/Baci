@@ -154,6 +154,7 @@ export function useChatLauncherDrag(
       base: position ?? { x: 0, y: 0 },
       next: { x: rect.left, y: rect.top },
     };
+    anchorRef.current?.setAttribute('data-chat-launcher-dragging', '');
     dragged.current = false;
     suppressedDragClick.current = null;
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -215,6 +216,7 @@ export function useChatLauncherDrag(
     gesture.current = null;
     dragged.current = false;
     suppressedDragClick.current = null;
+    anchorRef.current?.removeAttribute('data-chat-launcher-dragging');
     if (anchorRef.current) {
       anchorRef.current.style.transform = position
         ? `translate3d(${position.x}px, ${position.y}px, 0)`
@@ -227,6 +229,7 @@ export function useChatLauncherDrag(
     frame.current = null;
     const start = gesture.current;
     gesture.current = null;
+    anchorRef.current?.removeAttribute('data-chat-launcher-dragging');
     if (start && dragged.current) {
       setPosition(start.next);
       suppressedDragClick.current = {
@@ -260,9 +263,8 @@ export function useChatLauncherDrag(
       Math.abs(event.clientY - pending.y) <= 2;
     const matchesPointer = Boolean(
       pending &&
-        ((nativeEvent.pointerId === pending.pointerId &&
-          (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted)) ||
-          (nativeEvent.pointerId === 0 && nativeEvent.isTrusted)),
+        nativeEvent.pointerId === pending.pointerId &&
+        (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted),
     );
     const suppress = Boolean(
       matchesRelease && matchesPointer,

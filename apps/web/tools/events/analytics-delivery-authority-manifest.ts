@@ -27,7 +27,7 @@ export const analyticsDeliveryAuthorityManifest = {
     'apps/web/src/app/api/analytics/ga4/route.ts':
       '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
     'apps/web/src/app/api/analytics/snapchat/route.ts':
-      '4a26d1def2bc4bea0d1ec4d78dc9f2a13d3c36a9784f5268a71822537aeb62b3',
+      '39b0f05e22f44f195e3fb52a56d13e4176c01336c5d1c5f4ceab58a9d4c3b563',
     'apps/web/src/app/api/analytics/tiktok/route.ts':
       '6d9d17df68d13a16b3bcd35bb5acfa1a7caac02d73996a656012d18a4146854e',
   },

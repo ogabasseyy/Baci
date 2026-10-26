@@ -150,3 +150,28 @@ describe('storefront CAPI ingress', () => {
     ).toBe(400);
   });
 });
+
+it('retains Snapchat attribution without copying TikTok identifiers into delivery', async () => {
+  const response = await POST(
+    new NextRequest('https://ogabassey.com/api/analytics/snapchat', {
+      method: 'POST',
+      headers: {
+        host: 'ogabassey.com',
+        'content-type': 'application/json',
+        cookie: '_ttp=tiktok-cookie; ScCid=snap-click',
+      },
+      body: JSON.stringify({
+        ...payload,
+        eventSourceUrl: 'https://ogabassey.com/cart?ttclid=tiktok-click',
+      }),
+    })
+  );
+  expect(response.status).toBe(202);
+  const event = mocks.record.mock.calls[0][1];
+  expect(event.deliveryData).toMatchObject({
+    marketing_consent: true,
+    sccid: 'snap-click',
+  });
+  expect(event.deliveryData).not.toHaveProperty('ttclid');
+  expect(event.deliveryData).not.toHaveProperty('ttp');
+});

@@ -97,11 +97,6 @@ export async function POST(request: NextRequest) {
           undefined,
         ua: request.headers.get('user-agent') ?? undefined,
         marketing_consent: true,
-        ttclid: input.eventSourceUrl
-          ? (new URL(input.eventSourceUrl).searchParams.get('ttclid') ??
-            undefined)
-          : undefined,
-        ttp: request.cookies.get('_ttp')?.value,
         sccid: request.cookies.get('ScCid')?.value,
       },
     });

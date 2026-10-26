@@ -166,3 +166,23 @@ it('stays gated across repeated unresolved renders until resolution commits', ()
   );
   expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
 });
+
+it('surfaces capacity recovery in place once checkout has mounted', () => {
+  const view = render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+  cart.importWarnings = ['import_capacity_exceeded'];
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  // The form stays mounted and recovery is offered above it.
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+  expect(
+    screen.getByRole('region', { name: 'Cart import capacity' })
+  ).toBeVisible();
+});

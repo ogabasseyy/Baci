@@ -50,6 +50,15 @@ export function CheckoutCartCapacityGate({
     cart.sharedCartEnabled &&
     cart.importWarnings?.includes('import_capacity_exceeded')
   ) {
+    // Once checkout has mounted, never swap it out from under the
+    // shopper: surface the recovery in place above the live form.
+    if (revealed.current)
+      return (
+        <>
+          <CartImportConflicts />
+          {children}
+        </>
+      );
     return (
       <>
         <CartImportConflicts />

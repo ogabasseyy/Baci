@@ -1,3 +1,5 @@
+import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import {
   buildProductSupportLinks,
   type CommercialSupportLink,
@@ -7,10 +9,13 @@ import {
   PRODUCT_SCOPED_COMPARE_DISCOVERY_PRODUCT_LIMIT,
 } from '@/lib/storefront-compare/build-compare-discovery-links';
 import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
+import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import type {
   BuildProductSemanticModelInput,
   ProductSemanticCandidate,
 } from './product-semantic-types';
+
+export const MAX_PRODUCT_SUPPORT_LINKS = 5;
 
 export interface ProductSemanticCompareSupport {
   approvedCompareSlugs: ReadonlySet<string>;
@@ -136,6 +141,73 @@ function dedupeLinks(links: CommercialSupportLink[]) {
   });
 }
 
+function buildBrandAndFamilyHubLinks(
+  input: BuildProductSemanticModelInput
+): CommercialSupportLink[] {
+  const hubInventory = input.hubEligibilityInventory ?? [];
+  if (hubInventory.length === 0 || !input.currentProduct.brand) {
+    return [];
+  }
+
+  const matchedBrandEntry = brandAuthorityTaxonomy
+    .getEntries(input.categorySlug)
+    .find((entry) =>
+      brandAuthorityTaxonomy.matchesBrand(
+        entry,
+        input.currentProduct.brand ?? null
+      )
+    );
+
+  if (!matchedBrandEntry) {
+    return [];
+  }
+
+  const eligibleHubs = resolveEligibleCategoryHubDestinations({
+    storeUrl: input.storeUrl,
+    categorySlug: input.categorySlug,
+    products: hubInventory,
+  });
+
+  const matchedBrandHub = eligibleHubs.brandHubs.find(
+    (hub) => hub.brand_key === matchedBrandEntry.brandKey
+  );
+
+  if (!matchedBrandHub) {
+    return [];
+  }
+
+  const links: CommercialSupportLink[] = [
+    { href: matchedBrandHub.href, label: matchedBrandHub.label },
+  ];
+
+  const matchedFamilyHub = eligibleHubs.familyHubs.find((hub) => {
+    if (hub.brand_key !== matchedBrandEntry.brandKey) {
+      return false;
+    }
+    const familyEntry = modelFamilyAuthorityTaxonomy.getEntry(
+      input.categorySlug,
+      hub.brand_key,
+      hub.family_key ?? ''
+    );
+    return Boolean(
+      familyEntry &&
+        modelFamilyAuthorityTaxonomy.matchesProduct(
+          familyEntry,
+          input.currentProduct.name
+        )
+    );
+  });
+
+  if (matchedFamilyHub) {
+    links.push({
+      href: matchedFamilyHub.href,
+      label: matchedFamilyHub.label,
+    });
+  }
+
+  return links;
+}
+
 export function buildProductSemanticCompareSupport(
   input: BuildProductSemanticModelInput
 ): ProductSemanticCompareSupport {
@@ -155,9 +227,11 @@ export function buildProductSemanticCompareSupport(
     normalizedInput.storeUrl,
     normalizedInput.currentProduct
   );
+  const brandAndFamilyHubLinks = buildBrandAndFamilyHubLinks(normalizedInput);
   const supportLinkProducts = compareApprovalInventory;
-  const supportLinks = dedupeLinks([
+  const rawSupportLinks: CommercialSupportLink[] = [
     buildCategoryHubLink(normalizedInput),
+    ...brandAndFamilyHubLinks,
     ...buildProductSupportLinks({
       approvedCompareSlugs,
       storeUrl: normalizedInput.storeUrl,
@@ -167,15 +241,18 @@ export function buildProductSemanticCompareSupport(
       includeBrandCompareLink: false,
       products: supportLinkProducts,
     }),
-  ]).filter(
-    (link) =>
-      link.href !== currentProductHref &&
-      isApprovedSupportLink({
-        approvedCompareSlugs,
-        categorySlug: normalizedInput.categorySlug,
-        href: link.href,
-      })
-  );
+  ];
+  const supportLinks = dedupeLinks(rawSupportLinks)
+    .filter(
+      (link) =>
+        link.href !== currentProductHref &&
+        isApprovedSupportLink({
+          approvedCompareSlugs,
+          categorySlug: normalizedInput.categorySlug,
+          href: link.href,
+        })
+    )
+    .slice(0, MAX_PRODUCT_SUPPORT_LINKS);
 
   return {
     approvedCompareSlugs,

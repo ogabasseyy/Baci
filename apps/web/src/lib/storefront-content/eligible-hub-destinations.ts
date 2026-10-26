@@ -27,6 +27,7 @@ export interface EligibleHubProductInput {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  availability?: 'InStock' | 'OutOfStock' | null;
 }
 
 export interface ResolveEligibleCategoryHubDestinationsInput {
@@ -51,9 +52,14 @@ export function resolveEligibleCategoryHubDestinations(
 
   // Mirror the destination inventory scope: brand/family pages only count
   // parent or standalone rows (is_parent=true or no parent), never variants.
-  const availableProducts = input.products.filter(
-    (product) =>
-      isAvailableProduct(product) &&
+  const availableProducts = input.products.filter((product) => {
+    const isAvailable =
+      product.availability != null
+        ? product.availability === 'InStock'
+        : isAvailableProduct(product);
+
+    return (
+      isAvailable &&
       // Explicitly scoped pools are already category+children filtered by
       // the caller, so child-only rows count toward the parent hub.
       (input.assumeCategoryScoped === true ||
@@ -63,7 +69,8 @@ export function resolveEligibleCategoryHubDestinations(
           (slug) => generateSlug(slug) === categorySlug
         )) &&
       (product.is_parent === true || product.parent_product_id == null)
-  );
+    );
+  });
 
   const eligibleBrandEntries = brandAuthorityTaxonomy.getEligibleEntries(
     categorySlug,

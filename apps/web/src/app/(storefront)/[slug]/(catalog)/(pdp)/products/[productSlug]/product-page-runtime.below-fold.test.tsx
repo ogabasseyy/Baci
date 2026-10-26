@@ -18,6 +18,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockMaybeSingle = vi.fn();
 const mockFrom = vi.fn();
+const mockLoadCategoryScopedSemanticInventorySafely = vi.fn(() =>
+  Promise.resolve({ isCollection: false, products: [] as unknown[] })
+);
+const mockLoadPdpBrandHubEligibilityInventorySafely = vi.fn();
+const mockBuildProductSemanticModel = vi.fn((_input: unknown) => ({
+  supportLinks: [],
+  guideLinks: [],
+  alternatives: null,
+  sameBrand: null,
+  samePrice: null,
+}));
 
 vi.mock('next/headers', () => ({
   headers: () => Promise.resolve({ get: () => null, has: () => false }),
@@ -54,7 +65,7 @@ vi.mock(
   '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely',
   () => ({
     loadCategoryScopedSemanticInventorySafely: () =>
-      Promise.resolve({ isCollection: false, products: [] }),
+      mockLoadCategoryScopedSemanticInventorySafely(),
   })
 );
 
@@ -62,18 +73,21 @@ vi.mock('@/lib/storefront-content/load-published-cluster-posts-safely', () => ({
   loadPublishedClusterPostsSafely: () => Promise.resolve([]),
 }));
 
+vi.mock(
+  '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely',
+  () => ({
+    loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
+      mockLoadPdpBrandHubEligibilityInventorySafely(...args),
+  })
+);
+
 vi.mock('@/lib/storefront-product/build-product-context-paragraphs', () => ({
   buildProductContextParagraphs: () => [],
 }));
 
 vi.mock('@/lib/storefront-product/build-product-semantic-model', () => ({
-  buildProductSemanticModel: () => ({
-    supportLinks: [],
-    guideLinks: [],
-    alternatives: null,
-    sameBrand: null,
-    samePrice: null,
-  }),
+  buildProductSemanticModel: (input: unknown) =>
+    mockBuildProductSemanticModel(input),
 }));
 
 vi.mock('@/lib/storefront-product-price-seo', () => ({
@@ -147,6 +161,7 @@ async function renderBelowFold(merchant: typeof enabledMerchant) {
 describe('ProductPageBelowFold — repair device link integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValue([]);
     mockMaybeSingle.mockImplementation((result) => Promise.resolve(result));
   });
 
@@ -187,5 +202,99 @@ describe('ProductPageBelowFold — repair device link integration', () => {
     expect(
       screen.queryByRole('link', { name: /repair this device/i })
     ).not.toBeInTheDocument();
+  });
+
+  it('forwards dedicated hubEligibilityInventory (and NOT category_slug-rewritten inventoryCandidates) into buildProductSemanticModel', async () => {
+    const mockHubInventory = [
+      {
+        slug: 'apple-iphone-13',
+        name: 'iPhone 13',
+        brand: 'Apple',
+        price: 450000,
+        availability: 'InStock' as const,
+        stock: 5,
+        category_slug: 'phones',
+      },
+    ];
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce(
+      mockHubInventory
+    );
+
+    await renderBelowFold(enabledMerchant);
+
+    expect(mockLoadPdpBrandHubEligibilityInventorySafely).toHaveBeenCalledWith({
+      categorySlug: 'phones',
+      merchantId: 'merchant-1',
+      productBrand: 'Apple',
+    });
+
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hubEligibilityInventory: mockHubInventory,
+      })
+    );
+
+    const callArgs = mockBuildProductSemanticModel.mock.calls[0]?.[0] as {
+      hubEligibilityInventory?: unknown[];
+      inventory?: unknown[];
+    };
+    expect(callArgs.hubEligibilityInventory).toBe(mockHubInventory);
+    expect(callArgs.hubEligibilityInventory).not.toBe(callArgs.inventory);
+  });
+
+  it('still renders below-the-fold content when hubEligibilityInventory is empty', async () => {
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce([]);
+    mockFrom.mockReturnValue(
+      buildRepairDeviceQuery({
+        data: { slug: 'apple-iphone-13-pro-max' },
+        error: null,
+      })
+    );
+
+    await renderBelowFold(enabledMerchant);
+
+    expect(
+      screen.getByRole('link', { name: /repair this device/i })
+    ).toBeInTheDocument();
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hubEligibilityInventory: [],
+      })
+    );
+  });
+
+  it('passes empty hubEligibilityInventory when scopedInventory is a collection', async () => {
+    mockLoadCategoryScopedSemanticInventorySafely.mockResolvedValueOnce({
+      isCollection: true,
+      products: [
+        {
+          slug: 'child-item',
+          name: 'Child Item',
+          brand: 'Apple',
+          price: 400000,
+          category_slug: 'sub-phones',
+        },
+      ],
+    });
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce([
+      {
+        slug: 'apple-iphone-13',
+        name: 'iPhone 13',
+        brand: 'Apple',
+        price: 450000,
+        availability: 'InStock' as const,
+        stock: 5,
+        category_slug: 'phones',
+      },
+    ]);
+
+    await renderBelowFold(enabledMerchant);
+
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inventory: [],
+        hubEligibilityInventory: [],
+      })
+    );
   });
 });

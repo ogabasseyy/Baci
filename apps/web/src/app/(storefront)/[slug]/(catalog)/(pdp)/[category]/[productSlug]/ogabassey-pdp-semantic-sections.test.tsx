@@ -14,6 +14,7 @@ type SemanticModel = {
 };
 
 const mockGetCachedProductSeoLinkData = vi.fn();
+const mockLoadPdpBrandHubEligibilityInventorySafely = vi.fn();
 const mockBuildProductSemanticModel =
   vi.fn<(input: unknown) => SemanticModel>();
 const mockProductSemanticSections = vi.fn(
@@ -41,6 +42,14 @@ vi.mock('@/lib/storefront-product/get-cached-product-seo-link-data', () => ({
   getCachedProductSeoLinkData: (...args: unknown[]) =>
     mockGetCachedProductSeoLinkData(...args),
 }));
+
+vi.mock(
+  '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely',
+  () => ({
+    loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
+      mockLoadPdpBrandHubEligibilityInventorySafely(...args),
+  })
+);
 
 vi.mock('@/lib/storefront-product/build-product-semantic-model', () => ({
   buildProductSemanticModel: (input: unknown) =>
@@ -74,6 +83,7 @@ const product = {
 describe('OgabasseyPdpSemanticSections', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValue([]);
     mockGetCachedProductSeoLinkData.mockResolvedValue({
       inventory: [
         {
@@ -135,6 +145,11 @@ describe('OgabasseyPdpSemanticSections', () => {
       productSlug: 'lenovo-legion',
       storeSlug: 'ogabassey',
     });
+    expect(mockLoadPdpBrandHubEligibilityInventorySafely).toHaveBeenCalledWith({
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      productBrand: 'Lenovo',
+    });
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
         categorySlug: 'laptops',
@@ -150,6 +165,7 @@ describe('OgabasseyPdpSemanticSections', () => {
             category_slug: 'laptops',
           }),
         ],
+        hubEligibilityInventory: [],
         storeUrl: 'https://ogabassey.com',
       })
     );
@@ -253,5 +269,80 @@ describe('OgabasseyPdpSemanticSections', () => {
       productSlug: 'legacy-item-42',
       storeSlug: 'ogabassey',
     });
+  });
+
+  it('renders existing semantic sections and compare links intact when loadPdpBrandHubEligibilityInventorySafely returns empty array', async () => {
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce([]);
+
+    render(
+      await OgabasseyPdpSemanticSections({
+        categoryName: 'Laptops',
+        categorySlug: 'laptops',
+        merchant: {
+          id: 'merchant-1',
+          business_name: 'OgaBassey',
+          country: 'NG',
+          payout_currency: 'NGN',
+        },
+        product,
+        productComparePathPrefix: '/ogabassey',
+        storeSlug: 'ogabassey',
+        storeUrl: 'https://ogabassey.com',
+      })
+    );
+
+    expect(screen.getByLabelText('semantic sections')).toHaveTextContent(
+      'Model trust bullet'
+    );
+    expect(mockProductSemanticSections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productCompareLinks: [
+          expect.objectContaining({
+            href: '/laptops/compare/lenovo-legion-vs-macbook-pro',
+          }),
+        ],
+      })
+    );
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hubEligibilityInventory: [],
+      })
+    );
+  });
+
+  it('forwards resolved hubEligibilityInventory to buildProductSemanticModel', async () => {
+    const mockHubInventory = [
+      {
+        slug: 'lenovo-legion-7',
+        name: 'Lenovo Legion 7',
+        brand: 'Lenovo',
+        price: 4000000,
+        availability: 'InStock' as const,
+        stock: 5,
+        category_slug: 'laptops',
+      },
+    ];
+    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce(
+      mockHubInventory
+    );
+
+    await OgabasseyPdpSemanticSections({
+      categoryName: 'Laptops',
+      categorySlug: 'laptops',
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'OgaBassey',
+      },
+      product,
+      productComparePathPrefix: '/ogabassey',
+      storeSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+    });
+
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hubEligibilityInventory: mockHubInventory,
+      })
+    );
   });
 });

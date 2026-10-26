@@ -254,7 +254,58 @@ describe('eligible-hub-destinations', () => {
         categorySlug: 'smartphones',
         products,
       });
+
       expect(result.brandHubs).toHaveLength(0);
+    });
+    it('counts confirmed in-stock products with stock 0, while excluding confirmed out-of-stock items and unconfirmed zero-stock items', () => {
+      const inStockZeroStockProducts = [
+        'iPhone 15 Pro Max',
+        'iPhone 15 Pro',
+        'iPhone 15',
+        'iPhone 14 Pro',
+        'iPhone 14',
+      ].map((name) => ({
+        name,
+        brand: 'Apple',
+        stock: 0,
+        availability: 'InStock' as const,
+        category_slug: 'smartphones',
+      }));
+
+      const inStockResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products: inStockZeroStockProducts,
+      });
+
+      expect(inStockResult.brandHubs).toHaveLength(1);
+      expect(inStockResult.brandHubs[0]?.brand_key).toBe('apple');
+      expect(inStockResult.familyHubs).toHaveLength(1);
+      expect(inStockResult.familyHubs[0]?.family_key).toBe('iphone-15');
+
+      const outOfStockProducts = inStockZeroStockProducts.map((product) => ({
+        ...product,
+        stock: 5,
+        availability: 'OutOfStock' as const,
+      }));
+      const outOfStockResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products: outOfStockProducts,
+      });
+      expect(outOfStockResult.brandHubs).toHaveLength(0);
+      expect(outOfStockResult.familyHubs).toHaveLength(0);
+
+      const zeroStockProducts = inStockZeroStockProducts.map((product) => ({
+        ...product,
+        stock: 0,
+        availability: undefined,
+        manage_stock: true,
+      }));
+      const zeroStockResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products: zeroStockProducts,
+      });
+      expect(zeroStockResult.brandHubs).toHaveLength(0);
+      expect(zeroStockResult.familyHubs).toHaveLength(0);
     });
   });
 });

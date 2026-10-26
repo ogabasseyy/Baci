@@ -3,6 +3,7 @@ import type {
   InformationalGuideLink,
   PublishedClusterPost,
 } from '@/lib/storefront-content/content-cluster-types';
+import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 
 export interface ProductSemanticCandidate {
   slug: string;
@@ -49,6 +50,7 @@ export interface BuildProductSemanticModelInput {
   categoryName: string;
   currentProduct: ProductSemanticCandidate;
   inventory: ProductSemanticCandidate[];
+  hubEligibilityInventory?: EligibleHubProductInput[];
   guidePosts?: PublishedClusterPost[];
   priorityGuidePostSlugs?: string[];
   countryCode?: string | null;

@@ -52,5 +52,15 @@ describe('OgabasseyPdpCriticalShell visible summary', () => {
       )
     ).toBe(false);
     expect(container.querySelector('article[aria-label*="summary"]')).toBeNull();
+
+    const price = container.querySelector('[data-ogabassey-pdp-price]');
+    expect(price).not.toBeNull();
+    expect(
+      Boolean(
+        price &&
+          price.compareDocumentPosition(summary) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+      )
+    ).toBe(true);
   });
 });

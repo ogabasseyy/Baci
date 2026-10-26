@@ -6,6 +6,7 @@ import {
   recordReceiptClaimLoginStarted,
   recordReceiptClaimLoginStartedBestEffort,
 } from '@/lib/import-notifications/receipt-claim-preview';
+import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
 import { receiptClaimLoginEmailQuerySchema } from '@/schemas/receipt-claim-login-email-query';
 
@@ -38,6 +39,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json(
       { error: 'Invalid receipt claim login email query' },
       { status: 400 }
+    );
+  }
+
+  // The hint is unauthenticated bearer-token surface (documented accepted
+  // risk): bound per-IP polling here so a leaked link cannot be polled or
+  // write login-start telemetry unboundedly. Inherits the /api/storefront
+  // bucket (100/min); the GET+source=app activity write stays because the
+  // native claim screen cannot do cookie-CSRF POST.
+  const rateLimit = await checkRateLimit(request);
+  if (!rateLimit.allowed) {
+    return createRateLimitResponse(
+      rateLimit.limit,
+      rateLimit.remaining,
+      rateLimit.resetTime
     );
   }
 

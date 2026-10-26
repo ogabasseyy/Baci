@@ -128,7 +128,12 @@ BEGIN
                       WHERE o.customer_id = v_claim.customer_id),
     total_spent = COALESCE((SELECT sum(o.total) FROM public.orders AS o
                             WHERE o.customer_id = v_claim.customer_id
-                              AND o.payment_status = 'paid'), 0),
+                              -- The column has no status constraint: normalize
+                              -- legacy spellings (Paid, PAID, padded) exactly
+                              -- like the enqueue predicate and sender guards.
+                              AND regexp_replace(
+                                lower(btrim(COALESCE(o.payment_status, ''))),
+                                '\\s+', '_', 'g') = 'paid'), 0),
     updated_at = now()
   WHERE c.id = v_claim.customer_id
     AND v_claim.customer_id IS DISTINCT FROM v_owner.id;

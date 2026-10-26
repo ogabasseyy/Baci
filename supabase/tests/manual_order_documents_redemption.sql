@@ -14,6 +14,12 @@ INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('100000
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000013' AND event_type = 'manual_order_receipt';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000013' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('f', 64))->>'status' = 'created'), 'manual claim created despite stale customers row');
 UPDATE public.customers SET total_orders = 7, total_spent = 700 WHERE id = '10000000-0000-4000-8000-000000000012';
+-- A legacy-spelled paid order stays on the stranger row: the relink refresh
+-- must still count it (payment_status has no constraint; 'Paid' normalizes
+-- to paid). No items: the enqueue early-returns, so this inserts no outbox
+-- row and later suites keep their preconditions.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000096', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000010', 'stale@example.com', 'Paid', 100);
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000031', 'fresh@example.com', now(), null);
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000031', true);
 SELECT set_config('request.jwt.claims', '{"email":"fresh@example.com"}', true);
@@ -27,7 +33,7 @@ SELECT pg_temp.assert_true((SELECT user_id IS NULL FROM public.customers WHERE i
 SELECT pg_temp.assert_true((SELECT user_id = '10000000-0000-4000-8000-000000000031' FROM public.customers WHERE merchant_id = '10000000-0000-4000-8000-000000000001' AND email = 'fresh@example.com'), 'recipient row links to the verified user');
 SELECT pg_temp.assert_true((SELECT o.customer_id = (SELECT c.id FROM public.customers AS c WHERE c.merchant_id = '10000000-0000-4000-8000-000000000001' AND c.email = 'fresh@example.com') FROM public.orders AS o WHERE o.id = '10000000-0000-4000-8000-000000000013'), 'claimed order re-points at the recipient row');
 SELECT pg_temp.assert_true((SELECT rc.customer_id = (SELECT o.customer_id FROM public.orders AS o WHERE o.id = '10000000-0000-4000-8000-000000000013') FROM public.receipt_claims AS rc WHERE rc.token_hash = repeat('f', 64)), 'claim follows the re-pointed order');
-SELECT pg_temp.assert_true((SELECT total_orders = 0 AND total_spent = 0 FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000012'), 'relink refreshes the previous customer aggregates');
+SELECT pg_temp.assert_true((SELECT total_orders = 1 AND total_spent = 100 FROM public.customers WHERE id = '10000000-0000-4000-8000-000000000012'), 'relink refresh keeps the legacy Paid order in the previous customer aggregates');
 
 -- A second recipient on the same stale row gets their own row and their own
 -- order: row takeover is impossible because mismatched redeems never write

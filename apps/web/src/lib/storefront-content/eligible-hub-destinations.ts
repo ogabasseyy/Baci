@@ -18,6 +18,7 @@ export interface EligibleHubProductInput {
   stock?: number | null;
   price?: number;
   category_slug?: string | null;
+  category_slugs?: string[] | null;
   product_key_specs?: Record<string, unknown> | null;
   is_parent?: boolean | null;
   parent_product_id?: string | null;
@@ -45,7 +46,9 @@ export function resolveEligibleCategoryHubDestinations(
   const availableProducts = input.products.filter(
     (product) =>
       (product.stock == null || product.stock > 0) &&
-      (!product.category_slug || product.category_slug === categorySlug) &&
+      (!product.category_slug ||
+        product.category_slug === categorySlug ||
+        (product.category_slugs ?? []).includes(categorySlug)) &&
       (product.is_parent === true || product.parent_product_id == null)
   );
 

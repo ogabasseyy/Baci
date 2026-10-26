@@ -112,6 +112,7 @@ export interface InformationalClusterCategoryData {
     brand?: string | null;
     price: number;
     category_slug?: string | null;
+    category_slugs?: string[] | null;
     product_key_specs?: Record<string, unknown> | null;
     condition?: string | null;
     stock?: number | null;

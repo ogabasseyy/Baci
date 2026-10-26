@@ -1,10 +1,11 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import Script from 'next/script';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
 import {
   initializeXPixel,
+  markXPixelReady,
   measureXEvent,
   resetXPixel,
 } from '@/lib/x-ads/pixel-client';
@@ -30,22 +31,51 @@ export function TwitterPixel({
 }) {
   const allowed = useSyncExternalStore(subscribe, marketingAllowed, denied);
   const pathname = usePathname();
+  const serializedEvents = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(eventIds).sort(([left], [right]) =>
+        left.localeCompare(right)
+      )
+    )
+  );
+  const activation = useRef<
+    | { token: object | undefined; pixelId: string; serializedEvents: string }
+    | undefined
+  >(undefined);
+  const [sdkReady, setSdkReady] = useState(false);
   useEffect(() => {
-    initializeXPixel(pixelId, eventIds);
-    return resetXPixel;
-  }, [pixelId, eventIds]);
+    const token = allowed
+      ? initializeXPixel(pixelId, JSON.parse(serializedEvents))
+      : undefined;
+    activation.current = { token, pixelId, serializedEvents };
+    return () => {
+      if (token) resetXPixel(token);
+    };
+  }, [pixelId, serializedEvents, allowed]);
   useEffect(() => {
-    if (allowed) {
-      initializeXPixel(pixelId, eventIds);
-      if (pathname)
-        measureXEvent('pageView', { conversion_id: crypto.randomUUID() });
-    }
-  }, [allowed, pixelId, eventIds, pathname]);
+    if (
+      allowed &&
+      pathname &&
+      activation.current?.pixelId === pixelId &&
+      activation.current.serializedEvents === serializedEvents
+    )
+      measureXEvent('pageView', { conversion_id: crypto.randomUUID() });
+  }, [allowed, pixelId, serializedEvents, pathname]);
+  useEffect(() => {
+    if (
+      sdkReady &&
+      allowed &&
+      activation.current?.pixelId === pixelId &&
+      activation.current.serializedEvents === serializedEvents
+    )
+      markXPixelReady(activation.current.token);
+  }, [sdkReady, allowed, pixelId, serializedEvents]);
   return allowed && /^[A-Za-z0-9]{1,64}$/.test(pixelId) ? (
     <Script
       id="twitter-pixel"
       src="https://static.ads-twitter.com/uwt.js"
       strategy="afterInteractive"
+      onReady={() => setSdkReady(true)}
     />
   ) : null;
 }

@@ -7,6 +7,7 @@ import {
   buildCanonicalBrandCompareSlug,
   buildCanonicalProductCompareSlug,
 } from './compare-slugs';
+import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
 import { findFirstEligibleProductCompare } from './find-first-eligible-product-compare';
 import { normalizeInferredBrands } from './normalize-inferred-brands';
 import { getCuratedPriceBands } from './price-band-taxonomy';
@@ -74,14 +75,25 @@ export function buildCategorySupportLinks(input: {
   approvedCompareSlugs?: ReadonlySet<string>;
   /** Destination compare inventory; brand/price-band candidates derive from it when supplied. */
   compareProducts?: CommercialSupportProduct[];
+  /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
+  requireInferredBrandRelevance?: boolean;
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
-  const firstEligibleProductCompare = findFirstEligibleProductCompare(
+  const normalizedInferred = normalizeInferredBrands(
     input.categorySlug,
-    input.products,
-    input.inferredBrands,
-    input.approvedCompareSlugs
+    input.inferredBrands
   );
+  const brandRelevanceRequired = input.requireInferredBrandRelevance === true;
+  const hasInferredBrand = normalizedInferred.length > 0;
+  const firstEligibleProductCompare =
+    brandRelevanceRequired && !hasInferredBrand
+      ? null
+      : findFirstEligibleProductCompare(
+          input.categorySlug,
+          input.products,
+          input.inferredBrands,
+          input.approvedCompareSlugs
+        );
 
   if (firstEligibleProductCompare) {
     links.push({
@@ -112,9 +124,11 @@ export function buildCategorySupportLinks(input: {
       );
       const isRelevant =
         leftKey !== rightKey &&
-        (normalizedInferredBrands.length === 0 ||
-          (normalizedInferredBrands.includes(leftKey) &&
-            normalizedInferredBrands.includes(rightKey)));
+        (brandRelevanceRequired && !hasInferredBrand
+          ? false
+          : normalizedInferredBrands.length === 0 ||
+            (normalizedInferredBrands.includes(leftKey) &&
+              normalizedInferredBrands.includes(rightKey)));
 
       if (isRelevant) {
         links.push({
@@ -125,10 +139,20 @@ export function buildCategorySupportLinks(input: {
     }
   }
 
+  const priceBandProducts =
+    brandRelevanceRequired && hasInferredBrand
+      ? filterProductsByBrandSlugs(
+          input.categorySlug,
+          input.compareProducts ?? input.products,
+          normalizedInferred
+        )
+      : brandRelevanceRequired
+        ? []
+        : (input.compareProducts ?? input.products);
   const priceBandLink = buildFirstEligiblePriceBandLink({
     storeUrl: input.storeUrl,
     categorySlug: input.categorySlug,
-    products: input.compareProducts ?? input.products,
+    products: priceBandProducts,
   });
 
   if (priceBandLink) {

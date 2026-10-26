@@ -1,5 +1,7 @@
-import { buildPriceBandCandidate } from '@/lib/storefront-compare/compare-eligibility';
-import { getCuratedPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { generateSlug } from '@/lib/seo-utils';
+import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-commercial-support-links';
+import { buildBrandCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 
 export interface PriceBandLinkLike {
   href: string;
@@ -11,48 +13,75 @@ export interface PriceBandProductLike {
   name: string;
   brand?: string | null;
   price: number;
+  product_key_specs?: Record<string, unknown> | null;
+}
+
+function segmentAfter(href: string, marker: string): string | null {
+  const index = href.indexOf(marker);
+  if (index < 0) return null;
+  const rest = href.slice(index + marker.length);
+  const segment = rest.split(/[/?#]/)[0];
+  return segment ? segment : null;
 }
 
 /**
- * Re-checks a best-under link against the price-band destination's candidate
- * rules using the already-loaded compare inventory (same category+children
- * scope and cap as the destination pool, shaped exactly like the
- * destination's candidate input: slug/name/brand/price only).
+ * Re-checks best-under and brand-compare links against destination
+ * candidates derived from the already-loaded compare inventory (same
+ * category+children scope and cap as the destination pools). With no
+ * compare inventory, both link kinds are dropped (fail closed).
  */
 export function verifyPriceBandLinkAgainstDestination(args: {
   categorySlug: string;
   links: PriceBandLinkLike[];
   compareProducts: PriceBandProductLike[] | null;
 }): PriceBandLinkLike[] {
-  const bandLinkIndex = args.links.findIndex((link) =>
-    link.href.includes('/best-under/')
+  const brandCandidate = args.compareProducts
+    ? buildBrandCompareCandidate({
+        categorySlug: args.categorySlug,
+        products: args.compareProducts,
+      })
+    : null;
+  const indexableBandSlugs = new Set(
+    args.compareProducts
+      ? buildCategoryPriceBandCandidates(
+          args.categorySlug,
+          args.compareProducts
+        )
+          .filter((candidate) => candidate.isIndexable)
+          .map((candidate) => candidate.band.slug)
+      : []
   );
-  if (bandLinkIndex < 0) {
-    return args.links;
-  }
-  const withoutBand = args.links.filter((_, index) => index !== bandLinkIndex);
-  const bandLink = args.links[bandLinkIndex];
-  if (!bandLink || !args.compareProducts) {
-    return withoutBand;
-  }
-  const bandSlug = bandLink.href.slice(
-    bandLink.href.indexOf('/best-under/') + '/best-under/'.length
-  );
-  const band = getCuratedPriceBands(args.categorySlug).find(
-    (candidate) => candidate.slug === bandSlug
-  );
-  if (!band) {
-    return withoutBand;
-  }
-  const candidate = buildPriceBandCandidate({
-    categorySlug: args.categorySlug,
-    band,
-    products: args.compareProducts.map((product) => ({
-      slug: product.slug,
-      name: product.name,
-      brand: product.brand ?? null,
-      price: product.price,
-    })),
+
+  return args.links.filter((link) => {
+    const bandSlug = segmentAfter(link.href, '/best-under/');
+    if (bandSlug !== null) {
+      return indexableBandSlugs.has(bandSlug);
+    }
+    const compareSlug = segmentAfter(link.href, '/compare/');
+    if (compareSlug?.includes('-vs-')) {
+      // Product-compare links are gated by the maintained-route manifest;
+      // only the two-segment brand candidate slug is verified here. Brand
+      // slugs are taxonomy brand keys joined by -vs-; product slugs are
+      // longer product identifiers, distinguished by candidate equality.
+      if (brandCandidate && compareSlug === brandCandidate.canonicalSlug) {
+        return true;
+      }
+      const [left, right] = compareSlug.split('-vs-');
+      const brandSlugs = new Set(
+        brandAuthorityTaxonomy
+          .getEntries(args.categorySlug)
+          .flatMap((entry) => [
+            entry.brandKey,
+            generateSlug(entry.displayName),
+            generateSlug(entry.brandQueryValue),
+          ])
+      );
+      const isBrandSlug =
+        Boolean(left && right) &&
+        brandSlugs.has(left ?? '') &&
+        brandSlugs.has(right ?? '');
+      return !isBrandSlug;
+    }
+    return true;
   });
-  return candidate.isIndexable ? args.links : withoutBand;
 }

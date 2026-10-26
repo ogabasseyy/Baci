@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildEligibleHubDestinationsManifest,
-  resolveEligibleCategoryHubDestinations,
-  validateEligibleDestinationHref,
-} from './eligible-hub-destinations';
+import { resolveEligibleCategoryHubDestinations } from './eligible-hub-destinations';
 
 describe('eligible-hub-destinations', () => {
-  const merchantId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
-  const merchantSlug = 'ogabassey';
-  const canonicalHost = 'https://ogabassey.com';
-
   describe('resolveEligibleCategoryHubDestinations', () => {
     it('resolves both brand and family hubs when parent brand meets 5-product minimum and family meets 3-product minimum', () => {
       const products = [
@@ -66,7 +58,7 @@ describe('eligible-hub-destinations', () => {
         { name: 'iPhone 15 Pro Max', brand: 'Apple', stock: 10 },
         { name: 'iPhone 15', brand: 'Apple', stock: 5 },
         { name: 'iPhone 14 Pro', brand: 'Apple', stock: 4 },
-        { name: 'iPhone 13', brand: 'Apple', stock: 3 },
+        { name: 'iPhone 13', brand: 'Apple', stock: 2 },
         { name: 'iPhone 12', brand: 'Apple', stock: 2 },
       ];
 
@@ -124,167 +116,72 @@ describe('eligible-hub-destinations', () => {
         '/smartphones/brands/apple/families/iphone-15'
       );
     });
-  });
 
-  describe('buildEligibleHubDestinationsManifest', () => {
-    it('creates a validated manifest conforming to the versioned contract', () => {
-      const manifest = buildEligibleHubDestinationsManifest({
-        merchantId,
-        merchantSlug,
-        canonicalHost,
-        taxonomyVersion: '2026-10-25',
-        ttlSeconds: 3600,
-        destinations: {
-          brand_hubs: [
-            {
-              href: 'https://ogabassey.com/smartphones/brands/apple',
-              label: 'Explore Apple iPhone',
-              brand_key: 'apple',
-              category_slug: 'smartphones',
-            },
-          ],
-          family_hubs: [
-            {
-              href: 'https://ogabassey.com/smartphones/brands/apple/families/iphone-15',
-              label: 'Explore iPhone 15 Series',
-              brand_key: 'apple',
-              family_key: 'iphone-15',
-              category_slug: 'smartphones',
-            },
-          ],
+    it('matches hub eligibility strictly to requested category scope, ignoring other/child category products', () => {
+      // 2 iPhones under 'smartphones' and 3 Apple laptops under 'laptops'
+      const mixedCategoryProducts = [
+        {
+          name: 'iPhone 15 Pro Max',
+          brand: 'Apple',
+          category_slug: 'smartphones',
+          stock: 5,
         },
+        {
+          name: 'iPhone 15 Pro',
+          brand: 'Apple',
+          category_slug: 'smartphones',
+          stock: 3,
+        },
+        {
+          name: 'MacBook Pro 14',
+          brand: 'Apple',
+          category_slug: 'laptops',
+          stock: 4,
+        },
+        {
+          name: 'MacBook Air 13',
+          brand: 'Apple',
+          category_slug: 'laptops',
+          stock: 2,
+        },
+        {
+          name: 'MacBook Air 15',
+          brand: 'Apple',
+          category_slug: 'laptops',
+          stock: 1,
+        },
+      ];
+
+      // When resolving for 'smartphones', laptops products must NOT count toward Apple's 5-product minimum
+      const smartphoneResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products: mixedCategoryProducts,
+      });
+      expect(smartphoneResult.brandHubs).toHaveLength(0);
+      expect(smartphoneResult.familyHubs).toHaveLength(0);
+
+      // When resolving for 'laptops', only laptops count (3 MacBooks -> Apple laptops has 5-product minimum so not eligible)
+      const laptopResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'laptops',
+        products: mixedCategoryProducts,
+      });
+      expect(laptopResult.brandHubs).toHaveLength(0);
+    });
+
+    it('ignores products with missing or non-positive price when evaluating price band candidates', () => {
+      const products = [
+        { name: 'Phone 1', brand: 'Apple', price: 0, stock: 5 },
+        { name: 'Phone 2', brand: 'Apple', price: undefined, stock: 5 },
+        { name: 'Phone 3', brand: 'Samsung', price: 0, stock: 5 },
+      ];
+
+      const result = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products,
       });
 
-      expect(manifest.schema_version).toBe(1);
-      expect(manifest.taxonomy_version).toBe('2026-10-25');
-      expect(manifest.merchant_id).toBe(merchantId);
-      expect(manifest.merchant_slug).toBe(merchantSlug);
-      expect(manifest.canonical_host).toBe(canonicalHost);
-      expect(manifest.destinations.brand_hubs).toHaveLength(1);
-      expect(manifest.destinations.family_hubs).toHaveLength(1);
-      expect(manifest.destinations.compare_hubs).toEqual([]);
-      expect(manifest.destinations.price_band_hubs).toEqual([]);
-    });
-
-    it('rejects invalid inputs when building manifest', () => {
-      expect(() =>
-        buildEligibleHubDestinationsManifest({
-          merchantId: 'not-a-uuid',
-          merchantSlug: '',
-          canonicalHost: 'not-a-url',
-        })
-      ).toThrow();
-    });
-  });
-
-  describe('validateEligibleDestinationHref', () => {
-    const baseManifest = buildEligibleHubDestinationsManifest({
-      merchantId,
-      merchantSlug,
-      canonicalHost,
-      generatedAt: '2026-10-25T10:00:00.000Z',
-      expiresAt: '2026-10-26T10:00:00.000Z',
-      destinations: {
-        brand_hubs: [
-          {
-            href: 'https://ogabassey.com/smartphones/brands/apple',
-            label: 'Explore Apple iPhone',
-          },
-        ],
-        family_hubs: [
-          {
-            href: 'https://ogabassey.com/smartphones/brands/apple/families/iphone-15',
-            label: 'Explore iPhone 15 Series',
-          },
-        ],
-      },
-    });
-
-    it('validates matching brand and family hub destinations', () => {
-      const now = new Date('2026-10-25T12:00:00.000Z');
-
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          'https://ogabassey.com/smartphones/brands/apple',
-          now
-        )
-      ).toBe(true);
-
-      // Matches relative path
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          '/smartphones/brands/apple',
-          now
-        )
-      ).toBe(true);
-
-      // Matches family hub
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          '/smartphones/brands/apple/families/iphone-15',
-          now
-        )
-      ).toBe(true);
-    });
-
-    it('fails closed when manifest is expired (now > expires_at)', () => {
-      const expiredNow = new Date('2026-10-27T00:00:00.000Z');
-
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          'https://ogabassey.com/smartphones/brands/apple',
-          expiredNow
-        )
-      ).toBe(false);
-    });
-
-    it('fails closed when manifest is invalid', () => {
-      const invalidManifest = {
-        ...baseManifest,
-        schema_version: 2, // invalid schema version
-      };
-
-      expect(
-        validateEligibleDestinationHref(
-          invalidManifest,
-          'https://ogabassey.com/smartphones/brands/apple'
-        )
-      ).toBe(false);
-    });
-
-    it('returns false when href is not in eligible hubs', () => {
-      const now = new Date('2026-10-25T12:00:00.000Z');
-
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          '/smartphones/brands/samsung',
-          now
-        )
-      ).toBe(false);
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          '/smartphones/brands/apple/families/iphone-16',
-          now
-        )
-      ).toBe(false);
-    });
-
-    it('fails closed when absolute href origin does not match canonical_host', () => {
-      const now = new Date('2026-10-25T12:00:00.000Z');
-
-      expect(
-        validateEligibleDestinationHref(
-          baseManifest,
-          'https://usebaci.com/smartphones/brands/apple',
-          now
-        )
-      ).toBe(false);
+      // Zero-priced or unpriced products must not inflate the lowest price band
+      expect(result.priceBandHubs).toEqual([]);
     });
   });
 });

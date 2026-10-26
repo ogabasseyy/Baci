@@ -103,57 +103,16 @@ function buildFeaturedProducts(
 
 function postMatchesModelFamily(
   post: PublishedClusterPost,
-  tokens: string[],
   familyEntry: ModelFamilyAuthorityEntry
 ): boolean {
-  if (modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, post.title)) {
+  if (modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, post.title)) {
     return true;
   }
   const normalizedSlugText = post.slug.replace(/[-_]/g, ' ');
-  if (
-    modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, normalizedSlugText)
-  ) {
-    return true;
-  }
-  const familyTokens = familyEntry.familyKey
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  if (familyTokens.length >= 2) {
-    const unanchoredPattern = new RegExp(
-      familyEntry.productNamePattern.source.replace(/^\^/, ''),
-      'i'
-    );
-    const escapedFamilyKey = familyEntry.familyKey.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&'
-    );
-    const slugBoundaryPattern = new RegExp(
-      `(?:^|[-_])${escapedFamilyKey}(?:[-_]|$)`,
-      'i'
-    );
-    if (
-      unanchoredPattern.test(post.title) ||
-      unanchoredPattern.test(normalizedSlugText) ||
-      slugBoundaryPattern.test(post.slug) ||
-      familyTokens.every((token) => tokens.includes(token))
-    ) {
-      return true;
-    }
-  } else if (familyTokens.length === 1) {
-    const singleToken = familyTokens[0];
-    const contextualSinglePattern = new RegExp(
-      `\\b${familyEntry.brandKey}\\s+${singleToken}\\b|\\b${singleToken}\\s+\\d+`,
-      'i'
-    );
-    if (
-      contextualSinglePattern.test(post.title) ||
-      contextualSinglePattern.test(normalizedSlugText)
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return modelFamilyAuthorityTaxonomy.matchesContent(
+    familyEntry,
+    normalizedSlugText
+  );
 }
 
 export async function buildInformationalClusterModel(
@@ -200,13 +159,12 @@ export async function buildInformationalClusterModel(
   const brandHubLinks: Array<{ href: string; label: string }> = [];
   const familyHubLinks: Array<{ href: string; label: string }> = [];
 
-  const eligibleHubs = resolveEligibleCategoryHubDestinations({
-    storeUrl: input.storeUrl,
-    categorySlug,
-    products,
-  });
-
   if (inferred.brands.length > 0) {
+    const eligibleHubs = resolveEligibleCategoryHubDestinations({
+      storeUrl: input.storeUrl,
+      categorySlug,
+      products,
+    });
     const matchedBrandKeys = new Set<string>();
     for (const inferredBrand of inferred.brands) {
       const matchingBrandHub = eligibleHubs.brandHubs.find((hub) => {
@@ -247,10 +205,7 @@ export async function buildInformationalClusterModel(
         familyHub.brand_key,
         familyHub.family_key ?? ''
       );
-      if (
-        familyEntry &&
-        postMatchesModelFamily(input.post, inferred.tokens, familyEntry)
-      ) {
+      if (familyEntry && postMatchesModelFamily(input.post, familyEntry)) {
         familyHubLinks.push({
           href: familyHub.href,
           label: `Explore ${familyEntry.displayName}`,

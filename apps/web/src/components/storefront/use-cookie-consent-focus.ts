@@ -14,7 +14,12 @@ function canReceiveFocus(element: HTMLElement | null): element is HTMLElement {
     ancestor = ancestor.parentElement
   ) {
     const style = getComputedStyle(ancestor);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.opacity === '0'
+    )
+      return false;
   }
   return true;
 }

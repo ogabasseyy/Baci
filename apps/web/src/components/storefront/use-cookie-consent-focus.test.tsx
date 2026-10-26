@@ -16,7 +16,7 @@ function ConsentFocusHarness() {
     <>
       <div
         className="ogabassey-chat-anchor"
-        style={showNewsletter ? { display: 'none' } : undefined}
+        style={showNewsletter ? { opacity: '0' } : undefined}
       >
         <button
           key={runtimeMounted ? 'runtime' : 'deferred'}

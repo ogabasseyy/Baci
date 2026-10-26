@@ -94,8 +94,17 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
 
     await launcher.click();
     await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Toggle chat' })
+    ).toHaveAttribute('aria-expanded', 'true');
+    await expect(
+      page.getByRole('button', { name: 'Toggle chat' })
+    ).toHaveAttribute('aria-controls', 'ogabassey-chat-window');
     await page.getByRole('button', { name: 'Close chat' }).click();
     await expect(page.locator('.ogabassey-chat-window')).toBeHidden();
+    await expect(
+      page.getByRole('button', { name: 'Toggle chat' })
+    ).toHaveAttribute('aria-expanded', 'false');
     const toggle = page.getByRole('button', { name: 'Toggle chat' });
     const firstRestoredBounds = await toggle.boundingBox();
     if (!firstRestoredBounds)

@@ -44,6 +44,7 @@ test('unrelated keyboard focus leaves a timed newsletter visible and interactive
       <div class="ogabassey-chat-anchor">
         <button class="ogabassey-chat-button">Assistant</button>
       </div>
+      <button id="page-control-after">Page control after launcher</button>
     </main>
   `);
 
@@ -67,7 +68,18 @@ test('unrelated keyboard focus leaves a timed newsletter visible and interactive
   await expect(popup).toHaveCSS('opacity', '1');
 
   await page.keyboard.press('Tab');
-  await close.click();
+  await expect(page.locator('.ogabassey-chat-button')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#page-control-after')).toBeFocused();
+  // This is the state set by the production focus-handoff hook on Tab away.
+  await page.evaluate(() => {
+    document.body.dataset.chatPromotionFocusHandoff = 'true';
+  });
+  await expect(popup).toHaveCSS('opacity', '0');
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await expect(popup).toHaveCSS('opacity', '1');
+  await page.keyboard.press('Enter');
   await expect(popup).toBeHidden();
   await expect(page.locator('.ogabassey-chat-button')).toBeVisible();
 });

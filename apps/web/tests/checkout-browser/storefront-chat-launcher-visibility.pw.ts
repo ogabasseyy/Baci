@@ -82,12 +82,19 @@ test('a dragged-away launcher remains visible when the mobile offer appears', as
   await page.evaluate(() => {
     document.body.insertAdjacentHTML(
       'beforeend',
-      '<div class="ogabassey-offer-popup">Sponsored offer</div>'
+      '<div class="ogabassey-offer-popup" style="position:fixed;right:16px;bottom:16px;width:140px;height:72px">Sponsored offer</div>'
     );
   });
 
   await expect(anchor).toBeVisible();
-  await expect(page.locator('.ogabassey-offer-popup')).toBeVisible();
+  await expect(page.locator('.ogabassey-offer-popup')).toHaveCSS(
+    'visibility',
+    'visible'
+  );
+  await expect(anchor).not.toHaveAttribute(
+    'data-chat-launcher-offer-collision',
+    ''
+  );
 });
 
 test('offer collision includes a visible launcher overflow bubble', async ({

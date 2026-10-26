@@ -67,6 +67,8 @@ export function ChatLauncher({
         onClick={onClick}
         className={buttonClasses}
         aria-label="Toggle chat"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? 'ogabassey-chat-window' : undefined}
         aria-describedby={
           isOpen ? undefined : 'ogabassey-chat-launcher-keyboard-help'
         }

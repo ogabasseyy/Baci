@@ -126,6 +126,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       {/* Chat Window */}
       {isOpen && (
         <div
+          id="ogabassey-chat-window"
           className={`ogabassey-chat-window w-[calc(100vw-32px)] md:w-[400px] h-[400px] md:h-[500px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border ${isSanta ? 'border-red-200' : 'border-gray-200'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-black/5`}
         >
           {/* Header */}

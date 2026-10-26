@@ -17,9 +17,15 @@ describe('storefront chat overlay priority CSS', () => {
     );
   });
 
-  it('hides the launcher and promotional overlays for visible consent', () => {
+  it('keeps a non-modal consent launcher keyboard reachable and hides promotions', () => {
     expect(overlayCss).toMatch(
       /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(\s*:focus-within\s*\):not\(\s*\[data-chat-launcher-dragging\]\s*\)/
+    );
+    expect(overlayCss).toMatch(
+      /body:has\(\.storefront-cookie-consent\)[\s\S]*?\.ogabassey-chat-anchor[^{}]*\{\s*opacity:\s*0;\s*pointer-events:\s*none/
+    );
+    expect(overlayCss).toMatch(
+      /body:has\(\.storefront-cookie-consent\)[\s\S]*?\.ogabassey-chat-anchor[^{}]*:focus-within\s*\{\s*opacity:\s*1;\s*pointer-events:\s*auto;\s*z-index:\s*101/
     );
     expect(overlayCss).toMatch(
       /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/

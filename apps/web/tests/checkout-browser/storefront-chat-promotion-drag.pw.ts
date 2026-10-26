@@ -42,7 +42,14 @@ test('newsletter appearing during touch drag waits until the gesture ends', asyn
     type: 'touchEnd',
     touchPoints: [],
   });
-  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
+  await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+    'opacity',
+    '0'
+  );
+  await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+    'pointer-events',
+    'none'
+  );
   await page.getByRole('button', { name: 'Close newsletter' }).click();
   await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
   expect(

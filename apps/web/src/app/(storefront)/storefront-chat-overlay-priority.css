@@ -5,10 +5,22 @@
 body:has(.storefront-cookie-consent)
 .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(:focus-within):not(
   [data-chat-launcher-dragging]
-),
+) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
 body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
   display: none;
+}
+
+/* Consent is non-modal: keep a keyboard-focused launcher visible above it. */
+body:has(.storefront-cookie-consent)
+.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 101;
 }
 
 body:has(.ogabassey-newsletter-popup):not(

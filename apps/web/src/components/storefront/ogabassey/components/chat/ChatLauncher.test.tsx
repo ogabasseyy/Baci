@@ -26,6 +26,37 @@ describe('ChatLauncher', () => {
     expect(screen.getByText('AI')).toBeInTheDocument();
   });
 
+  it('exposes the chat expanded state and controls the open window', () => {
+    const { rerender } = render(
+      <ChatLauncher
+        isOpen={false}
+        isSanta={false}
+        proactiveMsg={null}
+        setProactiveMsg={vi.fn()}
+        onClick={vi.fn()}
+        drag={emptyDrag}
+      />,
+    );
+
+    const launcher = screen.getByRole('button', { name: 'Toggle chat' });
+    expect(launcher).toHaveAttribute('aria-expanded', 'false');
+    expect(launcher).not.toHaveAttribute('aria-controls');
+
+    rerender(
+      <ChatLauncher
+        isOpen
+        isSanta={false}
+        proactiveMsg={null}
+        setProactiveMsg={vi.fn()}
+        onClick={vi.fn()}
+        drag={emptyDrag}
+      />,
+    );
+
+    expect(launcher).toHaveAttribute('aria-expanded', 'true');
+    expect(launcher).toHaveAttribute('aria-controls', 'ogabassey-chat-window');
+  });
+
   it('renders the Santa launcher and the open-state close icon', () => {
     const { rerender } = render(
       <ChatLauncher

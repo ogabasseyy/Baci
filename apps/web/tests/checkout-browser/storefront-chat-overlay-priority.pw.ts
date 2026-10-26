@@ -25,6 +25,10 @@ test('consent focus handoff works with storefront overlay CSS', async ({
   const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
   await expect(launcher).toBeFocused();
   await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
+  await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+    'z-index',
+    '101'
+  );
 
   await dismiss.focus();
   await dismiss.click();
@@ -48,7 +52,14 @@ test('consent restores focus to the visible promotion when chat is suppressed', 
 
   await page.getByRole('button', { name: 'Dismiss consent' }).click();
 
-  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
+  await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+    'opacity',
+    '0'
+  );
+  await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+    'pointer-events',
+    'none'
+  );
   await expect(
     page.getByRole('button', { name: 'Close newsletter' })
   ).toBeFocused();
@@ -137,8 +148,9 @@ test('focused launcher remains reachable and pauses promotional overlays', async
         '<div class="ogabassey-offer-popup">Offer</div>'
       );
     });
-    expect(await page.locator('.ogabassey-chat-anchor').isVisible()).toBe(
-      width >= 424
+    await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
+      'opacity',
+      width >= 424 ? '1' : '0'
     );
     await page
       .locator('.ogabassey-offer-popup')

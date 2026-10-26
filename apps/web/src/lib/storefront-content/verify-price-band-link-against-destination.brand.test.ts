@@ -80,6 +80,31 @@ describe('verifyPriceBandLinkAgainstDestination brand-compare links', () => {
     ]);
   });
 
+  it('drops an indexable brand link whose slug is not curated', () => {
+    const links = [
+      {
+        href: 'https://store.test/smartphones/compare/apple-vs-samsung',
+        label: 'Apple vs Samsung',
+      },
+    ];
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: pool,
+        curatedCompareSlugs: new Set(['apple-vs-tecno']),
+      })
+    ).toEqual([]);
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: pool,
+        curatedCompareSlugs: new Set(['apple-vs-samsung']),
+      })
+    ).toEqual(links);
+  });
+
   it('verifies every band link, not just the first', () => {
     const result = verifyPriceBandLinkAgainstDestination({
       categorySlug: 'smartphones',

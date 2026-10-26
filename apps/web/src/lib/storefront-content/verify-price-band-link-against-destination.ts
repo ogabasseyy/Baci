@@ -3,6 +3,7 @@ import {
   buildBrandCompareCandidate,
   buildProductCompareCandidate,
 } from '@/lib/storefront-compare/compare-eligibility';
+import { isCuratedCompareSlug } from '@/lib/storefront-compare/compare-indexability-policy';
 import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
 
 export interface PriceBandLinkLike {
@@ -37,6 +38,7 @@ export function verifyPriceBandLinkAgainstDestination(args: {
   categorySlug: string;
   links: PriceBandLinkLike[];
   compareProducts: PriceBandProductLike[] | null;
+  curatedCompareSlugs?: ReadonlySet<string>;
 }): PriceBandLinkLike[] {
   const brandCandidate = args.compareProducts
     ? buildBrandCompareCandidate({
@@ -68,7 +70,11 @@ export function verifyPriceBandLinkAgainstDestination(args: {
         brandCandidate?.isIndexable &&
         compareSlug === brandCandidate.canonicalSlug
       ) {
-        return true;
+        // The destination brand page also requires the slug to be in its
+        // curated set; when the caller supplies that set, enforce it.
+        return args.curatedCompareSlugs
+          ? isCuratedCompareSlug(compareSlug, args.curatedCompareSlugs)
+          : true;
       }
       // Product-compare links survive only when the destination pool's
       // own candidate for the decoded pair is indexable.

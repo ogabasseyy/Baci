@@ -16,6 +16,7 @@ function setup() {
       width: 56,
       height: 56,
       bottomSafeArea: 0,
+      safeArea: { left: 0, top: 0, right: 0 },
       mobileOffset: 0,
       overflow: { left: 0, top: 0, right: 0, bottom: 0 },
       base: { x: 0, y: 0 },

@@ -15,6 +15,7 @@ describe('getChatLauncherKeyboardPosition', () => {
         0,
         0,
         noOverflow,
+        { left: 0, top: 0, right: 0 },
       ),
     ).toEqual({ x: 116, y: 120 });
     expect(
@@ -26,6 +27,7 @@ describe('getChatLauncherKeyboardPosition', () => {
         0,
         0,
         noOverflow,
+        { left: 0, top: 0, right: 0 },
       ),
     ).toEqual({ x: 100, y: 168 });
     expect(
@@ -37,6 +39,7 @@ describe('getChatLauncherKeyboardPosition', () => {
         0,
         0,
         noOverflow,
+        { left: 0, top: 0, right: 0 },
       ),
     ).toBeNull();
     expect(
@@ -48,6 +51,7 @@ describe('getChatLauncherKeyboardPosition', () => {
         0,
         0,
         noOverflow,
+        { left: 0, top: 0, right: 0 },
       ),
     ).toBeNull();
   });

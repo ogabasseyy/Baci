@@ -42,3 +42,30 @@ it('includes host-resolved writes while keeping named merchants isolated', async
   ).resolves.toBe(true);
   retirement.release();
 });
+it('holds the retirement fence until aborted transition work actually settles', async () => {
+  const { isCartSessionRetiring, runCartSessionTransition } = await import(
+    './cart-session-write-fence'
+  );
+  const controller = new AbortController();
+  let finish!: (value: string) => void;
+  const operation = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      })
+  );
+  const pending = runCartSessionTransition('shop-fence', 'blocked', operation, {
+    signal: controller.signal,
+  });
+  // Let the transition acquire its retirement and start the operation.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(operation).toHaveBeenCalledOnce();
+  controller.abort();
+  await expect(pending).resolves.toBe('blocked');
+  // The caller-visible result settled, but the fence must remain held
+  // while the signal-ignoring operation is still running.
+  expect(isCartSessionRetiring('shop-fence')).toBe(true);
+  finish('done');
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(isCartSessionRetiring('shop-fence')).toBe(false);
+});

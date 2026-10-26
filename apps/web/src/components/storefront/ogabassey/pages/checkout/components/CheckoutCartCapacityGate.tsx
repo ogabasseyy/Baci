@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { useRef } from 'react';
 import { CartImportConflicts } from '@/components/storefront/cart/cart-import-conflicts';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/cart';
@@ -22,20 +23,26 @@ export function CheckoutCartCapacityGate({
 }) {
   const cart = useCart();
   // Do not mount checkout (and its payment/session hooks) before the
-  // shared-cart import resolution is known: an empty warnings list on
-  // first mount only means the link lifecycle has not reported yet.
-  if (
+  // initial shared-cart import resolution is known: an empty warnings
+  // list on first mount only means the link lifecycle has not reported
+  // yet. Once checkout has mounted, later pending/retrying sync must
+  // never unmount it (form state lives inside), and a terminal
+  // 'retrying' state surfaces in place instead of dead-ending here.
+  const revealed = useRef(false);
+  const initialUnresolved =
     !validatedResume &&
     cart.sharedCartEnabled &&
-    cart.syncStatus !== 'synced' &&
-    cart.syncStatus !== 'error'
-  ) {
+    cart.sharedCartRef == null &&
+    (cart.syncStatus === 'pending' ||
+      (cart.syncStatus === 'synced' && !cart.isHydrated));
+  if (initialUnresolved && !revealed.current) {
     return (
       <p role="status" aria-label="Loading your cart">
         Loading your cart…
       </p>
     );
   }
+  revealed.current = true;
   if (
     !validatedResume &&
     cart.sharedCartEnabled &&

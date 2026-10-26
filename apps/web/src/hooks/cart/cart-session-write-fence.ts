@@ -107,7 +107,10 @@ export function runCartSessionTransition<T>(
   let abort!: () => void;
   const canceled = new Promise<T>((resolve) => {
     abort = () => {
-      retirement.release();
+      // Caller-visible cancellation only: the retirement fence stays
+      // held until the underlying work actually settles below, so a
+      // signal-ignoring operation cannot install a session after the
+      // fence has been released.
       resolve(blocked);
     };
     outcome?.signal?.addEventListener('abort', abort, { once: true });
@@ -124,7 +127,10 @@ export function runCartSessionTransition<T>(
     },
     () => blocked
   );
-  const pending = Promise.race([work, canceled]).finally(() => {
+  const pending = Promise.race([work, canceled]);
+  // Release the retirement only when the work promise settles, not
+  // when the raced caller-visible result settles on abort.
+  const releaseAfterWork = () => {
     retirement.release();
     outcome?.signal?.removeEventListener('abort', abort);
     flights.delete(pending);
@@ -136,7 +142,8 @@ export function runCartSessionTransition<T>(
         merchantSlug: slug,
         operationId: ran ? replayOperationId : undefined,
       });
-  });
+  };
+  void work.then(releaseAfterWork, releaseAfterWork);
   flights.set(pending, slug ?? '');
   return pending;
 }

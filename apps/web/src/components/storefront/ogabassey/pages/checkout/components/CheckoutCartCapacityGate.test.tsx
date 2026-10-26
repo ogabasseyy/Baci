@@ -5,6 +5,8 @@ import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 const cart = vi.hoisted(() => ({
   sharedCartEnabled: true,
   syncStatus: 'synced' as string,
+  isHydrated: true,
+  sharedCartRef: { cartId: 'cart-1', version: 1 } as { cartId: string; version: number } | null,
   importWarnings: [] as string[],
   importConflicts: [],
   resolveImportConflicts: vi.fn(),
@@ -15,6 +17,8 @@ vi.mock('@/hooks/cart', () => ({ useCart: () => cart }));
 beforeEach(() => {
   cart.sharedCartEnabled = true;
   cart.syncStatus = 'synced';
+  cart.isHydrated = true;
+  cart.sharedCartRef = { cartId: 'cart-1', version: 1 };
   cart.importWarnings = [];
   vi.clearAllMocks();
 });
@@ -98,6 +102,7 @@ it('does not bypass recovery for an unvalidated order query', () => {
 
 it('does not mount checkout while shared-cart import resolution is pending', () => {
   cart.syncStatus = 'pending';
+  cart.sharedCartRef = null;
   render(
     <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
       <button type="button">Place Order</button>
@@ -105,4 +110,35 @@ it('does not mount checkout while shared-cart import resolution is pending', () 
   );
   expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
   expect(screen.getByRole('status', { name: 'Loading your cart' })).toBeVisible();
+});
+
+it('keeps checkout mounted when sync becomes pending after mount', () => {
+  const view = render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+  cart.syncStatus = 'pending';
+  cart.sharedCartRef = null;
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+});
+
+it('surfaces a terminal retrying state in place instead of dead-ending', () => {
+  cart.syncStatus = 'retrying';
+  cart.sharedCartRef = null;
+  render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+  expect(
+    screen.queryByRole('status', { name: 'Loading your cart' })
+  ).toBeNull();
 });

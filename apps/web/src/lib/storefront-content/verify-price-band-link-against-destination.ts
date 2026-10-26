@@ -1,5 +1,9 @@
 import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-commercial-support-links';
-import { buildBrandCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
+import {
+  buildBrandCompareCandidate,
+  buildProductCompareCandidate,
+} from '@/lib/storefront-compare/compare-eligibility';
+import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
 
 export interface PriceBandLinkLike {
   href: string;
@@ -11,6 +15,7 @@ export interface PriceBandProductLike {
   name: string;
   brand?: string | null;
   price: number;
+  category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
 }
 
@@ -65,15 +70,22 @@ export function verifyPriceBandLinkAgainstDestination(args: {
       ) {
         return true;
       }
-      // Product-compare links are gated by the maintained-route manifest;
-      // they survive only when both sides are product slugs in the pool.
-      const [left, right] = compareSlug.split('-vs-');
-      const productSlugs = new Set(
-        (args.compareProducts ?? []).map((product) => product.slug)
+      // Product-compare links survive only when the destination pool's
+      // own candidate for the decoded pair is indexable.
+      const parsed = parseCompareSlug(compareSlug);
+      if (!parsed || !args.compareProducts) return false;
+      const leftProduct = args.compareProducts.find(
+        (product) => product.slug === parsed.leftKey
       );
-      return Boolean(
-        left && right && productSlugs.has(left) && productSlugs.has(right)
+      const rightProduct = args.compareProducts.find(
+        (product) => product.slug === parsed.rightKey
       );
+      if (!leftProduct || !rightProduct) return false;
+      return buildProductCompareCandidate({
+        categorySlug: args.categorySlug,
+        leftProduct,
+        rightProduct,
+      }).isIndexable;
     }
     return true;
   });

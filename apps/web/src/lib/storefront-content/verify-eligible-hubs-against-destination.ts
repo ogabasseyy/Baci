@@ -1,3 +1,4 @@
+import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { loadBrandAuthorityInventorySafely } from '@/lib/storefront-category/load-brand-authority-inventory-safely';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
@@ -14,6 +15,15 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   categorySlug: string;
   hubs: ResolvedEligibleCategoryHubDestinations;
 }): Promise<ResolvedEligibleCategoryHubDestinations> {
+  // The destination loaders 404 without an active categories row, even
+  // when denormalized product data matches the slug.
+  const category = await brandAuthorityPublicData
+    .getCategory(args.merchantId, args.categorySlug)
+    .catch(() => null);
+  if (!category) {
+    return { brandHubs: [], familyHubs: [] };
+  }
+
   const brandHubs: ResolvedEligibleCategoryHubDestinations['brandHubs'] = [];
   const familyHubs: ResolvedEligibleCategoryHubDestinations['familyHubs'] = [];
   const inventoryNamesByBrand = new Map<string, string[]>();

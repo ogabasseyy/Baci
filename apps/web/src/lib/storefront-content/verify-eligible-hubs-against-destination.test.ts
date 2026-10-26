@@ -7,6 +7,14 @@ vi.mock(
   () => ({ loadBrandAuthorityInventorySafely: vi.fn() })
 );
 
+vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
+  brandAuthorityPublicData: {
+    getCategory: vi
+      .fn()
+      .mockResolvedValue({ id: 'cat-1', name: 'Smartphones' }),
+  },
+}));
+
 const mockLoad = vi.mocked(loadBrandAuthorityInventorySafely);
 
 const hubs = {

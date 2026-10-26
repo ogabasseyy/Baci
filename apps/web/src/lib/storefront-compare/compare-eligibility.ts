@@ -20,6 +20,7 @@ interface BrandCompareProductInput {
   name: string;
   brand?: string | null;
   price: number;
+  product_key_specs?: Record<string, unknown> | null;
 }
 
 interface NormalizedBrand {
@@ -127,7 +128,14 @@ export function buildBrandCompareCandidate(input: {
   categorySlug: string;
   products: BrandCompareProductInput[];
 }) {
-  const brandsByKey = new Map<string, { label: string; count: number }>();
+  const brandsByKey = new Map<
+    string,
+    {
+      label: string;
+      count: number;
+      specValues: Map<string, Set<string>>;
+    }
+  >();
 
   for (const product of input.products) {
     const normalizedBrand = normalizeBrand(product.brand);
@@ -151,12 +159,26 @@ export function buildBrandCompareCandidate(input: {
 
     if (existing) {
       existing.count += 1;
+      for (const [key, value] of Object.entries(
+        product.product_key_specs ?? {}
+      )) {
+        const values = existing.specValues.get(key) ?? new Set<string>();
+        values.add(JSON.stringify(value));
+        existing.specValues.set(key, values);
+      }
       continue;
     }
 
+    const specValues = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(
+      product.product_key_specs ?? {}
+    )) {
+      specValues.set(key, new Set([JSON.stringify(value)]));
+    }
     brandsByKey.set(canonicalKey, {
       label,
       count: 1,
+      specValues,
     });
   }
 
@@ -169,10 +191,17 @@ export function buildBrandCompareCandidate(input: {
     return null;
   }
 
-  const differentiatingSpecCount = Math.min(
-    leftBrandEntry[1].count + rightBrandEntry[1].count,
-    4
-  );
+  // Real spec differentiation: keys both brands carry whose value sets differ.
+  const differentiatingSpecCount = [...leftBrandEntry[1].specValues.keys()]
+    .filter((key) => rightBrandEntry[1].specValues.has(key))
+    .filter((key) => {
+      const leftValues = leftBrandEntry[1].specValues.get(key) ?? new Set();
+      const rightValues = rightBrandEntry[1].specValues.get(key) ?? new Set();
+      return (
+        leftValues.size !== rightValues.size ||
+        [...leftValues].some((value) => !rightValues.has(value))
+      );
+    }).length;
 
   return {
     leftBrand: leftBrandEntry[1].label,

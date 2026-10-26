@@ -44,7 +44,7 @@ function selectByPrice(
   );
 }
 
-export function filterProductsByCanonicalBrand(
+function filterProductsByCanonicalBrand(
   categorySlug: string,
   products: BrandComparisonProduct[],
   brandLabel: string

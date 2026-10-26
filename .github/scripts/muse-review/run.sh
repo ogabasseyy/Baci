@@ -97,7 +97,7 @@ if (( run_rc == 0 )); then
   fi
 fi
 
-if (( capture_rc == 0 )); then
+if (( run_rc == 0 && capture_rc == 0 )); then
   if [[ -s "${model_file}" ]]; then
     model_ids="$(awk 'NF { printf "%s%s", sep, $0; sep=", " } END { print "" }' "${model_file}")"
     echo "::notice::Muse model(s) used: ${model_ids}"

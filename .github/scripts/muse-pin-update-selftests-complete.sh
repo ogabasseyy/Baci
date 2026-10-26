@@ -22,18 +22,20 @@ else
 fi
 checks="$(cat)"
 latest_checks="$(awk -F '\t' '
-  NF >= 6 && $1 != "" {
-    order = $3 != "" ? $3 : ($2 != "" ? $2 : $4)
-    if (order != "" && (!($1 in stamp) || order > stamp[$1] ||
-        (order == stamp[$1] && ($5 + 0) > (run_id[$1] + 0)))) {
-      stamp[$1] = order
+  NF >= 6 && $1 != "" && $5 != "" {
+    # Recency is the check-run id: GitHub assigns increasing ids, so the
+    # highest id is always the newest run — including a queued run that
+    # has no timestamps yet. (Timestamp strings would sort above a bare
+    # id, letting an older success mask a pending latest run.) A newest
+    # run without a success conclusion is reported missing below.
+    if (!($1 in stamp) || ($5 + 0) > (run_id[$1] + 0)) {
       run_id[$1] = $5
       conclusion[$1] = $6
       completed_at[$1] = $4
     }
   }
   END {
-    for (name in stamp) print name "\t" conclusion[name] "\t" completed_at[name]
+    for (name in run_id) print name "\t" conclusion[name] "\t" completed_at[name]
   }
 ' <<<"${checks}")"
 missing=()

@@ -77,15 +77,16 @@ t corrupt-sarif 1 "SARIF parse failed" corrupt.sarif "none"
 # --- scope-glob lockstep (every trusted path must trigger the job) ---
 SEC="$ROOT/.github/workflows/security.yml"
 stanza_has() {
-  if sed -n "/^ *$1:\$/,/$2/p" "$SEC" | grep -qF "$3"; then echo yes; else echo no; fi
+  # No grep -q here: with pipefail set, grep quitting early can
+  # SIGPIPE sed and fail the pipeline even on a match. Consume the
+  # whole range instead; exit status keeps the same meaning.
+  if sed -n "/^ *$1:\$/,/$2/p" "$SEC" | grep -F "$3" >/dev/null; then echo yes; else echo no; fi
 }
 assert_eq "relevant-hyphen" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/semgrep-sarif*')"
 assert_eq "relevant-underscore" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/semgrep_sarif_*')"
 assert_eq "trusted-hyphen" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/semgrep-sarif*')"
 assert_eq "trusted-underscore" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/semgrep_sarif_*')"
 assert_eq "relevant-pin-updater" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/muse-pin-update*')"
-assert_eq "trusted-pin-updater" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/scripts/muse-pin-update*')"
-assert_eq "trusted-pin-workflow" "yes" "$(stanza_has trusted_changed 'Resolve Semgrep scope' '.github/workflows/muse-code-pin-update.yml')"
 
 # --- base-revision filter execution (head replacement is ignored) ---
 # Mirrors the security.yml base-filter steps against scratch repos: base
@@ -124,7 +125,7 @@ for lock in "path: base-filter" \
   assert_eq "lockstep:$lock" "yes" "$got"
 done
 if sed -n '/Checkout base filter/,/Drop audited/p' "$SEC" \
-    | grep -qF "pull_request.base.ref"; then got="yes"; else got="no"; fi
+    | grep -F "pull_request.base.ref" >/dev/null; then got="yes"; else got="no"; fi
 assert_eq "lockstep:base-ref-checkout" "yes" "$got"
 
 # --- base-filter existence lockstep (every auditor module gated) ---

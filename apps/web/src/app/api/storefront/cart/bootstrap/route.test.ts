@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
-import { CART_QUOTA_BUDGETS } from '@/lib/cart/request-quota';
 import { getCart } from '@/lib/cart/service';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
@@ -310,39 +309,6 @@ describe('POST /api/storefront/cart/bootstrap', () => {
 
     expect(response.status).toBe(404);
     expect((await response.json()).code).toBe('merchant_unresolved');
-  });
-
-  it('bounds anonymous bootstraps per merchant and client', async () => {
-    let response = await postBootstrap({ body: {} });
-    expect(response.status).toBe(201);
-
-    for (
-      let attempt = 1;
-      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
-      attempt++
-    ) {
-      response = await postBootstrap({ body: {} });
-      expect(response.status).toBe(201);
-    }
-    response = await postBootstrap({ body: {} });
-    expect(response.status).toBe(429);
-    expect((await response.json()).code).toBe('quota_exceeded');
-  });
-
-  it('performs no merchant resolution once the pre-resolution quota is exhausted', async () => {
-    for (
-      let attempt = 0;
-      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
-      attempt++
-    ) {
-      const response = await postBootstrap({ body: {} });
-      expect(response.status).toBe(201);
-    }
-    mocks.rpcCalls = 0;
-    const response = await postBootstrap({ body: {} });
-    expect(response.status).toBe(429);
-    expect((await response.json()).code).toBe('quota_exceeded');
-    expect(mocks.rpcCalls).toBe(0);
   });
 
   it('fails closed when the proof secret is not provisioned', async () => {

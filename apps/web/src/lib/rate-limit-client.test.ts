@@ -39,7 +39,22 @@ describe('getClientIdentifier', () => {
 });
 
 describe('getClientIdentifier behind Cloudflare', () => {
+  it('does not trust Cloudflare headers without a proxy guarantee', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'anything',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('172.68.1.20');
+  });
+
   it('uses the visitor address when the peer is a Cloudflare egress', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getClientIdentifier(
         requestWith({
@@ -53,6 +68,7 @@ describe('getClientIdentifier behind Cloudflare', () => {
   });
 
   it('ignores forged Cloudflare headers from a non-Cloudflare peer', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getClientIdentifier(
         requestWith({
@@ -62,6 +78,19 @@ describe('getClientIdentifier behind Cloudflare', () => {
         })
       )
     ).toBe('192.0.2.44');
+  });
+
+  it('accepts IPv4-mapped IPv6 peers and compressed IPv6 visitors', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '2001:db8::1:2',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '::ffff:172.68.1.20',
+        })
+      )
+    ).toBe('2001:db8::1:2');
   });
 });
 

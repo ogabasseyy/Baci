@@ -7,11 +7,20 @@ import type { NextRequest } from 'next/server';
 const IPV4_REGEX =
   /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
-const IPV6_REGEX =
-  /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^::$/;
-
 function isValidIP(ip: string): boolean {
-  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
+  return IPV4_REGEX.test(ip) || ipv6ToBigInt(ip) !== null;
+}
+
+/**
+ * Whether the deployment guarantees the edge overwrites proxy headers:
+ * on Vercel, or where the operator explicitly asserts a trusted proxy
+ * (CART_TRUST_PROXY_HEADERS=true).
+ */
+function proxyHeadersGuaranteed(): boolean {
+  return (
+    process.env.VERCEL === '1' ||
+    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true'
+  );
 }
 
 // Published Cloudflare egress ranges (https://www.cloudflare.com/ips-v4
@@ -55,22 +64,33 @@ function ipv4ToBigInt(ip: string): bigint | null {
 }
 
 function ipv6ToBigInt(ip: string): bigint | null {
-  if (!IPV6_REGEX.test(ip)) return null;
+  // Structural parser (the regex above misses valid compressed forms
+  // and IPv4-embedded tails): split on the single allowed "::",
+  // validate every group, and expand to eight 16-bit groups.
   let value = ip;
-  const lastColon = value.lastIndexOf(':');
-  const tail = value.slice(lastColon + 1);
-  if (IPV4_REGEX.test(tail)) {
-    const v4 = ipv4ToBigInt(tail);
+  if (value.includes('.')) {
+    const lastColon = value.lastIndexOf(':');
+    if (lastColon < 0) return null;
+    const v4 = ipv4ToBigInt(value.slice(lastColon + 1));
     if (v4 === null) return null;
     value =
       value.slice(0, lastColon + 1) +
       `${Number((v4 >> 16n) & 0xffffn).toString(16)}:${Number(v4 & 0xffffn).toString(16)}`;
   }
-  const [head, rest] = value.split('::');
+  const parts = value.split('::');
+  if (parts.length > 2) return null;
+  const [head, rest] = parts;
   const headGroups = head ? head.split(':') : [];
   const tailGroups = rest ? rest.split(':') : [];
-  if (rest === undefined && headGroups.length !== 8) return null;
+  const groupPattern = /^[0-9a-fA-F]{1,4}$/;
+  if (![...headGroups, ...tailGroups].every((g) => groupPattern.test(g))) {
+    return null;
+  }
+  if (rest === undefined) {
+    if (headGroups.length !== 8) return null;
+  }
   const missing = 8 - headGroups.length - tailGroups.length;
+  if (rest !== undefined && missing < 1) return null;
   if (missing < 0) return null;
   const groups = [
     ...headGroups,
@@ -80,11 +100,7 @@ function ipv6ToBigInt(ip: string): bigint | null {
   if (groups.length !== 8) return null;
   let result = 0n;
   for (const group of groups) {
-    const parsed = Number.parseInt(group, 16);
-    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
-      return null;
-    }
-    result = (result << 16n) | BigInt(parsed);
+    result = (result << 16n) | BigInt(Number.parseInt(group, 16));
   }
   return result;
 }
@@ -113,6 +129,14 @@ function isCloudflarePeer(ip: string): boolean {
   }
   const v6 = ipv6ToBigInt(ip);
   if (v6 !== null) {
+    // IPv4-mapped peers (::ffff:a.b.c.d) are judged by the embedded
+    // IPv4 address against the IPv4 egress ranges.
+    if (v6 >> 32n === 0xffffn) {
+      const embedded = v6 & 0xffffffffn;
+      return CLOUDFLARE_IPV4_RANGES.some((cidr) =>
+        ipInCidr(embedded, cidr, ipv4ToBigInt, 32n)
+      );
+    }
     return CLOUDFLARE_IPV6_RANGES.some((cidr) =>
       ipInCidr(v6, cidr, ipv6ToBigInt, 128n)
     );
@@ -158,11 +182,14 @@ export function getClientIdentifier(request: NextRequest): string {
 
   // Behind Cloudflare the platform address is a shared egress, not the
   // visitor: prefer the authenticated visitor address so per-IP rate
-  // limiting also buckets per customer instead of per egress.
+  // limiting also buckets per customer instead of per egress. The peer
+  // evidence must itself be trustworthy: the platform address, or an
+  // x-real-ip only under the same proxy guarantee the trusted
+  // identifier requires.
   const peerIp =
     requestIp && isValidIP(requestIp)
       ? requestIp
-      : realIp && isValidIP(realIp)
+      : proxyHeadersGuaranteed() && realIp && isValidIP(realIp)
         ? realIp
         : null;
   const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
@@ -206,9 +233,7 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
   // asserts a trusted proxy (CART_TRUST_PROXY_HEADERS=true). On any
   // other deployment the header is client-suppliable, so it collapses
   // into the shared 'unknown' bucket instead of resetting budgets.
-  const proxyGuaranteed =
-    process.env.VERCEL === '1' ||
-    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
+  const proxyGuaranteed = proxyHeadersGuaranteed();
   if (proxyGuaranteed) {
     const realIp = request.headers.get('x-real-ip');
     // Behind Cloudflare, the platform address is a shared Cloudflare

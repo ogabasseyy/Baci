@@ -156,6 +156,24 @@ describe('CookieConsent', () => {
     expect(input).toHaveFocus();
   });
 
+  it('remains a non-modal banner when focus starts on another page control', () => {
+    render(
+      <>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Cookie consent' })
+    ).toHaveAttribute('aria-modal', 'false');
+    expect(outside).toHaveFocus();
+  });
+
   it('keeps focus on the chat toggle when consent appears during an open chat', () => {
     render(
       <div className="ogabassey-chat-anchor">

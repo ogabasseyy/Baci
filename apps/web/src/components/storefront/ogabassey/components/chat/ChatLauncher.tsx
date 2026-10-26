@@ -73,22 +73,24 @@ export function ChatLauncher({
       >
         {isOpen ? (
           <X size={28} />
-        ) : isSanta ? (
-          <div className="relative w-full h-full">
-            <img
-              src="/african-santa-head.svg"
-              alt="Santa"
-              className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
-            />
-          </div>
         ) : (
           <>
-            <Sparkles
-              size={28}
-              className="md:w-8 md:h-8 drop-shadow-xs"
-              fill="currentColor"
-              fillOpacity={0.1}
-            />
+            {isSanta ? (
+              <div className="relative w-full h-full">
+                <img
+                  src="/african-santa-head.svg"
+                  alt="Santa"
+                  className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
+                />
+              </div>
+            ) : (
+              <Sparkles
+                size={28}
+                className="md:w-8 md:h-8 drop-shadow-xs"
+                fill="currentColor"
+                fillOpacity={0.1}
+              />
+            )}
             <span className="ogabassey-chat-badge">
               <span className="ogabassey-chat-badge__ping" />
               <span className="ogabassey-chat-badge__label">AI</span>

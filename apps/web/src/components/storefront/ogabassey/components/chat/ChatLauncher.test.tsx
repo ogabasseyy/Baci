@@ -38,6 +38,7 @@ describe('ChatLauncher', () => {
       />,
     );
     expect(screen.getByRole('img', { name: 'Santa' })).toBeInTheDocument();
+    expect(screen.getByText('AI')).toBeInTheDocument();
 
     rerender(
       <ChatLauncher

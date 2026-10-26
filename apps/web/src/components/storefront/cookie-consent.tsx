@@ -2,13 +2,13 @@
 
 import { Cookie, Settings2, Shield, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 import { useCookieConsentController } from './use-cookie-consent-controller';
+import { useCookieConsentFocus } from './use-cookie-consent-focus';
 
 export { isCookieAllowed } from './is-cookie-allowed';
 export { useCookieConsent } from './use-cookie-consent';
@@ -28,49 +28,7 @@ export function CookieConsent() {
   } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const consentHasFocusRef = useRef(false);
-  const dismissThroughConsentRef = useRef(false);
-
-  function dismissConsent(action: () => void) {
-    return () => {
-      dismissThroughConsentRef.current = true;
-      consentHasFocusRef.current = Boolean(
-        dialogRef.current?.contains(document.activeElement)
-      );
-      action();
-    };
-  }
-
-  useEffect(() => {
-    if (isVisible) {
-      dismissThroughConsentRef.current = false;
-      const activeElement = document.activeElement;
-      const chatAnchor =
-        activeElement instanceof HTMLElement
-          ? activeElement.closest('.ogabassey-chat-anchor')
-          : null;
-      const chatIsOpen = Boolean(
-        chatAnchor?.querySelector('.ogabassey-chat-window')
-      );
-      if (activeElement instanceof HTMLElement && chatAnchor && !chatIsOpen) {
-        restoreFocusRef.current = activeElement;
-        dialogRef.current
-          ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
-          ?.focus();
-        consentHasFocusRef.current = true;
-      }
-      return;
-    }
-
-    const previousFocus = restoreFocusRef.current;
-    restoreFocusRef.current = null;
-    if (consentHasFocusRef.current && previousFocus?.isConnected)
-      previousFocus.focus();
-    consentHasFocusRef.current = false;
-    dismissThroughConsentRef.current = false;
-  }, [isVisible]);
+  const consentFocus = useCookieConsentFocus(isVisible);
 
   if (!isVisible) return null;
 
@@ -88,19 +46,10 @@ export function CookieConsent() {
       }}
       role="dialog"
       aria-label="Cookie consent"
-      ref={dialogRef}
-      onFocusCapture={() => {
-        consentHasFocusRef.current = true;
-      }}
-      onBlurCapture={(event) => {
-        const nextFocus = event.relatedTarget;
-        if (
-          (nextFocus instanceof Node &&
-            !event.currentTarget.contains(nextFocus)) ||
-          (nextFocus === null && !dismissThroughConsentRef.current)
-        )
-          consentHasFocusRef.current = false;
-      }}
+      aria-modal={false}
+      ref={consentFocus.bannerRef}
+      onFocusCapture={consentFocus.onFocusCapture}
+      onBlurCapture={consentFocus.onBlurCapture}
     >
       <div
         className={cn(
@@ -150,7 +99,7 @@ export function CookieConsent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={dismissConsent(acceptNecessary)}
+                onClick={consentFocus.dismissWithFocus(acceptNecessary)}
                 className="h-9"
               >
                 Necessary Only
@@ -158,7 +107,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={dismissConsent(acceptAll)}
+                onClick={consentFocus.dismissWithFocus(acceptAll)}
                 className="h-9 px-6 shadow-sm"
               >
                 Accept All
@@ -300,7 +249,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={dismissConsent(savePreferences)}
+                onClick={consentFocus.dismissWithFocus(savePreferences)}
                 className="h-9 px-6"
               >
                 Save Preferences

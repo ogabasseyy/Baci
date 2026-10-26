@@ -93,5 +93,8 @@ describe('ChatLauncher', () => {
       'aria-keyshortcuts',
       'ArrowUp ArrowDown ArrowLeft ArrowRight',
     );
+    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveAccessibleDescription(
+      'Use arrow keys to move the assistant launcher. Hold Shift for 48-pixel steps.',
+    );
   });
 });

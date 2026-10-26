@@ -76,6 +76,12 @@ describe('storefront-core OgaBassey navbar layering', () => {
 });
 
 describe('storefront overlay priority', () => {
+  it('keeps the non-modal consent banner out of an active conversation', () => {
+    expect(storefrontCoreCss).toMatch(
+      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.storefront-cookie-consent\s*\{\s*display:\s*none/
+    );
+  });
+
   it('hides competing chrome while the privacy dialog is visible', () => {
     const selector = 'body:has(.storefront-cookie-consent)';
     for (const widget of [

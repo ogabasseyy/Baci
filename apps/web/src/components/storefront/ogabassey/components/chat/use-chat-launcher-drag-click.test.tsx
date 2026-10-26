@@ -25,6 +25,28 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
+  it('suppresses Firefox touch clicks reported with pointerId zero', () => {
+    const { pointer, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320, 7, 'touch');
+    pointer('pointermove', 120, 220, 7, 'touch');
+    pointer('pointerup', 120, 220, 7, 'touch');
+    trustedClick(120, 220, 0);
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('keeps the drag click pending across keyboard activation', () => {
+    const { pointer, click, onOpen } = setup();
+    pointer('pointerdown', 220, 320, 7);
+    pointer('pointermove', 120, 220, 7);
+    pointer('pointerup', 120, 220, 7);
+    click(120, 220, 0, null);
+    expect(onOpen).toHaveBeenCalledOnce();
+
+    click(120, 220, 1, 7);
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
   it('suppresses a trusted pointerless drag click but allows a new pointer activation', () => {
     const { pointer, trustedClick, onOpen } = setup();
     pointer('pointerdown', 220, 320, 7);
@@ -47,6 +69,8 @@ describe('useChatLauncherDrag click correlation', () => {
     click(120, 220, 1, null);
     expect(onOpen).toHaveBeenCalledOnce();
 
+    pointer('pointerdown', 120, 220);
+    pointer('pointerup', 120, 220);
     click(120, 220);
     expect(onOpen).toHaveBeenCalledTimes(2);
   });

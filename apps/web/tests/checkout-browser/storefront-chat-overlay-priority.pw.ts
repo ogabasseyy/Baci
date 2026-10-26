@@ -99,3 +99,21 @@ test('focused launcher remains reachable and pauses promotional overlays', async
       .evaluate((popup) => popup.remove());
   }
 });
+
+test('an open conversation stays above the non-modal consent banner', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <style>${overlayCss}\n${chatCss}</style>
+    <div class="ogabassey-chat-anchor">
+      <section class="ogabassey-chat-window">Active conversation</section>
+      <button class="ogabassey-chat-button">Assistant</button>
+    </div>
+    <div class="storefront-cookie-consent" role="dialog" aria-modal="false">
+      Cookie preferences
+    </div>
+  `);
+
+  await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
+  await expect(page.locator('.storefront-cookie-consent')).toBeHidden();
+});

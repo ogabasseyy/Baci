@@ -2,6 +2,7 @@ import type { Overflow, Position } from './chat-launcher-geometry';
 
 export type Gesture = {
   pointerId: number;
+  pointerType: string;
   x: number;
   y: number;
   lastX: number;

@@ -67,10 +67,19 @@ export function ChatLauncher({
         onClick={onClick}
         className={buttonClasses}
         aria-label="Toggle chat"
+        aria-describedby={
+          isOpen ? undefined : 'ogabassey-chat-launcher-keyboard-help'
+        }
         aria-keyshortcuts={
           isOpen ? undefined : 'ArrowUp ArrowDown ArrowLeft ArrowRight'
         }
       >
+        {!isOpen && (
+          <span id="ogabassey-chat-launcher-keyboard-help" className="sr-only">
+            Use arrow keys to move the assistant launcher. Hold Shift for
+            48-pixel steps.
+          </span>
+        )}
         {isOpen ? (
           <X size={28} />
         ) : (

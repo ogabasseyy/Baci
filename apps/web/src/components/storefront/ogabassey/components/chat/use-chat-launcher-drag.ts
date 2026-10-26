@@ -4,7 +4,6 @@ import {
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   useEffect,
   useLayoutEffect,
@@ -20,6 +19,7 @@ import {
   type Position,
 } from './chat-launcher-geometry';
 import type { Gesture } from './chat-launcher-gesture';
+import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppression';
 import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
 
 const DRAG_THRESHOLD = 6;
@@ -44,6 +44,7 @@ export function useChatLauncherDrag(
   const isHiddenRef = useRef(isHidden);
   const suppressedDragClick = useRef<{
     pointerId: number;
+    pointerType: string;
     x: number;
     y: number;
   } | null>(null);
@@ -140,6 +141,7 @@ export function useChatLauncherDrag(
     const overflow = readChatLauncherOverflow(event.currentTarget, rect);
     gesture.current = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       x: event.clientX,
       y: event.clientY,
       lastX: event.clientX,
@@ -234,6 +236,7 @@ export function useChatLauncherDrag(
       setPosition(start.next);
       suppressedDragClick.current = {
         pointerId: start.pointerId,
+        pointerType: start.pointerType,
         x: start.lastX,
         y: start.lastY,
       };
@@ -250,23 +253,12 @@ export function useChatLauncherDrag(
     }
   }
 
-  function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
-    const pending = suppressedDragClick.current;
-    const nativeEvent = event.nativeEvent as MouseEvent & { pointerId?: number };
-    // Keep keyboard/assistive clicks independent of drag suppression.
-    const matchesRelease =
-      pending &&
-      event.detail > 0 &&
-      Math.abs(event.clientX - pending.x) <= 2 &&
-      Math.abs(event.clientY - pending.y) <= 2;
-    const matchesPointer = Boolean(
-      pending &&
-        ((nativeEvent.pointerId === pending.pointerId &&
-          (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted)) ||
-          (nativeEvent.pointerId === undefined && nativeEvent.isTrusted)),
+  function suppressClick(event: Parameters<typeof isSuppressedChatLauncherDragClick>[0]) {
+    const suppress = isSuppressedChatLauncherDragClick(
+      event,
+      suppressedDragClick.current,
     );
-    const suppress = Boolean(matchesRelease && matchesPointer);
-    if (pending) suppressedDragClick.current = null;
+    if (suppress) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }

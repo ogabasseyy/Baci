@@ -128,7 +128,13 @@ export function setup() {
     y: 300,
     toJSON: () => ({}),
   });
-  const pointer = (type: string, x: number, y: number, pointerId = 1) =>
+  const pointer = (
+    type: string,
+    x: number,
+    y: number,
+    pointerId = 1,
+    pointerType = 'mouse',
+  ) =>
     fireEvent(
       button,
       Object.assign(
@@ -138,7 +144,7 @@ export function setup() {
           clientY: y,
           button: 0,
         }),
-        { pointerId, isPrimary: true },
+        { pointerId, pointerType, isPrimary: true },
       ),
     );
   const click = (

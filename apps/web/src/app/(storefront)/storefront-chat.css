@@ -8,7 +8,7 @@
 @layer components {
   .ogabassey-chat-anchor {
     align-items: flex-end;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -31,7 +31,7 @@
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="default"] {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 5.75rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem + 5.75rem);
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="default"]::after {
@@ -39,7 +39,7 @@
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="cart"] {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 6.75rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem + 6.75rem);
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="cart"]::after {
@@ -47,7 +47,7 @@
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="product"] {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 6.25rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem + 6.25rem);
   }
 
   .ogabassey-chat-anchor[data-mobile-offset="product"]::after {

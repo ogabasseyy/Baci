@@ -91,6 +91,30 @@ test('focused launcher remains reachable and pauses promotional overlays', async
   }
 });
 
+test('mobile launcher advertises keyboard movement without snapping upward', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Show mobile footer' }).click();
+
+  const launcher = page.getByRole('button', { name: 'Assistant launcher' });
+  await expect(launcher).toHaveAttribute(
+    'aria-keyshortcuts',
+    'ArrowUp ArrowDown ArrowLeft ArrowRight'
+  );
+  const initialBounds = await launcher.boundingBox();
+  if (!initialBounds)
+    throw new Error('Chat launcher is missing its layout box');
+
+  await launcher.focus();
+  await page.keyboard.press('ArrowDown');
+
+  const movedBounds = await launcher.boundingBox();
+  if (!movedBounds) throw new Error('Chat launcher lost its layout box');
+  expect(movedBounds.y).toBe(initialBounds.y);
+});
+
 test('real drag hook clamps, suppresses drag click, and hands position to chat', async ({
   page,
 }, testInfo) => {

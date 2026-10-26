@@ -31,6 +31,7 @@ function DeferredLauncher({
         {...drag.buttonProps}
         type="button"
         aria-label="Assistant launcher"
+        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
         className="ogabassey-chat-button"
         onClick={(event) => {
           if (!drag.suppressClick(event)) onActivate(drag.position);
@@ -77,6 +78,9 @@ function ChatRuntime({
         {...drag.buttonProps}
         type="button"
         aria-label="Assistant launcher"
+        aria-keyshortcuts={
+          isOpen ? undefined : 'ArrowUp ArrowDown ArrowLeft ArrowRight'
+        }
         className="ogabassey-chat-button"
         onClick={(event) => {
           if (!drag.suppressClick(event)) setIsOpen((open) => !open);

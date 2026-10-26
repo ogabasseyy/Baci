@@ -42,7 +42,10 @@ describe('DeferredChatWidget', () => {
 
     expect(
       screen.getByRole('button', { name: 'Open AI chat assistant' }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute(
+      'aria-keyshortcuts',
+      'ArrowUp ArrowDown ArrowLeft ArrowRight',
+    );
     expect(loadChatWidget).not.toHaveBeenCalled();
     expect(screen.queryByText('Loaded chat runtime')).not.toBeInTheDocument();
   });

@@ -100,6 +100,7 @@ export function DeferredChatWidget({
           disabled={isLoading}
           className={buttonClasses}
           aria-label="Open AI chat assistant"
+          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
         >
           {isSanta ? (
             <div className="relative w-full h-full">

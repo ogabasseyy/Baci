@@ -94,11 +94,9 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   useEffect(() => {
     if (!isVisible) return;
 
-    const activeElement = document.activeElement;
-    const chatAnchor =
-      activeElement instanceof HTMLElement
-        ? activeElement.closest('.ogabassey-chat-anchor')
-        : null;
+    const chatAnchor = document.querySelector<HTMLElement>(
+      '.ogabassey-chat-anchor:has(.ogabassey-chat-window)'
+    );
     if (!chatAnchor?.querySelector('.ogabassey-chat-window')) return;
 
     let chatWasOpen = true;

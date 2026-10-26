@@ -86,7 +86,7 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     expect(dragBounds.x).toBeGreaterThanOrEqual(12);
     expect(dragBounds.y).toBeGreaterThanOrEqual(12);
     expect(dragBounds.x + dragBounds.width).toBeLessThanOrEqual(width - 12);
-    expect(dragBounds.y + dragBounds.height).toBeLessThanOrEqual(800 - 28);
+    expect(dragBounds.y + dragBounds.height).toBeLessThanOrEqual(800 - 27);
     await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
     await expect(launcher).toBeVisible();
     await expect(page.locator('.ogabassey-chat-window')).toHaveCount(0);

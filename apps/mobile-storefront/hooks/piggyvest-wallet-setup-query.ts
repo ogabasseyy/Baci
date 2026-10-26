@@ -40,7 +40,7 @@ export function piggyvestWalletSetupQuery(
           attempted:
             !snapshot.account &&
             snapshot.provisioningStatus !== 'not_started' &&
-            attempted,
+            (snapshot.provisioningStatus === 'pending' || attempted),
           completedSetup:
             !!snapshot.account &&
             (attempted ||

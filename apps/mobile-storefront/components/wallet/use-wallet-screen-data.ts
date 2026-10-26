@@ -57,6 +57,7 @@ export function useWalletScreenData() {
             merchantId: activeMerchantId,
             userId,
             isCurrent,
+            includeTransactions: true,
             refetchFull: () =>
               refetch({ cancelRefetch: false, throwOnError: true }),
           });

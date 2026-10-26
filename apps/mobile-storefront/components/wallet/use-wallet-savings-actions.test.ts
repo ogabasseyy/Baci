@@ -74,6 +74,24 @@ describe('createWalletSavingsActions', () => {
     expect(input.startWalletTopUp).not.toHaveBeenCalled();
     expect(input.setSavingsContributionAmount).not.toHaveBeenCalled();
   });
+  it('opens primary wallet bank funding with no savings contribution amount', () => {
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      savingsContributionAmount: '',
+      spendableBalance: 0,
+    };
+
+    createWalletSavingsActions(input).handleFundSavingsWallet();
+
+    expect(router.setParams).toHaveBeenCalledWith({
+      action: 'bank-transfer',
+      intent: 'synthetic-key',
+      requiredAmount: undefined,
+      returnTo: '/wallet?action=savings&savingsGoalId=goal-1&savingsAmount=',
+    });
+    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+  });
   it('exposes pending status only for an existing primary-wallet operation', () => {
     const input = {
       ...createInput(),

@@ -69,10 +69,37 @@ export function createWalletSavingsActions({
 
   const handleFundSavingsWallet = () => {
     const requestedAmount = Number(savingsContributionAmount);
+    const isPrimaryWallet = isPiggyvestPrimaryMerchant(activeMerchantId);
+    const hasRequestedAmount = savingsContributionAmount.trim().length > 0;
+
+    if (isPrimaryWallet) {
+      if (
+        goal?.source_mode !== 'manual' ||
+        goal.status === 'completed' ||
+        (hasRequestedAmount &&
+          (!Number.isSafeInteger(requestedAmount) ||
+            requestedAmount <= 0 ||
+            requestedAmount >
+              Math.max(0, goal.target_amount - goal.current_amount)))
+      ) {
+        return;
+      }
+      if (hasRequestedAmount && requestedAmount <= spendableBalance) return;
+      router.setParams({
+        action: 'bank-transfer',
+        intent: Crypto.randomUUID(),
+        requiredAmount: hasRequestedAmount
+          ? String(requestedAmount - Math.max(0, spendableBalance))
+          : undefined,
+        returnTo: `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goal.id)}&savingsAmount=${encodeURIComponent(savingsContributionAmount)}`,
+      });
+      return;
+    }
+
     if (
       goal?.source_mode !== 'manual' ||
       goal.status === 'completed' ||
-      !savingsContributionAmount.trim() ||
+      !hasRequestedAmount ||
       !Number.isSafeInteger(requestedAmount) ||
       requestedAmount <= 0 ||
       requestedAmount > Math.max(0, goal.target_amount - goal.current_amount)
@@ -80,15 +107,6 @@ export function createWalletSavingsActions({
       return;
     }
     if (requestedAmount <= spendableBalance) {
-      return;
-    }
-    if (isPiggyvestPrimaryMerchant(activeMerchantId)) {
-      router.setParams({
-        action: 'bank-transfer',
-        intent: Crypto.randomUUID(),
-        requiredAmount: String(requestedAmount - Math.max(0, spendableBalance)),
-        returnTo: `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goal.id)}&savingsAmount=${encodeURIComponent(savingsContributionAmount)}`,
-      });
       return;
     }
     if (isHostedStagingTestPaymentsEnabled()) {

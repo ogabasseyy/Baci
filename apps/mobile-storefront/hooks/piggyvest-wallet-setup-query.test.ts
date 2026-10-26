@@ -39,6 +39,21 @@ it('clears a stale local attempt only when the server confirms setup never start
   ).toBeNull();
   client.clear();
 });
+it('reports a server-confirmed pending setup as attempted without a local marker', async () => {
+  const client = new QueryClient();
+  jest.mocked(api.read).mockResolvedValue({
+    account: null,
+    provisioningStatus: 'pending',
+    requiresConsent: true,
+  });
+
+  const result = await client.fetchQuery(
+    piggyvestWalletSetupQuery(client, 'merchant', 'user')
+  );
+
+  expect(result.attempted).toBe(true);
+  client.clear();
+});
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();

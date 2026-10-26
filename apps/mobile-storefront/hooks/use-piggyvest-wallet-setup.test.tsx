@@ -27,6 +27,7 @@ const pending = {
   provisioningStatus: 'pending' as const,
   requiresConsent: true,
 };
+const notStarted = { ...pending, provisioningStatus: 'not_started' as const };
 const ready = {
   account: {
     accountNumber: '9000000012',
@@ -128,6 +129,21 @@ it('stops automatic polling after a minute and resumes safely on foreground', as
   expect(await AsyncStorage.getItem(storageKey)).toBeNull();
 });
 
+it('recovers server-pending setup without a local marker and polls it to completion', async () => {
+  expect(await AsyncStorage.getItem(storageKey)).toBeNull();
+  const { result } = mount();
+  await waitFor(() => expect(result.current.state).toBe('processing'));
+  jest.mocked(api.read).mockResolvedValue(ready);
+
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(policy.pollingIntervalMs);
+  });
+
+  await waitFor(() => expect(result.current.state).toBe('ready'));
+  expect(result.current.account).toEqual(ready.account);
+  expect(api.create).not.toHaveBeenCalled();
+});
+
 it('pauses polling while the app is backgrounded', async () => {
   await AsyncStorage.setItem(storageKey, 'pending');
   const { result } = mount();
@@ -170,6 +186,7 @@ it('retains an ambiguous setup across a failed read and retries status only', as
 });
 
 it('never submits the BVN when the pending marker cannot be saved', async () => {
+  jest.mocked(api.read).mockResolvedValue(notStarted);
   const { result } = mount();
   await waitFor(() => expect(result.current.state).toBe('not_started'));
   jest
@@ -185,6 +202,7 @@ it('never submits the BVN when the pending marker cannot be saved', async () => 
 });
 
 it('allows corrected details after an explicit BVN rejection', async () => {
+  jest.mocked(api.read).mockResolvedValue(notStarted);
   const { result } = mount();
   await waitFor(() => expect(result.current.state).toBe('not_started'));
   jest
@@ -200,6 +218,7 @@ it('allows corrected details after an explicit BVN rejection', async () => {
 });
 
 it('does not publish a late creation result into a different signed-in customer', async () => {
+  jest.mocked(api.read).mockResolvedValue(notStarted);
   let resolveCreation: (value: typeof ready) => void = () => undefined;
   jest.mocked(api.create).mockReturnValue(
     new Promise((resolve) => {

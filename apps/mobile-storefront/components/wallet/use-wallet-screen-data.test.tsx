@@ -71,7 +71,7 @@ it('passes full-read failures through to the refresh owner instead of claiming s
   unmount();
 });
 
-it('refreshes only numbers on a cached visit and when the mounted tab is revisited', async () => {
+it('refreshes missed transactions alongside numbers on cached visits and tab revisits', async () => {
   const { rerender, unmount } = renderHook(() => useWalletScreenData());
   await act(async () => {});
   expect(mockRefreshNumbers).toHaveBeenCalledTimes(1);
@@ -80,6 +80,8 @@ it('refreshes only numbers on a cached visit and when the mounted tab is revisit
   mockFocused = true;
   rerender({});
   expect(mockRefreshNumbers).toHaveBeenCalledTimes(2);
+  for (const [request] of mockRefreshNumbers.mock.calls)
+    expect(request.includeTransactions).toBe(true);
   expect(mockRefetch).not.toHaveBeenCalled();
   unmount();
 });
@@ -184,6 +186,9 @@ it('refreshes on foreground return, ignores duplicate active events and removes 
     onAppState('active');
   });
   expect(mockRefreshNumbers).toHaveBeenCalledTimes(2);
+  expect(mockRefreshNumbers).toHaveBeenLastCalledWith(
+    expect.objectContaining({ includeTransactions: true })
+  );
   unmount();
   expect(remove).toHaveBeenCalledTimes(1);
 });

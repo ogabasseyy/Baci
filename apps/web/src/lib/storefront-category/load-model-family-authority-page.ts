@@ -9,6 +9,7 @@ import type { SupportedClusterCategory } from '@/lib/storefront-content/content-
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { resolveFamilyAuthorityEligibility } from './authority-hub-eligibility';
 
 async function loadModelFamilyAuthorityPage(args: {
   merchantSlug: string;
@@ -36,10 +37,12 @@ async function loadModelFamilyAuthorityPage(args: {
   const brandInventory = brandPage.brandInventory ?? {
     products: brandPage.products,
   };
-  const allMatchedProducts = brandInventory.products.filter((product) =>
-    modelFamilyAuthorityTaxonomy.matchesProduct(family, product.name)
+  const eligibility = resolveFamilyAuthorityEligibility(
+    brandInventory.products,
+    family
   );
-  if (allMatchedProducts.length < family.minimumProducts) return null;
+  if (!eligibility.eligible) return null;
+  const allMatchedProducts = eligibility.products;
 
   const matchedProducts = allMatchedProducts.slice(
     0,
@@ -55,10 +58,11 @@ async function loadModelFamilyAuthorityPage(args: {
     .getEntries(args.categorySlug, brandPage.brand.brandKey)
     .filter((entry) => entry.familyKey !== family.familyKey)
     .flatMap((entry) => {
-      const productCount = brandInventory.products.filter((product) =>
-        modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
-      ).length;
-      return productCount >= entry.minimumProducts
+      const { productCount, eligible } = resolveFamilyAuthorityEligibility(
+        brandInventory.products,
+        entry
+      );
+      return eligible
         ? [
             {
               href: `${brandPage.canonicalUrl}/families/${entry.familyKey}`,

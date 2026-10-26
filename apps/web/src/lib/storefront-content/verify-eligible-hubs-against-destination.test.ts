@@ -17,6 +17,15 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
 
 const mockLoad = vi.mocked(loadBrandAuthorityInventorySafely);
 
+const product = (name: string) => ({
+  id: name,
+  slug: name,
+  name,
+  brand: 'Apple',
+  price: 100000,
+  stock: 5,
+});
+
 const hubs = {
   brandHubs: [
     {
@@ -42,12 +51,12 @@ describe('verifyEligibleHubsAgainstDestination', () => {
       productCount: 5,
       productCountIsLowerBound: false,
       products: [
-        { name: 'iPhone 15 Pro Max' },
-        { name: 'iPhone 15 Pro' },
-        { name: 'iPhone 15' },
-        { name: 'iPhone 14' },
-        { name: 'iPhone 13' },
-      ] as never,
+        product('iPhone 15 Pro Max'),
+        product('iPhone 15 Pro'),
+        product('iPhone 15'),
+        product('iPhone 14'),
+        product('iPhone 13'),
+      ],
     });
     const result = await verifyEligibleHubsAgainstDestination({
       merchantId: 'merchant-1',
@@ -63,7 +72,7 @@ describe('verifyEligibleHubsAgainstDestination', () => {
       latestUpdatedAt: null,
       productCount: 2,
       productCountIsLowerBound: false,
-      products: [{ name: 'iPhone 15' }, { name: 'iPhone 14' }] as never,
+      products: [product('iPhone 15'), product('iPhone 14')],
     });
     const result = await verifyEligibleHubsAgainstDestination({
       merchantId: 'merchant-1',
@@ -83,5 +92,19 @@ describe('verifyEligibleHubsAgainstDestination', () => {
     });
     expect(result.brandHubs).toHaveLength(0);
     expect(result.familyHubs).toHaveLength(0);
+  });
+  it('does not publish a hub from stale count metadata when its renderable rows fall short', async () => {
+    mockLoad.mockResolvedValue({
+      latestUpdatedAt: null,
+      productCount: 100,
+      productCountIsLowerBound: false,
+      products: [product('iPhone 15'), product('iPhone 14')],
+    });
+    const result = await verifyEligibleHubsAgainstDestination({
+      merchantId: 'merchant-1',
+      categorySlug: 'smartphones',
+      hubs,
+    });
+    expect(result).toEqual({ brandHubs: [], familyHubs: [] });
   });
 });

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { brandAuthorityPageLoader } from './load-brand-authority-page';
 
 const mockGetMerchant = vi.fn();
 const mockGetCategory = vi.fn();
@@ -22,7 +23,9 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
   },
 }));
 
-vi.mock('@/lib/normalize-product', () => ({
+vi.mock('@/lib/normalize-product', async () => ({
+  isRawDbProductRecord: (await import('@/lib/raw-db-product'))
+    .isRawDbProductRecord,
   normalizeProduct: (product: unknown) => product,
 }));
 
@@ -76,9 +79,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('builds a canonical indexable hub from matching active inventory', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
     const page = await brandAuthorityPageLoader.load(
       {
         merchantSlug: 'ogabassey',
@@ -115,9 +115,6 @@ describe('loadBrandAuthorityPage', () => {
     mockGetCachedBrandAuthorityProducts.mockResolvedValue(
       Array.from({ length: 6 }, (_, index) => makeProduct(index, 'Redmi'))
     );
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     await brandAuthorityPageLoader.load(
       {
@@ -148,9 +145,6 @@ describe('loadBrandAuthorityPage', () => {
       { ...makeProduct(4, 'Infinix'), name: 'Infinix Note 60 Pro' },
       { ...makeProduct(5, 'Infinix'), name: 'Infinix Smart 20' },
     ]);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     const page = await brandAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',
@@ -166,10 +160,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('rejects uncurated and thin brand pages', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
-
     await expect(
       brandAuthorityPageLoader.load({
         merchantSlug: 'ogabassey',
@@ -196,9 +186,6 @@ describe('loadBrandAuthorityPage', () => {
       ...Array.from({ length: 5 }, (_, index) => makeProduct(index)),
       { ...makeProduct(6), availability: 'OutOfStock' as const, stock: 0 },
     ]);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     const page = await brandAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',
@@ -214,9 +201,6 @@ describe('loadBrandAuthorityPage', () => {
   it('propagates database failure when brand-scoped product read fails', async () => {
     mockGetCachedBrandAuthorityProducts.mockRejectedValueOnce(
       new Error('database timeout')
-    );
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
     );
 
     await expect(
@@ -242,10 +226,6 @@ describe('loadBrandAuthorityPage', () => {
       ...genericProducts,
       ...galaxySProducts,
     ]);
-
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     const page = await brandAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',

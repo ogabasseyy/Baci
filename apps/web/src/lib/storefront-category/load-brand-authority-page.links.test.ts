@@ -22,7 +22,9 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
   },
 }));
 
-vi.mock('@/lib/normalize-product', () => ({
+vi.mock('@/lib/normalize-product', async () => ({
+  isRawDbProductRecord: (await import('@/lib/raw-db-product'))
+    .isRawDbProductRecord,
   normalizeProduct: (product: unknown) => product,
 }));
 

@@ -1,6 +1,7 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
+import { resolveBrandAuthorityEligibility } from './authority-hub-eligibility';
 
 async function getCachedBrandAuthorityEntriesRead(
   merchantId: string,
@@ -22,18 +23,23 @@ async function getCachedBrandAuthorityEntriesRead(
         categorySlug,
         entry
       );
+      const eligibility = resolveBrandAuthorityEligibility(
+        inventory.products,
+        categorySlug,
+        entry
+      );
       return {
         entry,
-        productCount: inventory.productCount,
+        eligible: eligibility.eligible,
+        productCount: eligibility.productCount,
         productCountIsLowerBound: inventory.productCountIsLowerBound,
       };
     })
   );
 
-  return counts.flatMap(({ entry, productCount, productCountIsLowerBound }) =>
-    productCount >= entry.minimumProducts
-      ? [{ ...entry, productCount, productCountIsLowerBound }]
-      : []
+  return counts.flatMap(
+    ({ entry, eligible, productCount, productCountIsLowerBound }) =>
+      eligible ? [{ ...entry, productCount, productCountIsLowerBound }] : []
   );
 }
 

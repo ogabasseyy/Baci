@@ -1,11 +1,11 @@
 import { headers } from 'next/headers';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import {
-  normalizeProduct,
-  type ProductKeySpecsRecord,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { ProductKeySpecsRecord } from '@/lib/normalize-product';
 import { buildStoreUrl } from '@/lib/store-url';
+import {
+  resolveBrandAuthorityEligibility,
+  resolveFamilyAuthorityEligibility,
+} from '@/lib/storefront-category/authority-hub-eligibility';
 import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
@@ -36,16 +36,6 @@ export interface BrandAuthorityPageProduct {
   product_key_specs?: ProductKeySpecsRecord | null;
   image: string;
   description: string;
-}
-
-function isRawDbProduct(value: unknown): value is RawDbProduct {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      'id' in value &&
-      'name' in value &&
-      'price' in value
-  );
 }
 
 async function getBrandAuthorityStorefrontPathPrefix(
@@ -107,21 +97,14 @@ async function loadBrandAuthorityPage(
     { limit: null }
   );
 
-  const allInStockProducts: BrandAuthorityPageProduct[] = (
-    brandProducts as unknown[]
-  )
-    .filter(isRawDbProduct)
-    .map((product) =>
-      normalizeProduct(product, { preferredCategorySlug: args.categorySlug })
-    )
-    .filter(
-      (product) =>
-        brandAuthorityTaxonomy.matchesBrand(
-          authorityEntry,
-          product.brand ?? null
-        ) && product.availability === 'InStock'
-    )
-    .map((product) => ({
+  const eligibility = resolveBrandAuthorityEligibility(
+    brandProducts,
+    args.categorySlug,
+    authorityEntry
+  );
+  if (!eligibility.eligible) return null;
+  const allInStockProducts: BrandAuthorityPageProduct[] =
+    eligibility.products.map((product) => ({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -137,12 +120,6 @@ async function loadBrandAuthorityPage(
       image: product.image,
       description: product.description,
     }));
-
-  const isIndexable =
-    allInStockProducts.length >= authorityEntry.minimumProducts;
-  if (!isIndexable) {
-    return null;
-  }
 
   const products: BrandAuthorityPageProduct[] = allInStockProducts.slice(
     0,
@@ -183,10 +160,11 @@ async function loadBrandAuthorityPage(
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
-      const productCount = allInStockProducts.filter((product) =>
-        modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
-      ).length;
-      return productCount >= entry.minimumProducts
+      const { productCount, eligible } = resolveFamilyAuthorityEligibility(
+        allInStockProducts,
+        entry
+      );
+      return eligible
         ? [
             {
               href: `${canonicalUrl}/families/${entry.familyKey}`,

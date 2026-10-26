@@ -2,6 +2,7 @@ import { generateSlug } from '@/lib/seo-utils';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import type { ModelFamilyAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
+import { buildAuthorityHubCandidates } from './authority-hub-candidates';
 import type { PublishedClusterPost } from './content-cluster-types';
 import type {
   EligibleHubProductInput,
@@ -70,13 +71,19 @@ export async function buildClusterHubLinks(args: {
     return { brandHubLinks, familyHubLinks };
   }
 
-  const resolvedHubs = resolveEligibleCategoryHubDestinations({
-    storeUrl: args.storeUrl,
-    categorySlug: args.categorySlug,
-    products: args.products,
-    // Callers supply the category-scoped semantic/override pool.
-    assumeCategoryScoped: true,
-  });
+  const resolvedHubs = args.skipDestinationVerification
+    ? resolveEligibleCategoryHubDestinations({
+        storeUrl: args.storeUrl,
+        categorySlug: args.categorySlug,
+        products: args.products,
+        // Callers supply the category-scoped semantic/override pool.
+        assumeCategoryScoped: true,
+      })
+    : buildAuthorityHubCandidates(
+        args.categorySlug,
+        args.inferredBrands,
+        args.storeUrl
+      );
 
   // Only brands the article actually matches can emit links, so only those
   // hubs need destination verification (family hubs follow their parent).

@@ -77,7 +77,11 @@ describe('buildClusterHubLinks', () => {
       latestUpdatedAt: null,
       productCount: 5,
       productCountIsLowerBound: false,
-      products: products.map((p) => ({ name: p.name })) as never,
+      products: products.map((p, index) => ({
+        ...p,
+        id: `phone-${index}`,
+        price: 100000,
+      })),
     });
     const result = await buildClusterHubLinks({
       post,
@@ -147,5 +151,29 @@ describe('buildClusterHubLinks', () => {
       skipDestinationVerification: true,
     });
     expect(result).toEqual({ brandHubLinks: [], familyHubLinks: [] });
+  });
+  it('uses destination inventory even when the semantic preview pool is empty', async () => {
+    mockLoad.mockResolvedValue({
+      latestUpdatedAt: null,
+      productCount: 5,
+      productCountIsLowerBound: false,
+      products: products.map((product, index) => ({
+        ...product,
+        id: `product-${index}`,
+        price: 100000,
+        slug: `phone-${index}`,
+      })),
+    });
+    const result = await buildClusterHubLinks({
+      post,
+      inferredBrands: ['Apple'],
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      storeUrl: 'https://store.test',
+      merchantId: 'merchant-1',
+      products: [],
+    });
+    expect(result.brandHubLinks).toHaveLength(1);
+    expect(result.familyHubLinks).toHaveLength(1);
   });
 });

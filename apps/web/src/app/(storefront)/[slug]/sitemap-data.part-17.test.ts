@@ -98,8 +98,18 @@ describe('sitemap-data', () => {
       async (
         _merchantId: string,
         _categorySlug: string,
-        entry: { brandKey: string }
+        entry: { brandKey: string; brandQueryValue: string }
       ) => ({
+        products: Array.from(
+          { length: { google: 5, samsung: 5, tecno: 4 }[entry.brandKey] ?? 0 },
+          (_, i) => ({
+            id: `phone-${i}`,
+            name: `Phone ${i}`,
+            brand: entry.brandQueryValue,
+            price: 100000,
+            manage_stock: false,
+          })
+        ),
         latestUpdatedAt:
           entry.brandKey === 'samsung' ? '2026-07-14T00:00:00Z' : null,
         productCount: { google: 5, samsung: 5, tecno: 4 }[entry.brandKey] ?? 0,
@@ -133,10 +143,20 @@ describe('sitemap-data', () => {
       async (
         _merchantId: string,
         _categorySlug: string,
-        entry: { brandKey: string }
+        entry: { brandKey: string; brandQueryValue: string }
       ) => {
         if (entry.brandKey !== 'samsung') throw new Error('timeout');
-        return { latestUpdatedAt: '2026-07-14T00:00:00Z', productCount: 5 };
+        return {
+          latestUpdatedAt: '2026-07-14T00:00:00Z',
+          productCount: 5,
+          products: Array.from({ length: 5 }, (_, i) => ({
+            id: `phone-${i}`,
+            name: `Phone ${i}`,
+            brand: entry.brandQueryValue,
+            price: 100000,
+            manage_stock: false,
+          })),
+        };
       }
     );
     const { getBrandAuthoritySitemapEntries } = sitemapData;

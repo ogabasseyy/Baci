@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { modelFamilyAuthorityPageLoader } from './load-model-family-authority-page';
 
 const mockLoadBrandPage = vi.fn();
 const mockLoadClusterPosts = vi.fn();
@@ -53,9 +54,6 @@ describe('model family authority page loader', () => {
   });
 
   it('builds an indexable family page at the inventory threshold', async () => {
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     const page = await modelFamilyAuthorityPageLoader.load({
       merchantSlug: 'store',
       categorySlug: 'smartphones',
@@ -83,9 +81,6 @@ describe('model family authority page loader', () => {
   });
 
   it('rejects thin and uncurated family pages', async () => {
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     expect(
       await modelFamilyAuthorityPageLoader.load({
         merchantSlug: 'store',
@@ -122,9 +117,6 @@ describe('model family authority page loader', () => {
       ],
       breadcrumbItems: [],
     });
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     const page = await modelFamilyAuthorityPageLoader.load({
       merchantSlug: 'store',
       categorySlug: 'smartphones',
@@ -169,9 +161,6 @@ describe('model family authority page loader', () => {
       },
       breadcrumbItems: [],
     });
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     const page = await modelFamilyAuthorityPageLoader.load({
       merchantSlug: 'store',
       categorySlug: 'smartphones',
@@ -190,9 +179,6 @@ describe('model family authority page loader', () => {
 
   it('propagates DB errors from brand page loader rather than returning null', async () => {
     mockLoadBrandPage.mockRejectedValueOnce(new Error('database error'));
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
 
     await expect(
       modelFamilyAuthorityPageLoader.load({
@@ -234,10 +220,6 @@ describe('model family authority page loader', () => {
         },
       ],
     });
-
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     const page = await modelFamilyAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',
       categorySlug: 'laptops',
@@ -281,10 +263,6 @@ describe('model family authority page loader', () => {
       ],
       breadcrumbItems: [],
     });
-
-    const { modelFamilyAuthorityPageLoader } = await import(
-      './load-model-family-authority-page'
-    );
     const page = await modelFamilyAuthorityPageLoader.load({
       merchantSlug: 'store',
       categorySlug: 'smartphones',

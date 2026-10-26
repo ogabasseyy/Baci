@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { brandAuthorityPageLoader } from './load-brand-authority-page';
 
 const mockGetMerchant = vi.fn();
 const mockGetCategory = vi.fn();
@@ -22,7 +23,9 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
   },
 }));
 
-vi.mock('@/lib/normalize-product', () => ({
+vi.mock('@/lib/normalize-product', async () => ({
+  isRawDbProductRecord: (await import('@/lib/raw-db-product'))
+    .isRawDbProductRecord,
   normalizeProduct: (product: unknown) => product,
 }));
 
@@ -76,9 +79,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('rejects missing merchants and unsafe route slugs before catalog reads', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
     mockGetMerchant.mockResolvedValueOnce(null);
 
     await expect(
@@ -108,9 +108,6 @@ describe('loadBrandAuthorityPage', () => {
 
   it('rejects a category that is not publicly available', async () => {
     mockGetCategory.mockResolvedValue(null);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     await expect(
       brandAuthorityPageLoader.load({
@@ -123,10 +120,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('resolves path prefixes for platform and custom-domain requests', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
-
     await expect(
       brandAuthorityPageLoader.getStorefrontPathPrefix('ogabassey', 'ogabassey')
     ).resolves.toBe('/ogabassey');
@@ -237,10 +230,6 @@ describe('loadBrandAuthorityPage', () => {
         description: 'MacBook Pro 16',
       },
     ]);
-
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
     const page = await brandAuthorityPageLoader.load(
       {
         merchantSlug: 'ogabassey',

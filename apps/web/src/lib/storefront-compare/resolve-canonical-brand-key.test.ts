@@ -25,6 +25,14 @@ describe('resolveCanonicalBrandKey', () => {
       );
     });
 
+    it('maps content-config aliases such as Sony to playstation', () => {
+      expect(resolveCanonicalBrandKey('gaming', 'Sony')).toBe('playstation');
+      expect(resolveCanonicalBrandKey('gaming', 'PlayStation')).toBe(
+        'playstation'
+      );
+      expect(resolveCanonicalBrandKey('gaming', 'Microsoft')).toBe('xbox');
+    });
+
     it('returns empty string for null, undefined, or empty brand', () => {
       expect(resolveCanonicalBrandKey('smartphones', null)).toBe('');
       expect(resolveCanonicalBrandKey('smartphones', undefined)).toBe('');

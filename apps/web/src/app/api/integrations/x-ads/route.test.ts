@@ -83,6 +83,23 @@ describe('X Ads setup API', () => {
       p_disconnect: false,
     });
   });
+  it('writes a pixel token only to the owner RPC and never returns it', async () => {
+    const response = await PATCH(
+      request({
+        pixelId: 'pixel',
+        credentials: { pixelToken: 'synthetic-private-token' },
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'save_x_ads_settings',
+      expect.objectContaining({
+        p_merchant_id: 'merchant',
+        p_credentials: { pixelToken: 'synthetic-private-token' },
+      })
+    );
+    expect(await response.text()).not.toContain('synthetic-private-token');
+  });
   it('rejects unauthenticated users', async () => {
     mocks.auth.mockResolvedValue({ error: 'Unauthorized' });
     expect((await PATCH(request({ pixelId: 'pixel' }))).status).toBe(401);

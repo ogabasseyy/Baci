@@ -19,7 +19,7 @@ export async function queueCartObservation(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        event_name: 'view_item',
+        event_name: 'product_view',
         event_id: eventId,
         event_time: Math.floor(Date.now() / 1000),
         event_source: 'web',

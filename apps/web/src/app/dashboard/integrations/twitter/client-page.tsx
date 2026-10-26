@@ -72,6 +72,7 @@ function ConnectionForm({
     initialConnection?.eventIds ?? {}
   );
   const [credentials, setCredentials] = useState(emptyCredentials);
+  const [pixelToken, setPixelToken] = useState('');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,14 +105,20 @@ function ConnectionForm({
         : Object.fromEntries(
             Object.entries(eventIds).filter(([, value]) => value.trim())
           ),
-      ...(!disconnect && Object.values(credentials).some(Boolean)
-        ? { credentials }
+      ...(!disconnect &&
+      (pixelToken || Object.values(credentials).some(Boolean))
+        ? {
+            credentials: {
+              ...(pixelToken ? { pixelToken } : {}),
+              ...(Object.values(credentials).some(Boolean) ? credentials : {}),
+            },
+          }
         : {}),
       disconnect,
     });
     if (!parsed.success) {
       setError(
-        'Enter a Pixel ID, matching event codes, and all four server credentials when updating server access.'
+        'Enter a Pixel ID, matching event codes, and a Conversion API access token or all four OAuth credentials. Use one method at a time.'
       );
       return;
     }
@@ -127,6 +134,7 @@ function ConnectionForm({
       setPixelId(data.pixelId ?? '');
       setEventIds(data.eventIds);
       setCredentials(emptyCredentials);
+      setPixelToken('');
       setSaved(true);
     } catch {
       setError('Could not save this store’s X connection.');
@@ -177,10 +185,25 @@ function ConnectionForm({
         </fieldset>
         <fieldset className="space-y-3">
           <legend className="font-semibold">Conversions API credentials</legend>
+          <label htmlFor="x-pixel-token" className="block">
+            Conversions API access token
+            <Input
+              id="x-pixel-token"
+              type="password"
+              value={pixelToken}
+              onChange={(event) => setPixelToken(event.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+          <p>
+            Copy the access token from X Events Manager → Install Pixel → Manual
+            → Conversion API. Leave blank to keep saved access. Use either this
+            token or the four OAuth fields below.
+          </p>
           <p>
             {connection?.capiConfigured
               ? 'Server credentials saved. Leave these fields blank to keep them.'
-              : 'Optional for browser tracking. Server delivery requires an Ads API-approved X application and a user with account access.'}
+              : 'Server access is optional for browser tracking. The OAuth alternative below requires an Ads API-approved X application and a user with account access.'}
           </p>
           {Object.entries(credentialLabels).map(([key, label]) => (
             <label key={key} className="block" htmlFor={`x-${key}`}>

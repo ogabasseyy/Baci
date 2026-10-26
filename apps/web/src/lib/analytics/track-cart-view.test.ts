@@ -118,7 +118,7 @@ it('queues a marketing-consented cart view for both social destinations without 
   const payloads = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
   expect(new Set(payloads.map((p) => p.event_id)).size).toBe(1);
   expect(payloads[0]).toMatchObject({
-    event_name: 'view_item',
+    event_name: 'product_view',
     marketing_consent: true,
     analytics_consent: false,
     targets: ['tiktok', 'snapchat'],

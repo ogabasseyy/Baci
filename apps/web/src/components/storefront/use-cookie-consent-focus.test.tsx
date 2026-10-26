@@ -6,23 +6,25 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { useState } from 'react';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { useCookieConsentFocus } from './use-cookie-consent-focus';
 
 function ConsentFocusHarness() {
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [runtimeMounted, setRuntimeMounted] = useState(false);
   const focus = useCookieConsentFocus(visible);
 
   return (
     <>
       <div className="ogabassey-chat-anchor">
         <button
+          key={runtimeMounted ? 'runtime' : 'deferred'}
           type="button"
           className="ogabassey-chat-button"
           onClick={() => setChatOpen((open) => !open)}
         >
-          Assistant launcher
+          {runtimeMounted ? 'Runtime launcher' : 'Assistant launcher'}
         </button>
         {chatOpen && (
           <div className="ogabassey-chat-window">
@@ -35,6 +37,9 @@ function ConsentFocusHarness() {
       </div>
       <button type="button" onClick={() => setChatOpen(true)}>
         Open chat
+      </button>
+      <button type="button" onClick={() => setRuntimeMounted(true)}>
+        Mount chat runtime
       </button>
       <button type="button" onClick={() => setVisible(true)}>
         Show consent
@@ -136,4 +141,33 @@ it('observes chat opened after consent appears', async () => {
       screen.getByRole('button', { name: 'Dismiss consent' })
     ).toHaveFocus()
   );
+});
+
+it('restores focus to the live launcher after deferred runtime handoff', () => {
+  render(<ConsentFocusHarness />);
+  screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Mount chat runtime' }));
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+
+  expect(
+    screen.getByRole('button', { name: 'Runtime launcher' })
+  ).toHaveFocus();
+});
+
+it('scopes consent mutations to the chat anchor parent', () => {
+  const observe = vi.spyOn(MutationObserver.prototype, 'observe');
+  render(<ConsentFocusHarness />);
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const anchor = document.querySelector('.ogabassey-chat-anchor');
+  expect(anchor).not.toBeNull();
+  expect(observe).toHaveBeenCalledWith(anchor?.parentElement, {
+    childList: true,
+    subtree: true,
+  });
+  observe.mockRestore();
 });

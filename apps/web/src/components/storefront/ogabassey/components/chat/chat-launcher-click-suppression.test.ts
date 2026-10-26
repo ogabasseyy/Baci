@@ -7,15 +7,19 @@ function clickEvent({
   pointerId,
   pointerType,
   isTrusted = true,
+  x = 100,
+  y = 200,
 }: {
   detail?: number;
   pointerId?: number;
   pointerType?: string;
   isTrusted?: boolean;
+  x?: number;
+  y?: number;
 } = {}) {
   return {
-    clientX: 100,
-    clientY: 200,
+    clientX: x,
+    clientY: y,
     detail,
     nativeEvent: {
       ...(pointerId === undefined ? {} : { pointerId }),
@@ -46,9 +50,27 @@ describe('chat launcher click suppression', () => {
     ).toBe(false);
   });
 
-  it('allows an independent trusted pointerless activation', () => {
+  it('allows a trusted pointerless click away from the release point', () => {
+    expect(
+      isSuppressedChatLauncherDragClick(
+        clickEvent({ x: 104, y: 200 }),
+        release,
+      ),
+    ).toBe(false);
+  });
+
+  it('suppresses a trusted pointerless click at the release point', () => {
     expect(
       isSuppressedChatLauncherDragClick(clickEvent(), release),
+    ).toBe(true);
+  });
+
+  it('allows an untrusted pointerless click at the release point', () => {
+    expect(
+      isSuppressedChatLauncherDragClick(
+        clickEvent({ isTrusted: false }),
+        release,
+      ),
     ).toBe(false);
   });
 

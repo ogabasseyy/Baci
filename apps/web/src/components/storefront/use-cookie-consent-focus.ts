@@ -88,8 +88,12 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     const previousFocus = restoreFocusRef.current;
     restoreFocusRef.current = null;
     viewChangeFocusRef.current = false;
-    if (bannerHasFocusRef.current && previousFocus?.isConnected)
-      previousFocus.focus();
+    const focusTarget = previousFocus?.isConnected
+      ? previousFocus
+      : document.querySelector<HTMLElement>(
+          '.ogabassey-chat-anchor .ogabassey-chat-button'
+        );
+    if (bannerHasFocusRef.current) focusTarget?.focus();
     bannerHasFocusRef.current = false;
     dismissThroughBannerRef.current = false;
   }, [isVisible, viewKey]);
@@ -98,14 +102,15 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     if (!isVisible) return;
 
     const chatWasOpen = new WeakMap<HTMLElement, boolean>();
-    document
-      .querySelectorAll<HTMLElement>('.ogabassey-chat-anchor')
-      .forEach((anchor) => {
-        chatWasOpen.set(
-          anchor,
-          Boolean(anchor.querySelector('.ogabassey-chat-window'))
-        );
-      });
+    const currentAnchors = new Set(
+      document.querySelectorAll<HTMLElement>('.ogabassey-chat-anchor')
+    );
+    currentAnchors.forEach((anchor) => {
+      chatWasOpen.set(
+        anchor,
+        Boolean(anchor.querySelector('.ogabassey-chat-window'))
+      );
+    });
     const findAnchors = (node: Node, includeDescendants = false) => {
       const anchors = new Set<HTMLElement>();
       if (node instanceof HTMLElement) {
@@ -122,6 +127,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
       }
       return anchors;
     };
+    let observerRoot = currentAnchors.values().next().value?.parentElement;
     const observer = new MutationObserver((records) => {
       const changedAnchors = new Set<HTMLElement>();
       records.forEach(({ target, addedNodes, removedNodes }) => {
@@ -136,6 +142,8 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
         }
       });
       changedAnchors.forEach((chatAnchor) => {
+        if (chatAnchor.isConnected) currentAnchors.add(chatAnchor);
+        else currentAnchors.delete(chatAnchor);
         const chatIsOpen = Boolean(
           chatAnchor.querySelector('.ogabassey-chat-window')
         );
@@ -162,8 +170,19 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
         }
         chatWasOpen.set(chatAnchor, chatIsOpen);
       });
+      if (!observerRoot || observerRoot === document.body) {
+        const mountedAnchor = currentAnchors.values().next().value;
+        if (mountedAnchor?.parentElement) {
+          observer.disconnect();
+          observerRoot = mountedAnchor.parentElement;
+          observer.observe(observerRoot, { childList: true, subtree: true });
+        }
+      }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(observerRoot ?? document.body, {
+      childList: true,
+      subtree: true,
+    });
     return () => observer.disconnect();
   }, [isVisible]);
 

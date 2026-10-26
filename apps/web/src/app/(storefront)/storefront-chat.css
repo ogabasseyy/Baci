@@ -73,12 +73,13 @@
       background-color 0.2s ease,
       color 0.2s ease,
       opacity 0.2s ease,
+      filter 0.2s ease,
       transform 0.2s ease;
     width: 3.5rem;
   }
 
   .ogabassey-chat-button:hover {
-    transform: scale(1.06);
+    filter: brightness(1.06);
   }
 
   .ogabassey-chat-button--open {
@@ -88,7 +89,7 @@
   }
 
   .ogabassey-chat-button--open:hover {
-    transform: rotate(90deg) scale(1.06);
+    filter: brightness(1.06);
   }
 
   .ogabassey-chat-button--santa {

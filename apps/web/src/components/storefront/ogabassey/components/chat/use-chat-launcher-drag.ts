@@ -23,7 +23,6 @@ import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppres
 import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
 
 const DRAG_THRESHOLD = 6;
-
 export function useChatLauncherDrag(
   initialPosition?: Position,
   isOpen = false,

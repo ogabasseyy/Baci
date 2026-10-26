@@ -4,8 +4,6 @@ export function isSuppressedChatLauncherDragClick(
   event: ReactMouseEvent<HTMLButtonElement>,
   pending: { pointerId: number; pointerType: string; x: number; y: number } | null,
 ) {
-  // Pointerless clicks cannot be distinguished from independent assistive
-  // activations, so only suppress browsers that report pointer correlation.
   const nativeEvent = event.nativeEvent as MouseEvent & {
     pointerId?: number;
     pointerType?: string;
@@ -26,5 +24,9 @@ export function isSuppressedChatLauncherDragClick(
           nativeEvent.pointerType === 'touch' &&
           nativeEvent.isTrusted)),
   );
-  return Boolean(matchesRelease && matchesPointer);
+  const trustedPointerlessClick =
+    nativeEvent.pointerId === undefined && nativeEvent.isTrusted;
+  return Boolean(
+    matchesRelease && (matchesPointer || trustedPointerlessClick),
+  );
 }

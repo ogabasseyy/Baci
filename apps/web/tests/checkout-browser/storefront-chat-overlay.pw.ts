@@ -18,10 +18,13 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       initialBounds.y + initialBounds.height / 2
     );
     await expect
-      .poll(async () => (await launcher.boundingBox())?.width ?? 0)
-      .toBeGreaterThan(initialBounds.width + 1);
+      .poll(() =>
+        launcher.evaluate((button) => getComputedStyle(button).filter)
+      )
+      .toBe('brightness(1.06)');
     const bounds = await launcher.boundingBox();
     if (!bounds) throw new Error('Chat launcher lost its layout box');
+    expect(bounds.width).toBeCloseTo(initialBounds.width, 1);
     const start = {
       x: bounds.x + bounds.width / 2,
       y: bounds.y + bounds.height / 2,
@@ -81,8 +84,6 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     expect(dragPosition).toContain('translate3d(');
     const dragBounds = await launcher.boundingBox();
     if (!dragBounds) throw new Error('Chat launcher lost its layout box');
-    // The CSS hover scale can extend the painted edge slightly beyond the
-    // pre-scale box used for pointer clamping; assert it stays safely in view.
     expect(dragBounds.x).toBeGreaterThanOrEqual(12);
     expect(dragBounds.y).toBeGreaterThanOrEqual(12);
     expect(dragBounds.x + dragBounds.width).toBeLessThanOrEqual(width - 12);

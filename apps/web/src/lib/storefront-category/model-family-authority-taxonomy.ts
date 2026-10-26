@@ -161,7 +161,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /^(?:Samsung )?(?:Galaxy )?A(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+A(?=\s|\d|$)/i,
-      /(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)/i,
+      /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)A[0-9]{2}\b|(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\bA[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,
     ]
   ),
   fam(
@@ -171,7 +171,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /^(?:Samsung )?(?:Galaxy )?S(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+S(?=\s|\d|$)/i,
-      /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?S[0-9]{2}\b/i,
+      /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)S[0-9]{2}\b|(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\bS[0-9]{2}\b(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,
     ]
   ),
   fam(

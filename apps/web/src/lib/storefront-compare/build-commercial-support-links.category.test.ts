@@ -245,3 +245,49 @@ describe('buildCategorySupportLinks price-band relevance', () => {
     expect(links.some((link) => link.href.includes('/best-under/'))).toBe(true);
   });
 });
+
+describe('buildCategorySupportLinks destination pool', () => {
+  it('derives the brand-compare link from compareProducts, not the caller pool', () => {
+    const specs = { chipset: 'X', ram_gb: 8, storage_gb: 128 };
+    const callerPool = [
+      ...Array.from({ length: 3 }, (_, i) => ({
+        slug: `iphone-${i}`,
+        name: `iPhone ${i}`,
+        brand: 'Apple',
+        price: 500_000,
+        product_key_specs: specs,
+      })),
+      ...Array.from({ length: 3 }, (_, i) => ({
+        slug: `galaxy-${i}`,
+        name: `Galaxy ${i}`,
+        brand: 'Samsung',
+        price: 450_000,
+        product_key_specs: specs,
+      })),
+    ];
+    const comparePool = [
+      ...callerPool.slice(0, 3),
+      ...Array.from({ length: 3 }, (_, i) => ({
+        slug: `tecno-${i}`,
+        name: `Tecno ${i}`,
+        brand: 'Tecno',
+        price: 200_000,
+        product_key_specs: { chipset: 'Y', ram_gb: 12, storage_gb: 256 },
+      })),
+    ];
+    const links = buildCategorySupportLinks({
+      storeUrl: 'https://store.test',
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      products: callerPool,
+      compareProducts: comparePool,
+      inferredBrands: ['apple', 'tecno'],
+    });
+    const brandLink = links.find((link) =>
+      link.href.includes('/compare/apple-vs-')
+    );
+    expect(brandLink?.href).toBe(
+      'https://store.test/smartphones/compare/apple-vs-tecno'
+    );
+  });
+});

@@ -73,7 +73,7 @@ export function buildCategorySupportLinks(input: {
   products: CommercialSupportProduct[];
   inferredBrands?: string[];
   approvedCompareSlugs?: ReadonlySet<string>;
-  /** Destination compare inventory; brand/price-band candidates derive from it when supplied. */
+  /** Destination compare inventory. Brand/price-band candidates derive from it; callers that cannot supply it must pass a pool identical to the destination compare inventory, or those links may point at a candidate the compare page rejects. */
   compareProducts?: CommercialSupportProduct[];
   /** Article contexts: compare links require an inferred brand; price bands count only inferred-brand products. */
   requireInferredBrandRelevance?: boolean;

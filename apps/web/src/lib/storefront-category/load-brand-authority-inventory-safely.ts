@@ -9,6 +9,8 @@ type BrandAuthorityInventory = Awaited<
  * Optional-content fallback around getCachedBrandAuthorityInventory.
  * Hub links are supplemental SEO content — a transient destination-inventory
  * failure must not error the page, so it degrades to null (no hub link).
+ * The timeout bounds render latency only; the cached underlying scan is
+ * shared and may still complete in the background.
  */
 const DESTINATION_INVENTORY_TIMEOUT_MS = 3_000;
 

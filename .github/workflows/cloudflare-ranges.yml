@@ -1,0 +1,32 @@
+name: Cloudflare Ranges Freshness
+
+# The cart quota identity trusts CF-Connecting-IP only from peers in
+# Cloudflare's published egress ranges, hardcoded in
+# apps/web/src/lib/rate-limit-client.ts. This weekly check fails when
+# Cloudflare publishes different ranges so the trust anchor cannot go
+# silently stale: update the constants (and fetch date) to fix it.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare hardcoded ranges with Cloudflare publication
+        run: |
+          set -euo pipefail
+          file=apps/web/src/lib/rate-limit-client.ts
+          grep -oE "'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+'" "$file" | tr -d "'" | sort > /tmp/hardcoded-v4.txt
+          grep -oE "'[0-9a-fA-F:]+/[0-9]+'" "$file" | tr -d "'" | grep ':' | sort > /tmp/hardcoded-v6.txt
+          curl -fsS https://www.cloudflare.com/ips-v4 | sort > /tmp/live-v4.txt
+          curl -fsS https://www.cloudflare.com/ips-v6 | sort > /tmp/live-v6.txt
+          diff -u /tmp/live-v4.txt /tmp/hardcoded-v4.txt
+          diff -u /tmp/live-v6.txt /tmp/hardcoded-v6.txt
+          echo "Cloudflare ranges match the published lists."

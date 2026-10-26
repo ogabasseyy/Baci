@@ -7,6 +7,7 @@ describe('getChatMobileOffset', () => {
     ['/ogabassey', 'default'],
     ['/store/cart', 'cart'],
     ['/store/category/product', 'product'],
+    ['/store/category/cart-organizer', 'product'],
     ['/store/checkout/payment', 'default'],
   ] as const)('reserves the correct mobile controls for %s', (path, expected) => {
     expect(getChatMobileOffset(path)).toBe(expected);

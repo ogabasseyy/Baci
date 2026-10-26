@@ -79,7 +79,7 @@ describe('storefront overlay priority', () => {
   it('hides competing chrome while the privacy dialog is visible', () => {
     const selector = 'body:has(.storefront-cookie-consent)';
     for (const widget of [
-      '.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window))',
+      '.ogabassey-chat-anchor',
       '.ogabassey-offer-popup',
       '.ogabassey-newsletter-popup',
     ]) {
@@ -87,6 +87,10 @@ describe('storefront overlay priority', () => {
     }
     expect(cssRuleFor(`${selector} .ogabassey-newsletter-popup`)).toContain(
       'display: none'
+    );
+    expect(storefrontCoreCss).toContain(`${selector} .ogabassey-chat-anchor,`);
+    expect(storefrontCoreCss).toMatch(
+      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.ogabassey-offer-popup\s*\{\s*display:\s*none/
     );
     expect(storefrontCoreCss).toMatch(
       /@media \(max-width: 767px\)[\s\S]*body:has\(\.ogabassey-offer-popup\)[\s\S]*\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\)/

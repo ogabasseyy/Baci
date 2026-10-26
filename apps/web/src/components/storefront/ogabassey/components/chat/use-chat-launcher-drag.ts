@@ -5,6 +5,7 @@ import {
   type DragEvent,
   type PointerEvent,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -108,38 +109,43 @@ export function useChatLauncherDrag(
     return overflow;
   }
 
-  useEffect(() => {
-    const resize = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      const button = buttonRef.current;
-      if (!rect || !button || rect.width === 0 || rect.height === 0) return;
-      const overflow = readOverflow(button, rect);
-      setPosition((current) =>
-        current
-          ? clamp(
-              current.x,
-              current.y,
-              rect.width,
-              rect.height,
-              readBottomSafeArea(),
-              overflow,
-            )
-          : current,
+  function reclampPosition() {
+    const button = buttonRef.current;
+    const rect = button?.getBoundingClientRect();
+    if (!button || !rect || rect.width === 0 || rect.height === 0) return;
+    const overflow = readOverflow(button, rect);
+    setPosition((current) => {
+      if (!current) return current;
+      const next = clamp(
+        current.x,
+        current.y,
+        rect.width,
+        rect.height,
+        readBottomSafeArea(),
+        overflow,
       );
-    };
-    window.addEventListener('resize', resize);
+      return next.x === current.x && next.y === current.y ? current : next;
+    });
+  }
+
+  useEffect(() => {
+    window.addEventListener('resize', reclampPosition);
     const button = buttonRef.current;
     const observer =
       button && typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(resize)
+        ? new ResizeObserver(reclampPosition)
         : null;
     if (button) observer?.observe(button);
     return () => {
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', reclampPosition);
       observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen && position) reclampPosition();
+  }, [isOpen, position]);
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (

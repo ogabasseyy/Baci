@@ -166,6 +166,36 @@ describe('useChatLauncherDrag', () => {
     );
   });
 
+  it('re-clamps the launcher against its bubble after chat closes', () => {
+    const { pointer, button, rerender } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', -2000, -2000);
+    pointer('pointerup', -2000, -2000);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(16px, 16px, 0)',
+    );
+
+    rerender(<Harness open />);
+    const bubble = document.createElement('div');
+    bubble.dataset.chatLauncherOverflow = '';
+    button.parentElement?.append(bubble);
+    vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      top: 250,
+      width: 192,
+      height: 50,
+      right: 292,
+      bottom: 300,
+      x: 100,
+      y: 250,
+      toJSON: () => ({}),
+    });
+    rerender(<Harness />);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(116px, 66px, 0)',
+    );
+  });
+
   it('opens on a tap with small finger movement', () => {
     const { pointer, button, onOpen } = setup();
     pointer('pointerdown', 220, 320);

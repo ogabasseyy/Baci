@@ -712,6 +712,49 @@ BEGIN
 END;
 $s4grant$;
 
+-- Outcome capture (diagnostic): the replay runner surfaces only a
+-- line number, so the probe records its SQLSTATE and follow-up
+-- blocks raise per outcome — the failing line names what happened.
+CREATE TEMP TABLE vtu_s4_diag(state text);
+
+DO $s4probe$
+BEGIN
+  BEGIN
+    PERFORM public.get_vtu_checkout_settings(
+      'e1e1e1e1-0000-4000-8000-000000000001',
+      'a11ce000-0000-4000-8000-000000000001'
+    );
+    INSERT INTO vtu_s4_diag VALUES ('EXECUTED');
+  EXCEPTION WHEN OTHERS THEN
+    INSERT INTO vtu_s4_diag VALUES (SQLSTATE);
+  END;
+END;
+$s4probe$;
+
+DO $s4out_executed$
+BEGIN
+  IF EXISTS (SELECT 1 FROM vtu_s4_diag WHERE state = 'EXECUTED') THEN
+    RAISE EXCEPTION 'S4-outcome: anon executed settings RPC';
+  END IF;
+END;
+$s4out_executed$;
+
+DO $s4out_42501$
+BEGIN
+  IF EXISTS (SELECT 1 FROM vtu_s4_diag WHERE state = '42501') THEN
+    RAISE EXCEPTION 'S4-outcome: denied with 42501 (probe logic fault)';
+  END IF;
+END;
+$s4out_42501$;
+
+DO $s4out_42883$
+BEGIN
+  IF EXISTS (SELECT 1 FROM vtu_s4_diag WHERE state = '42883') THEN
+    RAISE EXCEPTION 'S4-outcome: function unavailable (42883)';
+  END IF;
+END;
+$s4out_42883$;
+
 DO $s4$
 DECLARE
   v_msg text;

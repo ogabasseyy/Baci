@@ -4,6 +4,7 @@ import {
   getProductSearchTotalCount,
   orderRecordsByIds,
 } from '@baci/shared';
+import hostedPins from '@/config/hosted-storefront-pins.json';
 import {
   hydrateRowsNeedingBaseInventory,
   hydrateRowsNeedingStorefrontVariants,
@@ -32,6 +33,11 @@ export async function fetchProductsPage(
   const normalizedCondition = normalizeProductConditionFilterValue(
     options.condition
   );
+  const useSandboxCatalogSearch =
+    process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1' &&
+    process.env.EXPO_PUBLIC_API_URL === hostedPins.apiOrigin &&
+    process.env.EXPO_PUBLIC_SUPABASE_URL === hostedPins.supabaseOrigin &&
+    merchantId === hostedPins.merchantId;
 
   // An explicitly provided search that normalizes to nothing (e.g. "!!")
   // matches nothing: fall through to the unfiltered branch would present
@@ -40,7 +46,7 @@ export async function fetchProductsPage(
     return { nextOffset: null, products: [], total: 0 };
   }
 
-  if (normalizedSearch && options.refinements) {
+  if (normalizedSearch && !useSandboxCatalogSearch && options.refinements) {
     return fetchRefinedProductsPage(
       merchantId,
       normalizedSearch,
@@ -50,7 +56,7 @@ export async function fetchProductsPage(
     );
   }
 
-  if (normalizedSearch) {
+  if (normalizedSearch && !useSandboxCatalogSearch) {
     const { data: rankedResults, error: rankedError } = await withSupabaseRetry(
       async () =>
         await supabase.rpc('search_products_v2', {
@@ -124,6 +130,10 @@ export async function fetchProductsPage(
     .select(PRODUCT_SELECT, { count: 'exact' })
     .eq('merchant_id', merchantId)
     .eq('status', 'active');
+
+  if (normalizedSearch && useSandboxCatalogSearch) {
+    query = query.ilike('name', `%${normalizedSearch}%`);
+  }
 
   if (options.category) query = query.eq('category_id', options.category);
   if (normalizedCondition) {

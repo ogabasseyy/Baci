@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { resubmitReclaimedSavingsDispatch } from './primary-wallet-savings-transfer';
 import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
 
 const selection = {
@@ -68,9 +69,13 @@ describe('savings transfer reference lookup', () => {
       expect(await lookup()).toBe('uncertain');
     }
   });
-  it('reports absent only on an authoritative 404', async () => {
-    const { lookup } = lookupWith({ status: false, message: 'not found' }, 404);
-    expect(await lookup()).toBe('absent');
+  it.each([
+    ['generic JSON error', { status: false, message: 'not found' }],
+    ['HTML error page', '<html><body>not found</body></html>'],
+    ['malformed response', 'not-json-at-all{{{'],
+  ])('reports uncertain for a 404 with %s because absence is unverified', async (_label, body) => {
+    const { lookup } = lookupWith(body, 404);
+    expect(await lookup()).toBe('uncertain');
   });
   it.each([
     400, 429, 500,
@@ -88,5 +93,66 @@ describe('savings transfer reference lookup', () => {
         fetchImplementation,
       })
     ).toBe('uncertain');
+  });
+  it('reports uncertain when the provider lookup times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImplementation = vi.fn(
+        () => new Promise<Response>(() => undefined)
+      );
+      const lookup = lookupSavingsTransferReference({
+        ...selection,
+        fetchImplementation,
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await lookup).toBe('uncertain');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it.each([
+    ['pending', { ...success, data: { ...success.data, status: 'pending' } }],
+    ['unknown', { ...success, data: { ...success.data, status: 'unknown' } }],
+  ])('reports uncertain for a matching reference with %s status', async (_label, body) => {
+    const { lookup } = lookupWith(body);
+    expect(await lookup()).toBe('uncertain');
+  });
+  it('does not release or redispatch a reclaimed transfer after a generic 404 lookup', async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: false, message: 'not found' }), {
+        status: 404,
+      })
+    );
+    const retrieveWallet = vi.fn();
+    const transfer = vi.fn();
+    const releaseAfterRejection = vi.fn();
+
+    const result = await resubmitReclaimedSavingsDispatch(
+      {
+        operationId: 'operation',
+        goalId: 'goal',
+        amountKobo: selection.amountKobo,
+        sourceWalletId: selection.walletId,
+        destinationWalletId: selection.destinationWalletId,
+        businessId: 'business',
+        providerCustomerId: 'customer',
+        reference: selection.reference,
+      },
+      {
+        lookupTransfer: async () =>
+          await lookupSavingsTransferReference({
+            ...selection,
+            fetchImplementation,
+          }),
+        retrieveWallet,
+        transfer,
+        releaseAfterRejection,
+      }
+    );
+
+    expect(result).toBe('pending');
+    expect(retrieveWallet).not.toHaveBeenCalled();
+    expect(transfer).not.toHaveBeenCalled();
+    expect(releaseAfterRejection).not.toHaveBeenCalled();
   });
 });

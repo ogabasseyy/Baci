@@ -8,6 +8,19 @@ export const provisioningFixture = {
     environment: 'staging' as const,
   },
   goalId: '00000000-0000-4000-8000-000000000006',
+  ready: {
+    goalId: '00000000-0000-4000-8000-000000000006',
+    status: 'ready',
+    interestAccepted: false,
+    interestEnrollment: 'not_requested',
+    accounts: [
+      {
+        accountNumber: '0123456789',
+        accountName: 'Synthetic',
+        bankName: 'Synthetic Bank',
+      },
+    ],
+  },
   configuration: {
     onboarding: {
       merchantId: '00000000-0000-4000-8000-000000000001',

@@ -19,6 +19,7 @@ const interestBreakdownSchema = z.object({
 const interestPayoutSuccessDataSchema = z.object({
   id: z.string().min(1),
   amount: koboAmountSchema,
+  currency: z.literal('NGN').optional(),
   destination_wallet: z.string().min(1),
   destination_wallet_balance: koboAmountSchema,
   destination_wallet_ledger_balance: koboAmountSchema,

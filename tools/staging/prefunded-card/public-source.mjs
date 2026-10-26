@@ -15,9 +15,15 @@ const toolsDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export function assertRetirementSourceClosure(contents) {
   const required = [
-    ['apps/web/src/lib/piggyvest/prefunded-card-checkout-public-runtime.ts', 'prefundedCardCheckoutEmailSchema'],
+    [
+      'apps/web/src/lib/piggyvest/prefunded-card-checkout-public-runtime.ts',
+      'prefundedCardCheckoutEmailSchema',
+    ],
     ['apps/web/src/schemas/prefunded-card-checkout-email.ts', 'public domain'],
-    ['apps/web/src/schemas/prefunded-card-checkout-public-runtime.ts', "'retired_unconfirmed'"],
+    [
+      'apps/web/src/schemas/prefunded-card-checkout-public-runtime.ts',
+      "'retired_unconfirmed'",
+    ],
   ];
   for (const [name, marker] of required) {
     const content = contents.get(name);
@@ -120,9 +126,7 @@ export async function snapshot(sourceRoot, outputDirectory) {
   contents.delete('apps/web/src/env.ts');
   sourceHashes.delete('apps/web/src/env.ts');
   assertRetirementSourceClosure(contents);
-  const sources = Object.fromEntries(
-    sourceHashes
-  );
+  const sources = Object.fromEntries(sourceHashes);
   contents.set(
     'apps/web/next.config.mjs',
     await readFile(path.join(toolsDirectory, 'public-next.config.mjs'))
@@ -179,7 +183,9 @@ a:focus-visible{outline:3px solid var(--store-accent);outline-offset:4px}
   );
   const rewrites = Object.fromEntries(
     [...contents]
-      .filter(([name, content]) => sources[name] && sources[name] !== digest(content))
+      .filter(
+        ([name, content]) => sources[name] && sources[name] !== digest(content)
+      )
       .map(([name, content]) => [name, digest(content)])
   );
   await mkdir(destination, { mode: 0o700 });

@@ -43,6 +43,7 @@ export interface WalletFundingAccount {
 }
 
 export interface Transaction {
+  goal_id?: string;
   id: string;
   type:
     | 'credit'
@@ -61,6 +62,8 @@ export interface Transaction {
 }
 
 export interface WalletQueryData {
+  walletId?: string;
+  goalMetadata?: Record<string, string>;
   wallet: WalletData;
   transactions: Transaction[];
 }

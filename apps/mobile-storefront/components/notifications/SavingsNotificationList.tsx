@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList } from '@shopify/flash-list';
-import type { ReactElement } from 'react';
+import { type ReactElement, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,9 +11,10 @@ import {
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND, RADIUS, SPACING } from '@/constants/Colors';
 import type { SavingsNotification } from '@/schemas/savings-notifications';
+import { SavingsNotificationCard } from './SavingsNotificationCard';
 
 type SavingsNotificationListProps = {
-  header: ReactElement | null;
+  preferences: ReactElement | null;
   isLoading: boolean;
   notifications: SavingsNotification[];
   onOpen: (notification: SavingsNotification) => void;
@@ -44,24 +45,8 @@ export function getSavingsNotificationAccessibilityLabel(
   return `${title}, ${formatSavingsNotificationTimestamp(createdAt)}`;
 }
 
-function getNotificationIcon(
-  type: string
-):
-  | 'cash-outline'
-  | 'flame-outline'
-  | 'flag-outline'
-  | 'notifications-outline'
-  | 'trophy-outline' {
-  if (type.includes('interest')) return 'cash-outline';
-  if (type.includes('milestone') || type.includes('completion'))
-    return 'trophy-outline';
-  if (type.includes('streak')) return 'flame-outline';
-  if (type.includes('missed')) return 'flag-outline';
-  return 'notifications-outline';
-}
-
 export function SavingsNotificationList({
-  header,
+  preferences,
   isLoading,
   notifications,
   onOpen,
@@ -70,6 +55,7 @@ export function SavingsNotificationList({
 }: SavingsNotificationListProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const [retryPressed, setRetryPressed] = useState(false);
 
   const renderEmpty = () => {
     if (isLoading) {
@@ -102,10 +88,14 @@ export function SavingsNotificationList({
             accessibilityRole="button"
             accessibilityLabel="Try again"
             onPress={onRetry}
-            style={({ pressed }) => [
+            onPressIn={() => setRetryPressed(true)}
+            onPressOut={() => setRetryPressed(false)}
+            style={[
               styles.retryButton,
-              { backgroundColor: colors.primary },
-              pressed && styles.pressed,
+              {
+                backgroundColor: BRAND.primary,
+                opacity: retryPressed ? 0.72 : 1,
+              },
             ]}
           >
             <Text style={styles.retryText}>Try again</Text>
@@ -137,51 +127,30 @@ export function SavingsNotificationList({
       data={notifications}
       keyExtractor={(notification) => notification.id}
       ListEmptyComponent={renderEmpty}
-      ListHeaderComponent={header}
+      ListHeaderComponent={
+        <Text
+          accessibilityRole="header"
+          style={[styles.heading, { color: colors.text }]}
+        >
+          Recent updates
+        </Text>
+      }
+      ListFooterComponent={
+        preferences ? (
+          <View style={styles.preferences}>{preferences}</View>
+        ) : null
+      }
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
-        <Pressable
-          accessibilityLabel={getSavingsNotificationAccessibilityLabel(
+        <SavingsNotificationCard
+          label={getSavingsNotificationAccessibilityLabel(
             item.title,
             item.createdAt
           )}
-          accessibilityRole="button"
-          onPress={() => onOpen(item)}
-          style={({ pressed }) => [
-            styles.notification,
-            { backgroundColor: colors.card, borderColor: colors.border },
-            item.readAt === null && {
-              borderLeftColor: BRAND.primary,
-              borderLeftWidth: 3,
-            },
-            pressed && styles.pressed,
-          ]}
-        >
-          <View style={[styles.icon, { backgroundColor: colors.background }]}>
-            <Ionicons
-              color={colors.primary}
-              name={getNotificationIcon(item.type)}
-              size={22}
-            />
-          </View>
-          <View style={styles.copy}>
-            <Text
-              numberOfLines={1}
-              style={[styles.notificationTitle, { color: colors.text }]}
-            >
-              {item.title}
-            </Text>
-            <Text
-              numberOfLines={3}
-              style={[styles.notificationBody, { color: colors.textSecondary }]}
-            >
-              {item.body}
-            </Text>
-            <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
-              {formatSavingsNotificationTimestamp(item.createdAt)}
-            </Text>
-          </View>
-        </Pressable>
+          notification={item}
+          onOpen={onOpen}
+          timestamp={formatSavingsNotificationTimestamp(item.createdAt)}
+        />
       )}
       showsVerticalScrollIndicator={false}
     />
@@ -189,41 +158,12 @@ export function SavingsNotificationList({
 }
 
 const styles = StyleSheet.create({
+  heading: { fontSize: 18, fontWeight: '700', marginBottom: SPACING.md },
+  preferences: { marginTop: SPACING.lg },
   content: {
     flexGrow: 1,
     gap: SPACING.sm,
     padding: SPACING.md,
-  },
-  notification: {
-    alignItems: 'center',
-    borderRadius: RADIUS.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    padding: SPACING.md,
-  },
-  icon: {
-    alignItems: 'center',
-    borderRadius: RADIUS.full,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  copy: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  notificationBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  timestamp: {
-    fontSize: 11,
-    marginTop: SPACING.xs,
   },
   state: {
     alignItems: 'center',
@@ -254,8 +194,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
-  },
-  pressed: {
-    opacity: 0.72,
   },
 });

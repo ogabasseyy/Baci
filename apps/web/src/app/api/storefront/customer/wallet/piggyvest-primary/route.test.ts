@@ -13,9 +13,13 @@ const mocks = vi.hoisted(() => ({
   provider: vi.fn(),
   snapshot: vi.fn(),
   mapping: vi.fn(),
+  presence: vi.fn(),
   wallet: vi.fn(),
   accounts: vi.fn(),
   verify: vi.fn(),
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-presence', () => ({
+  hasPrimaryWalletOnboarding: mocks.presence,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-verification', () => ({
   verifyPrimaryWalletMapping: mocks.verify,
@@ -86,6 +90,7 @@ beforeEach(() => {
     userId: 'test-user',
   });
   mocks.onboard.mockResolvedValue({ status: 'pending' });
+  mocks.presence.mockResolvedValue(true);
   mocks.snapshot.mockResolvedValue({
     status: 'ready',
     balanceKobo: 100,
@@ -99,6 +104,20 @@ beforeEach(() => {
 });
 describe('primary wallet funding account GET', () => {
   const url = `https://example.com/api/storefront/customer/wallet/piggyvest-primary?merchantId=${merchantId}`;
+  it('reports not started only after confirming no durable onboarding exists', async () => {
+    mocks.presence.mockResolvedValue(false);
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'not_started',
+      account: null,
+    });
+    expect(mocks.snapshot).not.toHaveBeenCalled();
+  });
+  it('fails closed when onboarding presence cannot be checked', async () => {
+    mocks.presence.mockRejectedValue(new Error('unavailable'));
+    expect((await GET(new NextRequest(url))).status).toBe(503);
+  });
   it('requires authentication before resolving a wallet', async () => {
     mocks.auth.mockResolvedValue({
       user: null,

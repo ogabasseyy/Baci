@@ -37,7 +37,9 @@ describe('committed remediation branch resume', () => {
 
     assert.equal(result.type, 'pr_opened');
     assert.deepEqual(
-      calls.slice(-4).map(({ args, command }) => `${command} ${args.join(' ')}`),
+      calls
+        .slice(-4)
+        .map(({ args, command }) => `${command} ${args.join(' ')}`),
       [
         'git worktree list --porcelain',
         'rm -rf -- /worktrees/abc123-pnpm-store',

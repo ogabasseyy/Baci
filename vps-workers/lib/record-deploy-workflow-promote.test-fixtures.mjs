@@ -59,7 +59,16 @@ export function recordCommits(bare) {
 export function recordBarriers(bare) {
   const out = execFileSync(
     'git',
-    ['--git-dir', bare, 'ls-tree', '-r', '--name-only', BRANCH, '--', 'barriers/'],
+    [
+      '--git-dir',
+      bare,
+      'ls-tree',
+      '-r',
+      '--name-only',
+      BRANCH,
+      '--',
+      'barriers/',
+    ],
     { encoding: 'utf8' }
   ).trim();
   return out === '' ? [] : out.split('\n');

@@ -42,6 +42,7 @@ export default function SettingsScreen() {
   const {
     isRegistered,
     isLoading: isPushLoading,
+    error: pushError,
     register: registerPush,
     unregister: unregisterPush,
   } = usePushNotifications();
@@ -181,6 +182,7 @@ export default function SettingsScreen() {
           colors={colors}
           isLoading={isPushLoading}
           isRegistered={isRegistered}
+          error={pushError}
           onToggle={(value) => {
             void handleNotificationToggle(value);
           }}

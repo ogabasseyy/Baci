@@ -6,6 +6,7 @@ import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wall
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { trackSavingsContribution } from '@/services/track-savings-contribution';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
@@ -40,6 +41,24 @@ export function createWalletSavingsActions({
   setShowSavingsProgressModal: (value: boolean) => void;
   setSavingsContributionAmount: (value: string) => void;
 }) {
+  const refreshGoal = async () => {
+    const refreshed = await refetchWallet();
+    if (
+      typeof refreshed !== 'object' ||
+      refreshed === null ||
+      !('data' in refreshed)
+    )
+      return null;
+    const data = refreshed.data as
+      | import('@/hooks/wallet-query').WalletQueryData
+      | undefined;
+    return (
+      data?.wallet.savings_goals?.find((item) => item.id === goal?.id) ??
+      (data?.wallet.active_savings_goal?.id === goal?.id
+        ? (data?.wallet.active_savings_goal ?? null)
+        : null)
+    );
+  };
   const handleOpenSavings = () => {
     if (goal && (goal.status !== 'completed' || goal.selection_unresolved)) {
       setShowSavingsProgressModal(true);
@@ -49,12 +68,6 @@ export function createWalletSavingsActions({
   };
 
   const handleFundSavingsWallet = () => {
-    if (
-      isPiggyvestPrimaryMerchant(activeMerchantId) &&
-      idempotencyKeyRef.current
-    ) {
-      return handleAddSavingsContribution();
-    }
     const requestedAmount = Number(savingsContributionAmount);
     if (
       goal?.source_mode !== 'manual' ||
@@ -67,6 +80,15 @@ export function createWalletSavingsActions({
       return;
     }
     if (requestedAmount <= spendableBalance) {
+      return;
+    }
+    if (isPiggyvestPrimaryMerchant(activeMerchantId)) {
+      router.setParams({
+        action: 'bank-transfer',
+        intent: Crypto.randomUUID(),
+        requiredAmount: String(requestedAmount - Math.max(0, spendableBalance)),
+        returnTo: `/wallet?action=savings&savingsGoalId=${encodeURIComponent(goal.id)}&savingsAmount=${encodeURIComponent(savingsContributionAmount)}`,
+      });
       return;
     }
     if (isHostedStagingTestPaymentsEnabled()) {
@@ -96,6 +118,8 @@ export function createWalletSavingsActions({
       return checkPendingPrimarySavings({
         merchantId: activeMerchantId,
         operationId: idempotencyKeyRef.current,
+        goal,
+        refreshGoal,
         clearOperation: () => (idempotencyKeyRef.current = null),
         clearAmount: () => setSavingsContributionAmount(''),
         refetchWallet,
@@ -105,9 +129,14 @@ export function createWalletSavingsActions({
     return addSavingsContributionToGoal({
       activeMerchantId,
       activeMerchantSlug,
-      addSavingsContribution: isPiggyvestPrimaryMerchant(activeMerchantId)
-        ? addPiggyvestPrimarySavingsContribution
-        : addSavingsContribution,
+      addSavingsContribution: (request) => {
+        const submit = isPiggyvestPrimaryMerchant(activeMerchantId)
+          ? addPiggyvestPrimarySavingsContribution
+          : addSavingsContribution;
+        return goal
+          ? trackSavingsContribution(goal, () => submit(request), refreshGoal)
+          : submit(request);
+      },
       cancelSavingsReminder: cancelSavingsReminderNotification,
       clearIdempotencyKey: () => (idempotencyKeyRef.current = null),
       clearSavingsContributionAmount: () => setSavingsContributionAmount(''),

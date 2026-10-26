@@ -1,13 +1,46 @@
 export function officialStorageBootstrap(evidence, now) {
-  const reject = () => { throw new Error('Official Storage bootstrap evidence rejected'); };
-  if (!evidence || Object.keys(evidence).sort().join(',') !== 'db,network,observedAt,reviewed') reject();
+  const reject = () => {
+    throw new Error('Official Storage bootstrap evidence rejected');
+  };
+  if (
+    !evidence ||
+    Object.keys(evidence).sort().join(',') !== 'db,network,observedAt,reviewed'
+  )
+    reject();
   const observed = Date.parse(evidence.observedAt);
-  if (!Number.isSafeInteger(now) || !Number.isFinite(observed) || now < observed || now - observed > 300000 || evidence.reviewed !== true) reject();
+  if (
+    !Number.isSafeInteger(now) ||
+    !Number.isFinite(observed) ||
+    now < observed ||
+    now - observed > 300000 ||
+    evidence.reviewed !== true
+  )
+    reject();
   const { db, network } = evidence;
-  if (!db || !network || !/^[a-f0-9]{64}$/.test(db.id) || !/^[a-f0-9]{64}$/.test(network.id)) reject();
-  if (db.image !== 'supabase/postgres:17.6.1.136' || db.project !== 'baci-isolated-savings' || db.service !== 'db' || db.healthy !== true || db.networkId !== network.id) reject();
-  if (network.name !== 'baci-isolated-savings_database' || network.project !== 'baci-isolated-savings' || network.internal !== true || network.bridge !== 'baci-stg-db') reject();
-  const required = (name) => `\${${name}:?Secure staging setup required: ${name}}`;
+  if (
+    !db ||
+    !network ||
+    !/^[a-f0-9]{64}$/.test(db.id) ||
+    !/^[a-f0-9]{64}$/.test(network.id)
+  )
+    reject();
+  if (
+    db.image !== 'supabase/postgres:17.6.1.136' ||
+    db.project !== 'baci-isolated-savings' ||
+    db.service !== 'db' ||
+    db.healthy !== true ||
+    db.networkId !== network.id
+  )
+    reject();
+  if (
+    network.name !== 'baci-isolated-savings_database' ||
+    network.project !== 'baci-isolated-savings' ||
+    network.internal !== true ||
+    network.bridge !== 'baci-stg-db'
+  )
+    reject();
+  const required = (name) =>
+    `\${${name}:?Secure staging setup required: ${name}}`;
   return {
     name: 'baci-isolated-savings',
     services: {

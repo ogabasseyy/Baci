@@ -5,7 +5,9 @@ import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), setParams: jest.fn() },
+}));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'synthetic-key' }));
 jest.mock('./check-pending-primary-savings', () => ({
   checkPendingPrimarySavings: jest.fn(),
@@ -52,6 +54,26 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
 }
 
 describe('createWalletSavingsActions', () => {
+  it('opens primary bank funding and preserves the savings goal and amount without starting a card payment', () => {
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      spendableBalance: 500,
+    };
+    createWalletSavingsActions(input).handleFundSavingsWallet();
+
+    expect(router.setParams).toHaveBeenCalledWith({
+      action: 'bank-transfer',
+      intent: 'synthetic-key',
+      requiredAmount: '2000',
+      returnTo:
+        '/wallet?action=savings&savingsGoalId=goal-1&savingsAmount=2500',
+    });
+    expect(router.push).not.toHaveBeenCalled();
+    expect(input.setShowSavingsProgressModal).not.toHaveBeenCalled();
+    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    expect(input.setSavingsContributionAmount).not.toHaveBeenCalled();
+  });
   it('exposes pending status only for an existing primary-wallet operation', () => {
     const input = {
       ...createInput(),
@@ -103,7 +125,7 @@ describe('createWalletSavingsActions', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
-  it('checks an existing primary contribution instead of starting another wallet payment', () => {
+  it('opens wallet funding without checking or clearing an existing savings operation', () => {
     const input = {
       ...createInput(),
       activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
@@ -113,12 +135,24 @@ describe('createWalletSavingsActions', () => {
 
     createWalletSavingsActions(input).handleFundSavingsWallet();
 
+    expect(checkPendingPrimarySavings).not.toHaveBeenCalled();
+    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    expect(router.setParams).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'bank-transfer' })
+    );
+    expect(input.idempotencyKeyRef.current).toBe('pending-operation');
+  });
+  it('still checks the existing operation when transferring from wallet into savings', () => {
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      idempotencyKeyRef: { current: 'pending-operation' },
+    };
+    createWalletSavingsActions(input).handleAddSavingsContribution();
     expect(checkPendingPrimarySavings).toHaveBeenCalledWith(
       expect.objectContaining({ operationId: 'pending-operation' })
     );
-    expect(input.startWalletTopUp).not.toHaveBeenCalled();
-    expect(router.push).not.toHaveBeenCalled();
-    expect(input.idempotencyKeyRef.current).toBe('pending-operation');
+    expect(addSavingsContributionToGoal).not.toHaveBeenCalled();
   });
 
   it('opens selected plan bank funding only in pinned hosted staging', () => {

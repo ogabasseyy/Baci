@@ -23,6 +23,7 @@ import {
   validateLoginEmailInput,
 } from './login-screen-controller.helpers';
 import { runLoginSocialSignIn } from './login-social-sign-in';
+import { useLoginAuthActions } from './use-login-auth-actions';
 import { useLoginHardwareBackHandler } from './useLoginHardwareBackHandler';
 
 const log = createLogger('Login');
@@ -44,28 +45,19 @@ export function useLoginScreenController() {
   const initialEmail = getValidatedLoginEmailHint(emailParam);
 
   const dismissAndNavigate = () => dismissAuthenticatedLogin(returnTo);
+  const { signInWithOtp, verifyOtp, signInWithPassword } =
+    useLoginAuthActions();
 
-  const {
-    signInWithOtp,
-    verifyOtp,
-    signInWithGoogle,
-    isLoading,
-    signInWithPassword,
-    signInWithApple,
-    user,
-    isInitialized,
-  } = useAuthStore(
-    useShallow((state) => ({
-      signInWithOtp: state.signInWithOtp,
-      verifyOtp: state.verifyOtp,
-      signInWithGoogle: state.signInWithGoogle,
-      isLoading: state.isLoading,
-      signInWithPassword: state.signInWithPassword,
-      signInWithApple: state.signInWithApple,
-      user: state.user,
-      isInitialized: state.isInitialized,
-    }))
-  );
+  const { signInWithGoogle, isLoading, signInWithApple, user, isInitialized } =
+    useAuthStore(
+      useShallow((state) => ({
+        signInWithGoogle: state.signInWithGoogle,
+        isLoading: state.isLoading,
+        signInWithApple: state.signInWithApple,
+        user: state.user,
+        isInitialized: state.isInitialized,
+      }))
+    );
 
   const [step, setStep] = useState<AuthStep>('email');
   const [authMethod, setAuthMethod] = useState<LoginAuthMethod>('otp');

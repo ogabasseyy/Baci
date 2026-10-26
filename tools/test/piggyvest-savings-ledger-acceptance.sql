@@ -24,7 +24,7 @@ END $$;
 INSERT INTO piggyvest_savings_ledger.bindings
   (integration_id, merchant_id, customer_id, goal_id, authorized_login, enabled)
 VALUES ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001',
-  '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', 'harness_admin', true);
+  '20000000-0000-4000-8000-000000000001', '30000000-0000-4000-8000-000000000001', SESSION_USER, true);
 DO $$
 DECLARE original jsonb;
 BEGIN

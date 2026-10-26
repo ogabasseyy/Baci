@@ -4,10 +4,16 @@ import { hostedSavingsResetPrefix } from './hosted-savings-install-reset-prefix'
 import { hostedSavingsResetSnapshotSql } from './hosted-savings-install-reset-snapshot';
 import { hostedSavingsInstallSql } from './hosted-savings-install-sql';
 
-export function buildHostedSavingsResetSql(baseline: string, publicComment: string | null, commit = false) {
+export function buildHostedSavingsResetSql(
+  baseline: string,
+  publicComment: string | null,
+  commit = false
+) {
   const prefix = hostedSavingsResetPrefix(baseline);
   const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
-  const expected = prefix.functions.map((entry) => `(${literal(entry.signature)},'${entry.bodyMd5}')`).join(',\n');
+  const expected = prefix.functions
+    .map((entry) => `(${literal(entry.signature)},'${entry.bodyMd5}')`)
+    .join(',\n');
   const comment = publicComment === null ? 'NULL' : literal(publicComment);
   return `BEGIN;
 SET LOCAL search_path=pg_catalog;

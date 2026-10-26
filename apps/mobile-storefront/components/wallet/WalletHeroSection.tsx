@@ -1,27 +1,33 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { BRAND } from '@/constants/Colors';
+import type { usePiggyvestWalletSetup } from '@/hooks/use-piggyvest-wallet-setup';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { SavingsProviderPreview } from './SavingsProviderPreview';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
+import { WalletHeroAction } from './WalletHeroAction';
 import { WalletHeroCreateAccount } from './WalletHeroCreateAccount';
 import { WalletHeroFundingAccount } from './WalletHeroFundingAccount';
 import { WalletHeroSavingsAccount } from './WalletHeroSavingsAccount';
 import { WalletQuickUtilities } from './WalletQuickUtilities';
-import { WALLET_COLORS } from './wallet.colors';
+import {
+  WalletRefreshNotice,
+  type WalletRefreshState,
+} from './WalletRefreshNotice';
 import { styles } from './wallet.styles';
 import type { WalletDisplayFundingAccount } from './wallet.types';
 
 type WalletHeroSectionProps = {
+  onOpenSavingsPlans?: () => void;
   activeSavingsGoal?: Pick<
     WalletActiveSavingsGoal,
     'id' | 'status' | 'source_mode'
   > | null;
   isRefetching?: boolean;
+  refreshState?: WalletRefreshState;
+  onRefresh?: () => void;
   canCreateFundingAccount?: boolean;
   createFundingAccountUnavailableMessage?: string;
   isCreatingFundingAccount?: boolean;
@@ -38,6 +44,8 @@ type WalletHeroSectionProps = {
   onOpenRedeemPanel: () => void;
   savingsBalance: number;
   totalBalance: number;
+  walletSetupState?: ReturnType<typeof usePiggyvestWalletSetup>['state'];
+  primaryCapabilityPending?: boolean;
 };
 
 function formatTierLabel(tier: string | null | undefined) {
@@ -49,8 +57,11 @@ function formatTierLabel(tier: string | null | undefined) {
 }
 
 export function WalletHeroSection({
+  onOpenSavingsPlans,
   activeSavingsGoal,
   isRefetching = false,
+  refreshState,
+  onRefresh,
   canCreateFundingAccount = false,
   createFundingAccountUnavailableMessage,
   isCreatingFundingAccount = false,
@@ -67,8 +78,11 @@ export function WalletHeroSection({
   onOpenRedeemPanel,
   savingsBalance,
   totalBalance,
+  walletSetupState,
+  primaryCapabilityPending = false,
 }: WalletHeroSectionProps) {
   const visibleTier = formatTierLabel(loyaltyTier);
+  const hasHeaderAction = !!fundingAccount || !!walletSetupState;
   const savingsGoalId =
     !fundingAccount &&
     isHostedStagingTestPaymentsEnabled() &&
@@ -77,61 +91,82 @@ export function WalletHeroSection({
       ? activeSavingsGoal.id
       : null;
   return (
-    <Animated.View entering={FadeIn.duration(400)} style={styles.walletHero}>
-      <View style={styles.walletHeroHeader}>
-        <SavingsProviderPreview />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add money"
-          accessibilityHint="Opens wallet funding options"
-          hitSlop={6}
-          // Keep the funding action as the single bright accent in the hero.
+    <View style={styles.walletHero}>
+      <View style={styles.walletHeroUpperArea}>
+        <View
+          testID="wallet-balance-header"
           style={[
-            styles.addMoneyButton,
-            { borderColor: BRAND.primary, borderWidth: 2 },
+            styles.walletHeroHeader,
+            !hasHeaderAction && styles.walletHeroHeaderWithoutAccount,
           ]}
-          onPress={onOpenFundPanel}
         >
-          <Ionicons
-            accessible={false}
-            importantForAccessibility="no"
-            name="add-circle-outline"
-            size={14}
-            color={WALLET_COLORS.white}
-          />
-          <Text style={styles.addMoneyButtonText}>Add Money</Text>
-        </Pressable>
-      </View>
-      <View style={styles.balanceAndAccountRow}>
-        <View style={styles.balanceBlock}>
-          <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
-          <Text
-            style={styles.balanceAmount}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.55}
-          >
-            {formatNgnCurrency(totalBalance)}
-          </Text>
+          {!hasHeaderAction ? (
+            <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
+          ) : null}
+          <View style={!hasHeaderAction && styles.balanceProviderAlignment}>
+            <SavingsProviderPreview />
+          </View>
+          {fundingAccount ? (
+            <WalletHeroAction hasAccount onPress={onOpenFundPanel} />
+          ) : null}
         </View>
-        {fundingAccount ? (
-          <WalletHeroFundingAccount account={fundingAccount} />
-        ) : savingsGoalId ? (
-          <WalletHeroSavingsAccount
-            goalId={savingsGoalId}
-            isRefetching={isRefetching}
-          />
-        ) : (
-          <WalletHeroCreateAccount
-            canCreate={canCreateFundingAccount}
-            isCreating={isCreatingFundingAccount}
-            needsPhone={needsPhone}
-            onCreate={onCreateFundingAccount}
-            onOpenFundPanel={onOpenFundPanel}
-          />
-        )}
+        <View
+          style={[
+            styles.balanceAndAccountRow,
+            !hasHeaderAction && styles.balanceAndAccountRowWithoutAccount,
+          ]}
+        >
+          <View style={styles.balanceBlock}>
+            {hasHeaderAction ? (
+              <Text style={styles.balanceLabel}>Total Balance · NGN</Text>
+            ) : null}
+            <Text
+              style={[
+                styles.balanceAmount,
+                !hasHeaderAction && styles.balanceAmountWithoutAccount,
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.55}
+            >
+              {formatNgnCurrency(totalBalance)}
+            </Text>
+          </View>
+          {fundingAccount ? (
+            <WalletHeroFundingAccount account={fundingAccount} />
+          ) : walletSetupState ? (
+            <View style={styles.balanceBlock} />
+          ) : savingsGoalId ? (
+            <WalletHeroSavingsAccount
+              goalId={savingsGoalId}
+              isRefetching={isRefetching}
+            />
+          ) : (
+            <WalletHeroCreateAccount
+              canCreate={canCreateFundingAccount}
+              isCreating={isCreatingFundingAccount}
+              needsPhone={needsPhone}
+              onCreate={onCreateFundingAccount}
+              onOpenFundPanel={onOpenFundPanel}
+            />
+          )}
+        </View>
+        {!fundingAccount && walletSetupState ? (
+          <View
+            testID="wallet-setup-account-space"
+            style={styles.accountSetupSpace}
+          >
+            <WalletHeroAction
+              hasAccount={false}
+              setupState={walletSetupState}
+              disabled={primaryCapabilityPending}
+              onPress={onOpenFundPanel}
+            />
+          </View>
+        ) : null}
       </View>
       {!fundingAccount &&
+      !walletSetupState &&
       !savingsGoalId &&
       createFundingAccountUnavailableMessage ? (
         <Text style={styles.accountUnavailableMessage}>
@@ -139,6 +174,10 @@ export function WalletHeroSection({
         </Text>
       ) : null}
 
+      <WalletRefreshNotice
+        state={refreshState ?? (isRefetching ? 'updating' : undefined)}
+        onRetry={onRefresh}
+      />
       <View style={styles.balanceSummaryRow}>
         <View style={styles.balanceSummaryCell}>
           <Ionicons name="trending-up-outline" size={18} color="#50D6A3" />
@@ -154,7 +193,13 @@ export function WalletHeroSection({
               : '—'}
           </Text>
         </View>
-        <View style={styles.balanceSummaryCell}>
+        <Pressable
+          style={styles.balanceSummaryCell}
+          accessibilityRole="button"
+          accessibilityLabel="View all savings plans"
+          onPress={onOpenSavingsPlans}
+          disabled={!onOpenSavingsPlans}
+        >
           <Ionicons name="wallet-outline" size={18} color="#7CA7FF" />
           <Text style={styles.balanceSummaryLabel}>Savings</Text>
           <Text
@@ -165,7 +210,7 @@ export function WalletHeroSection({
           >
             {formatNgnCurrency(savingsBalance)}
           </Text>
-        </View>
+        </Pressable>
         <View style={styles.balanceSummaryCell}>
           <View style={styles.loyaltyActionRow}>
             <Ionicons name="star-outline" size={18} color="#F8B84C" />
@@ -202,6 +247,6 @@ export function WalletHeroSection({
           watch={creditWatch}
         />
       ) : null}
-    </Animated.View>
+    </View>
   );
 }

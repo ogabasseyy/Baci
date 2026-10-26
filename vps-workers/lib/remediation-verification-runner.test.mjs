@@ -91,7 +91,10 @@ describe('runRemediationVerification', () => {
     assert.throws(() => runRemediationVerification(options), /verify failed/);
     assert.equal(runnerCalls.length, 1);
     assert.equal(runnerCalls[0][0], 'docker');
-    assert.match(runnerCalls[0][1].join(' '), /rm -f baci-remediation-.*-verify/);
+    assert.match(
+      runnerCalls[0][1].join(' '),
+      /rm -f baci-remediation-.*-verify/
+    );
     const removals = runCheckedCalls
       .filter(([command]) => command === 'rm')
       .map(([, args]) => args.join(' '));

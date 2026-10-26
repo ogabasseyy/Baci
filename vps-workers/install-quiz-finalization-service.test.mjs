@@ -9,8 +9,14 @@ const source = readFileSync(
 
 test('installs one durable quiz worker using the cron fallback lock', () => {
   assert.match(source, /loginctl enable-linger/);
-  assert.match(source, /quiz-finalize\.lock.*process-quiz-finalization\.sh --loop/);
+  assert.match(
+    source,
+    /quiz-finalize\.lock.*process-quiz-finalization\.sh --loop/
+  );
   assert.match(source, /Restart=always/);
   assert.match(source, /WantedBy=default\.target/);
-  assert.match(source, /systemctl --user enable --now baci-quiz-finalization\.service/);
+  assert.match(
+    source,
+    /systemctl --user enable --now baci-quiz-finalization\.service/
+  );
 });

@@ -3,12 +3,14 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
+import { SAVINGS_PLAN_NEAR_TARGET_RATIO } from '@/config/savings-plan-card';
 import type Colors from '@/constants/Colors';
-import { palette } from '@/constants/Colors';
+import { BRAND, palette } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
+import { getSavingsProgress } from './get-savings-progress';
+import { WalletSavingsVariantBadges } from './WalletSavingsVariantBadges';
 
 type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
@@ -22,20 +24,12 @@ export function WalletSavingsPlanCard({
   onOpen,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
-  const actionGlowColors =
-    colors.primaryForeground === palette.black
-      ? ([palette.amber[600], palette.amber[400], palette.amber[600]] as const)
-      : ([palette.red[700], palette.red[600], palette.red[700]] as const);
-  const progress =
-    goal.target_amount > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            Math.round((goal.current_amount / goal.target_amount) * 100)
-          )
-        )
-      : 0;
+  const actionGlowColors = [
+    palette.red[700],
+    palette.red[600],
+    palette.red[700],
+  ] as const;
+  const { percent: progress, percentLabel } = getSavingsProgress(goal);
   const remaining = Math.max(0, goal.target_amount - goal.current_amount);
   const productImageSource = getSavingsGoalImageSource(goal, 128);
   const hasStarted = goal.current_amount > 0;
@@ -53,7 +47,10 @@ export function WalletSavingsPlanCard({
       : goal.status === 'paused'
         ? 'Plan paused'
         : hasStarted
-          ? 'Your next upgrade is taking shape'
+          ? goal.current_amount / goal.target_amount >=
+            SAVINGS_PLAN_NEAR_TARGET_RATIO
+            ? 'Nearly there'
+            : 'Keep going'
           : 'Your plan is ready';
 
   return (
@@ -83,25 +80,19 @@ export function WalletSavingsPlanCard({
         </View>
         <View style={styles.titleBlock}>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>
-            YOUR NEXT UPGRADE
+            {heading}
           </Text>
           <Text
             style={[styles.title, { color: colors.cardForeground }]}
-            numberOfLines={2}
+            numberOfLines={1}
+            ellipsizeMode="tail"
           >
             {goal.title}
           </Text>
-          {goal.product_variant_label ? (
-            <Text
-              style={[styles.variant, { color: colors.textSecondary }]}
-              numberOfLines={1}
-            >
-              {goal.product_variant_label}
-            </Text>
-          ) : null}
-          <Text style={[styles.heading, { color: colors.textSecondary }]}>
-            {heading}
-          </Text>
+          <WalletSavingsVariantBadges
+            label={goal.product_variant_label}
+            colors={colors}
+          />
           <View style={styles.amountRow}>
             <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>
               SAVED
@@ -120,23 +111,6 @@ export function WalletSavingsPlanCard({
               </Text>
             </Text>
           </View>
-          <View
-            accessible
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress"
-            accessibilityValue={{ min: 0, max: 100, now: progress }}
-            style={[
-              styles.track,
-              { backgroundColor: colors.primaryLowOpacity },
-            ]}
-          >
-            <View
-              style={[
-                styles.fill,
-                { width: `${progress}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
         </View>
       </View>
       <View style={styles.footer}>
@@ -145,17 +119,33 @@ export function WalletSavingsPlanCard({
             ? `${formatNgnCurrency(remaining)} to go`
             : 'Start with your first contribution'}
         </Text>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {progress}% · {formatDateTimeDisplay(goal.maturity_date, 'date')}
-        </Text>
+      </View>
+      <View
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Savings plan progress"
+        accessibilityValue={{
+          min: 0,
+          max: 100,
+          now: progress,
+          text: percentLabel,
+        }}
+        style={[styles.track, { backgroundColor: colors.primaryLowOpacity }]}
+      >
+        <View
+          style={[
+            styles.fill,
+            { width: `${progress}%`, backgroundColor: colors.primary },
+          ]}
+        />
       </View>
       <View
         style={[
           styles.viewPlanGlowFrame,
-          { backgroundColor: colors.primary },
+          { backgroundColor: BRAND.primary },
           hasSavingsGlow && {
             elevation: 5,
-            shadowColor: colors.primary,
+            shadowColor: BRAND.primary,
             shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.6,
             shadowRadius: 9,
@@ -170,9 +160,9 @@ export function WalletSavingsPlanCard({
           onBlur={() => setIsActionFocused(false)}
           style={[
             styles.viewPlanButton,
-            { backgroundColor: colors.primary },
+            { backgroundColor: BRAND.primary },
             isActionFocused && {
-              borderColor: colors.primaryForeground,
+              borderColor: palette.white,
               borderWidth: 2,
             },
           ]}
@@ -185,16 +175,10 @@ export function WalletSavingsPlanCard({
               style={[styles.viewPlanGradient, { pointerEvents: 'none' }]}
             />
           ) : null}
-          <Text
-            style={[styles.viewPlanText, { color: colors.primaryForeground }]}
-          >
+          <Text style={[styles.viewPlanText, { color: palette.white }]}>
             {actionLabel}
           </Text>
-          <Ionicons
-            name="arrow-forward"
-            size={17}
-            color={colors.primaryForeground}
-          />
+          <Ionicons name="arrow-forward" size={17} color={palette.white} />
         </Pressable>
       </View>
     </View>
@@ -209,6 +193,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     padding: 16,
     gap: 10,
+    minHeight: 210,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   iconWrap: {
@@ -225,7 +210,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  title: { fontSize: 18, fontWeight: '700' },
+  title: { fontSize: 18, fontWeight: '700', lineHeight: 24, height: 24 },
   variant: { fontSize: 12 },
   heading: { fontSize: 12, marginTop: 1 },
   amountRow: {

@@ -2,10 +2,12 @@ import * as Crypto from 'expo-crypto';
 import type { Dispatch, SetStateAction } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { createSavingsGoal } from '@/lib/customer-savings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
   cancelSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } from '@/services/savings-reminder-notifications';
+import { openSavingsWalletFunding } from './open-savings-wallet-funding';
 import {
   getSavingsReminderScheduledAt,
   type SavingsFrequency,
@@ -119,6 +121,7 @@ export async function runSavingsGoalSubmission(
       );
     }
     if (!isCurrent()) return;
+    input.setCreatedGoalId?.(result.goalId);
     if (input.sourceMode === 'manual') {
       try {
         // A deferred transfer is unconfirmed: the goal is created with an
@@ -155,12 +158,22 @@ export async function runSavingsGoalSubmission(
       input.setShowFundingModal(false);
       input.setShowPreviewModal(false);
       input.setFormError(null);
-      input.setShowTransferModal(true);
+      const usePrimaryWallet = isPiggyvestPrimaryMerchant(
+        input.activeMerchantId
+      );
+      input.setShowTransferModal(!usePrimaryWallet);
       try {
         await input.refetch();
       } catch {
         if (isCurrent())
           input.setFormError('Plan created but unable to refresh wallet data.');
+      }
+      if (usePrimaryWallet && isCurrent()) {
+        openSavingsWalletFunding({
+          goalId: result.goalId,
+          amount: input.effectiveInitialContribution,
+          requiredTopUpAmount: input.requiredTopUpAmount,
+        });
       }
       return;
     }

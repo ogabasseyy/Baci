@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { addSavingsContribution } from '@/lib/customer-savings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { getSavingsContributionError } from './get-savings-contribution-error';
+import { openSavingsWalletFunding } from './open-savings-wallet-funding';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
@@ -122,6 +125,20 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     });
   };
 
+  const continueCreatedPlanInWallet = () => {
+    if (!input.createdGoalId) return;
+    input.setFormError(null);
+    input.setShowTransferModal(false);
+    router.replace({
+      pathname: '/wallet',
+      params: {
+        action: 'savings',
+        savingsGoalId: input.createdGoalId,
+        savingsAmount: String(input.effectiveInitialContribution),
+      },
+    });
+  };
+
   const submitBankTransferContribution = async () => {
     const goalId = input.createdGoalId;
     if (!goalId || submitInFlightRef.current) {
@@ -133,6 +150,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       input.setFormError(null);
       input.setCreatedGoalId?.(null);
       input.setShowSuccessModal(true);
+      return;
+    }
+    if (isPiggyvestPrimaryMerchant(input.activeMerchantId)) {
+      continueCreatedPlanInWallet();
       return;
     }
     submitInFlightRef.current = true;
@@ -173,10 +194,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       }
     } catch (error) {
       if (!mountedRef.current) return;
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'Unable to record the contribution.';
+      const message = getSavingsContributionError(error);
       input.setFormError(message);
       showAppAlert({
         title: 'Contribution not recorded',
@@ -225,7 +243,12 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     goToWallet: () =>
       router.replace({
         pathname: '/wallet',
-        params: { action: 'savings' },
+        params: {
+          action: 'savings',
+          ...(input.createdGoalId
+            ? { savingsGoalId: input.createdGoalId }
+            : {}),
+        },
       }),
     handleAuthorizeSavingsCard,
     handleCopyFundingAccount,
@@ -233,6 +256,18 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     isSubmitting,
     submitBankTransferContribution,
     openWalletFundingScreen: () => {
+      if (
+        input.createdGoalId &&
+        isPiggyvestPrimaryMerchant(input.activeMerchantId)
+      ) {
+        input.setShowTransferModal(false);
+        openSavingsWalletFunding({
+          goalId: input.createdGoalId,
+          amount: input.effectiveInitialContribution,
+          requiredTopUpAmount: input.requiredTopUpAmount,
+        });
+        return;
+      }
       // Fund enough for the first contribution, but never send Paystack below the provider minimum.
       const maxNeeded = Math.max(
         input.requiredTopUpAmount,

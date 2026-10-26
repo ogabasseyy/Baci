@@ -125,6 +125,19 @@ it('does not register a cached token when the native capability is unavailable',
   expect(result.current.isRegistered).toBe(false);
 });
 
+it('explains why an explicit enable request cannot use this native build', async () => {
+  mockNativeRegistration.mockReturnValue(null);
+  const { result } = renderHook(() => useSavingsPushRegistration());
+  await act(async () => {
+    await result.current.register(undefined, undefined, { force: true });
+  });
+  expect(result.current.error).toBe(
+    'Push notifications are unavailable in this app build.'
+  );
+  expect(result.current.isRegistered).toBe(false);
+  expect(mockSave).not.toHaveBeenCalled();
+});
+
 it('shares one save between automatic registration and a foreground burst', async () => {
   const saving = deferred<boolean>();
   mockSave.mockReturnValueOnce(saving.promise);

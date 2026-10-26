@@ -28,6 +28,7 @@ import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-repl
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
+import { EXPECTED_RECOVERED_STAGING_PENDING_SOURCES } from './expected-recovered-staging-pending-sources.test-fixture';
 import { REDVAULT_PENDING_SOURCES } from './expected-redvault-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
@@ -363,6 +364,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
+  ...EXPECTED_RECOVERED_STAGING_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

@@ -88,11 +88,9 @@ test('restores the original configuration after a successful bounded rehearsal',
 
 test('keeps only a successful explicitly persistent activation', async () => {
   const state = fixture();
-  await runManagedNginxActivation(
-    { ...state, config: source },
-    state.actions,
-    { persistent: true }
-  );
+  await runManagedNginxActivation({ ...state, config: source }, state.actions, {
+    persistent: true,
+  });
   assert.deepEqual(state.calls, [
     'gateway',
     'stage',

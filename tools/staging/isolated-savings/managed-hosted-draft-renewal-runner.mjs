@@ -1,6 +1,6 @@
-import { isDeepStrictEqual } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { runPrivateSmoke } from './managed-private-smoke-runner.mjs';
 
 const leaseMs = 7 * 24 * 60 * 60 * 1000;
@@ -38,13 +38,17 @@ async function main() {
   if (!Number.isSafeInteger(uid) || !Number.isSafeInteger(gid))
     throw new Error('Owner renewal identity rejected');
   const identity = JSON.parse(
-    await readFile(new URL('./managed-hosted-draft-identity.json', import.meta.url))
+    await readFile(
+      new URL('./managed-hosted-draft-identity.json', import.meta.url)
+    )
   );
   await runHostedDraftRenewal({ identity, uid, gid });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
   main().catch(() => {
-    process.stderr.write('Seven-day renewal refused; inspect the fresh receipt.\n');
+    process.stderr.write(
+      'Seven-day renewal refused; inspect the fresh receipt.\n'
+    );
     process.exitCode = 1;
   });

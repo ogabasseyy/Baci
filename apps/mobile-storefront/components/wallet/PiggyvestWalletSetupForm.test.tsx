@@ -4,7 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -18,11 +18,60 @@ it('requires BVN and explicit consent before submitting', () => {
       onSubmit={onSubmit}
     />
   );
+  fireEvent.press(screen.getByRole('checkbox'));
   fireEvent.press(
     screen.getByRole('button', { name: 'Create account number' })
   );
   expect(onSubmit).not.toHaveBeenCalled();
   expect(screen.getByText('Enter a valid 11-digit BVN.')).toBeOnTheScreen();
+});
+
+it('keeps create disabled and muted until identity-verification consent is checked', () => {
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  const button = screen.getByRole('button', { name: 'Create account number' });
+  expect(button).toBeDisabled();
+  expect(button).toHaveStyle({ backgroundColor: Colors.dark.muted });
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(button).toBeEnabled();
+  expect(button).toHaveStyle({ backgroundColor: BRAND.primary });
+  fireEvent.press(screen.getByRole('checkbox'));
+  expect(button).toBeDisabled();
+});
+
+it.each([
+  [
+    'PROFILE_VERIFICATION_REQUIRED',
+    'Verify your email and complete your name and phone number before creating your wallet.',
+  ],
+  [
+    'OWNERSHIP_REVIEW_REQUIRED',
+    'Your wallet identity needs review. Contact support; do not create another wallet.',
+  ],
+])('shows safe actionable guidance for %s instead of a generic refresh error', async (code, message) => {
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={jest
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error('private provider details'), { code })
+        )}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  await waitFor(() => expect(screen.getByText(message)).toBeOnTheScreen());
+  expect(screen.queryByText('private provider details')).toBeNull();
 });
 
 it('exposes the visible button label as its accessible name', () => {

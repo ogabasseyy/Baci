@@ -4,6 +4,7 @@ import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
+import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
@@ -56,5 +57,12 @@ export async function runPrimaryWalletSavingsReconciliation(input: {
       token,
       fetchImplementation: input.fetchImplementation,
     }),
+    resolveIdentity: (selection) =>
+      resolvePrimaryWalletSavingsIdentity({
+        ...selection,
+        environment: configuration.environment,
+        token,
+        fetchImplementation: input.fetchImplementation,
+      }),
   });
 }

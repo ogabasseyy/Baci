@@ -21,15 +21,7 @@ export async function lookupSavingsTransferReference(input: {
       fetchImplementation: input.fetchImplementation ?? fetch,
       init: { method: 'GET' },
     });
-  } catch (error) {
-    // Only an authoritative 404 proves the previous holder died before
-    // submitting. Any other failure stays uncertain so the caller records
-    // unknown instead of risking a double submission.
-    if (
-      error instanceof Error &&
-      (error as Error & { httpStatus?: unknown }).httpStatus === 404
-    )
-      return 'absent';
+  } catch {
     return 'uncertain';
   }
   const rich = verification.rich.safeParse(response);

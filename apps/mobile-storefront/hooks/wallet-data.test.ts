@@ -438,6 +438,7 @@ describe('fetchWalletData', () => {
     expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
       p_merchant_id: merchantId,
       p_include_goals: true,
+      p_include_history: true,
     });
     expect(result.wallet).toMatchObject({
       earnings_available: true,

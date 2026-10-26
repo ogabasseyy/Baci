@@ -998,6 +998,13 @@ describe('useWallet', () => {
     setupWalletTableMocks();
     const queryClient = createTestClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const walletKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-1',
+    });
+    const derivedWalletKey = [...walletKey, 'derived-numbers'] as const;
+    queryClient.setQueryData(derivedWalletKey, { total: 750 });
 
     const { result, unmount } = renderHook(() => useWallet(), {
       wrapper: createWrapper(queryClient),
@@ -1007,21 +1014,20 @@ describe('useWallet', () => {
     invalidateSpy.mockClear();
 
     act(() => {
-      mockRealtimeHandlers.customer_savings_goals?.[0]?.();
-      mockRealtimeHandlers.customer_savings_contributions?.[0]?.();
-      mockRealtimeHandlers.customer_savings_contributions?.[0]?.();
+      mockRealtimeHandlers.customer_savings_goals?.at(-1)?.();
+      mockRealtimeHandlers.customer_savings_contributions?.at(-1)?.();
+      mockRealtimeHandlers.customer_savings_contributions?.at(-1)?.();
     });
 
     expect(invalidateSpy).not.toHaveBeenCalled();
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: walletKeys.data({
-        merchantId: 'merchant-1',
-        ownerId: 'customer-1',
-        userId: 'user-1',
-      }),
+      queryKey: walletKey,
       exact: false,
     });
+    expect(queryClient.getQueryState(derivedWalletKey)?.isInvalidated).toBe(
+      true
+    );
 
     unmount();
     queryClient.clear();
@@ -1051,7 +1057,7 @@ describe('useWallet', () => {
     );
 
     expect(result.current.data?.wallet.balance).toBe(3210);
-    expect(tableCalls).toEqual([]);
+    expect(tableCalls).toContain('customers');
 
     unmount();
     queryClient.clear();

@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { isStorefrontTelemetryExcluded } from './storefront-telemetry-excluded';
 
 type TrackingTransparencyPermission = {
   status: string;
@@ -32,10 +33,14 @@ async function tryLoadTrackingTransparency(): Promise<TrackingTransparencyModule
 }
 
 export function canRequestTrackingTransparency(): boolean {
-  return Platform.OS === 'ios';
+  return !isStorefrontTelemetryExcluded() && Platform.OS === 'ios';
 }
 
 export async function getTrackingPermissionStatus(): Promise<TrackingTransparencyPermission> {
+  if (isStorefrontTelemetryExcluded()) {
+    return { status: 'denied' };
+  }
+
   if (!canRequestTrackingTransparency()) {
     return { status: 'granted' };
   }
@@ -54,6 +59,10 @@ export async function getTrackingPermissionStatus(): Promise<TrackingTransparenc
 }
 
 export async function requestTrackingPermissionStatus(): Promise<TrackingTransparencyPermission> {
+  if (isStorefrontTelemetryExcluded()) {
+    return { status: 'denied' };
+  }
+
   if (!canRequestTrackingTransparency()) {
     return { status: 'granted' };
   }

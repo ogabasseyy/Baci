@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { ChatWidget } from './ChatWidget';
 
@@ -79,7 +79,6 @@ jest.mock('@/stores/ui-store', () => ({
   ),
 }));
 jest.mock('./ChatModal', () => ({ ChatModal: jest.fn(() => null) }));
-jest.mock('./constants', () => ({ EDGE_MARGIN: 16, HIDDEN_ROUTES: ['/quiz'] }));
 jest.mock('./styles', () => ({
   styles: new Proxy({}, { get: () => ({}) }),
 }));
@@ -115,6 +114,76 @@ jest.mock('./use-proactive-nudge', () => ({
 }));
 
 describe('ChatWidget route visibility', () => {
+  it.each([
+    '/wallet',
+    '/wallet/',
+    '/(tabs)/wallet',
+    '/wallet/manage-cards',
+    '/wallet/usdt',
+    '/wallet/setup',
+    '/wallet/savings',
+    '/wallet/savings/start',
+    '/wallet/savings/plan-1',
+    '/(tabs)/wallet/savings/start',
+    '/savings/funding',
+    '/notifications',
+    '/settings',
+    '/settings/notifications',
+  ])('hides floating chat on wallet, setup and plan route %s', (pathname) => {
+    mockUsePathname.mockReturnValue(pathname);
+
+    const { toJSON } = render(<ChatWidget />);
+
+    expect(toJSON()).toBeNull();
+  });
+
+  it.each([
+    '/',
+    '/(tabs)',
+    '/(tabs)/',
+    '/products/phone',
+    '/category/phones',
+    '/wallet-offers',
+    '/(tabs)/wallet-offers',
+    '/savings-guide',
+  ])('keeps global chat available on non-wallet route %s', (pathname) => {
+    mockUsePathname.mockReturnValue(pathname);
+
+    render(<ChatWidget />);
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Open chat assistant. Drag to move.',
+      })
+    ).toBeOnTheScreen();
+  });
+
+  it('hides chat when entering wallet and restores it after leaving wallet', () => {
+    mockUsePathname.mockReturnValue('/');
+    const { rerender } = render(<ChatWidget />);
+    expect(
+      screen.getByRole('button', {
+        name: 'Open chat assistant. Drag to move.',
+      })
+    ).toBeOnTheScreen();
+
+    mockUsePathname.mockReturnValue('/wallet');
+    rerender(<ChatWidget />);
+    expect(
+      screen.queryByRole('button', {
+        name: 'Open chat assistant. Drag to move.',
+      })
+    ).toBeNull();
+
+    mockUsePathname.mockReturnValue('/products/phone');
+    rerender(<ChatWidget />);
+    expect(
+      screen.getByRole('button', {
+        name: 'Open chat assistant. Drag to move.',
+      })
+    ).toBeOnTheScreen();
+  });
+
   it('returns null on the quiz route', () => {
     mockUsePathname.mockReturnValue('/quiz');
 

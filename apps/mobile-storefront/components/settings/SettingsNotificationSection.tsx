@@ -1,10 +1,12 @@
-import { ActivityIndicator, Switch } from 'react-native';
+import { ActivityIndicator, Switch, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { SettingsCardSection } from './SettingsCardSection';
 import { SettingsSectionRow } from './SettingsSectionRow';
+import { styles } from './styles';
 
 type SettingsNotificationSectionProps = {
   colors: typeof Colors.light;
+  error?: string | null;
   isLoading: boolean;
   isRegistered: boolean;
   onToggle: (enabled: boolean) => void;
@@ -12,6 +14,7 @@ type SettingsNotificationSectionProps = {
 
 export function SettingsNotificationSection({
   colors,
+  error,
   isLoading,
   isRegistered,
   onToggle,
@@ -48,6 +51,16 @@ export function SettingsNotificationSection({
           )
         }
       />
+      {error ? (
+        <Text
+          accessibilityRole="alert"
+          accessibilityLabel={error}
+          accessibilityLiveRegion="polite"
+          style={[styles.notificationError, { color: colors.error }]}
+        >
+          {error}
+        </Text>
+      ) : null}
     </SettingsCardSection>
   );
 }

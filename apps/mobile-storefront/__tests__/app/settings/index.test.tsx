@@ -195,4 +195,20 @@ describe('SettingsScreen', () => {
       'Failed to update notification settings. Please try again.'
     );
   });
+
+  it('shows a registration failure even when the hook resolves without throwing', () => {
+    mockUsePushNotifications.mockReturnValue({
+      isLoading: false,
+      isRegistered: false,
+      error: 'Failed to register token with server',
+      register: mockRegisterPush,
+      unregister: mockUnregisterPush,
+    });
+
+    render(<SettingsScreen />);
+
+    expect(
+      screen.getByText('Failed to register token with server')
+    ).toBeOnTheScreen();
+  });
 });

@@ -1,5 +1,7 @@
-import { ScrollView } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DraggableModalSheet } from '@/components/ui/DraggableModalSheet';
+import { BRAND } from '@/constants/Colors';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
@@ -27,7 +29,8 @@ type WalletFundModalProps = Pick<
   | 'onResetFund'
   | 'onSubmitPhone'
   | 'showFundPanel'
-> & { creditWatch: WalletCreditWatch };
+  | 'primarySetup'
+> & { creditWatch: WalletCreditWatch; embedded?: boolean };
 
 export function WalletFundModal({
   canCreateFundingAccount,
@@ -41,15 +44,21 @@ export function WalletFundModal({
   isFundPending,
   needsPhone,
   merchantId,
-  onRefresh,
   onChangeFundAmount,
   onConfirmFund,
   onCreateFundingAccount,
   onResetFund,
   onSubmitPhone,
   showFundPanel,
+  primarySetup,
+  embedded = false,
 }: WalletFundModalProps) {
+  const insets = useSafeAreaInsets();
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  function closePanel() {
+    primarySetup?.acknowledgeReady();
+    onResetFund();
+  }
   // Provisioning is tracked by provider, not by account presence: a retained
   // legacy account must not mask pending primary onboarding, and the legacy
   // details stay resolved (nothing is discarded) for transfer display and
@@ -60,23 +69,18 @@ export function WalletFundModal({
     primaryCapability !== false &&
     fundingAccount?.provider !== 'piggyvest';
   return (
-    <ModalSheet
-      backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
-      cardStyle={{
-        backgroundColor: colors.card,
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        maxHeight: '90%',
-        overflow: 'hidden',
-      }}
-      keyboardAutomaticOffset
-      keyboardSurfaceColor={colors.card}
+    <DraggableModalSheet
+      fitContent
+      embedded={embedded}
+      backgroundColor={colors.card}
+      borderColor={BRAND.primary}
+      handleColor={BRAND.primary}
       visible={showFundPanel}
-      onRequestClose={onResetFund}
-      onBackdropPress={onResetFund}
+      onClose={closePanel}
     >
       {showFundPanel ? (
-        <ScrollView
+        <BottomSheetScrollView
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -87,8 +91,8 @@ export function WalletFundModal({
               merchantId={merchantId}
               needsPhone={needsPhone}
               onSubmitPhone={onSubmitPhone}
-              onRefresh={onRefresh}
-              onClose={onResetFund}
+              setup={primarySetup}
+              onClose={closePanel}
             />
           ) : (
             <WalletFundPanel
@@ -106,13 +110,14 @@ export function WalletFundModal({
               onChangeFundAmount={onChangeFundAmount}
               onConfirmFund={onConfirmFund}
               onCreateFundingAccount={onCreateFundingAccount}
-              onResetFund={onResetFund}
+              onResetFund={closePanel}
               onSubmitPhone={onSubmitPhone}
               returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
+              celebrateAccountReady={primarySetup?.justCreated}
             />
           )}
-        </ScrollView>
+        </BottomSheetScrollView>
       ) : null}
-    </ModalSheet>
+    </DraggableModalSheet>
   );
 }

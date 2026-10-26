@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SavingsInterestActivitySchema } from './savings-interest-activity';
 
 const creditedInterestKoboSchema = z
   .number()
@@ -14,6 +15,7 @@ export const WalletSavingsInterestRequestSchema = z.strictObject({
 export const WalletSavingsInterestResponseSchema = z
   .strictObject({
     credited_interest_kobo: creditedInterestKoboSchema,
+    interest_history: z.array(SavingsInterestActivitySchema).max(20).optional(),
     goal_interest_kobo: z
       .array(
         z.strictObject({

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createContainedEvidenceDependencyWorkspace } from './cloudflare-evidence-contained-dependency-workspace';
 import { spawnIsolatedCloudflareEvidenceProcess } from './cloudflare-evidence-process-isolation';
 import {
   createEvidenceDependencyIntegrityAuthority,
@@ -25,6 +26,7 @@ const runnerModulePathFor = (workspaceRoot: string) =>
 const workspaceRoot = resolve(import.meta.dirname, '../../../..');
 let untrackedRunnerPath: string | undefined;
 let releaseWorkspaceLock: (() => Promise<void>) | undefined;
+let cleanupDependencyWorkspace: (() => Promise<void>) | undefined;
 
 beforeEach(async () => {
   releaseWorkspaceLock =
@@ -42,6 +44,8 @@ afterEach(async () => {
       await releaseWorkspaceLock?.();
     } finally {
       releaseWorkspaceLock = undefined;
+      await cleanupDependencyWorkspace?.();
+      cleanupDependencyWorkspace = undefined;
     }
   }
 });
@@ -55,8 +59,17 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       SECRET: 'never-forward',
     };
     const stateDir = await makePrivateTempDir('baci-evidence-isolation-');
-    const toolingMergeSha = await readEvidenceToolingHead(workspaceRoot);
-    const runnerModulePath = runnerModulePathFor(workspaceRoot);
+    const dependencyWorkspace =
+      await createContainedEvidenceDependencyWorkspace(workspaceRoot, [
+        'zod',
+        'tsx',
+        'esbuild',
+      ]);
+    cleanupDependencyWorkspace = dependencyWorkspace.cleanup;
+    const toolingMergeSha = await readEvidenceToolingHead(
+      dependencyWorkspace.root
+    );
+    const runnerModulePath = runnerModulePathFor(dependencyWorkspace.root);
     untrackedRunnerPath = runnerModulePath;
     await writeFile(
       runnerModulePath,
@@ -67,7 +80,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       .digest('hex');
     const { manifestPath, protectedMergeIdentityPath } =
       await createEvidenceDependencyIntegrityAuthority(
-        workspaceRoot,
+        dependencyWorkspace.root,
         toolingMergeSha,
         ['zod', 'tsx', 'esbuild']
       );
@@ -109,7 +122,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       runId,
       credentialInherited,
       { name: 'CLOUDFLARE_WRITE_TOKEN', value: 'write' },
-      workspaceRoot,
+      dependencyWorkspace.root,
       stateDir
     );
     await spawnIsolatedCloudflareEvidenceProcess(
@@ -118,7 +131,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       runId,
       credentialInherited,
       { name: 'CLOUDFLARE_WRITE_TOKEN', value: 'write' },
-      workspaceRoot,
+      dependencyWorkspace.root,
       stateDir
     );
     await spawnIsolatedCloudflareEvidenceProcess(
@@ -127,7 +140,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
       runId,
       credentialInherited,
       { name: 'CLOUDFLARE_READ_TOKEN', value: 'read' },
-      workspaceRoot,
+      dependencyWorkspace.root,
       stateDir
     );
     expect(spawn).toHaveBeenCalledTimes(3);
@@ -195,7 +208,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
         runId,
         credentialInherited,
         { name: 'CLOUDFLARE_WRITE_TOKEN', value: 'write' },
-        workspaceRoot,
+        dependencyWorkspace.root,
         stateDir
       )
     ).rejects.toThrow('authenticated dependency integrity manifest hash');
@@ -216,7 +229,7 @@ describe('spawnIsolatedCloudflareEvidenceProcess credential handoff', () => {
         runId,
         credentialInherited,
         { name: 'CLOUDFLARE_WRITE_TOKEN', value: 'write' },
-        workspaceRoot,
+        dependencyWorkspace.root,
         stateDir
       )
     ).rejects.toThrow('does not match the reviewed authority');

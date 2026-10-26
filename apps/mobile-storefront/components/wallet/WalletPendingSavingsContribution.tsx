@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import type Colors from '@/constants/Colors';
+import { BRAND, type default as Colors, palette } from '@/constants/Colors';
 
 export function WalletPendingSavingsContribution({
   colors,
@@ -13,7 +13,8 @@ export function WalletPendingSavingsContribution({
   return (
     <View style={{ gap: 16 }}>
       <Text style={{ color: colors.textSecondary }}>
-        Your contribution is awaiting confirmation. Check its status before
+        Your money is reserved while PiggyVest processes this transfer. It will
+        appear in savings only after confirmation. Check the status instead of
         starting another payment.
       </Text>
       <Pressable
@@ -26,10 +27,11 @@ export function WalletPendingSavingsContribution({
           padding: 16,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: colors.primary,
+          borderColor: BRAND.primary,
+          backgroundColor: BRAND.primary,
         }}
       >
-        <Text style={{ color: colors.primary, textAlign: 'center' }}>
+        <Text style={{ color: palette.white, textAlign: 'center' }}>
           {isChecking ? 'Checking contribution…' : 'Check contribution status'}
         </Text>
       </Pressable>

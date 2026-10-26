@@ -1,0 +1,1 @@
+export const SAVINGS_PLAN_NEAR_TARGET_RATIO = 0.75;

@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as barrel from './index';
-import {
-  LAUNCH_CAROUSEL_LIMIT,
-  launchCtaLabel,
-} from './launch-carousel';
+import { LAUNCH_CAROUSEL_LIMIT, launchCtaLabel } from './launch-carousel';
 import { prioritizeSmartphoneProducts } from './prioritize-smartphone-products';
 
 describe('storefront deep imports', () => {

@@ -7,6 +7,7 @@ import type Colors from '@/constants/Colors';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { useWalletFundPanelAutoCreate } from './use-wallet-fund-panel-auto-create';
+import { WalletAccountReadyBanner } from './WalletAccountReadyBanner';
 import { WalletCardTopUpForm } from './WalletCardTopUpForm';
 import { WalletCreditCheckPanel } from './WalletCreditCheckPanel';
 import {
@@ -45,6 +46,7 @@ interface WalletFundPanelProps {
   onResetFund: () => void;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
   returnToSavings?: boolean;
+  celebrateAccountReady?: boolean;
 }
 
 export function WalletFundPanel({
@@ -63,6 +65,7 @@ export function WalletFundPanel({
   onResetFund,
   onSubmitPhone,
   returnToSavings = false,
+  celebrateAccountReady = false,
 }: WalletFundPanelProps) {
   const insets = useSafeAreaInsets();
   // Tracks the "Fund with card instead" toggle. Card entry is ALSO shown
@@ -106,7 +109,6 @@ export function WalletFundPanel({
         },
       ]}
     >
-      <View style={[styles.handle, { backgroundColor: colors.border }]} />
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
@@ -129,6 +131,9 @@ export function WalletFundPanel({
         </Pressable>
       </View>
 
+      {celebrateAccountReady && fundingAccount ? (
+        <WalletAccountReadyBanner colors={colors} />
+      ) : null}
       {returnToSavings ? (
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Funding adds money to your wallet. After it is credited, return to

@@ -1,33 +1,19 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignoreWorkspaces": [
-    "apps/mobile-storefront"
-  ],
+  "ignoreWorkspaces": ["apps/mobile-storefront"],
   "workspaces": {
     "apps/web": {
       "entry": [
         "next.config.{js,ts,cjs,mjs}",
         "src/app/**/{page,layout,loading,error,not-found,global-error,route,template,default}.{ts,tsx}"
       ],
-      "project": [
-        "src/**/*.{ts,tsx,js,jsx}"
-      ],
-      "ignore": [
-        "**/*.d.ts",
-        "src/components/ui/**"
-      ]
+      "project": ["src/**/*.{ts,tsx,js,jsx}"],
+      "ignore": ["**/*.d.ts", "src/components/ui/**"]
     },
     "apps/mobile-admin": {
-      "entry": [
-        "app/**/*.{ts,tsx}",
-        "app.json"
-      ],
-      "project": [
-        "**/*.{ts,tsx,js,jsx}"
-      ],
-      "ignore": [
-        "**/*.d.ts"
-      ]
+      "entry": ["app/**/*.{ts,tsx}", "app.json"],
+      "project": ["**/*.{ts,tsx,js,jsx}"],
+      "ignore": ["**/*.d.ts"]
     }
   }
 }

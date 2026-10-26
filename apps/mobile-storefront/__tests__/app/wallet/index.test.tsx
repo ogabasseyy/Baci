@@ -1,6 +1,14 @@
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
+jest.mock('@/components/wallet/use-wallet-screen-data', () =>
+  jest.requireActual('@/test-support/wallet-screen-data.mock')
+);
+jest.mock('@/hooks/use-piggyvest-wallet-setup', () => ({
+  usePiggyvestWalletSetup: jest.requireActual<
+    typeof import('@/components/wallet/primary-setup.test-utils')
+  >('@/components/wallet/primary-setup.test-utils').primarySetupMock,
+}));
 // Controllable verdict (never a live probe: the real probe's network
 // timeouts hang this suite): DVA/legacy tests run with a resolved
 // legacy verdict so creation gating reflects only the axis under
@@ -580,7 +588,11 @@ describe('WalletScreen', () => {
   it('uses the display wallet cache policy for the wallet screen', () => {
     render(<WalletScreen />);
 
-    expect(mockUseWallet).toHaveBeenCalledWith({ cachePolicy: 'display' });
+    expect(mockUseWallet).toHaveBeenCalledWith({
+      cachePolicy: 'display',
+      navigationRefresh: 'numbers',
+      progressive: true,
+    });
   });
 
   it('passes wallet DVA availability through to wallet content', () => {

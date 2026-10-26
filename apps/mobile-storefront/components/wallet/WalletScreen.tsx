@@ -9,10 +9,10 @@ import { useRequireAuth } from '@/hooks/use-auth-guard';
 import {
   useCreateWalletFundingAccount,
   useRedeemPoints,
-  useWallet,
 } from '@/hooks/use-wallet';
 import { useMerchantPaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { CONFIG } from '@/lib/config';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { normalizeWalletFundAmountParam } from '@/lib/normalize-wallet-fund-amount-param';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
@@ -23,9 +23,10 @@ import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
 import { useWalletSavingsController } from './use-wallet-savings-controller';
+import { useWalletScreenData } from './use-wallet-screen-data';
+import { WalletLoadingView } from './WalletLoadingView';
 import {
   deriveWalletDisplayData,
-  getWalletLoadingMessage,
   sanitizeWalletFundAmount,
 } from './wallet-screen.helpers';
 import type { WalletScreenProps } from './wallet-screen.types';
@@ -58,9 +59,8 @@ export function WalletScreen({
       user: state.user,
     }))
   );
-  const { data, isError, isLoading, refetch, isRefetching } = useWallet({
-    cachePolicy: 'display',
-  });
+  const walletQuery = useWalletScreenData();
+  const { data, isLoading, refetch, isRefetching, refreshState } = walletQuery;
   const {
     data: paymentSettings,
     isError: isPaymentSettingsError,
@@ -140,6 +140,7 @@ export function WalletScreen({
       hasWalletData: Boolean(data),
       isCreating: createFundingAccountMutation.isPending,
       needsPhone,
+      openPanel: isPiggyvestPrimaryMerchant(activeMerchantId),
     },
     customerId: customer?.id,
     routeAction,
@@ -180,18 +181,13 @@ export function WalletScreen({
   if (redirectTo) {
     return <Redirect href={redirectTo} />;
   }
-  const loadingMessage = getWalletLoadingMessage({
-    hasMerchantContext,
-    hasWalletData: Boolean(data),
-    isError,
-    isLoading,
-    user,
-  });
   if (!user || !hasMerchantContext || isLoading || !data) {
     return (
-      <WalletScreenView
+      <WalletLoadingView
         colors={colors}
-        loadingMessage={loadingMessage}
+        query={walletQuery}
+        user={user}
+        hasMerchantContext={hasMerchantContext}
         presentation={presentation}
       />
     );
@@ -214,6 +210,7 @@ export function WalletScreen({
         presentation={presentation}
         walletContentProps={{
           activeSavingsGoal,
+          savingsGoals: walletData.savings_goals,
           hasSavedCards,
           canCreateFundingAccount,
           contentContainerStyle: scrollContentStyle,
@@ -232,6 +229,7 @@ export function WalletScreen({
           isFundPending,
           isRedeemPending: redeemMutation.isPending,
           isRefetching,
+          refreshState,
           loyaltyPoints: walletData.loyalty_points,
           needsPhone,
           onAddSavingsContribution: handleAddSavingsContribution,

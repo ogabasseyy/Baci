@@ -107,12 +107,16 @@ export function createInitializeAction({
             'refreshSession'
           );
           if (get()._initGen !== initGen) return;
-          if (refreshError || !refreshedSession) {
+          if (
+            (refreshError &&
+              shouldInvalidateSessionOnGetUserError(refreshError)) ||
+            (!refreshError && !refreshedSession)
+          ) {
             await supabase.auth
               .signOut({ scope: 'local' })
               .catch(() => undefined);
             session = null;
-          } else {
+          } else if (refreshedSession) {
             session = refreshedSession;
           }
         }
@@ -146,91 +150,6 @@ export function createInitializeAction({
           isInitialized: true,
         });
       }
-
-      const { data: authListener } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-          const { merchantId, user: previousUser } = get();
-          deferAuthStateChange(async () => {
-            const retireDeviceCartSafely = async () => {
-              try {
-                await clearDeviceCartForAccountTeardown();
-              } catch {
-                log.error(
-                  'Failed to retire cart device during auth transition'
-                );
-                if (typeof useCartStore.setState === 'function') {
-                  useCartStore.setState({
-                    items: [],
-                    lineSequence: 0,
-                    cartWideNegotiationActive: false,
-                  });
-                }
-              }
-            };
-            if (event === 'SIGNED_IN' && session?.user) {
-              if (previousUser?.id && previousUser.id !== session.user.id) {
-                // The Supabase JWT has already switched: fence the old
-                // identity synchronously so no screen or store can act
-                // as the previous account while retirement (a network
-                // revocation) is awaited, then hydrate the new one.
-                set({
-                  customer: null,
-                  isLoading: true,
-                  session: null,
-                  user: null,
-                });
-                await retireDeviceCartSafely();
-              }
-              // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
-              // fires on same-user session re-establishment / token refresh —
-              // resetting then would kick a shopper out of an in-progress quiz.
-              if (previousUser?.id !== session.user.id) {
-                useQuizStore.getState().reset();
-              }
-              await syncAuthenticatedState({
-                merchantId,
-                session,
-                set,
-                user: session.user,
-              });
-              const guestCartItems = useCartStore.getState().items;
-              if (guestCartItems.length > 0) {
-                log.info(
-                  `Cart sync: ${guestCartItems.length} items preserved after login`
-                );
-              }
-            } else if (event === 'SIGNED_OUT') {
-              // Teardown invalidates callbacks synchronously; offline retirement stays in secure storage.
-              await retireDeviceCartSafely();
-              const storedToken = await getStoredPushToken();
-              await clearLocalAndDeactivatePushToken(storedToken);
-              useSavedStore.getState().clearSaved();
-              useComparisonStore.getState().clearComparison();
-              useQuizStore.getState().reset();
-              set({
-                user: null,
-                session: null,
-                customer: null,
-                isLoading: false,
-                isInitialized: true,
-                _initializationInProgress: false,
-              });
-              clearQueryCachePreservingObservers(queryClient);
-            } else if (event === 'TOKEN_REFRESHED' && session) {
-              set({ session });
-            }
-          });
-        }
-      );
-
-      if (get()._initGen !== initGen) {
-        authListener.subscription.unsubscribe();
-        return;
-      }
-      set({
-        _authSubscription: authListener,
-        _initializationInProgress: false,
-      });
     } catch (error) {
       if (get()._initGen !== initGen) return;
       log.error('Auth initialization error:', error);
@@ -241,6 +160,99 @@ export function createInitializeAction({
         _initializationInProgress: false,
       });
     }
+    if (get()._initGen !== initGen) return;
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        const { merchantId, user: previousUser } = get();
+        deferAuthStateChange(async () => {
+          if (get()._initGen !== initGen) return;
+          const retireDeviceCartSafely = async () => {
+            try {
+              await clearDeviceCartForAccountTeardown();
+            } catch {
+              log.error('Failed to retire cart device during auth transition');
+              if (typeof useCartStore.setState === 'function') {
+                useCartStore.setState({
+                  items: [],
+                  lineSequence: 0,
+                  cartWideNegotiationActive: false,
+                });
+              }
+            }
+          };
+          if (event === 'SIGNED_IN' && session?.user) {
+            if (previousUser?.id && previousUser.id !== session.user.id) {
+              set({
+                customer: null,
+                isLoading: true,
+                session: null,
+                user: null,
+              });
+              await retireDeviceCartSafely();
+            }
+            // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
+            // fires on same-user session re-establishment / token refresh —
+            // resetting then would kick a shopper out of an in-progress quiz.
+            if (previousUser?.id !== session.user.id) {
+              useQuizStore.getState().reset();
+            }
+            await syncAuthenticatedState({
+              merchantId,
+              session,
+              set,
+              user: session.user,
+            });
+            const guestCartItems = useCartStore.getState().items;
+            if (guestCartItems.length > 0) {
+              log.info(
+                `Cart sync: ${guestCartItems.length} items preserved after login`
+              );
+            }
+          } else if (event === 'SIGNED_OUT') {
+            await retireDeviceCartSafely();
+            const storedToken = await getStoredPushToken();
+            await clearLocalAndDeactivatePushToken(storedToken);
+            useSavedStore.getState().clearSaved();
+            useComparisonStore.getState().clearComparison();
+            useQuizStore.getState().reset();
+            set({
+              user: null,
+              session: null,
+              customer: null,
+              isLoading: false,
+              isInitialized: true,
+              _initializationInProgress: false,
+            });
+            clearQueryCachePreservingObservers(queryClient);
+          } else if (
+            (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') &&
+            session?.user
+          ) {
+            if (get().user?.id !== session.user.id) {
+              await syncAuthenticatedState({
+                getInitGen: () => get()._initGen,
+                initGen,
+                merchantId,
+                session,
+                set,
+                user: session.user,
+              });
+            } else {
+              set({ session, error: null });
+            }
+          }
+        });
+      }
+    );
+
+    if (get()._initGen !== initGen) {
+      authListener.subscription.unsubscribe();
+      return;
+    }
+    set({
+      _authSubscription: authListener,
+      _initializationInProgress: false,
+    });
   };
 }
 

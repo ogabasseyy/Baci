@@ -16,6 +16,7 @@ import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
 } from '@/schemas/piggyvest/events';
+import { captureInterestRawDelivery } from './interest-raw-capture';
 import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 
@@ -160,6 +161,23 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
   const matchedSecret = verification.secret;
+
+  try {
+    const interestCapture = await captureInterestRawDelivery({
+      rawBody,
+      signature,
+      families: verification.families,
+    });
+    if (interestCapture) return interestCapture;
+  } catch {
+    return NextResponse.json(
+      {
+        error: 'Event intake unavailable',
+        code: 'PIGGYVEST_INBOX_ERROR',
+      },
+      { status: 503, headers: noStore }
+    );
+  }
 
   let jsonPayload: unknown;
   try {

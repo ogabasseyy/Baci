@@ -4,7 +4,9 @@ import test from 'node:test';
 import { runHostedDraftActivation } from './managed-hosted-draft-activation-runner.mjs';
 
 const identity = JSON.parse(
-  await readFile(new URL('./managed-hosted-draft-identity.json', import.meta.url))
+  await readFile(
+    new URL('./managed-hosted-draft-identity.json', import.meta.url)
+  )
 );
 
 function fixture() {
@@ -23,7 +25,8 @@ function fixture() {
       validateRoutingIdentity: () => {},
       validateManagedStartup: (binding) =>
         assert.equal(
-          Date.parse(binding.leaseExpiresAt) - Date.parse(binding.leaseNotBefore),
+          Date.parse(binding.leaseExpiresAt) -
+            Date.parse(binding.leaseNotBefore),
           86_400_000
         ),
       managedInventory: async () => ({
@@ -34,9 +37,12 @@ function fixture() {
       LoadState: 'loaded',
       ActiveState: started ? 'active' : 'inactive',
       MainPID: started ? '123' : '0',
-      Restart: 'no', NRestarts: '0',
+      Restart: 'no',
+      NRestarts: '0',
       FragmentPath: '/etc/systemd/system/baci-savings-gateway.service',
-      DropInPaths: '', NeedDaemonReload: 'no', UnitFileState: 'static',
+      DropInPaths: '',
+      NeedDaemonReload: 'no',
+      UnitFileState: 'static',
       InvocationID: started ? 'a'.repeat(32) : '',
     }),
     absent: async (path) => !path.endsWith('ingress.sock') || !started,
@@ -66,9 +72,13 @@ function fixture() {
 test('retains the exact hosted-draft identity for a 24-hour activation', async () => {
   const { actions, calls, reports } = fixture();
   let activated = false;
-  await runHostedDraftActivation({ identity, uid: 100, gid: 101 }, actions, async () => {
-    activated = true;
-  });
+  await runHostedDraftActivation(
+    { identity, uid: 100, gid: 101 },
+    actions,
+    async () => {
+      activated = true;
+    }
+  );
   assert.equal(activated, true);
   assert.ok(reports.some((report) => report.leaseSeconds === 86400));
   assert.ok(reports.some((report) => report.stage === 'retained-activation'));
@@ -80,7 +90,11 @@ test('rejects a tampered hosted route before any host mutation', async () => {
   const altered = structuredClone(identity);
   altered.restRoutes[3].methods = ['GET'];
   await assert.rejects(
-    runHostedDraftActivation({ identity: altered, uid: 100, gid: 101 }, actions, async () => {})
+    runHostedDraftActivation(
+      { identity: altered, uid: 100, gid: 101 },
+      actions,
+      async () => {}
+    )
   );
   assert.equal(calls.length, 0);
 });
@@ -88,13 +102,17 @@ test('rejects a tampered hosted route before any host mutation', async () => {
 test('rolls back retained evidence when activation callback fails', async () => {
   const { actions, calls } = fixture();
   await assert.rejects(
-    runHostedDraftActivation({ identity, uid: 100, gid: 101 }, actions, async () => {
-      throw new Error('activation failed');
-    })
+    runHostedDraftActivation(
+      { identity, uid: 100, gid: 101 },
+      actions,
+      async () => {
+        throw new Error('activation failed');
+      }
+    )
   );
   assert.ok(calls.some((call) => call[1] === 'stop'));
-  assert.deepEqual(calls.filter((call) => call[0] === 'remove').map((call) => call[1]), [
-    'startup-evidence',
-    'binding',
-  ]);
+  assert.deepEqual(
+    calls.filter((call) => call[0] === 'remove').map((call) => call[1]),
+    ['startup-evidence', 'binding']
+  );
 });

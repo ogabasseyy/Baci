@@ -43,7 +43,7 @@ test('builds offline executable plan and hardened readiness-gated timer without 
     const manifest = JSON.parse(
       await readFile(path.join(directory, 'manifest.json'), 'utf8')
     );
-    assert.equal(Object.keys(manifest.migrations).length, 6);
+    assert.equal(Object.keys(manifest.migrations).length, 7);
     assert.ok(
       Object.keys(manifest.sources).some((filename) =>
         filename.endsWith('primary-wallet-paid-interest-inbox-worker.ts')

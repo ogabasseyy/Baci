@@ -9,7 +9,11 @@ import { fetchWalletSavingsEarnings } from './wallet-savings-earnings';
 type InterestRpcClient = {
   rpc: (
     functionName: 'get_customer_savings_earnings',
-    args: { p_merchant_id: string; p_include_goals: true }
+    args: {
+      p_merchant_id: string;
+      p_include_goals: true;
+      p_include_history?: true;
+    }
   ) => Promise<{ data: unknown; error: { code?: string } | null }>;
 };
 
@@ -17,6 +21,7 @@ type WalletSavingsInterest = {
   status: 'available' | 'unavailable';
   creditedInterestKobo: number | null;
   goalInterestKobo: WalletSavingsInterestResponse['goal_interest_kobo'];
+  transactions?: WalletSavingsInterestResponse['interest_history'];
 };
 
 const missingFunctionCodes = new Set(['PGRST202', '42883']);
@@ -40,10 +45,18 @@ export async function fetchWalletSavingsInterest(
 
   const client = supabase as unknown as InterestRpcClient;
   try {
-    const { data, error } = await client.rpc(
-      'get_customer_savings_earnings',
-      request.data
-    );
+    let { data, error } = await client.rpc('get_customer_savings_earnings', {
+      ...request.data,
+      p_include_history: true,
+    });
+    if (error && missingFunctionCodes.has(error.code ?? '')) {
+      const legacy = await client.rpc(
+        'get_customer_savings_earnings',
+        request.data
+      );
+      data = legacy.data;
+      error = legacy.error;
+    }
     if (error) {
       if (!missingFunctionCodes.has(error.code ?? '')) return unavailable();
       const legacyEarnings = await fetchWalletSavingsEarnings(merchantId);
@@ -68,6 +81,9 @@ export async function fetchWalletSavingsInterest(
       status: 'available',
       creditedInterestKobo: parsed.data.credited_interest_kobo,
       goalInterestKobo: parsed.data.goal_interest_kobo,
+      ...(parsed.data.interest_history
+        ? { transactions: parsed.data.interest_history }
+        : {}),
     };
   } catch {
     return unavailable();

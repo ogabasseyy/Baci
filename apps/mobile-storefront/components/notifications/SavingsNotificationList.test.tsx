@@ -8,16 +8,34 @@ import {
   SavingsNotificationList,
 } from './SavingsNotificationList';
 
+jest.mock('react-native', () => {
+  const native =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  const React = jest.requireActual<typeof import('react')>('react');
+  return Object.defineProperty(Object.create(native), 'Pressable', {
+    value: ({
+      style,
+      ...props
+    }: React.ComponentProps<typeof native.Pressable>) =>
+      React.createElement(native.Pressable, {
+        ...props,
+        style: typeof style === 'function' ? undefined : style,
+      }),
+  });
+});
+
 jest.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,
     ListEmptyComponent,
     ListHeaderComponent,
+    ListFooterComponent,
     renderItem,
   }: {
     data: Array<{ id: string }>;
     ListEmptyComponent: () => ReactNode;
     ListHeaderComponent: ReactNode;
+    ListFooterComponent: ReactNode;
     renderItem: (input: { item: { id: string } }) => ReactNode;
   }) => {
     const { View } = require('react-native') as typeof import('react-native');
@@ -29,6 +47,7 @@ jest.mock('@shopify/flash-list', () => ({
           : data.map((item) => (
               <View key={item.id}>{renderItem({ item })}</View>
             ))}
+        {ListFooterComponent}
       </View>
     );
   },
@@ -48,11 +67,66 @@ const notification = {
 };
 
 describe('SavingsNotificationList', () => {
+  it('shows the updates heading before notification preferences', () => {
+    const { Text } = require('react-native') as typeof import('react-native');
+    render(
+      <SavingsNotificationList
+        preferences={<Text>Notification preferences</Text>}
+        isLoading={false}
+        notifications={[notification]}
+        onOpen={jest.fn<(item: SavingsNotification) => void>()}
+        onRetry={jest.fn<() => void>()}
+        requestError={null}
+      />
+    );
+
+    expect(screen.getByText('Recent updates')).toBeOnTheScreen();
+    expect(screen.getByText('Notification preferences')).toBeOnTheScreen();
+    expect(
+      screen
+        .getAllByText(
+          /^(Recent updates|Interest credited|Notification preferences)$/
+        )
+        .map((item) => item.props.children)
+    ).toEqual([
+      'Recent updates',
+      notification.title,
+      'Notification preferences',
+    ]);
+  });
+
+  it('preserves a readable row when NativeWind drops callback styles', () => {
+    render(
+      <SavingsNotificationList
+        preferences={null}
+        isLoading={false}
+        notifications={[notification]}
+        onOpen={jest.fn<(item: SavingsNotification) => void>()}
+        onRetry={jest.fn<() => void>()}
+        requestError={null}
+      />
+    );
+
+    const row = screen.getByRole('button', {
+      name: getSavingsNotificationAccessibilityLabel(
+        notification.title,
+        notification.createdAt
+      ),
+    });
+
+    expect(row).toHaveStyle({ flexDirection: 'row', padding: 16 });
+    expect(screen.getByText(notification.body)).toBeOnTheScreen();
+    fireEvent(row, 'pressIn');
+    expect(row).toHaveStyle({ opacity: 0.72 });
+    fireEvent(row, 'pressOut');
+    expect(row).toHaveStyle({ opacity: 1 });
+  });
+
   it('renders a retry state rather than fabricated notifications after an inbox failure', () => {
     const onRetry = jest.fn<() => void>();
     render(
       <SavingsNotificationList
-        header={null}
+        preferences={null}
         isLoading={false}
         notifications={[]}
         onOpen={jest.fn<(item: SavingsNotification) => void>()}
@@ -79,7 +153,7 @@ describe('SavingsNotificationList', () => {
     const onOpen = jest.fn<(item: SavingsNotification) => void>();
     render(
       <SavingsNotificationList
-        header={null}
+        preferences={null}
         isLoading={false}
         notifications={[notification]}
         onOpen={onOpen}
@@ -109,7 +183,7 @@ describe('SavingsNotificationList', () => {
     };
     render(
       <SavingsNotificationList
-        header={null}
+        preferences={null}
         isLoading={false}
         notifications={[notification, second]}
         onOpen={onOpen}
@@ -143,7 +217,7 @@ describe('SavingsNotificationList', () => {
   it('renders a placeholder for an unparseable timestamp', () => {
     render(
       <SavingsNotificationList
-        header={null}
+        preferences={null}
         isLoading={false}
         notifications={[{ ...notification, createdAt: 'not-a-date' }]}
         onOpen={jest.fn<(item: SavingsNotification) => void>()}

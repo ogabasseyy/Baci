@@ -102,24 +102,11 @@ describe('WalletContent', () => {
     ).toHaveLength(1);
   });
 
-  it('dismisses the fund panel bottom sheet through the backdrop', () => {
-    const onResetFund = jest.fn();
-    render(
-      <WalletContent
-        hasSavedCards
-        {...props}
-        showFundPanel={true}
-        onResetFund={onResetFund}
-      />
-    );
-
-    fireEvent.press(screen.getByRole('button', { name: 'Dismiss modal' }));
-
-    expect(onResetFund).toHaveBeenCalled();
-  });
-
   it('renders earnings, savings, loyalty points, and primary actions', () => {
     render(<WalletContent hasSavedCards {...props} />);
+    fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+      nativeEvent: { layout: { width: 400 } },
+    });
 
     expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
     expect(screen.getByText('Total Balance · NGN')).toBeOnTheScreen();
@@ -239,6 +226,9 @@ describe('WalletContent', () => {
 
   it('wires the plan action and card management without duplicate savings buttons', () => {
     render(<WalletContent hasSavedCards {...props} />);
+    fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+      nativeEvent: { layout: { width: 400 } },
+    });
 
     fireEvent.press(
       screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })

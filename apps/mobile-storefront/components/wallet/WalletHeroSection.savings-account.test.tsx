@@ -92,7 +92,7 @@ it('replaces Create account with the existing PiggyVest savings number when the 
   });
 });
 
-it('connects the actual wallet content to the savings account slot without changing its Add Money action', async () => {
+it('does not offer wallet funding for a goal-specific account that is not the primary wallet', async () => {
   const contentProps = createWalletContentProps();
   render(<WalletContent {...contentProps} fundingAccount={null} />);
   await act(async () => {});
@@ -101,8 +101,8 @@ it('connects the actual wallet content to the savings account slot without chang
   expect(
     screen.queryByRole('button', { name: 'Create account number' })
   ).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
-  expect(contentProps.onOpenFundPanel).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Add money' })).toBeNull();
+  expect(contentProps.onOpenFundPanel).not.toHaveBeenCalled();
 });
 
 it('leaves the production account slot unchanged and never looks up a sandbox account', () => {

@@ -1,4 +1,9 @@
-import { nativeActions, requireValue, stopped, unit } from './managed-private-smoke-actions.mjs';
+import {
+  nativeActions,
+  requireValue,
+  stopped,
+  unit,
+} from './managed-private-smoke-actions.mjs';
 import { runSmokeActivation } from './managed-private-smoke-activation.mjs';
 import { runSmokePreflight } from './managed-private-smoke-preflight.mjs';
 
@@ -68,7 +73,9 @@ export async function runPrivateSmoke(
       if (ctx.started && !ctx.retained) {
         const current = await actions.state();
         if (!stopped(current)) {
-          requireValue(ctx.invocation && current.InvocationID === ctx.invocation);
+          requireValue(
+            ctx.invocation && current.InvocationID === ctx.invocation
+          );
           await actions.run('/usr/bin/systemctl', ['stop', unit]);
           requireValue(stopped(await actions.state()));
         }

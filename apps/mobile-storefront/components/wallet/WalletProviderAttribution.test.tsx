@@ -3,7 +3,9 @@ import { WalletProviderAttribution } from './WalletProviderAttribution';
 
 it('attributes PiggyVest funding accounts', () => {
   render(<WalletProviderAttribution provider="piggyvest" color="#999999" />);
-  expect(screen.getByText('Powered by PiggyVest')).toBeOnTheScreen();
+  expect(
+    screen.getByRole('image', { name: 'Powered by PiggyVest' })
+  ).toBeOnTheScreen();
 });
 
 it.each([

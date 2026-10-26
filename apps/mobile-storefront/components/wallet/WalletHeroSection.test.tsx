@@ -66,7 +66,17 @@ describe('WalletHeroSection', () => {
   });
 
   it('opens funding and loyalty actions from the balance card', () => {
-    render(<WalletHeroSection {...baseProps} />);
+    render(
+      <WalletHeroSection
+        {...baseProps}
+        fundingAccount={{
+          accountName: 'Test',
+          accountNumber: '1234567890',
+          bankName: 'Test Bank',
+          provider: 'piggyvest',
+        }}
+      />
+    );
 
     fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
     fireEvent.press(
@@ -78,7 +88,17 @@ describe('WalletHeroSection', () => {
   });
 
   it('keeps Add Money compact without shrinking its touch area', () => {
-    render(<WalletHeroSection {...baseProps} />);
+    render(
+      <WalletHeroSection
+        {...baseProps}
+        fundingAccount={{
+          accountName: 'Test',
+          accountNumber: '1234567890',
+          bankName: 'Test Bank',
+          provider: 'piggyvest',
+        }}
+      />
+    );
 
     const addMoneyButton = screen.getByRole('button', { name: 'Add money' });
     expect(addMoneyButton).toHaveStyle({

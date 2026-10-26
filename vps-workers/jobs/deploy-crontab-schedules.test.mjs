@@ -179,10 +179,7 @@ describe('deploy crontab schedules', () => {
       deployScript,
       /^\s*(\*\/\d+|\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+.*process-redvault-refunds/m
     );
-    assert.match(
-      deployScript,
-      /process-redvault-refunds stays unscheduled/
-    );
+    assert.match(deployScript, /process-redvault-refunds stays unscheduled/);
   });
 
   it('restarts the drain receiver after promotion before installing cleanup cron', () => {

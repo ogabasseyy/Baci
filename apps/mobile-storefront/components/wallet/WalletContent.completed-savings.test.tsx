@@ -145,6 +145,9 @@ describe('WalletContent completed savings goals', () => {
     if (!props.activeSavingsGoal) throw new Error('Missing synthetic goal');
     props.activeSavingsGoal.selection_unresolved = true;
     render(<WalletContent {...props} />);
+    fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+      nativeEvent: { layout: { width: 400 } },
+    });
 
     fireEvent.press(
       screen.getByRole('button', {
@@ -159,6 +162,9 @@ describe('WalletContent completed savings goals', () => {
 
   it('keeps completed goals displayable without enabling top-up actions', () => {
     render(<WalletContent {...createProps()} showSavingsProgress />);
+    fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+      nativeEvent: { layout: { width: 400 } },
+    });
 
     expect(
       screen.getByRole('button', {

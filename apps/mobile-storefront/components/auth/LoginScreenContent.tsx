@@ -6,6 +6,7 @@ import { type LoginAuthMethod, LoginEmailStep } from './LoginEmailStep';
 import { LoginOtpStep } from './LoginOtpStep';
 import { LoginPasswordStep } from './LoginPasswordStep';
 import { loginScreenStyles as styles } from './LoginScreen.styles';
+import { validateLoginEmailInput } from './login-screen-controller.helpers';
 
 type ColorsScheme = (typeof Colors)['light'];
 type AuthStep = 'email' | 'otp' | 'password';
@@ -114,9 +115,19 @@ export function LoginScreenContent({
             if (emailError) setEmailError(null);
           }}
           onGoogleSignIn={handleGoogleSignIn}
-          onToggleAuthMethod={() =>
-            setAuthMethod(authMethod === 'otp' ? 'password' : 'otp')
-          }
+          onToggleAuthMethod={() => {
+            if (isLoading || isGoogleLoading || isAppleLoading) return;
+            if (authMethod === 'password') {
+              setAuthMethod('otp');
+              return;
+            }
+            const { error, normalizedEmail } = validateLoginEmailInput(email);
+            setEmailError(error);
+            if (error) return;
+            setEmail(normalizedEmail);
+            setAuthMethod('password');
+            setStep('password');
+          }}
         />
       ) : step === 'otp' ? (
         <LoginOtpStep

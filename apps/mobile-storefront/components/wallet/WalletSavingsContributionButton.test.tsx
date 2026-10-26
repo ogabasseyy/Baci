@@ -1,11 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import { palette } from '@/constants/Colors';
+import { BRAND, palette } from '@/constants/Colors';
 import { WalletSavingsContributionButton } from './WalletSavingsContributionButton';
 
 describe('WalletSavingsContributionButton', () => {
-  it('uses a solid readable green action and confirms the contribution', () => {
+  it('uses a solid readable red action and confirms the contribution', () => {
     const onPress = jest.fn();
     render(
       <WalletSavingsContributionButton
@@ -20,9 +20,7 @@ describe('WalletSavingsContributionButton', () => {
         screen.getByRole('button', { name: 'Confirm savings top-up' }).props
           .style
       )
-    ).toEqual(
-      expect.objectContaining({ backgroundColor: palette.emerald[800] })
-    );
+    ).toEqual(expect.objectContaining({ backgroundColor: BRAND.primary }));
     expect(screen.getByText('Add to savings')).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', { name: 'Confirm savings top-up' })

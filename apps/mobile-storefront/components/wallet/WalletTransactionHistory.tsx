@@ -9,6 +9,7 @@ import { styles } from './wallet.styles';
 type WalletColors = (typeof Colors)['light'];
 
 export interface WalletTransaction {
+  goal_id?: string;
   amount: number;
   created_at: string;
   description: string;
@@ -139,7 +140,11 @@ export function WalletTransactionHistory({
                 />
               </View>
               <View style={styles.txDetails}>
-                <Text style={[styles.txDescription, { color: colors.text }]}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[styles.txDescription, { color: colors.text }]}
+                >
                   {transaction.description}
                 </Text>
                 <Text style={[styles.txDate, { color: colors.textSecondary }]}>

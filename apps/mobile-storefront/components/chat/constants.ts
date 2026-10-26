@@ -29,6 +29,11 @@ export const HIDDEN_ROUTES = [
   '/search',
   '/account',
   '/quiz',
+  '/wallet',
+  '/(tabs)/wallet',
+  '/savings',
+  '/notifications',
+  '/settings',
 ];
 
 // H24 note: These are intentionally static — used only for FAB initial position

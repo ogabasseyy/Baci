@@ -13,6 +13,7 @@ export type SavingsPlanFundingPhase =
   | 'loading'
   | 'ready'
   | 'pending'
+  | 'unprepared'
   | 'unavailable'
   | 'error';
 
@@ -100,6 +101,16 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'SAVINGS_WALLET_NOT_FOUND'
+      ) {
+        setStatusCode(error.code);
+        setPhase('unprepared');
+        return;
+      }
       setFundingError(
         getErrorMessage(error, 'Unable to load the plan account.')
       );

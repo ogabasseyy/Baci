@@ -23,7 +23,8 @@ export function createPrimaryWalletExecutor(
     piggyvestPrimaryWalletRuntimeSchema.parse(configuration).database;
   return async (statement, parameters) => {
     const expectedCount =
-      statement === PRIMARY_WALLET_STATEMENTS.read
+      statement === PRIMARY_WALLET_STATEMENTS.read ||
+      statement === PRIMARY_WALLET_STATEMENTS.presence
         ? 1
         : statement === PRIMARY_WALLET_STATEMENTS.claim ||
             statement === PRIMARY_WALLET_VERIFICATION_STATEMENT

@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { splitFullName } from '../lib/auth-helpers';
+import { isRestrictedSavingsSandbox } from '../lib/is-restricted-savings-sandbox';
 import { createLogger } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 import { CustomerRowSchema } from '../lib/validation';
@@ -123,7 +124,7 @@ export async function hydrateCustomer({
   let validatedCustomer = CustomerRowSchema.safeParse(resolvedCustomer);
   if (!validatedCustomer.success) return null;
 
-  if (user.user_metadata) {
+  if (user.user_metadata && !isRestrictedSavingsSandbox()) {
     const { firstName, lastName } = splitFullName(user.user_metadata.full_name);
     const updates: Record<string, string> = {};
     if (!validatedCustomer.data.first_name && firstName)

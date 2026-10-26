@@ -1,7 +1,22 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SettingsSectionRow } from './SettingsSectionRow';
+
+jest.mock('react-native', () => {
+  const native = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return Object.defineProperty(Object.create(native), 'Pressable', {
+    value: (props: import('react-native').PressableProps) => (
+      <native.Pressable
+        {...props}
+        style={typeof props.style === 'function' ? undefined : props.style}
+      />
+    ),
+  });
+});
 
 describe('SettingsSectionRow', () => {
   it('renders the row copy and triggers onPress', () => {
@@ -50,11 +65,12 @@ describe('SettingsSectionRow', () => {
 
     expect(screen.getByRole('link', { name: 'Open terms' })).toHaveStyle({
       borderBottomColor: '#D1D5DB',
+      borderBottomWidth: StyleSheet.hairlineWidth,
     });
   });
 
-  it('keeps trailing controls beside long setting copy', () => {
-    render(
+  it('keeps padded horizontal rows when NativeWind drops callback styles', () => {
+    const { UNSAFE_getAllByType } = render(
       <View style={{ width: 180 }}>
         <SettingsSectionRow
           accessibilityLabel="Open account settings"
@@ -75,6 +91,9 @@ describe('SettingsSectionRow', () => {
     expect(row).toHaveStyle({
       flexDirection: 'row',
       justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      flexWrap: 'nowrap',
     });
     expect(screen.getByText('A setting with a long label')).toBeOnTheScreen();
     expect(
@@ -83,5 +102,46 @@ describe('SettingsSectionRow', () => {
       )
     ).toBeOnTheScreen();
     expect(screen.getByText('2.4.1')).toBeOnTheScreen();
+    const views = UNSAFE_getAllByType(View);
+    expect(
+      views.some((node) => {
+        const style = StyleSheet.flatten(node.props.style);
+        return style?.width === 64 && style?.flexShrink === 0;
+      })
+    ).toBe(true);
+    expect(
+      views.some((node) => {
+        const style = StyleSheet.flatten(node.props.style);
+        return style?.minWidth === 0 && style?.flex === 1;
+      })
+    ).toBe(true);
+  });
+
+  it('keeps horizontal padding and divider while providing press feedback', () => {
+    render(
+      <SettingsSectionRow
+        accessibilityLabel="Open terms"
+        borderBottom
+        borderColor="#D1D5DB"
+        icon="document-text-outline"
+        iconBackgroundColor="#E5E7EB"
+        iconColor="#111827"
+        label="Terms of Service"
+        labelColor="#111827"
+        onPress={jest.fn()}
+        right={<Text>Open</Text>}
+      />
+    );
+
+    const row = screen.getByRole('button', { name: 'Open terms' });
+    fireEvent(row, 'pressIn');
+    expect(row).toHaveStyle({
+      opacity: 0.7,
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      borderBottomColor: '#D1D5DB',
+    });
+    fireEvent(row, 'pressOut');
+    expect(row).not.toHaveStyle({ opacity: 0.7 });
   });
 });

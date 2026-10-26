@@ -4,6 +4,7 @@ import { RADIUS, SHADOWS, SPACING } from '@/constants/Colors';
 const SETTINGS_ICON_SIZE = 42;
 const SETTINGS_ICON_RADIUS = 14;
 const SETTINGS_ROW_SUBTITLE_MARGIN_TOP = 2;
+const SETTINGS_ROW_CONTROL_WIDTH = 64;
 
 export const styles = StyleSheet.create({
   container: {
@@ -48,6 +49,7 @@ export const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 72,
@@ -74,6 +76,8 @@ export const styles = StyleSheet.create({
   rowRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: SETTINGS_ROW_CONTROL_WIDTH,
     flexShrink: 0,
     marginLeft: SPACING.sm,
   },
@@ -92,6 +96,7 @@ export const styles = StyleSheet.create({
     fontWeight: '500',
   },
   iconCircle: {
+    flexShrink: 0,
     width: SETTINGS_ICON_SIZE,
     height: SETTINGS_ICON_SIZE,
     borderRadius: SETTINGS_ICON_RADIUS,
@@ -106,5 +111,10 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     opacity: 0.4,
     paddingBottom: SPACING.sm,
+  },
+  notificationError: {
+    fontSize: 12,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
   },
 });

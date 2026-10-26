@@ -15,9 +15,13 @@ test('managed CLI rejects unapproved modes without secret output or helper invoc
     });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
-    assert.equal(
+    const diagnostic = JSON.parse(result.stderr.split('\n')[0]);
+    assert.equal(diagnostic.stage, 'gateway');
+    assert.equal(diagnostic.reason, 'mode-rejected');
+    assert.doesNotMatch(result.stderr, /never-echo|untrusted/);
+    assert.match(
       result.stderr,
-      'Managed gateway withdrawn; operator review and fresh startup evidence required.\n'
+      /operator review and fresh startup evidence required/
     );
   }
 });

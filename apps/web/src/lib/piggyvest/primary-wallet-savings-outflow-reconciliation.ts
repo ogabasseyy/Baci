@@ -3,6 +3,7 @@ import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
+import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
@@ -39,6 +40,16 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
       token,
       fetchImplementation: input.fetchImplementation,
     }),
+    resolveIdentity: (selection: {
+      reservation: unknown;
+      providerResponse: unknown;
+    }) =>
+      resolvePrimaryWalletSavingsIdentity({
+        ...selection,
+        environment: configuration.environment,
+        token,
+        fetchImplementation: input.fetchImplementation,
+      }),
   };
   for (const reference of input.references) {
     if (!schemas.reserved.shape.reference.safeParse(reference).success)

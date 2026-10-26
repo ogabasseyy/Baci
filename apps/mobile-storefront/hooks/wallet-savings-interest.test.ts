@@ -31,6 +31,7 @@ it('calls the goals overload with a validated merchant UUID', async () => {
   expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
     p_merchant_id: merchantId,
     p_include_goals: true,
+    p_include_history: true,
   });
 });
 
@@ -46,7 +47,7 @@ it('falls back to the one-argument RPC only when the overload is absent', async 
     creditedInterestKobo: 733,
     goalInterestKobo: [],
   });
-  expect(mockRpc).toHaveBeenCalledTimes(1);
+  expect(mockRpc).toHaveBeenCalledTimes(2);
   expect(mockFetchWalletSavingsEarnings).toHaveBeenCalledWith(merchantId);
 });
 

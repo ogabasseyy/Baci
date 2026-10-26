@@ -13,6 +13,10 @@ jest.mock('./config', () => ({
 
 import { sendStorefrontOtp, verifyStorefrontOtp } from './storefront-auth-api';
 
+jest.mock('./get-hosted-storefront-otp-client', () => ({
+  getHostedStorefrontOtpClient: () => null,
+}));
+
 const mockFetch = jest.fn<FetchImplementation>();
 
 describe('storefront auth API client', () => {

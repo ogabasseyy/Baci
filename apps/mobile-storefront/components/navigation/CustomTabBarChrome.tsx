@@ -21,6 +21,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
 import { CustomTabBarItem, type CustomTabOptions } from './CustomTabBarItem';
 import { useWarmTabScreens } from './useWarmTabScreens';
+import { WalletDiscoveryBubble } from './WalletDiscoveryBubble';
 
 const HAS_EXPO_BLUR = UIManager.hasViewManagerConfig('ExpoBlurView');
 const BlurContainer = HAS_EXPO_BLUR ? BlurView : View;
@@ -56,6 +57,7 @@ export function CustomTabBarChrome({
   const tabWidth =
     visibleRoutes.length > 0 ? tabBarContentWidth / visibleRoutes.length : 0;
   const activeIdx = visibleRoutes.findIndex((r) => r.name === activeRouteName);
+  const walletIdx = visibleRoutes.findIndex((route) => route.name === 'wallet');
   const safeActiveIdx = activeIdx !== -1 ? activeIdx : 0;
   const pressInHandledRouteKeyRef = useRef<string | null>(null);
   const [optimisticRouteName, setOptimisticRouteName] =
@@ -128,7 +130,17 @@ export function CustomTabBarChrome({
   });
 
   return (
-    <View style={styles.outerContainer} testID="custom-tab-bar-wrapper">
+    <View
+      style={[styles.outerContainer, { pointerEvents: 'box-none' }]}
+      testID="custom-tab-bar-wrapper"
+    >
+      {preloadProtectedTabs && walletIdx >= 0 ? (
+        <WalletDiscoveryBubble
+          homeFocused={activeRouteName === 'index'}
+          walletCenter={8 + tabWidth * (walletIdx + 0.5)}
+          availableWidth={screenWidth - 32}
+        />
+      ) : null}
       <BlurContainer
         intensity={Platform.OS === 'ios' ? 70 : 85}
         tint={isDark ? 'dark' : 'light'}
@@ -259,6 +271,7 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 100,
     backgroundColor: 'transparent',
+    paddingTop: 96,
     borderRadius: 999,
     ...getTabBarShadowStyle('native'),
   },

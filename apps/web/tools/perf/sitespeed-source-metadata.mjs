@@ -11,6 +11,24 @@ const RELEVANT = [
   ':(exclude,glob)**/.playwright-cli/**',
 ];
 
+function readGitOutput(root, args) {
+  return new Promise((resolveOutput, reject) => {
+    const chunks = [];
+    const child = spawn('git', ['-C', root, ...args], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    child.stdout.on('data', (chunk) => chunks.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolveOutput(Buffer.concat(chunks));
+      } else {
+        reject(new Error(`git ${args[0]} exited ${code}`));
+      }
+    });
+  });
+}
+
 function streamDiffHash(root) {
   return new Promise((resolveHash, reject) => {
     const hash = createHash('sha256');
@@ -40,19 +58,17 @@ export async function gitMetadata(cwd) {
   };
   const root = (await read(['rev-parse', '--show-toplevel'])).trim();
   const trackedDiffHash = await streamDiffHash(root);
-  const status = await read([
-    '-C',
-    root,
-    'status',
-    '--porcelain',
-    '--untracked-files=all',
-    '--',
-    ...RELEVANT,
-  ]);
+  const status = (
+    await readGitOutput(root, [
+      'status',
+      '--porcelain',
+      '--untracked-files=all',
+      '--',
+      ...RELEVANT,
+    ])
+  ).toString('utf8');
   const untracked = (
-    await read([
-      '-C',
-      root,
+    await readGitOutput(root, [
       'ls-files',
       '--others',
       '--exclude-standard',
@@ -61,6 +77,7 @@ export async function gitMetadata(cwd) {
       ...RELEVANT,
     ])
   )
+    .toString('utf8')
     .split('\0')
     .filter(Boolean);
   const hash = createHash('sha256').update(trackedDiffHash);

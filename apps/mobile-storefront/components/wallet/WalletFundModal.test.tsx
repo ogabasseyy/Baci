@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet, View } from 'react-native';
+import { DraggableModalSheet } from '@/components/ui/DraggableModalSheet';
+import Colors, { BRAND } from '@/constants/Colors';
 import { WalletFundModal } from './WalletFundModal';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
@@ -29,6 +32,46 @@ describe('WalletFundModal', () => {
     jest.clearAllMocks();
     mockUseCapability.mockReturnValue(null);
   });
+  it.each([
+    false,
+    true,
+  ])('keeps a single shared sheet handle when embedded=%s', (embedded) => {
+    const props = createWalletContentProps();
+    const modal = (
+      <WalletFundModal
+        {...props}
+        colors={Colors.dark}
+        creditWatch={creditWatch}
+        embedded={embedded}
+        showFundPanel
+      />
+    );
+    render(
+      embedded ? (
+        <DraggableModalSheet
+          visible
+          backgroundColor={Colors.dark.card}
+          onClose={jest.fn()}
+        >
+          {modal}
+        </DraggableModalSheet>
+      ) : (
+        modal
+      )
+    );
+
+    const sheets = screen.getAllByTestId('gorhom-sheet');
+    expect(sheets).toHaveLength(1);
+    expect(sheets[0].props.handleIndicatorStyle).toEqual(
+      expect.objectContaining({ backgroundColor: BRAND.primary, width: 40 })
+    );
+    const innerHandles = screen.UNSAFE_getAllByType(View).filter((view) => {
+      const style = StyleSheet.flatten(view.props.style);
+      return style?.width === 36 && style?.height === 4;
+    });
+    expect(innerHandles).toHaveLength(0);
+  });
+
   it('shows the primary setup only while the server confirms the capability', () => {
     mockUseCapability.mockReturnValue(true);
     const props = createWalletContentProps();
@@ -84,6 +127,7 @@ describe('WalletFundModal', () => {
       <WalletFundModal
         {...props}
         creditWatch={creditWatch}
+        needsPhone
         fundingAccount={{
           accountName: 'Synthetic User',
           accountNumber: '9000000002',
@@ -96,6 +140,8 @@ describe('WalletFundModal', () => {
     );
     expect(screen.queryByText('Primary setup panel')).toBeNull();
     expect(screen.getByText('Add Money')).toBeOnTheScreen();
+    expect(screen.getByText('9000000002')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Phone number')).toBeNull();
   });
   it('shows savings return guidance when funding an existing plan', () => {
     const props = createWalletContentProps();
@@ -151,9 +197,13 @@ describe('WalletFundModal', () => {
       />
     );
 
-    expect(screen.getByTestId('keyboard-container')).toHaveProp(
-      'automaticOffset',
-      true
+    expect(screen.getByTestId('gorhom-sheet')).toHaveProp(
+      'keyboardBehavior',
+      'interactive'
+    );
+    expect(screen.getByTestId('gorhom-sheet')).toHaveProp(
+      'keyboardBlurBehavior',
+      'restore'
     );
     expect(
       screen.getByRole('button', { name: 'Continue to payment' })

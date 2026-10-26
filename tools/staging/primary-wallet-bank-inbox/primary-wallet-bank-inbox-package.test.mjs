@@ -55,9 +55,7 @@ test('builds offline executable plan and hardened readiness-gated timer without 
 });
 test('rejects package output inside the worktree', async () => {
   await assert.rejects(
-    buildPrimaryBankInboxPackage(
-      path.resolve('owned-inbox-package-output')
-    ),
+    buildPrimaryBankInboxPackage(path.resolve('owned-inbox-package-output')),
     /outside repository/
   );
 });

@@ -8,6 +8,10 @@ import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { WalletScreen } from './WalletScreen';
 import { fundWallet } from './wallet-screen.handlers';
 
+jest.mock('./use-wallet-screen-data', () =>
+  jest.requireActual('@/test-support/wallet-screen-data.mock')
+);
+
 const mockGoal: WalletActiveSavingsGoal = {
   contribution_amount: 5000,
   contribution_frequency: 'weekly',

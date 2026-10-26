@@ -91,7 +91,7 @@ it('renders savings progress modal and wires manual contribution actions', async
   expect(screen.getAllByText('Add to savings').length).toBeGreaterThan(0);
   expect(screen.getByText('50%')).toBeOnTheScreen();
   expect(screen.getByText('Condition: Used')).toBeOnTheScreen();
-  expect(screen.getAllByText('Storage: 256GB')).toHaveLength(2);
+  expect(screen.getByText('Storage: 256GB')).toBeOnTheScreen();
 
   fireEvent.changeText(screen.getByLabelText('Savings top-up amount'), '500');
   fireEvent.press(
@@ -155,6 +155,9 @@ it('requires an amount before opening wallet payment for an empty spendable wall
 it('shows the active plan progress on the wallet before opening its detail sheet', () => {
   const props = createWalletContentProps();
   render(<WalletContent {...props} />);
+  fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+    nativeEvent: { layout: { width: 400 } },
+  });
 
   expect(
     screen.getByRole('progressbar', { name: 'Savings plan progress' })
@@ -168,6 +171,9 @@ it('shows the active plan progress on the wallet before opening its detail sheet
 it('places the real funding account beside the balance before the device plan', () => {
   const props = createWalletContentProps();
   const { UNSAFE_root } = render(<WalletContent {...props} />);
+  fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+    nativeEvent: { layout: { width: 400 } },
+  });
   const rendered = UNSAFE_root.findAllByType(Text)
     .map((element) => String(element.props.children))
     .join('|');

@@ -1,6 +1,7 @@
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import type Colors from '@/constants/Colors';
+import { Keyboard, Pressable, Text, View } from 'react-native';
+import { BRAND, type default as Colors, palette } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import {
   isHostedStagingTestPaymentsEnabled,
@@ -19,6 +20,7 @@ type WalletSavingsContributionFlowProps = {
   onFundWallet: () => void;
   remainingAmount: number;
   walletBalance: number;
+  usesWalletBankTransfer?: boolean;
 };
 
 export function WalletSavingsContributionFlow({
@@ -31,6 +33,7 @@ export function WalletSavingsContributionFlow({
   onFundWallet,
   remainingAmount,
   walletBalance,
+  usesWalletBankTransfer = false,
 }: WalletSavingsContributionFlowProps) {
   const [isFundFocused, setIsFundFocused] = useState(false);
   const amount = Number(addAmount);
@@ -43,17 +46,22 @@ export function WalletSavingsContributionFlow({
     walletBalance <= 0 || (validAmount && amount > walletBalance);
   const isBusy = isAdding || isFundPending;
   const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
-  const topUpBlocked = !usesPlanFunding && isHostedStagingWalletTopUpBlocked();
+  const topUpBlocked =
+    !usesWalletBankTransfer &&
+    !usesPlanFunding &&
+    isHostedStagingWalletTopUpBlocked();
   const guidance = invalidAmount
     ? amount > remainingAmount
       ? `This plan only needs ${formatNgnCurrency(remainingAmount)} more. Enter a smaller amount.`
       : 'Enter an amount greater than zero.'
     : needsFunding
-      ? usesPlanFunding
-        ? 'Use the plan transfer details for this staging goal. Do not send a real bank transfer; approved operators run test funding.'
-        : topUpBlocked
-          ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
-          : 'Fund your wallet to add this amount to savings.'
+      ? usesWalletBankTransfer
+        ? 'Add money to your wallet, then move it into this savings plan.'
+        : usesPlanFunding
+          ? 'Use the plan transfer details for this staging goal. Do not send a real bank transfer; approved operators run test funding.'
+          : topUpBlocked
+            ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
+            : 'Fund your wallet to add this amount to savings.'
       : validAmount
         ? `Move ${formatNgnCurrency(amount)} from your wallet into this plan.`
         : 'Enter an amount to move from your wallet into this plan.';
@@ -68,12 +76,13 @@ export function WalletSavingsContributionFlow({
           styles.amountInput,
           {
             backgroundColor: colors.card,
-            borderColor: colors.border,
+            borderColor: BRAND.primary,
+            borderWidth: 2,
           },
         ]}
       >
         <Text style={[styles.amountPrefix, { color: colors.text }]}>₦</Text>
-        <TextInput
+        <BottomSheetTextInput
           accessibilityLabel="Savings top-up amount"
           value={addAmount
             .replace(/\D/g, '')
@@ -103,35 +112,50 @@ export function WalletSavingsContributionFlow({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              usesPlanFunding
-                ? 'Open savings bank transfer details'
-                : 'Continue to payment'
+              usesWalletBankTransfer
+                ? 'Open wallet bank transfer details'
+                : usesPlanFunding
+                  ? 'Open savings bank transfer details'
+                  : 'Continue to payment'
             }
             accessibilityState={{
-              disabled: !validAmount || isBusy || topUpBlocked,
+              disabled:
+                (!usesWalletBankTransfer && !validAmount) ||
+                isBusy ||
+                topUpBlocked,
               busy: isFundPending,
             }}
-            disabled={!validAmount || isBusy || topUpBlocked}
+            disabled={
+              (!usesWalletBankTransfer && !validAmount) ||
+              isBusy ||
+              topUpBlocked
+            }
             onFocus={() => setIsFundFocused(true)}
             onBlur={() => setIsFundFocused(false)}
-            onPress={onFundWallet}
+            onPress={() => {
+              Keyboard.dismiss();
+              onFundWallet();
+            }}
             style={[
               styles.primaryButton,
               {
-                backgroundColor: colors.primary,
+                backgroundColor: BRAND.primary,
               },
               isFundFocused && {
                 borderColor: colors.primaryForeground,
                 borderWidth: 2,
               },
-              (!validAmount || isBusy || topUpBlocked) && styles.disabledButton,
+              ((!usesWalletBankTransfer && !validAmount) ||
+                isBusy ||
+                topUpBlocked) &&
+                styles.disabledButton,
             ]}
           >
             <Text
               style={[
                 styles.primaryButtonText,
                 {
-                  color: colors.primaryForeground,
+                  color: palette.white,
                 },
               ]}
             >
@@ -139,9 +163,11 @@ export function WalletSavingsContributionFlow({
                 ? usesPlanFunding
                   ? 'Opening transfer details...'
                   : 'Opening payment...'
-                : usesPlanFunding
-                  ? 'View bank transfer details'
-                  : 'Continue to payment'}
+                : usesWalletBankTransfer
+                  ? 'Add money to wallet'
+                  : usesPlanFunding
+                    ? 'View bank transfer details'
+                    : 'Continue to payment'}
             </Text>
           </Pressable>
         ) : (

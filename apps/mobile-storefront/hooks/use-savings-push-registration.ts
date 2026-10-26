@@ -129,7 +129,11 @@ export function useSavingsPushRegistration(): UsePushNotificationsReturn {
     explicitMerchantId?: string,
     opts?: { force?: boolean }
   ) => {
-    if (isLoading || isRegistered || !getNativePushRegistration()) return;
+    if (isLoading || isRegistered) return;
+    if (!getNativePushRegistration()) {
+      setError('Push notifications are unavailable in this app build.');
+      return;
+    }
     const liveAuth = useAuthStore.getState();
     const startedAs = {
       userId: liveAuth.user?.id ?? null,

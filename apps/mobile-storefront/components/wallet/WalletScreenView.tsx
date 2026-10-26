@@ -4,7 +4,10 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
+import type { WalletData } from '@/hooks/wallet-query';
+import { WalletBalancePreview } from './WalletBalancePreview';
 import { WalletContent, type WalletContentProps } from './WalletContent';
+import { WalletPrimaryAccountContent } from './WalletPrimaryAccountContent';
 import { styles } from './wallet.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -14,6 +17,9 @@ interface WalletScreenViewProps {
   loadingMessage?: string;
   presentation: 'stack' | 'tab';
   walletContentProps?: Omit<WalletContentProps, 'colors'>;
+  balancePreview?: WalletData;
+  isError?: boolean;
+  onRetry?: () => void;
 }
 
 export function WalletScreenView({
@@ -21,6 +27,9 @@ export function WalletScreenView({
   loadingMessage,
   presentation,
   walletContentProps,
+  balancePreview,
+  isError,
+  onRetry,
 }: WalletScreenViewProps) {
   const hasWalletContent = Boolean(walletContentProps);
 
@@ -50,7 +59,17 @@ export function WalletScreenView({
           </View>
         ) : null}
         {walletContentProps ? (
-          <WalletContent colors={colors} {...walletContentProps} />
+          <WalletPrimaryAccountContent
+            colors={colors}
+            {...walletContentProps}
+          />
+        ) : balancePreview ? (
+          <WalletBalancePreview
+            wallet={balancePreview}
+            colors={colors}
+            isError={isError}
+            onRetry={onRetry}
+          />
         ) : (
           <View style={[styles.container, styles.centered]}>
             <ActivityIndicator

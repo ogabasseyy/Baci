@@ -138,7 +138,7 @@ it('refreshes wallet and visible earnings inbox when a scoped savings push arriv
   function NotificationJourney() {
     const inbox = useNotificationJourney();
     return createElement(SavingsNotificationList, {
-      header: null,
+      preferences: null,
       isLoading: inbox.isLoading,
       notifications: inbox.notifications,
       requestError: inbox.error,

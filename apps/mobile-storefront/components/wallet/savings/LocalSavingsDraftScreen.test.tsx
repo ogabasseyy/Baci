@@ -3,6 +3,7 @@ import {
   act,
   fireEvent,
   render,
+  renderAsync,
   screen,
   waitFor,
 } from '@testing-library/react-native';
@@ -89,6 +90,12 @@ jest.mock('@/lib/savings-draft-request-id', () => ({
   savingsDraftRequestId: (...args: unknown[]) => mockRequestId(...args),
 }));
 const previous = process.env.EXPO_PUBLIC_LOCAL_STOREFRONT;
+
+async function renderLoadedDraftScreen() {
+  await renderAsync(<LocalSavingsDraftScreen />);
+  expect(screen.queryByRole('progressbar')).toBeNull();
+}
+
 it('keeps staging device search above the keyboard with room for results', async () => {
   render(<LocalSavingsDraftScreen />);
   await waitFor(() => expect(mockList).toHaveBeenCalled());
@@ -142,8 +149,7 @@ it('distinguishes saved drafts for the same device by consent status', async () 
       acceptedAt: '2026-09-13T07:01:00Z',
     },
   ]);
-  render(<LocalSavingsDraftScreen />);
-  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  await renderLoadedDraftScreen();
   fireEvent.press(
     screen.getByRole('button', { name: 'View saved drafts (2)' })
   );
@@ -152,8 +158,7 @@ it('distinguishes saved drafts for the same device by consent status', async () 
 });
 
 it('keeps the isolated draft harness free of unsupported financial choices', async () => {
-  render(<LocalSavingsDraftScreen />);
-  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  await renderLoadedDraftScreen();
   expect(screen.getByText('Dream it.\nSave for it.')).toBeOnTheScreen();
   expect(screen.getByLabelText('Savings product search')).toBeOnTheScreen();
   expect(screen.queryByLabelText('Savings target amount')).toBeNull();
@@ -173,8 +178,7 @@ it('keeps the isolated draft harness free of unsupported financial choices', asy
 });
 
 it('requires the exact variant, then saves draft consent without exposing money actions', async () => {
-  render(<LocalSavingsDraftScreen />);
-  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  await renderLoadedDraftScreen();
   fireEvent.changeText(
     screen.getByLabelText('Savings product search'),
     'phone'
@@ -223,8 +227,7 @@ it('requires the exact variant, then saves draft consent without exposing money 
 it('loads route-selected products directly rather than assuming the first catalogue page contains them', async () => {
   mockParams.productId = draftFixture.productId;
   mockParams.variantId = draftFixture.variantId;
-  render(<LocalSavingsDraftScreen />);
-  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  await renderLoadedDraftScreen();
   expect(mockProductLookup).toHaveBeenCalledWith(draftFixture.productId);
   expect(
     screen.getByRole('button', { name: /256GB/, selected: true })
@@ -249,8 +252,7 @@ it('does not show an old customer draft after logout while a response is pending
 it('offers explicit replacement only after stale acceptance and requires fresh consent', async () => {
   mockParams.productId = draftFixture.productId;
   mockParams.variantId = draftFixture.variantId;
-  render(<LocalSavingsDraftScreen />);
-  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  await renderLoadedDraftScreen();
   fireEvent.press(screen.getByRole('button', { name: 'Review savings draft' }));
   await waitFor(() => expect(screen.getByRole('checkbox')).toBeTruthy());
   expect(screen.getByText(/Saved catalogue price:/)).toBeTruthy();

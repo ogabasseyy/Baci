@@ -21,6 +21,31 @@ const goal: WalletActiveSavingsGoal = {
 };
 
 describe('WalletSavingsPlanCard', () => {
+  it.each([
+    [0, 0, '0%'],
+    [100, 0.04, '<1%'],
+    [2000, 0.8, '<1%'],
+    [250000, 100, '100%'],
+  ])('announces %s saved without rounding positive fractional progress to zero', (amount, percent, label) => {
+    render(
+      <WalletSavingsPlanCard
+        colors={Colors.dark}
+        goal={{ ...goal, current_amount: amount, target_amount: 250000 }}
+        onOpen={jest.fn()}
+      />
+    );
+
+    const progress = screen.getByRole('progressbar', {
+      name: 'Savings plan progress',
+    });
+    expect(progress).toHaveAccessibilityValue({ now: percent, text: label });
+    expect(StyleSheet.flatten(progress.props.children.props.style)).toEqual(
+      expect.objectContaining({ width: `${percent}%` })
+    );
+    expect(screen.getByText(goal.title)).toHaveProp('numberOfLines', 1);
+    expect(screen.getByText(goal.title)).toHaveProp('ellipsizeMode', 'tail');
+  });
+
   it('shows a created but unfunded plan without claiming progress', () => {
     const onOpen = jest.fn();
     render(
@@ -58,7 +83,7 @@ describe('WalletSavingsPlanCard', () => {
     expect(
       screen.getByRole('progressbar', { name: 'Savings plan progress' })
     ).toHaveAccessibilityValue({ now: 50 });
-    expect(screen.getByText('50% · 30 October 2026')).toBeOnTheScreen();
+    expect(screen.queryByText('50% · 30 October 2026')).toBeNull();
     expect(screen.getByText('₦50,000 to go')).toBeOnTheScreen();
   });
 
@@ -105,7 +130,8 @@ describe('WalletSavingsPlanCard', () => {
       />
     );
 
-    expect(screen.getByText('256GB · Blue')).toBeOnTheScreen();
+    expect(screen.getByText('256GB')).toBeOnTheScreen();
+    expect(screen.getByRole('image', { name: 'Blue' })).toBeOnTheScreen();
     expect(
       screen.getByRole('button', { name: 'Add to savings for iPhone 15 Pro' })
     ).toBeOnTheScreen();
@@ -127,7 +153,7 @@ describe('WalletSavingsPlanCard', () => {
     expect(rendered).not.toContain(Colors.light.cardForeground);
   });
 
-  it('gives the dark mode Add to savings CTA a static horizontal amber glow', () => {
+  it('preserves the approved red Add to savings action in dark mode', () => {
     const onOpen = jest.fn();
     const { UNSAFE_getByType } = render(
       <WalletSavingsPlanCard colors={Colors.dark} goal={goal} onOpen={onOpen} />
@@ -135,7 +161,7 @@ describe('WalletSavingsPlanCard', () => {
 
     expect(UNSAFE_getByType(LinearGradient).props).toEqual(
       expect.objectContaining({
-        colors: [palette.amber[600], palette.amber[400], palette.amber[600]],
+        colors: [palette.red[700], palette.red[600], palette.red[700]],
         start: { x: 0, y: 0.5 },
         end: { x: 1, y: 0.5 },
       })
@@ -145,7 +171,7 @@ describe('WalletSavingsPlanCard', () => {
     });
     fireEvent(button, 'focus');
     expect(StyleSheet.flatten(button.props.style)).toEqual(
-      expect.objectContaining({ borderColor: palette.black, borderWidth: 2 })
+      expect.objectContaining({ borderColor: palette.white, borderWidth: 2 })
     );
     fireEvent.press(button);
     expect(onOpen).toHaveBeenCalledTimes(1);

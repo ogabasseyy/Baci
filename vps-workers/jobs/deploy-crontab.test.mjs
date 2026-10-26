@@ -20,9 +20,7 @@ describe('deploy crontab', () => {
     const releasePreparationIndex = deployScript.indexOf(
       'prepare_worker_release'
     );
-    const triggerServiceIndex = deployScript.indexOf(
-      'install_worker_services'
-    );
+    const triggerServiceIndex = deployScript.indexOf('install_worker_services');
 
     assert.match(releaseHelper, /NODE_BIN=\$\(ssh/);
     assert.notEqual(releasePreparationIndex, -1);
@@ -87,10 +85,7 @@ describe('deploy crontab', () => {
     );
 
     assert.match(deployScript, /APP_SHA=\$\(git rev-parse HEAD\)/);
-    assert.match(
-      releaseHelper,
-      /lib\/provision-immutable-checkout\.sh/
-    );
+    assert.match(releaseHelper, /lib\/provision-immutable-checkout\.sh/);
     assert.match(provisioner, /git -C "\$repo_dir" rev-parse --verify HEAD/);
     assert.match(
       provisioner,
@@ -116,10 +111,7 @@ describe('deploy crontab', () => {
       provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
-    assert.match(
-      provisioner,
-      /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
-    );
+    assert.match(provisioner, /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/);
     assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
     assert.match(
       provisioner,

@@ -1,10 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { useWallet } from '@/hooks/use-wallet';
-import { CONFIG } from '@/lib/config';
-import { pickMerchantId } from '@/lib/pick-merchant-id';
-import { useAuthStore } from '@/stores/auth-store';
 import {
   deriveStartSavingsAmounts,
   formatDateInput,
@@ -21,6 +17,7 @@ import { readParam } from './start-savings-controller.utils';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
+import { useStartSavingsIdentity } from './use-start-savings-identity';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
 import { useStartSavingsProductSearch } from './use-start-savings-product-search';
 import { useStartSavingsProductSelection } from './use-start-savings-product-selection';
@@ -34,12 +31,8 @@ export function useStartSavingsController() {
     null
   );
   const params = useLocalSearchParams<SavingsSearchParams>();
-  const { merchantId, userId } = useAuthStore(
-    useShallow((state) => ({
-      merchantId: state.merchantId,
-      userId: state.user?.id,
-    }))
-  );
+  const { activeMerchantId, activeMerchantSlug, userId } =
+    useStartSavingsIdentity();
   const { data: walletData, isRefetching, refetch } = useWallet();
   const [searchValue, setSearchValue] = useState('');
   const [contributionAmount, setContributionAmount] = useState('');
@@ -83,8 +76,6 @@ export function useStartSavingsController() {
     setFormError,
     setSearchValue,
   });
-  const activeMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
-  const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
   const {
     isLoadingPaymentMethods,
     paymentMethodsError,
@@ -197,6 +188,13 @@ export function useStartSavingsController() {
     handleFundingContinue,
     handleSourceModeChange,
   } = useStartSavingsFormFlow({
+    transferVerification: {
+      goalId: createdGoalId,
+      amount: effectiveInitialContribution,
+      merchantId: activeMerchantId ?? undefined,
+      merchantSlug: activeMerchantSlug,
+      userId,
+    },
     acceptsNonWithdrawableTerms,
     contributionValue,
     initialContributionEnabled,

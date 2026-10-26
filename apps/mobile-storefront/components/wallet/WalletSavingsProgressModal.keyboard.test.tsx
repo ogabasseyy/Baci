@@ -56,13 +56,19 @@ it.each([
     ).toBeOnTheScreen();
     fireEvent.press(payment);
     expect(onFundWallet).not.toHaveBeenCalled();
-    expect(screen.getByTestId('modal-keyboard-surface')).toHaveStyle({
-      height: 320,
-      backgroundColor: colors.background,
-    });
-    expect(screen.getByTestId('keyboard-container')).toHaveProp(
-      'automaticOffset',
-      true
+    expect(screen.getByTestId('gorhom-sheet')).toHaveProp(
+      'backgroundStyle',
+      expect.objectContaining({
+        backgroundColor: colors.background,
+      })
+    );
+    expect(screen.getByTestId('gorhom-sheet')).toHaveProp(
+      'keyboardBehavior',
+      'interactive'
+    );
+    expect(screen.getByTestId('gorhom-sheet')).toHaveProp(
+      'android_keyboardInputMode',
+      'adjustResize'
     );
     expect(screen.UNSAFE_getByType(ScrollView).props.keyboardDismissMode).toBe(
       'on-drag'

@@ -7,14 +7,19 @@ export function PlanTransferActions({
   colors,
   controller,
   onConfirmTransfer,
-  onContributeFromWallet,
-}: TransferModalProps & {
+}: Pick<TransferModalProps, 'colors'> & {
+  controller: Pick<
+    TransferModalProps['controller'],
+    | 'planFundingPhase'
+    | 'planFundingAccounts'
+    | 'isSubmitting'
+    | 'openWalletFundingScreen'
+  >;
   onConfirmTransfer: () => void;
-  onContributeFromWallet: () => void;
 }) {
   const usePlanAccount =
     controller.planFundingPhase === 'ready' &&
-    controller.planFundingAccounts.length > 0;
+    Boolean(controller.planFundingAccounts[0]?.accountNumber.trim());
   return (
     <View style={styles.transferActionRow}>
       <Pressable
@@ -27,26 +32,24 @@ export function PlanTransferActions({
           Open wallet funding screen
         </Text>
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          usePlanAccount
-            ? 'Confirm plan transfer'
-            : 'Record wallet contribution'
-        }
-        accessibilityState={{ disabled: controller.isSubmitting }}
-        style={[
-          styles.secondaryButton,
-          { borderColor: BRAND.primary, backgroundColor: BRAND.primary },
-          controller.isSubmitting ? styles.buttonDisabled : null,
-        ]}
-        onPress={usePlanAccount ? onConfirmTransfer : onContributeFromWallet}
-        disabled={controller.isSubmitting}
-      >
-        <Text style={[styles.secondaryButtonText, { color: palette.white }]}>
-          {usePlanAccount ? "I've made the transfer" : "I've funded wallet"}
-        </Text>
-      </Pressable>
+      {usePlanAccount ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Confirm plan transfer"
+          accessibilityState={{ disabled: controller.isSubmitting }}
+          style={[
+            styles.secondaryButton,
+            { borderColor: BRAND.primary, backgroundColor: BRAND.primary },
+            controller.isSubmitting ? styles.buttonDisabled : null,
+          ]}
+          onPress={onConfirmTransfer}
+          disabled={controller.isSubmitting}
+        >
+          <Text style={[styles.secondaryButtonText, { color: palette.white }]}>
+            Check transfer status
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

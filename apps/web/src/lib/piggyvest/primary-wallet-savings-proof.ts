@@ -2,10 +2,12 @@ import 'server-only';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { prefundedCardProviderEvidenceSchemas } from '@/schemas/prefunded-card-provider-evidence';
 import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
+import { primaryWalletSavingsIdentitySchemas } from '@/schemas/primary-wallet-savings-identity';
 
 export function verifyPrimaryWalletSavingsProof(
   storedReservation: unknown,
-  providerResponse: unknown
+  providerResponse: unknown,
+  identityEvidence?: unknown
 ) {
   const reservation =
     piggyvestPrimarySavingsTransferSchemas.reserved.safeParse(
@@ -59,13 +61,30 @@ export function verifyPrimaryWalletSavingsProof(
   }
   const actual = (success.success ? success.data : failure?.data)?.data;
   if (!actual) return { status: 'unverified' as const };
+  const identity =
+    primaryWalletSavingsIdentitySchemas.evidence.safeParse(identityEvidence);
+  const scopedBusinessIdentity =
+    success.success &&
+    actual.customer_id === expected.businessId &&
+    identity.success &&
+    identity.data.wallet.id === expected.sourceWalletId &&
+    identity.data.wallet.business_id === expected.businessId &&
+    identity.data.wallet.api_customer_id === expected.providerCustomerId &&
+    identity.data.transaction.id === actual.id &&
+    identity.data.transaction.business_id === expected.businessId &&
+    identity.data.transaction.wallet_id === expected.sourceWalletId &&
+    identity.data.transaction.api_customer_id === expected.providerCustomerId &&
+    identity.data.transaction.amount === -expected.amountKobo &&
+    identity.data.transaction.third_party_reference === expected.reference &&
+    identity.data.transaction.provider_reference === actual.reference;
   if (
     expected.sourceWalletId === expected.destinationWalletId ||
     actual.amount !== expected.amountKobo ||
     actual.third_party_reference !== expected.reference ||
     actual.source_wallet !== expected.sourceWalletId ||
     actual.destination_wallet !== expected.destinationWalletId ||
-    actual.customer_id !== expected.providerCustomerId ||
+    (actual.customer_id !== expected.providerCustomerId &&
+      !scopedBusinessIdentity) ||
     (actual.business_id !== undefined &&
       actual.business_id !== expected.businessId) ||
     (actual.currency !== undefined && actual.currency !== 'NGN')

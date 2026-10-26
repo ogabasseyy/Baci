@@ -6,8 +6,13 @@ const mockRetry = jest.fn();
 const mockSubmit = jest.fn();
 const mockFund = jest.fn();
 let mockReady = false;
+let mockError = false;
 jest.mock('./use-primary-savings-recovery', () => ({
-  usePrimarySavingsRecovery: () => ({ ready: mockReady, retry: mockRetry }),
+  usePrimarySavingsRecovery: () => ({
+    ready: mockReady,
+    error: mockError,
+    retry: mockRetry,
+  }),
 }));
 jest.mock('./use-wallet-savings-actions', () => ({
   createWalletSavingsActions: () => ({
@@ -30,14 +35,28 @@ const input = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockReady = false;
+  mockError = false;
 });
-it('blocks funding and submission until pending recovery is confirmed', () => {
+it('allows wallet funding while still blocking savings submission during recovery', () => {
   const { result } = renderHook(() => useWalletSavingsController(input));
   result.current.handleAddSavingsContribution();
   result.current.handleFundSavingsWallet();
   expect(mockSubmit).not.toHaveBeenCalled();
-  expect(mockFund).not.toHaveBeenCalled();
-  expect(mockRetry).toHaveBeenCalledTimes(2);
+  expect(mockFund).toHaveBeenCalledTimes(1);
+  expect(mockRetry).toHaveBeenCalledTimes(1);
+});
+it('allows funding after recovery fails and explains the savings retry accurately', () => {
+  mockError = true;
+  const { result } = renderHook(() => useWalletSavingsController(input));
+  result.current.handleFundSavingsWallet();
+  expect(mockFund).toHaveBeenCalledTimes(1);
+  expect(mockRetry).not.toHaveBeenCalled();
+  result.current.handleAddSavingsContribution();
+  expect(mockSubmit).not.toHaveBeenCalled();
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Couldn’t check contributions',
+    expect.stringContaining('You can still add money to your wallet')
+  );
 });
 it('uses existing operation actions once recovery is ready', () => {
   mockReady = true;

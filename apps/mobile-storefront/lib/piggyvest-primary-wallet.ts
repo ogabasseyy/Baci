@@ -9,11 +9,12 @@ const PATH = '/api/storefront/customer/wallet/piggyvest-primary';
 // inside the client's own session read, so a switch between the caller's
 // check and this send still authenticates as the expected user or throws
 // before any bytes leave the device.
-async function read(merchantId: string, userId?: string) {
+async function read(merchantId: string, userId?: string, signal?: AbortSignal) {
   const client = createStorefrontCustomerApiClient();
   const data = await client.fetchJson({
     path: `${PATH}?merchantId=${encodeURIComponent(merchantId)}`,
     expectedUserId: userId,
+    signal,
   });
   const snapshot = schemas.snapshot.safeParse(data);
   if (!snapshot.success)

@@ -1,16 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
+import { provisioningFixture } from './primary-savings-provisioning.test-support';
 
 vi.mock('server-only', () => ({}));
-const goalId = '00000000-0000-4000-8000-000000000006';
-const scope = {
-  merchantId: '00000000-0000-4000-8000-000000000001',
-  customerId: '00000000-0000-4000-8000-000000000002',
-  userId: '00000000-0000-4000-8000-000000000003',
-  integrationId: '00000000-0000-4000-8000-000000000004',
-  businessId: 'business',
-  environment: 'staging' as const,
-};
+const { goalId, scope, ready } = provisioningFixture;
 const walletName = `baci-save:${scope.integrationId}:${goalId}`;
 function fixture() {
   const mapping = {
@@ -63,19 +56,6 @@ function fixture() {
     ]),
   };
 }
-const ready = {
-  goalId,
-  status: 'ready',
-  interestAccepted: false,
-  interestEnrollment: 'not_requested',
-  accounts: [
-    {
-      accountNumber: '0123456789',
-      accountName: 'Synthetic',
-      bankName: 'Synthetic Bank',
-    },
-  ],
-};
 describe('primary savings provisioning connection', () => {
   it('creates once for the verified customer, then enrolls only provider-confirmed destination', async () => {
     const input = fixture();
@@ -87,7 +67,10 @@ describe('primary savings provisioning connection', () => {
       reserveVirtualAccount: true,
       enableInterestAccrual: false,
     });
-    expect(input.listWallets).toHaveBeenCalledWith('customer');
+    expect(input.listWallets.mock.calls).toEqual([
+      ['customer', walletName],
+      ['customer', walletName],
+    ]);
     expect(input.store.enroll).toHaveBeenCalledWith(goalId, {
       providerCustomerId: 'customer',
       providerWalletId: 'destination',

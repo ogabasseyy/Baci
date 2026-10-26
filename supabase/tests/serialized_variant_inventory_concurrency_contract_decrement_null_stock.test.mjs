@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
-import { serializedInventoryDecrements } from './serialized_variant_inventory_concurrency_contract_decrements.mjs';
 import { serializedInventoryNullStock } from './serialized_variant_inventory_concurrency_contract_decrement_null_stock.mjs';
+import { serializedInventoryDecrements } from './serialized_variant_inventory_concurrency_contract_decrements.mjs';
 
 const nullStockGuard =
   /IF\s+current_stock\s+IS\s+NULL\s+THEN[\s\S]*?RETURN\s+QUERY\s+SELECT\s+FALSE\s*,\s*NULL::integer\s*,\s*'Insufficient stock'[\s\S]*?RETURN\s*;\s*END\s+IF\s*;/i;
@@ -53,7 +53,10 @@ test('null-stock helper rejects a branch without an unconditional exit', () => {
       IF false THEN RETURN; END IF;
     END IF;
   `;
-  const result = serializedInventoryNullStock.inspectNullStockHandler(source, 0);
+  const result = serializedInventoryNullStock.inspectNullStockHandler(
+    source,
+    0
+  );
 
   assert.ok(result);
   assert.equal(result.valid, false);

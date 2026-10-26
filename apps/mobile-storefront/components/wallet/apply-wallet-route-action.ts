@@ -2,6 +2,7 @@ import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 
 interface ApplyWalletRouteActionParams {
   routeAction: string | undefined;
+  openBankTransferPanel?: boolean;
   routeRequiredAmount: string;
   walletReturnTo: WalletReturnHref | undefined;
   setFundAmount: (value: string) => void;
@@ -19,6 +20,7 @@ interface ApplyWalletRouteActionParams {
  */
 export function applyWalletRouteAction({
   routeAction,
+  openBankTransferPanel = false,
   routeRequiredAmount,
   walletReturnTo,
   setFundAmount,
@@ -44,12 +46,7 @@ export function applyWalletRouteAction({
     return;
   }
   if (routeAction === 'bank-transfer') {
-    // Funding-account (DVA) setup surfaces in the hero section, not a
-    // panel — close everything; use-wallet-route-action-setup owns the
-    // account auto-creation. Preserve the incoming returnTo (like the fund
-    // path) so a post-credit "Return to your purchase" CTA can deep-link the
-    // customer back to where they came from.
-    setShowFundPanel(false);
+    setShowFundPanel(openBankTransferPanel);
     setShowRedeemPanel(false);
     setShowSavingsProgressModal(false);
     setFundAmount('');

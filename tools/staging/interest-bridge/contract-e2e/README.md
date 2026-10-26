@@ -26,6 +26,23 @@ PG credentials/targets and stops/removes only its own cluster in `finally`.
 Server query/error-statement logging is disabled. Failures withhold SQL output.
 No other worktree or temporary directory is cleaned.
 
+For a recovered checkout, explicitly select its existing receiver source root:
+
+```sh
+cd /Users/mac/Documents/Codex/staging-runtime-20261018/workspace
+export BACI_CONTRACT_E2E_RECEIVER_ROOT="$PWD"
+pnpm exec node --test --test-concurrency=1 tools/staging/interest-bridge/contract-e2e/*.test.mjs
+pnpm exec node tools/staging/interest-bridge/contract-e2e/run.mjs
+```
+
+The override must resolve to an existing absolute source directory containing
+`apps/web/tools/piggyvest-staging`. Invalid explicit roots fail closed; there is
+no dependency-install or peer-worktree fallback. Without the override, the
+original receiver pointer remains unchanged. The source manifest fingerprints
+the actual selected files. Physical database guards, synthetic keys, import
+allowlists and disposable database isolation are unchanged. Missing recovered
+SQL inputs remain failures; this option neither substitutes nor fabricates them.
+
 ## Actual contracts exercised
 
 - Receiver `intake-handler.ts` validates raw-byte SHA-512 HMAC and seals the

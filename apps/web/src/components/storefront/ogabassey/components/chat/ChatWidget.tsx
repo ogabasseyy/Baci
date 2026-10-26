@@ -234,7 +234,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       {/* Floating Toggle Button */}
       <div className="relative group">
         {!isOpen && isSanta && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-32 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-xl border-2 border-red-100 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4">
+          <div data-chat-launcher-overflow className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-32 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-xl border-2 border-red-100 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4">
             <p className="text-sm font-bold text-gray-900 text-center leading-tight">
               Make a wish! {'\u2728'}
             </p>
@@ -245,7 +245,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
         {/* Proactive Nudge Bubble (Standard Mode) */}
         {!isOpen && !isSanta && proactiveMsg && (
-          <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-red-50 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
+          <div data-chat-launcher-overflow className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-red-50 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
             <div className="text-gray-800 text-xs font-medium leading-relaxed">
               {proactiveMsg}
             </div>

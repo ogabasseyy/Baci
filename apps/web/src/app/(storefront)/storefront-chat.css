@@ -18,6 +18,15 @@
     z-index: 90;
   }
 
+  .ogabassey-chat-anchor::before {
+    content: "";
+    height: env(safe-area-inset-bottom, 0px);
+    pointer-events: none;
+    position: fixed;
+    visibility: hidden;
+    width: 0;
+  }
+
   .ogabassey-chat-anchor--hidden {
     display: none;
   }

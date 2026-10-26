@@ -51,6 +51,12 @@ function setup() {
   });
   const onRender = vi.fn();
   const onOpen = vi.fn();
+  const getComputedStyle = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
+    pseudo === '::before'
+      ? ({ height: '34px' }) as CSSStyleDeclaration
+      : getComputedStyle(element),
+  );
   const view = render(<Harness onRender={onRender} onOpen={onOpen} />);
   const button = screen.getByRole('button', { name: 'Chat' });
   const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
@@ -125,6 +131,39 @@ describe('useChatLauncherDrag', () => {
     pointer('pointerup', 20, 20);
     fireEvent.click(button);
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it('uses pointerup coordinates when the last move event was missed', () => {
+    const { pointer } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointerup', 120, 220);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(100px, 200px, 0)',
+    );
+  });
+
+  it('keeps the proactive bubble inside the viewport at the top-left clamp', () => {
+    const { pointer, button } = setup();
+    const bubble = document.createElement('div');
+    bubble.dataset.chatLauncherOverflow = '';
+    button.parentElement?.append(bubble);
+    vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      top: 250,
+      width: 192,
+      height: 50,
+      right: 292,
+      bottom: 300,
+      x: 100,
+      y: 250,
+      toJSON: () => ({}),
+    });
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', -2000, -2000);
+    pointer('pointerup', -2000, -2000);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(116px, 66px, 0)',
+    );
   });
 
   it('opens on a tap with small finger movement', () => {
@@ -233,9 +272,14 @@ describe('useChatLauncherDrag', () => {
 
   it('keeps the icon above the device bottom safe area', () => {
     const { pointer } = setup();
-    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-      getPropertyValue: () => '34px',
-    } as unknown as CSSStyleDeclaration);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
+      (pseudo === '::before'
+        ? { height: '34px' }
+        : {
+            getPropertyValue: () =>
+              'env(safe-area-inset-bottom, 0px)',
+          }) as unknown as CSSStyleDeclaration,
+    );
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 220, 5000);
     pointer('pointerup', 220, 5000);

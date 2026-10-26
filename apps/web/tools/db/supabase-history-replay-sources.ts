@@ -293,9 +293,5 @@ const PENDING_SOURCES = [
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })
   .join('\n'); // biome-ignore format: keep the manifest at the 300-line modularity limit
 // One primary export (repo one-export-per-file rule): manifest module/tests destructure the collection.
-export const REPLAY_SOURCE_DATA = {
-  PIPELINE_SOURCES,
-  POST_REPLAY_SOURCES,
-  PENDING_SOURCES,
-  PRODUCTION_MAPPINGS,
-} as const;
+// biome-ignore format: keep the manifest at the 300-line modularity limit
+export const REPLAY_SOURCE_DATA = { PIPELINE_SOURCES, POST_REPLAY_SOURCES, PENDING_SOURCES, PRODUCTION_MAPPINGS } as const;

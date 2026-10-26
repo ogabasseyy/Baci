@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useV2Theme } from '../../providers/v2-theme-context';
+import { useOgabasseyChat } from './use-ogabassey-chat';
 
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/ogabassey'),
@@ -59,5 +61,35 @@ describe('ChatWidget focus restoration', () => {
     expect(externalButton).toHaveFocus();
     unmount();
     externalButton.remove();
+  });
+
+  it('does not reopen a closed chat when its theme changes', () => {
+    const setIsOpen = vi.fn();
+    vi.mocked(useOgabasseyChat).mockImplementation(() => ({
+      isOpen: false,
+      setIsOpen: (open) => setIsOpen(open),
+      messages: [],
+      input: '',
+      setInput: vi.fn(),
+      isLoading: false,
+      proactiveMsg: null,
+      setProactiveMsg: vi.fn(),
+      messagesEndRef: { current: null },
+      handleSend: vi.fn(),
+      handleSubmit: vi.fn(),
+      handleAddSantaWishToCart: vi.fn(),
+    }));
+    const { rerender } = render(<ChatWidget openOnMount />);
+    expect(setIsOpen).toHaveBeenCalledWith(true);
+
+    setIsOpen.mockClear();
+    vi.mocked(useV2Theme).mockReturnValue({
+      theme: 'santa',
+      setTheme: vi.fn(),
+      toggleTheme: vi.fn(),
+    });
+    rerender(<ChatWidget openOnMount />);
+
+    expect(setIsOpen).not.toHaveBeenCalled();
   });
 });

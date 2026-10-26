@@ -1,7 +1,7 @@
 'use client';
 
 import { isSantaGrantedPriceWithinCeiling } from '@baci/shared/lib';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { getMerchantCartState } from '@/hooks/cart/merchant-cart-storage';
@@ -67,27 +67,24 @@ export function useOgabasseyChat({
 
   // Opening the chat is a user event: hide the proactive nudge and seed the
   // welcome message here instead of reacting to `isOpen` in effects.
-  const setIsOpen = useCallback(
-    (open: boolean) => {
-      if (open) {
-        setProactiveMsg(null);
-        setMessages((prev) =>
-          prev.length > 0
-            ? prev
-            : [
-                {
-                  role: 'model',
-                  text: isSanta
-                    ? 'Ho ho ho! How can Santa AI help you today?'
-                    : 'Hello! How can I help you today?',
-                },
-              ]
-        );
-      }
-      setIsOpenState(open);
-    },
-    [isSanta],
-  );
+  const setIsOpen = (open: boolean) => {
+    if (open) {
+      setProactiveMsg(null);
+      setMessages((prev) =>
+        prev.length > 0
+          ? prev
+          : [
+              {
+                role: 'model',
+                text: isSanta
+                  ? 'Ho ho ho! How can Santa AI help you today?'
+                  : 'Hello! How can I help you today?',
+              },
+            ]
+      );
+    }
+    setIsOpenState(open);
+  };
 
   // Ref to always read fresh messages (avoids stale closure in handleSend)
   const messagesRef = useRef(messages);

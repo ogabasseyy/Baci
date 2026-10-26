@@ -3,7 +3,7 @@
 import '@/app/(storefront)/storefront-chat.css';
 import { Sparkles, X } from 'lucide-react';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
@@ -71,6 +71,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     isCartOpen,
     mobileOffset,
   );
+  const previousOpenOnMount = useRef(false);
 
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
   // storefront page instead of sending a chat message.
@@ -96,9 +97,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     .filter(Boolean)
     .join(' ');
   useEffect(() => {
-    if (openOnMount) {
+    if (openOnMount && !previousOpenOnMount.current) {
       setIsOpen(true);
     }
+    previousOpenOnMount.current = openOnMount;
   }, [openOnMount, setIsOpen]);
   useEffect(() => {
     const activeElement = document.activeElement;

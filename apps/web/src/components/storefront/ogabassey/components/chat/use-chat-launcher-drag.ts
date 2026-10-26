@@ -34,6 +34,7 @@ export function useChatLauncherDrag(
   const [position, setPosition] = useState<Position | undefined>(
     initialPosition,
   );
+  const positionRef = useRef(position);
   const anchorRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const gesture = useRef<Gesture | null>(null);
@@ -50,30 +51,35 @@ export function useChatLauncherDrag(
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
+  const commitPosition = (next: Position) => {
+    positionRef.current = next;
+    setPosition(next);
+  };
+
   useLayoutEffect(() => {
     isOpenRef.current = isOpen;
     isHiddenRef.current = isHidden;
   }, [isOpen, isHidden]);
 
   function reclampPosition() {
-    if (isOpenRef.current || isHiddenRef.current) return;
+    const current = positionRef.current;
+    if (isOpenRef.current || isHiddenRef.current || !current) return;
     const button = buttonRef.current;
     const rect = button?.getBoundingClientRect();
     if (!button || !rect || rect.width === 0 || rect.height === 0) return;
     const overflow = readChatLauncherOverflow(button, rect);
-    setPosition((current) => {
-      if (!current) return current;
-      const next = clampChatLauncherPosition(
-        current.x,
-        current.y,
-        rect.width,
-        rect.height,
-        readChatLauncherSafeArea(safeAreaProbe.current),
-        readChatLauncherMobileOffset(anchorRef.current),
-        overflow,
-      );
-      return next.x === current.x && next.y === current.y ? current : next;
-    });
+    const next = clampChatLauncherPosition(
+      current.x,
+      current.y,
+      rect.width,
+      rect.height,
+      readChatLauncherSafeArea(safeAreaProbe.current),
+      readChatLauncherMobileOffset(anchorRef.current),
+      overflow,
+    );
+    if (next.x !== current.x || next.y !== current.y) {
+      commitPosition(next);
+    }
   }
 
   function scheduleViewportReclamp() {
@@ -180,7 +186,7 @@ export function useChatLauncherDrag(
     );
     if (!next) return;
     event.preventDefault();
-    setPosition(next);
+    commitPosition(next);
   }
 
   function updateGesturePosition(x: number, y: number) {
@@ -239,7 +245,7 @@ export function useChatLauncherDrag(
       if (anchorRef.current) {
         anchorRef.current.style.transform = `translate3d(${start.next.x}px, ${start.next.y}px, 0)`;
       }
-      setPosition(start.next);
+      commitPosition(start.next);
       suppressedDragClick.current = {
         pointerId: start.pointerId,
         pointerType: start.pointerType,

@@ -74,6 +74,9 @@ it('rechecks collision after the offer entry animation settles', async () => {
   await act(async () => {
     await Promise.resolve();
   });
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
   expect(anchor).not.toHaveAttribute('data-chat-launcher-offer-collision');
 
   offerRect.mockReturnValue({
@@ -81,7 +84,50 @@ it('rechecks collision after the offer entry animation settles', async () => {
     x: 0, y: 0, toJSON: () => ({}),
   });
   fireEvent.animationEnd(offer);
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
 
   expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
+  offer.remove();
+});
+
+it('ignores unrelated mutations and defers offer layout reads to one frame', async () => {
+  const offer = document.createElement('div');
+  offer.className = 'ogabassey-offer-popup';
+  const { getByTestId } = render(<Harness position={{ x: 10, y: 10 }} />);
+  const anchor = getByTestId('launcher-anchor');
+  const measure = vi.spyOn(anchor, 'getBoundingClientRect');
+  const measureOffer = vi.spyOn(offer, 'getBoundingClientRect');
+  const frameCallbacks: FrameRequestCallback[] = [];
+  const requestFrame = vi
+    .spyOn(window, 'requestAnimationFrame')
+    .mockImplementation((callback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+
+  document.body.append(
+    document.createElement('div'),
+    document.createElement('div'),
+    document.createElement('div'),
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(requestFrame).not.toHaveBeenCalled();
+  expect(measure).not.toHaveBeenCalled();
+
+  document.body.append(offer);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(requestFrame).toHaveBeenCalledOnce();
+  expect(measure).not.toHaveBeenCalled();
+  act(() => frameCallbacks.shift()?.(0));
+  expect(measure).toHaveBeenCalledOnce();
+  expect(measureOffer).toHaveBeenCalledOnce();
+  requestFrame.mockRestore();
   offer.remove();
 });

@@ -30,6 +30,7 @@ const loadDefaultChatWidget = () => import('./ChatWidget');
 export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
+  // Keep handoff tracking mounted while this component swaps to ChatWidget.
   useChatPromotionFocusHandoff();
   const { isCartOpen } = useCart();
   const { theme } = useV2Theme();

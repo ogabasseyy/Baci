@@ -90,6 +90,17 @@ class MusePinUpdateTests(unittest.TestCase):
                 updater.main()
             update_files.assert_not_called()
 
+    def test_main_rejects_unknown_arguments_without_fetch_or_write(self):
+        with mock.patch.object(updater, "fetch_json") as fetch_json, \
+                mock.patch.object(updater, "update_files") as update_files:
+            with self.assertRaisesRegex(ValueError, "unexpected arguments"):
+                updater.main(["muse-pin-update.py", "--bogus-flag"])
+            with self.assertRaisesRegex(ValueError, "unexpected arguments"):
+                updater.main(["muse-pin-update.py",
+                              "--normalized-installer-sha"])
+            fetch_json.assert_not_called()
+            update_files.assert_not_called()
+
     def test_redirect_to_untrusted_host_is_refused_before_following(self):
         handler = updater.TrustedRedirectHandler("api.meta.ai")
         request = updater.urllib.request.Request("https://api.meta.ai/stable")

@@ -70,7 +70,19 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   "${model_args[@]}" \
   </dev/null 2>"${stderr_file}" \
   | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
-run_rc=$?
+run_status=("${PIPESTATUS[@]}")
+muse_rc="${run_status[0]}"
+jq_rc="${run_status[1]}"
+run_rc=0
+if (( muse_rc != 0 )); then
+  run_rc="$muse_rc"
+elif (( jq_rc != 0 )); then
+  # A malformed JSONL stream must fail loudly instead of leaving a
+  # partial capture_file that later validation might misread.
+  echo "::warning::Muse JSONL capture failed (jq exit ${jq_rc}); stderr tail follows"
+  redact "$(cat "${stderr_file}" 2>/dev/null || true)" | tail -c 4000
+  run_rc="$jq_rc"
+fi
 set -e
 
 echo "review_file=${review_file}" >> "${GITHUB_OUTPUT}"

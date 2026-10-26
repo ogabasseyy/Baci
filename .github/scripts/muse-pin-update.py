@@ -186,14 +186,34 @@ def current_pinned_version(root):
     return match.group(1)
 
 
-def main():
-    if len(sys.argv) == 3 and sys.argv[1] == "--normalized-installer-sha":
-        print(normalized_installer_hash(sys.argv[2]))
+USAGE = ("usage: muse-pin-update.py [--allow-downgrade] | "
+         "--normalized-installer-sha <path>")
+
+
+def parse_args(argv):
+    """Split argv into (mode, allow_downgrade) or raise ValueError."""
+    args = list(argv[1:])
+    allow_downgrade = False
+    if "--allow-downgrade" in args:
+        allow_downgrade = True
+        args.remove("--allow-downgrade")
+    if not args:
+        return ("update", allow_downgrade)
+    if len(args) == 2 and args[0] == "--normalized-installer-sha":
+        return (("normalized-installer-sha", args[1]), allow_downgrade)
+    raise ValueError("unexpected arguments: " + " ".join(argv[1:])
+                     + "\n" + USAGE)
+
+
+def main(argv=None):
+    mode, allow_downgrade = parse_args(argv if argv is not None else sys.argv)
+    if isinstance(mode, tuple):
+        print(normalized_installer_hash(mode[1]))
         return
     root = Path(__file__).resolve().parents[2]
     pins = resolve_pins(fetch_json(CHANNEL_URL, "api.meta.ai"))
     ensure_not_downgrade(pins["version"], current_pinned_version(root),
-                         allow_downgrade="--allow-downgrade" in sys.argv)
+                         allow_downgrade=allow_downgrade)
     update_files(root, pins)
     output_path = os.environ.get("GITHUB_OUTPUT")
     if output_path:

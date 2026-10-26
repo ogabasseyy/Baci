@@ -197,7 +197,7 @@ jobs:
             head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
             # Check each latest run's conclusion so canceled, failed, or
             # skipped gates are dispatched again instead of reused.
-            check_runs="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, (.started_at // ""), (.created_at // ""), (.completed_at // ""), .id, (.conclusion // "")] | @tsv] | join("\n")')"
+            check_runs="$(gh api --paginate "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, (.started_at // ""), (.created_at // ""), (.completed_at // ""), .id, (.conclusion // "")] | @tsv] | join("\n")')"
             if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh 'Quality Gate'; then
               echo "Quality Gate is missing or unsuccessful on $existing; its pull_request run must be approved or rerun by a maintainer." >&2
             fi

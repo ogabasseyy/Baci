@@ -1,0 +1,46 @@
+// @vitest-environment node
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import tailwind from '@tailwindcss/postcss';
+import postcss from 'postcss';
+import { describe, expect, it } from 'vitest';
+
+describe('storefront route-scoped listing and content CSS', () => {
+  it('compiles catalog listing styles under 120 KB without dashboard utilities', async () => {
+    const from = fileURLToPath(
+      new URL('./storefront-listing.css', import.meta.url)
+    );
+    const result = await postcss([tailwind({ optimize: true })]).process(
+      await readFile(from, 'utf8'),
+      { from, map: false }
+    );
+    expect(result.css.length).toBeLessThan(120_000);
+    for (const parts of [
+      ['grid', 'cols', '2'],
+      ['items', 'center'],
+      ['flex', 'col'],
+    ]) {
+      expect(result.css).toContain(`.${parts.join('-')}`);
+    }
+    expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
+  }, 20_000);
+
+  it('compiles public content styles under 140 KB without dashboard utilities', async () => {
+    const from = fileURLToPath(
+      new URL('./storefront-content.css', import.meta.url)
+    );
+    const result = await postcss([tailwind({ optimize: true })]).process(
+      await readFile(from, 'utf8'),
+      { from, map: false }
+    );
+    expect(result.css.length).toBeLessThan(140_000);
+    for (const parts of [
+      ['min-h', 'screen'],
+      ['items', 'center'],
+      ['flex', 'col'],
+    ]) {
+      expect(result.css).toContain(`.${parts.join('-')}`);
+    }
+    expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
+  }, 20_000);
+});

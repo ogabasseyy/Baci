@@ -9,9 +9,11 @@ describe('storefront CSS partitioning (route sheets)', () => {
   it.each([
     'storefront-home.css',
     'storefront-pdp.css',
+    'storefront-listing.css',
     'storefront-blog.css',
     'storefront-blog-post.css',
     'storefront-utility.css',
+    'storefront-content.css',
     'storefront-not-found.css',
   ])('includes the shared consent prompt in %s before it mounts', (file) => {
     expect(readStorefrontFile(file)).toContain(
@@ -161,13 +163,47 @@ describe('storefront CSS partitioning (route sheets)', () => {
     const compareLayout = readStorefrontFile(
       '[slug]/(catalog)/(listing)/compare/layout.tsx'
     );
+    const categoryLayout = readStorefrontFile(
+      '[slug]/(catalog)/(listing)/[category]/layout.tsx'
+    );
+    const productsLayout = readStorefrontFile(
+      '[slug]/(catalog)/(listing)/products/layout.tsx'
+    );
+    const searchLayout = readStorefrontFile(
+      '[slug]/(catalog)/(listing)/search/layout.tsx'
+    );
+    const contentLayout = readStorefrontFile('[slug]/(content)/layout.tsx');
     expect(
       comparePage.match(
         /var\(--store-background,#ffffff\).*?var\(--store-background-text,#111827\)/g
       )
     ).toHaveLength(2);
     expect(comparePage).not.toContain('storefront-eager-full-css-layout');
-    expect(compareLayout).toContain('StorefrontEagerFullCssLayout');
+    expect(compareLayout).toContain('StorefrontEagerListingCssLayout');
+    expect(categoryLayout).toContain('StorefrontEagerListingCssLayout');
+    expect(productsLayout).toContain('StorefrontEagerListingCssLayout');
+    expect(searchLayout).toContain('StorefrontEagerListingCssLayout');
+    expect(contentLayout).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-content\.css['"]/
+    );
+    expect(contentLayout).not.toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-full\.css['"]/
+    );
+    expect(contentLayout).toContain('StorefrontFullStyleLoader');
+
+    for (const utilityChildLayout of [
+      '[slug]/(utility)/member-status/layout.tsx',
+      '[slug]/(utility)/quiz/layout.tsx',
+      '[slug]/(utility)/repair/status/layout.tsx',
+      '[slug]/(utility)/repairs/[deviceSlug]/layout.tsx',
+      '[slug]/(utility)/reviews/layout.tsx',
+      '[slug]/(utility)/swap/layout.tsx',
+      '[slug]/(utility)/unlock-orders/layout.tsx',
+    ]) {
+      const childLayoutContent = readStorefrontFile(utilityChildLayout);
+      expect(childLayoutContent).not.toContain('StorefrontEagerFullCssLayout');
+      expect(childLayoutContent).toContain('StorefrontEagerUtilityCssLayout');
+    }
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {
@@ -202,7 +238,7 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
   });
 
-  it('keeps blog post renderer CSS off the listing stylesheet', () => {
+  it('keeps blog post renderer CSS off the listing stylesheet and avoids duplicate foundation imports', () => {
     const blogCss = readStorefrontFile('storefront-blog.css');
     const blogPostCss = readStorefrontFile('storefront-blog-post.css');
 
@@ -213,6 +249,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
     expect(blogCss).toMatch(
       /@source\s+["'][^"']*components\/ui\/card\.tsx["']/
+    );
+    expect(blogPostCss).toMatch(
+      /@import\s+["']tailwindcss\/utilities["']\s+source\(none\)/
+    );
+    expect(blogPostCss).not.toMatch(
+      /@import\s+["']\.\/storefront-foundation\.css["']/
     );
     expect(blogPostCss).toMatch(/components\/blog\/renderer/);
     expect(blogPostCss).toMatch(/@source\s+["'][^"']*blog\/\[postSlug\]["']/);

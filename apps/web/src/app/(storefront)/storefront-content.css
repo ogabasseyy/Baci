@@ -1,0 +1,58 @@
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+
+/* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
+@config "../../../tailwind.storefront-blog.config.mjs";
+
+/*
+  Public content and trust-policy CSS entrypoint.
+
+  Keep public informational/legal routes (/about, /contact, /faq, /privacy,
+  /returns, /shipping, /terms, /warranty, /pages/*) off the broad 331 KB
+  storefront-full.css render-blocking path on initial paint.
+*/
+/* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "../../**/*.test.ts";
+@source not "../../**/*.test.tsx";
+@source "../../components/storefront/cookie-consent.tsx";
+@source "./[slug]/(content)";
+@source "./[slug]/storefront-loading-ui.tsx";
+@source "../../components/app-body.tsx";
+@source "../../components/cart.tsx";
+@source "../../components/logo.tsx";
+@source "../../components/storefront/blocks/ogabassey-nav.tsx";
+@source "../../components/storefront/footer.tsx";
+@source "../../components/storefront/header.tsx";
+@source "../../components/storefront/loyalty";
+@source "../../components/storefront/newsletter-widget.tsx";
+@source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/ogabassey/pages/about-us.tsx";
+@source "../../components/storefront/ogabassey/pages/help-support.tsx";
+@source "../../components/storefront/ogabassey/pages/legal-dispute.tsx";
+@source "../../components/storefront/ogabassey/pages/privacy-policy.tsx";
+@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
+@source "../../components/storefront/search-autocomplete*.tsx";
+@source "../../components/storefront/trust/trust-policy-page-client.tsx";
+@source "../../components/themed";
+@source "../../components/ui/accordion.tsx";
+@source "../../components/ui/badge.tsx";
+@source "../../components/ui/button.tsx";
+@source "../../components/ui/card.tsx";
+@source "../../components/ui/cart-icon.tsx";
+@source "../../components/ui/dialog.tsx";
+@source "../../components/ui/input.tsx";
+@source "../../components/ui/label.tsx";
+@source "../../components/ui/progress.tsx";
+@source "../../components/ui/quantity-button.tsx";
+@source "../../components/ui/safe-html.tsx";
+@source "../../components/ui/scroll-area.tsx";
+@source "../../components/ui/sheet.tsx";
+@source "../../components/ui/skeleton.tsx";
+@source "../../components/ui/skeletons.tsx";
+@source "../../components/ui/tabs.tsx";
+@source "../../components/ui/textarea.tsx";
+@source "../../components/ui/toast.tsx";
+@source "../../hooks/use-loyalty.ts";
+/* stylelint-enable scss/at-rule-no-unknown */

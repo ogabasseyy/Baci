@@ -3,6 +3,7 @@
 import {
   type CSSProperties,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   useEffect,
@@ -12,30 +13,16 @@ import {
 } from 'react';
 import {
   clampChatLauncherPosition,
+  getChatLauncherAnchorStyle,
   readChatLauncherOverflow,
   readChatLauncherMobileOffset,
   readChatLauncherSafeArea,
-  type Overflow,
   type Position,
 } from './chat-launcher-geometry';
+import type { Gesture } from './chat-launcher-gesture';
+import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
 
 const DRAG_THRESHOLD = 6;
-type Gesture = {
-  pointerId: number;
-  x: number;
-  y: number;
-  lastX: number;
-  lastY: number;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  bottomSafeArea: number;
-  mobileOffset: number;
-  overflow: Overflow;
-  base: Position;
-  next: Position;
-};
 
 export function useChatLauncherDrag(
   initialPosition?: Position,
@@ -53,6 +40,8 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null);
+  const isOpenRef = useRef(isOpen);
+  const isHiddenRef = useRef(isHidden);
   const suppressedDragClick = useRef<{
     pointerId: number;
     x: number;
@@ -60,7 +49,11 @@ export function useChatLauncherDrag(
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
+  isOpenRef.current = isOpen;
+  isHiddenRef.current = isHidden;
+
   function reclampPosition() {
+    if (isOpenRef.current || isHiddenRef.current) return;
     const button = buttonRef.current;
     const rect = button?.getBoundingClientRect();
     if (!button || !rect || rect.width === 0 || rect.height === 0) return;
@@ -166,6 +159,24 @@ export function useChatLauncherDrag(
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  function onKeyboardMove(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (isOpen || isHidden) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const next = getChatLauncherKeyboardPosition(
+      event.key,
+      event.shiftKey,
+      position ?? { x: rect.left, y: rect.top },
+      rect,
+      readChatLauncherSafeArea(safeAreaProbe.current),
+      readChatLauncherMobileOffset(anchorRef.current),
+      readChatLauncherOverflow(event.currentTarget, rect),
+    );
+    if (!next) return;
+    event.preventDefault();
+    setPosition(next);
+  }
+
   function updateGesturePosition(x: number, y: number) {
     const start = gesture.current;
     if (!start) return;
@@ -255,16 +266,7 @@ export function useChatLauncherDrag(
     return suppress;
   }
 
-  const anchorStyle: CSSProperties | undefined =
-    position && !isOpen
-      ? {
-          left: 0,
-          top: 0,
-          right: 'auto',
-          bottom: 'auto',
-          transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-        }
-      : undefined;
+  const anchorStyle = getChatLauncherAnchorStyle(position, isOpen);
 
   return {
     position,
@@ -276,6 +278,7 @@ export function useChatLauncherDrag(
       onPointerDown,
       onPointerMove,
       onPointerUp,
+      onKeyDown: onKeyboardMove,
       onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
         gesture.current?.pointerId === event.pointerId && cancelGesture(),
       onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) =>

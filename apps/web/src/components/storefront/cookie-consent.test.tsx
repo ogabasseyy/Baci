@@ -109,4 +109,29 @@ describe('CookieConsent', () => {
 
     expect(input).toHaveFocus();
   });
+
+  it('moves focus from the bubble dismiss control into consent and restores it', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <button type="button" className="ogabassey-chat-button">
+          Assistant launcher
+        </button>
+        <button type="button" aria-label="Dismiss chat message">
+          Dismiss
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const dismiss = screen.getByRole('button', {
+      name: 'Dismiss chat message',
+    });
+    dismiss.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(screen.getByRole('button', { name: 'Customize' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+    expect(dismiss).toHaveFocus();
+  });
 });

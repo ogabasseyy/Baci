@@ -75,4 +75,22 @@ describe('ChatLauncher', () => {
     expect(setProactiveMsg).toHaveBeenCalledWith(null);
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('announces arrow-key movement as a launcher shortcut', () => {
+    render(
+      <ChatLauncher
+        isOpen={false}
+        isSanta={false}
+        proactiveMsg={null}
+        setProactiveMsg={vi.fn()}
+        onClick={vi.fn()}
+        drag={emptyDrag}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'ArrowUp ArrowDown ArrowLeft ArrowRight',
+    );
+  });
 });

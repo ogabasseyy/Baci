@@ -67,6 +67,9 @@ export function ChatLauncher({
         onClick={onClick}
         className={buttonClasses}
         aria-label="Toggle chat"
+        aria-keyshortcuts={
+          isOpen ? undefined : 'ArrowUp ArrowDown ArrowLeft ArrowRight'
+        }
       >
         {isOpen ? (
           <X size={28} />

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clampChatLauncherPosition,
+  getChatLauncherAnchorStyle,
   readChatLauncherOverflow,
 } from './chat-launcher-geometry';
 
@@ -24,6 +25,17 @@ function setVisualViewport(
 }
 
 describe('clampChatLauncherPosition', () => {
+  it('applies the saved transform only while the launcher is closed', () => {
+    expect(getChatLauncherAnchorStyle({ x: 24, y: 40 }, false)).toEqual({
+      left: 0,
+      top: 0,
+      right: 'auto',
+      bottom: 'auto',
+      transform: 'translate3d(24px, 40px, 0)',
+    });
+    expect(getChatLauncherAnchorStyle({ x: 24, y: 40 }, true)).toBeUndefined();
+  });
+
   it('keeps the launcher inside visual viewport offsets', () => {
     setVisualViewport(40, 20, 200, 300);
     expect(clampChatLauncherPosition(0, 0, 56, 56)).toEqual({ x: 56, y: 36 });

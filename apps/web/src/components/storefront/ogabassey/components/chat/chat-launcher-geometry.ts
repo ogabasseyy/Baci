@@ -1,7 +1,23 @@
+import type { CSSProperties } from 'react';
+
 const EDGE_GAP = 16;
 
 export type Position = { x: number; y: number };
 export type Overflow = { left: number; top: number; right: number; bottom: number };
+
+export function getChatLauncherAnchorStyle(
+  position: Position | undefined,
+  isOpen: boolean,
+): CSSProperties | undefined {
+  if (!position || isOpen) return undefined;
+  return {
+    left: 0,
+    top: 0,
+    right: 'auto',
+    bottom: 'auto',
+    transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+  };
+}
 
 export function readChatLauncherOverflow(
   button: HTMLButtonElement,

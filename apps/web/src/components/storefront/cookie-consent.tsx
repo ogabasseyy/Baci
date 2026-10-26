@@ -34,12 +34,14 @@ export function CookieConsent() {
   useEffect(() => {
     if (isVisible) {
       const activeElement = document.activeElement;
+      const chatAnchor =
+        activeElement instanceof HTMLElement
+          ? activeElement.closest('.ogabassey-chat-anchor')
+          : null;
       if (
         activeElement instanceof HTMLElement &&
-        activeElement.matches('.ogabassey-chat-button') &&
-        !activeElement
-          .closest('.ogabassey-chat-anchor')
-          ?.querySelector('.ogabassey-chat-window')
+        chatAnchor &&
+        !activeElement.closest('.ogabassey-chat-window')
       ) {
         restoreFocusRef.current = activeElement;
         dialogRef.current

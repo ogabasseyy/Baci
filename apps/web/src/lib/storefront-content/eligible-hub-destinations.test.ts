@@ -257,7 +257,7 @@ describe('eligible-hub-destinations', () => {
       expect(result.brandHubs).toHaveLength(0);
     });
 
-    it('excludes stock-zero products when manage_stock is absent', () => {
+    it('counts stock-zero products when manage_stock is absent (unmanaged at destination)', () => {
       const products = [
         'iPhone 15 Pro Max',
         'iPhone 15 Pro',
@@ -274,8 +274,8 @@ describe('eligible-hub-destinations', () => {
         categorySlug: 'smartphones',
         products,
       });
-      expect(result.brandHubs).toHaveLength(0);
-      expect(result.familyHubs).toHaveLength(0);
+      expect(result.brandHubs).toHaveLength(1);
+      expect(result.familyHubs).toHaveLength(1);
     });
 
     it('counts legacy null manage_stock products with zero stock like the destination', () => {

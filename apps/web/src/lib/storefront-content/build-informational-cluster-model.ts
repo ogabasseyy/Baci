@@ -10,6 +10,7 @@ import type {
   InformationalClusterModel,
 } from './content-cluster-types';
 import { inferContentClusterContext } from './infer-content-cluster-context';
+import { isAvailableProduct } from './is-available-product';
 import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
 
 interface CategoryInventoryProduct {
@@ -67,10 +68,7 @@ function toCategoryInventoryProduct(
 }
 
 function isInStock(product: CategoryInventoryProduct) {
-  if (product.manage_stock === false) {
-    return true;
-  }
-  return product.stock == null || product.stock > 0;
+  return isAvailableProduct(product);
 }
 
 function buildProductHref(storeUrl: string, product: CategoryInventoryProduct) {

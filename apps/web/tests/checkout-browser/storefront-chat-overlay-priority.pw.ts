@@ -15,7 +15,6 @@ test('mobile launcher advertises keyboard movement without snapping upward', asy
 }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto('/chat-launcher');
-  page.on('console', (message) => console.log('BROWSER', message.text()));
 
   const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
   await expect(launcher).toHaveAttribute(
@@ -39,7 +38,6 @@ test('consent focus handoff works with storefront overlay CSS', async ({
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/chat-launcher');
-  page.on('console', (message) => console.log('BROWSER', message.text()));
   const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
   await expect(launcher).toBeVisible();
   await launcher.focus();
@@ -83,9 +81,13 @@ test('consent dismissal restores the ordinary control focused before banner entr
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/chat-launcher');
-  const origin = page.getByRole('button', { name: 'Show consent' });
+  const origin = page.getByRole('button', { name: 'Focus origin' });
   await origin.focus();
-  await origin.evaluate((button) => (button as HTMLButtonElement).click());
+  await page
+    .getByRole('button', { name: 'Show consent' })
+    .evaluate((button) => {
+      (button as HTMLButtonElement).click();
+    });
   const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
   await dismiss.focus();
   await expect(dismiss).toBeFocused();

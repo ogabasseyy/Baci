@@ -34,7 +34,7 @@ const release = {
   pointerType: 'mouse',
   x: 100,
   y: 200,
-  expiresAt: Date.now() + 750,
+  expiresAt: Date.now() + 300,
 };
 
 describe('chat launcher click suppression', () => {
@@ -81,6 +81,15 @@ describe('chat launcher click suppression', () => {
   });
 
   it('allows a trusted pointerless activation after the drag click window', () => {
+    expect(
+      isSuppressedChatLauncherDragClick(clickEvent(), {
+        ...release,
+        expiresAt: Date.now() - 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('allows a trusted pointerless activation after 300ms', () => {
     expect(
       isSuppressedChatLauncherDragClick(clickEvent(), {
         ...release,

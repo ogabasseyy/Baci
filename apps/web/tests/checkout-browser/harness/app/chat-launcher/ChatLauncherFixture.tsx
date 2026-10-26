@@ -18,6 +18,7 @@ export function ChatLauncherFixture() {
   return (
     <V2ThemeProvider initialTheme="standard">
       <main>
+        <button type="button">Focus origin</button>
         <button type="button" onClick={() => setShowPromotions(true)}>
           Enable timed promotions
         </button>

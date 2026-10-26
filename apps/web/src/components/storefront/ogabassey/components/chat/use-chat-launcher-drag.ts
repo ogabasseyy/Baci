@@ -19,10 +19,14 @@ import {
   type Position,
 } from './chat-launcher-geometry';
 import type { Gesture } from './chat-launcher-gesture';
+import { createChatLauncherGestureLifecycle } from './chat-launcher-gesture-lifecycle';
 import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppression';
 import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
 
 const DRAG_THRESHOLD = 6;
+const DRAG_CLICK_GRACE_MS = 300;
+const useBrowserLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 export function useChatLauncherDrag(
   initialPosition?: Position,
   isOpen = false,
@@ -55,7 +59,20 @@ export function useChatLauncherDrag(
     setPosition(next);
   };
 
-  useLayoutEffect(() => {
+  const lifecycle = createChatLauncherGestureLifecycle({
+    gesture,
+    dragged,
+    frame,
+    anchor: anchorRef,
+    position: () => positionRef.current,
+    commitPosition,
+    scheduleViewportReclamp,
+    viewportReclampPending,
+    suppressedDragClick,
+    graceMs: DRAG_CLICK_GRACE_MS,
+  });
+
+  useBrowserLayoutEffect(() => {
     isOpenRef.current = isOpen;
     isHiddenRef.current = isHidden;
   }, [isOpen, isHidden]);
@@ -130,7 +147,7 @@ export function useChatLauncherDrag(
         cancelAnimationFrame(viewportFrame.current);
     };
   }, []);
-  useLayoutEffect(() => {
+  useBrowserLayoutEffect(() => {
     if (!isOpen && !isHidden && position) reclampPosition();
   }, [constraintKey, isHidden, isOpen, overflowKey, position]);
 
@@ -211,59 +228,6 @@ export function useChatLauncherDrag(
     if (gesture.current?.pointerId !== event.pointerId) return;
     updateGesturePosition(event.clientX, event.clientY);
   }
-  function cancelGesture() {
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    frame.current = null;
-    gesture.current = null;
-    dragged.current = false;
-    suppressedDragClick.current = null;
-    anchorRef.current?.removeAttribute('data-chat-launcher-dragging');
-    if (anchorRef.current) {
-      anchorRef.current.style.transform = position
-        ? `translate3d(${position.x}px, ${position.y}px, 0)`
-        : '';
-    }
-    if (viewportReclampPending.current) {
-      viewportReclampPending.current = false;
-      scheduleViewportReclamp();
-    }
-  }
-  function finishGesture() {
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    frame.current = null;
-    const start = gesture.current;
-    gesture.current = null;
-    anchorRef.current?.removeAttribute('data-chat-launcher-dragging');
-    if (start && dragged.current) {
-      if (anchorRef.current) {
-        anchorRef.current.style.transform = `translate3d(${start.next.x}px, ${start.next.y}px, 0)`;
-      }
-      commitPosition(start.next);
-      suppressedDragClick.current = {
-        pointerId: start.pointerId,
-        pointerType: start.pointerType,
-        x: start.lastX,
-        y: start.lastY,
-        // Compatibility clicks are dispatched immediately after pointerup.
-        // Bound the token so a missing native click cannot suppress a later
-        // pointerless assistive activation at the same location.
-        expiresAt: Date.now() + 750,
-      };
-    }
-    if (viewportReclampPending.current) {
-      viewportReclampPending.current = false;
-      scheduleViewportReclamp();
-    }
-  }
-  function onPointerUp(event: PointerEvent<HTMLButtonElement>) {
-    if (gesture.current?.pointerId !== event.pointerId) return;
-    // Pointer-up may contain the final coordinates of a fast flick.
-    updateGesturePosition(event.clientX, event.clientY);
-    finishGesture();
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }
   function suppressClick(event: Parameters<typeof isSuppressedChatLauncherDragClick>[0]) {
     const suppress = isSuppressedChatLauncherDragClick(
       event,
@@ -287,12 +251,17 @@ export function useChatLauncherDrag(
       ref: buttonRef,
       onPointerDown,
       onPointerMove,
-      onPointerUp,
+      onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
+        if (gesture.current?.pointerId === event.pointerId) {
+          updateGesturePosition(event.clientX, event.clientY);
+        }
+        lifecycle.onPointerUp(event);
+      },
       onKeyDown: onKeyboardMove,
       onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
-        gesture.current?.pointerId === event.pointerId && cancelGesture(),
+        gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
       onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) =>
-        gesture.current?.pointerId === event.pointerId && cancelGesture(),
+        gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
       style: {
         touchAction: isOpen ? 'auto' : 'none',
         userSelect: 'none',

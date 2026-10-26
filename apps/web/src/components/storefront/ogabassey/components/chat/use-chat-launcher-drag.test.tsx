@@ -178,9 +178,20 @@ describe('useChatLauncherDrag', () => {
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
-    vi.advanceTimersByTime(400);
+    vi.advanceTimersByTime(250);
     click(120, 220);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('allows a new pointerless activation after the drag-click grace period', () => {
+    vi.useFakeTimers();
+    const { pointer, click, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    vi.advanceTimersByTime(350);
+    click(120, 220);
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it('restores the previous transform when a drag is cancelled', () => {

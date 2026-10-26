@@ -54,6 +54,28 @@ test('consent focus handoff works with storefront overlay CSS', async ({
   await expect(launcher).toBeVisible();
 });
 
+test('consent restores focus to the visible promotion when chat is suppressed', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await launcher.focus();
+  await page
+    .getByRole('button', { name: 'Show consent' })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+  await page
+    .getByRole('button', { name: 'Show newsletter' })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+
+  await page.getByRole('button', { name: 'Dismiss consent' }).click();
+
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
+  await expect(
+    page.getByRole('button', { name: 'Close newsletter' })
+  ).toBeFocused();
+});
+
 test('focused launcher remains reachable and pauses promotional overlays', async ({
   page,
 }) => {

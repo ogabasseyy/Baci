@@ -12,6 +12,7 @@ const loadChatWidget = () =>
 export function ChatLauncherFixture() {
   const [showPromotions, setShowPromotions] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
+  const [showNewsletter, setShowNewsletter] = useState(false);
   const consentFocus = useCookieConsentFocus(showConsent);
 
   return (
@@ -22,6 +23,9 @@ export function ChatLauncherFixture() {
         </button>
         <button type="button" onClick={() => setShowConsent(true)}>
           Show consent
+        </button>
+        <button type="button" onClick={() => setShowNewsletter(true)}>
+          Show newsletter
         </button>
         {showConsent && (
           <div
@@ -42,6 +46,11 @@ export function ChatLauncherFixture() {
             >
               Dismiss consent
             </button>
+          </div>
+        )}
+        {showNewsletter && (
+          <div className="ogabassey-newsletter-popup">
+            <button type="button">Close newsletter</button>
           </div>
         )}
         {showPromotions && <PopupSystem />}

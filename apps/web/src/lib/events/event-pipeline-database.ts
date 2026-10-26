@@ -18,6 +18,7 @@ import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeli
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
+import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
 import {
   eventPipelineAdminAdjacentFunctions,
   eventPipelineExpenseCleanupAdjacentFunctions,
@@ -204,6 +205,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   },
   operations: {
     merchant_chatgpt_ads_credentials: ['select'],
+    merchant_x_ads_credentials: ['select'],
     analytics_events: ['insert', 'upsert'],
     domains: ['select'],
     merchant_feature_settings: ['select'],
@@ -215,6 +217,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     platform_settings: ['select'],
   },
   projectionAuthorities: {
+    'apps/web/src/lib/events/x-destination-adapter.ts': ['xDelivery'],
     'apps/web/src/lib/events/chatgpt-destination-adapter.ts': [
       'chatgptDelivery',
     ],
@@ -236,8 +239,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'apps/web/src/lib/platform-admin-auth.ts': ['operatorAuth'],
   },
   projections: {
-    // biome-ignore format: exact worker projection preserves the 300-line boundary gate.
-    chatgptDelivery: { merchants: columns('slug plan_tier plan_expires_at premium_features offline_conversions_enabled'), merchant_feature_settings: ['chatgpt_pixel_id'], merchant_chatgpt_ads_credentials: ['capi_key'], domains: ['domain'] },
+    ...socialDeliveryProjections,
     conversion: { merchants: columns('country payout_currency') },
     identity: {
       domains: ['merchant_id'],

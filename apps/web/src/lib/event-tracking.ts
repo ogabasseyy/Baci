@@ -1,6 +1,8 @@
 'use client';
 
 import { analytics } from '@/lib/analytics';
+import { isAnalyticsAllowed } from '@/lib/analytics-consent';
+import { isMarketingAllowed } from '@/lib/marketing-consent';
 import type { Product } from '@/lib/products';
 
 /**
@@ -25,6 +27,7 @@ export type EventType =
 
 interface BaseEvent {
   event_type: EventType;
+  event_id?: string;
   merchant_id: string;
   session_id?: string;
   user_agent?: string;
@@ -98,6 +101,8 @@ async function sendEvent(
       body: JSON.stringify({
         ...event,
         ...getEventMetadata(),
+        analytics_consent: isAnalyticsAllowed(),
+        marketing_consent: isMarketingAllowed(),
         timestamp: new Date().toISOString(),
       }),
     });
@@ -123,12 +128,14 @@ export const trackEvent = {
     product: Product,
     currency: string = 'USD'
   ) => {
+    const eventId = crypto.randomUUID();
     // Use joined categories.name from category_id, fallback to legacy TEXT field
     const categoryName =
       product.categories?.name || product.category || undefined;
 
     // Store in Supabase for merchant dashboard
     sendEvent({
+      event_id: eventId,
       event_type: 'product_view',
       merchant_id: merchantId,
       product_id: product.id,
@@ -139,7 +146,7 @@ export const trackEvent = {
     } as ProductEvent);
 
     // Also send to GA4/Facebook
-    analytics.viewItem(product, currency);
+    analytics.viewItem(product, currency, eventId);
   },
 
   /**
@@ -151,11 +158,13 @@ export const trackEvent = {
     quantity: number = 1,
     currency: string = 'USD'
   ) => {
+    const eventId = crypto.randomUUID();
     // Use joined categories.name from category_id, fallback to legacy TEXT field
     const categoryName =
       product.categories?.name || product.category || undefined;
 
     sendEvent({
+      event_id: eventId,
       event_type: 'add_to_cart',
       merchant_id: merchantId,
       product_id: product.id,
@@ -166,7 +175,7 @@ export const trackEvent = {
       currency,
     } as ProductEvent);
 
-    analytics.addToCart(product, quantity, currency);
+    analytics.addToCart(product, quantity, currency, undefined, eventId);
   },
 
   /**
@@ -204,12 +213,14 @@ export const trackEvent = {
     products: Array<{ product: Product; quantity: number }>,
     currency: string = 'USD'
   ) => {
+    const eventId = crypto.randomUUID();
     const total = products.reduce(
       (sum, { product, quantity }) => sum + product.price * quantity,
       0
     );
 
     sendEvent({
+      event_id: eventId,
       event_type: 'begin_checkout',
       merchant_id: merchantId,
       order_id: '', // Will be assigned later
@@ -225,7 +236,7 @@ export const trackEvent = {
       })),
     } as PurchaseEvent);
 
-    analytics.beginCheckout(products, currency);
+    analytics.beginCheckout(products, currency, eventId);
   },
 
   /**

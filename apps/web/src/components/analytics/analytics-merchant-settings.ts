@@ -1,3 +1,4 @@
+import { xEventIdsSchema } from '@/schemas/x-ads-settings';
 import { normalizeAnalyticsId } from './analytics-id';
 import type { MerchantWithAnalytics } from './analytics-pixel-provider';
 
@@ -77,7 +78,7 @@ export function buildMerchantAnalyticsSettings(
   }
 
   const featureSettings = asRecord(merchant.feature_settings);
-  return Object.fromEntries(
+  const identifiers = Object.fromEntries(
     ANALYTICS_ID_KEYS.map((key) => [
       key,
       normalizeAnalyticsId(featureSettings?.[key]) ??
@@ -86,4 +87,9 @@ export function buildMerchantAnalyticsSettings(
           : normalizeAnalyticsId(merchant[key])),
     ])
   ) as MerchantWithAnalytics;
+  const events = xEventIdsSchema.safeParse(featureSettings?.twitter_event_ids);
+  return {
+    ...identifiers,
+    ...(events.success ? { twitter_event_ids: events.data } : {}),
+  };
 }

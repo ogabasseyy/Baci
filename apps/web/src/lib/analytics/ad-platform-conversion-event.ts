@@ -7,7 +7,10 @@ export interface ConversionEvent {
   occurred_at?: string;
   limited_data_use?: boolean;
   user_data: {
+    analytics_consent?: boolean;
+    marketing_consent?: boolean;
     measurement_consent?: boolean;
+    twclid?: string;
     oppref?: string;
     obref?: string;
     city?: string;

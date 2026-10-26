@@ -25,7 +25,12 @@ it('omits malformed attribution without losing other valid references', () => {
 it('allows checkout when cookie access itself is unavailable', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   vi.spyOn(document, 'cookie', 'get').mockImplementation(() => {
     throw new Error('cookies unavailable');

@@ -1,4 +1,6 @@
+import { isConversionEvent } from '@/lib/analytics/is-conversion-event';
 import type { AnalyticsEventRequest } from '@/schemas/analytics-event';
+import { clientMarketingTargets } from './client-marketing-targets';
 
 function assignDefined(
   target: Record<string, unknown>,
@@ -13,6 +15,11 @@ export function buildAnalyticsEventData(
   eventType: string
 ): Record<string, unknown> {
   const eventData: Record<string, unknown> = {};
+  if (isConversionEvent(eventType))
+    eventData.targets = clientMarketingTargets({
+      analytics: input.analytics_consent,
+      marketing: input.marketing_consent,
+    });
   assignDefined(eventData, 'session_id', input.session_id);
   assignDefined(eventData, 'user_agent', input.user_agent);
   assignDefined(eventData, 'referrer', input.referrer);

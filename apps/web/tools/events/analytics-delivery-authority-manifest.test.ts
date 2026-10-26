@@ -19,9 +19,9 @@ describe('analytics delivery authority manifest', () => {
   it('hash-binds the reviewed temporary authority closure', () => {
     expect(manifest.authorityClosureHashes).toEqual({
       'apps/web/src/app/api/analytics/conversion/route.ts':
-        '8747272f15477bffc36d4bd8b18fa046338f1dbc6e1234bcd2400e11694057e2',
+        '5a279c699150383ee5b020e0947722da5169ace9a85c63a9e8142580273a9175',
       'apps/web/src/app/api/events/route.ts':
-        '3e758b45f0809b919f1a058251bb1acd85e6df6de93df2b63f45f6766be67aab',
+        'c5204ded0eedf71b02fc11983bb8a2c8734cc3a52543f99de21a8b46671fc4b2',
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
         '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
       'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':

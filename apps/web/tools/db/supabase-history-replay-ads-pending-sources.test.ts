@@ -68,6 +68,7 @@ describe('supabase history replay ads pending sources', () => {
       '20261024160100_validate_chatgpt_event_destination.sql',
       '20261024162000_chatgpt_ads_admin_destination.sql',
       '20261025220509_storefront_growth_integration_hint.sql',
+      '20261026060604_x_ads_conversion_settings_and_destination.sql',
     ] as const;
     for (const name of names) {
       const bytes = readFileSync(

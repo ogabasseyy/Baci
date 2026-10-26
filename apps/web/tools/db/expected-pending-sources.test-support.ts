@@ -41,6 +41,11 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
+      'supabase/migrations/20261026060604_x_ads_conversion_settings_and_destination.sql',
+    sha256: '62f9c97c017443b4a1adeaaf52b1fd69e45502557dc527d9c793b6930cc1e986',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261025220509_storefront_growth_integration_hint.sql',
     sha256: 'bb39579411334105589c3cdd42447a7706accdc16d654937560b970b4d9b1427',
   },

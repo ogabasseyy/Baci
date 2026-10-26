@@ -190,7 +190,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     2
   ),
   fam('infinix', 'note', 'Infinix Note', /^(?:Infinix )?Note/i, [
-    /(?<!\b(?:Redmi|Galaxy)\s+)\b(?:Infinix\s+)?Note\s+[0-9]+\b/i,
+    /\bInfinix\s+Note\s+[0-9]+\b/i,
     /\bInfinix\s+Note\b/i,
   ]),
   fam('tecno', 'spark', 'Tecno Spark', /^(?:Tecno )?Spark/i, [

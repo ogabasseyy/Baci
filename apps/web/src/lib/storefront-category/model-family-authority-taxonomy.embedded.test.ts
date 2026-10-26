@@ -95,6 +95,26 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(false);
 
+    // 1c. Standalone Note repetition must not match Infinix Note
+    const infinixNote = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'infinix',
+      'note'
+    );
+    if (!infinixNote) throw new Error('Expected Infinix Note family entry');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        infinixNote,
+        'Redmi Note 13 vs Infinix Hot 40. The Note 13 camera wins.'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        infinixNote,
+        'Infinix Note 40 Pro review'
+      )
+    ).toBe(true);
+
     // 2. Unrelated Oppo text (e.g. Oppo Reno camera) must not match Oppo A-Series
     expect(
       modelFamilyAuthorityTaxonomy.matchesContent(
@@ -133,15 +153,15 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(false);
 
-    const infinixNote = modelFamilyAuthorityTaxonomy.getEntry(
+    const infinixNoteEntry = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',
       'infinix',
       'note'
     );
-    if (infinixNote) {
+    if (infinixNoteEntry) {
       expect(
         modelFamilyAuthorityTaxonomy.matchesContent(
-          infinixNote,
+          infinixNoteEntry,
           'Redmi Note 13 Pro Full Review'
         )
       ).toBe(false);

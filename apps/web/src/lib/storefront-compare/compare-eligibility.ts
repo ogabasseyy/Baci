@@ -1,6 +1,8 @@
 import { generateSlug } from '../seo-utils';
+import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 const MIN_BRAND_COMPARE_PRODUCTS = 3;
 const MIN_PRICE_BAND_PRODUCTS = 6;
@@ -134,15 +136,26 @@ export function buildBrandCompareCandidate(input: {
       continue;
     }
 
-    const existing = brandsByKey.get(normalizedBrand.key);
+    // Group aliases (Redmi->Xiaomi, MacBook->Apple) under one canonical
+    // brand so a compare candidate can never pair a brand with itself.
+    const canonicalKey =
+      resolveCanonicalBrandKey(input.categorySlug, normalizedBrand.label) ||
+      normalizedBrand.key;
+    const canonicalEntry = brandAuthorityTaxonomy.getEntry(
+      input.categorySlug,
+      canonicalKey
+    );
+    const label = canonicalEntry?.brandQueryValue ?? normalizedBrand.label;
+
+    const existing = brandsByKey.get(canonicalKey);
 
     if (existing) {
       existing.count += 1;
       continue;
     }
 
-    brandsByKey.set(normalizedBrand.key, {
-      label: normalizedBrand.label,
+    brandsByKey.set(canonicalKey, {
+      label,
       count: 1,
     });
   }

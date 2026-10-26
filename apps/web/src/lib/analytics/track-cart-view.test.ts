@@ -35,7 +35,12 @@ it('does not queue or send a cart observation without consent', () => {
 it('shares an event ID and preserves the tenant and currency in the browser/server pair', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
@@ -55,7 +60,12 @@ it('shares an event ID and preserves the tenant and currency in the browser/serv
 it('leaves server delivery off when there is no merchant context', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
@@ -66,7 +76,12 @@ it('leaves server delivery off when there is no merchant context', () => {
 it('does not create a rejected empty-cart observation', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
@@ -74,4 +89,28 @@ it('does not create a rejected empty-cart observation', () => {
   trackCartView([], 'NGN', { merchantId });
   expect(fetcher).not.toHaveBeenCalled();
   expect(window.fbq).not.toHaveBeenCalled();
+});
+
+it('queues a marketing-consented cart view for both social destinations without requiring analytics consent', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: false,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const fetcher = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', fetcher);
+  trackCartView([{ product, quantity: 2 }], 'NGN', { merchantId });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const payloads = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
+  expect(new Set(payloads.map((p) => p.eventId)).size).toBe(1);
+  expect(payloads[0]).toMatchObject({
+    event: 'view_item',
+    consent: true,
+    merchantId,
+    eventData: { currency: 'NGN', value: 400 },
+  });
 });

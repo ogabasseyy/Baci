@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
       trustLevel: context.trustLevel,
       eventData: {
         targets: ['facebook'],
+        analytics_consent: true,
         currency: input.eventData.currency,
         value: input.eventData.value,
         items: input.eventData.products,
@@ -91,6 +92,7 @@ export async function POST(request: NextRequest) {
           input.eventSourceUrl ?? request.headers.get('referer') ?? undefined,
       },
       deliveryData: {
+        analytics_consent: true,
         ip:
           request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
           request.headers.get('x-real-ip') ??

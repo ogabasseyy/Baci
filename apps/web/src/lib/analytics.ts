@@ -2,6 +2,7 @@
 
 import type { Product } from '@/lib/products';
 import { trackCartView } from './analytics/track-cart-view';
+import { trackSocialFunnel } from './analytics/track-social-funnel';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
 import { measureXEvent } from './x-ads/pixel-client';
@@ -116,6 +117,19 @@ export const analytics = {
         },
       ],
     });
+    trackSocialFunnel(
+      'view_item',
+      [
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+        },
+      ],
+      currency,
+      eventId
+    );
     const params: ViewItemParams = {
       currency,
       value: product.price,
@@ -158,6 +172,12 @@ export const analytics = {
         },
       ],
     });
+    trackSocialFunnel(
+      'add_to_cart',
+      [{ id: product.id, name: product.name, price: product.price, quantity }],
+      currency,
+      eventId
+    );
     const params: AddToCartParams = {
       currency,
       value: product.price * quantity,
@@ -211,6 +231,17 @@ export const analytics = {
         num_items: quantity,
       })),
     });
+    trackSocialFunnel(
+      'begin_checkout',
+      products.map(({ product, quantity }) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity,
+      })),
+      currency,
+      eventId
+    );
     const value = products.reduce(
       (sum, { product, quantity }) => sum + product.price * quantity,
       0

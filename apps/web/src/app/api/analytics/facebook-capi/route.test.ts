@@ -67,11 +67,13 @@ describe('storefront CAPI ingress', () => {
       expect.objectContaining({
         merchantId,
         externalEventId: 'cart-event-1',
+        deliveryData: expect.objectContaining({ analytics_consent: true }),
         eventName: 'analytics.product_view.v1',
         eventType: 'product_view',
         eventData: expect.objectContaining({
           currency: 'NGN',
           targets: ['facebook'],
+          analytics_consent: true,
           value: 200,
           items: payload.eventData.products,
         }),

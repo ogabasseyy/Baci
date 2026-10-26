@@ -9,13 +9,13 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/ads/route.ts':
     'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
   'apps/web/src/app/api/analytics/facebook-capi/route.ts':
-    '0703e8247fa68a3c5a12a979e1f019809c939d67c477431eb3b850a5773b5f59',
+    'd3f90424593ade0d945da79006044a1132779217e1144dc006056d9060f0715c',
   'apps/web/src/app/api/analytics/ga4/route.ts':
     '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
   'apps/web/src/app/api/analytics/snapchat/route.ts':
-    '1a7898d59038b6a37e057e74da3907f4a42da9c25c7236e9d324d7b1516e4cd3',
+    '4a26d1def2bc4bea0d1ec4d78dc9f2a13d3c36a9784f5268a71822537aeb62b3',
   'apps/web/src/app/api/analytics/tiktok/route.ts':
-    '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
+    '6d9d17df68d13a16b3bcd35bb5acfa1a7caac02d73996a656012d18a4146854e',
   'apps/web/src/app/api/platform/events/route.ts':
     '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification

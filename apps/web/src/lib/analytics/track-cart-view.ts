@@ -2,7 +2,10 @@
 
 import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import { facebookCatalogEvent } from '@/lib/facebook-catalog-event';
+import { isMarketingAllowed } from '@/lib/marketing-consent';
 import type { Product } from '@/lib/products';
+import { sendSocialClientObservation } from './send-social-client-observation';
+import { trackSocialFunnel } from './track-social-funnel';
 
 type CartItem = { product: Product; quantity: number };
 type CartContext = { merchantId: string; userData?: unknown };
@@ -13,12 +16,45 @@ export function trackCartView(
   currency = 'USD',
   context?: CartContext
 ): void {
-  if (!isAnalyticsAllowed() || products.length === 0) return;
+  if (products.length === 0 || (!isAnalyticsAllowed() && !isMarketingAllowed()))
+    return;
   const eventId = crypto.randomUUID();
   const value = products.reduce(
     (total, item) => total + item.product.price * item.quantity,
     0
   );
+  if (isMarketingAllowed()) {
+    trackSocialFunnel(
+      'view_item',
+      products.map(({ product, quantity }) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity,
+      })),
+      currency,
+      eventId
+    );
+    if (context?.merchantId)
+      for (const destination of ['tiktok', 'snapchat'] as const)
+        void sendSocialClientObservation(destination, {
+          baseUrl: window.location.origin,
+          event: 'view_item',
+          eventId,
+          merchantId: context.merchantId,
+          eventData: {
+            value,
+            currency,
+            products: products.map(({ product, quantity }) => ({
+              id: product.id,
+              name: product.name,
+              price: product.price,
+              quantity,
+            })),
+          },
+        });
+  }
+  if (!isAnalyticsAllowed()) return;
   window.gtag?.('event', 'view_cart', {
     currency,
     value,

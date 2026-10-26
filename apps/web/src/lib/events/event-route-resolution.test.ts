@@ -140,3 +140,9 @@ describe('resolveEventRoute', () => {
     });
   });
 });
+
+it('treats explicit empty observation targets as no route rather than defaulting to all platforms', () => {
+  expect(
+    resolveEventRoute(event({ data: { event_data: { targets: [] } } }))
+  ).toEqual({ destinations: [], kind: 'no_route' });
+});

@@ -87,9 +87,13 @@ describe('event-pipeline credential paths', () => {
   });
 });
 
-it('bounds public Meta ingress signing to the exact reviewed chain', () => {
+it.each([
+  'facebook-capi',
+  'tiktok',
+  'snapchat',
+])('bounds public %s ingress signing to its exact reviewed chain', (platform) => {
   expect(eventPipelineCredentialPaths).toContainEqual([
-    'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+    `apps/web/src/app/api/analytics/${platform}/route.ts`,
     'apps/web/src/lib/events/event-ingress-capability.ts',
     'apps/web/src/lib/supabase/scoped-jwt.ts',
     'apps/web/src/lib/agentic/jwt-signing-material.ts',

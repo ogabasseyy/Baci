@@ -115,6 +115,20 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(true);
 
+    // 1e. Galaxy context on either side of a bare token matches
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'Samsung A55 5G review'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'The A55 from Samsung reviewed'
+      )
+    ).toBe(true);
+
     // 1c. Standalone Note repetition must not match Infinix Note
     const infinixNote = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

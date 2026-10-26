@@ -165,3 +165,43 @@ describe('buildCategorySupportLinks', () => {
     expect(brandCompareHrefs).toEqual([]);
   });
 });
+
+describe('buildCategorySupportLinks brand relevance', () => {
+  const samsungProducts = Array.from({ length: 6 }, (_, index) => ({
+    slug: `galaxy-${index}`,
+    name: `Galaxy Phone ${index}`,
+    brand: 'Samsung',
+    price: 300_000 + index * 10_000,
+    category_slug: 'smartphones',
+    product_key_specs: { chipset: 'Snapdragon', ram_gb: 12, storage_gb: 256 },
+  }));
+
+  it('emits no compare or price-band links for a no-brand article when relevance is required', () => {
+    const links = buildCategorySupportLinks({
+      storeUrl: 'https://store.test',
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      products: samsungProducts,
+      inferredBrands: [],
+      requireInferredBrandRelevance: true,
+    });
+    expect(links.filter((link) => link.href.includes('/compare/'))).toEqual([]);
+    expect(links.filter((link) => link.href.includes('/best-under/'))).toEqual(
+      []
+    );
+  });
+
+  it('emits no price-band link when the band only contains other-brand products', () => {
+    const links = buildCategorySupportLinks({
+      storeUrl: 'https://store.test',
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      products: samsungProducts,
+      inferredBrands: ['apple'],
+      requireInferredBrandRelevance: true,
+    });
+    expect(links.filter((link) => link.href.includes('/best-under/'))).toEqual(
+      []
+    );
+  });
+});

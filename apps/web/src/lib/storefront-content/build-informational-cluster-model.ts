@@ -181,6 +181,7 @@ export async function buildInformationalClusterModel(
     products,
     inferredBrands: inferred.brands,
     approvedCompareSlugs,
+    requireInferredBrandRelevance: true,
     compareProducts: input.categoryDataOverride
       ? undefined
       : (compareInventory?.products ?? []),

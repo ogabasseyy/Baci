@@ -238,3 +238,43 @@ describe('buildInformationalClusterModel relevance', () => {
     );
   });
 });
+
+describe('buildInformationalClusterModel override verification', () => {
+  it('verifies the price-band link for an override without destinationVerified', async () => {
+    const brands = ['Apple', 'Samsung', 'Tecno'];
+    const products = brands.flatMap((brand) =>
+      Array.from({ length: 3 }, (_, index) => ({
+        slug: `${brand.toLowerCase()}-${index}`,
+        name: `${brand} Phone ${index}`,
+        brand,
+        price: 300_000 + index * 10_000,
+        category_slug: 'smartphones',
+        stock: 4,
+        product_key_specs: { chipset: brand, ram_gb: 8, storage_gb: 128 },
+      }))
+    );
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: {
+        slug: 'apple-guide',
+        title: 'Apple Buying Guide',
+        excerpt: 'Apple picks.',
+        category: 'Smartphones',
+        tags: ['apple'],
+        keywords: ['apple'],
+        featured_image_url: null,
+        published_at: '2026-04-10T09:00:00.000Z',
+        reading_time_minutes: 4,
+      },
+      categoryDataOverride: {
+        category: { slug: 'smartphones', name: 'Smartphones' },
+        products,
+        isCollection: false,
+      },
+    });
+    const links = model?.commerceLinks.map((link) => link.href) ?? [];
+    expect(links.some((href) => href.includes('/best-under/'))).toBe(false);
+  });
+});

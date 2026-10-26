@@ -1,12 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadCategoryPageDataSafely } from './load-category-page-data-safely';
+import { describe, expect, it } from 'vitest';
 import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
-
-vi.mock('./load-category-page-data-safely', () => ({
-  loadCategoryPageDataSafely: vi.fn(),
-}));
-
-const mockLoad = vi.mocked(loadCategoryPageDataSafely);
 
 const links = [
   { href: 'https://store.test/smartphones/compare/a-vs-b', label: 'A vs B' },
@@ -16,66 +9,59 @@ const links = [
   },
 ];
 
-function rawProduct(id: string, brand: string, price: number) {
-  return {
-    id,
-    slug: id,
-    name: id,
-    brand,
-    price,
-    category_slug: 'smartphones',
-    stock_quantity: 4,
-  };
+function product(id: string, brand: string, price: number) {
+  return { slug: id, name: id, brand, price };
 }
 
 describe('verifyPriceBandLinkAgainstDestination', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-  it('keeps the band link when the destination pool makes it indexable', async () => {
+  it('keeps the band link when the compare pool makes it indexable', () => {
     const products = [
       ...Array.from({ length: 3 }, (_, i) =>
-        rawProduct(`apple-${i}`, 'Apple', 300_000)
+        product(`apple-${i}`, 'Apple', 300_000)
       ),
       ...Array.from({ length: 3 }, (_, i) =>
-        rawProduct(`samsung-${i}`, 'Samsung', 320_000)
+        product(`samsung-${i}`, 'Samsung', 320_000)
       ),
       ...Array.from({ length: 3 }, (_, i) =>
-        rawProduct(`tecno-${i}`, 'Tecno', 340_000)
+        product(`tecno-${i}`, 'Tecno', 340_000)
       ),
     ];
-    mockLoad.mockResolvedValue({ isCollection: false, products } as never);
-    const result = await verifyPriceBandLinkAgainstDestination({
-      merchantId: 'merchant-1',
-      categorySlug: 'smartphones',
-      storeSlug: 'store',
-      links,
-    });
-    expect(result).toEqual(links);
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: products,
+      })
+    ).toEqual(links);
   });
 
-  it('drops the band link when the destination pool is below thresholds', async () => {
-    mockLoad.mockResolvedValue({
-      isCollection: false,
-      products: [rawProduct('only-1', 'Apple', 300_000)],
-    } as never);
-    const result = await verifyPriceBandLinkAgainstDestination({
-      merchantId: 'merchant-1',
-      categorySlug: 'smartphones',
-      storeSlug: 'store',
-      links,
-    });
-    expect(result).toEqual([links[0]]);
+  it('drops the band link when the compare pool is below thresholds', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: [product('only-1', 'Apple', 300_000)],
+      })
+    ).toEqual([links[0]]);
   });
 
-  it('passes links through when there is no band link', async () => {
-    const result = await verifyPriceBandLinkAgainstDestination({
-      merchantId: 'merchant-1',
-      categorySlug: 'smartphones',
-      storeSlug: 'store',
-      links: [links[0] as never],
-    });
-    expect(result).toEqual([links[0]]);
-    expect(mockLoad).not.toHaveBeenCalled();
+  it('drops the band link when no compare inventory is available', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: null,
+      })
+    ).toEqual([links[0]]);
+  });
+
+  it('passes links through when there is no band link', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[0] as never],
+        compareProducts: null,
+      })
+    ).toEqual([links[0]]);
   });
 });

@@ -196,14 +196,14 @@ export async function buildInformationalClusterModel(
       : (compareInventory?.products ?? []),
   });
 
-  const verifiedCommerceLinks = input.categoryDataOverride
-    ? commerceLinks
-    : await verifyPriceBandLinkAgainstDestination({
-        merchantId: input.merchantId,
-        categorySlug,
-        storeSlug: input.merchantSlug,
-        links: commerceLinks,
-      });
+  const verifiedCommerceLinks =
+    input.categoryDataOverride?.destinationVerified === true
+      ? commerceLinks
+      : verifyPriceBandLinkAgainstDestination({
+          categorySlug,
+          links: commerceLinks,
+          compareProducts: compareInventory?.products ?? null,
+        });
 
   const combinedLinkCandidates = [
     ...brandHubLinks,

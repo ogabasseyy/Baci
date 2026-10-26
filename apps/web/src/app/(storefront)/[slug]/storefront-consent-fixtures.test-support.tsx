@@ -2,6 +2,7 @@ import { act, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { expect, vi } from 'vitest';
 import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
+import { sendFacebookPixelEvent } from '@/lib/analytics/facebook-pixel-client';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 
 export const merchant = {
@@ -39,4 +40,30 @@ export function expectNoPixels() {
   expect(
     screen.queryByTestId('chatgpt-measurement-sdk')
   ).not.toBeInTheDocument();
+}
+
+export function withdrawOptionalConsent() {
+  act(() => {
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: false,
+        functional: false,
+      })
+    );
+    window.dispatchEvent(new Event('cookie-consent-updated'));
+  });
+}
+
+export function expectMetaPixelConfigured(queue: unknown[][]) {
+  expect(queue).toContainEqual(['consent', 'grant']);
+  expect(queue).toContainEqual(['init', '123456789']);
+}
+
+export function expectMetaEventsBlocked(queue: unknown[][]) {
+  const callsAfterRevoke = queue.length;
+  sendFacebookPixelEvent('AddToCart');
+  expect(queue).toHaveLength(callsAfterRevoke);
 }

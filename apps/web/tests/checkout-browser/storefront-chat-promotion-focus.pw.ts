@@ -60,6 +60,7 @@ test('timed newsletter yields to page focus after keyboard leaves the launcher',
   await close.click();
   await expect(newsletter).toBeHidden();
   await expect(launcher).toBeVisible();
+  await expect(launcher).toBeFocused();
 });
 
 test('unrelated keyboard focus does not hide or disable a timed newsletter', async ({

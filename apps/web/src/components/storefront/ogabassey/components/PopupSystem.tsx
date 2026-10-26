@@ -10,6 +10,7 @@ export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreChatFocusAfterDismissal = useRef(false);
   const hasEngaged = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
@@ -59,7 +60,34 @@ export const PopupSystem: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (showNewsletter || showAdPopup || !restoreChatFocusAfterDismissal.current) {
+      return;
+    }
+
+    restoreChatFocusAfterDismissal.current = false;
+    const activeElement = document.activeElement;
+    if (activeElement && activeElement !== document.body && activeElement.isConnected) {
+      return;
+    }
+
+    const launcher = document.querySelector<HTMLElement>(
+      '.ogabassey-chat-anchor .ogabassey-chat-button',
+    );
+    if (launcher && window.getComputedStyle(launcher).display !== 'none') {
+      launcher.focus();
+    }
+  }, [showAdPopup, showNewsletter]);
+
+  const rememberPromotionFocus = (promotionSelector: string) => {
+    const activeElement = document.activeElement;
+    restoreChatFocusAfterDismissal.current =
+      activeElement instanceof HTMLElement &&
+      activeElement.closest(promotionSelector) !== null;
+  };
+
   const handleCloseNewsletter = () => {
+    rememberPromotionFocus('.ogabassey-newsletter-popup');
     setShowNewsletter(false);
 
     // Save dismissal to localStorage
@@ -175,6 +203,7 @@ export const PopupSystem: React.FC = () => {
               type="button"
               onClick={() => {
                 clearChatPromotionFocusHandoff();
+                rememberPromotionFocus('.ogabassey-offer-popup');
                 setShowAdPopup(false);
               }}
               className="absolute top-2 right-2 size-6 bg-white/80 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-white transition-colors z-20 shadow-sm"

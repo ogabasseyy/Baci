@@ -58,7 +58,14 @@ describe('PopupSystem', () => {
   });
 
   it('still queues the ad popup after the newsletter is dismissed', async () => {
-    render(<PopupSystem />);
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
 
     fireEvent.pointerDown(window);
 
@@ -70,7 +77,11 @@ describe('PopupSystem', () => {
       vi.advanceTimersByTime(4000);
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close newsletter' }));
+    const closeNewsletter = screen.getByRole('button', { name: 'Close newsletter' });
+    closeNewsletter.focus();
+    fireEvent.click(closeNewsletter);
+    const launcher = screen.getByRole('button', { name: 'Assistant' });
+    expect(launcher).toHaveFocus();
 
     act(() => {
       vi.advanceTimersByTime(10000);
@@ -78,5 +89,57 @@ describe('PopupSystem', () => {
 
     expect(screen.getByText('Sponsored')).toBeInTheDocument();
     expect(screen.getByTestId('popup-ad-unit')).toBeInTheDocument();
+
+    const closeAd = screen.getByRole('button', { name: 'Close ad' });
+    closeAd.focus();
+    fireEvent.click(closeAd);
+    expect(launcher).toHaveFocus();
+  });
+
+  it('returns focus to the launcher after a focused promotion closes', async () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const close = screen.getByRole('button', { name: 'Close newsletter' });
+    close.focus();
+    fireEvent.click(close);
+
+    expect(screen.getByRole('button', { name: 'Assistant' })).toHaveFocus();
+  });
+
+  it('does not steal focus when a promotion closes without owning focus', async () => {
+    render(
+      <>
+        <button>Page control</button>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const pageControl = screen.getByRole('button', { name: 'Page control' });
+    pageControl.focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Close newsletter' }));
+
+    expect(pageControl).toHaveFocus();
   });
 });

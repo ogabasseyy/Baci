@@ -171,20 +171,27 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
         timeout: 15_000,
       });
       await page.getByRole('button', { name: 'Close newsletter' }).click();
+      await expect(
+        page.getByRole('button', { name: 'Open AI chat assistant' })
+      ).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(
+        page.getByRole('button', { name: 'Open AI chat assistant' })
+      ).not.toBeFocused();
       await expect(page.locator('.ogabassey-offer-popup')).toBeVisible({
         timeout: 15_000,
       });
+      await page.getByRole('button', { name: 'Close ad' }).focus();
       await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
       await expect(
         page.locator('button[aria-label="Open AI chat assistant"]')
       ).not.toBeFocused();
-      await page.getByRole('button', { name: 'Close ad' }).focus();
       await page.keyboard.press('Enter');
       await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
       await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
-      await page
-        .getByRole('button', { name: 'Open AI chat assistant' })
-        .focus();
+      await expect(
+        page.getByRole('button', { name: 'Open AI chat assistant' })
+      ).toBeFocused();
       await page.keyboard.press('Enter');
       await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
     }

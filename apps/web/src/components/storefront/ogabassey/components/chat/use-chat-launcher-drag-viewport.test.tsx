@@ -81,6 +81,43 @@ describe('launcher viewport changes while chat is open', () => {
     view.unmount();
   });
 
+  it('re-clamps after overflow changes during an active drag', () => {
+    const view = setup({ initialPosition: { x: 100, y: 200 } });
+    view.pointer('pointerdown', 220, 320);
+    view.pointer('pointermove', 260, 360);
+    view.flush();
+
+    view.rerender(
+      <Harness
+        hasOverflow
+        onOverflowMount={(bubble) =>
+          vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+            left: -200,
+            top: -100,
+            width: 300,
+            height: 50,
+            right: 100,
+            bottom: -50,
+            x: -200,
+            y: -100,
+            toJSON: () => ({}),
+          })
+        }
+      />,
+    );
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(140px, 240px, 0)',
+    );
+
+    view.pointer('pointerup', 260, 360);
+    view.flush();
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(416px, 416px, 0)',
+    );
+    view.unmount();
+  });
+
   it('moves the focused launcher with arrow keys', () => {
     const { button } = setup();
     fireEvent.keyDown(button, { key: 'ArrowLeft' });

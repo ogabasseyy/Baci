@@ -79,7 +79,11 @@ export function useChatLauncherDrag(
 
   function reclampPosition() {
     const current = positionRef.current;
-    if (isOpenRef.current || isHiddenRef.current || gesture.current || !current) return;
+    if (gesture.current) {
+      viewportReclampPending.current = true;
+      return;
+    }
+    if (isOpenRef.current || isHiddenRef.current || !current) return;
     const button = buttonRef.current;
     const rect = button?.getBoundingClientRect();
     if (!button || !rect || rect.width === 0 || rect.height === 0) return;

@@ -28,7 +28,7 @@ it('explains quota exhaustion instead of a generic interruption', () => {
   const screen = render(<SharedCartStatusPanel />);
   expect(
     screen.getByText(
-      'Too many cart requests right now. Wait a few minutes, then retry. Your last confirmed items are saved.'
+      'Too many cart requests right now. Please wait a while, then retry. Your last confirmed items are saved.'
     )
   ).toBeTruthy();
   expect(

@@ -76,6 +76,67 @@ describe('getTrustedClientIdentifier', () => {
     ).toBe('203.0.113.9');
   });
 
+  it('ignores forged Cloudflare headers from a non-Cloudflare peer', () => {
+    vi.stubEnv('VERCEL', '1');
+    // Direct-to-origin callers can send cf-ray, but their platform
+    // address is not a Cloudflare egress, so their chosen identity
+    // must not replace the platform-verified address.
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'anything',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+
+  it.each([
+    // Just inside / outside 162.158.0.0/15 and 2a06:98c0::/29.
+    ['162.159.255.255', '203.0.113.9'],
+    ['162.160.0.0', '162.160.0.0'],
+    ['2a06:98c7:ffff::1', '203.0.113.9'],
+    ['2a06:98c8::1', '2a06:98c8::1'],
+    ['::1', '::1'],
+  ] as const)('resolves Cloudflare peer boundary %s', (peer, expected) => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': peer,
+        })
+      )
+    ).toBe(expected);
+  });
+
+  it('does not trust cf-connecting-ip from a Cloudflare peer without cf-ray', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('172.68.1.20');
+  });
+
+  it('trusts cf-connecting-ip from a Cloudflare IPv6 peer', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '2606:4700:4700::1111',
+        })
+      )
+    ).toBe('203.0.113.9');
+  });
+
   it('ignores cf-connecting-ip without evidence the request traversed Cloudflare', () => {
     vi.stubEnv('VERCEL', '1');
     expect(

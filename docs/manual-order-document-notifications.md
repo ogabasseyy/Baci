@@ -24,15 +24,18 @@ lost after dispatch, accepted send with failed marker persistence or stale
 dispatched lease is terminalized as `delivery_outcome_unknown`, not automatically
 resent. A provider `client_reference` is an audit correlation, not an idempotency key.
 
-Activation backfill is bounded by construction, not by cap: pre-existing
-orders carry `manual_document_notification_eligible = false`, so the
-postdeploy backfill only sees staff-recorded orders created during the
-deploy's own predeploy-to-postdeploy window that never got an outbox row.
-Each scanned order runs the enqueue function (which re-validates and
+Activation backfill is bounded by construction plus an abort budget:
+pre-existing orders carry `manual_document_notification_eligible = false`,
+so the postdeploy backfill only sees staff-recorded orders created during
+the deploy's own predeploy-to-postdeploy window that never got an outbox
+row. Each scanned order runs the enqueue function (which re-validates and
 early-returns for ineligible rows), the `NOT EXISTS` anti-join makes
 retries idempotent, and the 120s statement timeout fails the migration
-loud rather than stalling postdeploy. A cap would strand rows past it
-with no future trigger fire, so none is set.
+loud rather than stalling postdeploy. Past a 500-row scan the migration
+aborts outright (it never silently strands rows): a gap that large means
+the predeploy-to-postdeploy window stretched far past minutes, so split
+the catch-up manually — run the enqueue calls in chunks, then re-apply —
+instead of burst-mailing it.
 
 ## Corrections and resend
 
@@ -97,15 +100,21 @@ transaction after verifying the new worker drains batches with no 5xx.
 Catch-up scope: the backfill mails post-rollout manual orders created
 while the triggers were disabled (each re-validated by the enqueue
 function); pre-rollout orders carry the flag as false and are never
-mailed. A long predeploy-to-postdeploy gap therefore mails the whole
-gap's manual volume at activation — keep the gap minutes-long.
+mailed. A long predeploy-to-postdeploy gap trips the 500-row abort
+instead of mailing the whole gap — keep the gap minutes-long, or split
+the catch-up manually per the migration error.
 
 Accepted Bearer [REDACTED] risk: the unauthenticated login-email GET returns the
 masked hint (`b***@domain`) and records login-started activity for any
 token holder. Token possession already grants the anon preview and
 redemption itself, so the masked fragment discloses nothing beyond what
 the Bearer [REDACTED] already conveys; the activity write is funnel telemetry, not
-an authorization decision.
+an authorization decision. The masked-hint posture is effective only after
+postdeploy migration 20260930160200 lands: during the drain window the
+legacy anon preview RPC still returns the full recipient email to any
+token holder (pre-existing exposure), so keep the window minutes-long and
+verify the email is gone from the preview before treating the guarantee
+as live.
 
 This ordering matters because old revisions 500 the whole claimed batch
 (including unrelated shipped/delivered rows, which then wait for lease

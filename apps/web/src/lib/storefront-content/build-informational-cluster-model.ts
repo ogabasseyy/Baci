@@ -1,5 +1,6 @@
 import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
+import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-indexability-policy';
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
@@ -212,6 +213,14 @@ export async function buildInformationalClusterModel(
           categorySlug,
           links: commerceLinks,
           compareProducts: compareInventory?.products ?? null,
+          curatedCompareSlugs: compareInventory
+            ? buildCuratedCompareSlugSet({
+                storeUrl: input.storeUrl,
+                categorySlug,
+                categoryName,
+                products: compareInventory.products,
+              })
+            : undefined,
         });
 
   const combinedLinkCandidates = [

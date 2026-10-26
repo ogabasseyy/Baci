@@ -72,6 +72,8 @@ export function buildCategorySupportLinks(input: {
   products: CommercialSupportProduct[];
   inferredBrands?: string[];
   approvedCompareSlugs?: ReadonlySet<string>;
+  /** Destination compare inventory; brand/price-band candidates derive from it when supplied. */
+  compareProducts?: CommercialSupportProduct[];
 }): CommercialSupportLink[] {
   const links: CommercialSupportLink[] = [];
   const firstEligibleProductCompare = findFirstEligibleProductCompare(
@@ -96,7 +98,7 @@ export function buildCategorySupportLinks(input: {
 
     const brandCandidate = buildBrandCompareCandidate({
       categorySlug: input.categorySlug,
-      products: input.products,
+      products: input.compareProducts ?? input.products,
     });
 
     if (brandCandidate?.isIndexable) {
@@ -126,7 +128,7 @@ export function buildCategorySupportLinks(input: {
   const priceBandLink = buildFirstEligiblePriceBandLink({
     storeUrl: input.storeUrl,
     categorySlug: input.categorySlug,
-    products: input.products,
+    products: input.compareProducts ?? input.products,
   });
 
   if (priceBandLink) {

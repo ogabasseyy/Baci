@@ -1,5 +1,6 @@
 import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
+import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
@@ -22,6 +23,7 @@ interface CategoryInventoryProduct {
   stock?: number | null;
   is_parent?: boolean | null;
   parent_product_id?: string | null;
+  manage_stock?: boolean | null;
 }
 
 type OverrideCategoryProduct = NonNullable<
@@ -59,6 +61,7 @@ function toCategoryInventoryProduct(
     stock: product.stock ?? null,
     is_parent: product.is_parent ?? null,
     parent_product_id: product.parent_product_id ?? null,
+    manage_stock: product.manage_stock ?? null,
   };
 }
 
@@ -165,6 +168,12 @@ export async function buildInformationalClusterModel(
           storeSlug: input.merchantSlug,
           storeUrl: input.storeUrl,
         });
+  const compareInventory = input.categoryDataOverride
+    ? null
+    : await loadCompareCategoryInventorySafely({
+        merchantId: input.merchantId,
+        categorySlug,
+      });
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,
@@ -172,6 +181,9 @@ export async function buildInformationalClusterModel(
     products,
     inferredBrands: inferred.brands,
     approvedCompareSlugs,
+    compareProducts: input.categoryDataOverride
+      ? undefined
+      : (compareInventory?.products ?? []),
   });
 
   const combinedLinkCandidates = [

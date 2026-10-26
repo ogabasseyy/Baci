@@ -6172,26 +6172,29 @@ export type Database = {
       };
       merchant_x_ads_credentials: {
         Row: {
-          consumer_key: string;
-          consumer_secret: string;
-          access_token: string;
-          access_token_secret: string;
+          pixel_token: string | null;
+          consumer_key: string | null;
+          consumer_secret: string | null;
+          access_token: string | null;
+          access_token_secret: string | null;
           merchant_id: string;
           updated_at: string;
         };
         Insert: {
-          consumer_key: string;
-          consumer_secret: string;
-          access_token: string;
-          access_token_secret: string;
+          pixel_token?: string | null;
+          consumer_key?: string | null;
+          consumer_secret?: string | null;
+          access_token?: string | null;
+          access_token_secret?: string | null;
           merchant_id: string;
           updated_at?: string;
         };
         Update: {
-          consumer_key?: string;
-          consumer_secret?: string;
-          access_token?: string;
-          access_token_secret?: string;
+          pixel_token?: string | null;
+          consumer_key?: string | null;
+          consumer_secret?: string | null;
+          access_token?: string | null;
+          access_token_secret?: string | null;
           merchant_id?: string;
           updated_at?: string;
         };

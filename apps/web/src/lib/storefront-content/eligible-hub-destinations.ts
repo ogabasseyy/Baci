@@ -50,11 +50,11 @@ export function resolveEligibleCategoryHubDestinations(
   // parent or standalone rows (is_parent=true or no parent), never variants.
   const availableProducts = input.products.filter(
     (product) =>
-      (product.manage_stock === false ||
-        (product.stock != null && product.stock > 0) ||
-        // Legacy rows without stock management info keep the scoped-pool
-        // assumption; explicitly managed rows with unknown stock do not.
-        (product.stock == null && product.manage_stock == null)) &&
+      // Destination availability: only explicitly managed rows
+      // (manage_stock === true) require positive stock; null/false flags
+      // mean unmanaged inventory, which normalizeProduct treats as available.
+      (product.manage_stock !== true ||
+        (product.stock != null && product.stock > 0)) &&
       (generateSlug(product.category_slug ?? '') === categorySlug ||
         (product.category_slugs ?? []).some(
           (slug) => generateSlug(slug) === categorySlug

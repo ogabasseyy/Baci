@@ -1,4 +1,6 @@
+import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { formatCurrencyCompact } from '@/lib/currency';
+import { generateSlug } from '@/lib/seo-utils';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
 import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-indexability-policy';
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
@@ -91,13 +93,33 @@ function buildFeaturedProducts(
 ) {
   const inStockProducts = products.filter(isInStock);
   const normalizedBrands = inferredBrands.map((brand) => brand.toLowerCase());
+  // Content-config aliases (e.g. Sony -> playstation for gaming) sit
+  // outside the authority taxonomy, so resolve those alongside it.
+  const support =
+    CONTENT_CLUSTER_SUPPORT[
+      categorySlug as keyof typeof CONTENT_CLUSTER_SUPPORT
+    ];
+  const aliasesByCanonical = new Map<string, Set<string>>(
+    Object.entries(support?.brandTokens ?? {}).map(([canonical, aliases]) => [
+      canonical.toLowerCase(),
+      new Set(aliases.map((alias: string) => generateSlug(alias))),
+    ])
+  );
   const preferredProducts =
     normalizedBrands.length > 0
-      ? inStockProducts.filter((product) =>
-          normalizedBrands.includes(
-            resolveCanonicalBrandKey(categorySlug, product.brand ?? '')
-          )
-        )
+      ? inStockProducts.filter((product) => {
+          if (
+            normalizedBrands.includes(
+              resolveCanonicalBrandKey(categorySlug, product.brand ?? '')
+            )
+          ) {
+            return true;
+          }
+          const productBrandSlug = generateSlug(product.brand ?? '');
+          return normalizedBrands.some((brand) =>
+            aliasesByCanonical.get(brand)?.has(productBrandSlug)
+          );
+        })
       : [];
   // When brands are inferred, featured picks stay on-brand; falling back
   // to the full pool would surface irrelevant child-category products.

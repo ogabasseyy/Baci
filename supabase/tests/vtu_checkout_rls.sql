@@ -648,32 +648,57 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
--- Caller-identity pins (diagnostic): three separate blocks so a
--- failure line identifies which role the replay actually runs S4
--- under (anon / stuck-at-authenticated / role switch inert).
-DO $s4role_anon$
+-- Caller-identity pin (diagnostic result): replay runs S4 as anon
+-- (CI ordinal 173 stopped at the anon block), so the remaining
+-- question is the applied ACL shape. Five separate blocks: the
+-- first that fires names the shape (default-public / PUBLIC
+-- grantee / explicit anon grantee / privilege-checker divergence).
+DO $s4acl_default$
 BEGIN
-  IF current_role = 'anon' THEN
-    RAISE EXCEPTION 'S4-role: caller IS anon';
+  IF (SELECT proacl IS NULL FROM pg_catalog.pg_proc
+      WHERE oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure) THEN
+    RAISE EXCEPTION 'S4-acl: proacl IS NULL (default PUBLIC execute)';
   END IF;
 END;
-$s4role_anon$;
+$s4acl_default$;
 
-DO $s4role_authenticated$
+DO $s4acl_public$
 BEGIN
-  IF current_role = 'authenticated' THEN
-    RAISE EXCEPTION 'S4-role: caller IS authenticated';
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p,
+      pg_catalog.aclexplode(p.proacl) a
+    WHERE p.oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure
+      AND a.grantee = 0
+  ) THEN
+    RAISE EXCEPTION 'S4-acl: PUBLIC grantee present';
   END IF;
 END;
-$s4role_authenticated$;
+$s4acl_public$;
 
-DO $s4role_session$
+DO $s4acl_anon$
 BEGIN
-  IF current_role = session_user THEN
-    RAISE EXCEPTION 'S4-role: caller IS session user (role switch inert)';
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p,
+      pg_catalog.aclexplode(p.proacl) a
+    WHERE p.oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure
+      AND a.grantee = 'anon'::regrole::oid
+  ) THEN
+    RAISE EXCEPTION 'S4-acl: explicit anon grantee present';
   END IF;
 END;
-$s4role_session$;
+$s4acl_anon$;
+
+DO $s4acl_haspriv$
+BEGIN
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.get_vtu_checkout_settings(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'S4-acl: has_function_privilege(anon) is TRUE';
+  END IF;
+END;
+$s4acl_haspriv$;
 
 DO $s4grant$
 BEGIN

@@ -71,11 +71,8 @@ const SCOPED_SEMANTIC_LEGACY_SELECT = `
   product_categories(categories(slug))
 `;
 
-function resolveScopedCategorySlug(
-  row: ScopedSemanticInventoryRow,
-  requestedCategorySlug: string
-): string {
-  const joinedSlugs = (row.product_categories ?? [])
+function getJoinedCategorySlugs(row: ScopedSemanticInventoryRow): string[] {
+  return (row.product_categories ?? [])
     .flatMap((entry) => {
       const categories = entry?.categories;
       if (Array.isArray(categories)) {
@@ -85,6 +82,13 @@ function resolveScopedCategorySlug(
     })
     .map((category) => category?.slug?.trim())
     .filter((slug): slug is string => Boolean(slug));
+}
+
+function resolveScopedCategorySlug(
+  row: ScopedSemanticInventoryRow,
+  requestedCategorySlug: string
+): string {
+  const joinedSlugs = getJoinedCategorySlugs(row);
 
   // Mirror normalizeProduct's category_slug chain: preferred join -> first join
   // -> generateSlug(raw.category). Only the legacy (no-join) scope reaches the
@@ -132,6 +136,7 @@ function toScopedSemanticCandidate(
       stock_quantity: row.stock_quantity,
     }),
     category_slug: resolveScopedCategorySlug(row, requestedCategorySlug),
+    category_slugs: getJoinedCategorySlugs(row),
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
     is_parent: row.is_parent ?? null,
     parent_product_id: row.parent_product_id ?? null,

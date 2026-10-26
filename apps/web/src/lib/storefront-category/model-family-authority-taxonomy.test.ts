@@ -165,6 +165,29 @@ describe('model family authority taxonomy', () => {
     ).toBe(true);
   });
 
+  it('matches MacBook names with inch-prefixed sizes', () => {
+    const air = modelFamilyAuthorityTaxonomy.getEntry(
+      'laptops',
+      'apple',
+      'macbook-air'
+    );
+    const pro = modelFamilyAuthorityTaxonomy.getEntry(
+      'laptops',
+      'apple',
+      'macbook-pro'
+    );
+    if (!air || !pro) throw new Error('Expected MacBook family entries');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(air, '13-inch MacBook Air M2')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(pro, '13.6-inch MacBook Pro')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(air, 'MacBook Air 13-inch')
+    ).toBe(true);
+  });
+
   it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
     const phantom = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

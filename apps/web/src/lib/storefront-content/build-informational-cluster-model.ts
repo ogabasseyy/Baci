@@ -21,6 +21,7 @@ interface CategoryInventoryProduct {
   brand?: string | null;
   price: number;
   category_slug?: string | null;
+  category_slugs?: string[] | null;
   product_key_specs?: Record<string, unknown> | null;
   condition?: string | null;
   stock?: number | null;
@@ -57,6 +58,7 @@ function toCategoryInventoryProduct(
     brand: product.brand,
     price: product.price,
     category_slug: product.category_slug ?? categorySlug,
+    category_slugs: product.category_slugs ?? null,
     product_key_specs: product.product_key_specs ?? null,
     condition: product.condition ?? null,
     stock: product.stock ?? null,

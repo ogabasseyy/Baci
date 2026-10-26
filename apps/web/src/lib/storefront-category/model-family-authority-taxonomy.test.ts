@@ -169,6 +169,24 @@ describe('model family authority taxonomy', () => {
     expect(
       modelFamilyAuthorityTaxonomy.matchesContent(
         galaxyA,
+        'A78 vs Galaxy S24: Oppo vs Samsung shootout'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyS,
+        'Itel S24 vs Galaxy A55 compared'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'A55 vs A34: Which Samsung Mid-Ranger Wins?'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
         'Samsung Galaxy A55 review'
       )
     ).toBe(true);

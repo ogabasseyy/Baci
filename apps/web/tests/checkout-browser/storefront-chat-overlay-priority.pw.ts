@@ -10,6 +10,29 @@ const chatCss = readFileSync(
   'utf8'
 );
 
+test('mobile launcher advertises keyboard movement without snapping upward', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await expect(launcher).toHaveAttribute(
+    'aria-keyshortcuts',
+    'ArrowUp ArrowDown ArrowLeft ArrowRight'
+  );
+  const initialBounds = await launcher.boundingBox();
+  if (!initialBounds)
+    throw new Error('Chat launcher is missing its layout box');
+
+  await launcher.focus();
+  await page.keyboard.press('ArrowDown');
+
+  const movedBounds = await launcher.boundingBox();
+  if (!movedBounds) throw new Error('Chat launcher lost its layout box');
+  expect(movedBounds.y).toBe(initialBounds.y);
+});
+
 test('focused launcher remains reachable and pauses promotional overlays', async ({
   page,
 }) => {

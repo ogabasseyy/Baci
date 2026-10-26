@@ -35,7 +35,7 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it('keeps the drag click pending across keyboard activation', () => {
+  it('clears the drag click token on keyboard activation', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320, 7);
     pointer('pointermove', 120, 220, 7);
@@ -44,7 +44,7 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).toHaveBeenCalledOnce();
 
     click(120, 220, 1, 7);
-    expect(onOpen).toHaveBeenCalledOnce();
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
   it('allows an independent trusted pointerless activation after a missed drag click', () => {

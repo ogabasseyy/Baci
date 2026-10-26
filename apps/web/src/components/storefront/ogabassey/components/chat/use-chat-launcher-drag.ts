@@ -264,8 +264,9 @@ export function useChatLauncherDrag(
       event,
       suppressedDragClick.current,
     );
-    // Keyboard clicks keep the token; pointer clicks and pointerdown clear it.
-    if (event.detail > 0) suppressedDragClick.current = null;
+    // Any activation consumes the token. In particular, after keyboard-open
+    // the mounted chat toggle must not inherit the previous drag correlation.
+    suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }

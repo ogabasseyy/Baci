@@ -1,29 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-test('mobile launcher advertises keyboard movement without snapping upward', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto('/chat-launcher');
-  await page.getByRole('button', { name: 'Show mobile footer' }).click();
-
-  const launcher = page.getByRole('button', { name: 'Assistant launcher' });
-  await expect(launcher).toHaveAttribute(
-    'aria-keyshortcuts',
-    'ArrowUp ArrowDown ArrowLeft ArrowRight'
-  );
-  const initialBounds = await launcher.boundingBox();
-  if (!initialBounds)
-    throw new Error('Chat launcher is missing its layout box');
-
-  await launcher.focus();
-  await page.keyboard.press('ArrowDown');
-
-  const movedBounds = await launcher.boundingBox();
-  if (!movedBounds) throw new Error('Chat launcher lost its layout box');
-  expect(movedBounds.y).toBe(initialBounds.y);
-});
-
 test('real drag hook clamps, suppresses drag click, and hands position to chat', async ({
   page,
 }, testInfo) => {
@@ -31,7 +7,9 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
   for (const width of [375, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto('/chat-launcher');
-    const launcher = page.getByRole('button', { name: 'Assistant launcher' });
+    const launcher = page.getByRole('button', {
+      name: 'Open AI chat assistant',
+    });
     const initialBounds = await launcher.boundingBox();
     if (!initialBounds)
       throw new Error('Chat launcher is missing its layout box');
@@ -71,9 +49,7 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     });
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
-    await page.mouse.move(width < 768 ? width - 1 : 1, width < 768 ? 799 : 1, {
-      steps: 5,
-    });
+    await page.mouse.move(1, 1, { steps: 5 });
     await page.mouse.up();
 
     const browserClick = await page.evaluate(() => {
@@ -100,7 +76,7 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     }
 
     const dragPosition = await page
-      .getByTestId('deferred-launcher')
+      .locator('.ogabassey-chat-anchor')
       .evaluate((anchor) => (anchor as HTMLElement).style.transform);
     expect(dragPosition).toContain('translate3d(');
     const dragBounds = await launcher.boundingBox();
@@ -111,26 +87,70 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     expect(dragBounds.y).toBeGreaterThanOrEqual(12);
     expect(dragBounds.x + dragBounds.width).toBeLessThanOrEqual(width - 12);
     expect(dragBounds.y + dragBounds.height).toBeLessThanOrEqual(800 - 28);
-    await expect(page.getByTestId('deferred-launcher')).toBeVisible();
+    await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
+    await expect(launcher).toBeVisible();
+    await expect(page.locator('.ogabassey-chat-window')).toHaveCount(0);
 
     await launcher.click();
-    await expect(page.getByTestId('runtime-launcher')).toBeVisible();
-    await expect(page.getByTestId('chat-window')).toBeVisible();
+    await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
     await page.getByRole('button', { name: 'Close chat' }).click();
+    await expect(page.locator('.ogabassey-chat-window')).toBeHidden();
+    const toggle = page.getByRole('button', { name: 'Toggle chat' });
+    const firstRestoredBounds = await toggle.boundingBox();
+    if (!firstRestoredBounds)
+      throw new Error('Chat launcher lost its layout box');
+    expect(firstRestoredBounds.x).toBeLessThan(width / 2);
+    expect(firstRestoredBounds.y).toBeLessThan(800 / 2);
+    const toggleBounds = firstRestoredBounds;
+    const toggleStart = {
+      x: toggleBounds.x + toggleBounds.width / 2,
+      y: toggleBounds.y + toggleBounds.height / 2,
+    };
+    const size = width >= 768 ? 80 : 56;
+    const bottom = width >= 768 ? 16 : 108;
+    const release = {
+      x: width - 16 - size / 2,
+      y: 800 - bottom - size / 2,
+    };
+    await page.mouse.move(toggleStart.x, toggleStart.y);
+    await page.mouse.down();
+    await page.mouse.move(release.x, release.y);
+    await page.mouse.up();
+    await expect(page.locator('.ogabassey-chat-window')).toHaveCount(0);
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
+    const openToggleBounds = await toggle.boundingBox();
+    if (!openToggleBounds) throw new Error('Chat launcher lost its layout box');
+    expect(
+      Math.abs(openToggleBounds.x + openToggleBounds.width / 2 - release.x)
+    ).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(openToggleBounds.y + openToggleBounds.height / 2 - release.y)
+    ).toBeLessThanOrEqual(2);
+    await page.mouse.click(release.x, release.y);
+    await expect(page.locator('.ogabassey-chat-window')).toBeHidden();
     const restoredPosition = await page
-      .getByTestId('runtime-launcher')
+      .locator('.ogabassey-chat-anchor')
       .evaluate((anchor) => (anchor as HTMLElement).style.transform);
-    expect(restoredPosition).toBe(dragPosition);
+    expect(restoredPosition).toContain('translate3d(');
+    const restoredBounds = await page
+      .getByRole('button', { name: 'Toggle chat' })
+      .boundingBox();
+    if (!restoredBounds) throw new Error('Chat launcher lost its layout box');
+    expect(restoredBounds.x).toBeGreaterThan(width / 2);
+    expect(restoredBounds.y).toBeGreaterThan(800 / 2);
 
     if (width < 768) {
-      await page.getByRole('button', { name: 'Show mobile footer' }).click();
       const offset = await page
-        .getByTestId('runtime-launcher')
+        .locator('.ogabassey-chat-anchor')
         .evaluate((anchor) =>
           Number.parseFloat(getComputedStyle(anchor, '::after').height)
         );
       expect(offset).toBe(92);
-      const footerClamped = await launcher.boundingBox();
+      const footerClamped = await page
+        .getByRole('button', { name: 'Toggle chat' })
+        .boundingBox();
       if (!footerClamped)
         throw new Error('Chat launcher was hidden by the footer');
       expect(footerClamped.y + footerClamped.height).toBeLessThanOrEqual(
@@ -141,7 +161,11 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
     if (width === 375) {
       await page.evaluate(() => localStorage.clear());
       await page.goto('/chat-launcher');
-      await page.getByRole('button', { name: 'Show mobile footer' }).click();
+      const enablePromotions = page.getByRole('button', {
+        name: 'Enable timed promotions',
+      });
+      await enablePromotions.click();
+      await enablePromotions.click();
       await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible({
         timeout: 15_000,
       });
@@ -149,17 +173,19 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       await expect(page.locator('.ogabassey-offer-popup')).toBeVisible({
         timeout: 15_000,
       });
-      await expect(page.getByTestId('deferred-launcher')).toBeHidden();
+      await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
       await expect(
-        page.locator('button[aria-label="Assistant launcher"]')
+        page.locator('button[aria-label="Open AI chat assistant"]')
       ).not.toBeFocused();
       await page.getByRole('button', { name: 'Close ad' }).focus();
       await page.keyboard.press('Enter');
       await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
-      await expect(page.getByTestId('deferred-launcher')).toBeVisible();
-      await page.getByRole('button', { name: 'Assistant launcher' }).focus();
+      await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
+      await page
+        .getByRole('button', { name: 'Open AI chat assistant' })
+        .focus();
       await page.keyboard.press('Enter');
-      await expect(page.getByTestId('chat-window')).toBeVisible();
+      await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
     }
   }
 });
@@ -180,7 +206,7 @@ test('touch drag emits a suppressed click without loading chat', async ({
   const baseURL = testInfo.project.use.baseURL as string;
   await page.goto(new URL('/chat-launcher', baseURL).toString());
   const bounds = await page
-    .getByRole('button', { name: 'Assistant launcher' })
+    .getByRole('button', { name: 'Open AI chat assistant' })
     .boundingBox();
   if (!bounds) throw new Error('Chat launcher is missing its layout box');
 
@@ -204,13 +230,13 @@ test('touch drag emits a suppressed click without loading chat', async ({
     touchPoints: [],
   });
 
-  await expect(page.getByTestId('deferred-launcher')).toBeVisible();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
   expect(
     await page
-      .getByTestId('deferred-launcher')
+      .locator('.ogabassey-chat-anchor')
       .evaluate((anchor) => (anchor as HTMLElement).style.transform)
   ).toBe('translate3d(16px, 16px, 0px)');
-  await expect(page.getByTestId('runtime-launcher')).toHaveCount(0);
+  await expect(page.locator('.ogabassey-chat-window')).toHaveCount(0);
   await context.close();
 });
 
@@ -226,8 +252,13 @@ test('newsletter appearing during touch drag waits until the gesture ends', asyn
   const page = await context.newPage();
   const baseURL = testInfo.project.use.baseURL as string;
   await page.goto(new URL('/chat-launcher', baseURL).toString());
+  const enablePromotions = page.getByRole('button', {
+    name: 'Enable timed promotions',
+  });
+  await enablePromotions.click();
+  await enablePromotions.click();
   const bounds = await page
-    .getByRole('button', { name: 'Assistant launcher' })
+    .getByRole('button', { name: 'Open AI chat assistant' })
     .boundingBox();
   if (!bounds) throw new Error('Chat launcher is missing its layout box');
   const cdp = await context.newCDPSession(page);
@@ -242,7 +273,7 @@ test('newsletter appearing during touch drag waits until the gesture ends', asyn
   await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByTestId('deferred-launcher')).toBeVisible();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchMove',
     touchPoints: [{ id: 1, x: bounds.x + 115, y: bounds.y + 105 }],
@@ -251,12 +282,12 @@ test('newsletter appearing during touch drag waits until the gesture ends', asyn
     type: 'touchEnd',
     touchPoints: [],
   });
-  await expect(page.getByTestId('deferred-launcher')).toBeHidden();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
   await page.getByRole('button', { name: 'Close newsletter' }).click();
-  await expect(page.getByTestId('deferred-launcher')).toBeVisible();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
   expect(
     await page
-      .getByTestId('deferred-launcher')
+      .locator('.ogabassey-chat-anchor')
       .evaluate((anchor) => (anchor as HTMLElement).style.transform)
   ).toContain('translate3d(');
   await context.close();

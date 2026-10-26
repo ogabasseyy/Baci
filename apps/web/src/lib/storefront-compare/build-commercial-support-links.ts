@@ -3,10 +3,7 @@ import {
   buildPriceBandCandidate,
   buildProductCompareCandidate,
 } from './compare-eligibility';
-import {
-  buildCanonicalBrandCompareSlug,
-  buildCanonicalProductCompareSlug,
-} from './compare-slugs';
+import { buildCanonicalProductCompareSlug } from './compare-slugs';
 import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
 import { findFirstEligibleProductCompare } from './find-first-eligible-product-compare';
 import { normalizeInferredBrands } from './normalize-inferred-brands';
@@ -112,7 +109,7 @@ export function buildCategorySupportLinks(input: {
 
       if (isRelevant) {
         links.push({
-          href: `${input.storeUrl}/${input.categorySlug}/compare/${buildCanonicalBrandCompareSlug(brandCandidate.leftBrand, brandCandidate.rightBrand)}`,
+          href: `${input.storeUrl}/${input.categorySlug}/compare/${brandCandidate.canonicalSlug}`,
           label: `${brandCandidate.leftBrand} vs ${brandCandidate.rightBrand}`,
         });
       }
@@ -226,7 +223,7 @@ export function buildProductSupportLinks(input: {
         .includes(currentBrandKey)
     ) {
       links.push({
-        href: `${input.storeUrl}/${input.categorySlug}/compare/${buildCanonicalBrandCompareSlug(brandCandidate.leftBrand, brandCandidate.rightBrand)}`,
+        href: `${input.storeUrl}/${input.categorySlug}/compare/${brandCandidate.canonicalSlug}`,
         label: `${brandCandidate.leftBrand} vs ${brandCandidate.rightBrand}`,
       });
     }

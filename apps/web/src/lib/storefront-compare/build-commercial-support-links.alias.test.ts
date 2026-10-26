@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildProductSupportLinks } from './build-commercial-support-links';
+import {
+  buildCategorySupportLinks,
+  buildProductSupportLinks,
+} from './build-commercial-support-links';
 
 describe('buildProductSupportLinks canonical brand aliases', () => {
   it('never emits a same-canonical-brand compare for mixed Apple/MacBook laptops', () => {
@@ -38,6 +41,39 @@ describe('buildProductSupportLinks canonical brand aliases', () => {
       false
     );
     expect(links.some((link) => link.href.includes('macbook-vs-apple'))).toBe(
+      false
+    );
+  });
+
+  it('emits the candidate canonical slug for gaming alias brands', () => {
+    const products = [
+      ...[0, 1, 2].map((i) => ({
+        slug: `sony-${i}`,
+        name: `Sony Console ${i}`,
+        brand: 'Sony',
+        price: 500_000,
+        category_slug: 'gaming',
+        product_key_specs: { storage_gb: 825, ram_gb: 16, chipset: 'A' },
+      })),
+      ...[0, 1, 2].map((i) => ({
+        slug: `ms-${i}`,
+        name: `Microsoft Console ${i}`,
+        brand: 'Microsoft',
+        price: 450_000,
+        category_slug: 'gaming',
+        product_key_specs: { storage_gb: 512, ram_gb: 12, chipset: 'B' },
+      })),
+    ];
+    const links = buildCategorySupportLinks({
+      storeUrl: 'https://ogabassey.com',
+      categorySlug: 'gaming',
+      categoryName: 'Gaming',
+      products,
+    });
+    expect(links.map((link) => link.href)).toContain(
+      'https://ogabassey.com/gaming/compare/playstation-vs-xbox'
+    );
+    expect(links.some((link) => link.href.includes('microsoft-vs-sony'))).toBe(
       false
     );
   });

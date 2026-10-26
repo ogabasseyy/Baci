@@ -175,3 +175,43 @@ it('retains Snapchat attribution without copying TikTok identifiers into deliver
   expect(event.deliveryData).not.toHaveProperty('ttclid');
   expect(event.deliveryData).not.toHaveProperty('ttp');
 });
+
+it.each([
+  [
+    'baci_sccid=captured-click; ScCid=native-click',
+    '?ScCid=url-click',
+    'captured-click',
+  ],
+  ['ScCid=native-click', '?scCid=url-click', 'native-click'],
+  ['', '?sCcId=url-click', 'url-click'],
+  [
+    'baci_sccid=bad%20id; ScCid=native-click',
+    '?sccid=url-click',
+    'native-click',
+  ],
+  ['baci_sccid=bad%20id; ScCid=bad%20native', '?ScCid=url-click', 'url-click'],
+  ['', '?sc_clid=wrong-param', undefined],
+  ['baci_sccid=bad%20id; ScCid=bad%20native', '?sccid=bad%20url', undefined],
+  ['', `?ScCid=${'x'.repeat(257)}`, undefined],
+])('resolves bounded Snapchat attribution from cookie %s and source %s', async (cookie, query, expected) => {
+  const response = await POST(
+    new NextRequest('https://ogabassey.com/api/analytics/snapchat', {
+      method: 'POST',
+      headers: {
+        host: 'ogabassey.com',
+        'content-type': 'application/json',
+        cookie,
+      },
+      body: JSON.stringify({
+        ...payload,
+        eventSourceUrl: `https://ogabassey.com/cart${query}`,
+      }),
+    })
+  );
+  expect(response.status).toBe(202);
+  const delivery = mocks.record.mock.calls[0][1].deliveryData;
+  expect(delivery.sccid).toBe(expected);
+  expect(delivery.marketing_consent).toBe(true);
+  expect(delivery).not.toHaveProperty('ttclid');
+  expect(delivery).not.toHaveProperty('ttp');
+});

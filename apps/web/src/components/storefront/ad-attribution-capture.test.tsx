@@ -261,4 +261,50 @@ describe('AdAttributionCapture (runtime behaviour)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     localStorage.clear();
   });
+  it.each([
+    'ScCid',
+    'scCid',
+    'sccid',
+  ])('normalizes Snapchat %s only with complete marketing consent', (param) => {
+    localStorage.clear();
+    setSearch(`?${param}=snap_landing`);
+    runScript();
+    expect(fetchMock).not.toHaveBeenCalled();
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: true,
+        functional: false,
+      })
+    );
+    runScript();
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(
+      'sccid=snap_landing&marketing_consent=true'
+    );
+    fetchMock.mockClear();
+    document.cookie = 'baci_sccid=snap_landing';
+    runScript();
+    expect(fetchMock).not.toHaveBeenCalled();
+    localStorage.clear();
+  });
+  it('retains combined X/Snap attribution with one marketing grant', () => {
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: true,
+        functional: false,
+      })
+    );
+    setSearch('?ScCid=snap_landing&twclid=x_landing');
+    runScript();
+    const params = new URLSearchParams(fetchMock.mock.calls[0]?.[1]?.body);
+    expect(params.get('sccid')).toBe('snap_landing');
+    expect(params.get('twclid')).toBe('x_landing');
+    expect(params.getAll('marketing_consent')).toEqual(['true']);
+    localStorage.clear();
+  });
 });

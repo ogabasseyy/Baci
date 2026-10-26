@@ -42,9 +42,13 @@ export const attrCaptureSchema = attrCaptureObject
       ),
     { message: 'At least one ad click ID is required' }
   )
-  .refine((value) => !value.twclid || value.marketing_consent === 'true', {
-    message: 'X click capture requires marketing consent',
-  });
+  .refine(
+    (value) =>
+      !(value.twclid || value.sccid) || value.marketing_consent === 'true',
+    {
+      message: 'Social click capture requires marketing consent',
+    }
+  );
 
 export type AttrCaptureInput = z.infer<typeof attrCaptureSchema>;
 

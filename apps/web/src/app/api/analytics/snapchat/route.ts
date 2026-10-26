@@ -4,6 +4,7 @@ import { resolveEventIngressContext } from '@/lib/events/event-ingress-context';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { recordAnalyticsDomainEvent } from '@/lib/events/record-analytics-domain-event';
 import { createClient } from '@/lib/supabase/server';
+import { attrCaptureSchema } from '@/schemas/attr-capture';
 import { socialCapiEventSchema } from '@/schemas/social-capi-event';
 
 const EVENT_TYPES = {
@@ -11,6 +12,28 @@ const EVENT_TYPES = {
   add_to_cart: 'add_to_cart',
   begin_checkout: 'begin_checkout',
 } as const;
+
+/** Source URL has already passed the trusted storefront-origin check. */
+function snapchatClickId(
+  request: NextRequest,
+  sourceUrl?: string
+): string | undefined {
+  const candidates = [
+    request.cookies.get('baci_sccid')?.value,
+    request.cookies.get('ScCid')?.value,
+  ];
+  if (sourceUrl)
+    for (const [key, value] of new URL(sourceUrl).searchParams)
+      if (key.toLowerCase() === 'sccid') candidates.push(value);
+  for (const candidate of candidates) {
+    const parsed = attrCaptureSchema.safeParse({
+      sccid: candidate,
+      marketing_consent: 'true',
+    });
+    if (parsed.success && parsed.data.sccid) return parsed.data.sccid;
+  }
+  return undefined;
+}
 
 /** Public ingress only. Credential access and provider delivery belong to the worker. */
 export async function POST(request: NextRequest) {
@@ -97,7 +120,7 @@ export async function POST(request: NextRequest) {
           undefined,
         ua: request.headers.get('user-agent') ?? undefined,
         marketing_consent: true,
-        sccid: request.cookies.get('ScCid')?.value,
+        sccid: snapchatClickId(request, input.eventSourceUrl),
       },
     });
     // Acceptance is not a provider receipt. Never claim delivery from ingress.

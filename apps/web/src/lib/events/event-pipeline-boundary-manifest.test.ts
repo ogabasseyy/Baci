@@ -67,7 +67,7 @@ describe('event pipeline authority manifest', () => {
       'apps/web/src/app/api/analytics/ga4/route.ts':
         '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
       'apps/web/src/app/api/analytics/snapchat/route.ts':
-        '39b0f05e22f44f195e3fb52a56d13e4176c01336c5d1c5f4ceab58a9d4c3b563',
+        '9c6c1db9696259aef5526a6913610377fd4d9b27c4bdd99d8516240a2b3a0b1c',
       'apps/web/src/app/api/analytics/tiktok/route.ts':
         '6d9d17df68d13a16b3bcd35bb5acfa1a7caac02d73996a656012d18a4146854e',
       'apps/web/src/app/api/platform/events/route.ts':

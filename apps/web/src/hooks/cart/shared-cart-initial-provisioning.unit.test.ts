@@ -101,15 +101,16 @@ it('keeps waiting when a parallel create owns provisioning past the retry budget
     }
   );
   await provision(0);
-  for (let i = 0; i < MAX_AUTO_RETRIES; i++) {
+  // Pump scheduled retries/owner-waits until the bounded wait gives up.
+  for (let i = 0; i < 300 && !setLinkPhase.mock.calls.length; i++) {
     scheduled.shift()?.();
-    await vi.waitFor(() => expect(ensureCart).toHaveBeenCalledTimes(i + 2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  // Past the budget the owner is still in flight: no failed import,
-  // no forced ready, and another wait is scheduled.
-  expect(dispatch).not.toHaveBeenCalledWith(
+  // While the owner appears in flight, no failure is dispatched; the
+  // bounded owner wait eventually fails the import and readies.
+  expect(ensureCart.mock.calls.length).toBeGreaterThan(MAX_AUTO_RETRIES + 1);
+  expect(dispatch).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'import/failed' })
   );
-  expect(setLinkPhase).not.toHaveBeenCalledWith('ready');
-  expect(scheduled.length).toBeGreaterThan(0);
+  expect(setLinkPhase).toHaveBeenCalledWith('ready');
 });

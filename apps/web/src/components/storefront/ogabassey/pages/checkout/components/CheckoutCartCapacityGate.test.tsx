@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { Suspense } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 
@@ -236,4 +237,31 @@ it('does not reveal checkout while the initial import is pending for an existing
   expect(
     screen.getByRole('status', { name: 'Loading your cart' })
   ).toBeVisible();
+});
+
+it('does not count a suspended checkout as revealed when capacity blocks', () => {
+  let resolved = false;
+  const promise = Promise.resolve();
+  function SuspendedCheckout() {
+    if (!resolved) throw promise;
+    return <button type="button">Place Order</button>;
+  }
+  const makeTree = () => (
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <Suspense fallback={<p>Loading checkout…</p>}>
+        <SuspendedCheckout />
+      </Suspense>
+    </CheckoutCartCapacityGate>
+  );
+  const view = render(makeTree());
+  expect(screen.getByText('Loading checkout…')).toBeVisible();
+  // Capacity blocks before the suspended checkout ever commits: the
+  // pre-checkout recovery (with Edit cart) must show, not in-place.
+  cart.importWarnings = ['import_capacity_exceeded'];
+  view.rerender(makeTree());
+  expect(
+    screen.getByRole('button', { name: 'Edit cart items' })
+  ).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  resolved = true;
 });

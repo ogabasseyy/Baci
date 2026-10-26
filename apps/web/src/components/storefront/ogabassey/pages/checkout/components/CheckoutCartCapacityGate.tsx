@@ -2,8 +2,14 @@
 // Reads the client cart context and handles recovery actions.
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  Suspense,
+  useEffect,
+  useState,
+} from 'react';
 import { CartImportConflicts } from '@/components/storefront/cart/cart-import-conflicts';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/cart';
@@ -28,7 +34,7 @@ export function CheckoutCartCapacityGate({
   // yet. Once checkout has mounted, later pending/retrying sync must
   // never unmount it (form state lives inside), and a terminal
   // 'retrying' state surfaces in place instead of dead-ending here.
-  const revealed = useRef(false);
+  const [revealed, setRevealed] = useState(false);
   const initialUnresolved =
     !validatedResume &&
     cart.sharedCartEnabled &&
@@ -40,12 +46,7 @@ export function CheckoutCartCapacityGate({
     !validatedResume &&
     cart.sharedCartEnabled &&
     (cart.importWarnings?.includes('import_capacity_exceeded') ?? false);
-  // Only an actual render of the checkout children counts as revealed:
-  // a capacity-blocked render must not arm the in-place branch.
-  useEffect(() => {
-    if (!initialUnresolved && !capacityBlocked) revealed.current = true;
-  }, [initialUnresolved, capacityBlocked]);
-  if (initialUnresolved && !revealed.current) {
+  if (initialUnresolved && !revealed) {
     return (
       <p role="status" aria-label="Loading your cart">
         Loading your cart…
@@ -57,11 +58,11 @@ export function CheckoutCartCapacityGate({
     // shopper: surface the recovery in place above the live form.
     // The checkout child keeps a stable sibling position (after the
     // recovery slot) so toggling the panel cannot remount it.
-    if (revealed.current)
+    if (revealed)
       return (
         <>
           <CartImportConflicts />
-          {children}
+          {renderCheckout(children, () => setRevealed(true))}
         </>
       );
     return (
@@ -84,7 +85,41 @@ export function CheckoutCartCapacityGate({
   return (
     <>
       {null}
-      {children}
+      {renderCheckout(children, () => setRevealed(true))}
     </>
   );
+}
+
+/** Fire onReveal only once the checkout subtree actually commits. */
+function RevealMarker({
+  children,
+  onReveal,
+}: {
+  children: ReactNode;
+  onReveal: () => void;
+}) {
+  useEffect(() => {
+    onReveal();
+  }, [onReveal]);
+  return children;
+}
+
+/**
+ * Render checkout through a reveal marker. When the child is a
+ * Suspense boundary, the marker goes inside it: a suspended checkout
+ * must not count as revealed before it ever commits.
+ */
+function renderCheckout(children: ReactNode, onReveal: () => void) {
+  if (isValidElement(children) && children.type === Suspense) {
+    const element = children as ReactElement<{
+      children?: ReactNode;
+      fallback?: ReactNode;
+    }>;
+    return cloneElement(
+      element,
+      null,
+      <RevealMarker onReveal={onReveal}>{element.props.children}</RevealMarker>
+    );
+  }
+  return <RevealMarker onReveal={onReveal}>{children}</RevealMarker>;
 }

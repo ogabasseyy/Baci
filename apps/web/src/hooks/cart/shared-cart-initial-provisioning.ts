@@ -26,6 +26,10 @@ export function createInitialCartProvisioner(
   }
 ) {
   const generation = runtime.generationRef.current;
+  // The owner-wait below reschedules with a fresh attempt budget, so
+  // bound the total owner waits separately: a stale owner ref must
+  // not strand the import pending forever.
+  let ownerWaits = 0;
   const live = () =>
     lifecycle.isLive() && runtime.generationRef.current === generation;
   async function provision(attempt: number): Promise<void> {
@@ -57,7 +61,8 @@ export function createInitialCartProvisioner(
       // the link ready underneath it.
       const ownerInFlight =
         runtime.bootstrappingRef?.current || runtime.createRequestRef?.current;
-      if (ownerInFlight) {
+      if (ownerInFlight && ownerWaits < MAX_AUTO_RETRIES) {
+        ownerWaits += 1;
         lifecycle.schedule(
           () => void provision(0),
           backoffMs(ADOPT_RETRY_BASE_MS, attempt)

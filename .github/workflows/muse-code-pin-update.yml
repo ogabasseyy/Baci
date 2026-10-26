@@ -183,6 +183,15 @@ jobs:
               echo "::error::Existing pin-update branch $existing carries different pin files than the verified stable $VERSION; refusing to reuse it." >&2
               exit 1
             fi
+            # Never dispatch workflows on a branch carrying anything else:
+            # only the two verified pin files may differ from main.
+            foreign="$(gh api "repos/${REPO}/compare/main...${existing}" \
+              --jq '[.files[] | .filename] | map(select(. != ".github/scripts/muse-review/install.sh" and . != ".github/scripts/semgrep_sarif_pins.py")) | join("\n")')"
+            if [ -n "$foreign" ]; then
+              echo "::error::Existing pin-update branch $existing carries unverified changes beyond the two pin files; refusing to reuse it." >&2
+              printf '%s\n' "$foreign" >&2
+              exit 1
+            fi
             # Re-dispatch only checks that are actually missing, so a
             # healthy open PR does not burn CI capacity every week.
             head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
@@ -196,7 +205,7 @@ jobs:
             # fails on these pin changes, so any completed result means this
             # exact head was already scanned and must not be redispatched.
             if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh --terminal 'Semgrep SAST'; then
-              gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
+              gh workflow run security.yml --ref "$existing"
             fi
             if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
               gh workflow run muse-review-selftest.yml --ref "$existing"
@@ -218,7 +227,7 @@ jobs:
               echo "Pin update PR created with the dedicated token; pull_request checks run with forced quality gates."
             else
               echo "Pin update PR created with GITHUB_TOKEN. GitHub may require a maintainer to approve its pull_request workflows before checks run." >&2
-              gh workflow run security.yml --ref "$branch" -f force_trusted_change=true
+              gh workflow run security.yml --ref "$branch"
               gh workflow run muse-review-selftest.yml --ref "$branch"
             fi
           fi

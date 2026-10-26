@@ -5,7 +5,7 @@
 # head check): the agent authenticates only via META_API_KEY, and both token
 # vars are scrubbed from its environment as defense in depth.
 #
-# Env in: META_API_KEY, PROMPT_FILE, MUSE_EFFORT, RUNNER_TEMP,
+# Env in: META_API_KEY, PROMPT_FILE, MUSE_MODEL, MUSE_EFFORT, RUNNER_TEMP,
 #   GITHUB_WORKSPACE, GITHUB_OUTPUT, SCRIPT_DIR.
 # Output: review_file plus a model-ID notice from the retained Muse session.
 # Exits nonzero
@@ -30,6 +30,14 @@ cleanup() {
   rm -f "${session_export}" "${stderr_file}"
 }
 trap cleanup EXIT
+
+# Optional explicit model selection (repo MUSE_MODEL variable). When empty,
+# the CLI default applies; either way the model IDs actually used are
+# recorded from the run's token-usage events below.
+model_args=()
+if [[ -n "${MUSE_MODEL:-}" ]]; then
+  model_args+=(--model "${MUSE_MODEL}")
+fi
 
 # Materialize a symlink-free workspace BEFORE the key is exposed: the agent
 # inherits META_API_KEY and reads changed files, so any PR-added symlink
@@ -59,6 +67,7 @@ env -u GITHUB_TOKEN -u GH_TOKEN "${HOME}/.local/bin/muse" exec --json \
   --disable-write \
   --disable-shell \
   --output-schema "${SCRIPT_DIR}/schema.json" \
+  "${model_args[@]}" \
   </dev/null 2>"${stderr_file}" \
   | jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" > "${capture_file}"
 run_rc=$?

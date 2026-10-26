@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   enabled: true,
   shared: false,
   warnings: [] as string[],
+  slug: 'shop' as string | null,
   conflicts: [
     { item: { productId: 'phone' } },
     { item: { productId: 'charger' } },
@@ -17,7 +18,7 @@ vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
     sharedCartEnabled: mocks.enabled,
     sharedCartRef: mocks.shared ? { cartId: 'shared' } : null,
-    merchantSlug: 'shop',
+    merchantSlug: mocks.slug,
     importConflicts: mocks.conflicts,
     importWarnings: mocks.warnings,
     resolveImportConflicts: mocks.resolve,
@@ -30,6 +31,7 @@ beforeEach(() => {
   mocks.enabled = true;
   mocks.shared = false;
   mocks.warnings = [];
+  mocks.slug = 'shop';
 });
 it('requires an explicit offer for every conflicting item and replaces a changed choice', () => {
   render(<CartImportConflicts />);
@@ -116,4 +118,20 @@ it('does not refer to device items below when only shared-cart recovery is avail
   expect(
     screen.queryByRole('list', { name: 'Saved device cart items' })
   ).toBeNull();
+});
+
+it('gives an actionable path when capacity is exceeded before the merchant resolves', () => {
+  mocks.warnings = ['import_capacity_exceeded'];
+  mocks.slug = null;
+  render(<CartImportConflicts />);
+  expect(screen.getByText(/Your store is still loading/)).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: 'Retry importing device cart' })
+  ).toBeVisible();
+  expect(
+    screen.getByRole('button', {
+      name: 'Keep shared cart and discard saved device cart',
+    })
+  ).toBeVisible();
+  expect(screen.queryByLabelText('Saved device cart items')).toBeNull();
 });

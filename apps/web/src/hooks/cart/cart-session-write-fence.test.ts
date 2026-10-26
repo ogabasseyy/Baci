@@ -66,7 +66,18 @@ it('holds the retirement fence until aborted transition work actually settles', 
   // The caller-visible result settled, but the fence must remain held
   // while the signal-ignoring operation is still running.
   expect(isCartSessionRetiring('shop-fence')).toBe(true);
+  // A new retirement must not drain until the work settles either.
+  const { beginCartSessionRetirement } = await import(
+    './cart-session-write-fence'
+  );
+  const retirement = beginCartSessionRetirement('shop-fence');
+  const drained = vi.fn();
+  void retirement.drained.then(drained);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(drained).not.toHaveBeenCalled();
   finish('done');
+  await retirement.drained;
+  retirement.release();
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(isCartSessionRetiring('shop-fence')).toBe(false);
 });

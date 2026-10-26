@@ -70,6 +70,9 @@ it('removes the live line when quantities match and retries a version conflict',
     }),
     'shop'
   );
+  const calls = vi.mocked(sendSharedCartCommand).mock.calls;
+  expect(calls[0][0].operationId).toBeTruthy();
+  expect(calls[1][0].operationId).not.toBe(calls[0][0].operationId);
 });
 
 it('targets the line matching the assurance lane among same-identity lines', async () => {

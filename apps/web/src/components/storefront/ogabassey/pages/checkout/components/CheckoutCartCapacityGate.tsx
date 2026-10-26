@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { CartImportConflicts } from '@/components/storefront/cart/cart-import-conflicts';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/cart';
@@ -35,6 +35,9 @@ export function CheckoutCartCapacityGate({
     cart.sharedCartRef == null &&
     (cart.syncStatus === 'pending' ||
       (cart.syncStatus === 'synced' && !cart.isHydrated));
+  useEffect(() => {
+    if (!initialUnresolved) revealed.current = true;
+  }, [initialUnresolved]);
   if (initialUnresolved && !revealed.current) {
     return (
       <p role="status" aria-label="Loading your cart">
@@ -42,7 +45,6 @@ export function CheckoutCartCapacityGate({
       </p>
     );
   }
-  revealed.current = true;
   if (
     !validatedResume &&
     cart.sharedCartEnabled &&

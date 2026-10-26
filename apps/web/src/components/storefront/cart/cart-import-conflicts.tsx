@@ -36,7 +36,9 @@ export function CartImportConflicts() {
           Your device items and offers are still saved on this device.{' '}
           {!cart.sharedCartRef && cart.merchantSlug
             ? 'Remove items below, then retry importing.'
-            : 'Remove items from your shared cart, then retry importing.'}
+            : cart.sharedCartRef
+              ? 'Remove items from your shared cart, then retry importing.'
+              : 'Your store is still loading, so your saved items cannot be listed yet. Retry importing, or discard the saved device cart below.'}
         </p>
         {!cart.sharedCartRef && cart.merchantSlug ? (
           <DeviceCartCapacityItems

@@ -142,3 +142,27 @@ it('surfaces a terminal retrying state in place instead of dead-ending', () => {
     screen.queryByRole('status', { name: 'Loading your cart' })
   ).toBeNull();
 });
+
+it('stays gated across repeated unresolved renders until resolution commits', () => {
+  cart.syncStatus = 'pending';
+  cart.sharedCartRef = null;
+  const view = render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  cart.syncStatus = 'synced';
+  cart.sharedCartRef = { cartId: 'cart-1', version: 1 };
+  view.rerender(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+});

@@ -133,7 +133,7 @@ export function runCartSessionTransition<T>(
   const releaseAfterWork = () => {
     retirement.release();
     outcome?.signal?.removeEventListener('abort', abort);
-    flights.delete(pending);
+    flights.delete(work);
     if (
       (!succeeded || outcome?.signal?.aborted) &&
       (ran || getCartCookieEpoch(slug) !== startedEpoch)
@@ -144,7 +144,9 @@ export function runCartSessionTransition<T>(
       });
   };
   void work.then(releaseAfterWork, releaseAfterWork);
-  flights.set(pending, slug ?? '');
+  // Retirements drain flights, so register the work itself: draining
+  // must wait for actual settlement, not the abort race.
+  flights.set(work, slug ?? '');
   return pending;
 }
 

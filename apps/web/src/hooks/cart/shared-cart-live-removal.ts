@@ -79,7 +79,7 @@ export async function removeCapacityLineFromLiveCart(
   // One operation ID per removal: an indeterminate response is
   // replayed/reconciled under the same identity instead of minting a
   // second, unrelated command.
-  const operationId = crypto.randomUUID();
+  let operationId = crypto.randomUUID();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
     // not_found/unauthorized mean there is no live cart to update;
@@ -113,7 +113,12 @@ export async function removeCapacityLineFromLiveCart(
       return options?.clearGroupNegotiations
         ? clearLiveGroupNegotiations(merchantSlug)
         : true;
-    if (result.code === 'version_conflict') continue;
+    if (result.code === 'version_conflict') {
+      // A version conflict is a definitive response: the retry may
+      // send a different body, so it needs a fresh idempotency key.
+      operationId = crypto.randomUUID();
+      continue;
+    }
     // Indeterminate: the command may have committed despite the lost
     // response. Re-fetch and reconcile before reporting failure.
     const check = await fetchSharedCartSnapshot(undefined, merchantSlug);

@@ -1,51 +1,7 @@
-import { generateSlug } from '../seo-utils';
-import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
 import { buildProductCompareCandidate } from './compare-eligibility';
-
-export interface CommercialSupportBrandProduct {
-  slug: string;
-  name: string;
-  price: number;
-  brand?: string | null;
-  category_slug?: string | null;
-  product_key_specs?: Record<string, unknown> | null;
-}
-
-export function resolveCanonicalBrandKey(
-  categorySlug: string,
-  brand: string | null | undefined
-): string {
-  const raw = (brand ?? '').trim();
-  if (!raw) {
-    return '';
-  }
-  const matchingEntry = brandAuthorityTaxonomy
-    .getEntries(categorySlug)
-    .find((entry) => brandAuthorityTaxonomy.matchesBrand(entry, raw));
-  return matchingEntry?.brandKey ?? generateSlug(raw);
-}
-
-export function normalizeInferredBrands(
-  categorySlug: string,
-  inferredBrands?: string[]
-): string[] {
-  return Array.from(
-    new Set(
-      (inferredBrands ?? [])
-        .map((brand) => resolveCanonicalBrandKey(categorySlug, brand))
-        .filter(Boolean)
-    )
-  );
-}
-
-export function filterProductsByBrandSlugs<
-  T extends CommercialSupportBrandProduct,
->(categorySlug: string, products: T[], brandSlugs: string[]): T[] {
-  return products.filter((product) => {
-    const brandSlug = resolveCanonicalBrandKey(categorySlug, product.brand);
-    return Boolean(brandSlug && brandSlugs.includes(brandSlug));
-  });
-}
+import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
+import { normalizeInferredBrands } from './normalize-inferred-brands';
+import type { CommercialSupportBrandProduct } from './resolve-canonical-brand-key';
 
 export function findFirstEligibleProductCompare<
   T extends CommercialSupportBrandProduct,

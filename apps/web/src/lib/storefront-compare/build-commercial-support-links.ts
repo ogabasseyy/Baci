@@ -8,12 +8,10 @@ import {
   buildCanonicalBrandCompareSlug,
   buildCanonicalProductCompareSlug,
 } from './compare-slugs';
-import {
-  findFirstEligibleProductCompare,
-  normalizeInferredBrands,
-  resolveCanonicalBrandKey,
-} from './filter-commercial-support-brands';
+import { findFirstEligibleProductCompare } from './find-first-eligible-product-compare';
+import { normalizeInferredBrands } from './normalize-inferred-brands';
 import { getCuratedPriceBands } from './price-band-taxonomy';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 export interface CommercialSupportLink {
   href: string;

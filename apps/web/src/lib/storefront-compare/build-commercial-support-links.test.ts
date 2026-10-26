@@ -4,7 +4,7 @@ import {
   buildCategorySupportLinks,
   buildProductSupportLinks,
 } from './build-commercial-support-links';
-import { resolveCanonicalBrandKey } from './filter-commercial-support-brands';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 describe('buildCategorySupportLinks', () => {
   it('returns product-compare, brand-compare, and price-band links for eligible categories', () => {

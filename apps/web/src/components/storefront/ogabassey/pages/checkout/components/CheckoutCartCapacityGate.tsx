@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import type { ReactElement, ReactNode } from 'react';
 import {
-  cloneElement,
+  createElement,
   isValidElement,
   Suspense,
   useEffect,
@@ -115,9 +115,9 @@ function renderCheckout(children: ReactNode, onReveal: () => void) {
       children?: ReactNode;
       fallback?: ReactNode;
     }>;
-    return cloneElement(
-      element,
-      null,
+    return createElement(
+      Suspense,
+      { fallback: element.props.fallback },
       <RevealMarker onReveal={onReveal}>{element.props.children}</RevealMarker>
     );
   }

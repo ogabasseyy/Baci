@@ -229,6 +229,18 @@ describe('model family authority taxonomy', () => {
     expect(
       modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Galaxy Z Fold 6')
     ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'The new Z Fold rival folds flat'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'Samsung Galaxy Z Fold 7 hands-on'
+      )
+    ).toBe(true);
   });
 
   it('rejects Samsung accessory names for Galaxy A/S families', () => {

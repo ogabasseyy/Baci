@@ -2,6 +2,7 @@ import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
+import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
 import type {
@@ -82,6 +83,7 @@ function buildProductHref(storeUrl: string, product: CategoryInventoryProduct) {
 
 function buildFeaturedProducts(
   storeUrl: string,
+  categorySlug: string,
   inferredBrands: string[],
   products: CategoryInventoryProduct[],
   countryCode?: string | null
@@ -91,7 +93,9 @@ function buildFeaturedProducts(
   const preferredProducts =
     normalizedBrands.length > 0
       ? inStockProducts.filter((product) =>
-          normalizedBrands.includes((product.brand ?? '').trim().toLowerCase())
+          normalizedBrands.includes(
+            resolveCanonicalBrandKey(categorySlug, product.brand ?? '')
+          )
         )
       : [];
   // When brands are inferred, featured picks stay on-brand; falling back
@@ -171,7 +175,9 @@ export async function buildInformationalClusterModel(
       products,
       skipDestinationVerification: destinationVerified,
     }),
-    destinationVerified || inferred.brands.length === 0
+    destinationVerified ||
+    input.categoryDataOverride ||
+    inferred.brands.length === 0
       ? Promise.resolve(undefined)
       : loadMaintainedCompareRouteManifestSafely({
           merchantId: input.merchantId,
@@ -232,6 +238,7 @@ export async function buildInformationalClusterModel(
     commerceLinks: finalCommerceLinks.slice(0, 5),
     featuredProducts: buildFeaturedProducts(
       input.storeUrl,
+      categorySlug,
       inferred.brands,
       products,
       input.countryCode

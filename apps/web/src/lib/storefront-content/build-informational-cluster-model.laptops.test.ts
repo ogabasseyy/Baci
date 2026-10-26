@@ -46,4 +46,50 @@ describe('buildInformationalClusterModel laptop hub links', () => {
       'https://ogabassey.com/laptops/brands/apple/families/macbook-air'
     );
   });
+
+  it('features MacBook-branded inventory for a MacBook article', async () => {
+    const post = {
+      slug: 'macbook-air-m4-review-nigeria',
+      title: 'MacBook Air M4 Review: Best Laptop for Nigeria',
+      excerpt: 'Our MacBook Air verdict for buyers in Nigeria.',
+      category: 'Laptops',
+      tags: ['apple', 'macbook'],
+      keywords: ['macbook air'],
+      featured_image_url: null,
+      published_at: '2026-04-10T09:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post,
+      categoryDataOverride: {
+        category: { slug: 'laptops', name: 'Laptops' },
+        products: [
+          {
+            slug: 'macbook-air-m4',
+            name: 'MacBook Air M4',
+            brand: 'MacBook',
+            price: 1_500_000,
+            category_slug: 'laptops',
+            stock: 3,
+          },
+          {
+            slug: 'hp-pavilion',
+            name: 'HP Pavilion',
+            brand: 'HP',
+            price: 900_000,
+            category_slug: 'laptops',
+            stock: 3,
+          },
+        ],
+        isCollection: false,
+        destinationVerified: true,
+      },
+    });
+    expect(model?.featuredProducts.map((product) => product.href)).toEqual([
+      'https://ogabassey.com/laptops/macbook-air-m4',
+    ]);
+  });
 });

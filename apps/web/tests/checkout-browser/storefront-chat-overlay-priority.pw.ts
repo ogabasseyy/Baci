@@ -1,18 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
-const coreCss = readFileSync(
-  'src/app/(storefront)/storefront-core.css',
+const overlayCss = readFileSync(
+  'src/app/(storefront)/storefront-chat-overlay-priority.css',
   'utf8'
 );
 const chatCss = readFileSync(
   'src/app/(storefront)/storefront-chat.css',
   'utf8'
-);
-const overlayCss = coreCss.slice(
-  coreCss.indexOf(
-    '/* Consent takes priority over promotional and assistant chrome.'
-  )
 );
 
 test('focused launcher remains reachable and pauses promotional overlays', async ({

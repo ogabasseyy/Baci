@@ -19,3 +19,19 @@ Only a fully paid order is eligible for the X server Purchase event. Baci's exis
 No live X receipt is claimed by this guide. Provider account setup, approved destination activation, deployment and controlled paid-order verification remain operational steps.
 
 References: [X website tracking](https://help.x.com/en/business-and-advertising/conversion-tracking-for-websites), [web conversion API](https://docs.x.com/x-ads-api/measurement/web-conversions), [OAuth 1.0a requests](https://docs.x.com/x-ads-api/fundamentals/making-authenticated-requests).
+
+## Storefront browser policy
+
+The storefront CSP explicitly permits these SDK origins: `connect.facebook.net`,
+`analytics.tiktok.com`, `sc-static.net`, and `static.ads-twitter.com`. Collection
+connections permit `www.facebook.com`, `analytics.tiktok.com`, `tr.snapchat.com`,
+`tr6.snapchat.com`, `analytics.twitter.com`, `analytics.x.com`, and `t.co`.
+Admin/auth policies retain their existing nonce restrictions. Loading these
+origins still requires the visitor's relevant consent and merchant configuration.
+
+Origin references checked on 2026-10-26:
+
+- [Meta Pixel setup](https://developers.facebook.com/docs/meta-pixel/get-started/) and the configured Meta base-code SDK URL.
+- [TikTok official base code](https://ads.tiktok.com/gateway/docs/index?doc_id=1701890973258754) and [current bootstrap SDK](https://analytics.tiktok.com/i18n/pixel/events.js).
+- [Snap official installation](https://businesshelp.snapchat.com/s/article/pixel-website-install) and [current SDK](https://sc-static.net/scevent.min.js), whose collection URL builder selects `tr` or `tr6.snapchat.com`.
+- [X official CSP troubleshooting](https://business.x.com/en/help/troubleshooting/faqs-about-pixels) and [current SDK](https://static.ads-twitter.com/uwt.js), whose collection URL builders use `analytics.twitter.com`, `analytics.x.com`, and `t.co`.

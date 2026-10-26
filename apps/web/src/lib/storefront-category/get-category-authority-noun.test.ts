@@ -13,6 +13,13 @@ describe('getCategoryAuthorityNoun', () => {
     });
   });
 
+  it('normalizes non-canonical slug separators', () => {
+    expect(getCategoryAuthorityNoun('SMARTWATCHES')).toEqual({
+      titleNoun: 'Smartwatches',
+      lowerNoun: 'smartwatches',
+    });
+  });
+
   it('normalizes slug casing and whitespace', () => {
     expect(getCategoryAuthorityNoun('  SmartWatches ')).toEqual({
       titleNoun: 'Smartwatches',

@@ -1,3 +1,5 @@
+import { generateSlug } from '@/lib/seo-utils';
+
 export interface CategoryAuthorityNoun {
   titleNoun: string;
   lowerNoun: string;
@@ -14,7 +16,7 @@ export function getCategoryAuthorityNoun(
   categorySlug: string,
   categoryName?: string
 ): CategoryAuthorityNoun {
-  const normalizedSlug = categorySlug.trim().toLowerCase();
+  const normalizedSlug = generateSlug(categorySlug);
   const matched = CATEGORY_AUTHORITY_NOUNS[normalizedSlug];
   if (matched) {
     return matched;

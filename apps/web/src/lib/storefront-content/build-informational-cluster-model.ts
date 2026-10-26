@@ -10,6 +10,7 @@ import type {
   InformationalClusterModel,
 } from './content-cluster-types';
 import { inferContentClusterContext } from './infer-content-cluster-context';
+import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
 
 interface CategoryInventoryProduct {
   slug: string;
@@ -66,6 +67,9 @@ function toCategoryInventoryProduct(
 }
 
 function isInStock(product: CategoryInventoryProduct) {
+  if (product.manage_stock === false) {
+    return true;
+  }
   return product.stock == null || product.stock > 0;
 }
 
@@ -192,10 +196,19 @@ export async function buildInformationalClusterModel(
       : (compareInventory?.products ?? []),
   });
 
+  const verifiedCommerceLinks = input.categoryDataOverride
+    ? commerceLinks
+    : await verifyPriceBandLinkAgainstDestination({
+        merchantId: input.merchantId,
+        categorySlug,
+        storeSlug: input.merchantSlug,
+        links: commerceLinks,
+      });
+
   const combinedLinkCandidates = [
     ...brandHubLinks,
     ...familyHubLinks,
-    ...commerceLinks,
+    ...verifiedCommerceLinks,
   ];
 
   const seenHrefs = new Set<string>();

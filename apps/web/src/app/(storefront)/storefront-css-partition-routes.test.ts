@@ -3,6 +3,19 @@ import { readStorefrontFile } from './storefront-css-partition-read';
 import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 
 describe('storefront CSS partitioning (route sheets)', () => {
+  it.each([
+    'storefront-home.css',
+    'storefront-pdp.css',
+    'storefront-blog.css',
+    'storefront-blog-post.css',
+    'storefront-utility.css',
+    'storefront-not-found.css',
+  ])('includes the shared consent prompt in %s before it mounts', (file) => {
+    expect(readStorefrontFile(file)).toContain(
+      '@source "../../components/storefront/cookie-consent.tsx";'
+    );
+  });
+
   it('loads OgaBassey below-fold PDP styles through the deferred PDP stylesheet', () => {
     const deferredPdpCss = readStorefrontFile(
       'storefront-ogabassey-pdp-deferred.css'
@@ -19,9 +32,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
   });
 
-  it('validates OgaBassey category PDP route imports critical CSS in page, PDP CSS in renderer, and excludes PDP CSS from client', () => {
+  it('validates OgaBassey category PDP route imports critical CSS in page, shares PDP CSS across renderer and loading, and excludes PDP CSS from client', () => {
     const categoryPdpPage = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx'
+    );
+    const categoryPdpLoading = readStorefrontFile(
+      '[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
     );
     const defaultRenderer = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx'
@@ -32,6 +48,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
 
     expect(categoryPdpPage).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-critical\.css['"];?/
+    );
+    expect(categoryPdpLoading).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
+    );
+    expect(categoryPdpLoading).not.toMatch(
+      /storefront-ogabassey-pdp-loading\.css/
     );
     expect(defaultRenderer).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/

@@ -9,6 +9,14 @@ import { cartSessionCookieName } from './principal';
  */
 export const CART_PRIVATE_CACHE_CONTROL = 'private, no-store';
 
+/** Optional browser discovery: no cookie means no session, never a public cart. */
+export function emptyCartProbeResponse(): NextResponse {
+  return new NextResponse(null, {
+    status: 204,
+    headers: { 'Cache-Control': CART_PRIVATE_CACHE_CONTROL },
+  });
+}
+
 export type CartRouteErrorCode =
   | CartErrorCode
   | 'invalid_request'

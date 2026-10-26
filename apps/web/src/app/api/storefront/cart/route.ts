@@ -13,6 +13,7 @@ import {
 import {
   cartErrorResponse,
   cartJsonResponse,
+  emptyCartProbeResponse,
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
@@ -65,6 +66,12 @@ export async function GET(request: NextRequest) {
       contextDeps('session', 'not_found')
     );
     if (!context.ok) {
+      if (
+        context.error === 'missing_proof' &&
+        request.headers.get('x-baci-cart-probe') === '1'
+      ) {
+        return emptyCartProbeResponse();
+      }
       return cartErrorResponse(context.error);
     }
 

@@ -12,12 +12,18 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...rest
   }: {
     children: React.ReactNode;
     href: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} {...rest}>
+    <a
+      href={href}
+      data-prefetch={prefetch === undefined ? undefined : String(prefetch)}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -50,8 +56,20 @@ describe('CookieConsent', () => {
       vi.advanceTimersByTime(1000);
     });
 
-    expect(
-      screen.getByRole('link', { name: /read our policy/i })
-    ).toHaveAttribute('href', '/privacy');
+    const policyLink = screen.getByRole('link', { name: /read our policy/i });
+    expect(policyLink).toHaveAttribute('href', '/privacy');
+    expect(policyLink).toHaveAttribute('data-prefetch', 'false');
+  });
+
+  it('mounts outside document flow before deferred utility styles arrive', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(screen.getByRole('dialog', { name: 'Cookie consent' })).toHaveStyle({
+      position: 'fixed',
+      bottom: '1rem',
+      width: 'auto',
+      zIndex: 100,
+    });
   });
 });

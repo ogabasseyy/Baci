@@ -5,6 +5,8 @@
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-home.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+
 /*
   Homepage CSS entrypoint.
 

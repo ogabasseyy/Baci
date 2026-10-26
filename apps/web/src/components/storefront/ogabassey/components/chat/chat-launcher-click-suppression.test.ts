@@ -116,21 +116,21 @@ describe('chat launcher click suppression', () => {
     ).toBe(true);
   });
 
-  it('does not treat an unrelated pointer ID zero as a touch click', () => {
+  it('does not suppress pointer ID zero away from the release point', () => {
     expect(
       isSuppressedChatLauncherDragClick(
-        clickEvent({ pointerId: 0, pointerType: 'mouse' }),
+        clickEvent({ pointerId: 0, pointerType: 'mouse', x: 104 }),
         release,
       ),
     ).toBe(false);
   });
 
-  it('does not suppress a trusted pointer ID zero with a mismatched pointer type', () => {
+  it('suppresses a correlated trusted pointer ID zero with a mismatched pointer type', () => {
     expect(
       isSuppressedChatLauncherDragClick(
         clickEvent({ pointerId: 0, pointerType: 'mouse' }),
         { ...release, pointerId: 0, pointerType: 'touch' },
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

@@ -165,12 +165,12 @@ describe('useChatLauncherDrag', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
-    pointer('lostpointercapture', 120, 220);
+    pointer('lostpointercapture', 100, 180);
 
     expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(100px, 200px, 0)',
+      'translate3d(80px, 160px, 0)',
     );
-    click(120, 220);
+    click(100, 180);
     expect(onOpen).not.toHaveBeenCalled();
   });
 

@@ -30,6 +30,18 @@ body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
   display: none;
 }
 
+/* Do not reveal a timed overlay over the control reached by keyboard focus. */
+body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
+  :has(.ogabassey-newsletter-popup :focus-visible)
+)
+.ogabassey-offer-popup,
+body:has(:focus-visible):not(:has(.ogabassey-offer-popup :focus-visible)):not(
+    :has(.ogabassey-newsletter-popup :focus-visible)
+  )
+  .ogabassey-newsletter-popup {
+  display: none;
+}
+
 /* The offer spans the launcher corner only on narrow phones. */
 @media (max-width: 423px) {
   body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))

@@ -21,8 +21,7 @@ export function isSuppressedChatLauncherDragClick(
           (nativeEvent.isTrusted &&
             nativeEvent.pointerType === pending.pointerType))) ||
         (nativeEvent.pointerId === 0 &&
-          pending.pointerType === 'touch' &&
-          nativeEvent.pointerType === 'touch' &&
+          event.detail > 0 &&
           nativeEvent.isTrusted)),
   );
   // Older engines dispatch a trusted MouseEvent for the compatibility click.

@@ -260,9 +260,12 @@ export function useChatLauncherDrag(
       onKeyDown: onKeyboardMove,
       onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
         gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
-      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) =>
-        gesture.current?.pointerId === event.pointerId &&
-        (dragged.current ? lifecycle.finishGesture() : lifecycle.cancelGesture()),
+      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+        if (gesture.current?.pointerId !== event.pointerId) return;
+        updateGesturePosition(event.clientX, event.clientY);
+        if (dragged.current) lifecycle.finishGesture();
+        else lifecycle.cancelGesture();
+      },
       style: {
         touchAction: isOpen ? 'auto' : 'none',
         userSelect: 'none',

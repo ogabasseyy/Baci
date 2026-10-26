@@ -14,6 +14,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   const dismissThroughBannerRef = useRef(false);
   const viewChangeFocusRef = useRef(false);
   const previousViewKeyRef = useRef(viewKey);
+  const wasVisibleRef = useRef(isVisible);
 
   function switchView(action: () => void) {
     return () => {
@@ -29,6 +30,18 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   function dismissWithFocus(action: () => void) {
     return () => {
       dismissThroughBannerRef.current = true;
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLElement &&
+        bannerRef.current?.contains(activeElement) &&
+        !restoreFocusRef.current &&
+        !bannerFocusOriginRef.current
+      ) {
+        const origin = activeElement.closest('.storefront-cookie-consent');
+        const previous = origin?.previousElementSibling;
+        if (previous instanceof HTMLElement)
+          bannerFocusOriginRef.current = previous;
+      }
       bannerHasFocusRef.current = Boolean(
         bannerRef.current?.contains(document.activeElement)
       );
@@ -38,6 +51,17 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
 
   function handleBlur(event: FocusEvent<HTMLDivElement>) {
     const nextFocus = event.relatedTarget;
+    const previousFocus = event.target;
+    if (
+      previousFocus instanceof HTMLElement &&
+      !restoreFocusRef.current &&
+      !previousFocus.closest('.ogabassey-chat-anchor') &&
+      !previousFocus.closest(
+        '.ogabassey-offer-popup, .ogabassey-newsletter-popup'
+      )
+    ) {
+      bannerFocusOriginRef.current = previousFocus;
+    }
     if (
       !dismissThroughBannerRef.current &&
       !viewChangeFocusRef.current &&
@@ -51,6 +75,20 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
 
   useBrowserLayoutEffect(() => {
     if (isVisible) {
+      if (!wasVisibleRef.current && !restoreFocusRef.current) {
+        const activeElement = document.activeElement;
+        if (
+          activeElement instanceof HTMLElement &&
+          activeElement !== document.body &&
+          !activeElement.closest('.ogabassey-chat-anchor') &&
+          !activeElement.closest(
+            '.ogabassey-offer-popup, .ogabassey-newsletter-popup'
+          )
+        ) {
+          bannerFocusOriginRef.current = activeElement;
+        }
+      }
+      wasVisibleRef.current = true;
       const restoreViewFocus =
         viewChangeFocusRef.current && previousViewKeyRef.current !== viewKey;
       previousViewKeyRef.current = viewKey;
@@ -86,6 +124,8 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
       return;
     }
 
+    wasVisibleRef.current = false;
+
     const previousFocus = restoreFocusRef.current;
     restoreFocusRef.current = null;
     viewChangeFocusRef.current = false;
@@ -102,9 +142,16 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
         '.ogabassey-newsletter-popup button:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
       );
     }
-    if (bannerHasFocusRef.current && (previousFocus || chatAnchor))
+    if (
+      bannerHasFocusRef.current &&
+      (previousFocus || (chatAnchor && !bannerFocusOriginRef.current))
+    )
       focusTarget?.focus();
-    else if (bannerHasFocusRef.current) bannerFocusOriginRef.current?.focus();
+    else if (
+      bannerHasFocusRef.current &&
+      bannerFocusOriginRef.current?.isConnected
+    )
+      bannerFocusOriginRef.current.focus();
     bannerFocusOriginRef.current = null;
     bannerHasFocusRef.current = false;
     dismissThroughBannerRef.current = false;
@@ -202,7 +249,15 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     bannerRef,
     dismissWithFocus,
     switchView,
-    onFocusCapture: () => {
+    onFocusCapture: (event: FocusEvent<HTMLDivElement>) => {
+      const previous = event.relatedTarget;
+      if (
+        previous instanceof HTMLElement &&
+        !previous.closest('.ogabassey-chat-anchor') &&
+        !previous.closest('.ogabassey-offer-popup, .ogabassey-newsletter-popup')
+      ) {
+        bannerFocusOriginRef.current = previous;
+      }
       bannerHasFocusRef.current = true;
     },
     onBlurCapture: handleBlur,

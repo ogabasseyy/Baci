@@ -212,3 +212,17 @@ it('does not redirect consent focus to chat after a non-chat popup interaction',
 
   expect(newsletter).toHaveFocus();
 });
+
+it('restores focus to an ordinary control that was active before consent appeared', () => {
+  render(<ConsentFocusHarness />);
+  const newsletter = screen.getByRole('button', { name: 'Show newsletter' });
+  newsletter.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.focusIn(dismiss, { relatedTarget: newsletter });
+  fireEvent.click(dismiss);
+
+  expect(newsletter).toHaveFocus();
+});

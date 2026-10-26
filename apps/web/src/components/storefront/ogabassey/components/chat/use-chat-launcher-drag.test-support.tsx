@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { vi } from 'vitest';
 import { useChatLauncherDrag } from './use-chat-launcher-drag';
 
@@ -18,7 +19,9 @@ function Harness({
   onRender?: () => void;
   onOpen?: () => void;
   onOverflowMount?: (bubble: HTMLDivElement) => void;
-  onSuppressClick?: (suppress: typeof drag.suppressClick) => void;
+  onSuppressClick?: (
+    suppress: (event: ReactMouseEvent<HTMLButtonElement>) => boolean,
+  ) => void;
   constraintKey?: string;
 }) {
   const drag = useChatLauncherDrag(
@@ -88,7 +91,9 @@ export function setup() {
   });
   const onRender = vi.fn();
   const onOpen = vi.fn();
-  let suppressClick: ((event: never) => boolean) | undefined;
+  let suppressClick:
+    | ((event: ReactMouseEvent<HTMLButtonElement>) => boolean)
+    | undefined;
   const getComputedStyle = window.getComputedStyle.bind(window);
   vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
     if (element instanceof HTMLDivElement && element.style.position === 'fixed') {
@@ -107,7 +112,7 @@ export function setup() {
       onRender={onRender}
       onOpen={onOpen}
       onSuppressClick={(suppress) => {
-        suppressClick = suppress as (event: never) => boolean;
+        suppressClick = suppress;
       }}
     />,
   );
@@ -165,7 +170,10 @@ export function setup() {
         clientY: y,
         nativeEvent: { pointerId, isTrusted: true },
       };
-      if (!suppressClick?.(event as never)) onOpen();
+      if (!suppressClick?.(
+        event as unknown as ReactMouseEvent<HTMLButtonElement>,
+      ))
+        onOpen();
     },
     measure,
     onOpen,

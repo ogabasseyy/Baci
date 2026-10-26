@@ -63,6 +63,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     initialLauncherPosition,
     isOpen,
     launcherOverflowKey,
+    isCartOpen,
   );
 
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a

@@ -29,8 +29,8 @@ const loadDefaultChatWidget = () => import('./ChatWidget');
 export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
-  const drag = useChatLauncherDrag();
   const { isCartOpen } = useCart();
+  const drag = useChatLauncherDrag(undefined, false, false, isCartOpen);
   const { theme } = useV2Theme();
   const pathname = usePathname();
   const isFooterVisible = useOgabasseyScrollVisibility();

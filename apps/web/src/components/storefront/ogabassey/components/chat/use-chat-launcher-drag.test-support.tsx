@@ -5,17 +5,19 @@ import { useChatLauncherDrag } from './use-chat-launcher-drag';
 function Harness({
   open = false,
   hasOverflow = false,
+  hidden = false,
   onRender = () => {},
   onOpen = () => {},
   onOverflowMount,
 }: {
   open?: boolean;
   hasOverflow?: boolean;
+  hidden?: boolean;
   onRender?: () => void;
   onOpen?: () => void;
   onOverflowMount?: (bubble: HTMLDivElement) => void;
 }) {
-  const drag = useChatLauncherDrag(undefined, open, hasOverflow);
+  const drag = useChatLauncherDrag(undefined, open, hasOverflow, hidden);
   onRender();
   return (
     <div

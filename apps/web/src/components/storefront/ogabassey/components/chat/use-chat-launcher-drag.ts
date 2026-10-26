@@ -36,6 +36,7 @@ export function useChatLauncherDrag(
   initialPosition?: Position,
   isOpen = false,
   overflowKey: string | boolean = false,
+  isHidden = false,
 ) {
   const [position, setPosition] = useState<Position | undefined>(
     initialPosition,
@@ -45,6 +46,7 @@ export function useChatLauncherDrag(
   const gesture = useRef<Gesture | null>(null);
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
+  const viewportFrame = useRef<number | null>(null);
   const clickSuppressionTimer = useRef<number | null>(null);
   const clickSuppressionUntil = useRef(0);
 
@@ -110,6 +112,14 @@ export function useChatLauncherDrag(
     });
   }
 
+  function scheduleViewportReclamp() {
+    if (viewportFrame.current !== null) return;
+    viewportFrame.current = requestAnimationFrame(() => {
+      viewportFrame.current = null;
+      reclampPosition();
+    });
+  }
+
   useEffect(() => {
     window.addEventListener('resize', reclampPosition);
     const button = buttonRef.current;
@@ -119,21 +129,23 @@ export function useChatLauncherDrag(
         : null;
     if (button) observer?.observe(button);
     const visualViewport = window.visualViewport;
-    visualViewport?.addEventListener('resize', reclampPosition);
-    visualViewport?.addEventListener('scroll', reclampPosition);
+    visualViewport?.addEventListener('resize', scheduleViewportReclamp);
+    visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
     return () => {
       window.removeEventListener('resize', reclampPosition);
-      visualViewport?.removeEventListener('resize', reclampPosition);
-      visualViewport?.removeEventListener('scroll', reclampPosition);
+      visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
+      visualViewport?.removeEventListener('scroll', scheduleViewportReclamp);
       observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
+      if (viewportFrame.current !== null)
+        cancelAnimationFrame(viewportFrame.current);
       clearClickSuppressionTimer();
     };
   }, []);
 
   useLayoutEffect(() => {
-    if (!isOpen && position) reclampPosition();
-  }, [isOpen, overflowKey, position]);
+    if (!isOpen && !isHidden && position) reclampPosition();
+  }, [isHidden, isOpen, overflowKey, position]);
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (

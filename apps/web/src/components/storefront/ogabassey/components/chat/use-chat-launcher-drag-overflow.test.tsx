@@ -2,7 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import dragTestSupport from './use-chat-launcher-drag.test-support';
 
-const { setup } = dragTestSupport;
+const { Harness, setup } = dragTestSupport;
 
 afterEach(() => {
   vi.useRealTimers();
@@ -11,6 +11,47 @@ afterEach(() => {
 });
 
 describe('chat launcher overflow clamp', () => {
+  it('re-clamps the saved position when the cart-hidden launcher is restored', () => {
+    const { pointer, measure, rerender } = setup();
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(500);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(500);
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 2000, 2000);
+    pointer('pointerup', 2000, 2000);
+    rerender(<Harness hidden />);
+
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent(window, new Event('resize'));
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 56,
+      height: 56,
+      right: 56,
+      bottom: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    rerender(<Harness />);
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(248px, 374px, 0)',
+    );
+  });
+
   it('keeps the launcher reachable when its bubble cannot fit in a narrow viewport', () => {
     const { pointer, button } = setup();
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(260);

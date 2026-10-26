@@ -3,10 +3,16 @@ const EDGE_GAP = 16;
 export type Position = { x: number; y: number };
 export type Overflow = { left: number; top: number; right: number; bottom: number };
 
-function clampAxis(value: number, min: number, max: number, fallback: number) {
+function clampAxis(
+  value: number,
+  min: number,
+  max: number,
+  fallbackMin: number,
+  fallbackMax: number,
+) {
   return min <= max
     ? Math.max(min, Math.min(value, max))
-    : Math.max(0, Math.min(value, fallback));
+    : Math.max(fallbackMin, Math.min(value, Math.max(fallbackMin, fallbackMax)));
 }
 
 export function clampChatLauncherPosition(
@@ -34,11 +40,18 @@ export function clampChatLauncherPosition(
     overflow.bottom;
 
   return {
-    x: clampAxis(x, minX, maxX, viewportLeft + viewportWidth - width),
+    x: clampAxis(
+      x,
+      minX,
+      maxX,
+      viewportLeft,
+      viewportLeft + viewportWidth - width,
+    ),
     y: clampAxis(
       y,
       minY,
       maxY,
+      viewportTop,
       viewportTop + viewportHeight - height - bottomSafeArea,
     ),
   };

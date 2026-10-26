@@ -121,7 +121,7 @@ describe('useChatLauncherDrag', () => {
     vi.stubGlobal('visualViewport', viewport);
     const setViewportValue = (key: keyof VisualViewport, value: number) =>
       Object.defineProperty(viewport, key, { configurable: true, value });
-    const { pointer } = setup();
+    const { pointer, flush } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 2000, 2000);
     pointer('pointerup', 2000, 2000);
@@ -134,6 +134,7 @@ describe('useChatLauncherDrag', () => {
     setViewportValue('width', 200);
     setViewportValue('height', 300);
     act(() => viewport.dispatchEvent(new Event('resize')));
+    flush();
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(168px, 214px, 0)',
     );
@@ -141,6 +142,7 @@ describe('useChatLauncherDrag', () => {
     setViewportValue('offsetLeft', 200);
     setViewportValue('offsetTop', 200);
     act(() => viewport.dispatchEvent(new Event('scroll')));
+    flush();
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(216px, 216px, 0)',
     );

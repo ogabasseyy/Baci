@@ -1,9 +1,6 @@
 import type { ModelFamilyAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 
-export function matchesProduct(
-  entry: ModelFamilyAuthorityEntry,
-  productName: string
-) {
+function matchesProduct(entry: ModelFamilyAuthorityEntry, productName: string) {
   const trimmed = productName.trim();
   if (entry.modelPatterns && entry.modelPatterns.length > 0) {
     return entry.modelPatterns.some((pattern) => pattern.test(trimmed));
@@ -11,16 +8,15 @@ export function matchesProduct(
   return entry.productNamePattern.test(trimmed);
 }
 
-const BARE_SAMSUNG_MODEL_RIVALS =
-  'Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus';
+const RIVAL_BRAND_PATTERN =
+  /\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b/i;
+const SAMSUNG_BRAND_PATTERN = /\b(?:Samsung|Galaxy)\b/i;
+const ANY_BRAND_PATTERN =
+  /\b(?:Samsung|Galaxy|Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b/gi;
 
 function matchesBareSamsungModel(content: string, letter: 'A' | 'S'): boolean {
-  const rivalPattern = new RegExp(
-    `\\b(?:${BARE_SAMSUNG_MODEL_RIVALS})\\b`,
-    'i'
-  );
   for (const sentence of content.split(/[.!?]+/)) {
-    const tokenPattern = new RegExp(`\\b${letter}[0-9]{2}\\b`, 'gi');
+    const tokenPattern = letter === 'A' ? /\bA[0-9]{2}\b/gi : /\bS[0-9]{2}\b/gi;
     for (const match of sentence.matchAll(tokenPattern)) {
       const index = match.index ?? 0;
       if (
@@ -31,18 +27,24 @@ function matchesBareSamsungModel(content: string, letter: 'A' | 'S'): boolean {
       ) {
         continue;
       }
+      // The nearest brand mention before the token owns it: a rival
+      // directly before disqualifies, Samsung/Galaxy before qualifies.
       const before = sentence.slice(0, index);
-      if (rivalPattern.test(before)) {
-        continue;
+      let nearestBeforeIsSamsung: boolean | null = null;
+      for (const brandMatch of before.matchAll(ANY_BRAND_PATTERN)) {
+        nearestBeforeIsSamsung = SAMSUNG_BRAND_PATTERN.test(brandMatch[0]);
       }
-      if (/\b(?:Samsung|Galaxy)\b/i.test(before)) {
+      if (nearestBeforeIsSamsung === true) {
         return true;
       }
-      // Samsung context after the token only counts when no rival brand
-      // appears anywhere in the sentence (e.g. "A55 vs A34: Which
-      // Samsung Mid-Ranger Wins?").
+      if (nearestBeforeIsSamsung === false) {
+        continue;
+      }
+      // No brand before the token: Samsung context elsewhere in the
+      // sentence counts only when no rival brand appears at all (e.g.
+      // "A55 vs A34: Which Samsung Mid-Ranger Wins?").
       if (
-        !rivalPattern.test(sentence) &&
+        !RIVAL_BRAND_PATTERN.test(sentence) &&
         /\b(?:Samsung|Galaxy)\b/i.test(sentence)
       ) {
         return true;
@@ -52,7 +54,7 @@ function matchesBareSamsungModel(content: string, letter: 'A' | 'S'): boolean {
   return false;
 }
 
-export function matchesContent(
+function matchesContent(
   entry: ModelFamilyAuthorityEntry,
   content: string
 ): boolean {
@@ -79,3 +81,8 @@ export function matchesContent(
   }
   return matchesProduct(entry, trimmed);
 }
+
+export const modelFamilyContentMatching = {
+  matchesProduct,
+  matchesContent,
+};

@@ -1,9 +1,6 @@
 import { generateSlug } from '@/lib/seo-utils';
 import type { ModelFamilyAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
-import {
-  matchesContent,
-  matchesProduct,
-} from './model-family-content-matching';
+import { modelFamilyContentMatching } from './model-family-content-matching';
 
 declare module '@/lib/storefront-category/category-hub-types' {
   interface ModelFamilyAuthorityEntry {
@@ -266,6 +263,6 @@ function getEntry(categorySlug: string, brandSlug: string, familySlug: string) {
 export const modelFamilyAuthorityTaxonomy = {
   getEntries,
   getEntry,
-  matchesProduct,
-  matchesContent,
+  matchesProduct: modelFamilyContentMatching.matchesProduct,
+  matchesContent: modelFamilyContentMatching.matchesContent,
 };

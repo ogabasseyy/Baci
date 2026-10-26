@@ -3,7 +3,10 @@ import {
   buildDispatchMerchantSnapshot,
   buildDispatchPaymentSnapshot,
 } from '@/lib/build-manual-order-document-dispatch-snapshot';
-import { checkManualDocumentDispatchLease } from '@/lib/check-manual-document-dispatch-lease';
+import {
+  checkManualDocumentDispatchLease,
+  resetStartedDispatchMarker,
+} from '@/lib/check-manual-document-dispatch-lease';
 import {
   buildReceiptClaimUrl,
   createReceiptClaimToken,
@@ -227,12 +230,8 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
-      // Clear the marker only when it was actually started: a
-      // pre-dispatch failure (missing token, render throw) leaves it
-      // null, and clearing a null marker reports a false faulty cleanup
-      // that burns the corrective budget instead of the normal attempts.
       return reportFailedManualDocumentSend(result, () =>
-        dispatchStarted ? persistDispatch(false) : Promise.resolve()
+        resetStartedDispatchMarker(dispatchStarted, persistDispatch)
       );
     }
     providerAccepted = true;

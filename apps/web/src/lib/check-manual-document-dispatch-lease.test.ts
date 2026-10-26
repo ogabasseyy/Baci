@@ -3,6 +3,7 @@ import {
   checkManualDocumentDispatchLease,
   clearManualDocumentDispatchMarker,
   reclaimStaleManualDocumentDispatchMarker,
+  resetStartedDispatchMarker,
 } from './check-manual-document-dispatch-lease';
 
 function clientFor(result: { data: unknown; error: unknown }) {
@@ -219,5 +220,19 @@ describe('reclaimStaleManualDocumentDispatchMarker', () => {
     await expect(
       reclaimStaleManualDocumentDispatchMarker(client as never, row)
     ).rejects.toThrow('dispatch_marker_clear_failed');
+  });
+});
+
+describe('resetStartedDispatchMarker', () => {
+  it('clears the marker when dispatch had started', async () => {
+    const persistDispatch = vi.fn(async (_started: boolean) => {});
+    await resetStartedDispatchMarker(true, persistDispatch);
+    expect(persistDispatch).toHaveBeenCalledWith(false);
+  });
+
+  it('leaves a null marker alone when dispatch never started', async () => {
+    const persistDispatch = vi.fn(async (_started: boolean) => {});
+    await resetStartedDispatchMarker(false, persistDispatch);
+    expect(persistDispatch).not.toHaveBeenCalled();
   });
 });

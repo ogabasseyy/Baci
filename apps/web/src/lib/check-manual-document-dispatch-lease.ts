@@ -26,6 +26,19 @@ export async function checkManualDocumentDispatchLease(
   return lease.dispatch_started_at ? 'held' : 'reset';
 }
 
+/**
+ * Clears the dispatch marker only when it was actually started: a
+ * pre-dispatch failure (missing token, render throw) leaves it null,
+ * and clearing a null marker reports a false faulty cleanup that burns
+ * the corrective budget instead of the normal attempts.
+ */
+export async function resetStartedDispatchMarker(
+  dispatchStarted: boolean,
+  persistDispatch: (started: boolean) => Promise<void>
+): Promise<void> {
+  if (dispatchStarted) await persistDispatch(false);
+}
+
 export interface DispatchMarkerRow {
   id: string;
   order_id: string;

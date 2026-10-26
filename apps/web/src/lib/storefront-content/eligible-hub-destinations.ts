@@ -46,9 +46,10 @@ export function resolveEligibleCategoryHubDestinations(
   const availableProducts = input.products.filter(
     (product) =>
       (product.stock == null || product.stock > 0) &&
-      (!product.category_slug ||
-        product.category_slug === categorySlug ||
-        (product.category_slugs ?? []).includes(categorySlug)) &&
+      (product.category_slug === categorySlug ||
+        (product.category_slugs ?? []).includes(categorySlug) ||
+        // No category info at all: caller supplied a category-scoped pool.
+        (product.category_slug == null && product.category_slugs == null)) &&
       (product.is_parent === true || product.parent_product_id == null)
   );
 

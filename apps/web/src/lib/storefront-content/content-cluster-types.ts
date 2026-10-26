@@ -128,6 +128,7 @@ export interface BuildInformationalClusterModelInput {
   merchantSlug: string;
   storeUrl: string;
   post: PublishedClusterPost;
+  /** Test seam only: override pools skip destination verification, so callers must supply destination-verified inventory. Production callers omit this. */
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
 }

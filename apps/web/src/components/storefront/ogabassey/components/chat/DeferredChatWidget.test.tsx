@@ -90,14 +90,14 @@ describe('DeferredChatWidget', () => {
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
-    fireEvent.click(button, { detail: 1 });
+    fireEvent.click(button, { detail: 1, clientX: 120, clientY: 220 });
     expect(container.querySelector('.ogabassey-chat-anchor')).toHaveStyle({
       transform: 'translate3d(100px, 200px, 0)',
     });
     expect(loadChatWidget).not.toHaveBeenCalled();
     pointer('pointerdown', 120, 220);
     pointer('pointerup', 120, 220);
-    fireEvent.click(button, { detail: 1 });
+    fireEvent.click(button, { detail: 1, clientX: 120, clientY: 220 });
     expect(
       await screen.findByText('Saved position: 100,200'),
     ).toBeInTheDocument();

@@ -27,18 +27,18 @@ describe('useChatLauncherDrag', () => {
   });
 
   it('keeps a dragged icon inside the viewport and suppresses the resulting click', () => {
-    const { pointer, button, onOpen } = setup();
+    const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', -2000, -2000);
     pointer('pointerup', -2000, -2000);
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(16px, 16px, 0)',
     );
-    fireEvent.click(button, { detail: 1 });
+    click(-2000, -2000);
     expect(onOpen).not.toHaveBeenCalled();
     pointer('pointerdown', 20, 20);
     pointer('pointerup', 20, 20);
-    fireEvent.click(button, { detail: 1 });
+    click(20, 20);
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
@@ -89,7 +89,7 @@ describe('useChatLauncherDrag', () => {
   });
 
   it('opens on a tap with small finger movement', () => {
-    const { pointer, button, onOpen } = setup();
+    const { pointer, button, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 222, 322);
     pointer('pointerup', 222, 322);
@@ -149,14 +149,14 @@ describe('useChatLauncherDrag', () => {
   });
 
   it('keeps click suppression after pointer capture is released on pointerup', () => {
-    const { pointer, button, onOpen } = setup();
+    const { pointer, button, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
     const lostCapture = new MouseEvent('lostpointercapture', { bubbles: true });
     Object.defineProperty(lostCapture, 'pointerId', { value: 1 });
     fireEvent(button, lostCapture);
-    fireEvent.click(button, { detail: 1 });
+    click(120, 220);
     expect(onOpen).not.toHaveBeenCalled();
   });
 
@@ -173,12 +173,12 @@ describe('useChatLauncherDrag', () => {
 
   it('suppresses a delayed pointer click after a completed drag', () => {
     vi.useFakeTimers();
-    const { pointer, button, onOpen } = setup();
+    const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
     vi.advanceTimersByTime(400);
-    fireEvent.click(button, { detail: 1 });
+    click(120, 220);
     expect(onOpen).not.toHaveBeenCalled();
   });
 

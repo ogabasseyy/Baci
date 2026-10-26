@@ -23,6 +23,8 @@ type Gesture = {
   pointerId: number;
   x: number;
   y: number;
+  lastX: number;
+  lastY: number;
   left: number;
   top: number;
   width: number;
@@ -50,7 +52,11 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null);
-  const suppressNextPointerClick = useRef(false);
+  const suppressedDragClick = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
   function readOverflow(
@@ -163,6 +169,8 @@ export function useChatLauncherDrag(
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
       left: rect.left,
       top: rect.top,
       width: rect.width,
@@ -174,13 +182,15 @@ export function useChatLauncherDrag(
       next: { x: rect.left, y: rect.top },
     };
     dragged.current = false;
-    suppressNextPointerClick.current = false;
+    suppressedDragClick.current = null;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
   function updateGesturePosition(x: number, y: number) {
     const start = gesture.current;
     if (!start) return;
+    start.lastX = x;
+    start.lastY = y;
     const dx = x - start.x;
     const dy = y - start.y;
     if (!dragged.current && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
@@ -213,7 +223,7 @@ export function useChatLauncherDrag(
     frame.current = null;
     gesture.current = null;
     dragged.current = false;
-    suppressNextPointerClick.current = false;
+    suppressedDragClick.current = null;
     if (anchorRef.current) {
       anchorRef.current.style.transform = position
         ? `translate3d(${position.x}px, ${position.y}px, 0)`
@@ -228,7 +238,11 @@ export function useChatLauncherDrag(
     gesture.current = null;
     if (start && dragged.current) {
       setPosition(start.next);
-      suppressNextPointerClick.current = true;
+      suppressedDragClick.current = {
+        pointerId: start.pointerId,
+        x: start.lastX,
+        y: start.lastY,
+      };
     }
   }
 
@@ -243,10 +257,16 @@ export function useChatLauncherDrag(
   }
 
   function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
-    const suppress = suppressNextPointerClick.current && event.detail > 0;
-    if (suppress) {
-      suppressNextPointerClick.current = false;
-    }
+    const pending = suppressedDragClick.current;
+    const nativeEvent = event.nativeEvent as MouseEvent & { pointerId?: number };
+    const suppress = Boolean(
+      pending &&
+        event.detail > 0 &&
+        nativeEvent.pointerId === pending.pointerId &&
+        Math.abs(event.clientX - pending.x) <= 2 &&
+        Math.abs(event.clientY - pending.y) <= 2,
+    );
+    if (suppress) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }

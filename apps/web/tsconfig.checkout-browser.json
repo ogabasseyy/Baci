@@ -3,6 +3,7 @@
   "compilerOptions": { "incremental": false },
   "include": [
     "playwright.config.ts",
+    "src/types/**/*.d.ts",
     "tests/checkout-browser/**/*.ts",
     "tests/checkout-browser/**/*.tsx"
   ],

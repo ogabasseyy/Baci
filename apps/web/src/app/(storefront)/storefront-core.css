@@ -1182,8 +1182,12 @@ body:has(.ogabassey-chat-anchor:focus-within) .ogabassey-newsletter-popup {
   display: none;
 }
 
-/* Keep the draggable launcher clear of the bottom-left offer at every width. */
-body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
-.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(:focus-within) {
-  display: none;
+/* The offer spans the launcher corner only on narrow phones. */
+@media (max-width: 423px) {
+  body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
+    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
+      :focus-within
+    ) {
+    display: none;
+  }
 }

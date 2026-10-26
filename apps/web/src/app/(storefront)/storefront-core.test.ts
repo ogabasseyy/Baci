@@ -101,7 +101,7 @@ describe('storefront overlay priority', () => {
       /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)[\s\S]*?\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
     );
     expect(storefrontCoreCss).toMatch(
-      /body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(:focus-within\)\s*\{\s*display:\s*none/
+      /@media\s*\(max-width:\s*423px\)\s*\{[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
     );
     expect(storefrontCoreCss).toMatch(
       /body:has\(\.ogabassey-chat-anchor:focus-within\)\s+\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
@@ -117,7 +117,10 @@ describe('storefront overlay priority', () => {
     );
     expect(offerRuleIndex).toBeGreaterThan(consentRulesStart);
     expect(
-      storefrontCoreCss.slice(consentRulesStart, offerRuleIndex)
+      storefrontCoreCss.slice(
+        consentRulesStart,
+        storefrontCoreCss.indexOf('@media (max-width: 423px)')
+      )
     ).not.toContain('@media');
   });
 });

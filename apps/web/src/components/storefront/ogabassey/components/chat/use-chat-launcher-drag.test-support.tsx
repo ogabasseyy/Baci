@@ -124,9 +124,28 @@ function setup() {
         { pointerId: 1, isPrimary: true },
       ),
     );
+  const click = (
+    x: number,
+    y: number,
+    detail = 1,
+    pointerId: number | null = 1,
+  ) =>
+    fireEvent(
+      button,
+      Object.assign(
+        new MouseEvent('click', {
+          bubbles: true,
+          detail,
+          clientX: x,
+          clientY: y,
+        }),
+        ...(pointerId === null ? [] : [{ pointerId }]),
+      ),
+    );
   return {
     ...view,
     button,
+    click,
     measure,
     onOpen,
     onRender,

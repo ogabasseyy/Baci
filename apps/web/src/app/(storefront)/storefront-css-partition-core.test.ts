@@ -9,7 +9,9 @@ describe('storefront CSS partitioning (core chrome sheets)', () => {
     expect(coreCss).toMatch(/\.storefront-ppr-static-shell/);
     expect(coreCss).toMatch(/\.ogabassey-navbar/);
     expect(coreCss).toMatch(/\.ogabassey-mobile-footer/);
-    expect(coreCss).not.toMatch(/\.ogabassey-chat-/);
+    // Core retains only the lightweight stacking/visibility policy needed to
+    // prevent overlap before the deferred chat stylesheet has loaded.
+    expect(coreCss).not.toMatch(/\.ogabassey-chat-(?:button|badge)\b/);
   });
 
   it('keeps category hub discovery card styles in the shared storefront core stylesheet', () => {

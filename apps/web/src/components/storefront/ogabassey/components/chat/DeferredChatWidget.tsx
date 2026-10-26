@@ -3,7 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
 import { useCart } from '@/hooks/cart';
 import { CHAT_MOBILE_OFFSET_ATTRIBUTES } from '../../config/chat-mobile-offsets';
@@ -37,6 +37,7 @@ export function DeferredChatWidget({
     ChatWidgetModule['ChatWidget'] | null
   >(null);
   const [isLoading, setIsLoading] = useState(false);
+  const focusLauncherOnMount = useRef(false);
 
   const isSanta = theme === 'santa';
   const footerOffset = getChatMobileOffset(pathname);
@@ -67,6 +68,7 @@ export function DeferredChatWidget({
       return;
     }
 
+    focusLauncherOnMount.current = event.detail === 0;
     setIsLoading(true);
     const resolveChatWidget = loadChatWidget ?? loadDefaultChatWidget;
 
@@ -80,7 +82,13 @@ export function DeferredChatWidget({
   };
 
   if (ChatRuntime) {
-    return <ChatRuntime openOnMount initialLauncherPosition={drag.position} />;
+    return (
+      <ChatRuntime
+        openOnMount
+        focusLauncherOnMount={focusLauncherOnMount.current}
+        initialLauncherPosition={drag.position}
+      />
+    );
   }
 
   return (

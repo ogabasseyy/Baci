@@ -133,6 +133,60 @@ describe('DeferredChatWidget', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps keyboard focus on the loaded launcher after activation', async () => {
+    const loadChatWidget = vi.fn().mockResolvedValue({
+      ChatWidget: ({ focusLauncherOnMount }: { focusLauncherOnMount?: boolean }) => (
+        <button type="button" autoFocus={focusLauncherOnMount}>
+          Loaded chat launcher
+        </button>
+      ),
+    });
+    const user = userEvent.setup();
+    render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
+
+    screen.getByRole('button', { name: 'Open AI chat assistant' }).focus();
+    await user.keyboard('{Enter}');
+
+    const loadedLauncher = await screen.findByRole('button', {
+      name: 'Loaded chat launcher',
+    });
+    expect(loadedLauncher).toHaveFocus();
+  });
+
+  it('allows a keyboard activation after a drag that emitted no click', async () => {
+    const loadChatWidget = vi.fn().mockResolvedValue({
+      ChatWidget: () => <div>Loaded after keyboard activation</div>,
+    });
+    const { container } = render(
+      <DeferredChatWidget loadChatWidget={loadChatWidget} />,
+    );
+    const button = screen.getByRole('button', {
+      name: 'Open AI chat assistant',
+    });
+    const pointer = (type: string, x: number, y: number) =>
+      fireEvent(
+        button,
+        new MouseEvent(type, {
+          bubbles: true,
+          clientX: x,
+          clientY: y,
+          button: 0,
+        }),
+      );
+    pointer('pointerdown', 10, 10);
+    pointer('pointermove', 100, 100);
+    pointer('pointerup', 100, 100);
+    button.focus();
+
+    await userEvent.setup().keyboard('{Enter}');
+
+    expect(
+      await screen.findByText('Loaded after keyboard activation'),
+    ).toBeInTheDocument();
+    expect(loadChatWidget).toHaveBeenCalledOnce();
+    expect(container.querySelector('.ogabassey-chat-anchor')).toBeNull();
+  });
+
   it('keeps the launcher mounted but hidden while the cart is open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: true,

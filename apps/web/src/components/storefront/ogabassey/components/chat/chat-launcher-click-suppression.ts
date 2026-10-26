@@ -20,8 +20,7 @@ export function isSuppressedChatLauncherDragClick(
       ((nativeEvent.pointerId === pending.pointerId &&
         (nativeEvent.pointerId !== 0 ||
           (nativeEvent.isTrusted &&
-            pending.pointerType === 'touch' &&
-            nativeEvent.pointerType === 'touch'))) ||
+            nativeEvent.pointerType === pending.pointerType))) ||
         (nativeEvent.pointerId === 0 &&
           pending.pointerType === 'touch' &&
           nativeEvent.pointerType === 'touch' &&

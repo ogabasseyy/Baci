@@ -21,11 +21,13 @@ import { useOgabasseyChat } from './use-ogabassey-chat';
 
 export interface ChatWidgetProps {
   openOnMount?: boolean;
+  focusLauncherOnMount?: boolean;
   initialLauncherPosition?: { x: number; y: number };
 }
 
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
   openOnMount = false,
+  focusLauncherOnMount = false,
   initialLauncherPosition,
 }) => {
   const { isCartOpen } = useCart();
@@ -98,6 +100,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       setIsOpen(true);
     }
   }, [openOnMount, setIsOpen]);
+  useEffect(() => {
+    const activeElement = document.activeElement;
+    if (
+      focusLauncherOnMount &&
+      (!activeElement ||
+        activeElement === document.body ||
+        !activeElement.isConnected)
+    ) {
+      drag.buttonRef.current?.focus();
+    }
+  }, [focusLauncherOnMount, drag.buttonRef]);
 
   return (
     <div

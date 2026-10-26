@@ -264,10 +264,9 @@ export function useChatLauncherDrag(
       event,
       suppressedDragClick.current,
     );
-    // A keyboard activation has detail 0 and remains independent of the drag.
-    // Other clicks consume the token, whether correlated or not, so a missed
-    // compatibility click cannot swallow a later assistive activation.
-    if (event.detail > 0) suppressedDragClick.current = null;
+    // A subsequent activation is a new interaction: only this click may
+    // consume the drag correlation, including pointerless keyboard clicks.
+    suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }
@@ -277,6 +276,7 @@ export function useChatLauncherDrag(
   return {
     position,
     anchorRef,
+    buttonRef,
     anchorStyle,
     suppressClick,
     buttonProps: {

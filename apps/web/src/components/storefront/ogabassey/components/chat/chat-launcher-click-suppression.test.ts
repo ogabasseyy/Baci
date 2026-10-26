@@ -61,6 +61,15 @@ describe('chat launcher click suppression', () => {
     ).toBe(true);
   });
 
+  it('suppresses Firefox mouse clicks reported with pointer ID zero', () => {
+    expect(
+      isSuppressedChatLauncherDragClick(
+        clickEvent({ pointerId: 0, pointerType: 'mouse' }),
+        { ...release, pointerId: 0 },
+      ),
+    ).toBe(true);
+  });
+
   it('does not treat an unrelated pointer ID zero as a touch click', () => {
     expect(
       isSuppressedChatLauncherDragClick(

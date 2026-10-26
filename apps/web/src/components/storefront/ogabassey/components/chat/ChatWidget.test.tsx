@@ -168,6 +168,25 @@ describe('ChatWidget - toggle button', () => {
     expect(setIsOpen).toHaveBeenCalledWith(true);
   });
 
+  it('restores focus to the launcher after deferred keyboard activation', () => {
+    render(<ChatWidget openOnMount focusLauncherOnMount />);
+
+    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveFocus();
+  });
+
+  it('does not steal focus moved elsewhere while the runtime loads', () => {
+    const externalButton = document.createElement('button');
+    document.body.append(externalButton);
+    externalButton.focus();
+    const { unmount } = render(
+      <ChatWidget openOnMount focusLauncherOnMount />,
+    );
+
+    expect(externalButton).toHaveFocus();
+    unmount();
+    externalButton.remove();
+  });
+
   it('keeps the widget mounted but hidden when cart is open', () => {
     vi.mocked(useCart).mockReturnValue({
       isCartOpen: true,

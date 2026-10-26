@@ -94,15 +94,16 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     if (!isVisible) return;
 
     const activeElement = document.activeElement;
-    const hadFocusInOpenChat =
-      activeElement instanceof HTMLElement &&
-      Boolean(activeElement.closest('.ogabassey-chat-window'));
-    if (!hadFocusInOpenChat) return;
+    const chatAnchor =
+      activeElement instanceof HTMLElement
+        ? activeElement.closest('.ogabassey-chat-anchor')
+        : null;
+    if (!chatAnchor?.querySelector('.ogabassey-chat-window')) return;
 
     let chatWasOpen = true;
     const observer = new MutationObserver(() => {
       const chatIsOpen = Boolean(
-        document.querySelector('.ogabassey-chat-anchor .ogabassey-chat-window')
+        chatAnchor.querySelector('.ogabassey-chat-window')
       );
       if (chatWasOpen && !chatIsOpen) {
         const currentFocus = document.activeElement;
@@ -121,7 +122,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
       }
       chatWasOpen = chatIsOpen;
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(chatAnchor, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [isVisible]);
 

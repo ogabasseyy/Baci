@@ -648,6 +648,33 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
+-- Caller-identity pins (diagnostic): three separate blocks so a
+-- failure line identifies which role the replay actually runs S4
+-- under (anon / stuck-at-authenticated / role switch inert).
+DO $s4role_anon$
+BEGIN
+  IF current_role = 'anon' THEN
+    RAISE EXCEPTION 'S4-role: caller IS anon';
+  END IF;
+END;
+$s4role_anon$;
+
+DO $s4role_authenticated$
+BEGIN
+  IF current_role = 'authenticated' THEN
+    RAISE EXCEPTION 'S4-role: caller IS authenticated';
+  END IF;
+END;
+$s4role_authenticated$;
+
+DO $s4role_session$
+BEGIN
+  IF current_role = session_user THEN
+    RAISE EXCEPTION 'S4-role: caller IS session user (role switch inert)';
+  END IF;
+END;
+$s4role_session$;
+
 DO $s4grant$
 BEGIN
   IF pg_catalog.has_function_privilege(

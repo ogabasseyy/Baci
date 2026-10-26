@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   clampChatLauncherPosition,
+  readChatLauncherOverflow,
   readChatLauncherMobileOffset,
   readChatLauncherSafeArea,
   type Overflow,
@@ -59,32 +60,11 @@ export function useChatLauncherDrag(
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
-  function readOverflow(
-    button: HTMLButtonElement,
-    buttonRect: DOMRect,
-  ): Overflow {
-    const overflow: Overflow = { left: 0, top: 0, right: 0, bottom: 0 };
-    const overlays = button.parentElement?.querySelectorAll<HTMLElement>(
-      '[data-chat-launcher-overflow]',
-    );
-    overlays?.forEach((overlay) => {
-      const style = window.getComputedStyle(overlay);
-      if (style.display === 'none' || style.visibility === 'hidden') return;
-      const rect = overlay.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      overflow.left = Math.max(overflow.left, buttonRect.left - rect.left);
-      overflow.top = Math.max(overflow.top, buttonRect.top - rect.top);
-      overflow.right = Math.max(overflow.right, rect.right - buttonRect.right);
-      overflow.bottom = Math.max(overflow.bottom, rect.bottom - buttonRect.bottom);
-    });
-    return overflow;
-  }
-
   function reclampPosition() {
     const button = buttonRef.current;
     const rect = button?.getBoundingClientRect();
     if (!button || !rect || rect.width === 0 || rect.height === 0) return;
-    const overflow = readOverflow(button, rect);
+    const overflow = readChatLauncherOverflow(button, rect);
     setPosition((current) => {
       if (!current) return current;
       const next = clampChatLauncherPosition(
@@ -164,7 +144,7 @@ export function useChatLauncherDrag(
     const rect = event.currentTarget.getBoundingClientRect();
     const bottomSafeArea = readChatLauncherSafeArea(safeAreaProbe.current);
     const mobileOffset = readChatLauncherMobileOffset(anchorRef.current);
-    const overflow = readOverflow(event.currentTarget, rect);
+    const overflow = readChatLauncherOverflow(event.currentTarget, rect);
     gesture.current = {
       pointerId: event.pointerId,
       x: event.clientX,

@@ -3,6 +3,27 @@ const EDGE_GAP = 16;
 export type Position = { x: number; y: number };
 export type Overflow = { left: number; top: number; right: number; bottom: number };
 
+export function readChatLauncherOverflow(
+  button: HTMLButtonElement,
+  buttonRect: DOMRect,
+): Overflow {
+  const overflow: Overflow = { left: 0, top: 0, right: 0, bottom: 0 };
+  const overlays = button.parentElement?.querySelectorAll<HTMLElement>(
+    '[data-chat-launcher-overflow]',
+  );
+  overlays?.forEach((overlay) => {
+    const style = window.getComputedStyle(overlay);
+    if (style.display === 'none' || style.visibility === 'hidden') return;
+    const rect = overlay.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    overflow.left = Math.max(overflow.left, buttonRect.left - rect.left);
+    overflow.top = Math.max(overflow.top, buttonRect.top - rect.top);
+    overflow.right = Math.max(overflow.right, rect.right - buttonRect.right);
+    overflow.bottom = Math.max(overflow.bottom, rect.bottom - buttonRect.bottom);
+  });
+  return overflow;
+}
+
 export function readChatLauncherSafeArea(probe: HTMLElement | null) {
   return Number.parseFloat(
     probe ? window.getComputedStyle(probe).height : '0',

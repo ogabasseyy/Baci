@@ -21,10 +21,17 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     serviceWorkers: 'block',
   },
-  projects: ['chromium', 'webkit'].map((browserName) => ({
-    name: browserName,
-    use: { browserName: browserName as 'chromium' | 'webkit' },
-  })),
+  projects: [
+    ...(['chromium', 'webkit'] as const).map((browserName) => ({
+      name: browserName,
+      use: { browserName },
+    })),
+    {
+      name: 'firefox-chat-drag',
+      testMatch: '**/storefront-chat-overlay.pw.ts',
+      use: { browserName: 'firefox' },
+    },
+  ],
   webServer: {
     command: `pnpm exec next start tests/checkout-browser/harness --hostname 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/catalog`,

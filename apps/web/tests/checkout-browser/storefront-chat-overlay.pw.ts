@@ -180,7 +180,7 @@ test('touch drag emits a suppressed click without loading chat', async ({
   browser,
 }, testInfo) => {
   test.skip(
-    testInfo.project.name === 'webkit',
+    testInfo.project.use.browserName !== 'chromium',
     'Touch input uses Chromium CDP'
   );
   const context = await browser.newContext({

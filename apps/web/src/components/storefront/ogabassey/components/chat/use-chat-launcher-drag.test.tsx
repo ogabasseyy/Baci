@@ -6,7 +6,16 @@ function Harness({ open = false, onRender = () => {}, onOpen = () => {} }) {
   const drag = useChatLauncherDrag(undefined, open);
   onRender();
   return (
-    <div ref={drag.anchorRef} style={drag.anchorStyle} data-testid="anchor">
+    <div
+      ref={drag.anchorRef}
+      style={
+        {
+          ...drag.anchorStyle,
+          '--ogabassey-chat-safe-area-bottom': '34px',
+        } as React.CSSProperties
+      }
+      data-testid="anchor"
+    >
       <button
         type="button"
         {...drag.buttonProps}
@@ -121,7 +130,7 @@ describe('useChatLauncherDrag', () => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
     fireEvent(window, new Event('resize'));
     expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(248px, 408px, 0)',
+      'translate3d(248px, 374px, 0)',
     );
   });
 
@@ -167,6 +176,19 @@ describe('useChatLauncherDrag', () => {
     fireEvent(window, new Event('resize'));
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(100px, 200px, 0)',
+    );
+  });
+
+  it('keeps the icon above the device bottom safe area', () => {
+    const { pointer } = setup();
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      getPropertyValue: () => '34px',
+    } as CSSStyleDeclaration);
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 220, 5000);
+    pointer('pointerup', 220, 5000);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(200px, 662px, 0)',
     );
   });
 

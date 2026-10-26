@@ -20,14 +20,24 @@ type Gesture = {
   top: number;
   width: number;
   height: number;
+  bottomSafeArea: number;
   base: Position;
   next: Position;
 };
 
-function clamp(x: number, y: number, width: number, height: number): Position {
+function clamp(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  bottomSafeArea = 0,
+): Position {
   return {
     x: Math.max(EDGE_GAP, Math.min(x, window.innerWidth - width - EDGE_GAP)),
-    y: Math.max(EDGE_GAP, Math.min(y, window.innerHeight - height - EDGE_GAP)),
+    y: Math.max(
+      EDGE_GAP,
+      Math.min(y, window.innerHeight - height - EDGE_GAP - bottomSafeArea),
+    ),
   };
 }
 
@@ -45,13 +55,31 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
 
+  function readBottomSafeArea() {
+    const anchor = anchorRef.current;
+    if (!anchor) return 0;
+    const value =
+      window
+        .getComputedStyle(anchor)
+        .getPropertyValue('--ogabassey-chat-safe-area-bottom')
+        .trim() ||
+      anchor.style.getPropertyValue('--ogabassey-chat-safe-area-bottom').trim();
+    return Number.parseFloat(value) || 0;
+  }
+
   useEffect(() => {
     const resize = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
       if (!rect || rect.width === 0 || rect.height === 0) return;
       setPosition((current) =>
         current
-          ? clamp(current.x, current.y, rect.width, rect.height)
+          ? clamp(
+              current.x,
+              current.y,
+              rect.width,
+              rect.height,
+              readBottomSafeArea(),
+            )
           : current,
       );
     };
@@ -72,6 +100,7 @@ export function useChatLauncherDrag(
       return;
     // Measure once, before writing styles. The move path uses cached geometry.
     const rect = event.currentTarget.getBoundingClientRect();
+    const bottomSafeArea = readBottomSafeArea();
     gesture.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -80,6 +109,7 @@ export function useChatLauncherDrag(
       top: rect.top,
       width: rect.width,
       height: rect.height,
+      bottomSafeArea,
       base: position ?? { x: 0, y: 0 },
       next: { x: rect.left, y: rect.top },
     };
@@ -99,6 +129,7 @@ export function useChatLauncherDrag(
       start.top + dy,
       start.width,
       start.height,
+      start.bottomSafeArea,
     );
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {

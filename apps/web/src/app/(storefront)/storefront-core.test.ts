@@ -83,10 +83,13 @@ describe('storefront overlay priority', () => {
       '.ogabassey-offer-popup',
       '.ogabassey-newsletter-popup',
     ]) {
-      expect(storefrontCoreCss).toContain(`${selector} ${widget}`);
+      expect(storefrontCoreCss).toContain(widget);
     }
     expect(cssRuleFor(`${selector} .ogabassey-newsletter-popup`)).toContain(
       'display: none'
+    );
+    expect(storefrontCoreCss).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*body:has\(\.ogabassey-offer-popup\)[\s\S]*\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\)/
     );
   });
 });

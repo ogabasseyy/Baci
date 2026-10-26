@@ -7,6 +7,7 @@
 */
 @layer components {
   .ogabassey-chat-anchor {
+    --ogabassey-chat-safe-area-bottom: env(safe-area-inset-bottom, 0px);
     align-items: flex-end;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
     display: flex;

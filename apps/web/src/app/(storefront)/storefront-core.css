@@ -1167,7 +1167,7 @@ body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
 
 @media (max-width: 767px) {
   body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))
-    .ogabassey-chat-anchor {
+    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
     display: none;
   }
 }

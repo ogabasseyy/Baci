@@ -48,7 +48,7 @@ describe('CookieConsent', () => {
     act(() => vi.advanceTimersByTime(1000));
 
     const dialog = screen.getByRole('dialog', { name: 'Cookie consent' });
-    expect(dialog).toHaveClass('w-auto', 'overflow-y-auto');
+    expect(dialog).toHaveClass('w-auto', 'overflow-y-auto', 'z-[100]');
     expect(dialog).not.toHaveClass('w-full');
   });
 

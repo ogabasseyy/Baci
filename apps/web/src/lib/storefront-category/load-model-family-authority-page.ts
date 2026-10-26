@@ -1,10 +1,8 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { buildStoreUrl } from '@/lib/store-url';
 import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
-import {
-  brandAuthorityPageLoader,
-  getCategoryAuthorityNoun,
-} from '@/lib/storefront-category/load-brand-authority-page';
+import { getCategoryAuthorityNoun } from '@/lib/storefront-category/get-category-authority-noun';
+import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';

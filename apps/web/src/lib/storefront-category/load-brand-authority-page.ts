@@ -10,6 +10,7 @@ import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-a
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
+import { getCategoryAuthorityNoun } from '@/lib/storefront-category/get-category-authority-noun';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
@@ -19,34 +20,6 @@ import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
-
-export interface CategoryAuthorityNoun {
-  titleNoun: string;
-  lowerNoun: string;
-}
-
-const CATEGORY_AUTHORITY_NOUNS: Record<string, CategoryAuthorityNoun> = {
-  smartphones: { titleNoun: 'Phones', lowerNoun: 'phones' },
-  laptops: { titleNoun: 'Laptops', lowerNoun: 'laptops' },
-  tablets: { titleNoun: 'Tablets', lowerNoun: 'tablets' },
-  smartwatches: { titleNoun: 'Smartwatches', lowerNoun: 'smartwatches' },
-};
-
-export function getCategoryAuthorityNoun(
-  categorySlug: string,
-  categoryName?: string
-): CategoryAuthorityNoun {
-  const normalizedSlug = categorySlug.trim().toLowerCase();
-  const matched = CATEGORY_AUTHORITY_NOUNS[normalizedSlug];
-  if (matched) {
-    return matched;
-  }
-  const fallback = categoryName?.trim() || categorySlug.trim();
-  return {
-    titleNoun: fallback,
-    lowerNoun: fallback.toLowerCase(),
-  };
-}
 
 export interface BrandAuthorityPageProduct {
   id: string;

@@ -89,10 +89,10 @@ describe('storefront overlay priority', () => {
       'display: none'
     );
     expect(storefrontCoreCss).toMatch(
-      /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(:focus-within\)/
+      /body:has\(\.storefront-cookie-consent\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(\s*:focus-within\s*\):not\(\s*\[data-chat-launcher-dragging\]\s*\)/
     );
     expect(storefrontCoreCss).toMatch(
-      /body:has\(\.ogabassey-newsletter-popup\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(:focus-within\)\s*\{\s*display:\s*none/
+      /body:has\(\.ogabassey-newsletter-popup\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(\s*:focus-within\s*\):not\(\s*\[data-chat-launcher-dragging\]\s*\)\s*\{\s*display:\s*none/
     );
     expect(storefrontCoreCss).toMatch(
       /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/

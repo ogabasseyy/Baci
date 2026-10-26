@@ -140,13 +140,13 @@ const APPLE_MACBOOK_MODEL_FAMILIES: readonly ModelFamilyAuthorityEntry[] = [
   makeMacbook(
     'macbook-air',
     'MacBook Air',
-    /^(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
+    /^(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
     /\b(?:Apple\s+)?MacBook\s+Air\b/i
   ),
   makeMacbook(
     'macbook-pro',
     'MacBook Pro',
-    /^(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
+    /^(?:Apple\s+)?(?:[0-9]{2}(?:\.[0-9])?(?:["”']|[- ]inch)?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
     /\b(?:Apple\s+)?MacBook\s+Pro\b/i
   ),
 ];

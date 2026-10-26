@@ -18,26 +18,29 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   const familyHubs: ResolvedEligibleCategoryHubDestinations['familyHubs'] = [];
   const inventoryNamesByBrand = new Map<string, string[]>();
 
-  for (const hub of args.hubs.brandHubs) {
-    if (!hub.brand_key) continue;
-    const entry = brandAuthorityTaxonomy.getEntry(
-      args.categorySlug,
-      hub.brand_key
-    );
-    if (!entry) continue;
-    const inventory = await loadBrandAuthorityInventorySafely({
-      merchantId: args.merchantId,
-      categorySlug: args.categorySlug,
-      entry,
-    });
-    if (!inventory || inventory.productCount < entry.minimumProducts) {
-      continue;
-    }
-    brandHubs.push(hub);
-    inventoryNamesByBrand.set(
-      hub.brand_key,
-      inventory.products.map((product) => product.name)
-    );
+  const verified = await Promise.all(
+    args.hubs.brandHubs.map(async (hub) => {
+      if (!hub.brand_key) return null;
+      const entry = brandAuthorityTaxonomy.getEntry(
+        args.categorySlug,
+        hub.brand_key
+      );
+      if (!entry) return null;
+      const inventory = await loadBrandAuthorityInventorySafely({
+        merchantId: args.merchantId,
+        categorySlug: args.categorySlug,
+        entry,
+      });
+      if (!inventory || inventory.productCount < entry.minimumProducts) {
+        return null;
+      }
+      return { hub, names: inventory.products.map((product) => product.name) };
+    })
+  );
+  for (const result of verified) {
+    if (!result?.hub.brand_key) continue;
+    brandHubs.push(result.hub);
+    inventoryNamesByBrand.set(result.hub.brand_key, result.names);
   }
 
   for (const hub of args.hubs.familyHubs) {

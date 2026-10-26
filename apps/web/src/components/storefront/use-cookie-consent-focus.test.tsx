@@ -79,14 +79,40 @@ function ConsentFocusHarness() {
   );
 }
 
-it('restores the covered launcher after consent closes from inside the banner', () => {
+it('does not steal chat launcher focus when non-modal consent appears', () => {
   render(<ConsentFocusHarness />);
   const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
   launcher.focus();
   fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
 
   const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
-  expect(dismiss).toHaveFocus();
+  expect(launcher).toHaveFocus();
+  expect(dismiss).not.toHaveFocus();
+});
+
+it('restores chat launcher focus when consent closes after banner entry', () => {
+  render(<ConsentFocusHarness />);
+  const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+  launcher.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+
+  expect(launcher).toHaveFocus();
+});
+
+it('falls back to the launcher when banner focus has no related target', () => {
+  render(<ConsentFocusHarness />);
+  const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+  launcher.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  launcher.blur();
+  dismiss.focus();
+  fireEvent.focusIn(dismiss, { relatedTarget: null });
   fireEvent.click(dismiss);
 
   expect(launcher).toHaveFocus();
@@ -140,11 +166,8 @@ it('does not redirect consent focus to chat after a non-chat popup interaction',
   const newsletter = screen.getByRole('button', { name: 'Show newsletter' });
   newsletter.focus();
   fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
-  fireEvent.focusIn(screen.getByRole('button', { name: 'Dismiss consent' }), {
-    relatedTarget: newsletter,
-  });
-
   const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
   fireEvent.click(dismiss);
 
   expect(newsletter).toHaveFocus();
@@ -158,7 +181,6 @@ it('restores focus to an ordinary control that was active before consent appeare
 
   const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
   dismiss.focus();
-  fireEvent.focusIn(dismiss, { relatedTarget: newsletter });
   fireEvent.click(dismiss);
 
   expect(newsletter).toHaveFocus();

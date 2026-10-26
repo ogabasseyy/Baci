@@ -64,7 +64,7 @@ describe('CookieConsent', () => {
     ).toHaveAttribute('href', '/privacy');
   });
 
-  it('moves focus into consent when it covers the chat and restores focus on dismiss', () => {
+  it('does not steal chat focus when non-modal consent appears', () => {
     const { container } = render(
       <>
         <div className="ogabassey-chat-anchor">
@@ -81,9 +81,11 @@ describe('CookieConsent', () => {
     act(() => vi.advanceTimersByTime(1000));
 
     const customizeButton = screen.getByRole('button', { name: 'Customize' });
-    expect(customizeButton).toHaveFocus();
+    expect(launcher).toHaveFocus();
+    expect(customizeButton).not.toHaveFocus();
     expect(container.querySelector('.storefront-cookie-consent')).toBeTruthy();
 
+    customizeButton.focus();
     fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
     act(() => vi.advanceTimersByTime(200));
 
@@ -226,7 +228,7 @@ describe('CookieConsent', () => {
     expect(toggle).toHaveFocus();
   });
 
-  it('moves focus from the bubble dismiss control into consent and restores it', () => {
+  it('does not steal focus from the chat message dismiss control', () => {
     render(
       <div className="ogabassey-chat-anchor">
         <button type="button" className="ogabassey-chat-button">
@@ -245,7 +247,8 @@ describe('CookieConsent', () => {
 
     act(() => vi.advanceTimersByTime(1000));
 
-    expect(screen.getByRole('button', { name: 'Customize' })).toHaveFocus();
+    expect(dismiss).toHaveFocus();
+    screen.getByRole('button', { name: 'Customize' }).focus();
     fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
     act(() => vi.advanceTimersByTime(200));
     expect(dismiss).toHaveFocus();

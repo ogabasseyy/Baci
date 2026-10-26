@@ -45,9 +45,9 @@ export default defineConfig({
       testMatch: '**/storefront-chat-overlay*.pw.ts',
       use: {
         browserName: 'firefox',
-        launchOptions: {
-          env: { ...firefoxEnv, HOME: firefoxHome },
-        },
+        launchOptions: process.env.CI
+          ? { env: { ...firefoxEnv, HOME: firefoxHome } }
+          : undefined,
       },
     },
   ],

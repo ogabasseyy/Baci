@@ -46,9 +46,10 @@ test('consent focus handoff works with storefront overlay CSS', async ({
     .getByRole('button', { name: 'Show consent' })
     .evaluate((button) => (button as HTMLButtonElement).click());
   const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
-  await expect(dismiss).toBeFocused();
-  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
+  await expect(launcher).toBeFocused();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
 
+  await dismiss.focus();
   await dismiss.click();
   await expect(launcher).toBeFocused();
   await expect(launcher).toBeVisible();
@@ -107,7 +108,7 @@ test('consent dismissal preserves a newer outside focus after launcher handoff',
     .evaluate((button) => (button as HTMLButtonElement).click());
 
   const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
-  await expect(dismiss).toBeFocused();
+  await expect(launcher).toBeFocused();
   const origin = page.getByRole('button', { name: 'Focus origin' });
   await origin.focus();
   await expect(origin).toBeFocused();

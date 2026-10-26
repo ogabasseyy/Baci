@@ -142,16 +142,13 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
         '.ogabassey-newsletter-popup button:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
       );
     }
-    if (
+    if (bannerHasFocusRef.current && bannerFocusOriginRef.current?.isConnected)
+      bannerFocusOriginRef.current.focus();
+    else if (
       bannerHasFocusRef.current &&
       (previousFocus || (chatAnchor && !bannerFocusOriginRef.current))
     )
       focusTarget?.focus();
-    else if (
-      bannerHasFocusRef.current &&
-      bannerFocusOriginRef.current?.isConnected
-    )
-      bannerFocusOriginRef.current.focus();
     bannerFocusOriginRef.current = null;
     bannerHasFocusRef.current = false;
     dismissThroughBannerRef.current = false;

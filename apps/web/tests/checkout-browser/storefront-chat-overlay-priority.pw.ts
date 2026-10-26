@@ -95,6 +95,27 @@ test('consent dismissal restores the ordinary control focused before banner entr
   await expect(origin).toBeFocused();
 });
 
+test('consent dismissal preserves a newer outside focus after launcher handoff', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await launcher.focus();
+  await page
+    .getByRole('button', { name: 'Show consent' })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+
+  const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
+  await expect(dismiss).toBeFocused();
+  const origin = page.getByRole('button', { name: 'Focus origin' });
+  await origin.focus();
+  await expect(origin).toBeFocused();
+
+  await dismiss.click();
+  await expect(origin).toBeFocused();
+});
+
 test('focused launcher remains reachable and pauses promotional overlays', async ({
   page,
 }) => {
@@ -196,4 +217,75 @@ test('an open conversation stays above the non-modal consent banner', async ({
 
   await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
   await expect(page.locator('.storefront-cookie-consent')).toBeHidden();
+
+  await page
+    .locator('.ogabassey-chat-window')
+    .evaluate((window) => window.remove());
+  await expect(page.locator('.storefront-cookie-consent')).toBeVisible();
+});
+
+test('dragged launcher stays inside a pinch-zoomed visual viewport', async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.use.browserName !== 'chromium');
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  const baseURL = testInfo.project.use.baseURL as string;
+  await page.goto(new URL('/chat-launcher', baseURL).toString());
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.synthesizePinchGesture', {
+    x: 320,
+    y: 700,
+    scaleFactor: 2,
+    relativeSpeed: 800,
+    gestureSourceType: 'touch',
+  });
+  await cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor: 2 });
+  await cdp.send('Input.synthesizeScrollGesture', {
+    x: 180,
+    y: 400,
+    xDistance: 80,
+    yDistance: 120,
+    speed: 800,
+    gestureSourceType: 'touch',
+  });
+  const viewport = await page.evaluate(() => ({
+    left: window.visualViewport?.offsetLeft ?? 0,
+    top: window.visualViewport?.offsetTop ?? 0,
+    width: window.visualViewport?.width ?? window.innerWidth,
+    height: window.visualViewport?.height ?? window.innerHeight,
+    scale: window.visualViewport?.scale ?? 1,
+  }));
+  expect(viewport.scale).toBeGreaterThan(1);
+  expect(viewport.width).toBeLessThan(390);
+  expect(viewport.height).toBeLessThan(844);
+
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  const bounds = await launcher.boundingBox();
+  if (!bounds) throw new Error('Chat launcher is missing its layout box');
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(viewport.left + viewport.width - 2, viewport.top + 2, {
+    steps: 4,
+  });
+  await page.mouse.up();
+
+  const finalBounds = await launcher.boundingBox();
+  if (!finalBounds) throw new Error('Chat launcher lost its layout box');
+  expect(finalBounds.x).toBeGreaterThanOrEqual(viewport.left + 12);
+  expect(finalBounds.y).toBeGreaterThanOrEqual(viewport.top + 12);
+  expect(finalBounds.x + finalBounds.width).toBeLessThanOrEqual(
+    viewport.left + viewport.width - 12
+  );
+  expect(finalBounds.y + finalBounds.height).toBeLessThanOrEqual(
+    viewport.top + viewport.height - 12
+  );
+  await context.close();
 });

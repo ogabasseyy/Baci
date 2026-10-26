@@ -47,6 +47,8 @@ export interface ProductSemanticInventoryRow {
   slug?: string | null;
   stock?: number | null;
   stock_quantity?: number | null;
+  is_parent?: boolean | null;
+  parent_product_id?: string | null;
 }
 
 /**
@@ -63,6 +65,8 @@ export const PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT = `
   condition,
   stock,
   stock_quantity,
+  is_parent,
+  parent_product_id,
   ${PRODUCT_KEY_SPECS_RELATION_SELECT}
 `;
 

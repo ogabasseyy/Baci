@@ -23,6 +23,8 @@ interface CategoryInventoryProduct {
   product_key_specs?: Record<string, unknown> | null;
   condition?: string | null;
   stock?: number | null;
+  is_parent?: boolean | null;
+  parent_product_id?: string | null;
 }
 
 type OverrideCategoryProduct = NonNullable<
@@ -57,6 +59,8 @@ function toCategoryInventoryProduct(
     product_key_specs: product.product_key_specs ?? null,
     condition: product.condition ?? null,
     stock: product.stock ?? null,
+    is_parent: product.is_parent ?? null,
+    parent_product_id: product.parent_product_id ?? null,
   };
 }
 
@@ -105,13 +109,15 @@ function postMatchesModelFamily(
   post: PublishedClusterPost,
   familyEntry: ModelFamilyAuthorityEntry
 ): boolean {
-  if (modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, post.title)) {
-    return true;
-  }
-  const normalizedSlugText = post.slug.replace(/[-_]/g, ' ');
-  return modelFamilyAuthorityTaxonomy.matchesContent(
-    familyEntry,
-    normalizedSlugText
+  const haystacks = [
+    post.title,
+    post.slug.replace(/[-_]/g, ' '),
+    post.excerpt ?? '',
+    ...(post.tags ?? []),
+    ...(post.keywords ?? []),
+  ];
+  return haystacks.some((text) =>
+    modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, text)
   );
 }
 

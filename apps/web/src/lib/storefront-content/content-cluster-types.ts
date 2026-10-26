@@ -115,6 +115,8 @@ export interface InformationalClusterCategoryData {
     product_key_specs?: Record<string, unknown> | null;
     condition?: string | null;
     stock?: number | null;
+    is_parent?: boolean | null;
+    parent_product_id?: string | null;
   }>;
   fallbackName?: string | null;
   isCollection?: boolean;

@@ -20,6 +20,7 @@ interface CartLoadedViewProps {
   enableNegotiationModal: boolean;
   formatPrice: (amount: number) => string;
   grandTotal: number;
+  isPreparingCheckout?: boolean;
   handleCheckout: () => void;
   handleClearCart: () => void;
   handleReturnHome: () => void;
@@ -65,6 +66,7 @@ export default function CartLoadedView({
   enableNegotiationModal,
   formatPrice,
   grandTotal,
+  isPreparingCheckout,
   handleCheckout,
   handleClearCart,
   handleReturnHome,
@@ -257,6 +259,7 @@ export default function CartLoadedView({
         grandTotal={grandTotal}
         hasAcceptedNegotiation={hasAcceptedNegotiation}
         hasNonNegotiableItem={hasNonNegotiableCartItem}
+        isPreparingCheckout={isPreparingCheckout}
         onCheckout={handleCheckout}
         onCheckoutPressIn={onCheckoutPressIn}
         onNegotiateTotal={onNegotiateTotal}

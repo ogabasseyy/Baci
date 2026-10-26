@@ -111,7 +111,7 @@ test('parses job listings with run-id diagnostics', () => {
   assert.throws(() => parseJobsPayload('<html>nope</html>', 42), /workflow run 42 jobs unreadable/);
 });
 
-test('paginates run listing with one bounded call per page', () => {
+test('paginates workflow pages larger than the default child buffer with one bounded call per page', () => {
   const directory = mkdtempSync(join(tmpdir(), 'baci-fake-gh-'));
   const log = join(directory, 'calls.log');
   writeFileSync(
@@ -132,7 +132,7 @@ const page = Number(/[?&]page=(\\d+)/.exec(endpoint)[1]);
 const counts = process.env.FAKE_GH_PAGES.split(',').map(Number);
 const runs = Array.from({ length: counts[page - 1] ?? 0 }, (_, i) => ({
   id: page * 1000 + i, head_sha: 'b'.repeat(40), status: 'queued',
-  event: 'workflow_dispatch', display_title: 't', oversized_raw_payload: 'x'.repeat(4096),
+  event: 'workflow_dispatch', display_title: 't', oversized_raw_payload: 'x'.repeat(32768),
 }));
 process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 `,
@@ -171,8 +171,10 @@ process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 
     process.env.FAKE_GH_EXIT = '1';
     process.env.FAKE_GH_STDOUT = 'HTTP 403: abuse detected';
-    assert.throws(() => readRuns('status=queued', true), {
-      message: `gh api repos/ogabasseyy/Baci/actions/workflows/deploy.yml/runs?branch=main&per_page=100&page=1&status=queued failed with status 1: HTTP 403: abuse detected; inspect preceding diagnostics`,
+    assert.throws(() => readRuns('status=queued', true), error => {
+      assert.match(error.message, /^gh api repos\/ogabasseyy\/Baci\/actions\/workflows\/deploy\.yml\/runs\?/);
+      assert.match(error.message, /failed with status 1: HTTP 403: abuse detected; inspect preceding diagnostics$/);
+      return true;
     });
   } finally {
     process.env.PATH = savedPath;

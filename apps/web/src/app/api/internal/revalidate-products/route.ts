@@ -229,6 +229,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           // Related blog enrichment shares the merchant product tag. Expire it
           // before the edge purge can cause an article MISS to refill stale data.
           expireProductBlogCache(merchantId);
+          revalidateProducts(merchantId, undefined, {
+            expireImmediately: true,
+          });
           if (blogPostSlugsIncomplete) {
             // The article lookup totally failed: the affected article URLs
             // are unknown, so evict the hostname (a superset of the product
@@ -259,6 +262,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Expire the merchant-scoped article enrichment before the hostname purge
     // can trigger a MISS and refill Cloudflare with stale product data.
     expireProductBlogCache(merchantId);
+    revalidateProducts(merchantId, undefined, { expireImmediately: true });
     scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
   }
 

@@ -73,3 +73,31 @@ skip_superseded_historical_migration_repair() {
   fi
   skipped_count=$((skipped_count + 1))
 }
+
+# These three files shipped through Management API before their repository
+# timestamps were finalized. Reconcile only the exact recorded SQL, never a
+# same-name migration or an arbitrary duplicate-function error.
+reconcile_storefront_facet_timestamp() {
+  local version="$1" name="$2" file="$3" historical_version recorded_name body
+  case "$version:$name" in
+    20261003180000:storefront_available_search_facets) historical_version=20261003175517 ;;
+    20261003193000:storefront_processor_filters) historical_version=20261003183737 ;;
+    20261003194500:storefront_category_facets) historical_version=20261003184149 ;;
+    *) return 2 ;;
+  esac
+  recorded_name="$(awk -F '\t' -v version="$historical_version" '$1 == version { print $2; exit }' <<<"$applied_migrations")"
+  [ -n "$recorded_name" ] || return 2
+  [ "$recorded_name" = "$name" ] || return 1
+  body="$(jq -n --rawfile sql "$file" \
+    --arg historical "$historical_version" --arg name "$name" \
+    --arg registration "$(build_register_migration_query "$version" "$name")" '
+    {query: ("BEGIN; DO $reconcile$ BEGIN IF NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = "
+      + "\u0027" + $historical + "\u0027 AND name = \u0027" + $name
+      + "\u0027 AND statements = ARRAY[convert_from(decode(\u0027" + ($sql | @base64)
+      + "\u0027, \u0027base64\u0027), \u0027UTF8\u0027)]) THEN RAISE EXCEPTION \u0027Historical facet SQL mismatch\u0027; END IF; END $reconcile$;\n"
+      + $registration + "\nCOMMIT;")}')"
+  api_query_payload "$body" || return 1
+  applied_migrations="${applied_migrations}"$'\n'"${version}"$'\t'"${name}"
+  applied_count=$((applied_count + 1))
+  echo "✓ reconciled exact historical SQL: $historical_version -> $version  $name"
+}

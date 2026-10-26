@@ -67,6 +67,97 @@ describe('critical commerce selection helpers', () => {
     });
   });
 
+  it('keeps an off-policy zero-stock variant purchasable in the cart', () => {
+    const selectedCartProduct = buildVariantCartProduct(
+      { ...cartProduct, manage_stock: false, stock: 0 },
+      {
+        attributes: { storage: '512GB' },
+        price: 2_343_000,
+        variant: {
+          attributes: { storage: '512GB' },
+          effective_policy: 'off',
+          id: 'iphone17pm-512-esim',
+          inventory_tracking_policy: 'off',
+          merchant_id: 'merchant-1',
+          product_id: 'product-1',
+          stock_quantity: 0,
+        },
+      }
+    );
+
+    expect(selectedCartProduct).toMatchObject({
+      manage_stock: false,
+      price: 2_343_000,
+    });
+    expect(selectedCartProduct.stock).toBe(0);
+  });
+
+  it('enforces standard-tracked variant stock in the critical cart projection', () => {
+    const selectedCartProduct = buildVariantCartProduct(
+      { ...cartProduct, manage_stock: false, stock: 0 },
+      {
+        attributes: { storage: '512GB' },
+        price: 2_343_000,
+        variant: {
+          attributes: { storage: '512GB' },
+          effective_policy: 'standard',
+          id: 'iphone17pm-512-esim',
+          inventory_tracking_policy: 'standard',
+          merchant_id: 'merchant-1',
+          product_id: 'product-1',
+          stock_quantity: 3,
+        },
+      }
+    );
+
+    expect(selectedCartProduct).toMatchObject({ manage_stock: true, stock: 3 });
+  });
+
+  it('uses exact serialized units ahead of a stale variant scalar', () => {
+    const selectedCartProduct = buildVariantCartProduct(
+      { ...cartProduct, manage_stock: false, stock: 0 },
+      {
+        attributes: { storage: '512GB' },
+        price: 2_343_000,
+        variant: {
+          attributes: { storage: '512GB' },
+          available_units: 3,
+          effective_policy: 'serialized_strict',
+          id: 'iphone17pm-512-esim',
+          inventory_tracking_policy: 'serialized_strict',
+          merchant_id: 'merchant-1',
+          product_id: 'product-1',
+          stock_quantity: 0,
+        },
+      }
+    );
+
+    expect(selectedCartProduct).toMatchObject({ manage_stock: true, stock: 3 });
+  });
+
+  it('keeps then-unlimited variants unbounded in the critical cart projection', () => {
+    const selectedCartProduct = buildVariantCartProduct(
+      { ...cartProduct, manage_stock: false, stock: 0 },
+      {
+        attributes: { storage: '512GB' },
+        price: 2_343_000,
+        variant: {
+          attributes: { storage: '512GB' },
+          available_units: 1,
+          effective_policy: 'serialized_then_unlimited',
+          id: 'iphone17pm-512-esim',
+          inventory_tracking_policy: 'serialized_then_unlimited',
+          merchant_id: 'merchant-1',
+          product_id: 'product-1',
+          stock_quantity: 1,
+        },
+      }
+    );
+
+    expect(selectedCartProduct.manage_stock).toBe(true);
+    expect(selectedCartProduct.stock).toBe(Number.POSITIVE_INFINITY);
+  });
+
   it('returns the original cart product when no variant selection exists', () => {
     expect(buildVariantCartProduct(cartProduct, null)).toBe(cartProduct);
   });

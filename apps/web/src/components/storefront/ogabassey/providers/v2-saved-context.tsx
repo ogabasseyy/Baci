@@ -1,7 +1,19 @@
 'use client';
 
 import type React from 'react';
-import { createContext, use, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import {
+  createCommittedSnapshotStore,
+  type CommittedSnapshotStore,
+} from '@/lib/committed-snapshot-store';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import type { Product } from '../types';
 
@@ -19,7 +31,9 @@ interface V2SavedContextType {
   dismissToast: () => void;
 }
 
-const V2SavedContext = createContext<V2SavedContextType | undefined>(undefined);
+const V2SavedContext = createContext<
+  CommittedSnapshotStore<V2SavedContextType> | undefined
+>(undefined);
 const SAVED_STORAGE_KEY = 'ogabassey_v2_saved';
 const STORAGE_HYDRATION_TIMEOUT_MS = 1200;
 let hasWarnedMissingSavedProvider = false;
@@ -124,15 +138,22 @@ function writeSavedItemsToStorage(savedItems: Product[]) {
 }
 
 export const useV2Saved = () => {
-  const context = use(V2SavedContext);
-  if (!context) {
+  const store = use(V2SavedContext);
+  const snapshot = useSyncExternalStore(
+    store?.subscribe ?? subscribeToMissingSaved,
+    store?.getSnapshot ?? getSavedFallback,
+    store?.getServerSnapshot ?? getSavedFallback
+  );
+  if (!store) {
     if (typeof window !== 'undefined') {
       warnMissingSavedProvider();
     }
-    return SERVER_SAVED_CONTEXT_FALLBACK;
   }
-  return context;
+  return snapshot;
 };
+
+const getSavedFallback = () => SERVER_SAVED_CONTEXT_FALLBACK;
+const subscribeToMissingSaved = () => () => undefined;
 
 export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -253,11 +274,11 @@ export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
     setToastState((prev) => ({ ...prev, show: false }));
   };
 
+  const value = { savedItems, toggleSaved, isSaved, toastState, dismissToast };
+  const [store] = useState(() => createCommittedSnapshotStore(value));
+  useLayoutEffect(() => store.publish(value));
+
   return (
-    <V2SavedContext.Provider
-      value={{ savedItems, toggleSaved, isSaved, toastState, dismissToast }}
-    >
-      {children}
-    </V2SavedContext.Provider>
+    <V2SavedContext.Provider value={store}>{children}</V2SavedContext.Provider>
   );
 };

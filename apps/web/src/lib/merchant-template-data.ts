@@ -26,6 +26,7 @@ function normalizePremiumFeatures(
 }
 
 const PUBLIC_FEATURE_SETTING_KEYS = [
+  'chatgpt_pixel_id',
   'about_page_enabled',
   'auto_blog_enabled',
   'blog_enabled',

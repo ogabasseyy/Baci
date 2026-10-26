@@ -11,6 +11,7 @@ import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipe
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { onboardingEmailWorkerAuthority } from '@/lib/events/event-pipeline-onboarding-authority-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
@@ -132,7 +133,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   authority: {
     adminImporters: eventPipelineAdminImporters,
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths],
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths, ...onboardingEmailWorkerAuthority.adminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -141,7 +142,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',
@@ -177,6 +178,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
+      onboardingEmailWorkerAuthority.worker,
     ],
     servicePaths: eventPipelineAuthorityServicePaths,
     operationalServiceImporters: [
@@ -200,6 +202,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     vpsCleanup: ['cleanup_domain_event_pipeline_v1'],
   },
   operations: {
+    merchant_chatgpt_ads_credentials: ['select'],
     analytics_events: ['insert', 'upsert'],
     domains: ['select'],
     merchant_feature_settings: ['select'],
@@ -211,6 +214,9 @@ export const EVENT_PIPELINE_BOUNDARY = {
     platform_settings: ['select'],
   },
   projectionAuthorities: {
+    'apps/web/src/lib/events/chatgpt-destination-adapter.ts': [
+      'chatgptDelivery',
+    ],
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
@@ -229,6 +235,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'apps/web/src/lib/platform-admin-auth.ts': ['operatorAuth'],
   },
   projections: {
+    // biome-ignore format: exact worker projection preserves the 300-line boundary gate.
+    chatgptDelivery: { merchants: columns('slug plan_tier plan_expires_at premium_features offline_conversions_enabled'), merchant_feature_settings: ['chatgpt_pixel_id'], merchant_chatgpt_ads_credentials: ['capi_key'], domains: ['domain'] },
     conversion: { merchants: columns('country payout_currency') },
     identity: {
       domains: ['merchant_id'],

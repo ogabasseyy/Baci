@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -212,7 +218,7 @@ describe('JumiaBrandSelector', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load brands')).toBeInTheDocument();
+      expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
     });
 
     expect(screen.getByText('Retry')).toBeInTheDocument();
@@ -249,5 +255,63 @@ describe('JumiaBrandSelector', () => {
       ).toBeInTheDocument();
       expect(screen.getByRole('option', { name: 'Apple' })).toBeInTheDocument();
     });
+  });
+
+  it('refetches exact scope when business client or integration changes', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ brands: mockBrands }),
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { rerender } = render(
+      <JumiaBrandSelector
+        {...defaultProps}
+        integrationId="old"
+        businessClientCode="jumia-ng"
+      />
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('option', { name: 'Samsung' });
+    rerender(
+      <JumiaBrandSelector
+        {...defaultProps}
+        integrationId="new"
+        businessClientCode="jumia-gh"
+      />
+    );
+    expect(
+      screen.queryByRole('option', { name: 'Samsung' })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('combobox'));
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenLastCalledWith(
+        '/api/marketplace/jumia/brands?merchantId=merchant-1&integrationId=new&businessClientCode=jumia-gh',
+        expect.anything()
+      )
+    );
+  });
+  it('reuses a successful catalog on reopen within the same exact destination', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ brands: mockBrands }),
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(
+      <JumiaBrandSelector
+        {...defaultProps}
+        integrationId="integration"
+        businessClientCode="jumia-ng"
+      />
+    );
+    fireEvent.click(screen.getByRole('combobox'));
+    await screen.findByRole('option', { name: 'Samsung' });
+    await act(async () => {
+      popoverOnOpenChange?.(false);
+    });
+    await act(async () => {
+      popoverOnOpenChange?.(true);
+    });
+    expect(screen.getByRole('option', { name: 'Samsung' })).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

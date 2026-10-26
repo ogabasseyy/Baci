@@ -6,15 +6,15 @@ import {
 } from '@/schemas/storefront-preflight-rpc';
 import type { BlogListingStatusIntent } from './cached-storefront-blog-listing-status';
 import {
-  resolveBlogListingVerdict,
+  evaluateBlogListingRequest,
   type StorefrontBlogListingStatusResolution,
 } from './storefront-blog-listing-verdict';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import {
   callStorefrontPreflightRpc,
-  gateStorefrontPreflightStatus,
   type StorefrontPreflightRpcImpl,
 } from './storefront-preflight-rpc';
+import { gateStorefrontPreflightStatus } from './storefront-preflight-status-gate';
 
 export type { StorefrontBlogListingStatusResolution };
 
@@ -138,7 +138,7 @@ export async function resolveStorefrontBlogListingStatus(
     authorName = profile.name;
   }
 
-  const row = await callStorefrontPreflightRpc(
+  const result = await callStorefrontPreflightRpc(
     STOREFRONT_BLOG_LISTING_STATUS_RPC,
     { p_identifier: opts.identifier, p_author_name: authorName },
     {
@@ -147,25 +147,41 @@ export async function resolveStorefrontBlogListingStatus(
       timeoutMs: opts.timeoutMs,
     }
   );
-  if (row === null) {
+  if (result === null) {
     return { kind: 'noop' };
   }
 
-  const parsed = storefrontBlogListingStatusRowSchema.safeParse(row);
+  const parsed = storefrontBlogListingStatusRowSchema.safeParse(result.data);
   if (!parsed.success) {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    if (result.attempt) {
+      storefrontInternalPreflight.warnRpcFailOpen(
+        failOpenContext,
+        { ...result.attempt, outcome: 'parse-error' },
+        'parse'
+      );
+    } else {
+      storefrontInternalPreflight.warnFailOpen({
+        ...failOpenContext,
+        reason: 'parse',
+      });
+    }
     return { kind: 'noop' };
   }
   const verdict = parsed.data;
 
   if (
-    !gateStorefrontPreflightStatus(verdict.storefront_status, failOpenContext)
+    !gateStorefrontPreflightStatus(
+      verdict.storefront_status,
+      failOpenContext,
+      result.attempt
+    )
   ) {
     return { kind: 'noop' };
   }
 
-  return resolveBlogListingVerdict(opts.intent, verdict);
+  return evaluateBlogListingRequest({
+    intent: opts.intent,
+    row: verdict,
+    identifier: opts.identifier,
+  });
 }

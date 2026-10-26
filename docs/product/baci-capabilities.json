@@ -1,94 +1,214 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-21T11:38:42.987754+00:00",
-  "source_revision": "10f9f10ee7c1c5541ef13003b98123129a722395",
-  "evidence_digest": "4be123fc389f941d4ea20dde4e25405d7ae4968e112e2d4c994d0a953b28697e",
-  "claims_digest": "9172feb82825c7a9b0897d573e2f84758bcd114754ef13c0106f6e3138c625fd",
-  "review_scope": "Source audit; no prod verification claimed. Refs are reviewer evidence. MCP: buyer tools merchant-fixed; private continuation server-configured, off by default. ChatGPT privacy/retention/activation not established. Checkout offers via merchant-scoped get_storefront_offer_resolution (published/admin gate); scoping plus cart fall-through kept. RPC: one awaited factory, three sites. PDP snapshot emits anchor effective_policy; strict offer caps. Chunks 1000 scoped, 200 unscoped. Strict-null logs; outage throws retryable. Anchors lowest-id everywhere; strict zero-unit emits 0. Explicit picks win (pinned). Eligibility string false parses closed. MCP detail merchant-scoped. Duplicate-case ids hydrate all spellings.",
+  "reviewed_at": "2026-10-23T16:50:21.021709+00:00",
+  "source_revision": "e527d1b8bc792002af8d8d7c0525eca40b945bac",
+  "evidence_digest": "1d7bb09b146aa375bfd9dc46abd87421d3b8605912727625d14e6fe984f603e8",
+  "claims_digest": "47585bcf76d32c49a2924af209a6d54b474ffaf36b5b0946fb28d39e285cdb23",
+  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {
-      "id": "payments", "title": "Checkout payment configuration", "status": "code_evidenced",
+      "id": "payments",
+      "title": "Checkout payment configuration",
+      "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
       "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
-      "source_refs": ["apps/web/src/lib/checkout/payment-gateway-availability.ts", "apps/web/src/app/dashboard/settings/payments/payment-settings.ts", "apps/mobile-admin/app/(admin)/payment-methods.tsx", "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts", "apps/web/src/app/api/payments/credit-direct/sign/route.ts"]
+      "source_refs": [
+        "apps/web/src/lib/checkout/payment-gateway-availability.ts",
+        "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
+        "apps/mobile-admin/app/(admin)/payment-methods.tsx",
+        "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+      ]
     },
     {
-      "id": "shipping", "title": "Delivery and fulfillment", "status": "code_evidenced",
+      "id": "shipping",
+      "title": "Delivery and fulfillment",
+      "status": "code_evidenced",
       "claim": "Baci implements shipping zones and rates, pickup settings, quotes and shipment booking/tracking workflows.",
       "limitations": "Carrier coverage, credentials, merchant configuration and route availability apply. Booking code does not prove carrier delivery. Delivery zones are not multi-location inventory.",
-      "source_refs": ["apps/web/src/app/dashboard/settings/shipping/page.tsx", "apps/web/src/app/dashboard/settings/shipping/actions.ts", "apps/mobile-admin/hooks/createOrderDetailsShipmentActions.ts", "apps/web/src/lib/shipping/book-order-shipment.ts", "apps/mobile-admin/hooks/completeOrderShipment.ts", "apps/web/src/app/(platform)/track/[trackingNumber]/tracking-status.ts"]
+      "source_refs": [
+        "apps/web/src/app/dashboard/settings/shipping/page.tsx",
+        "apps/web/src/app/dashboard/settings/shipping/actions.ts",
+        "apps/mobile-admin/hooks/createOrderDetailsShipmentActions.ts",
+        "apps/web/src/lib/shipping/book-order-shipment.ts",
+        "apps/mobile-admin/hooks/completeOrderShipment.ts",
+        "apps/web/src/app/(platform)/track/[trackingNumber]/tracking-status.ts"
+      ]
     },
     {
-      "id": "domains", "title": "Domain purchase and management", "status": "code_evidenced",
+      "id": "domains",
+      "title": "Domain purchase and management",
+      "status": "code_evidenced",
       "claim": "Baci implements domain search and paid registration, connecting existing domains, verification and primary-domain management.",
       "limitations": "Requires domain entitlement, registrar/payment completion and DNS verification. Android in-app domain purchasing is disabled; existing-domain connection is a separate workflow.",
-      "source_refs": ["apps/web/src/app/dashboard/domains/page.tsx", "apps/mobile-admin/app/(admin)/domains/buy.tsx", "apps/mobile-admin/app/(admin)/domains/connect.tsx", "apps/mobile-admin/config/domain-purchase-availability.ts", "apps/web/src/app/dashboard/domains/components/domain-card.tsx", "apps/web/src/app/dashboard/domains/actions.ts", "apps/mobile-admin/hooks/useDomainActions.ts"]
+      "source_refs": [
+        "apps/web/src/app/dashboard/domains/page.tsx",
+        "apps/mobile-admin/app/(admin)/domains/buy.tsx",
+        "apps/mobile-admin/app/(admin)/domains/connect.tsx",
+        "apps/mobile-admin/config/domain-purchase-availability.ts",
+        "apps/web/src/app/dashboard/domains/components/domain-card.tsx",
+        "apps/web/src/app/dashboard/domains/actions.ts",
+        "apps/mobile-admin/hooks/useDomainActions.ts"
+      ]
     },
     {
-      "id": "jumia", "title": "Jumia sales channel", "status": "code_evidenced",
+      "id": "jumia",
+      "title": "Jumia sales channel",
+      "status": "code_evidenced",
       "claim": "Baci implements Jumia account connection and marketplace product/order synchronization workflows in the web dashboard and mobile sales-channel screen.",
       "limitations": "Marketplace entitlement, Vendor Center authorization and sync health must be verified. Konga and Amazon are not equivalent shipped channels. Do not claim continuous successful synchronization from connection UI alone.",
-      "source_refs": ["apps/web/src/app/dashboard/channels/client-page.tsx", "apps/mobile-admin/app/(admin)/sales-channels.tsx", "apps/mobile-admin/components/marketplace/JumiaChannelCard.tsx", "apps/web/src/app/api/marketplace/jumia/orders/route.ts", "apps/web/src/app/api/marketplace/jumia/products/export/route.ts"]
+      "source_refs": [
+        "apps/web/src/app/dashboard/channels/client-page.tsx",
+        "apps/mobile-admin/app/(admin)/sales-channels.tsx",
+        "apps/mobile-admin/components/marketplace/JumiaChannelCard.tsx",
+        "apps/web/src/app/api/marketplace/jumia/orders/route.ts",
+        "apps/web/src/app/api/marketplace/jumia/products/export/route.ts"
+      ]
     },
     {
-      "id": "manual-orders", "title": "Staff-entered orders", "status": "code_evidenced",
+      "id": "manual-orders",
+      "title": "Staff-entered orders",
+      "status": "code_evidenced",
       "claim": "Baci implements manual order creation, payment recording and order-status management for merchant staff.",
       "limitations": "Network and permissions are required. This is not evidence of an offline-first POS terminal, offline synchronization or all retail POS capabilities.",
-      "source_refs": ["apps/web/src/app/dashboard/orders/create/page.tsx", "apps/mobile-admin/app/(admin)/order/new.tsx", "apps/mobile-admin/hooks/orders/useRecordPayment.ts", "apps/web/src/app/dashboard/orders/create/create-order-form.tsx", "apps/mobile-admin/hooks/useNewOrderController.ts", "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts"]
+      "source_refs": [
+        "apps/web/src/app/dashboard/orders/create/page.tsx",
+        "apps/mobile-admin/app/(admin)/order/new.tsx",
+        "apps/mobile-admin/hooks/orders/useRecordPayment.ts",
+        "apps/web/src/app/dashboard/orders/create/create-order-form.tsx",
+        "apps/mobile-admin/hooks/useNewOrderController.ts",
+        "apps/mobile-admin/hooks/orders/useOrderStatusUpdate.ts"
+      ]
     },
     {
-      "id": "receipts", "title": "Invoices and receipts", "status": "code_evidenced",
+      "id": "receipts",
+      "title": "Invoices and receipts",
+      "status": "code_evidenced",
       "claim": "Baci implements invoice and receipt generation and order-document workflows.",
       "limitations": "Document availability depends on order data and permissions. Do not imply certified tax/accounting compliance or a POS terminal from PDF generation.",
-      "source_refs": ["apps/web/src/lib/invoice-generator.ts", "apps/web/src/lib/receipt-pdf-generator.ts", "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts"]
+      "source_refs": [
+        "apps/web/src/lib/invoice-generator.ts",
+        "apps/web/src/lib/receipt-pdf-generator.ts",
+        "apps/mobile-admin/hooks/createOrderDetailsReceiptActions.ts"
+      ]
     },
     {
-      "id": "staff", "title": "Team access and permissions", "status": "code_evidenced",
+      "id": "staff",
+      "title": "Team access and permissions",
+      "status": "code_evidenced",
       "claim": "Baci implements staff invitations, roles, suspension and permission enforcement.",
       "limitations": "Confirm actual billing entitlements and role permissions. Public Free/Pro/Premium pricing labels differ from some runtime tier vocabularies; do not invent a plan mapping.",
-      "source_refs": ["apps/web/src/app/dashboard/staff/page.tsx", "apps/web/src/app/dashboard/staff/actions.ts", "apps/web/src/lib/permission-grant.ts"]
+      "source_refs": [
+        "apps/web/src/app/dashboard/staff/page.tsx",
+        "apps/web/src/app/dashboard/staff/actions.ts",
+        "apps/web/src/lib/permission-grant.ts"
+      ]
     },
     {
-      "id": "imports", "title": "Catalog import and inventory", "status": "code_evidenced",
+      "id": "imports",
+      "title": "Catalog import and inventory",
+      "status": "code_evidenced",
       "claim": "Baci implements bulk CSV product imports, variants and stock-management workflows, including serialized inventory.",
       "limitations": "Requires the products:create permission. Barcode fields are not proof of barcode scanning or POS. General catalog export and product bundles require separate verification.",
-      "source_refs": ["apps/web/src/components/products/csv-bulk-import-dialog.tsx", "apps/web/src/app/api/products/bulk-import/route.ts", "apps/mobile-admin/components/product/ProductStockControls.tsx", "apps/mobile-admin/components/product/ProductVariantsCard.tsx", "apps/mobile-admin/hooks/product-save.ts", "apps/mobile-admin/components/product/VariantInventoryUnitsSheet.tsx"]
+      "source_refs": [
+        "apps/web/src/components/products/csv-bulk-import-dialog.tsx",
+        "apps/web/src/app/api/products/bulk-import/route.ts",
+        "apps/mobile-admin/components/product/ProductStockControls.tsx",
+        "apps/mobile-admin/components/product/ProductVariantsCard.tsx",
+        "apps/mobile-admin/hooks/product-save.ts",
+        "apps/mobile-admin/components/product/VariantInventoryUnitsSheet.tsx"
+      ]
     },
     {
-      "id": "expenses", "title": "Expenses and profit reporting", "status": "code_evidenced",
+      "id": "expenses",
+      "title": "Expenses and profit reporting",
+      "status": "code_evidenced",
       "claim": "Baci mobile-admin implements expense recording and merchant profit/reporting views.",
       "limitations": "Expense creation requires a valid branch and permissions. Profit calculations depend on complete cost/order inputs; these are not certified accounting or tax reports.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/expenses/index.tsx", "apps/mobile-admin/app/(admin)/expenses/new.tsx", "apps/mobile-admin/app/(admin)/analytics/index.tsx", "apps/mobile-admin/hooks/useSaveExpense.ts", "apps/mobile-admin/hooks/useAnalyticsOverview.ts", "apps/web/src/app/api/analytics/route.ts", "packages/shared/src/lib/order-item-analytics-profit.ts"]
+      "source_refs": [
+        "apps/mobile-admin/app/(admin)/expenses/index.tsx",
+        "apps/mobile-admin/app/(admin)/expenses/new.tsx",
+        "apps/mobile-admin/app/(admin)/analytics/index.tsx",
+        "apps/mobile-admin/hooks/useSaveExpense.ts",
+        "apps/mobile-admin/hooks/useAnalyticsOverview.ts",
+        "apps/web/src/app/api/analytics/route.ts",
+        "packages/shared/src/lib/order-item-analytics-profit.ts"
+      ]
     },
     {
-      "id": "followups", "title": "Customer follow-up workflows", "status": "code_evidenced",
+      "id": "followups",
+      "title": "Customer follow-up workflows",
+      "status": "code_evidenced",
       "claim": "Baci mobile-admin implements a customer follow-up queue for failed and stale unpaid checkouts and related order follow-up actions.",
       "limitations": "This is an operational queue, not evidence of customer groups, full CRM segmentation or guaranteed recovery. Query bounds and contact permissions apply.",
-      "source_refs": ["apps/mobile-admin/components/customers/FollowUpQueueList.tsx", "apps/mobile-admin/hooks/useFollowUpQueue.ts", "apps/mobile-admin/hooks/useFailedOrders.ts"]
+      "source_refs": [
+        "apps/mobile-admin/components/customers/FollowUpQueueList.tsx",
+        "apps/mobile-admin/hooks/useFollowUpQueue.ts",
+        "apps/mobile-admin/hooks/useFailedOrders.ts"
+      ]
     },
     {
-      "id": "marketing", "title": "Growth and tracking integrations", "status": "code_evidenced",
+      "id": "marketing",
+      "title": "Growth and tracking integrations",
+      "status": "code_evidenced",
       "claim": "Baci implements analytics/advertising setup and product-feed integration surfaces across web and mobile-admin.",
       "limitations": "Provider IDs, consent, OAuth, configuration and entitlements apply. Social profile links are not ad-account integrations. Configuration does not prove events delivered or improved conversions.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/analytics-config.tsx", "apps/mobile-admin/hooks/useAnalyticsConfigForm.ts", "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx", "apps/web/src/app/feeds/google-merchant.xml/route.ts", "apps/web/src/app/feeds/openai.jsonl/route.ts", "apps/web/src/app/feeds/facebook.xml/route.ts", "apps/web/src/app/api/integrations/ads/google/connect/route.ts", "apps/web/src/app/api/integrations/ads/meta/connect/route.ts", "apps/web/src/app/api/integrations/ads/tiktok/connect/route.ts", "apps/web/src/app/api/integrations/ads/snapchat/connect/route.ts"]
+      "source_refs": [
+        "apps/mobile-admin/app/(admin)/analytics-config.tsx",
+        "apps/mobile-admin/hooks/useAnalyticsConfigForm.ts",
+        "apps/mobile-admin/components/analytics/AnalyticsPlatformCards.tsx",
+        "apps/web/src/app/feeds/google-merchant.xml/route.ts",
+        "apps/web/src/app/feeds/openai.jsonl/route.ts",
+        "apps/web/src/app/feeds/facebook.xml/route.ts",
+        "apps/web/src/app/api/integrations/ads/google/connect/route.ts",
+        "apps/web/src/app/api/integrations/ads/meta/connect/route.ts",
+        "apps/web/src/app/api/integrations/ads/tiktok/connect/route.ts",
+        "apps/web/src/app/api/integrations/ads/snapchat/connect/route.ts"
+      ]
     },
     {
-      "id": "ai", "title": "AI-assisted commerce workflows", "status": "code_evidenced",
+      "id": "ai",
+      "title": "AI-assisted commerce workflows",
+      "status": "code_evidenced",
       "claim": "Baci implements AI-assisted storefront editing, content workflows and insight surfaces.",
       "limitations": "Assistance and agent status display are not proof of a general autonomous operator. Explain human approval, actual enabled tools and current scope; mission is not evidence of measured impact.",
-      "source_refs": ["apps/mobile-admin/app/(admin)/customize.tsx", "apps/mobile-admin/hooks/useBuilderConfig.ts", "apps/web/src/ai/flows/autofill-product-details.ts", "apps/mobile-admin/hooks/useBlogEditor.processAiRequest.ts", "apps/web/src/app/api/analytics/insights/route.ts"]
+      "source_refs": [
+        "apps/mobile-admin/app/(admin)/customize.tsx",
+        "apps/mobile-admin/hooks/useBuilderConfig.ts",
+        "apps/web/src/ai/flows/autofill-product-details.ts",
+        "apps/mobile-admin/hooks/useBlogEditor.processAiRequest.ts",
+        "apps/web/src/app/api/analytics/insights/route.ts"
+      ]
     },
     {
-      "id": "agent-protocols", "title": "ACP and UCP commerce foundations", "status": "code_evidenced",
+      "id": "agent-protocols",
+      "title": "ACP and UCP commerce foundations",
+      "status": "code_evidenced",
       "claim": "Baci implements ACP and UCP discovery profiles, structured catalog interfaces, UCP carts, checkout-session operations and order-reading interfaces for authorized agents.",
       "limitations": "Protocol implementation is not certification, partner approval or universal merchant activation. Discovery is merchant-scoped and capability-gated; checkout requires readiness, signed authorization and enabled payment configuration. Do not claim automatic ChatGPT/Google shopping inclusion, independently executable Google Pay, unconstrained autonomous payments or complete current-spec conformance without separate verification. The future-of-commerce mission is positioning, not measured impact.",
-      "source_refs": ["apps/web/src/app/.well-known/acp.json/route.ts", "apps/web/src/app/.well-known/ucp/route.ts", "apps/web/src/lib/agentic/acp-discovery-profile.ts", "apps/web/src/lib/agentic/ucp-shopping-profile.ts", "apps/web/src/lib/agentic/agent-commerce-manifest.ts", "apps/web/src/app/api/agentic/carts/[id]/checkout/route.ts", "apps/web/src/app/api/agentic/catalog/search/route.ts", "apps/web/src/app/api/agentic/carts/route.ts", "apps/web/src/app/api/agentic/checkout_sessions/route.ts", "apps/web/src/app/api/agentic/orders/[id]/route.ts"]
+      "source_refs": [
+        "apps/web/src/app/.well-known/acp.json/route.ts",
+        "apps/web/src/app/.well-known/ucp/route.ts",
+        "apps/web/src/lib/agentic/acp-discovery-profile.ts",
+        "apps/web/src/lib/agentic/ucp-shopping-profile.ts",
+        "apps/web/src/lib/agentic/agent-commerce-manifest.ts",
+        "apps/web/src/app/api/agentic/carts/[id]/checkout/route.ts",
+        "apps/web/src/app/api/agentic/catalog/search/route.ts",
+        "apps/web/src/app/api/agentic/carts/route.ts",
+        "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
+        "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+      ]
     },
     {
-      "id": "unverified-parity", "title": "Capabilities requiring further verification", "status": "unverified",
+      "id": "unverified-parity",
+      "title": "Capabilities requiring further verification",
+      "status": "unverified",
       "claim": "Dedicated offline POS, multi-location stock, customer-group segmentation, bundles, general merchant API access, wholesale commerce and secure digital fulfillment are not established by this audit.",
       "limitations": "Unverified is not absent. Require exact workflow, deployed version, entitlement and end-to-end evidence before claiming availability, absence or complete competitor parity.",
-      "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx", "apps/web/src/lib/llms-markdown-platform.ts"]
+      "source_refs": [
+        "apps/web/src/app/(platform)/pricing/page.tsx",
+        "apps/web/src/lib/llms-markdown-platform.ts"
+      ]
     }
   ]
 }

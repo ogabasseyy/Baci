@@ -260,3 +260,25 @@ describe('payment-gateway-availability', () => {
     });
   });
 });
+
+it.each([
+  { paystack_subaccount_code: 'ACCT_fixture' },
+  { paystack_subaccount_configured: true },
+])('uses enable-payment readiness wording for disabled Paystack with configuration %j', async (configuration) => {
+  const { getReadinessLaunchPaymentRequirement } = await import(
+    './payment-gateway-availability'
+  );
+  expect(
+    getReadinessLaunchPaymentRequirement({
+      country: 'NG',
+      bank_account_number: 'configured',
+      bank_code: 'configured',
+      ...configuration,
+      feature_settings: { paystack_enabled: false },
+    })
+  ).toMatchObject({
+    id: 'payment_method',
+    label: 'Enable a payment method',
+    completed: false,
+  });
+});

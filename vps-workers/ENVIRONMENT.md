@@ -66,3 +66,14 @@ Variable purposes:
 - `SUPABASE_CRON_LOG_RETENTION`: Retention interval for `cron.job_run_details`. Default is `14 days`.
 - `SUPABASE_PG_NET_RETENTION`: Retention interval for `net._http_response`. Default is `1 day`.
 
+
+## Merchant onboarding email worker
+
+The launcher and cron set `BACI_WORKER_PROFILE=merchant-onboarding-emails` before
+loading the application environment. This bounded worker requires neither agentic
+JWT signing keys nor negotiated-checkout proof credentials. Its links use
+`NEXT_PUBLIC_APP_URL` when configured, otherwise the preflight-required
+`BACI_WEB_BASE_URL`; the selected URL must be credential-free HTTPS and is
+normalized to its origin. Verify this is the Baci application host (normally
+`https://usebaci.com`), where `/dashboard` and `/onboarding/email-preferences` are
+served, before enabling the journey. Do not point it at an unrelated storefront.

@@ -248,6 +248,11 @@ describe('getCachedBlogListing', () => {
       expect.stringContaining('featured_image_url'),
       { count: 'estimated' }
     );
+    expect(blogSelects[0]).toHaveBeenCalledWith(
+      expect.stringContaining('classification_revision'),
+      { count: 'estimated' }
+    );
+    expect(blogSelects[0].mock.calls[0]?.[0]).not.toContain('updated_at');
   });
 
   it('resolves blog gating from the merchant snapshot without querying feature settings', async () => {

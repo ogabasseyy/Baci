@@ -25,15 +25,15 @@ export const JumiaBrandsResponseSchema = z.object({
 // ── Products ──
 
 const JumiaTranslation = z.object({
-  language: z.string(),
-  value: z.string(),
+  language: z.string().optional(),
+  value: z.string().optional(),
 });
 
 export const JumiaAttributeSchema = z.object({
-  id: z.string(),
+  id: z.uuid(),
   name: z.string(),
   value: z.string(),
-  translations: z.array(JumiaTranslation),
+  translations: z.array(JumiaTranslation).optional(),
 });
 
 export const JumiaSalePriceSchema = z.object({
@@ -42,48 +42,83 @@ export const JumiaSalePriceSchema = z.object({
   endAt: z.iso.datetime({ offset: true }),
 });
 
-export const JumiaGlobalPriceSchema = z.object({
-  value: z.number().nonnegative(),
-  updateAt: z.iso.datetime({ offset: true }),
-  salePrice: JumiaSalePriceSchema.nullable().optional(),
-});
+export const JumiaGlobalPriceSchema = z
+  .object({
+    currency: z.string().nullable().optional(),
+    value: z.number().nonnegative().nullable().optional(),
+    salePrice: JumiaSalePriceSchema.nullable().optional(),
+  })
+  .passthrough();
 
-export const JumiaVariationSchema = z.object({
-  id: z.string(),
-  sellerSku: z.string(),
-  barcodeEan: z
-    .string()
-    .refine(
-      (v) => v === '' || /^\d{8}(\d{5})?$/.test(v),
-      'Must be empty or a valid EAN-8 or EAN-13 barcode'
-    )
-    .optional(),
-  variation: z.string(),
-  globalPrice: JumiaGlobalPriceSchema,
-  attributes: z.array(JumiaAttributeSchema),
-});
+// Retrieve Products uses string codes, unlike the brands/categories endpoints.
+const JumiaProductCodeSchema = z.object({ code: z.string(), name: z.string() });
+const JumiaBusinessClientSchema = z
+  .object({
+    code: z.string().min(1),
+    name: z.string(),
+    countryName: z.string(),
+    countryCode: z.string(),
+    sku: z.string().nullable(),
+    visible: z.boolean(),
+    visibleUpdatedAt: z.iso.datetime({ offset: true }).nullable(),
+    status: z.enum(['ACTIVE', 'INACTIVE', 'DELETED']),
+    qc: z
+      .object({
+        status: z.string(),
+        updatedAt: z.iso.datetime({ offset: true }),
+        lastApprovedAt: z.iso.datetime({ offset: true }),
+        rejectionReason: z.string().optional(),
+        rejectionComment: z.string().optional(),
+      })
+      .passthrough(),
+    price: JumiaGlobalPriceSchema.extend({
+      localCurrency: z.string().nullable().optional(),
+      localValue: z.number().nonnegative().nullable().optional(),
+      salePrice: JumiaSalePriceSchema.extend({
+        localValue: z.number().nonnegative().optional(),
+      })
+        .nullable()
+        .optional(),
+    }),
+  })
+  .passthrough();
 
-export const JumiaProductSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  parentSku: z.string().min(1),
-  shop: z.object({ id: z.string() }),
-  brand: JumiaBrandSchema,
-  category: z.object({ code: z.int(), name: z.string() }),
-  images: z.array(
-    z.object({
-      url: z.url(),
-      originalUrl: z.url(),
-      primary: z.boolean(),
-    })
-  ),
-  attributeSetId: z.string(),
-  attributes: z.array(JumiaAttributeSchema),
-  createdAt: z.iso.datetime({ offset: true }),
-  updatedAt: z.iso.datetime({ offset: true }),
-  variations: z.array(JumiaVariationSchema),
-});
+export const JumiaVariationSchema = z
+  .object({
+    id: z.uuid(),
+    sellerSku: z.string().min(1),
+    barcodeEan: z.string().nullable(),
+    variation: z.string(),
+    globalPrice: JumiaGlobalPriceSchema,
+    attributes: z.array(JumiaAttributeSchema.partial({ value: true })),
+    businessClients: z.array(JumiaBusinessClientSchema),
+  })
+  .passthrough();
+
+export const JumiaProductSchema = z
+  .object({
+    id: z.uuid(),
+    name: z.string().min(1),
+    description: z.string(),
+    parentSku: z.string().min(1),
+    shop: z.object({ id: z.uuid() }),
+    brand: JumiaProductCodeSchema,
+    category: JumiaProductCodeSchema,
+    additionalCategories: z.array(JumiaProductCodeSchema).optional(),
+    images: z.array(
+      z.object({
+        url: z.url(),
+        originalUrl: z.url(),
+        primary: z.boolean(),
+      })
+    ),
+    attributeSetId: z.uuid(),
+    attributes: z.array(JumiaAttributeSchema),
+    createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
+    variations: z.array(JumiaVariationSchema),
+  })
+  .passthrough();
 
 export const JumiaProductsResponseSchema = z.object({
   products: z.array(JumiaProductSchema),
@@ -97,47 +132,77 @@ export const JumiaCategorySchema = z.object({
   code: z.int(),
   name: z.string().min(1),
   completePath: z.string().min(1),
+  hasChildren: z.boolean(),
   attributeSet: z.object({
-    id: z.string(),
+    sid: z.uuid(),
     name: z.string(),
   }),
 });
 
 export const JumiaCategoriesResponseSchema = z.object({
   categories: z.array(JumiaCategorySchema),
-  page: JumiaPageMetadataSchema.optional(),
+  page: JumiaPageMetadataSchema,
 });
 
 // ── Attribute Sets ──
 
+// Option translation properties are all optional in the provider schema.
+const JumiaAttributeOptionTranslation = z.object({
+  languageId: z.number().optional(),
+  languageCode: z.string().optional(),
+  translation: z.string().optional(),
+});
+
 const JumiaAttributeOption = z.object({
-  id: z.string(),
+  id: z.number(),
+  sid: z.uuid(),
   name: z.string(),
   position: z.number(),
   isDefault: z.boolean(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DELETED']),
+  translations: z.array(JumiaAttributeOptionTranslation).optional(),
 });
 
 const JumiaAttributeTranslation = z.object({
   languageCode: z.string(),
   translation: z.string(),
-  languageId: z.number(),
+  languageId: z.number().optional(),
 });
 
-// Intentionally flexible: Jumia API docs don't specify a fixed validation shape
-const JumiaAttributeValidation = z.record(z.string(), z.unknown());
+const JumiaAttributeValidation = z.object({
+  dateFormat: z.string().nullable().optional(),
+  decimalPlaces: z.number().nullable().optional(),
+  maxLength: z.number().nullable().optional(),
+  minLength: z.number().nullable().optional(),
+  percentage: z.boolean().nullable().optional(),
+  notZeroOrNegative: z.boolean().nullable().optional(),
+  selectedByDefault: z.boolean().nullable().optional(),
+});
 
 const JumiaAttributeDefinition = z.object({
   code: z.number(),
   name: z.string(),
   description: z.string(),
-  type: z.string(),
+  // TEXT, TEXT_AREA, NUMBER, MULTI_SELECTION, SELECTION, DATE, BOOLEAN,
+  // DATE_TIME, NUMBER_FLOAT. Unknown required types fail at the wire boundary.
+  type: z.union([
+    z.literal(0),
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+    z.literal(6),
+    z.literal(7),
+    z.literal(8),
+  ]),
   mandatory: z.boolean(),
   variation: z.boolean(),
   translatable: z.boolean(),
-  sid: z.string(),
-  translations: z.array(JumiaAttributeTranslation),
-  options: z.array(JumiaAttributeOption),
-  validations: z.array(JumiaAttributeValidation),
+  sid: z.uuid().optional(),
+  translations: z.array(JumiaAttributeTranslation).optional(),
+  options: z.array(JumiaAttributeOption).optional(),
+  validations: JumiaAttributeValidation.optional(),
 });
 
 export const JumiaAttributeSetResponseSchema = z.object({

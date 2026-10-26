@@ -245,7 +245,7 @@ describe('products index page', () => {
       'false'
     );
     const iphoneLinks = screen.getAllByRole('link', { name: /iphone 16/i });
-    expect(iphoneLinks).toHaveLength(2);
+    expect(iphoneLinks).toHaveLength(1);
     for (const link of iphoneLinks) {
       expect(link).toHaveAttribute('href', '/test-store/smartphones/iphone-16');
     }

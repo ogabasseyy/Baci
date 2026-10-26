@@ -1,3 +1,8 @@
+import {
+  jumiaMetadataApiRoutes,
+  jumiaMetadataClientPrefixes,
+} from './event-pipeline-jumia-loader-credential-paths';
+
 const client = 'apps/web/src/lib/jumia/client.ts';
 const clientConfig = 'apps/web/src/lib/jumia/jumia-client-config.ts';
 const loadGrant = 'apps/web/src/lib/jumia/load-jumia-authorization-grant.ts';
@@ -7,8 +12,7 @@ const clientPath = [client, clientConfig, loadGrant, credentialClient] as const;
 
 const clientRoutes = [
   'apps/web/src/app/api/marketplace/jumia/actions/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/brands/route.ts',
-  'apps/web/src/app/api/marketplace/jumia/categories/route.ts',
+  ...jumiaMetadataApiRoutes,
   'apps/web/src/app/api/marketplace/jumia/consignment/route.ts',
   'apps/web/src/app/api/marketplace/jumia/orders/[id]/items/route.ts',
   'apps/web/src/app/api/marketplace/jumia/orders/route.ts',
@@ -22,6 +26,7 @@ const clientRoutes = [
 
 export const eventPipelineJumiaServicePaths = [
   ...clientRoutes.map((route) => [route, ...clientPath]),
+  ...jumiaMetadataClientPrefixes.map((prefix) => [...prefix, ...clientPath]),
   [
     'apps/web/src/app/api/marketplace/jumia/connect/exchange/route.ts',
     'apps/web/src/app/api/marketplace/jumia/connect/exchange/discover-jumia-oauth-shops.ts',

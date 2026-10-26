@@ -8,6 +8,7 @@ import { TikTokPixel } from './tiktok-pixel';
 import { TwitterPixel } from './twitter-pixel';
 
 export interface MerchantWithAnalytics {
+  chatgpt_pixel_id?: string | null;
   google_analytics_id?: string | null;
   facebook_pixel_id?: string | null;
   tiktok_pixel_id?: string | null;
@@ -28,6 +29,7 @@ export function AnalyticsPixelProvider({
   const snapchatPixelId = normalizeAnalyticsId(merchant?.snapchat_pixel_id);
   const twitterPixelId = normalizeAnalyticsId(merchant?.twitter_pixel_id);
 
+  // ChatGPT measurement lives in the persistent storefront shell, once per store.
   return (
     <>
       {gaId ? <GoogleAnalytics measurementId={gaId} /> : null}

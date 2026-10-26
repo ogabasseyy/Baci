@@ -6,6 +6,7 @@ describe('isNonAgenticWorkerProfile', () => {
     'ai-storefront-jobs',
     'event-pipeline',
     'gigl-tracking',
+    'merchant-onboarding-emails',
     'petrock-reconciliation',
     'quiz-finalization',
   ])('allows the bounded %s worker without agentic signing material', (profile) => {

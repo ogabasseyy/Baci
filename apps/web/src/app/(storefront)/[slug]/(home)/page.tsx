@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { OgabasseyHomeCriticalShell } from '@/app/(storefront)/ogabassey/ogabassey-home-critical-shell';
 import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
 import {
   getSettledCanonicalOgabasseyHomeStateBox,
   hydrateSettledCanonicalOgabasseyHomeStateFromParams,
+  isDeferredCommittedLcpToRoute,
+  markStorefrontPageParams,
   peekSettledCanonicalOgabasseyHomeState,
   recordSettledCanonicalOgabasseyHomeState,
   type SettledCanonicalOgabasseyHomeState,
@@ -26,6 +29,7 @@ import {
   OGABASSEY_DOMAIN_IDENTIFIER,
 } from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
+import { OgabasseyHomeCommittedSlideZeroPreload } from './ogabassey-home-committed-slide-zero-preload';
 // Statically imported alongside OgabasseyHomeCommittedLcp so
 // renderOgabasseyStaticHomePage returns a synchronous RSC element during
 // RenderStage.Static; GenericStorefrontHomePage remains dynamically imported.
@@ -210,6 +214,25 @@ export async function generateMetadata({
   };
 }
 
+function renderOgabasseyHomeRouteWithOptionalCommittedShell(
+  slug: string,
+  params: Promise<{ slug: string }>
+) {
+  if (!isDeferredCommittedLcpToRoute(params)) {
+    return renderOgabasseyStaticHomePage(slug);
+  }
+
+  return (
+    <>
+      <div data-ogabassey-home-lcp-shell="true">
+        <OgabasseyHomeCriticalShell />
+      </div>
+      <OgabasseyHomeCommittedSlideZeroPreload />
+      {renderOgabasseyStaticHomePage(slug)}
+    </>
+  );
+}
+
 async function renderStorefrontHomeRouteAsync(
   params: Promise<{ slug: string }>,
   stateBox: SettledCanonicalOgabasseyHomeState
@@ -231,7 +254,7 @@ async function renderStorefrontHomeRouteAsync(
       });
     }
 
-    return renderOgabasseyStaticHomePage(slug);
+    return renderOgabasseyHomeRouteWithOptionalCommittedShell(slug, params);
   }
 
   return renderGenericStorefrontHomePage(params);
@@ -247,7 +270,10 @@ function StorefrontHomeRoute({
     hydrateSettledCanonicalOgabasseyHomeStateFromParams(params) ??
     peekSettledCanonicalOgabasseyHomeState();
   if (settled?.slug && isOgabasseyHomeIdentifier(settled.slug)) {
-    return renderOgabasseyStaticHomePage(settled.slug);
+    return renderOgabasseyHomeRouteWithOptionalCommittedShell(
+      settled.slug,
+      params
+    );
   }
 
   return renderStorefrontHomeRouteAsync(params, stateBox);
@@ -258,6 +284,8 @@ export default function StorefrontPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  markStorefrontPageParams(params);
+
   return (
     <>
       <OgabasseyHomeCommittedLcp params={params} />

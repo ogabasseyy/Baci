@@ -133,4 +133,65 @@ describe('model family authority page loader', () => {
       'infinix-hot-70-pro',
     ]);
   });
+
+  it('builds family page when family products appear after index 48 of brandInventory.products', async () => {
+    const genericProducts = Array.from({ length: 48 }, (_, index) => ({
+      name: `Samsung Other ${index}`,
+      slug: `samsung-other-${index}`,
+    }));
+    const galaxySProducts = [
+      { name: 'Samsung Galaxy S24', slug: 'samsung-galaxy-s24' },
+      { name: 'Samsung Galaxy S25', slug: 'samsung-galaxy-s25' },
+      { name: 'Samsung Galaxy S26', slug: 'samsung-galaxy-s26' },
+    ];
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://store.test/smartphones/brands/samsung',
+      merchant: {
+        id: 'merchant-id',
+        business_name: 'Store',
+        country: 'NG',
+        slug: 'store',
+        custom_domain: null,
+      },
+      brand: { brandKey: 'samsung', displayName: 'Samsung' },
+      products: genericProducts,
+      brandInventory: {
+        products: [...genericProducts, ...galaxySProducts],
+      },
+      breadcrumbItems: [],
+    });
+    const { modelFamilyAuthorityPageLoader } = await import(
+      './load-model-family-authority-page'
+    );
+    const page = await modelFamilyAuthorityPageLoader.load({
+      merchantSlug: 'store',
+      categorySlug: 'smartphones',
+      brandSlug: 'samsung',
+      familySlug: 'galaxy-s',
+    });
+
+    expect(page).not.toBeNull();
+    expect(page?.products).toHaveLength(3);
+    expect(page?.products.map((p) => p.slug)).toEqual([
+      'samsung-galaxy-s24',
+      'samsung-galaxy-s25',
+      'samsung-galaxy-s26',
+    ]);
+  });
+
+  it('propagates DB errors from brand page loader rather than returning null', async () => {
+    mockLoadBrandPage.mockRejectedValueOnce(new Error('database error'));
+    const { modelFamilyAuthorityPageLoader } = await import(
+      './load-model-family-authority-page'
+    );
+
+    await expect(
+      modelFamilyAuthorityPageLoader.load({
+        merchantSlug: 'store',
+        categorySlug: 'smartphones',
+        brandSlug: 'samsung',
+        familySlug: 'galaxy-s',
+      })
+    ).rejects.toThrow('database error');
+  });
 });

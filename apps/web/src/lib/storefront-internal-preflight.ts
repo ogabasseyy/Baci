@@ -1,5 +1,10 @@
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import type { StorefrontSlugSafetyReason } from '@/lib/storefront-slug-safety';
+import type {
+  StorefrontPreflightRpcAttempt,
+  StorefrontPreflightRpcAttemptProperties,
+} from './storefront-preflight-rpc-attempt';
+import { getRpcAttemptProperties } from './storefront-preflight-rpc-attempt-properties';
 
 export type StorefrontInternalPreflightFailOpenReason =
   | 'no-secret'
@@ -22,7 +27,8 @@ export type StorefrontInternalPreflightSurface =
   | 'product-canonical'
   | 'product-slug';
 
-interface StorefrontInternalPreflightContext {
+interface StorefrontInternalPreflightContext
+  extends StorefrontPreflightRpcAttemptProperties {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
   slug: string;
@@ -145,6 +151,18 @@ function resolveBaseUrl(origin: string): string | null {
   return null;
 }
 
+function warnRpcFailOpen(
+  context: Omit<StorefrontInternalPreflightContext, 'reason'>,
+  attempt: StorefrontPreflightRpcAttempt,
+  reason: StorefrontInternalPreflightFailOpenReason,
+  detail?: string
+) {
+  // Attempt telemetry lands first: under single-flight coalescing, joined
+  // callers share the owner's attempt, but the warn must keep the CALLER's
+  // surface/identity so PostHog fingerprints group correctly.
+  warnFailOpen({ ...attempt, ...context, reason, detail });
+}
+
 function warnFailOpen(context: StorefrontInternalPreflightContext) {
   console.warn('[storefront-internal-preflight] fail-open', {
     ...context,
@@ -201,6 +219,7 @@ async function captureFailOpen(context: StorefrontInternalPreflightContext) {
         slug: truncateSlugForDiagnostics(context.slug),
         status: context.status,
         surface: context.surface,
+        ...getRpcAttemptProperties(context),
       }
     );
   } catch {
@@ -278,5 +297,6 @@ export const storefrontInternalPreflight = {
   readJsonResponse,
   resolveBaseUrl,
   warnFailOpen,
+  warnRpcFailOpen,
   warnSkip,
 };

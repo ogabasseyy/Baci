@@ -11,6 +11,8 @@ export interface ShippingQuote {
   deliveryRange?: string;
   serviceTier?: string;
   isStationPickup?: boolean;
+  /** Receiver street sent with this quote request, separate from station display metadata. */
+  receiverAddress?: string;
   /** Station metadata normalized for checkout display. */
   stationName?: string;
   stationAddress?: string;

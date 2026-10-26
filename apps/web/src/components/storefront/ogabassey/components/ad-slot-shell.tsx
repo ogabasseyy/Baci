@@ -57,7 +57,12 @@ export function AdSlotShell({
       aria-hidden={ariaHidden || undefined}
       className={`w-full flex justify-center items-center my-6 ${outerClassName}`}
     >
-      <div className="flex flex-col items-center">
+      {/* A percentage width on the box alone resolves against this otherwise
+          shrink-to-fit frame. GPT mounting/removal must not resize that frame. */}
+      <div
+        className="ogabassey-ad-slot-frame flex flex-col items-center"
+        style={slotStyle}
+      >
         <span className="ogabassey-ad-placeholder-text text-[9px] uppercase tracking-widest mb-1 self-start ml-1">
           Sponsored
         </span>

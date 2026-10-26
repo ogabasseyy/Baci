@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "SDK v2 transport accepts provider-issued audience",
+    "same audience at separate fixed gateway",
+    "invalid token rejected at adapter and gateway",
+    "wrong audience issuer and expiry rejected at both components",
+    "caller cannot select forwarding destination",
+    "gateway redirects are not followed",
+    "adapter child starts with no inherited credentials"
+  ],
+  "scope": "local transport boundary; no production gateway or upstream vault"
+}

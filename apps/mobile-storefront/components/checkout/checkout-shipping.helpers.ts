@@ -154,6 +154,7 @@ export const fetchShippingQuotes = async ({
 }: FetchQuotesArgs) => {
   if (!state || !city || items.length === 0) return;
 
+  const receiverAddress = watchedAddress || `${city}, ${state}`;
   setIsLoadingQuotes(true);
   if (shouldResetSelection) {
     setShippingQuotes([]);
@@ -186,7 +187,7 @@ export const fetchShippingQuotes = async ({
             'Valued Customer',
           email: customer?.email || watchedEmail || 'guest@example.com',
           phone: watchedPhone || '',
-          address: watchedAddress || `${city}, ${state}`,
+          address: receiverAddress,
           city,
           state,
           country: 'Nigeria',
@@ -232,7 +233,9 @@ export const fetchShippingQuotes = async ({
               ...merchantPickupQuotes,
             ]
           : stationPickupQuotes;
-      setShippingQuotes(selectableQuotes);
+      setShippingQuotes(
+        selectableQuotes.map((quote) => ({ ...quote, receiverAddress }))
+      );
       setResolvedShippingQuoteContextKey(quoteContextKey);
       setSelectedQuoteId(
         getPreferredQuoteIdForPreference(

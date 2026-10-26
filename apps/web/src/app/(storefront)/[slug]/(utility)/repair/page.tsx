@@ -125,8 +125,8 @@ export async function RepairPageResolved(props: RepairPageRouteProps) {
 
 export default function RepairPage(props: RepairPageRouteProps) {
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="mx-auto max-w-3xl">
+    <div className="container mx-auto px-4 pt-6 pb-10 sm:pt-8">
+      <div className="mx-auto max-w-5xl">
         <RepairBookingLcpIntro />
         <Suspense fallback={<RepairBookingFallback hideIntro />}>
           <RepairPageResolved {...props} />

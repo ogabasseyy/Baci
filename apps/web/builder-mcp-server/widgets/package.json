@@ -1,0 +1,25 @@
+{
+  "name": "@baci/builder-preview-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm --filter @baci/web exec vitest run builder-mcp-server/widgets --maxWorkers=1",
+    "lint": "biome check src build.mjs package.json tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "0.28.1",
+    "typescript": "npm:@typescript/typescript6@~6.0.2",
+    "@biomejs/biome": "^2.5.0"
+  }
+}

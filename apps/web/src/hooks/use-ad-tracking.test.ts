@@ -16,6 +16,26 @@ import {
 import { useAdTracking } from './use-ad-tracking';
 
 describe('useAdTracking', () => {
+  it('captures late Pixel attribution and current consent when submitting an order', () => {
+    vi.mocked(getAdTrackingData).mockReturnValue({});
+    const { result } = renderHook(() => useAdTracking());
+    vi.mocked(getAdTrackingData).mockReturnValue({
+      oppref: 'late-click',
+      obref: 'late-browser',
+      chatgptConsent: true,
+    });
+    expect(result.current.getTrackingForOrder('stable-id')).toMatchObject({
+      oppref: 'late-click',
+      obref: 'late-browser',
+      chatgptConsent: true,
+      eventId: 'stable-id',
+    });
+    vi.mocked(getAdTrackingData).mockReturnValue({ chatgptConsent: false });
+    expect(result.current.getTrackingForOrder('stable-id')).not.toHaveProperty(
+      'oppref'
+    );
+  });
+
   it.each([
     ['trackFacebookPurchase', ['phone']],
     ['trackPurchase', ['phone']],

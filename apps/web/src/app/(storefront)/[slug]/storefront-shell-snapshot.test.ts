@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRootDomain } from '@/env';
 import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
-import { getRequestScopedMerchant } from '@/lib/cached-data';
+import {
+  type CachedMerchant,
+  getRequestScopedMerchant,
+} from '@/lib/cached-data';
 
 vi.mock('@/env', () => ({
   getRootDomain: vi.fn(() => 'usebaci.com'),
@@ -24,7 +27,7 @@ vi.mock('@/lib/validation', () => ({
   isDomainIdentifier: (value: string) => value.includes('.'),
 }));
 
-const baseMerchant = {
+const baseMerchant: CachedMerchant = {
   id: 'merchant-1',
   slug: 'ogabassey',
   business_name: 'Ogabassey',
@@ -33,7 +36,7 @@ const baseMerchant = {
   site_title: 'Ogabassey',
   site_tagline: 'Store tagline',
   site_description: 'Store description',
-  logo_url: null,
+  logo_url: '',
   phone: '+2348146978921',
   email: 'hello@ogabassey.com',
   social_media: {},
@@ -47,9 +50,9 @@ const baseMerchant = {
   country: 'NG',
   feature_settings: {},
   published_config: null,
-  favicon_svg_url: null,
-  favicon_png_32_url: null,
-  favicon_apple_touch_url: null,
+  favicon_svg_url: undefined,
+  favicon_png_32_url: undefined,
+  favicon_apple_touch_url: undefined,
 };
 
 const { getStorefrontShellSnapshot, getStorefrontShellSnapshotBase } =
@@ -64,12 +67,43 @@ describe('getStorefrontShellSnapshot', () => {
     vi.mocked(getRootDomain).mockReturnValue('usebaci.com');
   });
 
+  it.each([
+    [
+      'active paid plan',
+      { plan_tier: 'pro', plan_expires_at: null },
+      'pixel-shell',
+    ],
+    [
+      'expired plan',
+      { plan_tier: 'pro', plan_expires_at: '2000-01-01T00:00:00Z' },
+      null,
+    ],
+    ['free plan', { plan_tier: 'free', plan_expires_at: null }, null],
+    [
+      'explicit grant',
+      { plan_tier: 'free', premium_features: ['growth_integrations'] },
+      'pixel-shell',
+    ],
+  ])('resolves only the public entitled Pixel ID for %s', async (_name, plan, expected) => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      ...baseMerchant,
+      ...plan,
+      feature_settings: {
+        chatgpt_pixel_id: ' pixel-shell ',
+        capi_key: 'never-public',
+      },
+    });
+    vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([]);
+    const base = await getStorefrontShellSnapshotBase('ogabassey');
+    expect(base?.chatgptPixelId).toBe(expected);
+    if (!base) throw new Error('Expected a resolved merchant snapshot');
+    const snapshot = await getStorefrontShellSnapshot(base);
+    expect(snapshot?.chatgptPixelId).toBe(expected);
+    expect(JSON.stringify(snapshot)).not.toContain('never-public');
+  });
+
   it('returns path-routed shell data with a slug-based basePath on first render', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([
       { name: 'Phones', slug: 'phones' },
     ]);
@@ -95,11 +129,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('returns domain-routed shell data with an empty basePath on first render', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     vi.mocked(getStorefrontNavigationCategories).mockResolvedValue([
       { name: 'Phones', slug: 'phones' },
     ]);
@@ -126,11 +156,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('does not read request headers when the storefront identifier is already a domain', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
 
     const shellSnapshotBase =
       await getStorefrontShellSnapshotBase('ogabassey.com');
@@ -143,11 +169,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('treats slug subdomains as domain-routed even without x-merchant headers', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     mockHeaders.mockResolvedValue(
       new Headers([['host', 'ogabassey.usebaci.com']])
     );
@@ -162,11 +184,7 @@ describe('getStorefrontShellSnapshot', () => {
 
   it('uses the configured root domain for slug subdomain routing', async () => {
     vi.mocked(getRootDomain).mockReturnValue('shops.example');
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     mockHeaders.mockResolvedValue(
       new Headers([['host', 'ogabassey.shops.example']])
     );
@@ -180,11 +198,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('rejects confusable host suffixes when inferring slug subdomain routing', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     mockHeaders.mockResolvedValue(
       new Headers([['host', 'ogabassey.usebaci.com.attacker.tld']])
     );
@@ -198,11 +212,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('parses forwarded host lists when host is unavailable', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     mockHeaders.mockResolvedValue(
       new Headers([
         ['x-forwarded-host', 'ogabassey.usebaci.com:443, proxy.local'],
@@ -218,11 +228,7 @@ describe('getStorefrontShellSnapshot', () => {
   });
 
   it('prefers host over forwarded host for slug subdomain routing inference', async () => {
-    vi.mocked(getRequestScopedMerchant).mockResolvedValue(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue(baseMerchant);
     mockHeaders.mockResolvedValue(
       new Headers([
         ['host', 'usebaci.com'],
@@ -275,7 +281,7 @@ describe('getStorefrontShellSnapshot', () => {
         },
         tiktok_access_token: 'server-only-tiktok-token',
       },
-    } as unknown as Awaited<ReturnType<typeof getRequestScopedMerchant>>);
+    });
 
     const shellSnapshotBase = await getStorefrontShellSnapshotBase('ogabassey');
 

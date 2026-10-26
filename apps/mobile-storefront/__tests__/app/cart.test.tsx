@@ -175,14 +175,16 @@ describe('CartScreen state', () => {
     expect(screen.getByText('Retry')).toBeTruthy();
   });
 
-  it('opens guest identity modal for guests and routes signed-in users straight to checkout', () => {
+  it('opens guest identity modal for guests and routes signed-in users straight to checkout', async () => {
     const { rerender } = render(<CartScreen />);
 
     fireEvent.press(
       screen.getByRole('button', { name: /Proceed to checkout, total/i })
     );
 
-    expect(screen.getByText('Checkout Identity Modal')).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByText('Checkout Identity Modal')).toBeTruthy()
+    );
     expect(mockRouterPush).not.toHaveBeenCalled();
 
     mockUseAuthStatus.mockReturnValue(
@@ -203,7 +205,9 @@ describe('CartScreen state', () => {
 
     expect(mockRouterPrefetch).toHaveBeenCalledWith('/checkout');
     expect(mockWarmCheckoutEntry).toHaveBeenCalledWith(mockQueryClient);
-    expect(mockRouterPush).toHaveBeenCalledWith('/checkout');
+    await waitFor(() =>
+      expect(mockRouterPush).toHaveBeenCalledWith('/checkout')
+    );
   });
 
   it('does not warm checkout data while a populated cart is open', () => {

@@ -90,4 +90,15 @@ describe('storefront cart provider static import graph', () => {
   it('keeps supabase-js, the browser Supabase client, @/env, and zod behind dynamic imports', () => {
     expect(findForbiddenChains(ENTRY)).toEqual([]);
   });
+
+  it('keeps the related-blog browser database client out of the PDP static graph', () => {
+    expect(
+      findForbiddenChains(
+        path.join(
+          SRC,
+          'components/storefront/ogabassey/components/BlogSnippet.tsx'
+        )
+      )
+    ).toEqual([]);
+  });
 });

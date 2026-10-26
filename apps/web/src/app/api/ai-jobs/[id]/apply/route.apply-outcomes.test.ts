@@ -130,4 +130,24 @@ describe('POST /api/ai-jobs/[id]/apply outcomes', () => {
       error: 'Failed to apply AI draft',
     });
   });
+  it.each([
+    false,
+    true,
+  ])('returns retryable busy for lock contention even with force=%s', async (force) => {
+    const supabase = createApplySupabaseMock({
+      rpcError: Object.assign(new Error('website_busy'), { code: '40001' }),
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+    const response = await POST(
+      createApplyRequest(JSON.stringify({ merchantId, force })),
+      routeContext()
+    );
+    expect(response.status).toBe(409);
+    expect(response.headers.get('Retry-After')).toBe('1');
+    expect(await response.json()).toEqual({
+      error: 'Website is busy. Please retry.',
+      code: 'website_busy',
+      retryable: true,
+    });
+  });
 });

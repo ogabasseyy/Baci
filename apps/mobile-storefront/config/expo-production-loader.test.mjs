@@ -14,6 +14,8 @@ function load(overrides = {}) {
     const { evalConfig } = require('@expo/config/build/evalConfig');
     const { config } = evalConfig(require('node:path').resolve('app.config.ts'), { config: {} });
     assert.equal(config.android.versionCode, 1234);
+    assert.equal(config.owner, 'ogabassey-services-limited');
+    assert.equal(config.extra.eas.projectId, 'c6c1897b-cac8-49b0-85f9-3d277aecc379');
     assert.ok(config.plugins.some(p => Array.isArray(p) && p[0] === '@sentry/react-native/expo'));
   `,
     ],

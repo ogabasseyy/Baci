@@ -1,1 +1,6 @@
-export type EventRouteDestination = 'facebook' | 'ga4' | 'snapchat' | 'tiktok';
+export type EventRouteDestination =
+  | 'facebook'
+  | 'ga4'
+  | 'snapchat'
+  | 'tiktok'
+  | 'chatgpt';

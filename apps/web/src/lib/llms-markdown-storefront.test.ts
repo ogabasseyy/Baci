@@ -37,6 +37,18 @@ describe('llms markdown storefront builders', () => {
 
     expect(home).toContain('https://ogabassey.com/sitemap.xml');
     expect(home).toContain('https://ogabassey.com/{category}/{productSlug}');
+    expect(home).toContain(
+      '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons'
+    );
+    expect(home).toContain(
+      '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation'
+    );
+    expect(home).toContain(
+      '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs'
+    );
+    expect(home).toContain(
+      '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings'
+    );
   });
 
   it('normalizes trailing slashes in storefront home routes', () => {
@@ -47,6 +59,18 @@ describe('llms markdown storefront builders', () => {
 
     expect(home).toContain('https://ogabassey.com/sitemap.xml');
     expect(home).toContain('https://ogabassey.com/{category}/{productSlug}');
+    expect(home).toContain(
+      '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons'
+    );
+    expect(home).toContain(
+      '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation'
+    );
+    expect(home).toContain(
+      '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs'
+    );
+    expect(home).toContain(
+      '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings'
+    );
     expect(home).not.toContain('https://ogabassey.com//');
   });
 
@@ -313,5 +337,95 @@ describe('llms markdown storefront builders', () => {
     for (const expectedLine of expected) {
       expect(result).toContain(expectedLine);
     }
+  });
+
+  it('renders ## Key Specifications before ## Summary when product_key_specs has valid fields', () => {
+    const product = {
+      id: 'p-specs',
+      name: 'Flagship Phone',
+      slug: 'flagship-phone',
+      description: 'Super fast flagship.',
+      price: 1_200_000,
+      category: 'Smartphones',
+      stock: 5,
+      images: [],
+      product_key_specs: {
+        chipset: 'Snapdragon 8 Elite',
+        ram_gb: 16,
+        storage_gb: 512,
+        screen_size_inches: 6.8,
+        display_type: 'AMOLED',
+        battery_mah: 5000,
+        main_camera_mp: 200,
+        front_camera_mp: 32,
+        gpu: 'Adreno 830',
+        android_version: 'Android 15',
+        network_technology: '5G',
+        sim_type: 'Dual SIM',
+        warranty: '2 Years',
+      },
+    };
+
+    const result = buildProductMarkdown(
+      merchant,
+      'https://ogabassey.com',
+      product
+    );
+
+    expect(result).toContain('## Key Specifications');
+    expect(result).toContain('- Processor: Snapdragon 8 Elite');
+    expect(result).toContain('- RAM: 16GB');
+    expect(result).toContain('- Storage: 512GB');
+    expect(result).toContain('- Display Size: 6.8 inches');
+    expect(result).toContain('- Display Type: AMOLED');
+    expect(result).toContain('- Battery: 5000mAh');
+    expect(result).toContain('- Main Camera: 200MP');
+    expect(result).toContain('- Front Camera: 32MP');
+    expect(result).toContain('- Graphics: Adreno 830');
+    expect(result).toContain('- Operating System: Android 15');
+    expect(result).toContain('- Network: 5G');
+    expect(result).toContain('- SIM: Dual SIM');
+    expect(result).toContain('- Warranty: 2 Years');
+
+    const keySpecsIndex = result.indexOf('## Key Specifications');
+    const summaryIndex = result.indexOf('## Summary');
+    expect(keySpecsIndex).toBeGreaterThan(-1);
+    expect(summaryIndex).toBeGreaterThan(-1);
+    expect(keySpecsIndex).toBeLessThan(summaryIndex);
+  });
+
+  it('omits ## Key Specifications when product_key_specs is null or empty', () => {
+    const product = {
+      id: 'p-no-specs',
+      name: 'Simple Case',
+      slug: 'simple-case',
+      description: 'Protective case.',
+      price: 5000,
+      category: 'Accessories',
+      stock: 10,
+      images: [],
+      product_key_specs: null,
+    };
+
+    const result = buildProductMarkdown(
+      merchant,
+      'https://ogabassey.com',
+      product
+    );
+
+    expect(result).not.toContain('## Key Specifications');
+    expect(result).toContain('## Summary');
+
+    const emptySpecsResult = buildProductMarkdown(
+      merchant,
+      'https://ogabassey.com',
+      {
+        ...product,
+        product_key_specs: {},
+      }
+    );
+
+    expect(emptySpecsResult).not.toContain('## Key Specifications');
+    expect(emptySpecsResult).toContain('## Summary');
   });
 });

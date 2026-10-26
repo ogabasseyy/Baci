@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readStorefrontFile } from './storefront-css-partition-read';
+import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 
 describe('storefront CSS partitioning (route sheets)', () => {
   it('loads OgaBassey below-fold PDP styles through the deferred PDP stylesheet', () => {
@@ -130,7 +131,7 @@ describe('storefront CSS partitioning (route sheets)', () => {
   });
 
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {
-    const lcpCopyCss = readStorefrontFile('storefront-lcp-copy-css.ts');
+    const lcpCopyCss = STOREFRONT_LCP_COPY_CSS;
     const slugLayout = readStorefrontFile('[slug]/layout.tsx');
 
     expect(slugLayout).not.toMatch(/storefront-lcp-copy\.css/);

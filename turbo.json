@@ -143,6 +143,13 @@
         "vitest.config.*",
         "jest.config.*"
       ]
+    },
+    "@baci/web#test": {
+      "env": [
+        "BACI_BUILDER_LOCAL_PG",
+        "BACI_BUILDER_LOCAL_PG_MAJOR",
+        "BACI_BUILDER_LOCAL_PG_BIN"
+      ]
     }
   }
 }

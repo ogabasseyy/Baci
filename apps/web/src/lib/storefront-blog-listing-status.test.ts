@@ -201,6 +201,44 @@ describe('resolveStorefrontBlogListingStatus', () => {
     });
   });
 
+  it('308-redirects ?category=News to /blog/category/tech-news for Ogabassey', async () => {
+    const rpcImpl = rpcImplResolving(
+      makeRow({ categories: ['Tech News'], category_counts: [5] })
+    );
+    const result = await resolveStorefrontBlogListingStatus({
+      origin: 'https://ogabassey.com',
+      identifier: OGABASSEY,
+      intent: { kind: 'category-query', category: 'News' },
+      secret: 'internal-secret',
+      rpcImpl,
+    });
+
+    expect(result).toEqual({
+      kind: 'redirect',
+      redirectPath: '/blog/category/tech-news',
+      status: 308,
+    });
+  });
+
+  it('308-redirects ?category=Review to /blog/category/reviews for Ogabassey', async () => {
+    const rpcImpl = rpcImplResolving(
+      makeRow({ categories: ['Reviews'], category_counts: [5] })
+    );
+    const result = await resolveStorefrontBlogListingStatus({
+      origin: 'https://ogabassey.com',
+      identifier: 'ogabassey',
+      intent: { kind: 'category-query', category: 'Review' },
+      secret: 'internal-secret',
+      rpcImpl,
+    });
+
+    expect(result).toEqual({
+      kind: 'redirect',
+      redirectPath: '/blog/category/reviews',
+      status: 308,
+    });
+  });
+
   it('307-clamps an out-of-range listing page to the last page', async () => {
     const rpcImpl = rpcImplResolving(makeRow());
     const result = await resolveStorefrontBlogListingStatus({

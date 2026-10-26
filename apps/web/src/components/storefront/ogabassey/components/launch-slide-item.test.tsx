@@ -50,9 +50,10 @@ describe('LaunchSlideItem', () => {
       />
     );
 
+    expect(screen.getByText('Galaxy A27 5G')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Galaxy A27 5G' })
-    ).toBeInTheDocument();
+      screen.queryByRole('heading', { name: 'Galaxy A27 5G' })
+    ).not.toBeInTheDocument();
     const link = screen.getByRole('link', {
       name: 'Galaxy A27 5G — Pre-order now',
     });

@@ -1,4 +1,5 @@
 import { deliverAnalyticsEvent } from './analytics-destination-adapter';
+import { deliverChatgptPaidOrder } from './chatgpt-destination-adapter';
 import type {
   EventDestinationAdapter,
   EventDestinationContext,
@@ -9,6 +10,12 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 const adapter: EventDestinationAdapter = {
   async deliver(context) {
+    if (context.destination === 'chatgpt')
+      return deliverChatgptPaidOrder(
+        context.supabase,
+        context.event,
+        context.signal
+      );
     if (context.event.event_name.startsWith('analytics.')) {
       return await deliverAnalyticsEvent(
         context.supabase,

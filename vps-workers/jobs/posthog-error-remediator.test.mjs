@@ -123,6 +123,7 @@ describe('PostHog error remediator', () => {
     // dotenv never overrides set variables; prevent vps-workers/.env from
     // enabling the worker during this test.
     env.BACI_POSTHOG_REMEDIATION_ENABLED = '0';
+    delete env.DOTENV_CONFIG_QUIET;
     const result = spawnSync(
       process.execPath,
       [join(import.meta.dirname, 'posthog-error-remediator.mjs')],

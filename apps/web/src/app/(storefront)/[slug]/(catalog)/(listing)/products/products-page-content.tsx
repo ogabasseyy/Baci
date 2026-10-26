@@ -144,9 +144,12 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
     currentProductIndex.totalCount === 0
       ? 0
       : rangeStart + currentProductIndex.products.length - 1;
-  const deepLinkProducts = firstPageProductIndex.products
-    .filter((product) => product.slug)
-    .slice(0, 18);
+  const deepLinkProducts =
+    currentPage > 1
+      ? firstPageProductIndex.products
+          .filter((product) => product.slug)
+          .slice(0, 18)
+      : [];
 
   return (
     <>
@@ -203,18 +206,6 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 ))}
               </div>
             </section>
-          )}
-
-          {showMaintainedLinkModules && (
-            <Suspense fallback={null}>
-              <ProductsPageDeferredLinkModules
-                baseUrl={baseUrl}
-                categories={displayCategories}
-                merchantId={merchant.id}
-                pathPrefix={pathPrefix}
-                productTotalPages={totalPages}
-              />
-            </Suspense>
           )}
 
           {currentProductIndex.products.length === 0 ? (
@@ -282,6 +273,19 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
                 totalPages={totalPages}
               />
             </>
+          )}
+          {/* These links are independently streamed SEO enrichment. Keep them
+              after the catalog so their late arrival cannot push painted cards. */}
+          {showMaintainedLinkModules && (
+            <Suspense fallback={null}>
+              <ProductsPageDeferredLinkModules
+                baseUrl={baseUrl}
+                categories={displayCategories}
+                merchantId={merchant.id}
+                pathPrefix={pathPrefix}
+                productTotalPages={totalPages}
+              />
+            </Suspense>
           )}
         </div>
       </div>

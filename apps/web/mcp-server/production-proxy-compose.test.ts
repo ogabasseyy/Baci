@@ -37,6 +37,13 @@ describe('production MCP proxy configuration', () => {
     );
   });
 
+  it('forwards only an explicit cart text-continuation opt-in', () => {
+    const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
+    expect(compose).toContain(
+      'BACI_MCP_PRIVATE_TEXT_CONTINUATION=${BACI_MCP_PRIVATE_TEXT_CONTINUATION:-false}'
+    );
+  });
+
   it('requires an explicit trusted-proxy choice behind the loopback binding', () => {
     const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
 
@@ -65,4 +72,13 @@ describe('production MCP proxy configuration', () => {
       Number(match?.[1]) * (match?.[2] === 'm' ? 60_000 : 1000);
     expect(graceMs).toBeGreaterThan(SHUTDOWN_DRAIN_TIMEOUT_MS);
   });
+});
+
+it('keeps guest OAuth separate and default-off with private runtime-only credentials', () => {
+  const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
+  expect(compose).toContain('BACI_MCP_GUEST_OAUTH_ENABLED=${BACI_MCP_GUEST_OAUTH_ENABLED:-false}');
+  for (const name of ['MCP_GUEST_OAUTH_WORKER_TOKEN', 'MCP_GUEST_OAUTH_ENCRYPTION_KEY', 'MCP_GUEST_OAUTH_REDIRECT_URIS', 'MCP_GUEST_OAUTH_RESOURCE_URL']) {
+    expect(compose).toContain(`${name}=\u0024{${name}:-}`);
+    expect(compose).not.toContain(`NEXT_PUBLIC_${name}`);
+  }
 });

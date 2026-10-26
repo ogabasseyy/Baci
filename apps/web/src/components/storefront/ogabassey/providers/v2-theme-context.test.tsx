@@ -19,6 +19,32 @@ describe('V2ThemeProvider seasonal hydration defaults', () => {
     document.cookie = 'storefront-theme-v2=; Max-Age=0; path=/';
   });
 
+  it.each([
+    '2026-01-10T12:00:00',
+    '2026-10-22T12:00:00',
+    '2026-11-30T12:00:00',
+  ])('does not reset an already-standard theme immediately after mounting on %s', (date) => {
+    vi.useFakeTimers({ now: new Date(date) });
+    let renders = 0;
+    function StandardThemeConsumer() {
+      const { theme } = useV2Theme();
+      renders += 1;
+      return <span>{theme}</span>;
+    }
+    render(
+      <V2ThemeProvider>
+        <StandardThemeConsumer />
+      </V2ThemeProvider>
+    );
+    const mountedRenders = renders;
+
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(screen.getByText('standard')).toBeVisible();
+    expect(renders).toBe(mountedRenders);
+    expect(document.cookie).not.toContain('storefront-theme-v2=');
+  });
+
   it('switches to Santa after mount in December when no preference exists', async () => {
     vi.useFakeTimers({ now: new Date('2026-12-10T12:00:00Z') });
     document.cookie = '';

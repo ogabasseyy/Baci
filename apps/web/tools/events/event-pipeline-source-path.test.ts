@@ -3,6 +3,7 @@ import { isTestSourcePath } from './event-pipeline-source-path';
 
 describe('isTestSourcePath', () => {
   it.each([
+    'apps/web/tools/builder-preview-spike/test-fixtures/app/page.tsx',
     'worker.test.js',
     'worker.spec.jsx',
     'worker.test.cjs',
@@ -30,5 +31,8 @@ describe('isTestSourcePath', () => {
   it('keeps production modules classified as production', () => {
     expect(isTestSourcePath('worker.ts')).toBe(false);
     expect(isTestSourcePath('testimonials.ts')).toBe(false);
+    expect(isTestSourcePath('apps/web/src/test-fixtures-live/page.tsx')).toBe(
+      false
+    );
   });
 });

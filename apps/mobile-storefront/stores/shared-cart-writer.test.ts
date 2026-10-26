@@ -1,7 +1,9 @@
 import {
   forwardSharedCartWrite,
   installSharedCartWriter,
+  markSharedCartIntent,
   retireSharedCartWriter,
+  sharedCartWriteRevision,
   sharedCartWriterGeneration,
 } from './shared-cart-writer';
 
@@ -46,4 +48,50 @@ it('retires the current owner independently while a previous device is still wai
   await pending;
   first();
   second();
+});
+
+it('advances checkout intent revision before a queued writer executes', async () => {
+  const write = jest.fn().mockResolvedValue(undefined);
+  const release = installSharedCartWriter({ write, onError: jest.fn() });
+  const before = sharedCartWriteRevision();
+  try {
+    const pending = forwardSharedCartWrite({ type: 'clear' });
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+    expect(write).not.toHaveBeenCalled();
+    await pending;
+    expect(write).toHaveBeenCalledTimes(1);
+  } finally {
+    release();
+  }
+});
+it('advances the checkout intent revision for direct controller choices', () => {
+  const before = sharedCartWriteRevision();
+  markSharedCartIntent();
+  expect(sharedCartWriteRevision()).toBe(before + 1);
+});
+it('does not treat lifecycle reconciliation as a new shopper edit', async () => {
+  const release = installSharedCartWriter({
+    write: jest.fn().mockResolvedValue(undefined),
+    onError: jest.fn(),
+  });
+  const before = sharedCartWriteRevision();
+  try {
+    await forwardSharedCartWrite({ type: 'legacy_restore' });
+    expect(sharedCartWriteRevision()).toBe(before);
+  } finally {
+    release();
+  }
+});
+it('treats substantive repricing as a checkout-invalidating change', async () => {
+  const release = installSharedCartWriter({
+    write: jest.fn().mockResolvedValue(undefined),
+    onError: jest.fn(),
+  });
+  const before = sharedCartWriteRevision();
+  try {
+    await forwardSharedCartWrite({ type: 'legacy_reprice' });
+    expect(sharedCartWriteRevision()).toBe(before + 1);
+  } finally {
+    release();
+  }
 });

@@ -1,4 +1,5 @@
 import { getImageProps } from 'next/image';
+import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import {
@@ -59,19 +60,21 @@ export function MobileLcpHeroImage({
 
   return (
     <picture className="block h-full w-full">
-      {avifSrcSet ? (
+      <Suspense fallback={null}>
+        {avifSrcSet ? (
+          <source
+            media={MOBILE_HERO_SOURCE_MEDIA}
+            sizes={productSizes}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        ) : null}
         <source
           media={MOBILE_HERO_SOURCE_MEDIA}
           sizes={productSizes}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={productSrcSet}
         />
-      ) : null}
-      <source
-        media={MOBILE_HERO_SOURCE_MEDIA}
-        sizes={productSizes}
-        srcSet={productSrcSet}
-      />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}

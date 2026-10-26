@@ -46,7 +46,13 @@ describe('getCachedBrandAuthorityProducts', () => {
 
   it('hydrates public inventory before returning a bounded display selection', async () => {
     const query = makeQuery([
-      { id: 'product-1', name: 'Samsung Galaxy', price: 100, stock: 1 },
+      {
+        id: 'product-1',
+        name: 'Samsung Galaxy',
+        price: 100,
+        stock: 1,
+        category: 'Smartphones',
+      },
     ]);
     mockGetPublicSupabaseClient.mockReturnValue({ from: () => query });
     const { brandAuthorityTaxonomy } = await import(
@@ -63,14 +69,16 @@ describe('getCachedBrandAuthorityProducts', () => {
     await expect(
       getCachedBrandAuthorityProducts('merchant-1', 'smartphones', entry)
     ).resolves.toEqual([
-      { id: 'product-1', name: 'Samsung Galaxy', price: 100, stock: 1 },
+      {
+        id: 'product-1',
+        name: 'Samsung Galaxy',
+        price: 100,
+        stock: 1,
+        category: 'Smartphones',
+      },
     ]);
 
     expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
-    expect(query.eq).toHaveBeenCalledWith(
-      'product_categories.categories.slug',
-      'smartphones'
-    );
     expect(query.eq).toHaveBeenCalledWith('status', 'active');
     expect(query.ilike).toHaveBeenCalledWith('brand', 'Samsung');
     expect(query.or).toHaveBeenCalledWith(
@@ -88,33 +96,41 @@ describe('getCachedBrandAuthorityProducts', () => {
     expect(query.order).toHaveBeenNthCalledWith(2, 'id', { ascending: true });
   });
 
-  it('marks a full qualified page as a lower-bound inventory count', async () => {
-    const query = makeQuery(
-      Array.from({ length: 100 }, (_, index) => ({
-        id: `product-${index}`,
-        name: `Samsung Galaxy ${index}`,
-        price: 100,
-        stock: 1,
-      }))
-    );
+  it('slices to BRAND_AUTHORITY_PRODUCT_LIMIT (48) by default and returns full list when limit is null', async () => {
+    const products = Array.from({ length: 60 }, (_, index) => ({
+      id: `product-${index}`,
+      name: `Samsung Galaxy ${index}`,
+      price: 100,
+      stock: 1,
+      category: 'Smartphones',
+    }));
+    const query = makeQuery(products);
     mockGetPublicSupabaseClient.mockReturnValue({ from: () => query });
     const { brandAuthorityTaxonomy } = await import(
       './brand-authority-taxonomy'
     );
-    const { getCachedBrandAuthorityInventory } = await import(
-      './get-cached-brand-authority-inventory'
+    const { getCachedBrandAuthorityProducts } = await import(
+      './get-cached-brand-authority-products'
     );
     const entry = brandAuthorityTaxonomy.getEntry('smartphones', 'samsung');
     if (!entry) throw new Error('Expected Samsung taxonomy entry');
 
-    await expect(
-      getCachedBrandAuthorityInventory('merchant-1', 'smartphones', entry)
-    ).resolves.toEqual(
-      expect.objectContaining({
-        productCount: 100,
-        productCountIsLowerBound: true,
-      })
+    // Default limit should be 48
+    const defaultLimited = await getCachedBrandAuthorityProducts(
+      'merchant-1',
+      'smartphones',
+      entry
     );
+    expect(defaultLimited).toHaveLength(48);
+
+    // Limit null should return all 60 products
+    const unlimited = await getCachedBrandAuthorityProducts(
+      'merchant-1',
+      'smartphones',
+      entry,
+      { limit: null }
+    );
+    expect(unlimited).toHaveLength(60);
   });
 
   it('uses serialized public availability instead of stale product stock', async () => {
@@ -124,6 +140,7 @@ describe('getCachedBrandAuthorityProducts', () => {
       price: 100,
       stock: 4,
       manage_stock: true,
+      category: 'Smartphones',
     };
     const query = makeQuery([product]);
     mockGetPublicSupabaseClient.mockReturnValue({ from: () => query });
@@ -151,6 +168,7 @@ describe('getCachedBrandAuthorityProducts', () => {
       price: 100,
       stock: 0,
       manage_stock: true,
+      category: 'Smartphones',
     };
     const query = makeQuery([product]);
     mockGetPublicSupabaseClient.mockReturnValue({ from: () => query });

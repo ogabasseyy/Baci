@@ -2,6 +2,7 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
+import { BUILDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-builder-pending-sources';
 import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
@@ -14,7 +15,9 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
+import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
@@ -214,6 +217,7 @@ ${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 
 const PENDING_SOURCES = [
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
+  BUILDER_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',
@@ -260,6 +264,7 @@ const PENDING_SOURCES = [
   EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS,
   FEED_PENDING_REPLAY_SOURCE_ROWS,
   FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS,
+  ONBOARDING_PENDING_REPLAY_SOURCE_ROWS,
   GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS,
   GIGL_WALLET_SHIPPING_PENDING_SOURCES,
   INVENTORY_PENDING_REPLAY_SOURCE_ROWS,
@@ -277,6 +282,7 @@ const PENDING_SOURCES = [
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
   BLOG_PENDING_REPLAY_SOURCE_ROWS,
+  MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,

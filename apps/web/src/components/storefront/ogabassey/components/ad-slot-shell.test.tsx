@@ -11,6 +11,14 @@ const dims = {
 };
 
 describe('AdSlotShell', () => {
+  it('gives the shrink-to-fit label frame its own creative width before GPT mounts', () => {
+    const { container } = render(<AdSlotShell {...dims} />);
+    const box = container.querySelector('.ogabassey-ad-slot');
+    const frame = box?.parentElement;
+    expect(frame).toHaveClass('ogabassey-ad-slot-frame');
+    expect(frame?.style.getPropertyValue('--ad-slot-w')).toBe('320px');
+    expect(frame?.style.getPropertyValue('--ad-slot-w-lg')).toBe('970px');
+  });
   it('locks the box height to the per-breakpoint creative size via CSS vars', () => {
     const { container } = render(<AdSlotShell {...dims} />);
     const box = container.querySelector('.ogabassey-ad-slot') as HTMLElement;
@@ -24,8 +32,6 @@ describe('AdSlotShell', () => {
     expect(box.style.getPropertyValue('--ad-slot-h-lg')).toBe('90px');
     expect(box.style.getPropertyValue('--ad-slot-w-lg')).toBe('970px');
   });
-
-
 
   it('falls back to desktop dimensions when mobile dimensions are omitted', () => {
     const { container } = render(

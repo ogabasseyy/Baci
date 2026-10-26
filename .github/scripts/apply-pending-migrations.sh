@@ -285,6 +285,14 @@ for file in "${sorted_files[@]}"; do
     continue
   fi
 
+  reconciliation_status=0
+  reconcile_storefront_facet_timestamp "$version" "$name" "$file" || reconciliation_status=$?
+  case "$reconciliation_status" in
+    0) continue ;;
+    2) ;; # No mapped historical row: apply the normal migration.
+    *) echo "::error::Historical facet reconciliation failed" >&2; exit 1 ;;
+  esac
+
   if repair_spec="$(historical_migration_repair_spec "$version" "$name")"; then
     if ! apply_historical_migration_repair "$version" "$name" "$file" "$repair_spec"; then
       exit 1

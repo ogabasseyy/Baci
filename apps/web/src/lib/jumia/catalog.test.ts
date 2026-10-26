@@ -10,6 +10,10 @@ import {
   getStock,
 } from '@/lib/jumia/catalog';
 import type { JumiaClient } from '@/lib/jumia/client';
+import {
+  documentedAttributes,
+  documentedCategories,
+} from '@/schemas/jumia/catalog.test-fixtures.json';
 
 function createMockClient(
   response: unknown,
@@ -48,7 +52,7 @@ describe('getProducts', () => {
     });
   });
 
-  it('passes status and nextToken as query params', async () => {
+  it('passes normalized status and token as query params', async () => {
     const client = createMockClient({
       products: [],
       nextToken: null,
@@ -59,8 +63,8 @@ describe('getProducts', () => {
 
     const calledPath = vi.mocked(client.request).mock.calls[0][1] as string;
     expect(calledPath).toContain('/catalog/products?');
-    expect(calledPath).toContain('status=active');
-    expect(calledPath).toContain('nextToken=tok99');
+    expect(calledPath).toContain('status=ACTIVE');
+    expect(calledPath).toContain('token=tok99');
   });
 
   it('passes through nextToken and isLastPage from the validated response', async () => {
@@ -108,9 +112,9 @@ describe('getAllProducts', () => {
     expect(result).toEqual([p1, p2]);
     expect(client.request).toHaveBeenCalledTimes(2);
 
-    // Second call should include the nextToken from first page
+    // Second call sends the response nextToken under the documented token key.
     const secondCallPath = vi.mocked(client.request).mock.calls[1][1] as string;
-    expect(secondCallPath).toContain('nextToken=page2tok');
+    expect(secondCallPath).toContain('token=page2tok');
   });
 
   it('returns empty array when no products exist', async () => {
@@ -136,7 +140,7 @@ describe('getAllProducts', () => {
     await getAllProducts(client, { status: 'inactive' });
 
     const calledPath = vi.mocked(client.request).mock.calls[0][1] as string;
-    expect(calledPath).toContain('status=inactive');
+    expect(calledPath).toContain('status=INACTIVE');
   });
 
   it('propagates errors when request fails mid-pagination', async () => {
@@ -157,8 +161,8 @@ describe('getAllProducts', () => {
 
 describe('getCategories', () => {
   it('calls GET /catalog/categories', async () => {
-    const mockCategories = [{ id: 'cat-1', name: 'Electronics' }];
-    const client = createMockClient({ categories: mockCategories });
+    const mockCategories = documentedCategories.categories;
+    const client = createMockClient(documentedCategories);
 
     const result = await getCategories(client);
 
@@ -171,7 +175,10 @@ describe('getCategories', () => {
   });
 
   it('passes page param as query string', async () => {
-    const client = createMockClient({ categories: [] });
+    const client = createMockClient({
+      categories: [],
+      page: { current: 3, totalOfPages: 3 },
+    });
 
     await getCategories(client, { page: 3 });
 
@@ -190,10 +197,7 @@ describe('getCategories', () => {
 
 describe('getAllCategories', () => {
   it('returns categories array from single-page fetch', async () => {
-    const cats = [
-      { id: 'cat-1', name: 'Electronics' },
-      { id: 'cat-2', name: 'Fashion' },
-    ];
+    const cats = documentedCategories.categories;
     const client = createMockClient({
       categories: cats,
       page: { current: 1, totalOfPages: 1 },
@@ -206,9 +210,8 @@ describe('getAllCategories', () => {
   });
 
   it('auto-paginates through multiple pages', async () => {
-    const c1 = { id: 'cat-1', name: 'Electronics' };
-    const c2 = { id: 'cat-2', name: 'Fashion' };
-    const c3 = { id: 'cat-3', name: 'Home' };
+    const [c1, c2] = documentedCategories.categories;
+    const c3 = { ...c2, code: 1020203, name: 'Home' };
 
     const client = { request: vi.fn() } as unknown as JumiaClient;
     vi.mocked(client.request)
@@ -237,7 +240,7 @@ describe('getAllCategories', () => {
     const client = { request: vi.fn() } as unknown as JumiaClient;
     vi.mocked(client.request)
       .mockResolvedValueOnce({
-        categories: [{ id: 'cat-1', name: 'Electronics' }],
+        categories: [documentedCategories.categories[0]],
         page: { current: 1, totalOfPages: 3 },
       })
       .mockRejectedValueOnce(new Error('Gateway timeout'));
@@ -345,9 +348,7 @@ describe('getAllBrands', () => {
 
 describe('getAttributeSet', () => {
   it('calls GET /catalog/attribute-sets/:id with the given ID', async () => {
-    const mockResponse = {
-      attributeSet: { id: 'as-42', name: 'Phones', attributes: [] },
-    };
+    const mockResponse = documentedAttributes;
     const client = createMockClient(mockResponse);
 
     const result = await getAttributeSet(client, 'as-42');
@@ -426,11 +427,12 @@ describe('getStock', () => {
 
 describe('getAllProducts MAX_PAGES overflow', () => {
   it('throws when pagination exceeds MAX_PAGES limit', async () => {
+    let cursor = 0;
     const client = {
       request: vi.fn().mockImplementation(() =>
         Promise.resolve({
           products: [{ sku: 'SKU-X' }],
-          nextToken: 'always-more',
+          nextToken: `more-${cursor++}`,
           isLastPage: false,
         })
       ),
@@ -447,7 +449,7 @@ describe('getAllCategories MAX_PAGES overflow', () => {
     const client = {
       request: vi.fn().mockImplementation(() =>
         Promise.resolve({
-          categories: [{ id: 'cat-X', name: 'Infinite' }],
+          categories: [documentedCategories.categories[0]],
           page: { current: 1, totalOfPages: 99999 },
         })
       ),

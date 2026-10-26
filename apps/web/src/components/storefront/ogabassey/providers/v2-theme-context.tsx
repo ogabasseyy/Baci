@@ -5,9 +5,14 @@ import {
   createContext,
   use,
   useEffect,
+  useLayoutEffect,
   useState,
   useSyncExternalStore,
 } from 'react';
+import {
+  createCommittedSnapshotStore,
+  type CommittedSnapshotStore,
+} from '@/lib/committed-snapshot-store';
 
 export type V2ThemeMode = 'standard' | 'santa';
 const MAX_BROWSER_TIMEOUT_MS = 2_147_000_000;
@@ -18,7 +23,11 @@ interface V2ThemeContextType {
   toggleTheme: () => void;
 }
 
-const V2ThemeContext = createContext<V2ThemeContextType | undefined>(undefined);
+const V2ThemeContext = createContext<
+  CommittedSnapshotStore<V2ThemeContextType> | undefined
+>(undefined);
+const getNoTheme = () => null;
+const subscribeToMissingTheme = () => () => undefined;
 
 const THEME_COOKIE_NAME = 'storefront-theme-v2';
 
@@ -75,11 +84,16 @@ function resolveClientDefaultTheme(
 }
 
 export const useV2Theme = () => {
-  const context = use(V2ThemeContext);
-  if (!context) {
+  const store = use(V2ThemeContext);
+  const snapshot = useSyncExternalStore(
+    store?.subscribe ?? subscribeToMissingTheme,
+    store?.getSnapshot ?? getNoTheme,
+    store?.getServerSnapshot ?? getNoTheme
+  );
+  if (!snapshot) {
     throw new Error('useV2Theme must be used within a V2ThemeProvider');
   }
-  return context;
+  return snapshot;
 };
 
 interface V2ThemeProviderProps {
@@ -113,18 +127,23 @@ export const V2ThemeProvider: React.FC<V2ThemeProviderProps> = ({
     const isDecember = new Date().getMonth() === 11;
     const cookieTheme = getCookie(THEME_COOKIE_NAME);
     const now = new Date();
-    const boundary = new Date(now.getFullYear() + (isDecember ? 1 : 0), 0, 1);
+    // The reset is the next January, never January of the current year.
+    // A past deadline schedules an immediate context update during hydration.
+    const boundary = new Date(now.getFullYear() + 1, 0, 1);
     let timer: number | undefined;
     const schedule = () => {
       const remainingMs = Math.max(0, boundary.getTime() - Date.now());
-      timer = window.setTimeout(() => {
-        if (remainingMs > MAX_BROWSER_TIMEOUT_MS) {
-          schedule();
-          return;
-        }
-        setUserTheme('standard');
-        setCookie(THEME_COOKIE_NAME, 'standard');
-      }, Math.min(remainingMs, MAX_BROWSER_TIMEOUT_MS));
+      timer = window.setTimeout(
+        () => {
+          if (remainingMs > MAX_BROWSER_TIMEOUT_MS) {
+            schedule();
+            return;
+          }
+          setUserTheme('standard');
+          setCookie(THEME_COOKIE_NAME, 'standard');
+        },
+        Math.min(remainingMs, MAX_BROWSER_TIMEOUT_MS)
+      );
     };
     schedule();
 
@@ -173,9 +192,11 @@ export const V2ThemeProvider: React.FC<V2ThemeProviderProps> = ({
     setTheme(newTheme);
   };
 
+  const value = { theme, setTheme, toggleTheme };
+  const [store] = useState(() => createCommittedSnapshotStore(value));
+  useLayoutEffect(() => store.publish(value));
+
   return (
-    <V2ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-      {children}
-    </V2ThemeContext.Provider>
+    <V2ThemeContext.Provider value={store}>{children}</V2ThemeContext.Provider>
   );
 };

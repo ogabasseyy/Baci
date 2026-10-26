@@ -40,7 +40,7 @@ describe('getCachedBrandAuthorityEntries', () => {
       ['samsung', 5],
       ['google', 6],
     ]);
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(7);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(8);
   });
 
   it('fails optional category links open when the query fails', async () => {

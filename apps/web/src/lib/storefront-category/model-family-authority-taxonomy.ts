@@ -161,7 +161,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /^(?:Samsung )?Galaxy A(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+A(?=\s|\d|$)/i,
-      /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b/i,
+      /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b/i,
     ]
   ),
   fam(
@@ -169,7 +169,10 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'galaxy-s',
     'Samsung Galaxy S',
     /^(?:Samsung )?Galaxy S(?=\s|\d|$)/i,
-    [/\bGalaxy\s+S(?=\s|\d|$)/i, /\b(?:Samsung\s+)?S[0-9]{2}\b/i]
+    [
+      /\bGalaxy\s+S(?=\s|\d|$)/i,
+      /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?S[0-9]{2}\b/i,
+    ]
   ),
   fam(
     'samsung',

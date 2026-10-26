@@ -4,23 +4,17 @@
 -- the previous revision for 305s before applying it, so no old cron binary
 -- with the all-or-nothing batch parser can claim a manual row.
 --
--- Enabling is not retroactive, so the same transaction backfills eligible
--- orders created while the triggers were disabled. Re-runnable: orders that
--- already have a manual row are skipped, and the enqueue function
--- re-validates all eligibility. The reported count is scanned orders, not
--- enqueued rows: the void function early-returns for ineligible orders but
--- SELECT still emits one row per scanned order.
-ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
-ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_updates;
-ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_deletes;
-ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
-ALTER TABLE public.merchants ENABLE TRIGGER rearm_manual_documents_after_merchant_update;
-ALTER TABLE public.customers ENABLE TRIGGER rearm_manual_documents_after_customer_restore;
-ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after_tax_write;
-ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
-ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
-ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
-ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
+-- The triggers enable LAST in this file, after the activation backfill:
+-- an abort (burst fence or statement timeout) therefore leaves the
+-- triggers disabled with nothing mailed, and a retry re-runs the whole
+-- file cleanly (ENABLE TRIGGER is idempotent; the backfill anti-join
+-- skips already-enqueued rows). Enabling is not retroactive, so the
+-- backfill covers eligible orders created while the triggers were
+-- disabled. Re-runnable: orders that already have a manual row are
+-- skipped, and the enqueue function re-validates all eligibility. The
+-- reported count is scanned orders, not enqueued rows: the void function
+-- early-returns for ineligible orders but SELECT still emits one row per
+-- scanned order.
 -- Backfill: the eligible set is staff-recorded orders created while the
 -- triggers were disabled (manual volume only — imports and marketplace
 -- rows never set the flag), each a single enqueue call that early-returns
@@ -70,3 +64,17 @@ SELECT count(*) FROM (
     )
 ) AS scanned;
 RESET statement_timeout;
+-- Triggers enable only after the backfill succeeds (see header): an abort
+-- above leaves them disabled, so a retry never double-mails and new rows
+-- cannot enqueue until the catch-up is complete.
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_updates;
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_deletes;
+ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
+ALTER TABLE public.merchants ENABLE TRIGGER rearm_manual_documents_after_merchant_update;
+ALTER TABLE public.customers ENABLE TRIGGER rearm_manual_documents_after_customer_restore;
+ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after_tax_write;
+ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
+ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
+ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
+ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;

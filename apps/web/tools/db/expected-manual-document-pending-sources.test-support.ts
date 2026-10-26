@@ -67,7 +67,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: '9077d95b86dcacc077888b3585d7e9d4fc670ca807a144a1fe198a469acd596d',
+    sha256: 'e38af4dfde119fc21339a6edf104ffbb0c34d140941421245e160f7d0822a96b',
   },
   {
     repositoryPath:

@@ -5,7 +5,10 @@ import {
   hashReceiptClaimToken,
   type ReceiptClaimOrderForDeviceList,
 } from '@/lib/import-notifications/receipt-claim-links';
-import type { ReceiptLoginHintRpcClient } from '@/lib/receipts/server-login-hint-client';
+import {
+  createReceiptLoginHintServiceClient,
+  type ReceiptLoginHintRpcClient,
+} from '@/lib/receipts/server-login-hint-client';
 import { receiptClaimRouteParamsSchema } from '@/schemas/receipt-claim-route-params';
 import {
   type ReceiptClaimRecord,
@@ -147,6 +150,10 @@ export async function loadReceiptClaimLoginEmailHint({
   token,
 }: {
   supabase: SupabaseClient;
+  // Test seam only: production omits this so the branded service client
+  // is constructed after the anon preview has validated the token, and a
+  // missing service key can never turn an invalid-token request into a
+  // 500 before existence/expiry are checked.
   serviceSupabase?: ReceiptLoginHintRpcClient;
   token: string;
 }): Promise<ReceiptClaimLoginEmailHintResult> {
@@ -156,6 +163,9 @@ export async function loadReceiptClaimLoginEmailHint({
     return record;
   }
 
+  const hintSupabase =
+    serviceSupabase ?? createReceiptLoginHintServiceClient();
+
   // The recipient address travels through the branded single-RPC
   // login-hint handle so the anon preview payload never carries it, and
   // only a masked hint leaves the server: an anonymous token holder learns
@@ -163,17 +173,15 @@ export async function loadReceiptClaimLoginEmailHint({
   // window the function does not exist yet: fall back to the legacy preview
   // email, which the schema still tolerates.
   let rawEmail: string | null = null;
-  if (serviceSupabase) {
-    const { data, error } = await serviceSupabase.rpc(
-      'get_receipt_claim_login_hint',
-      { p_token_hash: hashReceiptClaimToken(token) }
-    );
+  const hintResult = await hintSupabase.rpc('get_receipt_claim_login_hint', {
+    p_token_hash: hashReceiptClaimToken(token),
+  });
 
-    if (!error) {
-      rawEmail = typeof data === 'string' ? data : null;
-    } else if (!isMissingLoginHintFunction(error)) {
-      throw new Error(`Failed to load receipt claim: ${error.message}`);
-    }
+  if (!hintResult.error) {
+    rawEmail =
+      typeof hintResult.data === 'string' ? hintResult.data : null;
+  } else if (!isMissingLoginHintFunction(hintResult.error)) {
+    throw new Error(`Failed to load receipt claim: ${hintResult.error.message}`);
   }
 
   return {

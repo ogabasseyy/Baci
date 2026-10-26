@@ -105,8 +105,10 @@ instead of mailing the whole gap — keep the gap minutes-long, or split
 the catch-up manually per the migration error.
 
 Accepted Bearer [REDACTED] risk: the unauthenticated login-email GET returns the
-masked hint (`b***@domain`) and records login-started activity for any
-token holder. Token possession already grants the anon preview and
+masked hint (`b***@domain`) to any token holder and records
+login-started activity for non-web sources only. Web logins record the
+same event through the CSRF-protected POST instead, so each surface is
+counted once. Token possession already grants the anon preview and
 redemption itself, so the masked fragment discloses nothing beyond what
 the Bearer [REDACTED] already conveys; the activity write is funnel telemetry, not
 an authorization decision. The masked-hint posture is effective only after

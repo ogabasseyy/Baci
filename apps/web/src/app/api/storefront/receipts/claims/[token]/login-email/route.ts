@@ -6,7 +6,6 @@ import {
   recordReceiptClaimLoginStarted,
   recordReceiptClaimLoginStartedBestEffort,
 } from '@/lib/import-notifications/receipt-claim-preview';
-import { createReceiptLoginHintServiceClient } from '@/lib/receipts/server-login-hint-client';
 import { createClient } from '@/lib/supabase/server';
 import { receiptClaimLoginEmailQuerySchema } from '@/schemas/receipt-claim-login-email-query';
 
@@ -44,11 +43,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = await createClient();
-    const hint = await loadReceiptClaimLoginEmailHint({
-      supabase,
-      serviceSupabase: createReceiptLoginHintServiceClient(),
-      token,
-    });
+    // The branded service client is constructed inside the loader only
+    // after the anon preview has validated the token.
+    const hint = await loadReceiptClaimLoginEmailHint({ supabase, token });
 
     if (!hint.ok) {
       return NextResponse.json({ error: hint.error }, { status: hint.status });

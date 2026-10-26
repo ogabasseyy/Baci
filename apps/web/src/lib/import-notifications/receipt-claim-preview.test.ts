@@ -141,9 +141,22 @@ describe('receipt claim preview', () => {
       },
       error: null,
     });
+    // Predeploy window: the hint function does not exist yet, so the
+    // loader falls back to the legacy preview email.
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message:
+            'Could not find function public.get_receipt_claim_login_hint',
+        },
+      }),
+    };
 
     const result = await loadReceiptClaimLoginEmailHint({
       supabase,
+      serviceSupabase,
       token: 'claim-token',
     });
 
@@ -227,9 +240,23 @@ describe('receipt claim preview', () => {
       },
       error: null,
     });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message:
+            'Could not find function public.get_receipt_claim_login_hint',
+        },
+      }),
+    };
 
     await expect(
-      loadReceiptClaimLoginEmailHint({ supabase, token: 'claim-token' })
+      loadReceiptClaimLoginEmailHint({
+        supabase,
+        serviceSupabase,
+        token: 'claim-token',
+      })
     ).resolves.toEqual({
       emailHint: '',
       ok: true,

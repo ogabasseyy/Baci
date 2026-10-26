@@ -113,7 +113,12 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
   it('returns a sanitized email hint for a valid claim token', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
@@ -136,13 +141,19 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       error: null,
     });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
+    const hintRpc = vi.fn().mockResolvedValue({
+      data: '  BasseyBJohn@Yahoo.CO.UK  ',
+      error: null,
+    });
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: hintRpc,
+    });
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledWith('get_receipt_claim_login_hint', {
+    expect(hintRpc).toHaveBeenCalledWith('get_receipt_claim_login_hint', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
@@ -151,7 +162,12 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
   it('records app login-start activity from the mobile email hint request', async () => {
     const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
@@ -173,7 +189,12 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       { data: null, error: { message: 'tracking write failed' } }
     );
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest('GET', '?source=app'), params);
     const body = await response.json();
@@ -255,11 +276,15 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
         data: { ...baseClaim, customer_email: 'not-an-email' },
         error: null,
       },
-      { data: null, error: null },
-      { data: 'not-an-email', error: null }
+      { data: null, error: null }
     );
     mockCreateClient.mockResolvedValue(supabase);
-    mockCreateReceiptLoginHintServiceClient.mockReturnValue(supabase);
+    mockCreateReceiptLoginHintServiceClient.mockReturnValue({
+      rpc: vi.fn().mockResolvedValue({
+        data: 'not-an-email',
+        error: null,
+      }),
+    });
 
     const response = await GET(getRequest(), params);
     const body = await response.json();
@@ -277,6 +302,11 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: 'Receipt claim link not found' });
+    // The branded service client is constructed only after the anon
+    // preview validates the token: an invalid token never touches
+    // privileged material, so a missing service key cannot turn it
+    // into a 500.
+    expect(mockCreateReceiptLoginHintServiceClient).not.toHaveBeenCalled();
   });
 
   it('returns a generic 500 when loading the email hint fails', async () => {

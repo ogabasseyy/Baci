@@ -1,102 +1,11 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useChatLauncherDrag } from './use-chat-launcher-drag';
+import { fireEvent, screen } from '@testing-library/react';
+import dragTestSupport from './use-chat-launcher-drag.test-support';
 
-function Harness({ open = false, onRender = () => {}, onOpen = () => {} }) {
-  const drag = useChatLauncherDrag(undefined, open);
-  onRender();
-  return (
-    <div
-      ref={drag.anchorRef}
-      style={
-        {
-          ...drag.anchorStyle,
-          '--ogabassey-chat-safe-area-bottom': '34px',
-        } as React.CSSProperties
-      }
-      data-testid="anchor"
-    >
-      <button
-        type="button"
-        {...drag.buttonProps}
-        onClick={() => {
-          if (!drag.suppressClick()) onOpen();
-        }}
-      >
-        Chat
-      </button>
-    </div>
-  );
-}
-
-function setup() {
-  let frame: FrameRequestCallback | undefined;
-  let notifyResizeObserver: ResizeObserverCallback | undefined;
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      constructor(callback: ResizeObserverCallback) {
-        notifyResizeObserver = callback;
-      }
-      observe() {}
-      disconnect() {}
-    },
-  );
-  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-    frame = callback;
-    return 1;
-  });
-  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {
-    frame = undefined;
-  });
-  const onRender = vi.fn();
-  const onOpen = vi.fn();
-  const getComputedStyle = window.getComputedStyle.bind(window);
-  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
-    pseudo === '::before'
-      ? ({ height: '34px' }) as CSSStyleDeclaration
-      : getComputedStyle(element),
-  );
-  const view = render(<Harness onRender={onRender} onOpen={onOpen} />);
-  const button = screen.getByRole('button', { name: 'Chat' });
-  const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
-    left: 200,
-    top: 300,
-    width: 56,
-    height: 56,
-    right: 256,
-    bottom: 356,
-    x: 200,
-    y: 300,
-    toJSON: () => ({}),
-  });
-  const pointer = (type: string, x: number, y: number) =>
-    fireEvent(
-      button,
-      Object.assign(
-        new MouseEvent(type, {
-          bubbles: true,
-          clientX: x,
-          clientY: y,
-          button: 0,
-        }),
-        { pointerId: 1, isPrimary: true },
-      ),
-    );
-  return {
-    ...view,
-    button,
-    measure,
-    onOpen,
-    onRender,
-    pointer,
-    flush: () => act(() => frame?.(0)),
-    notifyResizeObserver: () =>
-      act(() => notifyResizeObserver?.([], {} as ResizeObserver)),
-  };
-}
+const { Harness, setup } = dragTestSupport;
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -142,32 +51,8 @@ describe('useChatLauncherDrag', () => {
     );
   });
 
-  it('keeps the proactive bubble inside the viewport at the top-left clamp', () => {
-    const { pointer, button } = setup();
-    const bubble = document.createElement('div');
-    bubble.dataset.chatLauncherOverflow = '';
-    button.parentElement?.append(bubble);
-    vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
-      left: 100,
-      top: 250,
-      width: 192,
-      height: 50,
-      right: 292,
-      bottom: 300,
-      x: 100,
-      y: 250,
-      toJSON: () => ({}),
-    });
-    pointer('pointerdown', 220, 320);
-    pointer('pointermove', -2000, -2000);
-    pointer('pointerup', -2000, -2000);
-    expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(116px, 66px, 0)',
-    );
-  });
-
-  it('re-clamps the launcher against its bubble after chat closes', () => {
-    const { pointer, button, rerender } = setup();
+  it('re-clamps when the delayed proactive bubble appears after chat closes', () => {
+    const { pointer, rerender } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', -2000, -2000);
     pointer('pointerup', -2000, -2000);
@@ -176,21 +61,28 @@ describe('useChatLauncherDrag', () => {
     );
 
     rerender(<Harness open />);
-    const bubble = document.createElement('div');
-    bubble.dataset.chatLauncherOverflow = '';
-    button.parentElement?.append(bubble);
-    vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
-      left: 100,
-      top: 250,
-      width: 192,
-      height: 50,
-      right: 292,
-      bottom: 300,
-      x: 100,
-      y: 250,
-      toJSON: () => ({}),
-    });
     rerender(<Harness />);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(16px, 16px, 0)',
+    );
+    rerender(
+      <Harness
+        hasOverflow
+        onOverflowMount={(bubble) =>
+          vi.spyOn(bubble, 'getBoundingClientRect').mockReturnValue({
+            left: 100,
+            top: 250,
+            width: 192,
+            height: 50,
+            right: 292,
+            bottom: 300,
+            x: 100,
+            y: 250,
+            toJSON: () => ({}),
+          })
+        }
+      />,
+    );
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(116px, 66px, 0)',
     );
@@ -229,6 +121,17 @@ describe('useChatLauncherDrag', () => {
     fireEvent(button, lostCapture);
     fireEvent.click(button);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow later keyboard activation when a drag emits no click', () => {
+    vi.useFakeTimers();
+    const { pointer, button, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    vi.runOnlyPendingTimers();
+    fireEvent.click(button, { detail: 0 });
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it('restores the previous transform when a drag is cancelled', () => {

@@ -1164,6 +1164,10 @@ body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
   display: none;
 }
 
+body:has(.ogabassey-newsletter-popup) .ogabassey-chat-anchor {
+  display: none;
+}
+
 /* Keep delayed offer chrome from covering an active conversation. */
 body:has(.ogabassey-chat-anchor .ogabassey-chat-window) .ogabassey-offer-popup {
   display: none;

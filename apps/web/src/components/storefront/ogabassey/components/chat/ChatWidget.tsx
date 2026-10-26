@@ -54,7 +54,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     storefrontSlug: merchant?.merchant?.slug,
   });
 
-  const drag = useChatLauncherDrag(initialLauncherPosition, isOpen);
+  const launcherOverflowKey = isOpen
+    ? false
+    : isSanta
+      ? 'santa'
+      : proactiveMsg || false;
+  const drag = useChatLauncherDrag(
+    initialLauncherPosition,
+    isOpen,
+    launcherOverflowKey,
+  );
 
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
   // storefront page instead of sending a chat message.

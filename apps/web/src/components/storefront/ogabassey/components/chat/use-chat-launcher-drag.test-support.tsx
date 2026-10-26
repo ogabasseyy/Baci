@@ -1,0 +1,122 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
+import { useChatLauncherDrag } from './use-chat-launcher-drag';
+
+function Harness({
+  open = false,
+  hasOverflow = false,
+  onRender = () => {},
+  onOpen = () => {},
+  onOverflowMount,
+}: {
+  open?: boolean;
+  hasOverflow?: boolean;
+  onRender?: () => void;
+  onOpen?: () => void;
+  onOverflowMount?: (bubble: HTMLDivElement) => void;
+}) {
+  const drag = useChatLauncherDrag(undefined, open, hasOverflow);
+  onRender();
+  return (
+    <div
+      ref={drag.anchorRef}
+      style={
+        {
+          ...drag.anchorStyle,
+          '--ogabassey-chat-safe-area-bottom': '34px',
+        } as React.CSSProperties
+      }
+      data-testid="anchor"
+    >
+      <div className="relative group">
+        {hasOverflow && (
+          <div
+            ref={(bubble) => {
+              if (bubble) onOverflowMount?.(bubble);
+            }}
+            data-chat-launcher-overflow
+            data-testid="launcher-bubble"
+          />
+        )}
+        <button
+          type="button"
+          {...drag.buttonProps}
+          onClick={() => {
+            if (!drag.suppressClick()) onOpen();
+          }}
+        >
+          Chat
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function setup() {
+  let frame: FrameRequestCallback | undefined;
+  let notifyResizeObserver: ResizeObserverCallback | undefined;
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResizeObserver = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    frame = callback;
+    return 1;
+  });
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {
+    frame = undefined;
+  });
+  const onRender = vi.fn();
+  const onOpen = vi.fn();
+  const getComputedStyle = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
+    pseudo === '::before'
+      ? ({ height: '34px' }) as CSSStyleDeclaration
+      : getComputedStyle(element),
+  );
+  const view = render(<Harness onRender={onRender} onOpen={onOpen} />);
+  const button = screen.getByRole('button', { name: 'Chat' });
+  const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+    left: 200,
+    top: 300,
+    width: 56,
+    height: 56,
+    right: 256,
+    bottom: 356,
+    x: 200,
+    y: 300,
+    toJSON: () => ({}),
+  });
+  const pointer = (type: string, x: number, y: number) =>
+    fireEvent(
+      button,
+      Object.assign(
+        new MouseEvent(type, {
+          bubbles: true,
+          clientX: x,
+          clientY: y,
+          button: 0,
+        }),
+        { pointerId: 1, isPrimary: true },
+      ),
+    );
+  return {
+    ...view,
+    button,
+    measure,
+    onOpen,
+    onRender,
+    pointer,
+    flush: () => act(() => frame?.(0)),
+    notifyResizeObserver: () =>
+      act(() => notifyResizeObserver?.([], {} as ResizeObserver)),
+  };
+}
+
+export default { Harness, setup };

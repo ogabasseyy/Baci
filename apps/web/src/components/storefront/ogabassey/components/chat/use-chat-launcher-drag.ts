@@ -62,6 +62,7 @@ function clamp(
 export function useChatLauncherDrag(
   initialPosition?: Position,
   isOpen = false,
+  overflowKey: string | boolean = false,
 ) {
   const [position, setPosition] = useState<Position | undefined>(
     initialPosition,
@@ -71,6 +72,14 @@ export function useChatLauncherDrag(
   const gesture = useRef<Gesture | null>(null);
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
+  const clickSuppressionTimer = useRef<number | null>(null);
+
+  function clearClickSuppressionTimer() {
+    if (clickSuppressionTimer.current !== null) {
+      window.clearTimeout(clickSuppressionTimer.current);
+      clickSuppressionTimer.current = null;
+    }
+  }
 
   function readBottomSafeArea() {
     const anchor = anchorRef.current;
@@ -140,12 +149,13 @@ export function useChatLauncherDrag(
       window.removeEventListener('resize', reclampPosition);
       observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
+      clearClickSuppressionTimer();
     };
   }, []);
 
   useLayoutEffect(() => {
     if (!isOpen && position) reclampPosition();
-  }, [isOpen, position]);
+  }, [isOpen, overflowKey, position]);
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (
@@ -173,6 +183,7 @@ export function useChatLauncherDrag(
       next: { x: rect.left, y: rect.top },
     };
     dragged.current = false;
+    clearClickSuppressionTimer();
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
@@ -210,6 +221,7 @@ export function useChatLauncherDrag(
     frame.current = null;
     gesture.current = null;
     dragged.current = false;
+    clearClickSuppressionTimer();
     if (anchorRef.current) {
       anchorRef.current.style.transform = position
         ? `translate3d(${position.x}px, ${position.y}px, 0)`
@@ -223,7 +235,14 @@ export function useChatLauncherDrag(
     const start = gesture.current;
     gesture.current = null;
     // Commit once at release, including when release beats the queued frame.
-    if (start && dragged.current) setPosition(start.next);
+    if (start && dragged.current) {
+      setPosition(start.next);
+      clearClickSuppressionTimer();
+      clickSuppressionTimer.current = window.setTimeout(() => {
+        clickSuppressionTimer.current = null;
+        dragged.current = false;
+      }, 0);
+    }
   }
 
   function onPointerUp(event: PointerEvent<HTMLButtonElement>) {
@@ -239,6 +258,7 @@ export function useChatLauncherDrag(
   function suppressClick() {
     const suppress = dragged.current;
     dragged.current = false;
+    clearClickSuppressionTimer();
     return suppress;
   }
 

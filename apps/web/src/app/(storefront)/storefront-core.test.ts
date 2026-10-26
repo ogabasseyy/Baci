@@ -89,6 +89,9 @@ describe('storefront overlay priority', () => {
       'display: none'
     );
     expect(storefrontCoreCss).toContain(`${selector} .ogabassey-chat-anchor,`);
+    expect(
+      cssRuleFor('body:has(.ogabassey-newsletter-popup) .ogabassey-chat-anchor')
+    ).toContain('display: none');
     expect(storefrontCoreCss).toMatch(
       /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.ogabassey-offer-popup\s*\{\s*display:\s*none/
     );

@@ -4,6 +4,8 @@
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-blog.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+
 /*
   Blog post CSS. Keep renderer / embed / shadcn surfaces off the listing
   render-blocking path; the listing layout loads storefront-blog.css only.

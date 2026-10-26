@@ -2,6 +2,8 @@
 
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+
 @source "./[slug]/layout.tsx";
 @source "./[slug]/(catalog)/(pdp)/layout.tsx";
 @source "./[slug]/(catalog)/(pdp)/product/[productSlug]/page.tsx";

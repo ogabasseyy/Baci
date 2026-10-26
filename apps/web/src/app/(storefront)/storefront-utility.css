@@ -2,6 +2,8 @@
 @import "./storefront-foundation.css";
 @config "../../../tailwind.storefront-blog.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+
 /* Essential utility-route styles must exist before the first interaction. */
 @source "./[slug]/(utility)";
 @source "../../components/storefront/ogabassey/pages";

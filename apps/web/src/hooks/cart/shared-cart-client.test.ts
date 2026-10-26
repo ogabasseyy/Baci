@@ -51,6 +51,23 @@ describe('shared-cart-client snapshot', () => {
     vi.clearAllMocks();
   });
 
+  it('treats an empty-session probe as a non-retryable absent session', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    expect(await fetchSharedCartSnapshot()).toEqual({
+      ok: false,
+      code: 'unauthorized',
+      snapshot: null,
+      retryable: false,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/storefront/cart',
+      expect.objectContaining({
+        headers: { 'x-baci-cart-probe': '1' },
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fetches the authorized snapshot without storing it', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({ cart: snapshot(), warnings: [] })

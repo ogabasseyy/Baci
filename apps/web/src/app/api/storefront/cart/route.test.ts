@@ -17,6 +17,29 @@ import {
 } from './route.test-support';
 
 describe('GET /api/storefront/cart', () => {
+  it('returns no content for an explicit empty-session probe without creating a cart or cookie', async () => {
+    const response = await getCart({
+      headers: { 'x-baci-cart-probe': '1' },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.text()).toBe('');
+    expect(mocks.capturedPrincipal).toBeNull();
+  });
+
+  it('still rejects invalid proofs on an empty-session probe', async () => {
+    const response = await getCart({
+      headers: {
+        'x-baci-cart-probe': '1',
+        cookie: cartCookie('cp1.invalid.invalid'),
+      },
+    });
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('invalid_proof');
+    expect(mocks.capturedPrincipal).toBeNull();
+  });
+
   it('returns the authorized snapshot without setting cookies', async () => {
     mocks.cartPayload = {
       code: null,

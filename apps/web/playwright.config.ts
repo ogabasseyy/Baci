@@ -1,9 +1,17 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { defineConfig } from '@playwright/test';
 
 const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
 const port = Number(configuredPort || 3217);
+const firefoxHome = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'baci-playwright-firefox-home-')
+);
+process.on('exit', () =>
+  fs.rmSync(firefoxHome, { recursive: true, force: true })
+);
+
 export default defineConfig({
   testDir: './tests/checkout-browser',
   testMatch: '**/*.pw.ts',
@@ -29,7 +37,12 @@ export default defineConfig({
     {
       name: 'firefox-chat-drag',
       testMatch: '**/storefront-chat-overlay.pw.ts',
-      use: { browserName: 'firefox' },
+      use: {
+        browserName: 'firefox',
+        launchOptions: {
+          env: { ...process.env, HOME: firefoxHome },
+        },
+      },
     },
   ],
   webServer: {

@@ -84,8 +84,15 @@ export function useChatLauncherDrag(
       );
     };
     window.addEventListener('resize', resize);
+    const button = buttonRef.current;
+    const observer =
+      button && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(resize)
+        : null;
+    if (button) observer?.observe(button);
     return () => {
       window.removeEventListener('resize', resize);
+      observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
     };
   }, []);

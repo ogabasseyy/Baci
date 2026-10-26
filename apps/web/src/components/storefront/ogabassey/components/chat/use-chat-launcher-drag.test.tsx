@@ -31,6 +31,17 @@ function Harness({ open = false, onRender = () => {}, onOpen = () => {} }) {
 
 function setup() {
   let frame: FrameRequestCallback | undefined;
+  let notifyResizeObserver: ResizeObserverCallback | undefined;
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResizeObserver = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     frame = callback;
     return 1;
@@ -74,10 +85,15 @@ function setup() {
     onRender,
     pointer,
     flush: () => act(() => frame?.(0)),
+    notifyResizeObserver: () =>
+      act(() => notifyResizeObserver?.([], {} as ResizeObserver)),
   };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('useChatLauncherDrag', () => {
   it('batches movement into a transform without rendering React or reading layout per move', () => {
@@ -122,7 +138,7 @@ describe('useChatLauncherDrag', () => {
   });
 
   it('keeps the icon reachable after the viewport shrinks', () => {
-    const { pointer } = setup();
+    const { pointer, measure } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 2000, 2000);
     pointer('pointerup', 2000, 2000);
@@ -179,11 +195,47 @@ describe('useChatLauncherDrag', () => {
     );
   });
 
+  it('re-clamps a saved position when the hidden launcher becomes visible', () => {
+    const { pointer, measure, notifyResizeObserver } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 2000, 2000);
+    pointer('pointerup', 2000, 2000);
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent(window, new Event('resize'));
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 56,
+      height: 56,
+      right: 56,
+      bottom: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    notifyResizeObserver();
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(248px, 374px, 0)',
+    );
+  });
+
   it('keeps the icon above the device bottom safe area', () => {
     const { pointer } = setup();
     vi.spyOn(window, 'getComputedStyle').mockReturnValue({
       getPropertyValue: () => '34px',
-    } as CSSStyleDeclaration);
+    } as unknown as CSSStyleDeclaration);
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 220, 5000);
     pointer('pointerup', 220, 5000);

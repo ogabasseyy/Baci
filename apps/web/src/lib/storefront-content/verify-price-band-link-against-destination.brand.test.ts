@@ -105,6 +105,31 @@ describe('verifyPriceBandLinkAgainstDestination brand-compare links', () => {
     ).toEqual(links);
   });
 
+  it('drops a product-compare link whose slug is not curated', () => {
+    const links = [
+      {
+        href: 'https://store.test/smartphones/compare/iphone-0-vs-galaxy-0',
+        label: 'iPhone 0 vs Galaxy 0',
+      },
+    ];
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: pool,
+        curatedCompareSlugs: new Set(['apple-vs-samsung']),
+      })
+    ).toEqual([]);
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: pool,
+        curatedCompareSlugs: new Set(['galaxy-0-vs-iphone-0']),
+      })
+    ).toEqual(links);
+  });
+
   it('verifies every band link, not just the first', () => {
     const result = verifyPriceBandLinkAgainstDestination({
       categorySlug: 'smartphones',

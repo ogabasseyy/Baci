@@ -1,4 +1,3 @@
-import { generateSlug } from '@/lib/seo-utils';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 export interface BrandComparisonRow {
@@ -49,7 +48,7 @@ function filterProductsByCanonicalBrand(
   products: BrandComparisonProduct[],
   brandLabel: string
 ): BrandComparisonProduct[] {
-  const brandKey = generateSlug(brandLabel);
+  const brandKey = resolveCanonicalBrandKey(categorySlug, brandLabel);
   return products.filter(
     (product) =>
       resolveCanonicalBrandKey(categorySlug, product.brand) === brandKey

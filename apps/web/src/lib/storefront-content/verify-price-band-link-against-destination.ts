@@ -80,6 +80,14 @@ export function verifyPriceBandLinkAgainstDestination(args: {
       // own candidate for the decoded pair is indexable.
       const parsed = parseCompareSlug(compareSlug);
       if (!parsed || !args.compareProducts) return false;
+      // Product compares must also sit in the destination curated set
+      // when the caller supplies it, mirroring the brand branch.
+      if (
+        args.curatedCompareSlugs &&
+        !isCuratedCompareSlug(compareSlug, args.curatedCompareSlugs)
+      ) {
+        return false;
+      }
       const leftProduct = args.compareProducts.find(
         (product) => product.slug === parsed.leftKey
       );

@@ -3,6 +3,7 @@ import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commer
 import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-indexability-policy';
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
+import { normalizeInferredBrands } from '@/lib/storefront-compare/normalize-inferred-brands';
 import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
@@ -90,7 +91,10 @@ function buildFeaturedProducts(
   countryCode?: string | null
 ) {
   const inStockProducts = products.filter(isInStock);
-  const normalizedBrands = inferredBrands.map((brand) => brand.toLowerCase());
+  const normalizedBrands = normalizeInferredBrands(
+    categorySlug,
+    inferredBrands
+  );
   const preferredProducts =
     normalizedBrands.length > 0
       ? inStockProducts.filter((product) =>

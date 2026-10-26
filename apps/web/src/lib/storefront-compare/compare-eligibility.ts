@@ -235,7 +235,11 @@ export function buildPriceBandCandidate(input: {
   const differentiatingSpecCount = Math.min(
     new Set(
       bandProducts
-        .map((product) => normalizeBrand(product.brand)?.key)
+        .map((product) =>
+          product.brand
+            ? resolveCanonicalBrandKey(input.categorySlug, product.brand)
+            : null
+        )
         .filter((brandKey): brandKey is string => Boolean(brandKey))
     ).size,
     4

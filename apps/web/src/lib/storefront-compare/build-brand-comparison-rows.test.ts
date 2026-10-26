@@ -40,4 +40,28 @@ describe('buildBrandComparisonRows', () => {
     });
     expect(comparisonRows[2]?.leftValue).toBe('Redmi 12');
   });
+
+  it('counts gaming alias brands under their canonical comparison labels', () => {
+    const products = [
+      { ...product('PS5 Console', 'Sony', 850_000), category_slug: 'gaming' },
+      { ...product('PS5 Slim', 'Sony', 800_000), category_slug: 'gaming' },
+      {
+        ...product('Xbox Series X', 'Microsoft', 780_000),
+        category_slug: 'gaming',
+      },
+      {
+        ...product('Xbox Series S', 'Microsoft', 450_000),
+        category_slug: 'gaming',
+      },
+    ];
+    const { leftBrandProducts, rightBrandProducts } = buildBrandComparisonRows({
+      categorySlug: 'gaming',
+      leftBrand: 'Sony',
+      rightBrand: 'Microsoft',
+      products,
+      priceFormatter: formatter,
+    });
+    expect(leftBrandProducts).toHaveLength(2);
+    expect(rightBrandProducts).toHaveLength(2);
+  });
 });

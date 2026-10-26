@@ -219,6 +219,21 @@ describe('compare eligibility candidate builders', () => {
     });
   });
 
+  it('counts Redmi and Xiaomi as one canonical brand in price bands', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: CURATED_PRICE_BANDS.smartphones[1],
+      products: [
+        { slug: 'redmi-1', name: 'Redmi 1', brand: 'Redmi', price: 300000 },
+        { slug: 'redmi-2', name: 'Redmi 2', brand: 'Redmi', price: 320000 },
+        { slug: 'xiaomi-1', name: 'Xiaomi 1', brand: 'Xiaomi', price: 340000 },
+        { slug: 'xiaomi-2', name: 'Xiaomi 2', brand: 'Xiaomi', price: 360000 },
+      ],
+    });
+    expect(candidate.differentiatingSpecCount).toBe(1);
+    expect(candidate.isIndexable).toBe(false);
+  });
+
   it('does not inflate price-band differentiating spec count beyond distinct brand count', () => {
     expect(
       buildPriceBandCandidate({

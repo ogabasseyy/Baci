@@ -1,4 +1,6 @@
-'use client';
+import { omitBlankIntegrationSecrets } from '@/lib/integration-secret-settings';
+
+('use client');
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -62,7 +64,10 @@ async function persistIntegrationSettings<T extends object>(
   const response = await fetchWithCsrf('/api/merchant/features', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...updates, merchantId }),
+    body: JSON.stringify({
+      ...omitBlankIntegrationSecrets(updates),
+      merchantId,
+    }),
   });
 
   if (!response.ok) {

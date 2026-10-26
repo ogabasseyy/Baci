@@ -2,6 +2,10 @@ import type { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
+  INTEGRATION_SECRET_FIELDS,
+  omitBlankIntegrationSecrets,
+} from '@/lib/integration-secret-settings';
+import {
   getMerchantFeatureAccess,
   merchantFeatureUpgradeResponse,
 } from '@/lib/merchant-feature-gates';
@@ -70,7 +74,9 @@ export function createPutFeatureSettings(
           },
           { status: 400 }
         );
-      const sanitizedSettings = parsedSettings.data;
+      const sanitizedSettings = omitBlankIntegrationSecrets(
+        parsedSettings.data
+      );
       if (hasNonEmptyGrowthIntegrationSetting(sanitizedSettings)) {
         const featureAccess = await getMerchantFeatureAccess(
           auth.supabase,
@@ -95,7 +101,7 @@ export function createPutFeatureSettings(
       const { data: existingSettings, error: existingSettingsError } =
         await auth.supabase
           .from('merchant_feature_settings')
-          .select('custom_settings')
+          .select(`custom_settings, ${INTEGRATION_SECRET_FIELDS.join(', ')}`)
           .eq('merchant_id', access.merchantId)
           .maybeSingle();
       if (existingSettingsError) {
@@ -115,6 +121,12 @@ export function createPutFeatureSettings(
         );
       const completeSettings = {
         ...defaultMerchantFeatureSettings,
+        ...Object.fromEntries(
+          INTEGRATION_SECRET_FIELDS.map((key) => [
+            key,
+            existingSettings?.[key] ?? null,
+          ])
+        ),
         ...sanitizedSettings,
         merchant_id: access.merchantId,
         updated_at: new Date().toISOString(),

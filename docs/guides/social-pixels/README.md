@@ -69,3 +69,9 @@ and provider browser/server receipts. Capture event names, currency/value, and
 matching event IDs where available. Do not include a visible server credential
 or customer personal information. Label missing receipts as pending rather than
 presenting the setup screen as delivery proof.
+
+Saved Meta, TikTok, Snapchat and GA4 server credentials are write-only in Baci.
+The dashboard reports whether a credential is saved and keeps the replacement
+field blank. Saving a blank field keeps the existing credential; entering a new
+value replaces it. Use **Disconnect server tracking** to clear the saved
+credential explicitly. Pixel IDs and other non-secret settings remain visible.

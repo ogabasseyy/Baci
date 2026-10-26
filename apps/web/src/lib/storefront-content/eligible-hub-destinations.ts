@@ -51,8 +51,10 @@ export function resolveEligibleCategoryHubDestinations(
   const availableProducts = input.products.filter(
     (product) =>
       (product.manage_stock === false ||
-        product.stock == null ||
-        product.stock > 0) &&
+        (product.stock != null && product.stock > 0) ||
+        // Legacy rows without stock management info keep the scoped-pool
+        // assumption; explicitly managed rows with unknown stock do not.
+        (product.stock == null && product.manage_stock == null)) &&
       (generateSlug(product.category_slug ?? '') === categorySlug ||
         (product.category_slugs ?? []).some(
           (slug) => generateSlug(slug) === categorySlug

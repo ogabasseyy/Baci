@@ -168,11 +168,23 @@ describe('eligible-hub-destinations', () => {
       expect(laptopResult.brandHubs).toHaveLength(0);
     });
 
-    it('ignores products with missing or non-positive price when evaluating price band candidates', () => {
+    it('excludes variant rows the destination inventory would not count', () => {
       const products = [
-        { name: 'Phone 1', brand: 'Apple', price: 0, stock: 5 },
-        { name: 'Phone 2', brand: 'Apple', price: undefined, stock: 5 },
-        { name: 'Phone 3', brand: 'Samsung', price: 0, stock: 5 },
+        { name: 'iPhone 15 Pro Max', brand: 'Apple', stock: 10 },
+        { name: 'iPhone 15 Pro', brand: 'Apple', stock: 5 },
+        { name: 'iPhone 15', brand: 'Apple', stock: 3 },
+        {
+          name: 'iPhone 15 128GB Black',
+          brand: 'Apple',
+          stock: 2,
+          parent_product_id: 'iphone-15-id',
+        },
+        {
+          name: 'iPhone 15 256GB Blue',
+          brand: 'Apple',
+          stock: 2,
+          parent_product_id: 'iphone-15-id',
+        },
       ];
 
       const result = resolveEligibleCategoryHubDestinations({
@@ -180,8 +192,9 @@ describe('eligible-hub-destinations', () => {
         products,
       });
 
-      // Zero-priced or unpriced products must not inflate the lowest price band
-      expect(result.priceBandHubs).toEqual([]);
+      // Only 3 standalone rows count, below both brand (5) and family (3+brand gate) minimums
+      expect(result.brandHubs).toHaveLength(0);
+      expect(result.familyHubs).toHaveLength(0);
     });
   });
 });

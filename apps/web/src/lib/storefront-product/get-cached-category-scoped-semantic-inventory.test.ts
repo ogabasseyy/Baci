@@ -105,6 +105,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 7,
         category_slug: 'laptops',
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
+        is_parent: null,
+        parent_product_id: null,
       },
       {
         slug: 'legion-5',
@@ -115,6 +117,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 3,
         category_slug: 'gaming-laptops',
         product_key_specs: { ram_gb: 32 },
+        is_parent: null,
+        parent_product_id: null,
       },
     ]);
   });
@@ -225,6 +229,8 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 0,
         category_slug: 'retro-tech',
         product_key_specs: null,
+        is_parent: null,
+        parent_product_id: null,
       },
     ]);
   });

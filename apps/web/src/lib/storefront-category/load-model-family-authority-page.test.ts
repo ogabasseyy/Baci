@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoadBrandPage = vi.fn();
 const mockLoadClusterPosts = vi.fn();
+type LoadBrandAuthorityPageModule =
+  typeof import('@/lib/storefront-category/load-brand-authority-page');
 vi.mock(
   '@/lib/storefront-category/load-brand-authority-page',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<typeof import('./load-brand-authority-page')>();
+    const actual = await importOriginal<LoadBrandAuthorityPageModule>();
     return {
       ...actual,
       brandAuthorityPageLoader: {

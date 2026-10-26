@@ -133,6 +133,8 @@ function toScopedSemanticCandidate(
     }),
     category_slug: resolveScopedCategorySlug(row, requestedCategorySlug),
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
+    is_parent: row.is_parent ?? null,
+    parent_product_id: row.parent_product_id ?? null,
   };
 }
 

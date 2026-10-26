@@ -352,6 +352,49 @@ describe('buildInformationalClusterModel', () => {
     );
   });
 
+  it('links the family hub when the family is mentioned only in the excerpt', async () => {
+    const post = {
+      slug: 'apple-buying-guide-nigeria',
+      title: 'Apple Buying Guide for Nigeria',
+      excerpt: 'Our iPhone 15 picks for every budget.',
+      category: 'Smartphones',
+      tags: ['apple'],
+      keywords: ['apple phones'],
+      featured_image_url: null,
+      published_at: '2026-04-10T09:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    const products = [
+      'iPhone 15 Pro Max',
+      'iPhone 15 Pro',
+      'iPhone 15',
+      'iPhone 14',
+      'iPhone 13',
+    ].map((name, index) => ({
+      slug: name.toLowerCase().replaceAll(' ', '-'),
+      name,
+      brand: 'Apple',
+      price: 500_000 - index * 10_000,
+      category_slug: 'smartphones',
+      stock: 3,
+    }));
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post,
+      categoryDataOverride: {
+        category: { slug: 'smartphones', name: 'Smartphones' },
+        products,
+        isCollection: false,
+      },
+    });
+    const links = model?.commerceLinks.map((link) => link.href) ?? [];
+    expect(links).toContain(
+      'https://ogabassey.com/smartphones/brands/apple/families/iphone-15'
+    );
+  });
+
   it('does NOT link to /families/iphone-15 if < 3 iPhone 15 products are in stock', async () => {
     const iphone15Post = {
       slug: 'iphone-15-pro-max-review',

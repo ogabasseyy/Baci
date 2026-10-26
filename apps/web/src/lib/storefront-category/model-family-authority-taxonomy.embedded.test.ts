@@ -81,6 +81,20 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(false);
 
+    // 1b. Apple chip names must not match Galaxy A
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'iPhone 15 Pro vs Galaxy S24: A17 Pro vs Snapdragon'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'The A18 Bionic chip explained'
+      )
+    ).toBe(false);
+
     // 2. Unrelated Oppo text (e.g. Oppo Reno camera) must not match Oppo A-Series
     expect(
       modelFamilyAuthorityTaxonomy.matchesContent(

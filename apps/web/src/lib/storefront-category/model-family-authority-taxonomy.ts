@@ -161,7 +161,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /^(?:Samsung )?Galaxy A(?=\s|\d|$)/i,
     [
       /\bGalaxy\s+A(?=\s|\d|$)/i,
-      /(?<!\b(?:Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b/i,
+      /(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\b(?:Samsung\s+)?A[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)/i,
     ]
   ),
   fam(

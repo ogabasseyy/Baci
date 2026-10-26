@@ -30,7 +30,6 @@ export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
   const { isCartOpen } = useCart();
-  const drag = useChatLauncherDrag(undefined, false, false, isCartOpen);
   const { theme } = useV2Theme();
   const pathname = usePathname();
   const isFooterVisible = useOgabasseyScrollVisibility();
@@ -42,6 +41,13 @@ export function DeferredChatWidget({
   const isSanta = theme === 'santa';
   const footerOffset = getChatMobileOffset(pathname);
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
+  const drag = useChatLauncherDrag(
+    undefined,
+    false,
+    false,
+    isCartOpen,
+    mobileOffset,
+  );
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',

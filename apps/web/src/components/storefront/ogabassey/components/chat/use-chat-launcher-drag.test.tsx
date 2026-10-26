@@ -107,7 +107,7 @@ describe('useChatLauncherDrag', () => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
     fireEvent(window, new Event('resize'));
     expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(248px, 374px, 0)',
+      'translate3d(248px, 358px, 0)',
     );
   });
 
@@ -247,15 +247,17 @@ describe('useChatLauncherDrag', () => {
     });
     notifyResizeObserver();
     expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(248px, 374px, 0)',
+      'translate3d(248px, 358px, 0)',
     );
   });
 
   it('keeps the icon above the device bottom safe area', () => {
     const { pointer } = setup();
     vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
-      (pseudo === '::before'
+      (element instanceof HTMLDivElement && element.style.position === 'fixed'
         ? { height: '34px' }
+        : pseudo === '::before'
+          ? { height: '34px' }
         : {
             getPropertyValue: () =>
               'env(safe-area-inset-bottom, 0px)',

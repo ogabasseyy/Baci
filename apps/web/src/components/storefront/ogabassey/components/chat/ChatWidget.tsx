@@ -53,6 +53,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     isSanta,
     storefrontSlug: merchant?.merchant?.slug,
   });
+  const footerOffset = getChatMobileOffset(pathname);
+  const mobileOffset = isFooterVisible ? footerOffset : 'screen';
 
   const launcherOverflowKey = isOpen
     ? false
@@ -64,6 +66,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     isOpen,
     launcherOverflowKey,
     isCartOpen,
+    mobileOffset,
   );
 
   // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
@@ -83,8 +86,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     handleSend(label);
   };
 
-  const footerOffset = getChatMobileOffset(pathname);
-  const mobileOffset = isFooterVisible ? footerOffset : 'screen';
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',

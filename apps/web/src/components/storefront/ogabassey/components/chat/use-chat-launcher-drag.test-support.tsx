@@ -9,6 +9,7 @@ function Harness({
   onRender = () => {},
   onOpen = () => {},
   onOverflowMount,
+  constraintKey = 'screen',
 }: {
   open?: boolean;
   hasOverflow?: boolean;
@@ -16,8 +17,15 @@ function Harness({
   onRender?: () => void;
   onOpen?: () => void;
   onOverflowMount?: (bubble: HTMLDivElement) => void;
+  constraintKey?: string;
 }) {
-  const drag = useChatLauncherDrag(undefined, open, hasOverflow, hidden);
+  const drag = useChatLauncherDrag(
+    undefined,
+    open,
+    hasOverflow,
+    hidden,
+    constraintKey,
+  );
   onRender();
   return (
     <div
@@ -29,6 +37,7 @@ function Harness({
         } as React.CSSProperties
       }
       data-testid="anchor"
+      data-mobile-offset={constraintKey}
     >
       <div className="relative group">
         {hasOverflow && (
@@ -77,11 +86,18 @@ function setup() {
   const onRender = vi.fn();
   const onOpen = vi.fn();
   const getComputedStyle = window.getComputedStyle.bind(window);
-  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
-    pseudo === '::before'
-      ? ({ height: '34px' }) as CSSStyleDeclaration
-      : getComputedStyle(element),
-  );
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) => {
+    if (element instanceof HTMLDivElement && element.style.position === 'fixed') {
+      return { height: '34px' } as CSSStyleDeclaration;
+    }
+    if (pseudo === '::before') return { height: '34px' } as CSSStyleDeclaration;
+    if (pseudo === '::after') {
+      return {
+        height: element.getAttribute('data-mobile-offset') === 'default' ? '92px' : '16px',
+      } as CSSStyleDeclaration;
+    }
+    return getComputedStyle(element);
+  });
   const view = render(<Harness onRender={onRender} onOpen={onOpen} />);
   const button = screen.getByRole('button', { name: 'Chat' });
   const measure = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({

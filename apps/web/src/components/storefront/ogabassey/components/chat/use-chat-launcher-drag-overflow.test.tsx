@@ -48,7 +48,7 @@ describe('chat launcher overflow clamp', () => {
     rerender(<Harness />);
 
     expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(248px, 374px, 0)',
+      'translate3d(248px, 358px, 0)',
     );
   });
 
@@ -102,7 +102,7 @@ describe('chat launcher overflow clamp', () => {
       -2000,
       2000,
       116,
-      310,
+      294,
     ],
     [
       'bottom-right',
@@ -110,7 +110,7 @@ describe('chat launcher overflow clamp', () => {
       2000,
       2000,
       134,
-      310,
+      294,
     ],
   ] as const)(
     'keeps the proactive bubble inside the viewport at the %s clamp',
@@ -133,4 +133,46 @@ describe('chat launcher overflow clamp', () => {
       );
     },
   );
+
+  it('re-clamps below a newly visible mobile footer after navigation', () => {
+    const { pointer, rerender } = setup();
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(500);
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 220, 450);
+    pointer('pointerup', 220, 450);
+
+    rerender(<Harness constraintKey="default" />);
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(200px, 302px, 0)',
+    );
+  });
+
+  it('re-clamps overflow after its entrance animation settles', () => {
+    const { button, pointer, rerender, flush } = setup();
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(500);
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 240, 320);
+    pointer('pointerup', 240, 320);
+    const bubble = document.createElement('div');
+    bubble.dataset.chatLauncherOverflow = '';
+    button.parentElement?.append(bubble);
+    const measureBubble = vi.spyOn(bubble, 'getBoundingClientRect');
+    measureBubble.mockReturnValue({
+      left: 100, top: 250, width: 300, height: 50, right: 400, bottom: 300,
+      x: 100, y: 250, toJSON: () => ({}),
+    });
+    rerender(<Harness hasOverflow />);
+    expect(screen.getByTestId('anchor').style.transform).toContain('184px');
+
+    measureBubble.mockReturnValue({
+      left: 0, top: 250, width: 120, height: 50, right: 120, bottom: 300,
+      x: 0, y: 250, toJSON: () => ({}),
+    });
+    fireEvent.animationEnd(screen.getByTestId('launcher-bubble'));
+    flush();
+    expect(screen.getByTestId('anchor').style.transform).toContain('216px');
+  });
 });

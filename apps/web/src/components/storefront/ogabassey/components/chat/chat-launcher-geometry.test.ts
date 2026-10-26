@@ -34,7 +34,7 @@ describe('clampChatLauncherPosition', () => {
   it('keeps the launcher reachable when bubble overflow cannot fit', () => {
     setVisualViewport(100, 50, 120, 300);
     expect(
-      clampChatLauncherPosition(0, 60, 80, 56, 0, {
+      clampChatLauncherPosition(0, 60, 80, 56, 0, 0, {
         left: 50,
         top: 0,
         right: 50,

@@ -7,7 +7,6 @@
 */
 @layer components {
   .ogabassey-chat-anchor {
-    --ogabassey-chat-safe-area-bottom: env(safe-area-inset-bottom, 0px);
     align-items: flex-end;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
     display: flex;
@@ -18,9 +17,9 @@
     z-index: 90;
   }
 
-  .ogabassey-chat-anchor::before {
+  .ogabassey-chat-anchor::after {
     content: "";
-    height: env(safe-area-inset-bottom, 0px);
+    height: 1rem;
     pointer-events: none;
     position: fixed;
     visibility: hidden;
@@ -35,12 +34,24 @@
     bottom: calc(env(safe-area-inset-bottom, 0px) + 5.75rem);
   }
 
+  .ogabassey-chat-anchor[data-mobile-offset="default"]::after {
+    height: 5.75rem;
+  }
+
   .ogabassey-chat-anchor[data-mobile-offset="cart"] {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 6.75rem);
   }
 
+  .ogabassey-chat-anchor[data-mobile-offset="cart"]::after {
+    height: 6.75rem;
+  }
+
   .ogabassey-chat-anchor[data-mobile-offset="product"] {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 6.25rem);
+  }
+
+  .ogabassey-chat-anchor[data-mobile-offset="product"]::after {
+    height: 6.25rem;
   }
 
   .ogabassey-chat-button {
@@ -155,6 +166,13 @@
     .ogabassey-chat-anchor[data-mobile-offset="product"] {
       bottom: 1rem;
       right: 1rem;
+    }
+
+    .ogabassey-chat-anchor::after,
+    .ogabassey-chat-anchor[data-mobile-offset="default"]::after,
+    .ogabassey-chat-anchor[data-mobile-offset="cart"]::after,
+    .ogabassey-chat-anchor[data-mobile-offset="product"]::after {
+      height: 0;
     }
 
     .ogabassey-chat-button {

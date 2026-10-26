@@ -12,6 +12,8 @@ import {
 } from 'react';
 import {
   clampChatLauncherPosition,
+  readChatLauncherMobileOffset,
+  readChatLauncherSafeArea,
   type Overflow,
   type Position,
 } from './chat-launcher-geometry';
@@ -26,17 +28,18 @@ type Gesture = {
   width: number;
   height: number;
   bottomSafeArea: number;
+  mobileOffset: number;
   overflow: Overflow;
   base: Position;
   next: Position;
 };
 
-/** No layout reads or React renders in the pointer-move path. */
 export function useChatLauncherDrag(
   initialPosition?: Position,
   isOpen = false,
   overflowKey: string | boolean = false,
   isHidden = false,
+  constraintKey: string | boolean = false,
 ) {
   const [position, setPosition] = useState<Position | undefined>(
     initialPosition,
@@ -47,30 +50,8 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null);
-  const clickSuppressionTimer = useRef<number | null>(null);
-  const clickSuppressionUntil = useRef(0);
-
-  function clearClickSuppressionTimer() {
-    if (clickSuppressionTimer.current !== null) {
-      window.clearTimeout(clickSuppressionTimer.current);
-      clickSuppressionTimer.current = null;
-    }
-  }
-
-  function readBottomSafeArea() {
-    const anchor = anchorRef.current;
-    if (!anchor) return 0;
-    // A pseudo-element's height resolves env() where custom properties do not.
-    const value = window.getComputedStyle(anchor, '::before').height;
-    if (Number.isFinite(Number.parseFloat(value))) {
-      return Number.parseFloat(value);
-    }
-    const fallback = window
-      .getComputedStyle(anchor)
-      .getPropertyValue('--ogabassey-chat-safe-area-bottom')
-      .trim();
-    return Number.parseFloat(fallback) || 0;
-  }
+  const suppressNextPointerClick = useRef(false);
+  const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
   function readOverflow(
     button: HTMLButtonElement,
@@ -105,7 +86,8 @@ export function useChatLauncherDrag(
         current.y,
         rect.width,
         rect.height,
-        readBottomSafeArea(),
+        readChatLauncherSafeArea(safeAreaProbe.current),
+        readChatLauncherMobileOffset(anchorRef.current),
         overflow,
       );
       return next.x === current.x && next.y === current.y ? current : next;
@@ -120,32 +102,50 @@ export function useChatLauncherDrag(
     });
   }
 
+  function handleOverflowAnimationEnd(event: Event) {
+    if (
+      event.target instanceof Element &&
+      event.target.matches('[data-chat-launcher-overflow]')
+    ) {
+      scheduleViewportReclamp();
+    }
+  }
+
   useEffect(() => {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'height:env(safe-area-inset-bottom, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
+    document.body.append(probe);
+    safeAreaProbe.current = probe;
     window.addEventListener('resize', reclampPosition);
+    const anchor = anchorRef.current;
     const button = buttonRef.current;
     const observer =
       button && typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(reclampPosition)
         : null;
     if (button) observer?.observe(button);
+    anchor?.addEventListener('animationend', handleOverflowAnimationEnd, true);
     const visualViewport = window.visualViewport;
     visualViewport?.addEventListener('resize', scheduleViewportReclamp);
     visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
     return () => {
       window.removeEventListener('resize', reclampPosition);
+      anchor?.removeEventListener('animationend', handleOverflowAnimationEnd, true);
       visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
       visualViewport?.removeEventListener('scroll', scheduleViewportReclamp);
       observer?.disconnect();
+      probe.remove();
+      safeAreaProbe.current = null;
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       if (viewportFrame.current !== null)
         cancelAnimationFrame(viewportFrame.current);
-      clearClickSuppressionTimer();
     };
   }, []);
 
   useLayoutEffect(() => {
     if (!isOpen && !isHidden && position) reclampPosition();
-  }, [isHidden, isOpen, overflowKey, position]);
+  }, [constraintKey, isHidden, isOpen, overflowKey, position]);
 
   function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (
@@ -156,7 +156,8 @@ export function useChatLauncherDrag(
     )
       return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const bottomSafeArea = readBottomSafeArea();
+    const bottomSafeArea = readChatLauncherSafeArea(safeAreaProbe.current);
+    const mobileOffset = readChatLauncherMobileOffset(anchorRef.current);
     const overflow = readOverflow(event.currentTarget, rect);
     gesture.current = {
       pointerId: event.pointerId,
@@ -167,12 +168,13 @@ export function useChatLauncherDrag(
       width: rect.width,
       height: rect.height,
       bottomSafeArea,
+      mobileOffset,
       overflow,
       base: position ?? { x: 0, y: 0 },
       next: { x: rect.left, y: rect.top },
     };
     dragged.current = false;
-    clearClickSuppressionTimer();
+    suppressNextPointerClick.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
@@ -189,6 +191,7 @@ export function useChatLauncherDrag(
       start.width,
       start.height,
       start.bottomSafeArea,
+      start.mobileOffset,
       start.overflow,
     );
     if (frame.current !== null) return;
@@ -210,7 +213,7 @@ export function useChatLauncherDrag(
     frame.current = null;
     gesture.current = null;
     dragged.current = false;
-    clearClickSuppressionTimer();
+    suppressNextPointerClick.current = false;
     if (anchorRef.current) {
       anchorRef.current.style.transform = position
         ? `translate3d(${position.x}px, ${position.y}px, 0)`
@@ -225,13 +228,7 @@ export function useChatLauncherDrag(
     gesture.current = null;
     if (start && dragged.current) {
       setPosition(start.next);
-      clearClickSuppressionTimer();
-      clickSuppressionUntil.current = performance.now() + 500;
-      clickSuppressionTimer.current = window.setTimeout(() => {
-        clickSuppressionTimer.current = null;
-        clickSuppressionUntil.current = 0;
-        dragged.current = false;
-      }, 500);
+      suppressNextPointerClick.current = true;
     }
   }
 
@@ -246,15 +243,11 @@ export function useChatLauncherDrag(
   }
 
   function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
-    const suppress =
-      dragged.current &&
-      event.detail > 0 &&
-      performance.now() <= clickSuppressionUntil.current;
-    if (suppress || event.detail === 0) {
-      dragged.current = false;
-      clickSuppressionUntil.current = 0;
-      clearClickSuppressionTimer();
+    const suppress = suppressNextPointerClick.current && event.detail > 0;
+    if (suppress) {
+      suppressNextPointerClick.current = false;
     }
+    if (event.detail === 0) dragged.current = false;
     return suppress;
   }
 
@@ -279,12 +272,10 @@ export function useChatLauncherDrag(
       onPointerDown,
       onPointerMove,
       onPointerUp,
-      onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
-        if (gesture.current?.pointerId === event.pointerId) cancelGesture();
-      },
-      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
-        if (gesture.current?.pointerId === event.pointerId) cancelGesture();
-      },
+      onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
+        gesture.current?.pointerId === event.pointerId && cancelGesture(),
+      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) =>
+        gesture.current?.pointerId === event.pointerId && cancelGesture(),
       style: {
         touchAction: isOpen ? 'auto' : 'none',
         userSelect: 'none',

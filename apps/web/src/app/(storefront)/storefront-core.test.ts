@@ -104,10 +104,7 @@ describe('storefront overlay priority', () => {
       /body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\)\s+\.ogabassey-chat-anchor:not\(:has\(\.ogabassey-chat-window\)\):not\(:focus-within\)\s*\{\s*display:\s*none/
     );
     expect(storefrontCoreCss).toMatch(
-      /body:has\(\.ogabassey-offer-popup\)\s+\.ogabassey-chat-anchor:focus-within\s*\{\s*z-index:\s*50/
-    );
-    expect(storefrontCoreCss).toMatch(
-      /body:has\(\.ogabassey-newsletter-popup\)\s+\.ogabassey-chat-anchor:focus-within\s*\{\s*z-index:\s*60/
+      /body:has\(\.ogabassey-chat-anchor:focus-within\)\s+\.ogabassey-offer-popup,[\s\S]*?\.ogabassey-newsletter-popup\s*\{\s*display:\s*none/
     );
     const offerSelector =
       'body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent))';

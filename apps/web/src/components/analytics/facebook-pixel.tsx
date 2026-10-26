@@ -6,6 +6,7 @@ import { useLayoutEffect, useSyncExternalStore } from 'react';
 import { isAnalyticsAllowed } from '@/lib/analytics';
 import {
   activateFacebookPixel,
+  facebookPixelReady,
   validFacebookPixelId,
 } from '@/lib/analytics/facebook-pixel-client';
 
@@ -56,6 +57,7 @@ export function FacebookPixel({ pixelId }: FacebookPixelProps) {
     <Script
       id="facebook-pixel-sdk"
       src="https://connect.facebook.net/en_US/fbevents.js"
+      onReady={facebookPixelReady}
       strategy="lazyOnload"
     />
   );

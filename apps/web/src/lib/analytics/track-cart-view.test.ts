@@ -1,7 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { facebookCapiEventSchema } from '@/schemas/facebook-capi-event';
-import { activateFacebookPixel } from './facebook-pixel-client';
+import {
+  activateFacebookPixel,
+  facebookPixelReady,
+} from './facebook-pixel-client';
 import { trackCartView } from './track-cart-view';
 
 const product: Product = {
@@ -29,6 +32,7 @@ it('does not queue or send a cart observation without consent', () => {
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
   window.fbq = vi.fn();
+  facebookPixelReady();
   trackCartView([], 'NGN', { merchantId: 'merchant-1' });
   expect(fetcher).not.toHaveBeenCalled();
   expect(window.fbq).not.toHaveBeenCalled();
@@ -46,6 +50,7 @@ it('shares an event ID and preserves the tenant and currency in the browser/serv
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
   window.fbq = vi.fn();
+  facebookPixelReady();
   activateFacebookPixel('123');
   vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
   trackCartView([{ product, quantity: 1 }], 'NGN', { merchantId });
@@ -89,6 +94,7 @@ it('does not create a rejected empty-cart observation', () => {
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
   window.fbq = vi.fn();
+  facebookPixelReady();
   trackCartView([], 'NGN', { merchantId });
   expect(fetcher).not.toHaveBeenCalled();
   expect(window.fbq).not.toHaveBeenCalled();

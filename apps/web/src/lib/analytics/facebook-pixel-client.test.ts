@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   activateFacebookPixel,
+  facebookPixelReady,
   sendFacebookPixelEvent,
 } from './facebook-pixel-client';
 
@@ -16,6 +17,7 @@ beforeEach(() => {
     })
   );
   window.fbq = vi.fn();
+  facebookPixelReady();
 });
 afterEach(() => {
   cleanup?.();
@@ -73,4 +75,35 @@ it('disables automatic configuration before initialization', () => {
     (window.fbq as typeof window.fbq & { disablePushState: boolean })
       .disablePushState
   ).toBe(true);
+});
+
+it('drops obsolete tenant observations while the external SDK is loading', () => {
+  window.fbq = vi.fn(); // A new, not-ready SDK identity.
+  const old = activateFacebookPixel('111');
+  sendFacebookPixelEvent('AddToCart', {}, { eventID: 'obsolete' });
+  old?.();
+  cleanup = activateFacebookPixel('222');
+  sendFacebookPixelEvent('AddToCart', {}, { eventID: 'current' });
+  expect(
+    vi.mocked(window.fbq).mock.calls.filter((call) => call[0] === 'trackSingle')
+  ).toEqual([]);
+  facebookPixelReady();
+  expect(
+    vi.mocked(window.fbq).mock.calls.filter((call) => call[0] === 'trackSingle')
+  ).toEqual([
+    ['trackSingle', '222', 'PageView', {}],
+    ['trackSingle', '222', 'AddToCart', {}, { eventID: 'current' }],
+  ]);
+  facebookPixelReady();
+  expect(
+    vi.mocked(window.fbq).mock.calls.filter((call) => call[0] === 'trackSingle')
+  ).toHaveLength(2);
+});
+it('drops observations revoked before SDK readiness', () => {
+  window.fbq = vi.fn();
+  cleanup = activateFacebookPixel('111');
+  cleanup?.();
+  vi.mocked(window.fbq).mockClear();
+  facebookPixelReady();
+  expect(window.fbq).not.toHaveBeenCalled();
 });

@@ -8,7 +8,15 @@ type FacebookQueue = ((...args: unknown[]) => void) & {
   push?: (...args: unknown[]) => void;
   disablePushState?: boolean;
 };
-let active: { id: string; token: symbol } | undefined;
+type Observation = {
+  event: string;
+  data?: object;
+  options?: { eventID: string };
+};
+let active:
+  | { id: string; token: symbol; url: string; pending: Observation[] }
+  | undefined;
+const ready = new WeakSet<FacebookQueue>();
 const initialized = new WeakMap<FacebookQueue, Set<string>>();
 export const validFacebookPixelId = (id: string): boolean =>
   /^\d{1,32}$/.test(id);
@@ -31,7 +39,7 @@ function sdk(): FacebookQueue {
 export function activateFacebookPixel(id: string): (() => void) | undefined {
   if (!validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
   const token = Symbol(id);
-  active = { id, token };
+  active = { id, token, url: window.location.href, pending: [] };
   const fbq = sdk();
   fbq.disablePushState = true;
   fbq('consent', 'revoke');
@@ -60,11 +68,36 @@ export function sendFacebookPixelEvent(
   options?: { eventID: string }
 ): void {
   if (!active || !isAnalyticsAllowed() || typeof window === 'undefined') return;
-  window.fbq?.(
+  const fbq = window.fbq as FacebookQueue | undefined;
+  if (!fbq) return;
+  if (!ready.has(fbq)) {
+    if (active.pending.length < 50)
+      active.pending.push({ event, data, options });
+    return;
+  }
+  if (active.url !== window.location.href) return;
+  fbq(
     'trackSingle',
     active.id,
     event,
     data ?? {},
     ...(options ? [options] : [])
   );
+}
+
+/** Next Script onReady confirms the external SDK can consume measurements now. */
+export function facebookPixelReady(): void {
+  const fbq = window.fbq as FacebookQueue | undefined;
+  if (!fbq) return;
+  ready.add(fbq);
+  if (!active || !isAnalyticsAllowed() || active.url !== window.location.href)
+    return;
+  const pending = active.pending;
+  active.pending = [];
+  for (const observation of pending)
+    sendFacebookPixelEvent(
+      observation.event,
+      observation.data,
+      observation.options
+    );
 }

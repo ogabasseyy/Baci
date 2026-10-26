@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { facebookPixelReady } from '@/lib/analytics/facebook-pixel-client';
 import { FacebookPixel } from './facebook-pixel';
 
 const route = vi.hoisted(() => ({ path: '/products/one' }));
@@ -24,6 +25,7 @@ it('does not render or activate a malicious pixel ID even with analytics consent
     })
   );
   window.fbq = vi.fn();
+  facebookPixelReady();
   const view = render(<FacebookPixel pixelId="123');alert(1)//" />);
   expect(view.queryByTestId('meta-script')).toBeNull();
   expect(window.fbq).not.toHaveBeenCalled();
@@ -40,6 +42,7 @@ it('tracks each active merchant route once without broadcasting to an old pixel'
     })
   );
   window.fbq = vi.fn();
+  facebookPixelReady();
   const view = render(<FacebookPixel pixelId="111" />);
   expect(window.fbq).toHaveBeenCalledWith('trackSingle', '111', 'PageView', {});
   vi.mocked(window.fbq).mockClear();

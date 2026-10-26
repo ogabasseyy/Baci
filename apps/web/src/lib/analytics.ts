@@ -75,14 +75,18 @@ function sendGA4Event(eventName: string, params: object) {
 }
 
 // Facebook Pixel Event Tracking
-function sendFBEvent(eventName: string, params?: object) {
+function sendFBEvent(
+  eventName: string,
+  params?: object,
+  options?: { eventID: string }
+) {
   if (!isAnalyticsAllowed()) return;
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    sendFacebookPixelEvent(eventName, facebookCatalogEvent(params));
+    sendFacebookPixelEvent(eventName, facebookCatalogEvent(params), options);
   } else {
-    sendFacebookPixelEvent(eventName);
+    sendFacebookPixelEvent(eventName, undefined, options);
   }
 }
 
@@ -143,14 +147,18 @@ export const analytics = {
     // Use joined categories.name from category_id, fallback to legacy TEXT field
     const categoryName = product.categories?.name || product.category || '';
 
-    sendFBEvent('ViewContent', {
-      content_ids: [product.id],
-      content_name: product.name,
-      content_type: 'product',
-      content_category: categoryName,
-      value: product.price,
-      currency,
-    });
+    sendFBEvent(
+      'ViewContent',
+      {
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: 'product',
+        content_category: categoryName,
+        value: product.price,
+        currency,
+      },
+      { eventID: eventId }
+    );
   },
 
   // Add to cart
@@ -188,14 +196,18 @@ export const analytics = {
 
     sendGA4Event('add_to_cart', params);
 
-    sendFBEvent('AddToCart', {
-      content_ids: [product.id],
-      content_name: product.name,
-      content_type: 'product',
-      value: product.price * quantity,
-      currency,
-      num_items: quantity,
-    });
+    sendFBEvent(
+      'AddToCart',
+      {
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: 'product',
+        value: product.price * quantity,
+        currency,
+        num_items: quantity,
+      },
+      { eventID: eventId }
+    );
   },
 
   // Remove from cart
@@ -258,13 +270,17 @@ export const analytics = {
       items,
     });
 
-    sendFBEvent('InitiateCheckout', {
-      content_ids: products.map((p) => p.product.id),
-      content_type: 'product',
-      value,
-      currency,
-      num_items: products.reduce((sum, p) => sum + p.quantity, 0),
-    });
+    sendFBEvent(
+      'InitiateCheckout',
+      {
+        content_ids: products.map((p) => p.product.id),
+        content_type: 'product',
+        value,
+        currency,
+        num_items: products.reduce((sum, p) => sum + p.quantity, 0),
+      },
+      { eventID: eventId }
+    );
   },
 
   // Add payment info (optional step)

@@ -2,6 +2,8 @@ import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
+type SecretUnionModule = typeof import('@/lib/piggyvest/webhook-secret-union');
+
 const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   processEvent: vi.fn(),
@@ -13,10 +15,7 @@ vi.mock('@/env', () => ({
   getPiggyvestApiConfig: () => null,
 }));
 vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/lib/piggyvest/webhook-secret-union')
-    >();
+  const actual = await importOriginal<SecretUnionModule>();
   return {
     ...actual,
     verifyPiggyvestWebhookSecrets: (input: {

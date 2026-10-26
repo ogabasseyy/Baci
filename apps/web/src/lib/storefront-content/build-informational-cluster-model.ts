@@ -168,7 +168,7 @@ export async function buildInformationalClusterModel(
       products,
       skipDestinationVerification: destinationVerified,
     }),
-    destinationVerified
+    destinationVerified || inferred.brands.length === 0
       ? Promise.resolve(undefined)
       : loadMaintainedCompareRouteManifestSafely({
           merchantId: input.merchantId,
@@ -176,7 +176,7 @@ export async function buildInformationalClusterModel(
           storeSlug: input.merchantSlug,
           storeUrl: input.storeUrl,
         }),
-    input.categoryDataOverride
+    input.categoryDataOverride || inferred.brands.length === 0
       ? Promise.resolve(null)
       : loadCompareCategoryInventorySafely({
           merchantId: input.merchantId,

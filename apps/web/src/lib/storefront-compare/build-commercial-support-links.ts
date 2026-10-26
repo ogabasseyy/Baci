@@ -45,26 +45,6 @@ export function buildCategoryPriceBandCandidates(
   );
 }
 
-function _buildFirstEligiblePriceBandLink(input: {
-  storeUrl: string;
-  categorySlug: string;
-  products: CommercialSupportProduct[];
-}) {
-  const candidate = buildCategoryPriceBandCandidates(
-    input.categorySlug,
-    input.products
-  ).find((entry) => entry.isIndexable);
-
-  if (!candidate) {
-    return null;
-  }
-
-  return {
-    href: `${input.storeUrl}/${input.categorySlug}/best-under/${candidate.band.slug}`,
-    label: candidate.band.label,
-  } satisfies CommercialSupportLink;
-}
-
 export function buildCategorySupportLinks(input: {
   storeUrl: string;
   categorySlug: string;

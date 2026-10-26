@@ -95,6 +95,26 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(false);
 
+    // 1d. Bare chip tokens must not match Galaxy A/S without Galaxy context
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'iPhone 16 with A18 chip vs Samsung Galaxy S24 camera test'
+      )
+    ).toBe(false);
+    const galaxyS = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-s'
+    );
+    if (!galaxyS) throw new Error('Expected Galaxy S family entry');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyS,
+        'iPhone 16 with A18 chip vs Samsung Galaxy S24 camera test'
+      )
+    ).toBe(true);
+
     // 1c. Standalone Note repetition must not match Infinix Note
     const infinixNote = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

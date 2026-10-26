@@ -44,7 +44,7 @@ export function resolveEligibleCategoryHubDestinations(
   input: ResolveEligibleCategoryHubDestinationsInput
 ): ResolvedEligibleCategoryHubDestinations {
   const baseUrl = input.storeUrl ? input.storeUrl.replace(/\/+$/, '') : '';
-  const categorySlug = input.categorySlug;
+  const categorySlug = generateSlug(input.categorySlug);
 
   // Mirror the destination inventory scope: brand/family pages only count
   // parent or standalone rows (is_parent=true or no parent), never variants.

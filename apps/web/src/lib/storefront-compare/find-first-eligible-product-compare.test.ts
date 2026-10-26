@@ -88,6 +88,33 @@ describe('findFirstEligibleProductCompare', () => {
       expect(result?.rightProduct.slug).toBe('galaxy-s24');
     });
 
+    it('ignores the generic gaming token when requiring distinct brands', () => {
+      const gamingProducts = [
+        {
+          slug: 'ps5-console',
+          name: 'PS5 Console',
+          brand: 'Sony',
+          price: 850_000,
+          category_slug: 'gaming',
+          product_key_specs: { storage_gb: 825, ram_gb: 16, chipset: 'PS5' },
+        },
+        {
+          slug: 'ps4-console',
+          name: 'PS4 Console',
+          brand: 'Sony',
+          price: 450_000,
+          category_slug: 'gaming',
+          product_key_specs: { storage_gb: 500, ram_gb: 8, chipset: 'PS4' },
+        },
+      ];
+      const result = findFirstEligibleProductCompare('gaming', gamingProducts, [
+        'playstation',
+        'gaming',
+      ]);
+      expect(result?.leftProduct.slug).toBe('ps5-console');
+      expect(result?.rightProduct.slug).toBe('ps4-console');
+    });
+
     it('returns null when inferred brands match fewer than 2 products', () => {
       const result = findFirstEligibleProductCompare('smartphones', products, [
         'apple',

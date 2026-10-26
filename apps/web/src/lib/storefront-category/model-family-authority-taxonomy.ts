@@ -282,7 +282,10 @@ function matchesContent(
     return false;
   }
   if (entry.embeddedPatterns && entry.embeddedPatterns.length > 0) {
-    return entry.embeddedPatterns.some((pattern) => pattern.test(trimmed));
+    // Bound the scan: embedded patterns include tempered clauses whose
+    // cost grows with input length, and model mentions live up front.
+    const bounded = trimmed.slice(0, 1000);
+    return entry.embeddedPatterns.some((pattern) => pattern.test(bounded));
   }
   return matchesProduct(entry, trimmed);
 }

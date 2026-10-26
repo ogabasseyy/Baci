@@ -1,6 +1,7 @@
 reduce inputs as $event (
   {text: null};
   if ($event | type) == "object"
+     and ($event.payload | type) == "object"
      and $event.payload_type == "run.terminal.completed"
      and ($event.payload.text | type) == "string" then
     .text = $event.payload.text

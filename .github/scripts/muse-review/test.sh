@@ -121,6 +121,22 @@ assert_eq "capture-requires-answer" "yes" "${capture_missing_answer}"
 printf '%s\n' 'not json' > "${capture_fixture}"
 if jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}" >/dev/null 2>&1; then capture_invalid_json="no"; else capture_invalid_json="yes"; fi
 assert_eq "capture-rejects-invalid-jsonl" "yes" "${capture_invalid_json}"
+# Scalar/array payloads must be ignored, not crash the capture.
+cat > "${capture_fixture}" <<'JSONL'
+{"payload_type":"session.tokenUsage","payload":"just-a-string"}
+{"payload_type":"run.terminal.completed","payload":["not","an","object"]}
+{"payload_type":"run.terminal.completed","payload":{"text":"review result"}}
+JSONL
+captured="$(jq -cS -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}")"
+assert_eq "capture-ignores-scalar-payloads" '{"text":"review result"}' "${captured}"
+cat > "${capture_fixture}" <<'EXPORT'
+{"events":[
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":["not","an","object"]}},
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}}
+]}
+EXPORT
+captured_models="$(jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" | paste -sd ',' -)"
+assert_eq "capture-model-ids-ignores-scalar-payloads" "muse-spark-1.3" "${captured_models}"
 rm -f "${capture_fixture}"
 
 # --- sweep_workspace_symlinks ---

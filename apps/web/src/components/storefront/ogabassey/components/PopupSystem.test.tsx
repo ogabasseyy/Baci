@@ -142,4 +142,33 @@ describe('PopupSystem', () => {
 
     expect(pageControl).toHaveFocus();
   });
+
+  it('does not restore focus to a launcher hidden by an ancestor', async () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const anchor = document.querySelector<HTMLElement>('.ogabassey-chat-anchor');
+    if (!anchor) throw new Error('Missing chat launcher anchor');
+    anchor.style.display = 'none';
+    const close = screen.getByRole('button', { name: 'Close newsletter' });
+    close.focus();
+    fireEvent.click(close);
+
+    expect(document.activeElement).not.toBe(
+      document.querySelector('.ogabassey-chat-button'),
+    );
+    act(() => vi.clearAllTimers());
+  });
 });

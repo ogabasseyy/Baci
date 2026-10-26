@@ -6,6 +6,19 @@ import { useEffect, useRef, useState } from 'react';
 import { AdUnit } from './AdUnit';
 import { useDeferredActivation } from './deferred-shell-feature';
 
+function canReceiveFocus(element: HTMLElement | null): element is HTMLElement {
+  if (!element?.isConnected) return false;
+  for (
+    let ancestor: HTMLElement | null = element;
+    ancestor;
+    ancestor = ancestor.parentElement
+  ) {
+    const style = window.getComputedStyle(ancestor);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+  }
+  return true;
+}
+
 export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
@@ -74,9 +87,7 @@ export const PopupSystem: React.FC = () => {
     const launcher = document.querySelector<HTMLElement>(
       '.ogabassey-chat-anchor .ogabassey-chat-button',
     );
-    if (launcher && window.getComputedStyle(launcher).display !== 'none') {
-      launcher.focus();
-    }
+    if (canReceiveFocus(launcher)) launcher.focus();
   }, [showAdPopup, showNewsletter]);
 
   const rememberPromotionFocus = (promotionSelector: string) => {

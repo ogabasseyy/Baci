@@ -83,3 +83,33 @@ test('unrelated keyboard focus does not hide or disable a timed newsletter', asy
   await expect(newsletter).toHaveCSS('opacity', '1');
   await expect(newsletter).toHaveCSS('pointer-events', 'auto');
 });
+
+test('promotion focus handoff survives loading and closing chat', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+
+  const launcher = page.locator(
+    '.ogabassey-chat-anchor .ogabassey-chat-button'
+  );
+  await launcher.click();
+  await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
+  await page.getByRole('button', { name: 'Close chat' }).click();
+  await expect(page.locator('.ogabassey-chat-window')).toBeHidden();
+
+  const newsletter = page.locator('.ogabassey-newsletter-popup');
+  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await launcher.focus();
+  await page.keyboard.press('Tab');
+
+  await expect(
+    page.getByRole('button', { name: 'Page control after assistant' })
+  ).toBeFocused();
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-chat-promotion-focus-handoff',
+    'true'
+  );
+  await expect(newsletter).toHaveCSS('opacity', '0');
+});

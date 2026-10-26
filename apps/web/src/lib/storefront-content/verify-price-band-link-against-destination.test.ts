@@ -58,14 +58,14 @@ describe('verifyPriceBandLinkAgainstDestination', () => {
     ).toEqual([]);
   });
 
-  it('passes links through when there is no band link', () => {
+  it('drops unverifiable compare links when no compare inventory is available', () => {
     expect(
       verifyPriceBandLinkAgainstDestination({
         categorySlug: 'smartphones',
         links: [links[0] as never],
         compareProducts: null,
       })
-    ).toEqual([links[0]]);
+    ).toEqual([]);
   });
 });
 

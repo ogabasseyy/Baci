@@ -9,6 +9,7 @@ const firefoxHome = path.join(
   os.tmpdir(),
   `baci-playwright-firefox-home-${process.pid}`
 );
+fs.mkdirSync(firefoxHome, { recursive: true });
 process.on('exit', () =>
   fs.rmSync(firefoxHome, { recursive: true, force: true })
 );
@@ -47,7 +48,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `mkdir -p '${firefoxHome}' && pnpm exec next start tests/checkout-browser/harness --hostname 127.0.0.1 --port ${port}`,
+    command: `pnpm exec next start tests/checkout-browser/harness --hostname 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/catalog`,
     reuseExistingServer: false,
     timeout: 60000,

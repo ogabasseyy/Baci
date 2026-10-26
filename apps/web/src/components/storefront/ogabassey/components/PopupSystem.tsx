@@ -5,27 +5,16 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { AdUnit } from './AdUnit';
 import { useDeferredActivation } from './deferred-shell-feature';
-
-function canReceiveFocus(element: HTMLElement | null): element is HTMLElement {
-  if (!element?.isConnected) return false;
-  for (
-    let ancestor: HTMLElement | null = element;
-    ancestor;
-    ancestor = ancestor.parentElement
-  ) {
-    const style = window.getComputedStyle(ancestor);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
-  }
-  return true;
-}
+import { usePopupFocusManagement } from './use-popup-focus-management';
 
 export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restoreFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restoreChatFocusAfterDismissal = useRef(false);
-  const lastInputModality = useRef<'keyboard' | 'pointer' | 'unknown'>('unknown');
+  const { rememberPromotionFocus } = usePopupFocusManagement(
+    showNewsletter,
+    showAdPopup,
+  );
   const hasEngaged = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
@@ -74,93 +63,6 @@ export const PopupSystem: React.FC = () => {
       }
     };
   }, []);
-
-  useEffect(() => {
-    const markKeyboardInput = () => {
-      lastInputModality.current = 'keyboard';
-    };
-    const markPointerInput = () => {
-      lastInputModality.current = 'pointer';
-    };
-    document.addEventListener('keydown', markKeyboardInput, true);
-    document.addEventListener('pointerdown', markPointerInput, true);
-    return () => {
-      document.removeEventListener('keydown', markKeyboardInput, true);
-      document.removeEventListener('pointerdown', markPointerInput, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (showNewsletter || showAdPopup || !restoreChatFocusAfterDismissal.current) {
-      return;
-    }
-    let observer: MutationObserver | null = null;
-    const stopPendingRestore = () => {
-      observer?.disconnect();
-      if (restoreFocusTimerRef.current) {
-        clearTimeout(restoreFocusTimerRef.current);
-        restoreFocusTimerRef.current = null;
-      }
-      document.removeEventListener('pointerdown', cancelPendingRestore, true);
-      document.removeEventListener('keydown', cancelPendingRestore, true);
-      document.removeEventListener('focusin', cancelPendingRestore, true);
-    };
-    const cancelPendingRestore = () => {
-      restoreChatFocusAfterDismissal.current = false;
-      stopPendingRestore();
-    };
-    const tryRestoreFocus = () => {
-      const activeElement = document.activeElement;
-      if (
-        activeElement &&
-        activeElement !== document.body &&
-        activeElement.isConnected
-      ) {
-        restoreChatFocusAfterDismissal.current = false;
-        stopPendingRestore();
-        return true;
-      }
-      const launcher = document.querySelector<HTMLElement>(
-        '.ogabassey-chat-anchor .ogabassey-chat-button',
-      );
-      if (!canReceiveFocus(launcher)) return false;
-      restoreChatFocusAfterDismissal.current = false;
-      launcher.focus();
-      stopPendingRestore();
-      return true;
-    };
-    if (!tryRestoreFocus()) {
-      observer = new MutationObserver(() => {
-        if (tryRestoreFocus()) observer?.disconnect();
-      });
-      observer.observe(document.body, {
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style'],
-      });
-      document.addEventListener('pointerdown', cancelPendingRestore, true);
-      document.addEventListener('keydown', cancelPendingRestore, true);
-      document.addEventListener('focusin', cancelPendingRestore, true);
-      restoreFocusTimerRef.current = setTimeout(() => {
-        restoreChatFocusAfterDismissal.current = false;
-        stopPendingRestore();
-      }, 10_000);
-    }
-    return stopPendingRestore;
-  }, [showAdPopup, showNewsletter]);
-
-  const rememberPromotionFocus = (promotionSelector: string) => {
-    const activeElement = document.activeElement;
-    const keyboardFocused =
-      lastInputModality.current === 'keyboard' ||
-      (lastInputModality.current === 'unknown' &&
-        activeElement instanceof HTMLElement &&
-        activeElement.matches(':focus-visible'));
-    restoreChatFocusAfterDismissal.current =
-      keyboardFocused &&
-      activeElement instanceof HTMLElement &&
-      activeElement.closest(promotionSelector) !== null;
-  };
 
   const handleCloseNewsletter = () => {
     rememberPromotionFocus('.ogabassey-newsletter-popup');

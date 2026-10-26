@@ -1,6 +1,7 @@
 import { generateSlug } from '@/lib/seo-utils';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
+import { isAvailableProduct } from './is-available-product';
 
 export interface EligibleHubItem {
   href: string;
@@ -50,15 +51,7 @@ export function resolveEligibleCategoryHubDestinations(
   // parent or standalone rows (is_parent=true or no parent), never variants.
   const availableProducts = input.products.filter(
     (product) =>
-      // Destination availability: explicitly unmanaged rows (manage_stock
-      // null/false) are always available; managed rows need positive stock.
-      // Unknown stock (null) counts only for explicitly scoped pools.
-      (product.manage_stock === false ||
-        product.manage_stock === null ||
-        (product.stock != null && product.stock > 0) ||
-        (product.stock == null &&
-          product.manage_stock !== true &&
-          input.assumeCategoryScoped === true)) &&
+      isAvailableProduct(product) &&
       (generateSlug(product.category_slug ?? '') === categorySlug ||
         (product.category_slugs ?? []).some(
           (slug) => generateSlug(slug) === categorySlug

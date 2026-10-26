@@ -86,3 +86,13 @@ describe('event-pipeline credential paths', () => {
     );
   });
 });
+
+it('bounds public Meta ingress signing to the exact reviewed chain', () => {
+  expect(eventPipelineCredentialPaths).toContainEqual([
+    'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ]);
+});

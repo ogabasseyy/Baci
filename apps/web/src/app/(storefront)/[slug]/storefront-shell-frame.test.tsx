@@ -15,6 +15,12 @@ vi.mock('@/components/analytics/chatgpt-pixel', () => ({
   ),
 }));
 
+vi.mock('@/components/analytics/facebook-pixel', () => ({
+  FacebookPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="facebook-pixel">{pixelId}</span>
+  ),
+}));
+
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
@@ -200,4 +206,30 @@ it('wires anonymous derived capability hints into the storefront cart', () => {
     sharedCartAccountsEnabled: false,
     sharedCartRealtimeEnabled: true,
   });
+});
+
+it('keeps one Meta Pixel on direct product landing and cart navigation', () => {
+  const props = {
+    preloadHeroLcpImages: false,
+    shellSnapshot: {
+      ...shellSnapshot,
+      merchant: {
+        ...shellSnapshot.merchant,
+        growth_integrations_enabled: true,
+        feature_settings: { facebook_pixel_id: '2099259280261589' },
+      },
+    } satisfies StorefrontShellSnapshot,
+  };
+  const view = render(
+    <StorefrontShellFrame {...props}>
+      <main>Product</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
+  view.rerender(
+    <StorefrontShellFrame {...props}>
+      <main>Cart</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
 });

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import type React from 'react';
+import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
+import { FacebookPixel } from '@/components/analytics/facebook-pixel';
 import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
@@ -25,6 +27,8 @@ export function StorefrontShellFrame({
 
   const { merchant, routingMode } = shellSnapshot;
   const merchantSlug = merchant.slug || '';
+  const facebookPixelId =
+    buildMerchantAnalyticsSettings(merchant)?.facebook_pixel_id;
 
   return (
     <StorefrontMerchantProvider
@@ -53,6 +57,7 @@ export function StorefrontShellFrame({
         {shellSnapshot.chatgptPixelId ? (
           <ChatgptPixel pixelId={shellSnapshot.chatgptPixelId} />
         ) : null}
+        {facebookPixelId ? <FacebookPixel pixelId={facebookPixelId} /> : null}
         <DeferredPageViewTracker merchantId={merchant.id} />
         <CookieConsent />
         {/*

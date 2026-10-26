@@ -2,11 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockLoadBrandPage = vi.fn();
 const mockLoadClusterPosts = vi.fn();
-vi.mock('@/lib/storefront-category/load-brand-authority-page', () => ({
-  brandAuthorityPageLoader: {
-    load: (...args: unknown[]) => mockLoadBrandPage(...args),
-  },
-}));
+vi.mock(
+  '@/lib/storefront-category/load-brand-authority-page',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<typeof import('./load-brand-authority-page')>();
+    return {
+      ...actual,
+      brandAuthorityPageLoader: {
+        load: (...args: unknown[]) => mockLoadBrandPage(...args),
+      },
+    };
+  }
+);
 vi.mock('@/lib/storefront-content/load-published-cluster-posts-safely', () => ({
   loadPublishedClusterPostsSafely: (...args: unknown[]) =>
     mockLoadClusterPosts(...args),
@@ -193,5 +201,98 @@ describe('model family authority page loader', () => {
         familySlug: 'galaxy-s',
       })
     ).rejects.toThrow('database error');
+  });
+
+  it('loads laptop model family authority page with category-aware nouns', async () => {
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://ogabassey.com/laptops/brands/apple',
+      categoryName: 'Laptops',
+      merchant: {
+        id: 'merchant-ogabassey',
+        business_name: 'Ogabassey',
+        country: 'NG',
+        slug: 'ogabassey',
+        custom_domain: 'ogabassey.com',
+      },
+      brand: { brandKey: 'apple', displayName: 'Apple MacBook' },
+      products: [
+        { name: 'MacBook Pro 14 M3', slug: 'macbook-pro-14-m3' },
+        { name: 'MacBook Pro 16 M3', slug: 'macbook-pro-16-m3' },
+        { name: 'MacBook Pro 14 M2', slug: 'macbook-pro-14-m2' },
+        { name: 'Apple MacBook Pro 16 M2', slug: 'apple-macbook-pro-16-m2' },
+        { name: 'MacBook Air 13 M2', slug: 'macbook-air-13-m2' },
+        { name: 'MacBook Air 15 M3', slug: 'macbook-air-15-m3' },
+        { name: 'Apple MacBook Air M1', slug: 'apple-macbook-air-m1' },
+      ],
+      breadcrumbItems: [
+        { name: 'Ogabassey', url: 'https://ogabassey.com' },
+        { name: 'Laptops', url: 'https://ogabassey.com/laptops' },
+        {
+          name: 'Apple MacBook',
+          url: 'https://ogabassey.com/laptops/brands/apple',
+        },
+      ],
+    });
+
+    const { modelFamilyAuthorityPageLoader } = await import(
+      './load-model-family-authority-page'
+    );
+    const page = await modelFamilyAuthorityPageLoader.load({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'laptops',
+      brandSlug: 'apple',
+      familySlug: 'macbook-pro',
+    });
+
+    expect(page).toMatchObject({
+      canonicalUrl:
+        'https://ogabassey.com/laptops/brands/apple/families/macbook-pro',
+      heading: 'MacBook Pro Laptops and Prices in Nigeria',
+      intro:
+        'Compare 4 available MacBook Pro laptops from Ogabassey, including current prices, specifications, condition, and availability.',
+      metaDescription:
+        'Compare 4 MacBook Pro laptops from Ogabassey, with current prices, specifications, condition, and availability in Nigeria.',
+    });
+    expect(page?.products).toHaveLength(4);
+    expect(page?.familyLinks).toContainEqual({
+      href: 'https://ogabassey.com/laptops/brands/apple/families/macbook-air',
+      label: 'MacBook Air laptops',
+      productCount: 3,
+    });
+  });
+
+  it('uses family.intro when defined, replacing {merchantName}', async () => {
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://store.test/smartphones/brands/apple',
+      categoryName: 'Smartphones',
+      merchant: {
+        id: 'merchant-id',
+        business_name: 'Store',
+        country: 'NG',
+        slug: 'store',
+        custom_domain: null,
+      },
+      brand: { brandKey: 'apple', displayName: 'Apple iPhone' },
+      products: [
+        { name: 'Apple iPhone 17', slug: 'iphone-17' },
+        { name: 'Apple iPhone 17 Pro', slug: 'iphone-17-pro' },
+        { name: 'Apple iPhone 17 Pro Max', slug: 'iphone-17-pro-max' },
+      ],
+      breadcrumbItems: [],
+    });
+
+    const { modelFamilyAuthorityPageLoader } = await import(
+      './load-model-family-authority-page'
+    );
+    const page = await modelFamilyAuthorityPageLoader.load({
+      merchantSlug: 'store',
+      categorySlug: 'smartphones',
+      brandSlug: 'apple',
+      familySlug: 'iphone-17',
+    });
+
+    expect(page?.intro).toBe(
+      'Compare iPhone 17, iPhone 17e, iPhone 17 Air, iPhone 17 Pro, and iPhone 17 Pro Max options at Store.'
+    );
   });
 });

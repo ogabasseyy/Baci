@@ -20,6 +20,34 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 
+export interface CategoryAuthorityNoun {
+  titleNoun: string;
+  lowerNoun: string;
+}
+
+const CATEGORY_AUTHORITY_NOUNS: Record<string, CategoryAuthorityNoun> = {
+  smartphones: { titleNoun: 'Phones', lowerNoun: 'phones' },
+  laptops: { titleNoun: 'Laptops', lowerNoun: 'laptops' },
+  tablets: { titleNoun: 'Tablets', lowerNoun: 'tablets' },
+  smartwatches: { titleNoun: 'Smartwatches', lowerNoun: 'smartwatches' },
+};
+
+export function getCategoryAuthorityNoun(
+  categorySlug: string,
+  categoryName?: string
+): CategoryAuthorityNoun {
+  const normalizedSlug = categorySlug.trim().toLowerCase();
+  const matched = CATEGORY_AUTHORITY_NOUNS[normalizedSlug];
+  if (matched) {
+    return matched;
+  }
+  const fallback = categoryName?.trim() || categorySlug.trim();
+  return {
+    titleNoun: fallback,
+    lowerNoun: fallback.toLowerCase(),
+  };
+}
+
 export interface BrandAuthorityPageProduct {
   id: string;
   name: string;
@@ -150,10 +178,14 @@ async function loadBrandAuthorityPage(
 
   const storeUrl = buildStoreUrl(merchant);
   const categoryName = categoryData.name;
+  const categoryNoun = getCategoryAuthorityNoun(
+    args.categorySlug,
+    categoryName
+  );
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/brands/${authorityEntry.brandKey}`;
   const countryContext = getCountryShoppingContext(merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `${authorityEntry.displayName} Phones and Prices${countrySuffix}`;
+  const heading = `${authorityEntry.displayName} ${categoryNoun.titleNoun} and Prices${countrySuffix}`;
   const supportedCategory =
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
@@ -185,7 +217,7 @@ async function loadBrandAuthorityPage(
         ? [
             {
               href: `${canonicalUrl}/families/${entry.familyKey}`,
-              label: `${entry.displayName} phones`,
+              label: `${entry.displayName} ${categoryNoun.lowerNoun}`,
               productCount,
             },
           ]
@@ -200,9 +232,14 @@ async function loadBrandAuthorityPage(
       suffix: merchant.business_name,
       fallback: authorityEntry.displayName,
     }).title,
-    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
+    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
     heading,
-    intro: `Explore a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
+    intro: authorityEntry.intro
+      ? authorityEntry.intro.replaceAll(
+          '{merchantName}',
+          merchant.business_name
+        )
+      : `Explore a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
     categoryName,
     brand: authorityEntry,
     products,

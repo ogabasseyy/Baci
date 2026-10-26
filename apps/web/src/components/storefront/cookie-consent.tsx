@@ -31,9 +31,21 @@ export function CookieConsent() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const consentHasFocusRef = useRef(false);
+  const dismissThroughConsentRef = useRef(false);
+
+  function dismissConsent(action: () => void) {
+    return () => {
+      dismissThroughConsentRef.current = true;
+      consentHasFocusRef.current = Boolean(
+        dialogRef.current?.contains(document.activeElement)
+      );
+      action();
+    };
+  }
 
   useEffect(() => {
     if (isVisible) {
+      dismissThroughConsentRef.current = false;
       const activeElement = document.activeElement;
       const chatAnchor =
         activeElement instanceof HTMLElement
@@ -57,6 +69,7 @@ export function CookieConsent() {
     if (consentHasFocusRef.current && previousFocus?.isConnected)
       previousFocus.focus();
     consentHasFocusRef.current = false;
+    dismissThroughConsentRef.current = false;
   }, [isVisible]);
 
   if (!isVisible) return null;
@@ -82,8 +95,9 @@ export function CookieConsent() {
       onBlurCapture={(event) => {
         const nextFocus = event.relatedTarget;
         if (
-          nextFocus instanceof Node &&
-          !event.currentTarget.contains(nextFocus)
+          (nextFocus instanceof Node &&
+            !event.currentTarget.contains(nextFocus)) ||
+          (nextFocus === null && !dismissThroughConsentRef.current)
         )
           consentHasFocusRef.current = false;
       }}
@@ -136,7 +150,7 @@ export function CookieConsent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={acceptNecessary}
+                onClick={dismissConsent(acceptNecessary)}
                 className="h-9"
               >
                 Necessary Only
@@ -144,7 +158,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={acceptAll}
+                onClick={dismissConsent(acceptAll)}
                 className="h-9 px-6 shadow-sm"
               >
                 Accept All
@@ -286,7 +300,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={savePreferences}
+                onClick={dismissConsent(savePreferences)}
                 className="h-9 px-6"
               >
                 Save Preferences

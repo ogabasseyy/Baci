@@ -113,6 +113,29 @@ describe('CookieConsent', () => {
     expect(outside).toHaveFocus();
   });
 
+  it('does not restore chat focus after consent loses focus to the document body', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <button className="ogabassey-chat-button" type="button">
+          Assistant launcher
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+    launcher.focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const accept = screen.getByRole('button', { name: 'Accept All' });
+    accept.focus();
+    accept.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.click(accept);
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(launcher).not.toHaveFocus();
+  });
+
   it('does not move focus out of an open chat conversation', () => {
     render(
       <div className="ogabassey-chat-anchor">

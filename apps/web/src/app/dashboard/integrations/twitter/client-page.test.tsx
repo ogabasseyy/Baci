@@ -71,3 +71,42 @@ it('clears typed credentials and old event mappings when switching merchant', as
   expect(screen.getByLabelText('Successful payment')).toHaveValue('');
   expect(screen.getByLabelText('Add to cart')).toHaveValue('tw-xyz-cart');
 });
+it('saves a masked pixel token without OAuth fields and clears it after success', async () => {
+  mocks.merchant.mockReturnValue({ merchant: { id: 'merchant-a' } });
+  mocks.save.mockResolvedValue(Response.json(initial));
+  render(
+    <XAdsIntegrationClient
+      initialMerchantId="merchant-a"
+      initialConnection={initial}
+    />
+  );
+  const input = screen.getByLabelText('Conversions API access token');
+  expect(input).toHaveAttribute('type', 'password');
+  fireEvent.change(input, { target: { value: 'synthetic-pixel-token' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent('saved')
+  );
+  expect(JSON.parse(mocks.save.mock.calls[0][1].body).credentials).toEqual({
+    pixelToken: 'synthetic-pixel-token',
+  });
+  expect(input).toHaveValue('');
+});
+it('rejects mixed token and OAuth input before sending', () => {
+  mocks.merchant.mockReturnValue({ merchant: { id: 'merchant-a' } });
+  render(
+    <XAdsIntegrationClient
+      initialMerchantId="merchant-a"
+      initialConnection={initial}
+    />
+  );
+  fireEvent.change(screen.getByLabelText('Conversions API access token'), {
+    target: { value: 'synthetic-token' },
+  });
+  fireEvent.change(screen.getByLabelText('API key'), {
+    target: { value: 'synthetic-key' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect(mocks.save).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert')).toHaveTextContent('one method');
+});

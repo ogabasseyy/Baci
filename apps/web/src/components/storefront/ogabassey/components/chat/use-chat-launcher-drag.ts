@@ -239,20 +239,18 @@ export function useChatLauncherDrag(
   function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
     const pending = suppressedDragClick.current;
     const nativeEvent = event.nativeEvent as MouseEvent & { pointerId?: number };
-    // Safari on iOS can emit a MouseEvent for a touch-generated click. Match
-    // that pointer-id-less compatibility click only at the drag release point;
-    // a new pointerdown clears the token, and detail=0 assistive clicks pass.
+    // The storefront targets current Safari/iOS Safari releases, where clicks
+    // are PointerEvents. Keep the correlation exact rather than guessing for
+    // pointer-id-less clicks, which may be independent assistive activation.
     const matchesRelease =
       pending &&
       event.detail > 0 &&
       Math.abs(event.clientX - pending.x) <= 2 &&
       Math.abs(event.clientY - pending.y) <= 2;
     const suppress = Boolean(
-      matchesRelease &&
-        (nativeEvent.pointerId === pending.pointerId ||
-          nativeEvent.pointerId === undefined),
+      matchesRelease && nativeEvent.pointerId === pending.pointerId,
     );
-    if (suppress) suppressedDragClick.current = null;
+    if (pending) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }

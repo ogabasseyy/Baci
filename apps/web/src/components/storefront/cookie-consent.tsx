@@ -36,7 +36,10 @@ export function CookieConsent() {
       const activeElement = document.activeElement;
       if (
         activeElement instanceof HTMLElement &&
-        activeElement.closest('.ogabassey-chat-anchor')
+        activeElement.matches('.ogabassey-chat-button') &&
+        !activeElement
+          .closest('.ogabassey-chat-anchor')
+          ?.querySelector('.ogabassey-chat-window')
       ) {
         restoreFocusRef.current = activeElement;
         dialogRef.current

@@ -54,6 +54,7 @@ export function ChatLauncher({
               setProactiveMsg(null);
             }}
             className="absolute -top-2 -left-2 bg-gray-100 hover:bg-gray-200 rounded-full p-1 transition-colors"
+            aria-label="Dismiss chat message"
           >
             <X size={10} className="text-gray-500" />
           </button>

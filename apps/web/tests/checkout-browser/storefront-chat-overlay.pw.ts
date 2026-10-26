@@ -93,7 +93,7 @@ test('focused launcher remains reachable and pauses promotional overlays', async
 
 test('real drag hook clamps, suppresses drag click, and hands position to chat', async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(60_000);
   for (const width of [375, 1440]) {
     await page.setViewportSize({ width, height: 800 });
@@ -115,12 +115,43 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       x: bounds.x + bounds.width / 2,
       y: bounds.y + bounds.height / 2,
     };
+    await launcher.evaluate((button) => {
+      const state = window as typeof window & {
+        lastLauncherPointerUpId?: number;
+        lastLauncherClick?: { isPointerEvent: boolean; pointerId?: number };
+      };
+      button.addEventListener('pointerup', (event) => {
+        state.lastLauncherPointerUpId = (event as PointerEvent).pointerId;
+      });
+      button.addEventListener('click', (event) => {
+        const click = event as PointerEvent;
+        state.lastLauncherClick = {
+          isPointerEvent: event instanceof PointerEvent,
+          pointerId: click.pointerId,
+        };
+      });
+    });
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
     await page.mouse.move(width < 768 ? width - 1 : 1, width < 768 ? 799 : 1, {
       steps: 5,
     });
     await page.mouse.up();
+
+    const browserClick = await page.evaluate(() => {
+      const state = window as typeof window & {
+        lastLauncherPointerUpId?: number;
+        lastLauncherClick?: { isPointerEvent: boolean; pointerId?: number };
+      };
+      return {
+        pointerUpId: state.lastLauncherPointerUpId,
+        click: state.lastLauncherClick,
+      };
+    });
+    if (testInfo.project.use.browserName === 'webkit') {
+      expect(browserClick.click?.isPointerEvent).toBe(true);
+      expect(browserClick.click?.pointerId).toBe(browserClick.pointerUpId);
+    }
 
     const dragPosition = await page
       .getByTestId('deferred-launcher')

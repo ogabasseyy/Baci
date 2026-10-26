@@ -68,7 +68,9 @@ describe('CookieConsent', () => {
     const { container } = render(
       <>
         <div className="ogabassey-chat-anchor">
-          <button type="button">Assistant launcher</button>
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
         </div>
         <CookieConsent />
       </>
@@ -86,5 +88,25 @@ describe('CookieConsent', () => {
     act(() => vi.advanceTimersByTime(200));
 
     expect(launcher).toHaveFocus();
+  });
+
+  it('does not move focus out of an open chat conversation', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <div className="ogabassey-chat-window">
+          <input aria-label="Chat message" />
+          <button className="ogabassey-chat-button" type="button">
+            Close chat
+          </button>
+        </div>
+        <CookieConsent />
+      </div>
+    );
+    const input = screen.getByRole('textbox', { name: 'Chat message' });
+    input.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(input).toHaveFocus();
   });
 });

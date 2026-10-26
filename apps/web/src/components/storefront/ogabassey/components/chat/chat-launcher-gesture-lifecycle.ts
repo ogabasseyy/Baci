@@ -1,11 +1,13 @@
 import type { PointerEvent } from 'react';
 import type { Gesture } from './chat-launcher-gesture';
+import { CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS } from './chat-launcher-click-suppression';
 
 export type SuppressedDragClick = {
   pointerId: number;
   pointerType: string;
   x: number;
   y: number;
+  expiresAt: number;
 };
 
 type GestureLifecycleOptions = {
@@ -47,6 +49,7 @@ export function createChatLauncherGestureLifecycle({
         pointerType: start.pointerType,
         x: start.lastX,
         y: start.lastY,
+        expiresAt: Date.now() + CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS,
       };
     }
     if (viewportReclampPending.current) {

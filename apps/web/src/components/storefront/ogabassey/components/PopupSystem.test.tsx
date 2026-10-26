@@ -180,6 +180,77 @@ describe('PopupSystem', () => {
     act(() => vi.clearAllTimers());
   });
 
+  it('cancels pending focus restoration after the user moves on', async () => {
+    render(
+      <>
+        <button>Page control</button>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const anchor = document.querySelector<HTMLElement>('.ogabassey-chat-anchor');
+    if (!anchor) throw new Error('Missing chat launcher anchor');
+    anchor.style.display = 'none';
+    const close = screen.getByRole('button', { name: 'Close newsletter' });
+    fireEvent.keyDown(document, { key: 'Tab' });
+    close.focus();
+    fireEvent.click(close);
+
+    const pageControl = screen.getByRole('button', { name: 'Page control' });
+    fireEvent.pointerDown(pageControl);
+    pageControl.focus();
+    anchor.style.display = '';
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(pageControl).toHaveFocus();
+    act(() => vi.clearAllTimers());
+  });
+
+  it('expires hidden-launcher focus restoration after its bounded wait', async () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const anchor = document.querySelector<HTMLElement>('.ogabassey-chat-anchor');
+    if (!anchor) throw new Error('Missing chat launcher anchor');
+    anchor.style.display = 'none';
+    const close = screen.getByRole('button', { name: 'Close newsletter' });
+    fireEvent.keyDown(document, { key: 'Tab' });
+    close.focus();
+    fireEvent.click(close);
+
+    act(() => vi.advanceTimersByTime(10_000));
+    anchor.style.display = '';
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('.ogabassey-chat-button')).not.toHaveFocus();
+    act(() => vi.clearAllTimers());
+  });
+
   it('does not force focus to chat after a pointer dismisses a promotion', async () => {
     render(
       <>

@@ -18,8 +18,10 @@ export function useChatLauncherOfferCollision(
       );
       if (offer !== observedOffer) {
         resizeObserver?.disconnect();
+        observedOffer?.removeEventListener('animationend', syncCollision);
         observedOffer = offer;
         if (offer) resizeObserver?.observe(offer);
+        offer?.addEventListener('animationend', syncCollision);
       }
       if (!anchor || !offer) {
         anchor?.removeAttribute(COLLISION_ATTRIBUTE);
@@ -43,12 +45,17 @@ export function useChatLauncherOfferCollision(
     window.addEventListener('resize', syncCollision);
     window.visualViewport?.addEventListener('resize', syncCollision);
     window.visualViewport?.addEventListener('scroll', syncCollision);
+    anchorRef.current?.addEventListener('transitionend', syncCollision);
+    anchorRef.current?.addEventListener('animationend', syncCollision);
     return () => {
       observer.disconnect();
       resizeObserver?.disconnect();
+      observedOffer?.removeEventListener('animationend', syncCollision);
       window.removeEventListener('resize', syncCollision);
       window.visualViewport?.removeEventListener('resize', syncCollision);
       window.visualViewport?.removeEventListener('scroll', syncCollision);
+      anchorRef.current?.removeEventListener('transitionend', syncCollision);
+      anchorRef.current?.removeEventListener('animationend', syncCollision);
       anchorRef.current?.removeAttribute(COLLISION_ATTRIBUTE);
     };
   }, [anchorRef, position]);

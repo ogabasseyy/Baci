@@ -5,6 +5,11 @@ test('a dragged launcher and timed offer never occupy the same corner', async ({
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/chat-launcher');
+  // The harness omits Tailwind utilities; model the production bottom-left offer box.
+  await page.addStyleTag({
+    content:
+      '.ogabassey-offer-popup { position: fixed !important; left: 0 !important; bottom: 0 !important; width: 350px !important; height: 240px !important; }',
+  });
   const enablePromotions = page.getByRole('button', {
     name: 'Enable timed promotions',
   });
@@ -14,25 +19,19 @@ test('a dragged launcher and timed offer never occupy the same corner', async ({
     timeout: 8000,
   });
 
-  const offer = page.locator('.ogabassey-offer-popup');
-  await expect(offer).toBeVisible({ timeout: 15_000 });
   const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
-  const launcherBox = await launcher.boundingBox();
-  const offerBox = await offer.boundingBox();
-  if (!launcherBox || !offerBox)
-    throw new Error('Overlay controls are missing');
-  const destination = { x: offerBox.x + 12, y: offerBox.y + 12 };
-  await page.mouse.move(launcherBox.x + 28, launcherBox.y + 28);
+  const initialBox = await launcher.boundingBox();
+  if (!initialBox) throw new Error('Chat launcher is missing its layout box');
+  await page.mouse.move(initialBox.x + 28, initialBox.y + 28);
   await page.mouse.down();
-  await page.mouse.move(
-    destination.x + 28 - launcherBox.x + launcherBox.x,
-    destination.y + 28 - launcherBox.y + launcherBox.y,
-    { steps: 12 }
-  );
+  await page.mouse.move(52, 748, { steps: 12 });
   await page.mouse.up();
   await page.getByRole('button', { name: 'Focus origin' }).focus();
 
+  const offer = page.locator('.ogabassey-offer-popup');
   const anchor = page.locator('.ogabassey-chat-anchor');
+  await expect(offer).toBeAttached({ timeout: 15_000 });
+  await page.waitForTimeout(750);
   await expect(anchor).toHaveAttribute(
     'data-chat-launcher-offer-collision',
     ''

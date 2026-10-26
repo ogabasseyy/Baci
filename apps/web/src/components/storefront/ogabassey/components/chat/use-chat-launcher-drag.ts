@@ -50,13 +50,13 @@ export function useChatLauncherDrag(
   const viewportReclampPending = useRef(false);
   const isOpenRef = useRef(isOpen);
   const isHiddenRef = useRef(isHidden);
-  // Keep correlation through delayed browser compatibility clicks, then clear
-  // on the next independent input event so the token cannot eat a later tap.
+  // Keep delayed compatibility clicks correlated; clear the token on new input.
   const suppressedDragClick = useRef<{
     pointerId: number;
     pointerType: string;
     x: number;
     y: number;
+    expiresAt: number;
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 

@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS,
   clearChatLauncherDragClickOnNewInteraction,
   isSuppressedChatLauncherDragClick,
 } from './chat-launcher-click-suppression';
@@ -37,6 +38,7 @@ const release = {
   pointerType: 'mouse',
   x: 100,
   y: 200,
+  expiresAt: Number.MAX_SAFE_INTEGER,
 };
 
 describe('chat launcher click suppression', () => {
@@ -84,8 +86,23 @@ describe('chat launcher click suppression', () => {
 
   it('suppresses a delayed trusted pointerless compatibility click', () => {
     vi.useFakeTimers();
+    const delayedRelease = {
+      ...release,
+      expiresAt: Date.now() + CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS,
+    };
     vi.advanceTimersByTime(1000);
-    expect(isSuppressedChatLauncherDragClick(clickEvent(), release)).toBe(true);
+    expect(isSuppressedChatLauncherDragClick(clickEvent(), delayedRelease)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('allows a pointerless activation after the drag correlation expires', () => {
+    vi.useFakeTimers();
+    const staleRelease = {
+      ...release,
+      expiresAt: Date.now() + CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS,
+    };
+    vi.advanceTimersByTime(CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS + 1);
+    expect(isSuppressedChatLauncherDragClick(clickEvent(), staleRelease)).toBe(false);
     vi.useRealTimers();
   });
 

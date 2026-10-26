@@ -35,6 +35,7 @@ function setup() {
       pointerType: string;
       x: number;
       y: number;
+      expiresAt: number;
     } | null,
   };
   const commitPosition = vi.fn();
@@ -73,6 +74,7 @@ describe('chat launcher gesture lifecycle', () => {
       pointerType: 'touch',
       x: 30,
       y: 40,
+      expiresAt: expect.any(Number),
     });
     expect(state.gesture.current).toBeNull();
     expect(state.anchor.hasAttribute('data-chat-launcher-dragging')).toBe(false);
@@ -85,6 +87,7 @@ describe('chat launcher gesture lifecycle', () => {
       pointerType: 'touch',
       x: 30,
       y: 40,
+      expiresAt: Date.now() + 1000,
     };
     state.lifecycle.cancelGesture();
 

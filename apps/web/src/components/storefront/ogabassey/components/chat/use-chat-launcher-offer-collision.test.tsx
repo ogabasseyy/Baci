@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { useRef } from 'react';
 import { expect, it, vi } from 'vitest';
 import type { Position } from './chat-launcher-geometry';
@@ -54,5 +54,34 @@ it('marks and clears actual offer overlap after a moved launcher changes positio
   });
   act(() => rerender(<Harness position={{ x: 1200, y: 700 }} />));
   expect(anchor).not.toHaveAttribute('data-chat-launcher-offer-collision');
+  offer.remove();
+});
+
+it('rechecks collision after the offer entry animation settles', async () => {
+  const { getByTestId } = render(<Harness position={{ x: 10, y: 10 }} />);
+  const anchor = getByTestId('launcher-anchor');
+  const offer = document.createElement('div');
+  offer.className = 'ogabassey-offer-popup';
+  document.body.append(offer);
+  vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue({
+    left: 20, top: 20, right: 76, bottom: 76, width: 56, height: 56,
+    x: 20, y: 20, toJSON: () => ({}),
+  });
+  const offerRect = vi.spyOn(offer, 'getBoundingClientRect').mockReturnValue({
+    left: 500, top: 500, right: 820, bottom: 740, width: 320, height: 240,
+    x: 500, y: 500, toJSON: () => ({}),
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(anchor).not.toHaveAttribute('data-chat-launcher-offer-collision');
+
+  offerRect.mockReturnValue({
+    left: 0, top: 0, right: 320, bottom: 240, width: 320, height: 240,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  fireEvent.animationEnd(offer);
+
+  expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
   offer.remove();
 });

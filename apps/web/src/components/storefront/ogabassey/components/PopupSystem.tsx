@@ -23,6 +23,7 @@ export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreFocusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreChatFocusAfterDismissal = useRef(false);
   const lastInputModality = useRef<'keyboard' | 'pointer' | 'unknown'>('unknown');
   const hasEngaged = useDeferredActivation({
@@ -94,6 +95,20 @@ export const PopupSystem: React.FC = () => {
       return;
     }
     let observer: MutationObserver | null = null;
+    const stopPendingRestore = () => {
+      observer?.disconnect();
+      if (restoreFocusTimerRef.current) {
+        clearTimeout(restoreFocusTimerRef.current);
+        restoreFocusTimerRef.current = null;
+      }
+      document.removeEventListener('pointerdown', cancelPendingRestore, true);
+      document.removeEventListener('keydown', cancelPendingRestore, true);
+      document.removeEventListener('focusin', cancelPendingRestore, true);
+    };
+    const cancelPendingRestore = () => {
+      restoreChatFocusAfterDismissal.current = false;
+      stopPendingRestore();
+    };
     const tryRestoreFocus = () => {
       const activeElement = document.activeElement;
       if (
@@ -102,6 +117,7 @@ export const PopupSystem: React.FC = () => {
         activeElement.isConnected
       ) {
         restoreChatFocusAfterDismissal.current = false;
+        stopPendingRestore();
         return true;
       }
       const launcher = document.querySelector<HTMLElement>(
@@ -110,6 +126,7 @@ export const PopupSystem: React.FC = () => {
       if (!canReceiveFocus(launcher)) return false;
       restoreChatFocusAfterDismissal.current = false;
       launcher.focus();
+      stopPendingRestore();
       return true;
     };
     if (!tryRestoreFocus()) {
@@ -121,8 +138,15 @@ export const PopupSystem: React.FC = () => {
         attributes: true,
         attributeFilter: ['class', 'style'],
       });
+      document.addEventListener('pointerdown', cancelPendingRestore, true);
+      document.addEventListener('keydown', cancelPendingRestore, true);
+      document.addEventListener('focusin', cancelPendingRestore, true);
+      restoreFocusTimerRef.current = setTimeout(() => {
+        restoreChatFocusAfterDismissal.current = false;
+        stopPendingRestore();
+      }, 10_000);
     }
-    return () => observer?.disconnect();
+    return stopPendingRestore;
   }, [showAdPopup, showNewsletter]);
 
   const rememberPromotionFocus = (promotionSelector: string) => {

@@ -37,6 +37,7 @@ describe('buildInformationalClusterModel laptop hub links', () => {
           stock: 3,
         })),
         isCollection: false,
+        destinationVerified: true,
       },
     });
     const links = model?.commerceLinks.map((link) => link.href) ?? [];

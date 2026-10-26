@@ -71,4 +71,5 @@ export const smartphoneCategoryData = {
     },
   ],
   isCollection: false,
+  destinationVerified: true,
 };

@@ -152,17 +152,19 @@ export async function buildInformationalClusterModel(
     storeUrl: input.storeUrl,
     merchantId: input.merchantId,
     products,
-    skipDestinationVerification: Boolean(input.categoryDataOverride),
+    skipDestinationVerification:
+      input.categoryDataOverride?.destinationVerified === true,
   });
 
-  const approvedCompareSlugs = input.categoryDataOverride
-    ? undefined
-    : await loadMaintainedCompareRouteManifestSafely({
-        merchantId: input.merchantId,
-        categorySlug,
-        storeSlug: input.merchantSlug,
-        storeUrl: input.storeUrl,
-      });
+  const approvedCompareSlugs =
+    input.categoryDataOverride?.destinationVerified === true
+      ? undefined
+      : await loadMaintainedCompareRouteManifestSafely({
+          merchantId: input.merchantId,
+          categorySlug,
+          storeSlug: input.merchantSlug,
+          storeUrl: input.storeUrl,
+        });
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,

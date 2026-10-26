@@ -98,20 +98,6 @@ describe('useChatLauncherDrag', () => {
     expect(screen.getByTestId('anchor').style.transform).toBe('');
   });
 
-  it('keeps the icon reachable after the viewport shrinks', () => {
-    const { pointer, measure, flush } = setup();
-    pointer('pointerdown', 220, 320);
-    pointer('pointermove', 2000, 2000);
-    pointer('pointerup', 2000, 2000);
-    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
-    fireEvent(window, new Event('resize'));
-    flush();
-    expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(248px, 358px, 0)',
-    );
-  });
-
   it('re-clamps against visual viewport size and offset changes', () => {
     const viewport = Object.assign(new EventTarget(), {
       offsetLeft: 0,
@@ -196,6 +182,30 @@ describe('useChatLauncherDrag', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('clears stale correlation after a new pointerless keyboard activation', () => {
+    const { pointer, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    trustedClick(120, 220);
+
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it('clears stale correlation after a new pointerdown outside the launcher', () => {
+    const { pointer, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    fireEvent.pointerDown(document, { pointerId: 9 });
+
+    trustedClick(120, 220);
+
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
   it('allows a new tap after a drag produced no click', () => {
     vi.useFakeTimers();
     const { pointer, click, onOpen } = setup();
@@ -220,30 +230,8 @@ describe('useChatLauncherDrag', () => {
     expect(anchor.style.transform).toBe('');
   });
 
-  it('does not replace the saved position with zero bounds while hidden', () => {
-    const { pointer, measure } = setup();
-    pointer('pointerdown', 220, 320);
-    pointer('pointermove', 120, 220);
-    pointer('pointerup', 120, 220);
-    measure.mockReturnValue({
-      left: 0,
-      top: 0,
-      width: 0,
-      height: 0,
-      right: 0,
-      bottom: 0,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    });
-    fireEvent(window, new Event('resize'));
-    expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(100px, 200px, 0)',
-    );
-  });
-
   it('re-clamps a saved position when the hidden launcher becomes visible', () => {
-    const { pointer, measure, notifyResizeObserver } = setup();
+    const { pointer, measure, notifyResizeObserver, flush } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 2000, 2000);
     pointer('pointerup', 2000, 2000);
@@ -273,28 +261,9 @@ describe('useChatLauncherDrag', () => {
       toJSON: () => ({}),
     });
     notifyResizeObserver();
+    flush();
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(248px, 358px, 0)',
-    );
-  });
-
-  it('keeps the icon above the device bottom safe area', () => {
-    const { pointer } = setup();
-    vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
-      (element instanceof HTMLDivElement && element.style.position === 'fixed'
-        ? { height: '34px' }
-        : pseudo === '::before'
-          ? { height: '34px' }
-        : {
-            getPropertyValue: () =>
-              'env(safe-area-inset-bottom, 0px)',
-          }) as unknown as CSSStyleDeclaration,
-    );
-    pointer('pointerdown', 220, 320);
-    pointer('pointermove', 220, 5000);
-    pointer('pointerup', 220, 5000);
-    expect(screen.getByTestId('anchor').style.transform).toBe(
-      'translate3d(200px, 662px, 0)',
     );
   });
 

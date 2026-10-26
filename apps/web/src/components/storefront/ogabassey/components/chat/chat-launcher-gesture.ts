@@ -1,4 +1,4 @@
-import type { Overflow, Position } from './chat-launcher-geometry';
+import type { Overflow, Position, SafeAreaEdges } from './chat-launcher-geometry';
 
 export type Gesture = {
   pointerId: number;
@@ -12,6 +12,7 @@ export type Gesture = {
   width: number;
   height: number;
   bottomSafeArea: number;
+  safeArea: SafeAreaEdges;
   mobileOffset: number;
   overflow: Overflow;
   base: Position;

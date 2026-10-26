@@ -1,5 +1,11 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
+export function clearChatLauncherDragClickOnNewInteraction(
+  pending: { current: unknown | null },
+) {
+  pending.current = null;
+}
+
 export function isSuppressedChatLauncherDragClick(
   event: ReactMouseEvent<HTMLButtonElement>,
   pending: { pointerId: number; pointerType: string; x: number; y: number } | null,

@@ -93,17 +93,36 @@ export const PopupSystem: React.FC = () => {
     if (showNewsletter || showAdPopup || !restoreChatFocusAfterDismissal.current) {
       return;
     }
-
-    restoreChatFocusAfterDismissal.current = false;
-    const activeElement = document.activeElement;
-    if (activeElement && activeElement !== document.body && activeElement.isConnected) {
-      return;
+    let observer: MutationObserver | null = null;
+    const tryRestoreFocus = () => {
+      const activeElement = document.activeElement;
+      if (
+        activeElement &&
+        activeElement !== document.body &&
+        activeElement.isConnected
+      ) {
+        restoreChatFocusAfterDismissal.current = false;
+        return true;
+      }
+      const launcher = document.querySelector<HTMLElement>(
+        '.ogabassey-chat-anchor .ogabassey-chat-button',
+      );
+      if (!canReceiveFocus(launcher)) return false;
+      restoreChatFocusAfterDismissal.current = false;
+      launcher.focus();
+      return true;
+    };
+    if (!tryRestoreFocus()) {
+      observer = new MutationObserver(() => {
+        if (tryRestoreFocus()) observer?.disconnect();
+      });
+      observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style'],
+      });
     }
-
-    const launcher = document.querySelector<HTMLElement>(
-      '.ogabassey-chat-anchor .ogabassey-chat-button',
-    );
-    if (canReceiveFocus(launcher)) launcher.focus();
+    return () => observer?.disconnect();
   }, [showAdPopup, showNewsletter]);
 
   const rememberPromotionFocus = (promotionSelector: string) => {

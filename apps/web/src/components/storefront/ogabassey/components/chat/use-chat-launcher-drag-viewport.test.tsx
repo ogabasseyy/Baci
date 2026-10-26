@@ -10,6 +10,61 @@ afterEach(() => {
 });
 
 describe('launcher viewport changes while chat is open', () => {
+  it('does not replace the saved position with zero bounds while hidden', () => {
+    const { pointer, measure } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    measure.mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent(window, new Event('resize'));
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(100px, 200px, 0)',
+    );
+  });
+
+  it('keeps the icon reachable after the viewport shrinks', () => {
+    const { pointer, flush } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 2000, 2000);
+    pointer('pointerup', 2000, 2000);
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(480);
+    fireEvent(window, new Event('resize'));
+    flush();
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(248px, 358px, 0)',
+    );
+  });
+
+  it('keeps the icon above the device bottom safe area', () => {
+    const { pointer } = setup();
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudo) =>
+      (element instanceof HTMLDivElement && element.style.position === 'fixed'
+        ? { height: '34px' }
+        : pseudo === '::before'
+          ? { height: '34px' }
+          : {
+              getPropertyValue: () => 'env(safe-area-inset-bottom, 0px)',
+            }) as unknown as CSSStyleDeclaration,
+    );
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 220, 5000);
+    pointer('pointerup', 220, 5000);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(200px, 662px, 0)',
+    );
+  });
+
   it('batches rapid window resize re-clamps into one animation frame', () => {
     const view = setup({ initialPosition: { x: 100, y: 200 } });
 

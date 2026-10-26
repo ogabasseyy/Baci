@@ -109,10 +109,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     let focusTarget = document.querySelector<HTMLElement>(
       '.ogabassey-chat-anchor .ogabassey-chat-button'
     );
-    const chatAnchor = focusTarget?.closest<HTMLElement>(
-      '.ogabassey-chat-anchor'
-    );
-    if (chatAnchor && getComputedStyle(chatAnchor).display === 'none') {
+    if (!canReceiveFocus(focusTarget)) {
       const promotion = document.querySelector<HTMLElement>(
         '.ogabassey-newsletter-popup button[aria-label="Close newsletter"]:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
       );
@@ -130,8 +127,12 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     const focusOrigin = bannerFocusOriginRef.current;
     if (bannerHasFocusRef.current && canReceiveFocus(focusOrigin))
       focusOrigin.focus();
-    else if (bannerHasFocusRef.current && bannerFocusStartedInChatRef.current)
-      focusTarget?.focus();
+    else if (
+      bannerHasFocusRef.current &&
+      bannerFocusStartedInChatRef.current &&
+      canReceiveFocus(focusTarget)
+    )
+      focusTarget.focus();
     bannerFocusOriginRef.current = null;
     bannerFocusStartedInChatRef.current = false;
     bannerHasFocusRef.current = false;

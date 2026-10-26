@@ -50,7 +50,13 @@ body[data-chat-promotion-focus-handoff="true"]:not(
   pointer-events: none;
 }
 
-/* The offer spans the launcher corner only on narrow phones. */
+/* Keep the launcher reachable when a moved launcher intersects the offer. */
+body:has(.ogabassey-chat-anchor[data-chat-launcher-offer-collision])
+.ogabassey-offer-popup:not(:focus-within) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 @media (max-width: 423px) {
   body:has(.ogabassey-offer-popup):not(:has(.storefront-cookie-consent)):not(
       [data-chat-promotion-focus-handoff="true"]

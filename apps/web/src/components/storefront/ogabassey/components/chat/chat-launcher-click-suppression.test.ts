@@ -1,6 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppression';
+import {
+  clearChatLauncherDragClickOnNewInteraction,
+  isSuppressedChatLauncherDragClick,
+} from './chat-launcher-click-suppression';
 
 function clickEvent({
   detail = 1,
@@ -84,6 +87,14 @@ describe('chat launcher click suppression', () => {
     vi.advanceTimersByTime(1000);
     expect(isSuppressedChatLauncherDragClick(clickEvent(), release)).toBe(true);
     vi.useRealTimers();
+  });
+
+  it('does not let a click-less drag token swallow a later pointerless activation', () => {
+    const pending = { current: release };
+    clearChatLauncherDragClickOnNewInteraction(pending);
+    expect(
+      isSuppressedChatLauncherDragClick(clickEvent(), pending.current),
+    ).toBe(false);
   });
 
   it('suppresses Firefox touch clicks reported with pointer ID zero', () => {

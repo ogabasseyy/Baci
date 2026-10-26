@@ -4,6 +4,7 @@ const EDGE_GAP = 16;
 
 export type Position = { x: number; y: number };
 export type Overflow = { left: number; top: number; right: number; bottom: number };
+export type SafeAreaEdges = Pick<Overflow, 'left' | 'top' | 'right'>;
 
 export function getChatLauncherAnchorStyle(
   position: Position | undefined,
@@ -46,6 +47,19 @@ export function readChatLauncherSafeArea(probe: HTMLElement | null) {
   ) || 0;
 }
 
+export function readChatLauncherSafeAreaEdges(
+  probe: HTMLElement | null,
+): SafeAreaEdges {
+  if (!probe) return { left: 0, top: 0, right: 0 };
+  const style = window.getComputedStyle(probe);
+  const read = (value: string) => Number.parseFloat(value) || 0;
+  return {
+    top: read(style.paddingTop),
+    right: read(style.paddingRight),
+    left: read(style.paddingLeft),
+  };
+}
+
 export function readChatLauncherMobileOffset(anchor: HTMLElement | null) {
   if (!anchor || window.innerWidth >= 768) return 0;
   return Number.parseFloat(window.getComputedStyle(anchor, '::after').height) || 0;
@@ -71,15 +85,17 @@ export function clampChatLauncherPosition(
   bottomSafeArea = 0,
   mobileOffset = 0,
   overflow: Overflow = { left: 0, top: 0, right: 0, bottom: 0 },
+  safeArea: SafeAreaEdges = { left: 0, top: 0, right: 0 },
 ): Position {
   const viewport = window.visualViewport;
   const viewportLeft = viewport?.offsetLeft ?? 0;
   const viewportTop = viewport?.offsetTop ?? 0;
   const viewportWidth = viewport?.width ?? window.innerWidth;
   const viewportHeight = viewport?.height ?? window.innerHeight;
-  const minX = viewportLeft + EDGE_GAP + overflow.left;
-  const maxX = viewportLeft + viewportWidth - width - EDGE_GAP - overflow.right;
-  const minY = viewportTop + EDGE_GAP + overflow.top;
+  const minX = viewportLeft + EDGE_GAP + safeArea.left + overflow.left;
+  const maxX =
+    viewportLeft + viewportWidth - width - EDGE_GAP - safeArea.right - overflow.right;
+  const minY = viewportTop + EDGE_GAP + safeArea.top + overflow.top;
   const maxY =
     viewportTop +
     viewportHeight -
@@ -94,14 +110,14 @@ export function clampChatLauncherPosition(
       x,
       minX,
       maxX,
-      viewportLeft,
-      viewportLeft + viewportWidth - width,
+      viewportLeft + safeArea.left,
+      viewportLeft + viewportWidth - width - safeArea.right,
     ),
     y: clampAxis(
       y,
       minY,
       maxY,
-      viewportTop,
+      viewportTop + safeArea.top,
       viewportTop + viewportHeight - height - bottomSafeArea - mobileOffset,
     ),
   };

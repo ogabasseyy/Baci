@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -164,6 +165,38 @@ describe('DeferredChatWidget', () => {
     await user.keyboard('{Enter}');
     expect(await screen.findByText('Loaded chat runtime')).toBeInTheDocument();
     expect(loadChatWidget).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not steal focus after a deferred load fails if focus moved elsewhere', async () => {
+    let rejectLoad: (reason: Error) => void = () => {};
+    const loadChatWidget = vi.fn(
+      () =>
+        new Promise<{
+          ChatWidget: () => ReactNode;
+        }>((_resolve, reject) => {
+          rejectLoad = reject;
+        }),
+    );
+    render(
+      <>
+        <button type="button">Page control</button>
+        <DeferredChatWidget loadChatWidget={loadChatWidget} />
+      </>,
+    );
+    const launcher = screen.getByRole('button', {
+      name: 'Open AI chat assistant',
+    });
+    launcher.focus();
+    await userEvent.setup().keyboard('{Enter}');
+
+    const pageControl = screen.getByRole('button', { name: 'Page control' });
+    pageControl.focus();
+    rejectLoad(new Error('Chunk unavailable'));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Chat did not load. Activate again to retry.',
+    );
+    expect(pageControl).toHaveFocus();
   });
 
   it('keeps keyboard focus on the loaded launcher after activation', async () => {

@@ -145,7 +145,7 @@ describe('PopupSystem', () => {
     expect(pageControl).toHaveFocus();
   });
 
-  it('does not restore focus to a launcher hidden by an ancestor', async () => {
+  it('restores focus when a hidden launcher becomes available after dismissal', async () => {
     render(
       <>
         <div className="ogabassey-chat-anchor">
@@ -172,6 +172,11 @@ describe('PopupSystem', () => {
     expect(document.activeElement).not.toBe(
       document.querySelector('.ogabassey-chat-button'),
     );
+    anchor.style.display = '';
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.querySelector('.ogabassey-chat-button')).toHaveFocus();
     act(() => vi.clearAllTimers());
   });
 

@@ -16,12 +16,17 @@ import {
   readChatLauncherOverflow,
   readChatLauncherMobileOffset,
   readChatLauncherSafeArea,
+  readChatLauncherSafeAreaEdges,
   type Position,
 } from './chat-launcher-geometry';
 import type { Gesture } from './chat-launcher-gesture';
 import { createChatLauncherGestureLifecycle } from './chat-launcher-gesture-lifecycle';
-import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppression';
+import {
+  clearChatLauncherDragClickOnNewInteraction,
+  isSuppressedChatLauncherDragClick,
+} from './chat-launcher-click-suppression';
 import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
+import { useChatLauncherOfferCollision } from './use-chat-launcher-offer-collision';
 
 const DRAG_THRESHOLD = 6;
 const useBrowserLayoutEffect =
@@ -36,6 +41,7 @@ export function useChatLauncherDrag(
   const [position, setPosition] = useState<Position | undefined>(initialPosition);
   const positionRef = useRef(position);
   const anchorRef = useRef<HTMLDivElement>(null);
+  useChatLauncherOfferCollision(anchorRef, position);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const dragged = useRef(false);
@@ -44,8 +50,8 @@ export function useChatLauncherDrag(
   const viewportReclampPending = useRef(false);
   const isOpenRef = useRef(isOpen);
   const isHiddenRef = useRef(isHidden);
-  // The one-shot token is cleared by the next click or pointerdown rather than
-  // by a timer, so delayed compatibility clicks still correlate with the drag.
+  // Keep correlation through delayed browser compatibility clicks, then clear
+  // on the next independent input event so the token cannot eat a later tap.
   const suppressedDragClick = useRef<{
     pointerId: number;
     pointerType: string;
@@ -95,6 +101,7 @@ export function useChatLauncherDrag(
       readChatLauncherSafeArea(safeAreaProbe.current),
       readChatLauncherMobileOffset(anchorRef.current),
       overflow,
+      readChatLauncherSafeAreaEdges(safeAreaProbe.current),
     );
     if (next.x !== current.x || next.y !== current.y) {
       commitPosition(next);
@@ -120,9 +127,15 @@ export function useChatLauncherDrag(
     scheduleViewportReclamp();
   }
   useEffect(() => {
+    const clearStaleDragClick = () => {
+      clearChatLauncherDragClickOnNewInteraction(suppressedDragClick);
+    };
+    document.addEventListener('pointerdown', clearStaleDragClick, true);
+    document.addEventListener('keydown', clearStaleDragClick, true);
+    document.addEventListener('focusin', clearStaleDragClick, true);
     const probe = document.createElement('div');
     probe.style.cssText =
-      'height:env(safe-area-inset-bottom, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
+      'height:env(safe-area-inset-bottom, 0px);padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
     document.body.append(probe);
     safeAreaProbe.current = probe;
     window.addEventListener('resize', scheduleViewportReclamp);
@@ -138,6 +151,9 @@ export function useChatLauncherDrag(
     visualViewport?.addEventListener('resize', scheduleViewportReclamp);
     visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
     return () => {
+      document.removeEventListener('pointerdown', clearStaleDragClick, true);
+      document.removeEventListener('keydown', clearStaleDragClick, true);
+      document.removeEventListener('focusin', clearStaleDragClick, true);
       window.removeEventListener('resize', scheduleViewportReclamp);
       anchor?.removeEventListener('animationend', handleOverflowAnimationEnd, true);
       visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
@@ -159,6 +175,7 @@ export function useChatLauncherDrag(
     if (event.button !== 0 || event.isPrimary === false) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const bottomSafeArea = readChatLauncherSafeArea(safeAreaProbe.current);
+    const safeArea = readChatLauncherSafeAreaEdges(safeAreaProbe.current);
     const mobileOffset = readChatLauncherMobileOffset(anchorRef.current);
     const overflow = readChatLauncherOverflow(event.currentTarget, rect);
     gesture.current = {
@@ -173,6 +190,7 @@ export function useChatLauncherDrag(
       width: rect.width,
       height: rect.height,
       bottomSafeArea,
+      safeArea,
       mobileOffset,
       overflow,
       base: position ?? { x: 0, y: 0 },
@@ -196,6 +214,7 @@ export function useChatLauncherDrag(
       readChatLauncherSafeArea(safeAreaProbe.current),
       readChatLauncherMobileOffset(anchorRef.current),
       readChatLauncherOverflow(event.currentTarget, rect),
+      readChatLauncherSafeAreaEdges(safeAreaProbe.current),
     );
     if (!next) return;
     event.preventDefault();
@@ -218,6 +237,7 @@ export function useChatLauncherDrag(
       start.bottomSafeArea,
       start.mobileOffset,
       start.overflow,
+      start.safeArea,
     );
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {

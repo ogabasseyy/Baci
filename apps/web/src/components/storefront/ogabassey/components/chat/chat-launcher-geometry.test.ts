@@ -46,6 +46,24 @@ describe('clampChatLauncherPosition', () => {
     expect(clampChatLauncherPosition(200, 900, 56, 56, 34).y).toBe(374);
   });
 
+  it('keeps the launcher clear of top and horizontal safe areas', () => {
+    setVisualViewport(0, 0, 400, 800);
+    expect(
+      clampChatLauncherPosition(0, 0, 56, 56, 0, 0, undefined, {
+        left: 44,
+        top: 48,
+        right: 44,
+      }),
+    ).toEqual({ x: 60, y: 64 });
+    expect(
+      clampChatLauncherPosition(1000, 1000, 56, 56, 0, 0, undefined, {
+        left: 44,
+        top: 48,
+        right: 44,
+      }),
+    ).toEqual({ x: 284, y: 728 });
+  });
+
   it('keeps the launcher reachable when bubble overflow cannot fit', () => {
     setVisualViewport(100, 50, 120, 300);
     expect(

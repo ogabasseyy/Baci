@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { useCookieConsentFocus } from './use-cookie-consent-focus';
 
 function ConsentFocusHarness() {
@@ -8,6 +8,7 @@ function ConsentFocusHarness() {
   const [chatOpen, setChatOpen] = useState(false);
   const [runtimeMounted, setRuntimeMounted] = useState(false);
   const [showNewsletter, setShowNewsletter] = useState(false);
+  const [hideLauncherButton, setHideLauncherButton] = useState(false);
   const [navigated, setNavigated] = useState(false);
   const focus = useCookieConsentFocus(visible);
 
@@ -21,6 +22,7 @@ function ConsentFocusHarness() {
           key={runtimeMounted ? 'runtime' : 'deferred'}
           type="button"
           className="ogabassey-chat-button"
+          style={hideLauncherButton ? { visibility: 'hidden' } : undefined}
           onClick={() => setChatOpen((open) => !open)}
         >
           {runtimeMounted ? 'Runtime launcher' : 'Assistant launcher'}
@@ -49,6 +51,9 @@ function ConsentFocusHarness() {
       </button>
       <button type="button" onClick={() => setShowNewsletter(true)}>
         Show newsletter
+      </button>
+      <button type="button" onClick={() => setHideLauncherButton(true)}>
+        Hide launcher button
       </button>
       <h1 tabIndex={-1}>Repair page</h1>
       {navigated && <p>Repair page loaded</p>}
@@ -82,6 +87,14 @@ function ConsentFocusHarness() {
             onClick={focus.dismissWithFocus(() => setVisible(false))}
           >
             Dismiss consent
+          </button>
+          <button
+            type="button"
+            onClick={focus.dismissWithFocus(() => {
+              window.setTimeout(() => setVisible(false), 200);
+            })}
+          >
+            Dismiss consent with exit animation
           </button>
         </div>
       )}
@@ -171,6 +184,20 @@ it('restores focus to a visible promotion if CSS hides the launcher', () => {
   ).toHaveFocus();
 });
 
+it('does not focus a hidden launcher button when consent closes', () => {
+  render(<ConsentFocusHarness />);
+  const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+  launcher.focus();
+  const focus = vi.spyOn(launcher, 'focus');
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Hide launcher button' }));
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+
+  expect(focus).not.toHaveBeenCalled();
+});
+
 it('does not redirect consent focus to chat after a non-chat popup interaction', () => {
   render(<ConsentFocusHarness />);
   const newsletter = screen.getByRole('button', { name: 'Show newsletter' });
@@ -226,4 +253,23 @@ it('keeps the original page control as origin while focus moves inside consent',
   fireEvent.click(dismiss);
 
   expect(origin).toHaveFocus();
+});
+
+it('preserves newer outside focus while consent finishes its exit animation', () => {
+  vi.useFakeTimers();
+  render(<ConsentFocusHarness />);
+  const origin = screen.getByRole('button', { name: 'Show newsletter' });
+  origin.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  const dismiss = screen.getByRole('button', {
+    name: 'Dismiss consent with exit animation',
+  });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+  origin.focus();
+  act(() => vi.advanceTimersByTime(200));
+
+  expect(origin).toHaveFocus();
+  vi.useRealTimers();
 });

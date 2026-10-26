@@ -54,7 +54,18 @@ export function DeferredChatWidget({
   );
   useEffect(() => {
     if (!isLoading && loadFailed && focusLauncherOnMount.current) {
-      drag.buttonRef.current?.focus();
+      const launcher = drag.buttonRef.current;
+      const activeElement = document.activeElement;
+      if (
+        launcher &&
+        (!activeElement ||
+          activeElement === document.body ||
+          activeElement === launcher ||
+          !activeElement.isConnected)
+      ) {
+        launcher.focus();
+      }
+      focusLauncherOnMount.current = false;
     }
   }, [drag.buttonRef, isLoading, loadFailed]);
   const anchorClasses = [

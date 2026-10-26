@@ -1,5 +1,5 @@
 import { clampChatLauncherPosition } from './chat-launcher-geometry';
-import type { Overflow, Position } from './chat-launcher-geometry';
+import type { Overflow, Position, SafeAreaEdges } from './chat-launcher-geometry';
 
 const KEY_MOVEMENT = {
   ArrowDown: [0, 1],
@@ -20,6 +20,7 @@ export function getChatLauncherKeyboardPosition(
   bottomSafeArea: number,
   mobileOffset: number,
   overflow: Overflow,
+  safeArea: SafeAreaEdges,
 ) {
   if (!isMovementKey(key)) return null;
   const movement = KEY_MOVEMENT[key];
@@ -32,5 +33,6 @@ export function getChatLauncherKeyboardPosition(
     bottomSafeArea,
     mobileOffset,
     overflow,
+    safeArea,
   );
 }

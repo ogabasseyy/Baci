@@ -11,6 +11,11 @@ type XQueue = ((
   version?: string;
   exe?: (...args: unknown[]) => void;
 };
+declare global {
+  interface Window {
+    twq?: XQueue;
+  }
+}
 type Pending = {
   event: keyof XEventIds;
   params: Record<string, unknown>;

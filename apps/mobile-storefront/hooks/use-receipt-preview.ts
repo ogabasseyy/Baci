@@ -248,7 +248,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     const resolvedTypeCode = resolveInvoiceTypeCode({
       paymentMethod: receiptDetail.payment_method,
       isPaid: isPaidReceipt,
-      wasPaid: receiptDetail.payment_status === 'refunded',
+      wasPaid: normalizeStatus(receiptDetail.payment_status) === 'refunded',
       paymentStatus: receiptDetail.payment_status,
       amountPaid: receiptDetail.amount_paid,
       storedTypeCode: receiptDetail.invoice_type_code,

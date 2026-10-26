@@ -149,6 +149,21 @@ describe('useReceiptPreview document kind', () => {
     expect(result.current.html).not.toContain('Proforma Invoice');
   });
 
+  it('keeps the commercial title for a legacy-cased refunded invoice', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'Refunded',
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.isOpen).toBe(true);
+    expect(result.current.html).not.toContain('Proforma Invoice');
+  });
+
   it('preserves an explicit stored type code instead of deriving proforma', () => {
     mockReceiptDetail = {
       ...unpaidProformaDetail('NGN'),

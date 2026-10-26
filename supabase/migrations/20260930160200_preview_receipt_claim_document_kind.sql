@@ -110,13 +110,15 @@ BEGIN
             -- internal whitespace) or 'Partially Paid' previews as
             -- proforma while the sender renders an invoice.
             AND regexp_replace(lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g') IS DISTINCT FROM 'paid'
-            AND regexp_replace(lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g') IS DISTINCT FROM 'partially_paid'
-            AND COALESCE(o.amount_paid, 0) <= 0
-            -- Mirror resolveInvoiceTypeCode: an explicit stored 325 stays
-            -- proforma on any method, like the sender emits.
-            AND (lower(btrim(o.payment_method)) = 'invoice'
-              AND COALESCE(nullif(btrim(o.invoice_type_code), ''), '380') = '380'
-              OR nullif(btrim(o.invoice_type_code), '') = '325')
+            -- Mirror resolveInvoiceTypeCode exactly: an explicit stored
+            -- 325 stays proforma like the sender emits even with partial
+            -- or credited payment; the amount/status gates apply only to
+            -- the implicit invoice-method default-380 branch.
+            AND (nullif(btrim(o.invoice_type_code), '') = '325'
+              OR (regexp_replace(lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g') IS DISTINCT FROM 'partially_paid'
+                AND COALESCE(o.amount_paid, 0) <= 0
+                AND lower(btrim(o.payment_method)) = 'invoice'
+                AND COALESCE(nullif(btrim(o.invoice_type_code), ''), '380') = '380'))
           THEN 'proforma_invoice'
           WHEN n.event_type = 'manual_order_invoice' THEN 'invoice'
           ELSE 'receipt'

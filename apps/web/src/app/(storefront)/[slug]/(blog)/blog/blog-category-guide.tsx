@@ -1,9 +1,18 @@
 import {
-  buildGuideCopyItems,
   type CategoryGuideCopy,
+  type CategoryGuideCopyItem,
   getOgabasseyCategoryGuideCopy,
-  normalizeCategoryKey,
 } from './blog-category-guide-copy';
+
+function toGuideItems(
+  prefix: string,
+  items: string[]
+): CategoryGuideCopyItem[] {
+  return items.map((text, index) => ({
+    id: `${prefix}-${index + 1}`,
+    text,
+  }));
+}
 
 function buildCategoryGuideCopy({
   category,
@@ -23,15 +32,21 @@ function buildCategoryGuideCopy({
     }
   }
 
-  const genericGuideKey = normalizeCategoryKey(category) || 'category';
+  const genericGuideKey =
+    category
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'category';
 
   return {
     heading: `About ${category} articles from ${merchantName}`,
-    paragraphs: buildGuideCopyItems(`${genericGuideKey}-paragraph`, [
+    paragraphs: toGuideItems(`${genericGuideKey}-paragraph`, [
       `${merchantName} uses this category to organize ${category.toLowerCase()} articles in one place so readers can scan recent updates, compare related topics and move from research to the most relevant store pages without relying on a single short listing view.`,
       `There ${totalPosts === 1 ? 'is' : 'are'} ${totalPosts} ${totalPosts === 1 ? 'article' : 'articles'} in this archive. Use the newest posts first, then review related categories, author pages and product links when you need more context before taking the next step.`,
     ]),
-    bullets: buildGuideCopyItems(`${genericGuideKey}-bullet`, [
+    bullets: toGuideItems(`${genericGuideKey}-bullet`, [
       'Start with recent posts for the freshest context.',
       'Use related categories to continue the research path.',
       'Check linked products or policies before making a decision.',

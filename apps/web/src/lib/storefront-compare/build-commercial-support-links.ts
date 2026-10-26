@@ -1,5 +1,4 @@
 import { generateSlug } from '../seo-utils';
-import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
 import {
   buildBrandCompareCandidate,
   buildPriceBandCandidate,
@@ -9,6 +8,11 @@ import {
   buildCanonicalBrandCompareSlug,
   buildCanonicalProductCompareSlug,
 } from './compare-slugs';
+import {
+  findFirstEligibleProductCompare,
+  normalizeInferredBrands,
+  resolveCanonicalBrandKey,
+} from './filter-commercial-support-brands';
 import { getCuratedPriceBands } from './price-band-taxonomy';
 
 export interface CommercialSupportLink {
@@ -16,7 +20,7 @@ export interface CommercialSupportLink {
   label: string;
 }
 
-interface CommercialSupportProduct {
+export interface CommercialSupportProduct {
   slug: string;
   name: string;
   brand?: string | null;
@@ -41,120 +45,6 @@ export function buildCategoryPriceBandCandidates(
   return getCuratedPriceBands(categorySlug).map((band) =>
     buildPriceBandCandidate({ categorySlug, band, products })
   );
-}
-
-function resolveCanonicalBrandKey(
-  categorySlug: string,
-  brand: string | null | undefined
-): string {
-  const raw = (brand ?? '').trim();
-  if (!raw) {
-    return '';
-  }
-  const matchingEntry = brandAuthorityTaxonomy
-    .getEntries(categorySlug)
-    .find((entry) => brandAuthorityTaxonomy.matchesBrand(entry, raw));
-  return matchingEntry?.brandKey ?? generateSlug(raw);
-}
-
-function normalizeInferredBrands(
-  categorySlug: string,
-  inferredBrands?: string[]
-): string[] {
-  return Array.from(
-    new Set(
-      (inferredBrands ?? [])
-        .map((brand) => resolveCanonicalBrandKey(categorySlug, brand))
-        .filter(Boolean)
-    )
-  );
-}
-
-function filterProductsByBrandSlugs(
-  categorySlug: string,
-  products: CommercialSupportProduct[],
-  brandSlugs: string[]
-): CommercialSupportProduct[] {
-  return products.filter((product) => {
-    const brandSlug = resolveCanonicalBrandKey(categorySlug, product.brand);
-    return Boolean(brandSlug && brandSlugs.includes(brandSlug));
-  });
-}
-
-function findFirstEligibleProductCompare(
-  categorySlug: string,
-  products: CommercialSupportProduct[],
-  inferredBrands?: string[]
-) {
-  const normalizedInferredBrands = normalizeInferredBrands(
-    categorySlug,
-    inferredBrands
-  );
-
-  if (normalizedInferredBrands.length > 0) {
-    const preferredProducts = filterProductsByBrandSlugs(
-      categorySlug,
-      products,
-      normalizedInferredBrands
-    );
-
-    if (preferredProducts.length >= 2) {
-      for (
-        let leftIndex = 0;
-        leftIndex < preferredProducts.length - 1;
-        leftIndex += 1
-      ) {
-        const leftProduct = preferredProducts[leftIndex];
-        for (
-          let rightIndex = leftIndex + 1;
-          rightIndex < preferredProducts.length;
-          rightIndex += 1
-        ) {
-          const rightProduct = preferredProducts[rightIndex];
-          const candidate = buildProductCompareCandidate({
-            categorySlug,
-            leftProduct,
-            rightProduct,
-          });
-
-          if (candidate.isIndexable) {
-            return {
-              leftProduct,
-              rightProduct,
-            };
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  for (let leftIndex = 0; leftIndex < products.length - 1; leftIndex += 1) {
-    const leftProduct = products[leftIndex];
-
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < products.length;
-      rightIndex += 1
-    ) {
-      const rightProduct = products[rightIndex];
-      const candidate = buildProductCompareCandidate({
-        categorySlug,
-        leftProduct,
-        rightProduct,
-      });
-
-      if (candidate.isIndexable) {
-        return {
-          leftProduct,
-          rightProduct,
-        };
-      }
-    }
-  }
-
-  return null;
 }
 
 function buildFirstEligiblePriceBandLink(input: {
@@ -205,25 +95,10 @@ export function buildCategorySupportLinks(input: {
       input.inferredBrands
     );
 
-    let brandCandidate = buildBrandCompareCandidate({
+    const brandCandidate = buildBrandCompareCandidate({
       categorySlug: input.categorySlug,
       products: input.products,
     });
-
-    if (normalizedInferredBrands.length >= 2) {
-      const preferredProducts = filterProductsByBrandSlugs(
-        input.categorySlug,
-        input.products,
-        normalizedInferredBrands
-      );
-      const multiBrandCandidate = buildBrandCompareCandidate({
-        categorySlug: input.categorySlug,
-        products: preferredProducts,
-      });
-      if (multiBrandCandidate?.isIndexable) {
-        brandCandidate = multiBrandCandidate;
-      }
-    }
 
     if (brandCandidate?.isIndexable) {
       const leftKey = resolveCanonicalBrandKey(
@@ -235,9 +110,10 @@ export function buildCategorySupportLinks(input: {
         brandCandidate.rightBrand
       );
       const isRelevant =
-        normalizedInferredBrands.length === 0 ||
-        (normalizedInferredBrands.includes(leftKey) &&
-          normalizedInferredBrands.includes(rightKey));
+        leftKey !== rightKey &&
+        (normalizedInferredBrands.length === 0 ||
+          (normalizedInferredBrands.includes(leftKey) &&
+            normalizedInferredBrands.includes(rightKey)));
 
       if (isRelevant) {
         links.push({

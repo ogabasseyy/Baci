@@ -9,7 +9,7 @@ export interface CategoryGuideCopy {
   paragraphs: CategoryGuideCopyItem[];
 }
 
-export function buildGuideCopyItems(
+function buildGuideCopyItems(
   prefix: string,
   items: string[]
 ): CategoryGuideCopyItem[] {
@@ -32,7 +32,7 @@ function createGuide(
   };
 }
 
-export function normalizeCategoryKey(category: string): string {
+function normalizeCategoryKey(category: string): string {
   return category
     .trim()
     .toLowerCase()

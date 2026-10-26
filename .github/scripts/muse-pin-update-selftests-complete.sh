@@ -28,7 +28,7 @@ latest_checks="$(awk -F '\t' '
     # has no timestamps yet. (Timestamp strings would sort above a bare
     # id, letting an older success mask a pending latest run.) A newest
     # run without a success conclusion is reported missing below.
-    if (!($1 in stamp) || ($5 + 0) > (run_id[$1] + 0)) {
+    if (!($1 in run_id) || ($5 + 0) > (run_id[$1] + 0)) {
       run_id[$1] = $5
       conclusion[$1] = $6
       completed_at[$1] = $4

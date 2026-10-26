@@ -81,6 +81,14 @@ if printf '%b' "${older_success_then_latest_queued}" | bash "${checker}" >/dev/n
   exit 1
 fi
 
+# Row order must not matter: a newer canceled run listed before an
+# older success is still the latest and must fail the gate.
+newer_cancelled_first="Selftest (hard-2)\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:30:00Z\t101\tcancelled\nSelftest (hard-2)\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:01:00Z\t100\tsuccess\n"
+if printf '%b' "${newer_cancelled_first}" | bash "${checker}" 'Selftest (hard-2)' >/dev/null 2>&1; then
+  echo 'FAIL accepted an older success listed after a newer canceled run.' >&2
+  exit 1
+fi
+
 for failed_conclusion in cancelled timed_out stale; do
   quality_gate_runs="Quality Gate\t2026-10-13T12:00:00Z\t2026-10-13T08:00:00Z\t2026-10-13T13:00:00Z\t200\tsuccess\nQuality Gate\t2026-10-13T09:00:00Z\t2026-10-13T10:00:00Z\t2026-10-13T11:01:00Z\t201\t${failed_conclusion}\n"
   if printf '%b' "${quality_gate_runs}" | bash "${checker}" 'Quality Gate' >/dev/null 2>&1; then

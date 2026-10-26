@@ -46,6 +46,7 @@ export function useChatLauncherDrag(
     pointerType: string;
     x: number;
     y: number;
+    expiresAt: number;
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
@@ -243,6 +244,10 @@ export function useChatLauncherDrag(
         pointerType: start.pointerType,
         x: start.lastX,
         y: start.lastY,
+        // Compatibility clicks are dispatched immediately after pointerup.
+        // Bound the token so a missing native click cannot suppress a later
+        // pointerless assistive activation at the same location.
+        expiresAt: Date.now() + 750,
       };
     }
     if (viewportReclampPending.current) {

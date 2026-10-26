@@ -92,4 +92,30 @@ describe('ChatWidget focus restoration', () => {
 
     expect(setIsOpen).not.toHaveBeenCalled();
   });
+
+  it('restores focus to the launcher when the chat header closes', () => {
+    const setIsOpen = vi.fn();
+    vi.mocked(useOgabasseyChat).mockReturnValue({
+      isOpen: true,
+      setIsOpen,
+      messages: [],
+      input: '',
+      setInput: vi.fn(),
+      isLoading: false,
+      proactiveMsg: null,
+      setProactiveMsg: vi.fn(),
+      messagesEndRef: { current: null },
+      handleSend: vi.fn(),
+      handleSubmit: vi.fn(),
+      handleAddSantaWishToCart: vi.fn(),
+    });
+    render(<ChatWidget />);
+
+    const close = screen.getByRole('button', { name: 'Close chat' });
+    close.focus();
+    close.click();
+
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+    expect(screen.getByRole('button', { name: 'Toggle chat' })).toHaveFocus();
+  });
 });

@@ -175,7 +175,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                drag.buttonRef.current?.focus();
+              }}
               className={`relative z-10 p-2 rounded-full ${isSanta ? 'hover:bg-red-700/50' : 'hover:bg-gray-100'} transition-colors`}
               aria-label="Close chat"
             >

@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 
 export function isSuppressedChatLauncherDragClick(
   event: ReactMouseEvent<HTMLButtonElement>,
-  pending: { pointerId: number; pointerType: string; x: number; y: number } | null,
+  pending: { pointerId: number; pointerType: string; x: number; y: number; expiresAt: number } | null,
 ) {
   const nativeEvent = event.nativeEvent as MouseEvent & {
     pointerId?: number;
@@ -10,6 +10,7 @@ export function isSuppressedChatLauncherDragClick(
   };
   const matchesRelease =
     pending &&
+    Date.now() <= pending.expiresAt &&
     event.detail > 0 &&
     Math.abs(event.clientX - pending.x) <= 2 &&
     Math.abs(event.clientY - pending.y) <= 2;

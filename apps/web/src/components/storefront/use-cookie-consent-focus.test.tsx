@@ -197,3 +197,18 @@ it('restores focus to a visible promotion if CSS hides the launcher', () => {
     screen.getByRole('button', { name: 'Close newsletter' })
   ).toHaveFocus();
 });
+
+it('does not redirect consent focus to chat after a non-chat popup interaction', () => {
+  render(<ConsentFocusHarness />);
+  const newsletter = screen.getByRole('button', { name: 'Show newsletter' });
+  newsletter.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+  fireEvent.focusIn(screen.getByRole('button', { name: 'Dismiss consent' }), {
+    relatedTarget: newsletter,
+  });
+
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  fireEvent.click(dismiss);
+
+  expect(newsletter).toHaveFocus();
+});

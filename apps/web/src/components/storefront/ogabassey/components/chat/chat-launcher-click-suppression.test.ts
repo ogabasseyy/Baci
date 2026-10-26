@@ -29,7 +29,13 @@ function clickEvent({
   } as unknown as ReactMouseEvent<HTMLButtonElement>;
 }
 
-const release = { pointerId: 7, pointerType: 'mouse', x: 100, y: 200 };
+const release = {
+  pointerId: 7,
+  pointerType: 'mouse',
+  x: 100,
+  y: 200,
+  expiresAt: Date.now() + 750,
+};
 
 describe('chat launcher click suppression', () => {
   it('suppresses a release-correlated pointer click', () => {
@@ -71,6 +77,15 @@ describe('chat launcher click suppression', () => {
         clickEvent({ isTrusted: false }),
         release,
       ),
+    ).toBe(false);
+  });
+
+  it('allows a trusted pointerless activation after the drag click window', () => {
+    expect(
+      isSuppressedChatLauncherDragClick(clickEvent(), {
+        ...release,
+        expiresAt: Date.now() - 1,
+      }),
     ).toBe(false);
   });
 

@@ -45,6 +45,7 @@ function client(data: unknown = config, error?: unknown) {
 }
 
 const order = {
+  ad_tracking: { analyticsConsent: true, marketingConsent: true },
   currency: 'NGN',
   id: 'order-1',
   order_items: [
@@ -88,7 +89,7 @@ describe('triggerPurchaseConversion delivery', () => {
   it('omits malformed browser tracking values', async () => {
     await triggerPurchaseConversion(client(), 'merchant-1', {
       ...order,
-      ad_tracking: { fbc: 42, limitedDataUse: 'true' },
+      ad_tracking: { analyticsConsent: true, fbc: 42, limitedDataUse: 'true' },
     });
     expect(mocks.send).toHaveBeenCalledWith(
       expect.any(Object),
@@ -112,4 +113,24 @@ describe('triggerPurchaseConversion delivery', () => {
     ).rejects.toThrow('capi failed');
     expect(logger.error).toHaveBeenCalled();
   });
+});
+
+it.each([
+  undefined,
+  false,
+])('never reads provider secrets for legacy NecessaryOnly/missing consent %s', async (analyticsConsent) => {
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-09-15T12:00:00.000Z'));
+  const fetcher = vi.fn<typeof globalThis.fetch>(async () =>
+    Response.json(config)
+  );
+  await triggerPurchaseConversion(
+    createEventPipelineTestClient(fetcher),
+    'merchant-1',
+    { ...order, ad_tracking: { analyticsConsent, marketingConsent: false } }
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(mocks.send).not.toHaveBeenCalled();
+  vi.useRealTimers();
 });

@@ -1,3 +1,5 @@
+import { INTEGRATION_SECRET_FIELDS } from './integration-secret-settings';
+
 type JsonRecord = Record<string, unknown>;
 
 const ZOHO_CAMPAIGNS_CUSTOM_SETTING_KEYS = [
@@ -27,9 +29,15 @@ function redactZohoCampaignSettingsRecord(settings: JsonRecord): JsonRecord {
 }
 
 export function redactMerchantFeatureSettingsResponse<T>(settings: T): T {
-  if (!isRecord(settings) || !isRecord(settings.custom_settings)) {
-    return settings;
+  if (!isRecord(settings)) return settings;
+  const safe: JsonRecord = { ...settings };
+  for (const key of INTEGRATION_SECRET_FIELDS) {
+    if (!(key in safe)) continue;
+    safe[`${key}_configured`] =
+      typeof safe[key] === 'string' && safe[key].trim().length > 0;
+    safe[key] = null;
   }
+  if (!isRecord(settings.custom_settings)) return safe as T;
 
   const redactedCustomSettings = { ...settings.custom_settings };
   let didRedact = false;
@@ -43,10 +51,10 @@ export function redactMerchantFeatureSettingsResponse<T>(settings: T): T {
     didRedact = true;
   }
 
-  if (!didRedact) return settings;
+  if (!didRedact) return safe as T;
 
   return {
-    ...settings,
+    ...safe,
     custom_settings: redactedCustomSettings,
   } as T;
 }
@@ -87,4 +95,15 @@ export function preserveZohoCampaignSecretCustomSettings(
   }
 
   return incoming;
+}
+
+/** Strip integration credentials before dashboard context crosses into React/JSON. */
+export function redactMerchantIntegrationContext<T>(merchant: T): T {
+  if (!isRecord(merchant)) return merchant;
+  const safe: JsonRecord = redactMerchantFeatureSettingsResponse(merchant);
+  if (isRecord(safe.feature_settings))
+    safe.feature_settings = redactMerchantFeatureSettingsResponse(
+      safe.feature_settings
+    );
+  return safe as T;
 }

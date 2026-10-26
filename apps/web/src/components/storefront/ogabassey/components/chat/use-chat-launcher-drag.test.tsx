@@ -161,6 +161,19 @@ describe('useChatLauncherDrag', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('commits a moved position and suppresses activation when capture is lost mid-drag', () => {
+    const { pointer, click, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('lostpointercapture', 120, 220);
+
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(100px, 200px, 0)',
+    );
+    click(120, 220);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('does not swallow later keyboard activation when a drag emits no click', () => {
     vi.useFakeTimers();
     const { pointer, button, onOpen } = setup();

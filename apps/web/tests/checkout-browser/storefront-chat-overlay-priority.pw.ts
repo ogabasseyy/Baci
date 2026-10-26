@@ -203,7 +203,7 @@ test('focused launcher remains reachable and pauses promotional overlays', async
   }
 });
 
-test('an open conversation stays above the non-modal consent banner', async ({
+test('consent remains visible alongside an open conversation', async ({
   page,
 }) => {
   await page.setContent(`
@@ -218,7 +218,7 @@ test('an open conversation stays above the non-modal consent banner', async ({
   `);
 
   await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
-  await expect(page.locator('.storefront-cookie-consent')).toBeHidden();
+  await expect(page.locator('.storefront-cookie-consent')).toBeVisible();
 
   await page
     .locator('.ogabassey-chat-window')

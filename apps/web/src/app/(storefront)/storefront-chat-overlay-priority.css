@@ -1,15 +1,11 @@
 /* Imported with storefront core so deferred widget styles cannot cause an
-   overlapping flash. The non-modal privacy banner waits for an open chat;
-   dismissible promotional overlays yield to active assistant chrome. */
-body:has(.ogabassey-chat-anchor .ogabassey-chat-window)
-.storefront-cookie-consent {
-  display: none;
-}
+   overlapping flash. Consent stays visible above chat; promotional overlays
+   yield to active assistant chrome. */
 
 body:has(.storefront-cookie-consent)
-  .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
-    :focus-within
-  ):not([data-chat-launcher-dragging]),
+.ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(:focus-within):not(
+  [data-chat-launcher-dragging]
+),
 body:has(.storefront-cookie-consent) .ogabassey-offer-popup,
 body:has(.storefront-cookie-consent) .ogabassey-newsletter-popup {
   display: none;

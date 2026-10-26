@@ -108,9 +108,19 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
       '.ogabassey-chat-anchor'
     );
     if (chatAnchor && getComputedStyle(chatAnchor).display === 'none') {
-      focusTarget = document.querySelector<HTMLElement>(
-        '.ogabassey-newsletter-popup button:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
+      const promotion = document.querySelector<HTMLElement>(
+        '.ogabassey-newsletter-popup button[aria-label="Close newsletter"]:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
       );
+      focusTarget =
+        promotion && promotion.tabIndex !== -1 && canReceiveFocus(promotion)
+          ? promotion
+          : ([
+              ...document.querySelectorAll<HTMLElement>(
+                '.ogabassey-newsletter-popup button:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
+              ),
+            ].find(
+              (button) => button.tabIndex >= 0 && canReceiveFocus(button)
+            ) ?? null);
     }
     const focusOrigin = bannerFocusOriginRef.current;
     if (bannerHasFocusRef.current && canReceiveFocus(focusOrigin))

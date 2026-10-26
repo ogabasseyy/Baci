@@ -11,9 +11,9 @@ describe('storefront chat overlay priority CSS', () => {
     expect(overlayCss.split('\n').length).toBeLessThanOrEqual(300);
   });
 
-  it('keeps the non-modal consent banner clear of an open conversation', () => {
-    expect(overlayCss).toMatch(
-      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)\s+\.storefront-cookie-consent\s*\{\s*display:\s*none/
+  it('keeps consent visible when an open conversation is present', () => {
+    expect(overlayCss).not.toMatch(
+      /body:has\(\.ogabassey-chat-anchor\s+\.ogabassey-chat-window\)[\s\S]*?\.storefront-cookie-consent\s*\{\s*display:\s*none/
     );
   });
 

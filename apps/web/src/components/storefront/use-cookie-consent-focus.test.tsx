@@ -54,7 +54,16 @@ function ConsentFocusHarness() {
       {navigated && <p>Repair page loaded</p>}
       {showNewsletter && (
         <div className="ogabassey-newsletter-popup">
-          <button type="button">Close newsletter</button>
+          <button
+            type="button"
+            aria-label="Dismiss newsletter popup backdrop"
+            tabIndex={-1}
+          >
+            Backdrop
+          </button>
+          <button type="button" aria-label="Close newsletter">
+            Close newsletter
+          </button>
         </div>
       )}
       <button type="button" onClick={() => setVisible(true)}>

@@ -261,7 +261,8 @@ export function useChatLauncherDrag(
       onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
         gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
       onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) =>
-        gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
+        gesture.current?.pointerId === event.pointerId &&
+        (dragged.current ? lifecycle.finishGesture() : lifecycle.cancelGesture()),
       style: {
         touchAction: isOpen ? 'auto' : 'none',
         userSelect: 'none',

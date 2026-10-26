@@ -37,11 +37,12 @@ export function useChatLauncherDrag(
   overflowKey: string | boolean = false,
   isHidden = false,
   constraintKey: string | boolean = false,
+  active = true,
 ) {
   const [position, setPosition] = useState<Position | undefined>(initialPosition);
   const positionRef = useRef(position);
   const anchorRef = useRef<HTMLDivElement>(null);
-  useChatLauncherOfferCollision(anchorRef, position);
+  useChatLauncherOfferCollision(anchorRef, position, active);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const dragged = useRef(false);
@@ -64,7 +65,6 @@ export function useChatLauncherDrag(
     positionRef.current = next;
     setPosition(next);
   };
-
   const lifecycle = createChatLauncherGestureLifecycle({
     gesture,
     dragged,
@@ -81,7 +81,6 @@ export function useChatLauncherDrag(
     isOpenRef.current = isOpen;
     isHiddenRef.current = isHidden;
   }, [isOpen, isHidden]);
-
   function reclampPosition() {
     const current = positionRef.current;
     if (gesture.current) {
@@ -107,7 +106,6 @@ export function useChatLauncherDrag(
       commitPosition(next);
     }
   }
-
   function scheduleViewportReclamp() {
     if (gesture.current) {
       viewportReclampPending.current = true;
@@ -119,7 +117,6 @@ export function useChatLauncherDrag(
       reclampPosition();
     });
   }
-
   function handleOverflowAnimationEnd(event: Event) {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -127,6 +124,7 @@ export function useChatLauncherDrag(
     scheduleViewportReclamp();
   }
   useEffect(() => {
+    if (!active) return;
     const clearStaleDragClick = () => {
       clearChatLauncherDragClickOnNewInteraction(suppressedDragClick);
     };
@@ -165,7 +163,7 @@ export function useChatLauncherDrag(
       if (viewportFrame.current !== null)
         cancelAnimationFrame(viewportFrame.current);
     };
-  }, []);
+  }, [active]);
   useBrowserLayoutEffect(() => {
     if (!isOpen && !isHidden && position) reclampPosition();
   }, [constraintKey, isHidden, isOpen, overflowKey, position]);

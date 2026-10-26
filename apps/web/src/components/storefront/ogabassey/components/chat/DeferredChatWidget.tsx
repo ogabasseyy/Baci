@@ -52,6 +52,7 @@ export function DeferredChatWidget({
     false,
     isCartOpen,
     mobileOffset,
+    !ChatRuntime,
   );
   useEffect(() => {
     if (!isLoading && loadFailed && focusLauncherOnMount.current) {

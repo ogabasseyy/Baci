@@ -4,6 +4,22 @@ import { expect, it, vi } from 'vitest';
 import type { Position } from './chat-launcher-geometry';
 import { useChatLauncherOfferCollision } from './use-chat-launcher-offer-collision';
 
+const resizeObservers: Array<TestResizeObserver> = [];
+
+class TestResizeObserver implements ResizeObserver {
+  private callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    resizeObservers.push(this);
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  trigger() {
+    this.callback([], this);
+  }
+}
+
 function Harness({ position }: { position?: Position }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   useChatLauncherOfferCollision(anchorRef, position);
@@ -130,4 +146,43 @@ it('ignores unrelated mutations and defers offer layout reads to one frame', asy
   expect(measureOffer).toHaveBeenCalledOnce();
   requestFrame.mockRestore();
   offer.remove();
+});
+
+it('rechecks overlap when the launcher anchor becomes visible again', async () => {
+  resizeObservers.length = 0;
+  vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  const { getByTestId } = render(<Harness position={{ x: 10, y: 10 }} />);
+  const anchor = getByTestId('launcher-anchor');
+  const offer = document.createElement('div');
+  offer.className = 'ogabassey-offer-popup';
+  document.body.append(offer);
+  const rect = (left: number, top: number) => ({
+    left, top, right: left + 56, bottom: top + 56, width: 56, height: 56,
+    x: left, y: top, toJSON: () => ({}),
+  });
+  vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue(rect(20, 20));
+  vi.spyOn(offer, 'getBoundingClientRect').mockReturnValue({
+    ...rect(0, 0), right: 320, bottom: 240, width: 320, height: 240,
+  });
+  await act(async () => {
+    await Promise.resolve();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+  expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
+
+  vi.mocked(anchor.getBoundingClientRect).mockReturnValue(rect(500, 500));
+  act(() => resizeObservers.at(-1)?.trigger());
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+  expect(anchor).not.toHaveAttribute('data-chat-launcher-offer-collision');
+
+  vi.mocked(anchor.getBoundingClientRect).mockReturnValue(rect(20, 20));
+  act(() => resizeObservers.at(-1)?.trigger());
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
+  expect(anchor).toHaveAttribute('data-chat-launcher-offer-collision');
+  offer.remove();
+  vi.unstubAllGlobals();
 });

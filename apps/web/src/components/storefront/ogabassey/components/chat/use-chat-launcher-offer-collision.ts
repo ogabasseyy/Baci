@@ -6,13 +6,14 @@ const COLLISION_ATTRIBUTE = 'data-chat-launcher-offer-collision';
 export function useChatLauncherOfferCollision(
   anchorRef: { current: HTMLDivElement | null },
   position: Position | undefined,
+  active = true,
 ) {
   const syncCollisionRef = useRef<() => void>(() => {});
   const previousPositionRef = useRef(position);
   const hasPosition = position !== undefined;
 
   useEffect(() => {
-    if (!hasPosition) return;
+    if (!active || !hasPosition) return;
     let observedOffer: HTMLElement | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let syncFrame: number | null = null;
@@ -56,6 +57,7 @@ export function useChatLauncherOfferCollision(
     };
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(scheduleCollisionSync);
+      if (anchorRef.current) resizeObserver.observe(anchorRef.current);
     }
     syncCollisionRef.current = syncCollision;
     syncCollision();
@@ -90,7 +92,7 @@ export function useChatLauncherOfferCollision(
         syncCollisionRef.current = () => {};
       }
     };
-  }, [anchorRef, hasPosition]);
+  }, [active, anchorRef, hasPosition]);
 
   useEffect(() => {
     const previousPosition = previousPositionRef.current;

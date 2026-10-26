@@ -132,6 +132,9 @@ describe('DeferredChatWidget', () => {
     expect(
       await screen.findByText('Loaded chat runtime open'),
     ).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('div[style*="safe-area-inset-bottom"]'),
+    ).toHaveLength(0);
   });
 
   it('announces keyboard load failure, restores focus, and allows retry', async () => {

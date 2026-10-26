@@ -94,8 +94,10 @@ function buildFeaturedProducts(
           normalizedBrands.includes((product.brand ?? '').trim().toLowerCase())
         )
       : [];
+  // When brands are inferred, featured picks stay on-brand; falling back
+  // to the full pool would surface irrelevant child-category products.
   const selectedPool =
-    preferredProducts.length > 0 ? preferredProducts : inStockProducts;
+    normalizedBrands.length > 0 ? preferredProducts : inStockProducts;
 
   return selectedPool
     .slice()

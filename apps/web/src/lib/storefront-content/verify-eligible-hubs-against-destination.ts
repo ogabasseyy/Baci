@@ -15,11 +15,23 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   categorySlug: string;
   hubs: ResolvedEligibleCategoryHubDestinations;
 }): Promise<ResolvedEligibleCategoryHubDestinations> {
+  if (args.hubs.brandHubs.length === 0 && args.hubs.familyHubs.length === 0) {
+    return { brandHubs: [], familyHubs: [] };
+  }
   // The destination loaders 404 without an active categories row, even
-  // when denormalized product data matches the slug.
-  const category = await brandAuthorityPublicData
-    .getCategory(args.merchantId, args.categorySlug)
-    .catch(() => null);
+  // when denormalized product data matches the slug. The lookup is bounded
+  // like the inventory scan so a stall degrades to no hub links.
+  let categoryTimer: ReturnType<typeof setTimeout> | undefined;
+  const category = await Promise.race([
+    brandAuthorityPublicData
+      .getCategory(args.merchantId, args.categorySlug)
+      .catch(() => null),
+    new Promise<null>((resolve) => {
+      categoryTimer = setTimeout(() => resolve(null), 3_000);
+    }),
+  ]).finally(() => {
+    if (categoryTimer) clearTimeout(categoryTimer);
+  });
   if (!category) {
     return { brandHubs: [], familyHubs: [] };
   }

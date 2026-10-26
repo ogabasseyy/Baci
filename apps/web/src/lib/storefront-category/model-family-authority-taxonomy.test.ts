@@ -231,6 +231,29 @@ describe('model family authority taxonomy', () => {
     ).toBe(true);
   });
 
+  it('rejects Samsung accessory names for Galaxy A/S families', () => {
+    const galaxyS = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-s'
+    );
+    const galaxyA = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-a'
+    );
+    if (!galaxyS || !galaxyA) throw new Error('Expected Galaxy entries');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyS, 'Samsung S Pen Pro')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyA, 'Samsung A Cover')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(galaxyS, 'Galaxy S24 Ultra')
+    ).toBe(true);
+  });
+
   it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
     const phantom = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

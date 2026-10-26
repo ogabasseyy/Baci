@@ -159,20 +159,14 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'galaxy-a',
     'Samsung Galaxy A',
     /^(?:Samsung )?(?:Galaxy )?A(?=\d|\s+\d|\s+(?:Series|Ultra|Plus|FE)\b|$)/i,
-    [
-      /\bGalaxy\s+A(?=\s|\d|$)/i,
-      /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)A[0-9]{2}\b|(?:^|[.!?]\s*)(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\b(?:Samsung|Galaxy)\b(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\bA[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)|(?:^|[.!?]\s*)(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\bA[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,
-    ]
+    [/\bGalaxy\s+A(?=\s|\d|$)/i]
   ),
   fam(
     'samsung',
     'galaxy-s',
     'Samsung Galaxy S',
     /^(?:Samsung )?(?:Galaxy )?S(?=\d|\s+\d|\s+(?:Ultra|Plus|FE)\b|$)/i,
-    [
-      /\bGalaxy\s+S(?=\s|\d|$)/i,
-      /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)S[0-9]{2}\b|(?:^|[.!?]\s*)(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\b(?:Samsung|Galaxy)\b(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\bS[0-9]{2}\b|(?:^|[.!?]\s*)(?:(?!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b)[^.!?])*?\bS[0-9]{2}\b(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,
-    ]
+    [/\bGalaxy\s+S(?=\s|\d|$)/i]
   ),
   fam(
     'samsung',
@@ -273,6 +267,41 @@ function matchesProduct(entry: ModelFamilyAuthorityEntry, productName: string) {
   return entry.productNamePattern.test(trimmed);
 }
 
+const BARE_SAMSUNG_MODEL_RIVALS =
+  'Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus';
+
+function matchesBareSamsungModel(content: string, letter: 'A' | 'S'): boolean {
+  const rivalPattern = new RegExp(
+    `\\b(?:${BARE_SAMSUNG_MODEL_RIVALS})\\b`,
+    'i'
+  );
+  for (const sentence of content.split(/[.!?]+/)) {
+    const tokenPattern = new RegExp(`\\b${letter}[0-9]{2}\\b`, 'gi');
+    for (const match of sentence.matchAll(tokenPattern)) {
+      const index = match.index ?? 0;
+      if (
+        letter === 'A' &&
+        /^\s+(?:Pro|Bionic|chip)\b/i.test(
+          sentence.slice(index + match[0].length)
+        )
+      ) {
+        continue;
+      }
+      const before = sentence.slice(0, index);
+      if (rivalPattern.test(before)) {
+        continue;
+      }
+      if (
+        /\b(?:Samsung|Galaxy)\b/i.test(before) ||
+        /\b(?:Samsung|Galaxy)\b/i.test(sentence)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function matchesContent(
   entry: ModelFamilyAuthorityEntry,
   content: string
@@ -282,10 +311,21 @@ function matchesContent(
     return false;
   }
   if (entry.embeddedPatterns && entry.embeddedPatterns.length > 0) {
-    // Bound the scan: embedded patterns include tempered clauses whose
-    // cost grows with input length, and model mentions live up front.
+    // Bound the scan; model mentions live toward the front of post text.
     const bounded = trimmed.slice(0, 1000);
-    return entry.embeddedPatterns.some((pattern) => pattern.test(bounded));
+    if (entry.embeddedPatterns.some((pattern) => pattern.test(bounded))) {
+      return true;
+    }
+    if (
+      entry.brandKey === 'samsung' &&
+      (entry.familyKey === 'galaxy-a' || entry.familyKey === 'galaxy-s')
+    ) {
+      return matchesBareSamsungModel(
+        bounded,
+        entry.familyKey === 'galaxy-a' ? 'A' : 'S'
+      );
+    }
+    return false;
   }
   return matchesProduct(entry, trimmed);
 }

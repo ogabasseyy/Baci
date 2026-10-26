@@ -12,6 +12,13 @@ describe('normalizeInferredBrands', () => {
       expect(result).toEqual(['xiaomi']);
     });
 
+    it('drops generic tokens but keeps brands sharing their category slug', () => {
+      expect(
+        normalizeInferredBrands('gaming', ['playstation', 'gaming'])
+      ).toEqual(['playstation']);
+      expect(normalizeInferredBrands('xbox', ['xbox'])).toEqual(['xbox']);
+    });
+
     it('filters out empty or invalid brand tokens', () => {
       const result = normalizeInferredBrands('smartphones', [
         'Samsung',

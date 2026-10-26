@@ -35,10 +35,11 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
   function handleBlur(event: FocusEvent<HTMLDivElement>) {
     const nextFocus = event.relatedTarget;
     if (
+      !dismissThroughBannerRef.current &&
       !viewChangeFocusRef.current &&
       ((nextFocus instanceof Node &&
         !event.currentTarget.contains(nextFocus)) ||
-        (nextFocus === null && !dismissThroughBannerRef.current))
+        nextFocus === null)
     ) {
       bannerHasFocusRef.current = false;
     }
@@ -114,6 +115,11 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
           !currentFocus.isConnected ||
           currentFocus.closest('.ogabassey-chat-anchor')
         ) {
+          const launcher = chatAnchor.querySelector<HTMLButtonElement>(
+            '.ogabassey-chat-button'
+          );
+          if (launcher && !restoreFocusRef.current)
+            restoreFocusRef.current = launcher;
           bannerRef.current
             ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
             ?.focus();

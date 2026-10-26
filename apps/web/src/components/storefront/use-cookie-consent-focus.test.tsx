@@ -11,7 +11,11 @@ function ConsentFocusHarness() {
   return (
     <>
       <div className="ogabassey-chat-anchor">
-        <button type="button" onClick={() => setChatOpen((open) => !open)}>
+        <button
+          type="button"
+          className="ogabassey-chat-button"
+          onClick={() => setChatOpen((open) => !open)}
+        >
           Assistant launcher
         </button>
         {chatOpen && (
@@ -71,7 +75,12 @@ it('moves focus to consent when an open chat covering it closes', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Close conversation' }));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  expect(dismiss).toHaveFocus();
+  fireEvent.click(dismiss);
+  expect(
+    screen.getByRole('button', { name: 'Assistant launcher' })
+  ).toHaveFocus();
 });
 
 it('moves focus to consent when the launcher toggle closes an open chat', async () => {
@@ -85,5 +94,8 @@ it('moves focus to consent when the launcher toggle closes an open chat', async 
   fireEvent.click(launcher);
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  expect(screen.getByRole('button', { name: 'Dismiss consent' })).toHaveFocus();
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  expect(dismiss).toHaveFocus();
+  fireEvent.click(dismiss);
+  expect(launcher).toHaveFocus();
 });

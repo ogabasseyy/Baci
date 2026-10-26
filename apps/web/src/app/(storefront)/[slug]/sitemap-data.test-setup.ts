@@ -4,7 +4,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.NEXT_PUBLIC_ROOT_DOMAIN = 'usebaci.com';
 
-export let _mockHeaders = new Map<string, string>();
+export let mockHeaders = new Map<string, string>();
 export const mockGetMerchantByIdentifier = vi.fn();
 export const mockGetCachedCategoryPageData = vi.fn();
 export const mockGetCachedCategoryProductCounts = vi.fn();
@@ -67,15 +67,15 @@ export function createEq(table: string) {
 }
 
 export function _setCustomDomainHeader(domain: string) {
-  _mockHeaders = new Map<string, string>([['x-custom-domain', domain]]);
+  mockHeaders = new Map<string, string>([['x-custom-domain', domain]]);
 }
 
 export function _setMerchantDomainHeader(domain: string) {
-  _mockHeaders = new Map<string, string>([['x-merchant-domain', domain]]);
+  mockHeaders = new Map<string, string>([['x-merchant-domain', domain]]);
 }
 
 export function _setHostHeader(host: string) {
-  _mockHeaders = new Map<string, string>([['host', host]]);
+  mockHeaders = new Map<string, string>([['host', host]]);
 }
 
 export function _mockProductsQuery(data: unknown, error: Error | null = null) {
@@ -93,7 +93,7 @@ export function registerSitemapDataTests() {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    _mockHeaders = new Map();
+    mockHeaders = new Map();
     mockQueryResults.clear();
     mockSelectCalls.length = 0;
     mockGetMerchantByIdentifier.mockResolvedValue({
@@ -115,3 +115,11 @@ export function registerSitemapDataTests() {
     mockBuildCommercialSupportDiscoveryLinks.mockReturnValue([]);
   });
 }
+
+export {
+  _mockProductsQuery as mockProductsQuery,
+  _setCustomDomainHeader as setCustomDomainHeader,
+  _setHostHeader as setHostHeader,
+  _setMerchantDomainHeader as setMerchantDomainHeader,
+  mockHeaders as _mockHeaders,
+};

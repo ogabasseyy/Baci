@@ -61,7 +61,10 @@ jobs:
   build-and-deploy:
     name: Build Storefront AAB & Upload to Play Store
     runs-on: baci-android
-    timeout-minutes: 90
+    # Patched ReactAndroid and Hermes compile from source for all four ABIs.
+    # The measured cold source build exceeds a single 330-minute step. Give
+    # native libraries and app packaging separate budgets, plus upload/cleanup.
+    timeout-minutes: 600
 
     steps:
       - name: Checkout
@@ -79,6 +82,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Validate native build time budget
+        run: node --test .github/scripts/android-storefront-release-budget.test.mjs
 
       - name: Setup pnpm
         id: setup_pnpm
@@ -105,6 +111,10 @@ jobs:
         with:
           store-dir: ${{ env.PNPM_STORE_DIR }}
           pnpm-bin-dir: ${{ steps.setup_pnpm.outputs.bin_dest }}
+
+      # Keep this runner's build state outside the shared ~/.gradle cleanup path.
+      - name: Configure dedicated Gradle home
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" configure-gradle-home
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
@@ -210,6 +220,14 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" fix-splash
 
+      - name: Compile patched React Native and Hermes
+        timeout-minutes: 360
+        working-directory: ${{ env.WORKING_DIR }}/android
+        env:
+          GRADLE_OPTS: ${{ env.ANDROID_GRADLE_OPTS }}
+          NODE_OPTIONS: ${{ env.ANDROID_NODE_OPTIONS }}
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" build-native
+
       - name: Decode keystore
         working-directory: ${{ env.WORKING_DIR }}
         env:
@@ -217,6 +235,7 @@ jobs:
         run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" decode-keystore
 
       - name: Build Android App Bundle (storefront)
+        timeout-minutes: 180
         working-directory: ${{ env.WORKING_DIR }}/android
         env:
           GRADLE_OPTS: ${{ env.ANDROID_GRADLE_OPTS }}

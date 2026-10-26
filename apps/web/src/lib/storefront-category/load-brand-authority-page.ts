@@ -6,6 +6,7 @@ import {
   type RawDbProduct,
 } from '@/lib/normalize-product';
 import { buildStoreUrl } from '@/lib/store-url';
+import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
@@ -15,10 +16,11 @@ import type { SupportedClusterCategory } from '@/lib/storefront-content/content-
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 
-interface BrandAuthorityPageProduct {
+export interface BrandAuthorityPageProduct {
   id: string;
   name: string;
   slug: string;
@@ -55,7 +57,7 @@ async function getBrandAuthorityStorefrontPathPrefix(
     headersList.has('x-merchant-slug') ||
     isDomainIdentifier(routeIdentifier)
     ? ''
-    : `/${merchantSlug}`;
+    : getStorefrontPathPrefix(headersList, merchantSlug);
 }
 
 async function loadBrandAuthorityPage(
@@ -97,23 +99,16 @@ async function loadBrandAuthorityPage(
   );
   if (!categoryData) return null;
 
-  let brandProducts: RawDbProduct[];
-  try {
-    brandProducts = await getCachedBrandAuthorityProducts(
-      merchant.id,
-      args.categorySlug,
-      authorityEntry
-    );
-  } catch (error) {
-    console.warn('Failed to load brand authority products', {
-      merchantId: merchant.id,
-      categorySlug: args.categorySlug,
-      brandKey: authorityEntry.brandKey,
-      error,
-    });
-    return null;
-  }
-  const normalizedProducts = (brandProducts as unknown[])
+  const brandProducts = await getCachedBrandAuthorityProducts(
+    merchant.id,
+    args.categorySlug,
+    authorityEntry,
+    { limit: null }
+  );
+
+  const allInStockProducts: BrandAuthorityPageProduct[] = (
+    brandProducts as unknown[]
+  )
     .filter(isRawDbProduct)
     .map((product) =>
       normalizeProduct(product, { preferredCategorySlug: args.categorySlug })
@@ -124,15 +119,8 @@ async function loadBrandAuthorityPage(
           authorityEntry,
           product.brand ?? null
         ) && product.availability === 'InStock'
-    );
-  const isIndexable =
-    normalizedProducts.length >= authorityEntry.minimumProducts;
-  if (!isIndexable) {
-    return null;
-  }
-
-  const products: BrandAuthorityPageProduct[] = normalizedProducts.map(
-    (product) => ({
+    )
+    .map((product) => ({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -147,8 +135,19 @@ async function loadBrandAuthorityPage(
       product_key_specs: product.product_key_specs,
       image: product.image,
       description: product.description,
-    })
+    }));
+
+  const isIndexable =
+    allInStockProducts.length >= authorityEntry.minimumProducts;
+  if (!isIndexable) {
+    return null;
+  }
+
+  const products: BrandAuthorityPageProduct[] = allInStockProducts.slice(
+    0,
+    BRAND_AUTHORITY_PRODUCT_LIMIT
   );
+
   const storeUrl = buildStoreUrl(merchant);
   const categoryName = categoryData.name;
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/brands/${authorityEntry.brandKey}`;
@@ -168,8 +167,8 @@ async function loadBrandAuthorityPage(
           authorityEntry.brandKey,
           ...(authorityEntry.brandAliases ?? []),
         ],
-        productNames: normalizedProducts.map((product) => product.name),
-        productSlugs: normalizedProducts.map((product) => product.slug),
+        productNames: products.map((product) => product.name),
+        productSlugs: products.map((product) => product.slug),
       }
     : null;
   const guidePosts =
@@ -179,7 +178,7 @@ async function loadBrandAuthorityPage(
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
-      const productCount = products.filter((product) =>
+      const productCount = allInStockProducts.filter((product) =>
         modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
       ).length;
       return productCount >= entry.minimumProducts
@@ -207,6 +206,7 @@ async function loadBrandAuthorityPage(
     categoryName,
     brand: authorityEntry,
     products,
+    brandInventory: { products: allInStockProducts },
     guideLinks:
       guideContext && options.includeGuideLinks !== false
         ? buildCommercialGuideLinks({

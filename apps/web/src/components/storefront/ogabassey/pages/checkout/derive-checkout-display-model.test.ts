@@ -105,6 +105,7 @@ describe('deriveCheckoutDisplayModel', () => {
     expect(model.mobileSummaryCart).toEqual([
       {
         brand: '',
+        variantAttributes: {},
         cartItemId: 'line-1',
         description: '',
         gtin: '',
@@ -181,5 +182,26 @@ describe('deriveCheckoutDisplayModel', () => {
 
     expect(model.summarySubtotal).toBe(0);
     expect(model.effectiveItemSubtotal).toBe(0);
+  });
+});
+
+it('preserves resumed condition and variant in both summary models', () => {
+  const order = resumedOrder();
+  order.items[0].condition = 'new';
+  order.items[0].variant_name = '512GB / Physical + eSIM / Silver';
+  const model = deriveCheckoutDisplayModel({
+    checkoutCart: [],
+    checkoutCartTotal: 0,
+    currencyCode: 'NGN',
+    itemSubtotal: 0,
+    resumedOrder: order,
+  });
+  expect(model.displayItems[0]).toMatchObject({
+    condition: 'new',
+    variant_name: '512GB / Physical + eSIM / Silver',
+  });
+  expect(model.mobileSummaryCart[0].variantAttributes).toEqual({
+    condition: 'new',
+    variant: '512GB / Physical + eSIM / Silver',
   });
 });

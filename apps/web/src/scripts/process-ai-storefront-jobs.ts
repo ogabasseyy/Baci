@@ -1,3 +1,5 @@
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
+import { storedStorefrontLayoutJobInputSchema } from '@/schemas/ai-jobs';
 import 'dotenv/config';
 
 import { createClient } from '@supabase/supabase-js';
@@ -137,7 +139,7 @@ export async function processAiStorefrontJobs({
         supabase,
         jobId: claimedJob.id,
         merchantId: claimedJob.merchant_id,
-        input: storefrontLayoutJobInputSchema.parse(claimedJob.input),
+        input: (BUILDER_PRIVATE_STORAGE_ENABLED?storedStorefrontLayoutJobInputSchema:storefrontLayoutJobInputSchema).parse(claimedJob.input),
       });
 
       const completedAt = new Date().toISOString();

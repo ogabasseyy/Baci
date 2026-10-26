@@ -1,8 +1,8 @@
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
 import type { AddToCartOptions } from './cart-types';
+import { projectDefaultVariantProduct } from './project-default-variant-product';
 
 interface GatedAdd {
   product: Product;
@@ -35,16 +35,7 @@ export function gateAddToCart(
       : options;
   const productForCart =
     defaultVariantSelection && !options?.variantId
-      ? {
-          ...product,
-          price: defaultVariantSelection.price,
-          compare_at_price:
-            defaultVariantSelection.compareAtPrice ?? product.compare_at_price,
-          stock:
-            resolveSerializedVariantStock(defaultVariantSelection.variant) ??
-            defaultVariantSelection.variant.stock_quantity ??
-            product.stock,
-        }
+      ? projectDefaultVariantProduct(product, defaultVariantSelection)
       : product;
 
   // A quiz-prize voucher line redeems a unit that was already reserved for

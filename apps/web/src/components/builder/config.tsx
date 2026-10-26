@@ -34,6 +34,7 @@ import {
   OgabasseyUtilities,
   type OgabasseyUtilitiesProps,
 } from '@/components/storefront/blocks/ogabassey-utilities';
+import { StorefrontTextPresentation } from '@/components/storefront/portable/text-presentation';
 import { StorefrontProductGrid } from '@/components/storefront/product-grid';
 import { ThemedButton } from '@/components/themed/themed-button';
 import { Button } from '@/components/ui/button';
@@ -958,20 +959,11 @@ export const builderConfig: Config<
                 : (animationTrigger as 'scroll' | 'immediate'),
           }}
         >
-          <section className="py-12 container px-4 md:px-6">
-            <div
-              className={cn('max-w-3xl mx-auto', {
-                'text-left': align === 'left',
-                'text-center': align === 'center',
-                'text-right': align === 'right',
-              })}
-            >
-              {title && <h2 className="text-3xl font-bold mb-4">{title}</h2>}
-              <div className="prose dark:prose-invert max-w-none">
-                <p className="text-lg whitespace-pre-wrap">{content}</p>
-              </div>
-            </div>
-          </section>
+          <StorefrontTextPresentation
+            title={title ?? ''}
+            content={content}
+            align={align}
+          />
         </AnimatedWrapper>
       ),
     },

@@ -96,6 +96,11 @@ export function getIntegrationStatus(
   integrationId: string,
   merchant: MerchantData
 ): IntegrationStatus {
+  if (integrationId === 'chatgpt') {
+    return isFilledText(merchant.feature_settings?.chatgpt_pixel_id)
+      ? { actionLabel: 'Manage', label: 'Pixel configured', state: 'partial' }
+      : STATUS_COPY.not_configured;
+  }
   if (integrationId === 'google-merchant') {
     return STATUS_COPY.feed_ready;
   }

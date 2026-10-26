@@ -83,6 +83,12 @@ exit 73
       join(binDirectory, 'ssh'),
       `#!/usr/bin/env bash
 touch "\${TEST_SSH_MARKER}"
+case "$*" in
+  *".config/baci/remediation.disabled"*)
+    echo enabled
+    exit 0
+    ;;
+esac
 if [ "\${TEST_SCENARIO:-}" = "remote-preflight-failure" ]; then
   payload="$(cat)"
   case "$* $payload" in

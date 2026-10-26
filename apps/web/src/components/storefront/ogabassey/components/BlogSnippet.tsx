@@ -16,10 +16,10 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import {
   BLOG_POST_PRODUCT_LINKS_SELECT,
-  normalizeBlogPostProductLink,
   type BlogPostProductLinkRow,
+  normalizeBlogPostProductLink,
 } from '@/lib/blog-post-product-links';
-import { createClient } from '@/lib/supabase/client';
+import { waitForLcpWindowEnd } from '@/lib/posthog/wait-for-lcp';
 
 interface BlogSnippetProps {
   category: string;
@@ -47,14 +47,21 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
   const [post, setPost] = useState<BlogPost | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     async function fetchRelatedBlog() {
       if (!merchantId) {
         return;
       }
 
-      const supabase = createClient();
-
       try {
+        // This recommendation is below the PDP: do not compete with its hero
+        // for the SDK, network or main thread. Reuse the bounded LCP/interaction
+        // signal already used by the storefront's deferred UI.
+        await waitForLcpWindowEnd();
+        if (cancelled) return;
+        const { createClient } = await import('@/lib/supabase/client');
+        if (cancelled) return;
+        const supabase = createClient();
         // Prefer explicit product-post links authored by the content agent.
         if (productId) {
           const { data: explicitLinks, error: explicitLinksError } =
@@ -82,7 +89,7 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
             .find((candidate) => candidate !== null);
 
           if (explicitPost) {
-            setPost(explicitPost);
+            if (!cancelled) setPost(explicitPost);
             return;
           }
 
@@ -117,7 +124,7 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
             }
 
             if (!matchError && matches && matches.length > 0) {
-              setPost(matches[0]);
+              if (!cancelled) setPost(matches[0]);
               return;
             }
           }
@@ -147,7 +154,7 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
           }
 
           if (categoryPosts && categoryPosts.length > 0) {
-            setPost(categoryPosts[0]);
+            if (!cancelled) setPost(categoryPosts[0]);
             return;
           }
         }
@@ -165,11 +172,14 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
           .limit(1);
 
         if (recentPostsError) {
-          console.error('Error fetching recent blog snippet:', recentPostsError);
+          console.error(
+            'Error fetching recent blog snippet:',
+            recentPostsError
+          );
         }
 
         if (recentPosts && recentPosts.length > 0) {
-          setPost(recentPosts[0]);
+          if (!cancelled) setPost(recentPosts[0]);
         }
       } catch (error) {
         console.error('Error fetching related blog:', error);
@@ -177,6 +187,9 @@ export const BlogSnippet: React.FC<BlogSnippetProps> = ({
     }
 
     fetchRelatedBlog();
+    return () => {
+      cancelled = true;
+    };
   }, [productId, merchantId, category]);
 
   // Don't render until a post is found (output is null while loading either way)

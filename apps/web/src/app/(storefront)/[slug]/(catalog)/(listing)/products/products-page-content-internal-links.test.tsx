@@ -219,6 +219,17 @@ describe('ProductsPageContent maintained buying path modules', () => {
 
     render(result as React.ReactElement);
 
+    // Late SEO enrichment must never insert above the already-painted catalog.
+    expect(
+      screen
+        .getByRole('heading', { name: 'No products available' })
+        .compareDocumentPosition(
+          screen.getByRole('region', {
+            name: 'Deferred maintained products links',
+          })
+        )
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
     expect(
       screen.getByRole('region', {
         name: 'Deferred maintained products links',

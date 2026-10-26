@@ -1,0 +1,53 @@
+{
+  "name": "baci-builder-staging",
+  "productionAllowed": false,
+  "submissionsAllowed": false,
+  "host": "82.29.190.219",
+  "user": "bassey",
+  "releaseRoot": "/home/bassey/baci-builder-staging",
+  "hosts": {
+    "web": "builder-staging.usebaci.com",
+    "auth": "builder-auth-staging.usebaci.com",
+    "mcp": "builder-mcp-staging.usebaci.com",
+    "storefrontWildcard": "*.builder-sites-staging.usebaci.com"
+  },
+  "listeners": {
+    "web": "127.0.0.1:18890",
+    "auth": "127.0.0.1:18891",
+    "mcp": "127.0.0.1:18892"
+  },
+  "workers": [
+    "baci-builder-staging-edit-runner",
+    "baci-builder-staging-publication-verifier"
+  ],
+  "database": {
+    "mode": "isolated-local-postgresql",
+    "major": 17,
+    "observedVersion": "17.11",
+    "binDirectory": "/opt/homebrew/opt/postgresql@17/bin",
+    "listener": "Unix socket only; no TCP",
+    "storage": "owned disposable local fixture directories",
+    "copyProductionData": false,
+    "forbiddenProjectRefs": ["aivqthbxdshhltbwipbr", "fjeivihgcwpvbvsqtapq"]
+  },
+  "credentials": [
+    "separate outer ES256 signing key",
+    "separate cookie signing keys",
+    "separate AES-GCM vault keys",
+    "dedicated upstream OAuth client",
+    "auth-storage database role",
+    "INSERT-only publication-verifier role"
+  ],
+  "migrationRegistry": "apps/web/tools/db/supabase-history-replay-builder-pending-sources.ts",
+  "automaticDeployment": false,
+  "activation": "BLOCKED_PENDING_QUALIFICATION",
+  "localOnly": true,
+  "remoteProvisioningAuthorized": false,
+  "remoteProposal": {
+    "projectName": "baci-builder-staging",
+    "organization": "rywjlzuhibxdfmtvdzrf",
+    "quotedMonthlyUSD": 10,
+    "costApproved": false,
+    "decision": "Owner requested local database; no hosted project creation"
+  }
+}

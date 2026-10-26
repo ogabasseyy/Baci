@@ -1,3 +1,6 @@
+import { parseConnectedCartReply, type ConnectedCartReply } from '../connected-cart-reply';
+import { readStructuredContent } from '../parse-cart-tool-output';
+import { widgetHost } from '../widget-host';
 import { openOgabasseyUrl } from '../open-ogabassey-url';
 import {
   buildReviewCartUrl,
@@ -8,6 +11,8 @@ import type { CartItem } from '../widget-types';
 export interface CartReviewOptions {
   cart: CartItem[];
   cartUrl: string | undefined;
+  connectionCartId?: string;
+  onConnectedRefresh?: (reply: ConnectedCartReply) => void;
   /** Shared add/remove/view serialization flag. */
   busy: { current: boolean };
   setCartError: (message: string | null) => void;
@@ -25,6 +30,26 @@ export function useCartReview(options: CartReviewOptions) {
     (cart.length > 0 && !!cartUrl) || hasReviewableHandoffLines(cartUrl);
   const handleViewCart = () => {
     if (busy.current || !canReviewCart) return;
+    if (options.connectionCartId) {
+      return (async () => {
+      const host = widgetHost.get();
+      if (!host?.callTool) { setCartError('Could not refresh your connected cart.'); return; }
+      let pending: Window | null = null;
+      busy.current = true;
+      setCartError(null);
+      try {
+        pending = host.openExternal ? null : window.open('about:blank', '_blank');
+        if (pending) pending.opener = null;
+        const result = await host.callTool('get_ogabassey_guest_cart', {});
+        const current = parseConnectedCartReply(readStructuredContent(result));
+        if (!current || current.cartId !== options.connectionCartId) throw new Error('Cart unavailable');
+        options.onConnectedRefresh?.(current);
+        if (!current.items.length) { pending?.close(); setCartError('Your connected cart is empty.'); return; }
+        if (!openOgabasseyUrl(current.url, pending)) throw new Error('Navigation blocked');
+      } catch { pending?.close(); setCartError('Could not refresh your connected cart. Please retry.'); }
+      finally { busy.current = false; }
+      })();
+    }
     try {
       const reviewUrl = cartUrl ? buildReviewCartUrl(cartUrl) : null;
       // A rejected URL (wrong path, foreign origin) must surface: the

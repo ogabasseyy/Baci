@@ -5,6 +5,7 @@ const EVENT_DESTINATIONS: readonly EventRouteDestination[] = [
   'ga4',
   'snapchat',
   'tiktok',
+  'chatgpt',
 ];
 
 export function getEventPipelineActiveDestinations(): EventRouteDestination[] {

@@ -12,6 +12,7 @@ import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
+import { useCartCheckoutRecovery } from '@/components/cart/use-cart-checkout-recovery';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
 import { useCartScreenItemHandlers } from '@/components/cart/use-cart-screen-item-handlers';
@@ -23,12 +24,11 @@ import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useHaptics } from '@/hooks/use-haptics';
 import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
-import { sharedCartCheckoutReady } from '@/lib/cart/checkout-ready';
 import { isValidCartStore } from '@/lib/cart-validation';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { formatPrice, useCartStore } from '@/stores/cart-store';
-import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
 
 export default function CartScreen() {
   // Reconcile lines stamped pending while the setting was unknown: a
@@ -108,20 +108,16 @@ export default function CartScreen() {
     triggerHaptic,
   });
 
-  const handleCheckout = () => {
-    triggerHaptic();
-    if (!sharedCartCheckoutReady(useNativeSharedCartStore.getState())) {
-      Alert.alert(
-        'Cart is syncing',
-        'Finish syncing your cart before checkout.'
-      );
-      return;
-    }
+  const { recoverCheckout, isPreparing } = useCartCheckoutRecovery(() => {
     if (isAuthenticated) {
       router.push('/checkout');
     } else {
       setIsIdentityModalOpen(true);
     }
+  });
+  const handleCheckout = () => {
+    triggerHaptic();
+    void recoverCheckout();
   };
 
   const handleReturnHome = () => {
@@ -230,8 +226,13 @@ export default function CartScreen() {
         enableNegotiationModal={enableNegotiationModal}
         formatPrice={formatPrice}
         grandTotal={grandTotal}
+        isPreparingCheckout={isPreparing}
         handleCheckout={handleCheckout}
         handleClearCart={() => {
+          // Intent-to-open fencing: a confirmed clear must never land
+          // under an in-flight checkout, even at the cost of one
+          // spurious Cart changed alert when the dialog is cancelled.
+          markSharedCartIntent();
           Alert.alert('Clear Cart', 'Remove all items from your cart?', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Clear', style: 'destructive', onPress: clearCart },

@@ -1,4 +1,5 @@
-import type { CachedMerchant } from '@/lib/cached-data';
+// URL formatting needs only public identity, not the storefront data loader.
+type StoreUrlMerchant = { slug: string; custom_domain?: string };
 
 const ROOT_DOMAIN = (
   process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com'
@@ -53,9 +54,7 @@ function inferProtocol(host: string, headersList: Headers): 'http' | 'https' {
  * Custom:    https://ogabassey.com             (domain-mode, no slug)
  * Subdomain: https://ogabassey.usebaci.com     (domain-mode, no slug)
  */
-export function buildStoreUrl(
-  merchant: Pick<CachedMerchant, 'slug' | 'custom_domain'>
-): string {
+export function buildStoreUrl(merchant: StoreUrlMerchant): string {
   if (process.env.NODE_ENV === 'development') {
     return `http://localhost:3000/${merchant.slug}`;
   }
@@ -76,7 +75,7 @@ export function buildStoreUrl(
 }
 
 export function buildRequestScopedStoreUrl(
-  merchant: Pick<CachedMerchant, 'slug' | 'custom_domain'>,
+  merchant: StoreUrlMerchant,
   headersList: Headers
 ): string {
   const configuredCustomDomain = normalizeCustomDomain(merchant.custom_domain);

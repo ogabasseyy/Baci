@@ -126,6 +126,26 @@ export async function GET(request: NextRequest) {
     );
 
     if (!fetched.ok) {
+      if (fetched.failure === 'budget_limit_reached') {
+        console.warn('[Address API] Google details budget limit reached');
+        return NextResponse.json(
+          {
+            error: 'Address suggestions are temporarily limited',
+            code: 'PLACES_DETAILS_BUDGET_LIMIT_REACHED',
+          },
+          { status: 429 }
+        );
+      }
+      if (fetched.failure === 'budget_unavailable') {
+        console.warn('[Address API] Google details budget unavailable');
+        return NextResponse.json(
+          {
+            error: 'Address suggestions are temporarily unavailable',
+            code: 'PLACES_DETAILS_BUDGET_UNAVAILABLE',
+          },
+          { status: 503 }
+        );
+      }
       console.error('[Places API] Details HTTP error:', fetched.status);
       return NextResponse.json(
         {

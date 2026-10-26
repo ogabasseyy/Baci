@@ -3,31 +3,42 @@ import { storefrontPreflightRpcMemo } from '@/lib/storefront-preflight-rpc-memo'
 import { createPublicClient } from '@/lib/supabase/public';
 import { createAbortSignalTimeout } from './abort-signal-timeout';
 import type { StorefrontInternalPreflightSurface } from './storefront-internal-preflight';
-import {
-  storefrontInternalPreflight,
-  UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
-} from './storefront-internal-preflight';
+import { storefrontInternalPreflight } from './storefront-internal-preflight';
 import { createStorefrontPreflightCircuitBreaker } from './storefront-preflight-circuit-breaker';
+import {
+  createStorefrontPreflightRpcAttemptRecorder,
+  type StorefrontPreflightRpcAttempt,
+} from './storefront-preflight-rpc-attempt';
 import { classifyRpcErrorReason } from './storefront-preflight-rpc-error';
+import { boundedStorefrontPreflightRpcErrorDetail } from './storefront-preflight-rpc-error-detail';
 import {
   snapshotStorefrontPreflightRpcArgs,
   storefrontPreflightRpcFlightKey,
   storefrontPreflightRpcFlights,
 } from './storefront-preflight-rpc-flight';
+import { classifyStorefrontPreflightRpcOutcome } from './storefront-preflight-rpc-outcome';
+import { getStorefrontPreflightRpcThrownErrorDetail } from './storefront-preflight-rpc-thrown-detail';
 
-/** Direct-Supabase transport for the proxy middleware's storefront preflights.
- * One anon PostgREST RPC replaces the internal self-fetch. A short verdict memo
- * and a consecutive-failure breaker bound repeat traffic and brownouts.
- *
- * The RPCs are intentionally anon-GRANTed SECURITY DEFINER public verdict
- * reads. They remain directly callable with the public key, so platform anon
- * rate limiting and the DB statement timeout provide the outer safeguards.
+/** Direct anon PostgREST transport for middleware storefront preflights.
+ * A short verdict memo and consecutive-failure breaker bound repeat traffic.
+ * SECURITY DEFINER public verdict RPCs remain anon-callable; platform rate
+ * limiting and DB statement timeout provide outer safeguards.
  */
 
 export interface StorefrontPreflightRpcContext {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
   slug: string;
+}
+
+export interface StorefrontPreflightRpcSuccess {
+  /** Verdict row; callers must still schema-validate before trusting fields. */
+  data: unknown;
+  /**
+   * Attempt that produced this row, so caller-side schema validation can
+   * correlate its parse fail-open. Null for memoized hits — no RPC ran.
+   */
+  attempt: StorefrontPreflightRpcAttempt | null;
 }
 
 export type StorefrontPreflightRpcResult = {
@@ -82,32 +93,15 @@ function isAbortLikeError(error: unknown): boolean {
 }
 
 /**
- * Bounded, secrets-free `code message` diagnostic for a fail-open. PostgREST
- * error messages carry no secrets; bounding keeps a pathological message from
- * bloating the telemetry payload. Empty → undefined so the property is omitted.
- */
-function boundedErrorDetail(code: string, message: string): string | undefined {
-  return `${code} ${message}`.trim().slice(0, 160) || undefined;
-}
-
-/** Same diagnostic for the rare THROWN (not resolved-`{ error }`) rejection. */
-function thrownErrorDetail(error: unknown): string | undefined {
-  if (error instanceof Error || error instanceof DOMException) {
-    return boundedErrorDetail(error.name, error.message);
-  }
-  return undefined;
-}
-
-/**
- * Calls a preflight verdict RPC and returns its single row, or null after
- * logging/capturing the fail-open (callers return their surface's fail-open
- * verdict on null). Never throws.
+ * Returns one verdict row with its producing attempt, or null after logging
+ * a fail-open; never throws. `success` is transport-level: the caller still
+ * schema-validates `data` and correlates a parse fail-open via `attempt`.
  */
 export async function callStorefrontPreflightRpc(
   fn: string,
   args: Record<string, string>,
   options: CallStorefrontPreflightRpcOptions
-): Promise<unknown | null> {
+): Promise<StorefrontPreflightRpcSuccess | null> {
   const failOpenContext = { ...options.failOpenContext };
   const emptyResult = options.emptyResult;
   const attemptOptions = { emptyResult, failOpenContext };
@@ -132,7 +126,7 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
   if (memoized !== undefined) {
-    return memoized;
+    return { data: memoized, attempt: null };
   }
 
   const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
@@ -163,7 +157,7 @@ async function runStorefrontPreflightRpcAttempt(
   options: CallStorefrontPreflightRpcOptions,
   rpcImpl: StorefrontPreflightRpcImpl,
   timeoutMs: number
-): Promise<unknown | null> {
+): Promise<StorefrontPreflightRpcSuccess | null> {
   const { failOpenContext } = options;
   if (breaker.isOpen()) {
     // Console-only: the transition itself was captured once below.
@@ -174,6 +168,11 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
+  const recordAttempt = createStorefrontPreflightRpcAttemptRecorder({
+    deadlineMs: timeoutMs,
+    rpcName: fn,
+    surface: failOpenContext.surface,
+  });
   const timeout = createAbortSignalTimeout(timeoutMs);
 
   let result: StorefrontPreflightRpcResult;
@@ -181,37 +180,30 @@ async function runStorefrontPreflightRpcAttempt(
     result = await rpcImpl(fn, args, timeout.signal);
   } catch (error) {
     const reason = isAbortLikeError(error) ? 'timeout' : 'fetch-error';
-    if (reason === 'timeout') {
-      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
-    }
-    breaker.recordFailure();
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
+    return handleRpcFailure(
+      key,
+      failOpenContext,
+      recordAttempt,
       reason,
-      detail: thrownErrorDetail(error),
-    });
-    captureBreakerOpenTransition(failOpenContext);
-    return null;
+      getStorefrontPreflightRpcThrownErrorDetail(error)
+    );
   } finally {
     timeout.clear();
   }
 
   if (result.error) {
     const reason = classifyRpcErrorReason(result.error);
-    if (reason === 'timeout') {
-      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
-    }
-    breaker.recordFailure();
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
+    return handleRpcFailure(
+      key,
+      failOpenContext,
+      recordAttempt,
       reason,
-      detail: boundedErrorDetail(
+      boundedStorefrontPreflightRpcErrorDetail(
         result.error.code ?? '',
         result.error.message ?? ''
       ),
-    });
-    captureBreakerOpenTransition(failOpenContext);
-    return null;
+      result.error.code
+    );
   }
 
   breaker.recordSuccess();
@@ -223,63 +215,66 @@ async function runStorefrontPreflightRpcAttempt(
       Array.isArray(result.data) &&
       result.data.length === 0
     ) {
+      recordAttempt('empty-result');
       storefrontPreflightRpcMemo.write(
         key,
         storefrontPreflightRpcMemo.emptyResult
       );
       return null;
     }
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    const attemptContext = recordAttempt('parse-error');
+    storefrontInternalPreflight.warnRpcFailOpen(
+      failOpenContext,
+      attemptContext,
+      'parse'
+    );
     return null;
   }
 
   storefrontPreflightRpcMemo.write(key, row);
-  return row;
+  const attempt = recordAttempt('success');
+  return { data: row, attempt };
+}
+
+function handleRpcFailure(
+  key: string,
+  failOpenContext: StorefrontPreflightRpcContext,
+  recordAttempt: ReturnType<typeof createStorefrontPreflightRpcAttemptRecorder>,
+  reason: 'timeout' | 'fetch-error' | 'has-error',
+  detail?: string,
+  databaseErrorCode?: string
+): null {
+  const attemptContext = recordAttempt(
+    classifyStorefrontPreflightRpcOutcome(reason, databaseErrorCode)
+  );
+  if (reason === 'timeout') {
+    storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
+  }
+  breaker.recordFailure();
+  storefrontInternalPreflight.warnRpcFailOpen(
+    failOpenContext,
+    attemptContext,
+    reason,
+    detail
+  );
+  captureBreakerOpenTransition(failOpenContext, attemptContext);
+  return null;
 }
 
 function captureBreakerOpenTransition(
-  failOpenContext: StorefrontPreflightRpcContext
+  failOpenContext: StorefrontPreflightRpcContext,
+  attempt: StorefrontPreflightRpcAttempt
 ): void {
   if (breaker.consumeOpenTransition()) {
     // Exactly one capture per open transition — its own fingerprint makes a
-    // brownout alertable without a capture per suppressed navigation.
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'circuit-open',
-    });
+    // brownout alertable without a capture per suppressed navigation. Carries
+    // the tripping attempt so it joins the attempt that caused it.
+    storefrontInternalPreflight.warnRpcFailOpen(
+      failOpenContext,
+      attempt,
+      'circuit-open'
+    );
   }
-}
-
-/**
- * Shared storefront-status gate for RPC verdict rows: true only for a
- * published storefront. Unknown/unpublished is the DESIGNED junk-traffic
- * fail-open (skip-logged, no capture — parity with the routes'
- * `failOpenReason: 'unknown-storefront'`); any future status value fails open
- * as a captured has-error.
- */
-export function gateStorefrontPreflightStatus(
-  status: string,
-  failOpenContext: StorefrontPreflightRpcContext
-): boolean {
-  if (status === 'published') {
-    return true;
-  }
-
-  if (status === 'unknown' || status === 'unpublished') {
-    storefrontInternalPreflight.warnSkip({
-      ...failOpenContext,
-      reason: UNKNOWN_STOREFRONT_FAIL_OPEN_REASON,
-    });
-  } else {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'has-error',
-    });
-  }
-  return false;
 }
 
 /** Test hook: clears the verdict memo, breaker state, and client singleton. */

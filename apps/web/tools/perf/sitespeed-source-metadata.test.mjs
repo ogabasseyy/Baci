@@ -281,14 +281,39 @@ it('includes package, lockfile, and Next config edits in source identity', async
 });
 
 describe('git metadata', () => {
-  it('returns stable shape', async () => {
-    const metadata = await gitMetadata(process.cwd());
-    expect(metadata).toEqual(
-      expect.objectContaining({
-        sha: expect.any(String),
-        dirty: expect.any(Boolean),
-        diffHash: expect.any(String),
-      })
-    );
+  it('returns stable shape from its own repository, independent of the active worktree', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'sitespeed-shape-meta-'));
+    try {
+      await exec('git', ['init', '-q'], { cwd });
+      await exec(
+        'git',
+        [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'core.hooksPath=/dev/null',
+          'commit',
+          '--allow-empty',
+          '-qm',
+          'isolated shape fixture',
+        ],
+        { cwd }
+      );
+      const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd });
+      const metadata = await gitMetadata(cwd);
+      expect(metadata).toEqual(
+        expect.objectContaining({
+          sha: stdout.trim(),
+          dirty: false,
+          diffHash: expect.any(String),
+        })
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });

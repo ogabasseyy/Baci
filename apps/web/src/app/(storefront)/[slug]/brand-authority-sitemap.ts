@@ -1,5 +1,4 @@
 import type { MetadataRoute } from 'next';
-import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
@@ -60,14 +59,13 @@ export async function getBrandAuthoritySitemapEntries({
               const familyEntries = modelFamilyAuthorityTaxonomy
                 .getEntries(categorySlug, entry.brandKey)
                 .flatMap((family) => {
-                  const matchingProducts = (inventory.products ?? [])
-                    .slice(0, BRAND_AUTHORITY_PRODUCT_LIMIT)
-                    .filter((product) =>
+                  const matchingProducts = (inventory.products ?? []).filter(
+                    (product) =>
                       modelFamilyAuthorityTaxonomy.matchesProduct(
                         family,
                         product.name
                       )
-                    );
+                  );
                   if (matchingProducts.length < family.minimumProducts) {
                     return [];
                   }

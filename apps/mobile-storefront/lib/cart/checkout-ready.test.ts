@@ -12,6 +12,7 @@ it('permits legacy checkout but requires a confirmed active hydrated shared cart
   for (const change of [
     { status: 'pending' },
     { metadataReady: false },
+    { mergeConflicts: [{ productId: 'product-1' }] },
     { snapshot: null },
     { snapshot: { state: 'completed', lines: [{}] } },
   ])

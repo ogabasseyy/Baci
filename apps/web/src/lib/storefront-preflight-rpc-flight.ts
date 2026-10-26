@@ -1,4 +1,5 @@
 import { SingleFlight } from './single-flight';
+import type { StorefrontPreflightRpcSuccess } from './storefront-preflight-rpc';
 
 type RpcImpl = (...args: never[]) => unknown;
 
@@ -38,17 +39,17 @@ export function storefrontPreflightRpcFlightKey(
 }
 
 class StorefrontPreflightRpcFlights {
-  private reads = new SingleFlight<unknown | null>();
+  private reads = new SingleFlight<StorefrontPreflightRpcSuccess | null>();
 
   run(
     key: string,
-    load: () => Promise<unknown | null>
-  ): Promise<unknown | null> {
+    load: () => Promise<StorefrontPreflightRpcSuccess | null>
+  ): Promise<StorefrontPreflightRpcSuccess | null> {
     return this.reads.run(key, load);
   }
 
   reset(): void {
-    this.reads = new SingleFlight<unknown | null>();
+    this.reads = new SingleFlight<StorefrontPreflightRpcSuccess | null>();
   }
 }
 

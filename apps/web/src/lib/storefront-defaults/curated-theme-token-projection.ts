@@ -19,6 +19,8 @@ export function getCuratedThemeTokenProjection(
     '--theme-accent': colors.accent,
     '--theme-background': colors.background,
     '--theme-foreground': colors.foreground,
+    '--theme-hero-overlay': colors.foreground,
+    '--theme-hero-foreground': colors.background,
     '--theme-muted': colors.muted,
     '--theme-muted-foreground': colors.mutedForeground,
     '--theme-border': colors.border,

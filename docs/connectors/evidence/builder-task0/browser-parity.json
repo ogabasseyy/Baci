@@ -1,0 +1,237 @@
+{
+  "browser": "156.0.8078.47",
+  "publicCss": "compiled src/app/globals.css with Tailwind",
+  "records": [
+    {
+      "width": 375,
+      "blocks": [
+        {
+          "type": "Header",
+          "x": 0,
+          "y": 0,
+          "width": 375,
+          "height": 46,
+          "color": "rgb(0, 0, 0)",
+          "background": "rgb(255, 255, 255)",
+          "font": "Inter, sans-serif",
+          "padding": "8px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Hero",
+          "x": 0,
+          "y": 46,
+          "width": 375,
+          "height": 403.1875,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "96px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Text",
+          "x": 0,
+          "y": 449.1875,
+          "width": 375,
+          "height": 192,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "none"
+        },
+        {
+          "type": "Button",
+          "x": 0,
+          "y": 641.1875,
+          "width": 375,
+          "height": 69,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "16px",
+          "columns": "none"
+        },
+        {
+          "type": "ProductGrid",
+          "x": 0,
+          "y": 710.1875,
+          "width": 375,
+          "height": 490.6875,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "159.5px 159.5px"
+        },
+        {
+          "type": "Footer",
+          "x": 0,
+          "y": 1200.875,
+          "width": 375,
+          "height": 263.1875,
+          "color": "rgb(255, 255, 255)",
+          "background": "rgb(26, 32, 44)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 0px",
+          "columns": "none"
+        }
+      ]
+    },
+    {
+      "width": 768,
+      "blocks": [
+        {
+          "type": "Header",
+          "x": 0,
+          "y": 0,
+          "width": 768,
+          "height": 46,
+          "color": "rgb(0, 0, 0)",
+          "background": "rgb(255, 255, 255)",
+          "font": "Inter, sans-serif",
+          "padding": "8px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Hero",
+          "x": 0,
+          "y": 46,
+          "width": 768,
+          "height": 404,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "96px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Text",
+          "x": 0,
+          "y": 450,
+          "width": 768,
+          "height": 192,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "none"
+        },
+        {
+          "type": "Button",
+          "x": 0,
+          "y": 642,
+          "width": 768,
+          "height": 69,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "16px",
+          "columns": "none"
+        },
+        {
+          "type": "ProductGrid",
+          "x": 0,
+          "y": 711,
+          "width": 768,
+          "height": 542.515625,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "229.328px 229.328px 229.328px"
+        },
+        {
+          "type": "Footer",
+          "x": 0,
+          "y": 1253.515625,
+          "width": 768,
+          "height": 169.59375,
+          "color": "rgb(255, 255, 255)",
+          "background": "rgb(26, 32, 44)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 0px",
+          "columns": "none"
+        }
+      ]
+    },
+    {
+      "width": 1200,
+      "blocks": [
+        {
+          "type": "Header",
+          "x": 0,
+          "y": 0,
+          "width": 1200,
+          "height": 46,
+          "color": "rgb(0, 0, 0)",
+          "background": "rgb(255, 255, 255)",
+          "font": "Inter, sans-serif",
+          "padding": "8px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Hero",
+          "x": 0,
+          "y": 46,
+          "width": 1200,
+          "height": 404,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "96px 0px",
+          "columns": "none"
+        },
+        {
+          "type": "Text",
+          "x": 0,
+          "y": 450,
+          "width": 1200,
+          "height": 192,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "none"
+        },
+        {
+          "type": "Button",
+          "x": 0,
+          "y": 642,
+          "width": 1200,
+          "height": 69,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "16px",
+          "columns": "none"
+        },
+        {
+          "type": "ProductGrid",
+          "x": 0,
+          "y": 711,
+          "width": 1200,
+          "height": 664.921875,
+          "color": "rgb(36, 20, 61)",
+          "background": "rgba(0, 0, 0, 0)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 16px",
+          "columns": "373.328px 373.328px 373.328px"
+        },
+        {
+          "type": "Footer",
+          "x": 0,
+          "y": 1375.921875,
+          "width": 1200,
+          "height": 169.59375,
+          "color": "rgb(255, 255, 255)",
+          "background": "rgb(26, 32, 44)",
+          "font": "Inter, sans-serif",
+          "padding": "48px 0px",
+          "columns": "none"
+        }
+      ]
+    }
+  ]
+}

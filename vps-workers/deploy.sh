@@ -18,6 +18,7 @@ source "$WORKER_ROOT/lib/install-worker-services.sh"
 
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
+REMEDIATION_DISABLED_MARKER="/home/bassey/.config/baci/remediation.disabled"
 APP_SHA=$(git rev-parse HEAD)
 CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # Exit protocol for the release coordinator: 42 means the live worker
@@ -42,7 +43,9 @@ fi
 check_deploy_workflow_inflight
 
 prepare_worker_release
-
+REMEDIATION_STATE=$(ssh "$VPS" "if [ -e '$REMEDIATION_DISABLED_MARKER' ] || [ -L '$REMEDIATION_DISABLED_MARKER' ]; then printf disabled; else printf enabled; fi")
+[[ "$REMEDIATION_STATE" == disabled || "$REMEDIATION_STATE" == enabled ]]
+if [ "$REMEDIATION_STATE" = enabled ]; then
 CODEX_CONTAINER_BIN=$(ssh "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
 CODEX_READONLY_SECCOMP_PROFILE="$REMOTE_DIR/config/codex-readonly-seccomp.json"
 
@@ -53,6 +56,11 @@ fi
 
 echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
+else
+  CODEX_CONTAINER_BIN=''
+  CODEX_READONLY_SECCOMP_PROFILE=''
+  echo "==> Remediation disabled by operator; skipping its image build"
+fi
 
 # Final refusal BEFORE anything below mutates live state: staging and
 # the image build take minutes, and a workflow that started in that
@@ -120,7 +128,7 @@ ssh "$VPS" "bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
 echo "==> Installing crontab entries on VPS (idempotent)"
 CRON_BLOCK_START="# >>> baci-workers >>>"
 CRON_BLOCK_END="# <<< baci-workers <<<"
-cat <<EOF | ssh "$VPS" "cat > $REMOTE_DIR/crontab.fragment"
+cat <<EOF | ssh "$VPS" "cat > $STAGING_DIR/crontab.fragment"
 $CRON_BLOCK_START
 0,30 * * * * flock -n $REMOTE_DIR/locks/push-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/push-receipts.mjs' >> $REMOTE_DIR/logs/push-receipts.log 2>&1
 10 *   * * * flock -n $REMOTE_DIR/locks/cleanup-agentic-request-records.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-agentic-request-records.mjs' >> $REMOTE_DIR/logs/cleanup-agentic-request-records.log 2>&1
@@ -149,6 +157,7 @@ $CRON_BLOCK_START
 0 */6  * * * flock -n $REMOTE_DIR/locks/inventory-push-alerts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/inventory/push-alerts' >> $REMOTE_DIR/logs/inventory-push-alerts.log 2>&1
 */5 *  * * * flock -n $REMOTE_DIR/locks/sync-jumia-orders.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/sync-jumia-orders.sh' >> $REMOTE_DIR/logs/sync-jumia-orders.log 2>&1
 17 *   * * * flock -n $REMOTE_DIR/locks/process-import-jobs.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-import-jobs.sh' >> $REMOTE_DIR/logs/process-import-jobs.log 2>&1
+*/10 * * * * flock -n $REMOTE_DIR/locks/merchant-onboarding-emails.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=merchant-onboarding-emails && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-merchant-onboarding-emails.sh' >> $REMOTE_DIR/logs/merchant-onboarding-emails.log 2>&1
 */10 * * * * flock -n $REMOTE_DIR/locks/ollama-workload.lock flock -n $REMOTE_DIR/locks/ai-storefront-jobs.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=ai-storefront-jobs && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-ai-storefront-jobs.sh' >> $REMOTE_DIR/logs/ai-storefront-jobs.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/process-domain-events.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-domain-events.sh --once' >> $REMOTE_DIR/logs/process-domain-events.log 2>&1
 * * * * * flock -n $REMOTE_DIR/locks/process-event-deliveries.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-event-deliveries.sh --once' >> $REMOTE_DIR/logs/process-event-deliveries.log 2>&1
@@ -166,7 +175,7 @@ $CRON_BLOCK_START
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA'" <<'REMOTE_SH'
+ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE' '$REMEDIATION_DISABLED_MARKER'" <<'REMOTE_SH'
 set -euo pipefail
 
 fragment_path="$1"
@@ -202,7 +211,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" > "$tmp_file" <<'PY'
+python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" "${6:-enabled}" "${7:-}" > "$tmp_file" <<'PY'
 import pathlib
 import subprocess
 import sys
@@ -211,6 +220,16 @@ fragment = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 remote_dir = sys.argv[2]
 block_start = sys.argv[3]
 block_end = sys.argv[4]
+disabled = pathlib.Path(sys.argv[6]) if sys.argv[6] else pathlib.Path(remote_dir).parent / '.config/baci/remediation.disabled'
+is_disabled = disabled.exists() or disabled.is_symlink()
+if sys.argv[5] == 'disabled' and not is_disabled:
+    raise SystemExit('Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image.')
+if is_disabled:
+    jobs = ('vercel-error-remediator.mjs', 'sentry-mobile-error-remediator.mjs',
+            'posthog-error-remediator.mjs', 'remediation-codex-canary.mjs',
+            'cleanup-remediation-storage.mjs')
+    fragment = '\n'.join(line for line in fragment.splitlines()
+                         if not any(f'{remote_dir}/jobs/{job}' in line for job in jobs))
 
 existing = subprocess.run(
     ['crontab', '-l'],

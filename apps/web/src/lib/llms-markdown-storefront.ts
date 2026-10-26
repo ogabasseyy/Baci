@@ -4,6 +4,7 @@ import {
   getStorefrontFaqItems,
   type StorefrontFaqSource,
 } from '@/lib/llms-markdown-storefront-faq';
+import { buildProductKeySpecsSection } from '@/lib/llms-product-specs-markdown';
 import { normalizeOrigin } from '@/lib/normalize-origin';
 import { normalizeProduct, type RawDbProduct } from '@/lib/normalize-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
@@ -24,21 +25,16 @@ function buildMerchantIntro(
     merchant.site_description ||
     merchant.site_tagline ||
     `Storefront for ${merchant.business_name}.`;
-  const businessName = sanitizeMarkdownText(merchant.business_name);
-  const safeDescription = sanitizeMarkdownText(description);
-  const businessType = sanitizeMarkdownText(
-    merchant.business_type || 'Not specified'
-  );
   const phone = sanitizeMarkdownText(merchant.phone);
   const email = sanitizeMarkdownText(merchant.email);
 
   return [
-    `# ${businessName}`,
+    `# ${sanitizeMarkdownText(merchant.business_name)}`,
     '',
-    `> ${safeDescription}`,
+    `> ${sanitizeMarkdownText(description)}`,
     '',
     '## Storefront Summary',
-    `- Business type: ${businessType}`,
+    `- Business type: ${sanitizeMarkdownText(merchant.business_type || 'Not specified')}`,
     `- Canonical host: ${origin}`,
     phone ? `- Phone: ${phone}` : '',
     email ? `- Email: ${email}` : '',
@@ -91,6 +87,10 @@ export function buildStorefrontHomeMarkdown(
     `- ${normalizedOrigin}/products/{productSlug}`,
     `- ${normalizedOrigin}/blog/index.html.md`,
     `- ${normalizedOrigin}/blog/{postSlug}.md`,
+    '- `/{category}/brands/{brandSlug}`: Brand authority hub with curated model families, price bands, and comparisons',
+    '- `/{category}/brands/{brandSlug}/families/{familySlug}`: Model family authority hub for a specific product generation',
+    '- `/{category}/compare/{comparisonSlug}`: Side-by-side product or brand comparison page with structured specs',
+    '- `/{category}/best-under/{priceBandSlug}`: Budget-segmented buying guide and product rankings',
     '',
     '## Notes',
     '- `/checkout`, `/account`, and wallet or payment flows are stateful.',
@@ -141,9 +141,6 @@ export function buildStorefrontContactMarkdown(
   origin: string
 ): string {
   const normalizedOrigin = normalizeOrigin(origin);
-  const contactText = sanitizeMarkdownText(
-    merchant.pages?.contact || `Contact ${merchant.business_name}.`
-  );
   const phone = sanitizeMarkdownText(merchant.phone);
   const email = sanitizeMarkdownText(merchant.email);
   const address = sanitizeMarkdownText(merchant.business_address);
@@ -152,7 +149,9 @@ export function buildStorefrontContactMarkdown(
     ...buildMerchantIntro(merchant, normalizedOrigin),
     '# Contact',
     '',
-    contactText,
+    sanitizeMarkdownText(
+      merchant.pages?.contact || `Contact ${merchant.business_name}.`
+    ),
     '',
     '## Contact Details',
     phone ? `- Phone: ${phone}` : '',
@@ -207,28 +206,23 @@ export function buildCategoryMarkdown(
   const description =
     data.fallbackDescription ||
     `Browse ${title} from ${merchant.business_name}.`;
-  const safeTitle = sanitizeMarkdownText(title);
-  const safeDescription = sanitizeMarkdownText(description);
-  const businessName = sanitizeMarkdownText(merchant.business_name);
   const merchantCurrency = sanitizeMarkdownText(
     resolveMerchantCurrencyConfig(merchant).code
   );
   // Only the first MAX_PRODUCTS_IN_CATEGORY_MARKDOWN products are rendered, so
-  // normalize just those — normalizeProduct (image extraction, category lookup,
-  // slug/spec normalization) over the full uncapped category list was wasted
-  // work on this uncached per-request markdown build. The displayed count still
-  // reflects the full eligible set.
+  // normalize just those — normalizeProduct over the full uncapped category
+  // list was wasted work on this uncached per-request markdown build.
   const eligibleProducts = data.products.filter(isRawDbProduct);
   const products = eligibleProducts
     .slice(0, MAX_PRODUCTS_IN_CATEGORY_MARKDOWN)
     .map((product) => normalizeProduct(product));
 
   return [
-    `# ${safeTitle}`,
+    `# ${sanitizeMarkdownText(title)}`,
     '',
-    `> ${safeDescription}`,
+    `> ${sanitizeMarkdownText(description)}`,
     '',
-    `- Store: ${businessName}`,
+    `- Store: ${sanitizeMarkdownText(merchant.business_name)}`,
     `- Canonical category URL: ${normalizedOrigin}/${categorySlug}`,
     `- Markdown mirror: ${normalizedOrigin}/${categorySlug}/index.html.md`,
     `- Product count in this view: ${eligibleProducts.length}`,
@@ -273,28 +267,24 @@ export function buildProductMarkdown(
       ? `- Compare at price: ${product.compare_at_price} ${currency}`
       : '';
   const description = product.description || `Buy ${product.name}.`;
-  const productName = sanitizeMarkdownText(product.name);
-  const safeDescription = sanitizeMarkdownText(description);
-  const businessName = sanitizeMarkdownText(merchant.business_name);
-  const category = sanitizeMarkdownText(product.category);
   const brand = sanitizeMarkdownText(product.brand);
-  const condition = sanitizeMarkdownText(product.condition);
   const primaryImage = product.images[0]
     ? sanitizeMarkdownText(product.images[0])
     : '';
 
   return [
-    `# ${productName}`,
+    `# ${sanitizeMarkdownText(product.name)}`,
     '',
-    `> ${safeDescription}`,
+    `> ${sanitizeMarkdownText(description)}`,
     '',
+    ...buildProductKeySpecsSection(product.product_key_specs),
     '## Summary',
-    `- Store: ${businessName}`,
-    `- Category: ${category}`,
+    `- Store: ${sanitizeMarkdownText(merchant.business_name)}`,
+    `- Category: ${sanitizeMarkdownText(product.category)}`,
     brand ? `- Brand: ${brand}` : '',
     `- Price: ${product.price} ${currency}`,
     compareAt,
-    `- Condition: ${condition}`,
+    `- Condition: ${sanitizeMarkdownText(product.condition)}`,
     `- Availability: ${agentAvailability.availability}`,
     `- inventory_policy: ${agentAvailability.inventory_policy}`,
     `- is_purchasable: ${String(agentAvailability.is_purchasable)}`,

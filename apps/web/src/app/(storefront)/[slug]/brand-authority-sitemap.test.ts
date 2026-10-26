@@ -167,7 +167,7 @@ describe('getBrandAuthoritySitemapEntries', () => {
     ]);
   });
 
-  it('checks family eligibility against the same 48 products rendered by the page', async () => {
+  it('includes a model family appearing after index 48 of brand inventory in the sitemap', async () => {
     mockInventory.mockImplementation(
       async (
         _merchant: string,
@@ -199,6 +199,7 @@ describe('getBrandAuthoritySitemapEntries', () => {
 
     expect(entries.map((entry) => entry.url)).toEqual([
       'https://store.test/smartphones/brands/samsung',
+      'https://store.test/smartphones/brands/samsung/families/galaxy-s',
     ]);
   });
 });

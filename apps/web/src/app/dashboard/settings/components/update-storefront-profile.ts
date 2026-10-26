@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { createClient } from '@/lib/supabase/client';
 import type { Json } from '@/types/supabase';
 
@@ -32,8 +34,10 @@ export async function updateStorefrontProfile({
   expectedUpdatedAt,
   settings,
 }: UpdateStorefrontProfileInput): Promise<void> {
-  const { data, error } = await createClient().rpc(
-    'update_merchant_identity_settings',
+  const { data, error } = await (createClient() as SupabaseClient).rpc(
+    BUILDER_PRIVATE_STORAGE_ENABLED
+      ? 'builder_private_update_identity'
+      : 'update_merchant_identity_settings',
     {
       p_merchant_id: merchantId,
       p_expected_updated_at: expectedUpdatedAt,

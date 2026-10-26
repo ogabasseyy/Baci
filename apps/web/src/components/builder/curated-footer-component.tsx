@@ -1,6 +1,7 @@
 import { Facebook, Instagram, Linkedin, Twitter, Youtube } from 'lucide-react';
 import Link from 'next/link';
 import type { ComponentType } from 'react';
+import { FooterPresentation } from '@/components/storefront/portable/footer-presentation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -55,81 +56,69 @@ export function CuratedFooter({
   );
 
   return (
-    <footer
-      className="mt-auto py-12"
-      style={{
-        backgroundColor: backgroundColor || 'var(--theme-footer-bg, #1A202C)',
-        color: textColor || 'var(--theme-footer-text, #FFFFFF)',
-      }}
+    <FooterPresentation
+      brandName={brandName}
+      copyrightText={copyrightText}
+      backgroundColor={backgroundColor}
+      textColor={textColor}
     >
-      <div className="container mx-auto px-4">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <h3 className="text-lg font-semibold mb-4">{brandName}</h3>
-            <p className="text-sm">{copyrightText}</p>
-          </div>
-
-          {showQuickLinks && quickLinks.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">{quickLinksLabel}</h3>
-              <nav aria-label="Footer Navigation">
-                <ul className="flex flex-col gap-2 list-none p-0 m-0">
-                  {quickLinks.map((link) => (
-                    <li key={link.url}>
-                      <Link
-                        href={asRoute(
-                          getStorefrontScopedHref(link.url, basePath)
-                        )}
-                        className="text-sm hover:underline underline-offset-4"
-                      >
-                        {link.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            </div>
-          )}
-
-          {visibleSocialLinks.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">{socialLinksLabel}</h3>
-              <div className="flex gap-4">
-                {visibleSocialLinks.map(([platform, url]) => {
-                  const Icon = socialIcons[platform];
-                  return (
-                    <Link
-                      key={platform}
-                      href={asRoute(url)}
-                      className="transition-opacity hover:opacity-100"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Follow us on ${platform}`}
-                    >
-                      <Icon className="size-5" />
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {showNewsletter && (
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Newsletter</h3>
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  placeholder="Your email"
-                  className="flex-1"
-                  aria-label="Email address for newsletter"
-                />
-                <Button size="sm">Subscribe</Button>
-              </div>
-            </div>
-          )}
+      {showQuickLinks && quickLinks.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">{quickLinksLabel}</h3>
+          <nav aria-label="Footer Navigation">
+            <ul className="flex flex-col gap-2 list-none p-0 m-0">
+              {quickLinks.map((link) => (
+                <li key={link.url}>
+                  <Link
+                    href={asRoute(getStorefrontScopedHref(link.url, basePath))}
+                    className="text-sm hover:underline underline-offset-4"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
-      </div>
-    </footer>
+      )}
+
+      {visibleSocialLinks.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">{socialLinksLabel}</h3>
+          <div className="flex gap-4">
+            {visibleSocialLinks.map(([platform, url]) => {
+              const Icon = socialIcons[platform];
+              return (
+                <Link
+                  key={platform}
+                  href={asRoute(url)}
+                  className="transition-opacity hover:opacity-100"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Follow us on ${platform}`}
+                >
+                  <Icon className="size-5" />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {showNewsletter && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Newsletter</h3>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="Your email"
+              className="flex-1"
+              aria-label="Email address for newsletter"
+            />
+            <Button size="sm">Subscribe</Button>
+          </div>
+        </div>
+      )}
+    </FooterPresentation>
   );
 }

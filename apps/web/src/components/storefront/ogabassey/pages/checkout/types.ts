@@ -95,6 +95,8 @@ export interface ResumedOrder {
     quantity: number;
     price: number;
     image_url?: string;
+    condition?: string | null;
+    variant_name?: string | null;
   }>;
 }
 

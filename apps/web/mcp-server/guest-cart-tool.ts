@@ -1,4 +1,8 @@
 import {
+  guestOAuthCartInputSchema,
+  guestOAuthCartOutputSchema,
+} from '../src/schemas/guest-oauth';
+import {
   GuestCartBridgePendingError,
   GuestCartPersistedError,
 } from './guest-cart-errors';
@@ -31,22 +35,45 @@ export function registerGuestCartTool(
     getMerchantId: () => Promise<string | null>;
     formatPrice: (price: number) => string;
     clientIp?: string;
+    connectionCart?: { resolveToken: () => Promise<string> };
     /** Server-only candidate opt-in; keep production off until live exposure QA passes. */
     enablePrivateTextContinuation?: boolean;
-  }
+  },
 ) {
-  function transcript<T extends Parameters<typeof withGuestCartTranscript>[0]>(reply: T) {
-    return withGuestCartTranscript(reply, {
-      enabled: options.enablePrivateTextContinuation === true,
+  function transcript<T extends Parameters<typeof withGuestCartTranscript>[0]>(
+    reply: T,
+  ) {
+    const safeReply =
+      options.connectionCart && reply.structuredContent
+        ? {
+            ...reply,
+            ...(reply.structuredContent.retryable === true ? {
+              content: [{ type: 'text' as const, text: 'The cart changed or is temporarily unavailable. Cart authority stays with this connection. If a current version is returned, retry with it; preserve operationId when retrying a request whose result is unknown.' }],
+            } : {}),
+            structuredContent: { ...Object.fromEntries(
+              Object.entries(reply.structuredContent).filter(([key]) => key !== 'cart_token'),
+            ), connection_bound: true },
+          }
+        : reply;
+    return withGuestCartTranscript(safeReply, {
+      enabled:
+        !options.connectionCart &&
+        options.enablePrivateTextContinuation === true,
     });
   }
   server.registerTool(
     'update_ogabassey_guest_cart',
     {
-      outputSchema: mcpGuestCartOutputSchema,
+      outputSchema: options.connectionCart
+        ? guestOAuthCartOutputSchema
+        : mcpGuestCartOutputSchema,
       title: 'Update Ogabassey Guest Cart',
-      description: MCP_GUEST_CART_DESCRIPTION,
-      inputSchema: mcpGuestCartInputSchema,
+      description: options.connectionCart
+        ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
+        : MCP_GUEST_CART_DESCRIPTION,
+      inputSchema: options.connectionCart
+        ? guestOAuthCartInputSchema
+        : mcpGuestCartInputSchema,
       annotations: {
         readOnlyHint: false,
         // Quantity 0 removes a line and a lowered absolute quantity shrinks
@@ -59,14 +86,23 @@ export function registerGuestCartTool(
         idempotentHint: false,
       },
       _meta: {
+        securitySchemes: options.connectionCart
+          ? [{ type: 'oauth2', scopes: ['cart:write'] }]
+          : [{ type: 'noauth' }],
         ui: { visibility: ['model', 'app'] },
         'openai/widgetAccessible': true,
         'openai/toolInvocation/invoking': 'Saving to your guest cart…',
         'openai/toolInvocation/invoked': 'Guest cart saved',
       },
     },
-    async (args) => {
+    async (input) => {
       try {
+        const args = {
+          ...input,
+          ...(options.connectionCart
+            ? { cart_token: await options.connectionCart.resolveToken() }
+            : {}),
+        };
         // Defensive validation for direct callers and tests. The SDK already
         // enforces the full schema, including cross-field refinements, before
         // invoking this registered handler.
@@ -107,7 +143,7 @@ export function registerGuestCartTool(
                 type: 'guest-cart',
                 event: 'quota_exceeded',
                 retry_after_seconds: quota.retryAfterSeconds,
-              })
+              }),
             );
             return transcript({
               isError: true,
@@ -161,17 +197,17 @@ export function registerGuestCartTool(
                 ) {
                   throw new VariantSelectionRequired(
                     productId,
-                    handoff.product_url
+                    handoff.product_url,
                   );
                 }
                 if (handoff?.product_unavailable === true) {
                   throw new ProductUnavailable(productId);
                 }
                 throw new Error(
-                  'A product is unavailable or requires option selection'
+                  'A product is unavailable or requires option selection',
                 );
               }
-            }
+            },
           )
           .catch((error: unknown) => {
             // No cart was persisted, so return the pre-write reservation
@@ -185,7 +221,7 @@ export function registerGuestCartTool(
             )
               refundGuestCartCreation(
                 options.clientIp ?? 'unknown',
-                quota?.windowStart
+                quota?.windowStart,
               );
             throw error;
           });
@@ -214,6 +250,6 @@ export function registerGuestCartTool(
       } catch (error) {
         return transcript(mapGuestCartToolError(error));
       }
-    }
+    },
   );
 }

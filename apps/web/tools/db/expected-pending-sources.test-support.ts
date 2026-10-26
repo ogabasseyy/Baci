@@ -1,5 +1,6 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
 import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
+import { EXPECTED_BUILDER_PENDING_SOURCES } from './expected-builder-pending-sources.test-support';
 import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
 import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
@@ -12,6 +13,7 @@ import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
 import { EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES } from './expected-manual-document-pending-sources.test-support';
+import { EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './expected-merchant-classification-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -37,9 +39,41 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  {
+    repositoryPath:
+      'supabase/migrations/20261024162000_chatgpt_ads_admin_destination.sql',
+    sha256: 'e678d6ec10d05787fc0b66af71d1cda4bad2928f03716581e7b8ba62beb3ea6f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024160000_chatgpt_ads_settings_and_destination.sql',
+    sha256: 'e85d9c2a0490784d6a4b9a3fe010f7f5bce4b2731d6386c88bbb93049171eccc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261024160100_validate_chatgpt_event_destination.sql',
+    sha256: 'dec225fa7dc511181d6e64afea8c9a8192ad6005ef9dd5a3818584ebc628e7e8',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023131010_merchant_onboarding_delivery_pause.sql',
+    sha256: 'd7fd07c62261403f3c8baabfbe2dba6426ddc026dd68173d4f39aa9e9650e796',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023110000_merchant_onboarding_in_app_reminders.sql',
+    sha256: '44fcab00b2e267aa4adf0ca1d4d1b76f58c2550cebd2c4d800ab590c9fc30aad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261023080443_merchant_onboarding_email_journey.sql',
+    sha256: '33b2e892e78619c73e3e022fd98ea9eab1c3393eefdeb1cf8244e8d140c14f4b',
+  },
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
+  ...EXPECTED_BUILDER_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {

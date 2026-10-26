@@ -33,9 +33,10 @@ describe('buildCategoryHubBrandCards', () => {
     });
 
     // Assert
-    expect(cards).toHaveLength(7);
+    expect(cards).toHaveLength(8);
     expect(cards.map((card) => card.href)).toEqual(
       expect.arrayContaining([
+        'https://ogabassey.com/smartphones/brands/apple',
         'https://ogabassey.com/smartphones/brands/xiaomi',
         'https://ogabassey.com/smartphones/brands/oppo',
       ])
@@ -64,9 +65,10 @@ describe('buildCategoryHubBrandCards', () => {
     });
 
     // Assert
-    expect(cards).toHaveLength(7);
+    expect(cards).toHaveLength(8);
     expect(cards.map((card) => card.href)).toEqual(
       expect.arrayContaining([
+        'https://ogabassey.com/smartphones/brands/apple',
         'https://ogabassey.com/smartphones/brands/xiaomi',
         'https://ogabassey.com/smartphones/brands/oppo',
       ])

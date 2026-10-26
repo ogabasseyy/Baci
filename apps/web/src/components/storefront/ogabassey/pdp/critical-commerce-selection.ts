@@ -1,3 +1,4 @@
+import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import {
   canonicalizeCommerceVariantAxis,
   normalizeCommerceVariantOption,
@@ -60,19 +61,6 @@ export function formatCriticalPrice(
   return formatCurrencyWithConfig(price, currency, COMPACT_OPTIONS);
 }
 
-function getVariantStock(
-  cartProduct: CartProduct,
-  selection: ResolvedCriticalVariantSelection | null
-) {
-  if (!selection) {
-    return cartProduct.stock;
-  }
-
-  return typeof selection.variant.stock_quantity === 'number'
-    ? selection.variant.stock_quantity
-    : cartProduct.stock;
-}
-
 export function buildVariantCartProduct(
   cartProduct: CartProduct,
   selection: ResolvedCriticalVariantSelection | null
@@ -83,6 +71,7 @@ export function buildVariantCartProduct(
 
   const variantImage =
     selection.variant.primary_image || selection.variant.images?.[0];
+  const inventory = resolveVariantInventory(cartProduct, selection.variant);
 
   return {
     ...cartProduct,
@@ -92,8 +81,10 @@ export function buildVariantCartProduct(
       cartProduct.condition,
     image: variantImage ?? cartProduct.image,
     imageLarge: variantImage ?? cartProduct.imageLarge,
+    manage_stock: inventory.manageStock,
     price: selection.price,
-    stock: getVariantStock(cartProduct, selection),
+    stock: inventory.stock,
+    variants: cartProduct.variants,
   };
 }
 
@@ -263,7 +254,8 @@ export function pickInitialSelectedAttributes({
 
   return Object.fromEntries(
     Object.entries(initialAttributes).filter(([axis]) =>
-      selectableAxes.has(axis)
+      selectableAxes.has(axis) &&
+      (axis !== 'color' || Boolean(normalizedExplicitAttributes.color))
     )
   );
 }

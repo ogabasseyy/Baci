@@ -1,14 +1,20 @@
 'use client';
 
 import { type Data, Render } from '@puckeditor/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 import { builderConfig } from '@/components/builder/config';
 import { leasePublicPuckThemeTokens } from '@/components/storefront/public-puck-theme-token-lease';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { getCuratedThemeTokenProjection } from '@/lib/storefront-defaults/curated-theme-token-projection';
 import { createClient } from '@/lib/supabase/client';
 import { defaultTheme, type ThemeConfiguration } from '@/lib/theme-config';
+import { builderPublicHomeSchema } from '@/schemas/builder-public-home';
+import { PublicPortableHome } from './portable/public-portable-home';
 
 interface PuckStorefrontProps {
   onNoConfig?: () => void;
@@ -17,6 +23,7 @@ interface PuckStorefrontProps {
 interface MerchantPuckData {
   data: Data;
   merchantId: string;
+  publishedVersion: string | null;
 }
 
 interface MerchantPuckTheme {
@@ -84,7 +91,7 @@ function normalizeThemeConfiguration(
 interface LoadPuckConfigParams {
   merchantId: string;
   onNoConfig?: () => void;
-  setPuckData: (data: Data) => void;
+  setPuckData: (data: Data, publishedVersion: string | null) => void;
   setPuckTheme: (theme: ThemeConfiguration | null) => void;
   setLoading: (loading: boolean) => void;
 }
@@ -102,12 +109,31 @@ async function loadPuckConfig({
     const supabase = createClient();
 
     // Fetch published Puck config
-    const { data: pageConfig, error: fetchError } = await supabase
-      .from('page_configs')
-      .select('published_config')
-      .eq('merchant_id', merchantId)
-      .eq('page_slug', 'home')
-      .single();
+    const response = BUILDER_PRIVATE_STORAGE_ENABLED
+      ? await (supabase as SupabaseClient).rpc(
+          'builder_public_home',
+          { p_merchant: merchantId },
+          { get: true }
+        )
+      : await supabase
+          .from('page_configs')
+          .select('published_config')
+          .eq('merchant_id', merchantId)
+          .eq('page_slug', 'home')
+          .single();
+    const fetchError = response.error;
+    let boundVersion: string | null = null;
+    let pageConfig: { published_config: unknown } | null = null;
+    if (!fetchError && response.data) {
+      if (BUILDER_PRIVATE_STORAGE_ENABLED) {
+        const published = builderPublicHomeSchema.parse(response.data);
+        pageConfig = { published_config: published.config };
+        boundVersion = published.publishedVersion;
+      } else
+        pageConfig = z
+          .object({ published_config: z.unknown() })
+          .parse(response.data);
+    }
 
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
@@ -117,7 +143,7 @@ async function loadPuckConfig({
         throw fetchError;
       }
     } else if (pageConfig?.published_config) {
-      setPuckData(pageConfig.published_config as Data);
+      setPuckData(pageConfig.published_config as Data, boundVersion);
 
       // Apply theme if it exists
       const configWithTheme = pageConfig.published_config as {
@@ -146,7 +172,7 @@ async function loadPuckConfig({
 }
 
 export function PuckStorefront({ onNoConfig }: PuckStorefrontProps) {
-  const { merchant } = useMerchant();
+  const { merchant, basePath } = useMerchant();
   const onNoConfigRef = useRef(onNoConfig);
   const [puckData, setPuckData] = useState<MerchantPuckData | null>(null);
   const [puckTheme, setPuckTheme] = useState<MerchantPuckTheme | null>(null);
@@ -175,8 +201,8 @@ export function PuckStorefront({ onNoConfig }: PuckStorefrontProps) {
       onNoConfig: () => {
         if (active) onNoConfigRef.current?.();
       },
-      setPuckData: (data) => {
-        if (active) setPuckData({ data, merchantId });
+      setPuckData: (data, publishedVersion) => {
+        if (active) setPuckData({ data, merchantId, publishedVersion });
       },
       setPuckTheme: (theme) => {
         if (active && theme) setPuckTheme({ merchantId, theme });
@@ -218,6 +244,28 @@ export function PuckStorefront({ onNoConfig }: PuckStorefrontProps) {
   // If no Puck data, return null (fallback will be shown)
   if (!activePuckData) {
     return null;
+  }
+
+  // Explicit capability opt-in; unmarked legacy Puck keeps its existing renderer.
+  const root = activePuckData.root as { props?: { rendererVersion?: unknown } };
+  if (root?.props && Object.hasOwn(root.props, 'rendererVersion')) {
+    return (
+      <PublicPortableHome
+        config={activePuckData}
+        publishedVersion={
+          puckData?.merchantId === merchantId ? puckData.publishedVersion : null
+        }
+        merchant={{
+          id: merchant?.id,
+          template_id: merchant?.template_id,
+          slug: merchant?.slug,
+          business_name: merchant?.business_name,
+          logo_url: merchant?.logo_url ?? null,
+          currency: resolveMerchantCurrencyConfig(merchant ?? {}).code,
+        }}
+        basePath={basePath ?? ''}
+      />
+    );
   }
 
   // Render using Puck

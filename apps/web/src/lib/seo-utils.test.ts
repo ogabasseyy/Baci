@@ -2421,7 +2421,7 @@ describe('generateCollectionPageSchema', () => {
     ]);
   });
 
-  it('includes brand plus shipping and return policy on collection-page product offers', () => {
+  it('includes brand and identifiers on collection-page product offers and omits per-item shipping and return policy', () => {
     const schema = generateCollectionPageSchema({
       name: 'Smartphones',
       description: 'Shop smartphones',
@@ -2467,24 +2467,14 @@ describe('generateCollectionPageSchema', () => {
     const product = listItem.item as Record<string, unknown>;
     const offer = product.offers as Record<string, unknown>;
     const brand = product.brand as Record<string, unknown>;
-    const shipping = offer.shippingDetails as Record<string, unknown>;
-    const returnPolicy = offer.hasMerchantReturnPolicy as Record<
-      string,
-      unknown
-    >;
 
     expect(brand).toEqual({
       '@type': 'Brand',
       name: 'Samsung',
     });
     expect(product.gtin).toBe('0123456789012');
-    expect(shipping['@type']).toBe('OfferShippingDetails');
-    expect(
-      (shipping.shippingDestination as Record<string, unknown>).addressCountry
-    ).toBe('NG');
-    expect(returnPolicy['@type']).toBe('MerchantReturnPolicy');
-    expect(returnPolicy.returnPolicyCountry).toBe('NG');
-    expect(returnPolicy.merchantReturnDays).toBe(10);
+    expect(offer.shippingDetails).toBeUndefined();
+    expect(offer.hasMerchantReturnPolicy).toBeUndefined();
   });
 
   it('keeps unmanaged products InStock in collection offers', () => {

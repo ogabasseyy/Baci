@@ -76,28 +76,24 @@ describe('useCheckoutStepActions — address continue', () => {
     expect(resetPaymentSelection).toHaveBeenCalledTimes(1);
   });
 
-  it('fills the station address but preserves city/state for a provider station-pickup quote', () => {
-    // A paid GIGL station-pickup quote depends on the customer's real city/state
-    // for its quote context — those must NOT be overwritten with the merchant's
-    // Lagos pickup counter, or the provider quote is cleared on the way to
-    // payment. The required address is instead satisfied with the station's own
-    // address (the delivery-address card is hidden for pickup).
+  it('keeps the quoted receiver address when continuing with provider station pickup', () => {
+    // Station display metadata must never replace the receiver used for the
+    // quote. The API and fulfillment both validate that original destination.
     const { result, setValue } = renderStepActions({
       selectedQuote: {
         id: 'gigl',
         isStationPickup: true,
         stationName: 'PORT HARCOURT',
         stationAddress: 'GIGL Aba Road, Port Harcourt',
+        receiverAddress: '12 Customer Street',
       } as ShippingQuote,
     });
 
     result.current.handleContinue();
 
-    expect(setValue).toHaveBeenCalledWith(
-      'address',
-      'PORT HARCOURT, GIGL Aba Road, Port Harcourt',
-      { shouldValidate: true }
-    );
+    expect(setValue).toHaveBeenCalledWith('address', '12 Customer Street', {
+      shouldValidate: true,
+    });
     expect(setValue).not.toHaveBeenCalledWith(
       'city',
       'Ikeja',

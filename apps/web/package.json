@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp",
+    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication",
     "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",
@@ -49,7 +49,13 @@
     "mcp": "tsx mcp-server/server.ts",
     "test:checkout:build": "tsc --project tsconfig.checkout-browser.json && next build tests/checkout-browser/harness",
     "test:checkout:browser": "playwright test",
-    "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js"
+    "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js",
+    "typecheck:builder-mcp": "tsc --noEmit -p tsconfig.builder-mcp.json",
+    "build:builder-mcp": "pnpm --filter @baci/builder-preview-widget build && esbuild builder-mcp-server/serve.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outfile=builder-mcp-server/dist/server.mjs && cp builder-mcp-server/preview.html builder-mcp-server/dist/preview.html",
+    "mcp:builder": "tsx builder-mcp-server/serve.ts",
+    "typecheck:builder-publication": "tsc --noEmit -p tsconfig.builder-publication.json",
+    "verify:builder-release": "vitest run tests/builder-chatgpt builder-mcp-server --maxWorkers=1",
+    "verify:builder-provider": "pnpm --dir tools/builder-auth test"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",
@@ -149,6 +155,7 @@
     "next": "16.3.8",
     "next-themes": "^0.4.6",
     "novel": "^1.0.2",
+    "oidc-provider": "9.13.0",
     "openai": "^6.42.0",
     "pg": "8.23.0",
     "posthog-js": "^1.396.6",
@@ -179,7 +186,8 @@
     "ajv-formats": "^3.0.1",
     "postgres": "^3.4.9",
     "@modelcontextprotocol/server": "^2.3.1",
-    "@modelcontextprotocol/node": "^2.1.1"
+    "@modelcontextprotocol/node": "^2.1.1",
+    "undici": "7.29.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
@@ -191,6 +199,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/google.maps": "^3.65.1",
+    "@types/oidc-provider": "9.12.1",
     "@types/node": "^24.13.2",
     "@types/pg": "8.23.1",
     "@types/react": "^19.2.17",

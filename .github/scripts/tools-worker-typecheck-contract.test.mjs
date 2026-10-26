@@ -36,9 +36,16 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.equal(pkg.scripts['typecheck:mcp'], 'tsc --noEmit -p tsconfig.mcp.json');
+  for (const project of ['builder-mcp', 'builder-publication']) {
+    assert.equal(pkg.scripts[`typecheck:${project}`], `tsc --noEmit -p tsconfig.${project}.json`);
+    const config = JSON.parse(await readFile(`apps/web/tsconfig.${project}.json`, 'utf8'));
+    assert.equal(config.extends, './tsconfig.json');
+    assert.notEqual(config.compilerOptions.strict, false);
+    assert.ok(config.include.length > 0);
+  }
   assert.equal(mcpTsconfig.extends, './tsconfig.json');
   assert.equal(webTsconfig.compilerOptions.strict, true);
   assert.notEqual(mcpTsconfig.compilerOptions.strict, false);
@@ -66,6 +73,8 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'tools/db/**/*.ts',
     'tools/cost/**/*.ts',
     'src/scripts/process-domain-events.ts',
+    'src/scripts/process-merchant-onboarding-emails.ts',
+    'src/scripts/process-merchant-onboarding-emails.test.ts',
     'src/scripts/process-domain-events.test.ts',
     'src/scripts/domain-event-worker-message.ts',
     'src/scripts/domain-event-worker-batch.ts',
@@ -122,4 +131,21 @@ test('bugfix: CI runner script changes trigger the web quality gate', async () =
       `${file} must trigger the web quality gate`
     );
   }
+});
+
+test('full web shards install the isolated builder auth lockfile before fixture collection', async () => {
+  const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+  const shard = workflow.split('  quality-test-web:')[1].split('  quality-db-replay:')[0];
+  const typecheck = workflow.split('  quality-typecheck:')[1].split('  quality-test:')[0];
+  const install = 'pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile';
+  assert.ok(shard.indexOf(install) >= 0);
+  assert.ok(shard.indexOf(install) < shard.indexOf('Run web vitest shard'));
+  assert.ok(typecheck.indexOf(install) >= 0);
+  assert.ok(typecheck.indexOf(install) < typecheck.indexOf('Run Typecheck'));
+  const authTests = 'pnpm --dir apps/web/tools/builder-auth test';
+  assert.ok(typecheck.indexOf(authTests) > typecheck.indexOf(install));
+  assert.ok(typecheck.indexOf(authTests) < typecheck.indexOf('Run Typecheck'));
+  const pkg = JSON.parse(await readFile('apps/web/tools/builder-auth/package.json', 'utf8'));
+  assert.ok(pkg.dependencies['oidc-provider']);
+  assert.match(await readFile('apps/web/tools/builder-auth/pnpm-lock.yaml', 'utf8'), /oidc-provider:/);
 });

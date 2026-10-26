@@ -1,0 +1,77 @@
+import { NextRequest } from 'next/server';
+import { BUILDER_ACCOUNT_LINKING_ENABLED } from '@/config/builder-linking';
+import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
+import { checkCsrfProtection } from '@/lib/csrf';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { createClient } from '@/lib/supabase/server';
+import { getOwnerPublicationRuntime } from '@/lib/website-builder/publication-runtime';
+import { publicationPostSchema } from '@/schemas/builder-publication';
+
+async function handle(request: NextRequest) {
+  const client = await createClient();
+  const { data, error } = await client.auth.getUser();
+  if (error || !data.user)
+    return Response.json(
+      { error: 'Sign in to Baci to review this publication.' },
+      {
+        status: 401,
+        headers: {
+          'Cache-Control': 'private, no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      }
+    );
+  const handler = getOwnerPublicationRuntime();
+  if (
+    !BUILDER_ACCOUNT_LINKING_ENABLED ||
+    !BUILDER_PRIVATE_STORAGE_ENABLED ||
+    !handler
+  )
+    return Response.json(
+      { error: 'Publication approval is not enabled.' },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'private, no-store',
+          'Referrer-Policy': 'no-referrer',
+        },
+      }
+    );
+  if (request.method === 'POST') {
+    const csrf = await checkCsrfProtection(request);
+    if (!csrf.valid) {
+      const response =
+        csrf.response ?? Response.json({ error: 'Forbidden' }, { status: 403 });
+      response.headers.set('Cache-Control', 'private, no-store');
+      response.headers.set('Referrer-Policy', 'no-referrer');
+      return response;
+    }
+    const body = await readBoundedJsonBody(request, 4096);
+    const parsed = body.ok ? publicationPostSchema.safeParse(body.body) : null;
+    if (!parsed?.success)
+      return Response.json(
+        { error: 'Invalid publication request.' },
+        {
+          status: !body.ok && body.reason === 'too_large' ? 413 : 400,
+          headers: {
+            'Cache-Control': 'private, no-store',
+            'Referrer-Policy': 'no-referrer',
+          },
+        }
+      );
+    const headers = new Headers(request.headers);
+    headers.delete('content-length');
+    headers.set('content-type', 'application/json');
+    return handler(
+      new NextRequest(request.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(parsed.data),
+        signal: request.signal,
+      })
+    );
+  }
+  return handler(request);
+}
+export const GET = handle;
+export const POST = handle;

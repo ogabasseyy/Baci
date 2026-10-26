@@ -193,3 +193,31 @@ describe('CartCheckoutFooter', () => {
     expect(onCheckoutPressIn).toHaveBeenCalledTimes(1);
   });
 });
+it('shows sync progress and prevents duplicate checkout presses', () => {
+  const checkout = jest.fn();
+  render(
+    <CartCheckoutFooter
+      checkoutDotColor="#fff"
+      colors={Colors.light}
+      enableNegotiationModal={false}
+      formatPrice={formatPrice}
+      grandTotal={100}
+      hasAcceptedNegotiation={false}
+      isPreparingCheckout
+      onCheckout={checkout}
+      onCheckoutPressIn={jest.fn()}
+      onNegotiateTotal={jest.fn()}
+      surfaceInset="#fff"
+    />
+  );
+  expect(screen.getByText('Syncing cart…')).toBeTruthy();
+  const button = screen.getByRole('button', {
+    name: 'Proceed to checkout, total NGN 100',
+  });
+  expect(button.props.accessibilityState).toMatchObject({
+    disabled: true,
+    busy: true,
+  });
+  fireEvent.press(button);
+  expect(checkout).not.toHaveBeenCalled();
+});

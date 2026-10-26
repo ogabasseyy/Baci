@@ -15,7 +15,6 @@ import { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } from '@/env';
 import { resolveCartApiOrigin } from '@/lib/cart/api-origin';
 import {
   cartPairingRevision,
-  clearCartPairingLink,
   peekCartPairingLink,
   subscribeCartPairing,
 } from '@/lib/cart/pairing-link';
@@ -23,8 +22,16 @@ import { createNativeCartClient } from '@/lib/cart/shared-cart-client';
 import { CONFIG } from '@/lib/config';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { markSharedCartIntent } from '@/stores/shared-cart-writer';
+import { dismissPairingLink } from './dismiss-pairing-link';
+import { pairWithSharedCart } from './pair-with-shared-cart';
+import { pairingRetryOperation } from './pairing-retry-operation';
+import { retryPairingSync } from './retry-pairing-sync';
+
+import { usePairingOperation } from './use-pairing-operation';
 
 export function NativeCartPairingPanel() {
+  const operation = usePairingOperation(dismissPairingLink);
   const revision = useSyncExternalStore(
     subscribeCartPairing,
     cartPairingRevision,
@@ -86,31 +93,23 @@ export function NativeCartPairingPanel() {
   }, [revision, retryTick]);
   if (!link) return null;
   const ready = preview.revision === revision && preview.status === 'ready';
-  const busy = shared.status === 'loading' || shared.status === 'pending';
+  const busy =
+    operation.running ||
+    shared.status === 'loading' ||
+    shared.status === 'pending';
   async function pair(
     choice: 'connect' | 'merge' | 'keep_existing'
   ): Promise<void> {
-    const current = peekCartPairingLink();
-    if (
-      !current ||
-      !ready ||
-      !shared.enabled ||
-      !shared.pair ||
-      cartPairingRevision() !== revision
-    )
-      return;
-    try {
-      await shared.pair(
-        current,
-        choice,
-        shared.mergeConflicts.flatMap((item) => {
-          const keep = resolutions[cartLineIdentity(item)];
-          return keep ? [{ item, keep }] : [];
-        })
-      );
-    } catch {
-      setFailed(true);
-    }
+    if (!shared.enabled) return;
+    const paired = await pairWithSharedCart({
+      ready,
+      revision,
+      pair: shared.pair,
+      mergeConflicts: shared.mergeConflicts,
+      resolutions,
+      choice,
+    });
+    if (!paired) setFailed(true);
   }
   async function browser(): Promise<void> {
     const current = peekCartPairingLink();
@@ -120,6 +119,7 @@ export function NativeCartPairingPanel() {
       cartPairingRevision() !== revision
     )
       return;
+    markSharedCartIntent();
     try {
       await WebBrowser.openBrowserAsync(current.browserUrl);
     } catch {
@@ -131,10 +131,10 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
-        accessibilityState={{ disabled }}
-        disabled={disabled}
+        accessibilityState={{ disabled: disabled || operation.running }}
+        disabled={disabled || operation.running}
         onPress={() => {
-          void run();
+          void operation.run(run);
         }}
         style={styles.button}
       >
@@ -145,7 +145,7 @@ export function NativeCartPairingPanel() {
   return (
     <ModalSheet
       visible
-      onRequestClose={clearCartPairingLink}
+      onRequestClose={operation.dismiss}
       cardStyle={[styles.card, { backgroundColor: colors.background }]}
     >
       <Text
@@ -154,9 +154,11 @@ export function NativeCartPairingPanel() {
       >
         Continue with this cart
       </Text>
-      {preview.status === 'loading' ? (
+      {preview.status === 'loading' || operation.running ? (
         <ActivityIndicator
-          accessibilityLabel="Checking cart"
+          accessibilityLabel={
+            operation.running ? 'Syncing cart' : 'Checking cart'
+          }
           color={colors.primary}
         />
       ) : null}
@@ -203,12 +205,13 @@ export function NativeCartPairingPanel() {
                         accessibilityState={{
                           checked: resolutions[key] === keep,
                         }}
-                        onPress={() =>
+                        onPress={() => {
+                          markSharedCartIntent();
                           setResolutions((previous) => ({
                             ...previous,
                             [key]: keep,
-                          }))
-                        }
+                          }));
+                        }}
                         style={styles.button}
                       >
                         <Text style={{ color: colors.primary }}>
@@ -255,16 +258,11 @@ export function NativeCartPairingPanel() {
           ) : (
             button('Connect cart', () => pair('connect'), busy)
           )}
-          {failed && shared.refresh
+          {failed && pairingRetryOperation(shared, items.length)
             ? button(
                 'Retry sync',
-                async () => {
-                  try {
-                    await shared.refresh?.();
-                  } catch {
-                    setFailed(true);
-                  }
-                },
+                async () =>
+                  setFailed(!(await retryPairingSync(shared, items.length))),
                 busy
               )
             : null}
@@ -273,7 +271,9 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close cart link"
-        onPress={clearCartPairingLink}
+        onPress={operation.dismiss}
+        disabled={operation.running}
+        accessibilityState={{ disabled: operation.running }}
         style={styles.button}
       >
         <Text style={{ color: colors.text }}>Close</Text>

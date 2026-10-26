@@ -39,6 +39,14 @@ describe('negotiated checkout proof environment validation', () => {
     ).toBe(false);
   });
 
+  it('allows the onboarding worker without negotiated checkout credentials', () => {
+    expect(
+      isNegotiatedCheckoutProofSecretMissing(productionPhaseOneA, {
+        BACI_WORKER_PROFILE: 'merchant-onboarding-emails',
+      })
+    ).toBe(false);
+  });
+
   it('does not require the secret outside production phase 1a', () => {
     expect(
       isNegotiatedCheckoutProofSecretMissing(

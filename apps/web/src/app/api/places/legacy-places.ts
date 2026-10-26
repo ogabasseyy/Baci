@@ -1,3 +1,5 @@
+import type { GoogleBudgetReservation } from './provider-budget';
+
 /**
  * Shared client for Google Places API (Legacy) JSON endpoints.
  * Retries transient failures with exponential backoff: network errors and
@@ -11,7 +13,11 @@ const TRANSIENT_LEGACY_STATUS = 'UNKNOWN_ERROR';
 
 export type LegacyPlacesResult<T> =
   | { ok: true; status: number; data: T }
-  | { ok: false; status: number };
+  | {
+      ok: false;
+      status: number;
+      failure: 'budget_limit_reached' | 'budget_unavailable' | 'http_error';
+    };
 
 function isTimeoutError(error: unknown): boolean {
   // AbortSignal.timeout can reject with a DOMException from another realm,
@@ -40,15 +46,26 @@ function sleep(ms: number): Promise<void> {
 
 export async function fetchLegacyPlacesJson<T extends { status?: string }>(
   url: string,
-  beforeAttempt?: () => Promise<boolean>,
+  beforeAttempt?: () => Promise<GoogleBudgetReservation>,
   options?: { retryTimeouts?: boolean }
 ): Promise<LegacyPlacesResult<T>> {
   let retries = MAX_RETRIES;
   let delay = INITIAL_RETRY_DELAY_MS;
 
   for (;;) {
-    if (beforeAttempt && !(await beforeAttempt())) {
-      return { ok: false, status: 429 };
+    if (beforeAttempt) {
+      const reservation = await beforeAttempt();
+      if (!reservation.reserved) {
+        const failure =
+          reservation.reason === 'limit_reached'
+            ? 'budget_limit_reached'
+            : 'budget_unavailable';
+        return {
+          ok: false,
+          status: failure === 'budget_limit_reached' ? 429 : 503,
+          failure,
+        };
+      }
     }
     let response: Response;
     try {
@@ -78,7 +95,7 @@ export async function fetchLegacyPlacesJson<T extends { status?: string }>(
     }
 
     if (!response.ok) {
-      return { ok: false, status: response.status };
+      return { ok: false, status: response.status, failure: 'http_error' };
     }
 
     const data = (await response.json()) as T;

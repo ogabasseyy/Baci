@@ -100,6 +100,22 @@ it('fails closed when the bootstrap reply names another merchant', async () => {
   ).rejects.toMatchObject({ code: 'temporarily_unavailable' });
 });
 
+it('preserves quota exhaustion so the UI can ask the shopper to wait', async () => {
+  const fetcher = jest
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ token: 'csrf-token-1' }))
+    .mockResolvedValueOnce(jsonResponse({ code: 'quota_exceeded' }, 429));
+  await expect(
+    bootstrapNativeCart(
+      config,
+      storageWith(null) as never,
+      fetcher as never,
+      () => {},
+      jest.fn()
+    )
+  ).rejects.toMatchObject({ code: 'quota_exceeded' });
+});
+
 it('wraps transport failures as temporarily unavailable', async () => {
   const fetcher = jest.fn().mockRejectedValue(new Error('offline'));
   await expect(

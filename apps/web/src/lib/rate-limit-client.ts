@@ -70,6 +70,24 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     process.env.VERCEL === '1' ||
     process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
   if (proxyGuaranteed) {
+    // Behind Cloudflare, the platform x-real-ip is a shared Cloudflare
+    // egress address, so keying anonymous budgets on it collapses many
+    // customers into one 30/hour bootstrap bucket and mass-produces
+    // "cart sync was interrupted" failures. Cloudflare overwrites
+    // CF-Connecting-IP with the visitor address at its edge; require a
+    // CF-Ray header as evidence the request actually traversed
+    // Cloudflare before trusting it, and keep the platform address as
+    // the fallback. Origin access should still be restricted to
+    // Cloudflare (Authenticated Origin Pulls) so direct-to-origin
+    // callers cannot forge these headers to rotate budgets.
+    const cloudflareIp = request.headers.get('cf-connecting-ip');
+    if (
+      request.headers.get('cf-ray') &&
+      cloudflareIp &&
+      isValidIP(cloudflareIp)
+    ) {
+      return cloudflareIp;
+    }
     const realIp = request.headers.get('x-real-ip');
     if (realIp && isValidIP(realIp)) return realIp;
   }

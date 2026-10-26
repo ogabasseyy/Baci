@@ -54,6 +54,15 @@ export async function bootstrapNativeCart(
     );
     const parsed = nativeCartReplySchema.safeParse(await created.json());
     assertCurrent();
+    // Quota exhaustion is the one bootstrap failure the shopper can act
+    // on; keep its code so the status panel can ask them to wait instead
+    // of showing a generic interruption. Other failures stay closed.
+    if (
+      created.status === 429 &&
+      parsed.success &&
+      parsed.data.code === 'quota_exceeded'
+    )
+      throw new NativeCartError('quota_exceeded');
     if (
       !created.ok ||
       !parsed.success ||

@@ -20,6 +20,23 @@ beforeEach(() => {
     chooseLegacy: null,
   });
 });
+it('explains quota exhaustion instead of a generic interruption', () => {
+  useNativeSharedCartStore.setState({
+    status: 'error',
+    code: 'quota_exceeded',
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(
+    screen.getByText(
+      'Too many cart requests right now. Wait a few minutes, then retry. Your last confirmed items are saved.'
+    )
+  ).toBeTruthy();
+  expect(
+    screen.queryByText(
+      'Cart sync was interrupted. Your last confirmed items are saved.'
+    )
+  ).toBeNull();
+});
 it('shows no dead choice buttons when no legacy chooser is available', () => {
   useNativeSharedCartStore.setState({
     status: 'choice_required',

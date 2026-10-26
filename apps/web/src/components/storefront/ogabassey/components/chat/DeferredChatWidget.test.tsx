@@ -133,7 +133,7 @@ describe('DeferredChatWidget', () => {
     ).toBeInTheDocument();
   });
 
-  it('announces a failed runtime load and leaves the launcher retryable', async () => {
+  it('announces keyboard load failure, restores focus, and allows retry', async () => {
     const loadChatWidget = vi
       .fn()
       .mockRejectedValueOnce(new Error('Chunk unavailable'))
@@ -144,13 +144,15 @@ describe('DeferredChatWidget', () => {
       name: 'Open AI chat assistant',
     });
 
-    await user.click(launcher);
+    launcher.focus();
+    await user.keyboard('{Enter}');
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Chat did not load. Activate again to retry.',
     );
+    expect(launcher).toHaveFocus();
     expect(launcher).toBeEnabled();
-    await user.click(launcher);
+    await user.keyboard('{Enter}');
     expect(await screen.findByText('Loaded chat runtime')).toBeInTheDocument();
     expect(loadChatWidget).toHaveBeenCalledTimes(2);
   });

@@ -3,7 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
 import { useCart } from '@/hooks/cart';
 import { CHAT_MOBILE_OFFSET_ATTRIBUTES } from '../../config/chat-mobile-offsets';
@@ -50,6 +50,11 @@ export function DeferredChatWidget({
     isCartOpen,
     mobileOffset,
   );
+  useEffect(() => {
+    if (!isLoading && loadFailed && focusLauncherOnMount.current) {
+      drag.buttonRef.current?.focus();
+    }
+  }, [drag.buttonRef, isLoading, loadFailed]);
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',

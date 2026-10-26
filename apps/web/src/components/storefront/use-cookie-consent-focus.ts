@@ -88,11 +88,19 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
     const previousFocus = restoreFocusRef.current;
     restoreFocusRef.current = null;
     viewChangeFocusRef.current = false;
-    const focusTarget = previousFocus?.isConnected
+    let focusTarget = previousFocus?.isConnected
       ? previousFocus
       : document.querySelector<HTMLElement>(
           '.ogabassey-chat-anchor .ogabassey-chat-button'
         );
+    const chatAnchor = focusTarget?.closest<HTMLElement>(
+      '.ogabassey-chat-anchor'
+    );
+    if (chatAnchor && getComputedStyle(chatAnchor).display === 'none') {
+      focusTarget = document.querySelector<HTMLElement>(
+        '.ogabassey-newsletter-popup button:not(:disabled), .ogabassey-offer-popup button:not(:disabled)'
+      );
+    }
     if (bannerHasFocusRef.current) focusTarget?.focus();
     bannerHasFocusRef.current = false;
     dismissThroughBannerRef.current = false;

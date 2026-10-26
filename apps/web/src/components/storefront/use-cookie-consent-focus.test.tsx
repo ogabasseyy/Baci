@@ -13,11 +13,15 @@ function ConsentFocusHarness() {
   const [visible, setVisible] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [runtimeMounted, setRuntimeMounted] = useState(false);
+  const [showNewsletter, setShowNewsletter] = useState(false);
   const focus = useCookieConsentFocus(visible);
 
   return (
     <>
-      <div className="ogabassey-chat-anchor">
+      <div
+        className="ogabassey-chat-anchor"
+        style={showNewsletter ? { display: 'none' } : undefined}
+      >
         <button
           key={runtimeMounted ? 'runtime' : 'deferred'}
           type="button"
@@ -41,6 +45,14 @@ function ConsentFocusHarness() {
       <button type="button" onClick={() => setRuntimeMounted(true)}>
         Mount chat runtime
       </button>
+      <button type="button" onClick={() => setShowNewsletter(true)}>
+        Show newsletter
+      </button>
+      {showNewsletter && (
+        <div className="ogabassey-newsletter-popup">
+          <button type="button">Close newsletter</button>
+        </div>
+      )}
       <button type="button" onClick={() => setVisible(true)}>
         Show consent
       </button>
@@ -170,4 +182,18 @@ it('scopes consent mutations to the chat anchor parent', () => {
     subtree: true,
   });
   observe.mockRestore();
+});
+
+it('restores focus to a visible promotion if CSS hides the launcher', () => {
+  render(<ConsentFocusHarness />);
+  screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Show newsletter' }));
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+
+  expect(
+    screen.getByRole('button', { name: 'Close newsletter' })
+  ).toHaveFocus();
 });

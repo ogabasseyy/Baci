@@ -44,22 +44,12 @@ export function PiggyvestWalletSetupForm({
     setError(null);
     try {
       await onSubmit(parsed.data);
-      // Clear only after the setup is confirmed: a failure keeps the BVN
-      // for correction-free retry, while success drops the sensitive
-      // value from state at the earliest safe moment.
-      setBvn('');
     } catch (error) {
       const code =
         typeof error === 'object' && error !== null
           ? (error as { code?: unknown }).code
           : undefined;
       if (code === 'INVALID_BVN') {
-        // The number itself was rejected: keeping a known-wrong BVN in
-        // state serves no retry (the user must enter a different one),
-        // so drop the sensitive value now instead of widening its
-        // lifetime in memory. Transient failures below keep it for a
-        // correction-free retry of a possibly-right number.
-        setBvn('');
         setError('That BVN was rejected. Check the number and try again.');
       } else if (code === 'PROFILE_VERIFICATION_REQUIRED') {
         setError(
@@ -75,6 +65,10 @@ export function PiggyvestWalletSetupForm({
         );
       }
     } finally {
+      // Any completed async attempt ends the BVN's useful lifetime,
+      // regardless of whether the provider confirmed setup.
+      setBvn('');
+      setShowBvn(false);
       submitting.current = false;
       setBusy(false);
     }

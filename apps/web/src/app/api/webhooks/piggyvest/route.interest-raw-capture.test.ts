@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   capture: vi.fn(),
   processEvent: vi.fn(),
   families: ['interest'] as string[],
-  secret: globalThis.crypto.randomUUID(),
+  secret: Array.from(globalThis.crypto.getRandomValues(new Uint8Array(32)))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join(''),
 }));
 
 vi.mock('@/env', () => ({
@@ -78,6 +80,26 @@ it('captures signed interest bytes before event schema parsing', async () => {
   const responseText = JSON.stringify(await response.json());
   expect(responseText).not.toContain(secret);
   expect(responseText).not.toContain(rawBody);
+});
+
+it('canonicalizes uppercase signature hex before verification and capture', async () => {
+  const canonicalSignature = createHmac('sha512', secret)
+    .update(rawBody)
+    .digest('hex');
+  const response = await POST(
+    new NextRequest('https://synthetic.example.test/api/webhooks/piggyvest', {
+      method: 'POST',
+      body: rawBody,
+      headers: { 'x-pvb-signature': canonicalSignature.toUpperCase() },
+    })
+  );
+
+  expect(response.status).toBe(200);
+  expect(mocks.capture).toHaveBeenCalledWith({
+    rawBody: Buffer.from(rawBody),
+    signature: canonicalSignature,
+  });
+  expect(mocks.processEvent).not.toHaveBeenCalled();
 });
 
 it.each([

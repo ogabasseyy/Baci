@@ -138,7 +138,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
   const rawBody: Buffer = bounded.body;
-  const signature = request.headers.get('x-pvb-signature');
+  // Canonicalize only the hex encoding. HMAC verification still uses the
+  // exact bounded wire bytes, while capture and SQL receive lowercase
+  // 128-character evidence as required by their storage contract.
+  const signature =
+    request.headers.get('x-pvb-signature')?.toLowerCase() ?? null;
   const verification = verifyPiggyvestWebhookSecrets({ rawBody, signature });
   if (verification.status === 'unconfigured') {
     return NextResponse.json(

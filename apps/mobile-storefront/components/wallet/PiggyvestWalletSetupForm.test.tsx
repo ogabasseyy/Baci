@@ -125,10 +125,13 @@ it.each([
   );
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('button', { name: 'Show BVN' }));
   fireEvent.press(
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() => expect(screen.getByText(message)).toBeOnTheScreen());
+  expect(screen.getByLabelText('BVN').props.value).toBe('');
+  expect(screen.getByRole('button', { name: 'Show BVN' })).toBeOnTheScreen();
   expect(screen.queryByText('private provider details')).toBeNull();
 });
 
@@ -146,7 +149,7 @@ it('exposes the visible button label as its accessible name', () => {
   expect(screen.getByText('Create account number')).toBeOnTheScreen();
 });
 
-it('keeps the BVN for retry and shows a safe inline error on failure', async () => {
+it('clears the BVN after a generic submit failure and shows a safe inline error', async () => {
   const onSubmit = jest
     .fn()
     .mockRejectedValue(new Error('private provider error'));
@@ -159,11 +162,13 @@ it('keeps the BVN for retry and shows a safe inline error on failure', async () 
   );
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('button', { name: 'Show BVN' }));
   fireEvent.press(
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
-  expect(screen.getByLabelText('BVN').props.value).toBe('12345678901');
+  expect(screen.getByLabelText('BVN').props.value).toBe('');
+  expect(screen.getByRole('button', { name: 'Show BVN' })).toBeOnTheScreen();
   expect(screen.queryByText('private provider error')).toBeNull();
   expect(onSubmit).toHaveBeenCalledWith({
     merchantId,
@@ -187,6 +192,7 @@ it('maps a definitive BVN rejection to correctable guidance', async () => {
   );
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('button', { name: 'Show BVN' }));
   fireEvent.press(
     screen.getByRole('button', { name: 'Create account number' })
   );
@@ -197,6 +203,7 @@ it('maps a definitive BVN rejection to correctable guidance', async () => {
   // A definitively rejected number is dropped: keeping a known-wrong BVN
   // serves no retry and only widens the sensitive value's lifetime.
   expect(screen.getByLabelText('BVN').props.value).toBe('');
+  expect(screen.getByRole('button', { name: 'Show BVN' })).toBeOnTheScreen();
 });
 
 it('clears the BVN only after the setup is confirmed', async () => {
@@ -210,15 +217,59 @@ it('clears the BVN only after the setup is confirmed', async () => {
   );
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(screen.getByRole('button', { name: 'Show BVN' }));
   fireEvent.press(
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
     expect(screen.getByLabelText('BVN').props.value).toBe('')
   );
+  expect(screen.getByRole('button', { name: 'Show BVN' })).toBeOnTheScreen();
   expect(onSubmit).toHaveBeenCalledWith({
     merchantId,
     bvn: '12345678901',
     consent: true,
   });
+});
+
+it('preserves an invalid local BVN for correction without submitting', () => {
+  const onSubmit = jest.fn();
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '123');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('BVN').props.value).toBe('123');
+});
+
+it('prevents double submission while clearing sensitive input on completion', async () => {
+  let resolveSubmit!: () => void;
+  const onSubmit = jest.fn(
+    () => new Promise<void>((resolve) => (resolveSubmit = resolve))
+  );
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  const submit = screen.getByRole('button', { name: 'Create account number' });
+  fireEvent.press(submit);
+  fireEvent.press(submit);
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+  resolveSubmit();
+  await waitFor(() =>
+    expect(screen.getByLabelText('BVN').props.value).toBe('')
+  );
 });

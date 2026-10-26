@@ -49,24 +49,31 @@ export function DeviceCartCapacityItems({
   // reconciliation): a second edit must not rotate the epoch before
   // the first removal's live command has been sent, or that command
   // would be fenced off and its server line left behind.
-  const removalChainRef = useRef<Promise<void>>(Promise.resolve());
+  const removalChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const removalBusyRef = useRef(false);
+  function trackRemovalTail(task: Promise<unknown>) {
+    removalChainRef.current = task;
+    void task.finally(() => {
+      // Only the current tail may release the busy flag: an earlier
+      // operation finishing must not let a new removal start while
+      // later queued removals are still reconciling.
+      if (removalChainRef.current === task) removalBusyRef.current = false;
+    });
+  }
   function remove(index: number) {
     const selected = items[index];
     if (!selected) return;
     if (!removalBusyRef.current) {
       // Idle: run now (the no-locks fallback completes synchronously).
       removalBusyRef.current = true;
-      removalChainRef.current = Promise.resolve(
-        performRemoval(selected)
-      ).finally(() => {
-        removalBusyRef.current = false;
-      });
+      trackRemovalTail(Promise.resolve(performRemoval(selected)));
       return;
     }
-    removalChainRef.current = removalChainRef.current.then(
-      () => performRemoval(selected),
-      () => performRemoval(selected)
+    trackRemovalTail(
+      removalChainRef.current.then(
+        () => performRemoval(selected),
+        () => performRemoval(selected)
+      )
     );
   }
   function performRemoval(selected: CartItem) {

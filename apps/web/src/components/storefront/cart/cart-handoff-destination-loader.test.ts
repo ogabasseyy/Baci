@@ -29,6 +29,16 @@ it('publishes a checked destination cart', async () => {
   expect(d.setDestChecked).toHaveBeenLastCalledWith(true);
 });
 
+it('marks the destination checked on a load error', async () => {
+  vi.mocked(fetchDestinationCart).mockResolvedValue({ status: 'error' });
+  const d = deps();
+  await loadDestinationCart(d, 'shop');
+  expect(d.setDestChecked).toHaveBeenLastCalledWith(true);
+  expect(d.setDestinationError).toHaveBeenCalledWith(
+    'Could not check your existing cart. Please try again.'
+  );
+});
+
 it('surfaces a retryable error when the bounded refresh deadline aborts', async () => {
   vi.mocked(fetchDestinationCart).mockResolvedValue({ status: 'error' });
   const controller = new AbortController();

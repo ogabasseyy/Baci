@@ -28,6 +28,7 @@ export async function loadDestinationCart(
     return;
   }
   if (result.status === 'error') {
+    deps.setDestChecked(true);
     deps.setDestinationError(
       'Could not check your existing cart. Please try again.'
     );

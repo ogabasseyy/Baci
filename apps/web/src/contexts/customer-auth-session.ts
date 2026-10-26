@@ -275,7 +275,10 @@ export async function performCustomerLogout(
       // merchant's parked cart) even when scoped erasure failed.
       clearCartStorage(merchantSlug, previousUserId ?? userId);
     }
-    setRememberedCustomerUserId(merchantSlug, null);
+    // Only drop the remembered identity on confirmed erasure: it is
+    // the only record of which user the parked cache belongs to, and
+    // the retained revocation fence needs it for the retry cleanup.
+    if (erased) setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);

@@ -179,12 +179,27 @@ export function createCartRecovery(
       !capacityBlocked
     )
       return;
+    // The shopper explicitly abandons the retained device cart, so the
+    // indeterminate create that carried it must not replay afterwards.
+    // Keep a copy until the erasure below is verified: a failed write
+    // restores the exact create request so retry stays replay-safe.
+    let discardedCreate: {
+      attempted: boolean;
+      request: typeof createRequestRef.current;
+    } | null = null;
     if (!stateRef.current.confirmed && capacityBlocked) {
-      // The shopper explicitly abandons the retained device cart, so the
-      // indeterminate create that carried it must not replay afterwards.
+      discardedCreate = {
+        attempted: createAttemptedRef.current,
+        request: createRequestRef.current,
+      };
       createAttemptedRef.current = false;
       createRequestRef.current = null;
     }
+    const restoreDiscardedCreate = () => {
+      if (!discardedCreate) return;
+      createAttemptedRef.current = discardedCreate.attempted;
+      createRequestRef.current = discardedCreate.request;
+    };
     // Discarding explicitly abandons the device lines: erase the parked
     // cache so a later terminal guard or re-plan cannot resurrect them.
     // The display cache re-persists the kept server cart afterwards.
@@ -212,6 +227,7 @@ export function createCartRecovery(
     } catch {
       // A secure browser without Web Locks throws synchronously from
       // the lock manager: keep the capacity recovery active.
+      restoreDiscardedCreate();
       dispatch({
         code: 'temporarily_unavailable',
         generation,
@@ -227,6 +243,7 @@ export function createCartRecovery(
           setLinkPhase('ready');
           return;
         }
+        restoreDiscardedCreate();
         dispatch({
           code: 'temporarily_unavailable',
           generation,
@@ -235,6 +252,7 @@ export function createCartRecovery(
       })
       .catch(() => {
         if (generationRef.current !== generation) return;
+        restoreDiscardedCreate();
         dispatch({
           code: 'temporarily_unavailable',
           generation,

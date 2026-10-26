@@ -5,6 +5,10 @@ import {
   performCustomerLogout,
   resetRememberedCustomerSessionsForTests,
 } from './customer-auth-session';
+import {
+  getRememberedCustomerUserId,
+  setRememberedCustomerUserId,
+} from './customer-auth-storage';
 
 vi.mock('@/hooks/cart/cart-session-write-fence', () => ({
   beginCartSessionRetirement: () => ({
@@ -47,7 +51,10 @@ it('preserves unscoped cart keys when retired-cache erasure fails on logout', as
   );
   window.localStorage.setItem('baci-cart', 'saved');
   window.localStorage.setItem('baci-cart-guest', 'saved');
+  setRememberedCustomerUserId('shop', 'old-user');
   await performCustomerLogout('shop', vi.fn(), vi.fn(), vi.fn(), 'old-user');
+  // The retiring identity survives for the fenced retry cleanup.
+  expect(getRememberedCustomerUserId('shop')).toBe('old-user');
   // The committed logout still finishes, but the failed scoped
   // erasure must not trigger the unconditional unscoped clear.
   expect(clearCartStorage).not.toHaveBeenCalled();

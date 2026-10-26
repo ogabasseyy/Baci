@@ -266,3 +266,35 @@ it('keeps group-deal clearing for the first of two rapid removals', async () => 
     expect.objectContaining({ clearGroupNegotiations: false })
   );
 });
+
+it('keeps later removals queued until the whole removal chain drains', async () => {
+  saveCartToStorage(
+    [
+      cartItem({ id: 'a', cartItemId: 'a', name: 'Alpha' }),
+      cartItem({ id: 'b', cartItemId: 'b', name: 'Bravo' }),
+      cartItem({ id: 'c', cartItemId: 'c', name: 'Charlie' }),
+    ],
+    'shop'
+  );
+  let finishFirst!: (value: boolean) => void;
+  vi.mocked(removeCapacityLineFromLiveCart)
+    .mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishFirst = resolve;
+        })
+    )
+    .mockResolvedValue(true);
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Alpha' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Bravo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Charlie' }));
+  // Only the first live reconciliation may be in flight.
+  await vi.waitFor(() =>
+    expect(removeCapacityLineFromLiveCart).toHaveBeenCalledTimes(1)
+  );
+  finishFirst(true);
+  await vi.waitFor(() =>
+    expect(removeCapacityLineFromLiveCart).toHaveBeenCalledTimes(3)
+  );
+});

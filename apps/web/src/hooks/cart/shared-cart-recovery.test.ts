@@ -146,3 +146,50 @@ it('resolves an empty retry instead of leaving an untracked pending import', () 
     type: 'import/resolved',
   });
 });
+
+it('restores the retained create request when discard erasure fails', async () => {
+  const { saveCartToStorage, cartItem } = await import(
+    './shared-cart-provisioning.test-support'
+  ).then(async (support) => ({
+    cartItem: support.cartItem,
+    saveCartToStorage: (await import('./cart-storage')).saveCartToStorage,
+  }));
+  const { result } = renderHook(() =>
+    useSharedCartRuntime({
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+      sessionGeneration: 7,
+    })
+  );
+  const runtime = result.current;
+  runtime.stateRef.current = {
+    ...runtime.stateRef.current,
+    importStatus: 'failed',
+    importWarnings: ['import_capacity_exceeded'],
+  };
+  runtime.createAttemptedRef.current = true;
+  const retained = {
+    lines: [{ item: { productId: 'prod-1' }, quantity: 1 }],
+    operationId: 'import:create:deadbeef',
+  };
+  runtime.createRequestRef.current = retained as never;
+  const dispatch = vi.fn();
+  createCartRecovery({
+    ...runtime,
+    dispatch,
+    setLinkPhase: vi.fn(),
+    refreshNow: vi.fn(),
+    ensureCart: vi.fn(),
+  }).discardLegacyImport();
+  // Simulate the erasure not persisting: the parked cache is still
+  // there when the discard write verifies it.
+  saveCartToStorage([cartItem({ id: 'prod-1', cartItemId: 'prod-1' })], 'shop');
+  await vi.waitFor(() =>
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'import/failed' })
+    )
+  );
+  // The exact retained create survives for replay-safe retry.
+  expect(runtime.createAttemptedRef.current).toBe(true);
+  expect(runtime.createRequestRef.current).toBe(retained);
+});

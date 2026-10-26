@@ -1,5 +1,3 @@
-import { generateSlug } from '@/lib/seo-utils';
-import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-commercial-support-links';
 import { buildBrandCompareCandidate } from '@/lib/storefront-compare/compare-eligibility';
 
@@ -59,28 +57,23 @@ export function verifyPriceBandLinkAgainstDestination(args: {
     }
     const compareSlug = segmentAfter(link.href, '/compare/');
     if (compareSlug?.includes('-vs-')) {
-      // Product-compare links are gated by the maintained-route manifest;
-      // only the two-segment brand candidate slug is verified here. Brand
-      // slugs are taxonomy brand keys joined by -vs-; product slugs are
-      // longer product identifiers, distinguished by candidate equality.
-      if (brandCandidate && compareSlug === brandCandidate.canonicalSlug) {
+      // The destination brand page is kept only for its own indexable
+      // top-two candidate; every other brand-style slug is dropped.
+      if (
+        brandCandidate?.isIndexable &&
+        compareSlug === brandCandidate.canonicalSlug
+      ) {
         return true;
       }
+      // Product-compare links are gated by the maintained-route manifest;
+      // they survive only when both sides are product slugs in the pool.
       const [left, right] = compareSlug.split('-vs-');
-      const brandSlugs = new Set(
-        brandAuthorityTaxonomy
-          .getEntries(args.categorySlug)
-          .flatMap((entry) => [
-            entry.brandKey,
-            generateSlug(entry.displayName),
-            generateSlug(entry.brandQueryValue),
-          ])
+      const productSlugs = new Set(
+        (args.compareProducts ?? []).map((product) => product.slug)
       );
-      const isBrandSlug =
-        Boolean(left && right) &&
-        brandSlugs.has(left ?? '') &&
-        brandSlugs.has(right ?? '');
-      return !isBrandSlug;
+      return Boolean(
+        left && right && productSlugs.has(left) && productSlugs.has(right)
+      );
     }
     return true;
   });

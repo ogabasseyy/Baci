@@ -168,6 +168,27 @@ describe('eligible-hub-destinations', () => {
       expect(laptopResult.brandHubs).toHaveLength(0);
     });
 
+    it('treats an empty category_slugs list as no category info', () => {
+      const products = [
+        'iPhone 15 Pro Max',
+        'iPhone 15 Pro',
+        'iPhone 15',
+        'iPhone 14',
+        'iPhone 13',
+      ].map((name) => ({
+        name,
+        brand: 'Apple',
+        stock: 5,
+        category_slug: null,
+        category_slugs: [] as string[],
+      }));
+      const result = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products,
+      });
+      expect(result.brandHubs).toHaveLength(1);
+    });
+
     it('fails closed when category memberships are known but exclude the category', () => {
       const products = [
         'iPhone 15 Pro Max',

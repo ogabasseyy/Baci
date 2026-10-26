@@ -105,6 +105,7 @@ export async function buildClusterHubLinks(args: {
         },
       });
 
+  const pushedBrandKeys = new Set<string>();
   for (const inferredBrand of args.inferredBrands) {
     const matchingBrandHub = findHubForBrand(
       eligibleHubs.brandHubs,
@@ -112,6 +113,16 @@ export async function buildClusterHubLinks(args: {
       inferredBrand
     );
     if (!matchingBrandHub) continue;
+    // Aliased inferred brands (redmi + xiaomi) resolve to the same hub.
+    if (
+      matchingBrandHub.brand_key &&
+      pushedBrandKeys.has(matchingBrandHub.brand_key)
+    ) {
+      continue;
+    }
+    if (matchingBrandHub.brand_key) {
+      pushedBrandKeys.add(matchingBrandHub.brand_key);
+    }
     if (matchingBrandHub.brand_key) {
       matchedBrandKeys.add(matchingBrandHub.brand_key);
     }

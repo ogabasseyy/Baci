@@ -98,6 +98,35 @@ describe('buildClusterHubLinks', () => {
     expect(mockLoad).toHaveBeenCalledTimes(1);
   });
 
+  it('de-duplicates aliased inferred brands resolving to the same hub', async () => {
+    const xiaomiProducts = [
+      'Redmi Note 13',
+      'Redmi Note 12',
+      'Xiaomi 14',
+      'Xiaomi 13',
+      'Redmi 12',
+    ].map((name) => ({
+      name,
+      brand: 'Xiaomi',
+      stock: 5,
+      category_slug: 'smartphones',
+    }));
+    const result = await buildClusterHubLinks({
+      post,
+      inferredBrands: ['redmi', 'xiaomi'],
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      storeUrl: 'https://store.test',
+      merchantId: 'merchant-1',
+      products: xiaomiProducts,
+      skipDestinationVerification: true,
+    });
+    expect(result.brandHubLinks).toHaveLength(1);
+    expect(result.brandHubLinks[0]?.href).toBe(
+      'https://store.test/smartphones/brands/xiaomi'
+    );
+  });
+
   it('returns no links when no brand is inferred', async () => {
     const result = await buildClusterHubLinks({
       post,

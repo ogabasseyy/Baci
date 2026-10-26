@@ -49,7 +49,9 @@ export function resolveEligibleCategoryHubDestinations(
       (product.category_slug === categorySlug ||
         (product.category_slugs ?? []).includes(categorySlug) ||
         // No category info at all: caller supplied a category-scoped pool.
-        (product.category_slug == null && product.category_slugs == null)) &&
+        (product.category_slug == null &&
+          (product.category_slugs == null ||
+            product.category_slugs.length === 0))) &&
       (product.is_parent === true || product.parent_product_id == null)
   );
 

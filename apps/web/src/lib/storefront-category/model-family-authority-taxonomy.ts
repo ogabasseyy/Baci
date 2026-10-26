@@ -185,27 +185,27 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'infinix',
     'hot',
     'Infinix HOT',
-    /^(?:Infinix )?Hot/i,
+    /^(?:Infinix )?Hot(?=\s|\d|$)/i,
     [/\b(?:Infinix\s+)?Hot\s+[0-9]+\b/i, /\bInfinix\s+Hot\b/i],
     2
   ),
-  fam('infinix', 'note', 'Infinix Note', /^(?:Infinix )?Note/i, [
+  fam('infinix', 'note', 'Infinix Note', /^(?:Infinix )?Note(?=\s|\d|$)/i, [
     /\bInfinix\s+Note\s+[0-9]+\b/i,
     /\bInfinix\s+Note\b/i,
   ]),
-  fam('tecno', 'spark', 'Tecno Spark', /^(?:Tecno )?Spark/i, [
+  fam('tecno', 'spark', 'Tecno Spark', /^(?:Tecno )?Spark(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Spark\s+[0-9]+\b/i,
     /\bTecno\s+Spark\b/i,
   ]),
-  fam('tecno', 'camon', 'Tecno Camon', /^(?:Tecno )?Camon/i, [
+  fam('tecno', 'camon', 'Tecno Camon', /^(?:Tecno )?Camon(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Camon\s+[0-9]+\b/i,
     /\bTecno\s+Camon\b/i,
   ]),
-  fam('tecno', 'pop', 'Tecno Pop', /^(?:Tecno )?Pop/i, [
+  fam('tecno', 'pop', 'Tecno Pop', /^(?:Tecno )?Pop(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Pop\s+[0-9]+\b/i,
     /\bTecno\s+Pop\b/i,
   ]),
-  fam('tecno', 'phantom', 'Tecno Phantom', /^(?:Tecno )?Phantom/i, [
+  fam('tecno', 'phantom', 'Tecno Phantom', /^(?:Tecno )?Phantom(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Phantom\s+(?:X|V|[0-9])\b/i,
     /\bTecno\s+Phantom\b/i,
   ]),
@@ -218,10 +218,14 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
   fam('itel', 'p-series', 'Itel P Series', /^(?:Itel )?P(?=\s|\d)/i, [
     /\bItel\s+P(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,
   ]),
-  fam('xiaomi', 'redmi-note', 'Redmi Note', /^(?:Xiaomi )?Redmi Note/i, [
-    /\b(?:Xiaomi\s+)?Redmi\s+Note\b/i,
-  ]),
-  fam('xiaomi', 'redmi-a', 'Redmi A', /^(?:Xiaomi )?Redmi A/i, [
+  fam(
+    'xiaomi',
+    'redmi-note',
+    'Redmi Note',
+    /^(?:Xiaomi )?Redmi Note(?=\s|\d|$)/i,
+    [/\b(?:Xiaomi\s+)?Redmi\s+Note\b/i]
+  ),
+  fam('xiaomi', 'redmi-a', 'Redmi A', /^(?:Xiaomi )?Redmi A(?=\s|\d|$)/i, [
     /\b(?:Xiaomi\s+)?Redmi\s+A\b/i,
     /\bRedmi\s+A[0-9]+\b/i,
   ]),

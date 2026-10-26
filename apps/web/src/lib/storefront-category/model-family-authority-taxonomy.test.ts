@@ -188,6 +188,25 @@ describe('model family authority taxonomy', () => {
     ).toBe(true);
   });
 
+  it('rejects family-name prefixes of longer words in product names', () => {
+    const cases: [string, string, string][] = [
+      ['tecno', 'spark', 'Tecno Sparkle 10'],
+      ['tecno', 'camon', 'Tecno Camonera 10'],
+      ['infinix', 'hot', 'Infinix Hotspot 10'],
+    ];
+    for (const [brand, family, name] of cases) {
+      const entry = modelFamilyAuthorityTaxonomy.getEntry(
+        'smartphones',
+        brand,
+        family
+      );
+      if (!entry) throw new Error(`Expected ${brand} ${family} entry`);
+      expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, name)).toBe(
+        false
+      );
+    }
+  });
+
   it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
     const phantom = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',

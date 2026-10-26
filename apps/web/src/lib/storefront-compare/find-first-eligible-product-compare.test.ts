@@ -3,6 +3,41 @@ import { findFirstEligibleProductCompare } from './find-first-eligible-product-c
 
 describe('findFirstEligibleProductCompare', () => {
   describe('findFirstEligibleProductCompare', () => {
+    it('chooses a cross-brand pair for multi-brand articles regardless of pool order', () => {
+      const products = [
+        {
+          slug: 'iphone-a',
+          name: 'iPhone A',
+          brand: 'Apple',
+          price: 800_000,
+          category_slug: 'smartphones',
+          product_key_specs: { chipset: 'A1', ram_gb: 8, storage_gb: 128 },
+        },
+        {
+          slug: 'iphone-b',
+          name: 'iPhone B',
+          brand: 'Apple',
+          price: 780_000,
+          category_slug: 'smartphones',
+          product_key_specs: { chipset: 'A2', ram_gb: 8, storage_gb: 256 },
+        },
+        {
+          slug: 'galaxy-a',
+          name: 'Galaxy A',
+          brand: 'Samsung',
+          price: 750_000,
+          category_slug: 'smartphones',
+          product_key_specs: { chipset: 'S1', ram_gb: 12, storage_gb: 256 },
+        },
+      ];
+      const result = findFirstEligibleProductCompare('smartphones', products, [
+        'apple',
+        'samsung',
+      ]);
+      expect(result?.leftProduct.slug).toBe('iphone-a');
+      expect(result?.rightProduct.slug).toBe('galaxy-a');
+    });
+
     const products = [
       {
         slug: 'iphone-15-pro',

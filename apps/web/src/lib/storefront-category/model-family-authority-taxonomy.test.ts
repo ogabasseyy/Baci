@@ -186,6 +186,12 @@ describe('model family authority taxonomy', () => {
     expect(
       modelFamilyAuthorityTaxonomy.matchesProduct(air, 'MacBook Air 13-inch')
     ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        air,
+        'Apple 13-inch MacBook Air M3'
+      )
+    ).toBe(true);
   });
 
   it('rejects family-name prefixes of longer words in product names', () => {

@@ -2,6 +2,7 @@ import { buildProductCompareCandidate } from './compare-eligibility';
 import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
 import { normalizeInferredBrands } from './normalize-inferred-brands';
 import type { CommercialSupportBrandProduct } from './resolve-canonical-brand-key';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 export function findFirstEligibleProductCompare<
   T extends CommercialSupportBrandProduct,
@@ -23,6 +24,8 @@ export function findFirstEligibleProductCompare<
     );
 
     if (preferredProducts.length >= 2) {
+      // Multi-brand articles must compare across brands, not within one.
+      const requireDistinctBrands = normalizedInferredBrands.length > 1;
       for (
         let leftIndex = 0;
         leftIndex < preferredProducts.length - 1;
@@ -35,6 +38,13 @@ export function findFirstEligibleProductCompare<
           rightIndex += 1
         ) {
           const rightProduct = preferredProducts[rightIndex];
+          if (
+            requireDistinctBrands &&
+            resolveCanonicalBrandKey(categorySlug, leftProduct.brand) ===
+              resolveCanonicalBrandKey(categorySlug, rightProduct.brand)
+          ) {
+            continue;
+          }
           const candidate = buildProductCompareCandidate({
             categorySlug,
             leftProduct,

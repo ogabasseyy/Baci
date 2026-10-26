@@ -37,7 +37,10 @@ export function terminalConsumptionCheckpoint(
   receipt: SharedCartImportReceipt | null,
   terminalCartId: string
 ): SharedCartImportReceipt | null {
-  if (!receipt || receipt.cartId !== terminalCartId) return receipt;
+  // A receipt from a different cart needs no checkpoint: the filter
+  // already treats it as unrelated, and verifying it against this
+  // terminal cart would fail unconditionally.
+  if (!receipt || receipt.cartId !== terminalCartId) return null;
   return {
     ...receipt,
     lineCount: 0,

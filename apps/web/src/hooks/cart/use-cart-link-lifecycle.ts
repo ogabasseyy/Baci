@@ -27,12 +27,7 @@ import {
   retireDeEnrolledCartDeviceSession,
 } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
-import {
-  terminalCachePersisted,
-  terminalCheckpointPersisted,
-  terminalConsumptionCheckpoint,
-  unimportedTerminalLines,
-} from './terminal-cart-cache';
+import { adoptTerminalSnapshotCache } from './shared-cart-terminal-adoption';
 import { useCartLinkPolling } from './use-cart-link-polling';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -170,65 +165,19 @@ export function useCartLinkLifecycle(
       if (cancelled || generationRef.current !== generation || run !== adoptRun)
         return;
       if (result.ok && isTerminalCart(result.snapshot)) {
-        // Decide recovery from a fresh read, not the effect-start
-        // copy: another tab may have written fresher device lines
-        // while revocation clearing and the fetch were awaited. A
-        // pending revocation parks the cache, so it reads as empty.
-        const storedNow = isCartDeviceRevocationPending(merchantSlug)
-          ? []
-          : getCartFromStorage(merchantSlug);
-        cached = unimportedTerminalLines(
-          storedNow,
-          result.snapshot.cartId,
-          getSharedCartImportReceipt(merchantSlug)
+        const adoption = adoptTerminalSnapshotCache(
+          merchantSlug,
+          result.snapshot
         );
-        if (cached.length) {
-          // Provisioning reads the parked source again: remove only consumed mirror lines.
-          saveCartToStorage(cached, merchantSlug);
-          // Provisioning re-reads storage: if the filtered cache did
-          // not persist, it would recreate already-consumed items.
-          const persistedOk = terminalCachePersisted(
-            getCartFromStorage(merchantSlug),
-            cached
-          );
-          if (!persistedOk) {
-            retryAdopt(attempt, run);
-            return;
-          }
-          // The filtered remainder is the new baseline: checkpoint
-          // the receipt so a reload cannot subtract it twice.
-          const checkpoint = terminalConsumptionCheckpoint(
-            getSharedCartImportReceipt(merchantSlug),
-            result.snapshot.cartId
-          );
-          if (checkpoint) {
-            saveSharedCartImportReceipt(merchantSlug, checkpoint);
-            if (
-              !terminalCheckpointPersisted(
-                getSharedCartImportReceipt(merchantSlug),
-                result.snapshot.cartId
-              )
-            ) {
-              // Roll the filtered cache back so a reload cannot
-              // re-filter it against the original receipt.
-              saveCartToStorage(storedNow, merchantSlug);
-              retryAdopt(attempt, run);
-              return;
-            }
-          }
+        cached = adoption.cached;
+        if (adoption.kind === 'retry') {
+          retryAdopt(attempt, run);
+          return;
+        }
+        if (adoption.kind === 'provision') {
           adoptOutcomeRef.current = 'expired';
           await provision(attempt, run);
           return;
-        }
-        if (storedNow.length) {
-          // Every cached row was consumed by the terminal cart:
-          // persist the empty filter so mirrored rows cannot be
-          // re-planned as a fresh import once the proof expires.
-          saveCartToStorage([], merchantSlug);
-          if (getCartFromStorage(merchantSlug).length) {
-            retryAdopt(attempt, run);
-            return;
-          }
         }
       }
       if (result.ok) {

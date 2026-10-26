@@ -3,7 +3,7 @@ import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
 import { adoptPreservedCart } from './shared-cart-preserved-session';
-import { snapshot } from './shared-cart-provisioning.test-support';
+import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
 
 vi.mock('./cart-storage', () => ({
   getCartFromStorage: vi.fn(),
@@ -94,4 +94,25 @@ it('resets the pending import before retrying after a terminal preserved cart', 
   );
   expect(retryProvisioning).toHaveBeenCalledOnce();
   expect(ctx.createAttemptedRef.current).toBe(false);
+});
+
+it('provisions preserved lines when the stored receipt is from another cart', async () => {
+  const terminal = snapshot({ cartId: 'cart-b', state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([cartItem()] as never);
+  vi.mocked(getSharedCartImportReceipt).mockReturnValue({
+    cartId: 'cart-a',
+    importedAt: '2026-10-26T00:00:00.000Z',
+    lineCount: 1,
+  } as never);
+  const retryProvisioning = vi.fn().mockResolvedValue({ ok: true });
+  const ctx = context();
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, retryProvisioning)
+  ).resolves.toEqual({ ok: true });
+  expect(retryProvisioning).toHaveBeenCalledOnce();
 });

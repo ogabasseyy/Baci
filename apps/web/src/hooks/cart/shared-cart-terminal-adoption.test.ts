@@ -1,67 +1,55 @@
-import { expect, it } from 'vitest';
-import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
+import { beforeEach, expect, it } from 'vitest';
 import {
-  initialSharedCartState,
-  sharedCartReducer,
-} from './shared-cart-reducer';
+  getCartFromStorage,
+  getSharedCartImportReceipt,
+  saveCartToStorage,
+  saveSharedCartImportReceipt,
+} from './cart-storage';
+import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
+import { adoptTerminalSnapshotCache } from './shared-cart-terminal-adoption';
 
-it('clears capacity warnings when polling adopts a terminal cart', () => {
-  const started = sharedCartReducer(initialSharedCartState, {
-    cached: [cartItem({ id: 'prod-9', cartItemId: 'prod-9' })],
-    generation: 1,
-    merchantId: '11111111-1111-4111-8111-111111111111',
-    products: {},
-    type: 'link/start',
-  });
-  const linked = sharedCartReducer(started, {
-    generation: 1,
-    snapshot: snapshot({ lines: [], version: 1 }),
-    type: 'link/snapshot',
-  });
-  const blocked = sharedCartReducer(linked, {
-    generation: 1,
-    type: 'import/capacity_exceeded',
-  });
-  expect(blocked.importStatus).toBe('failed');
-  expect(blocked.importWarnings).toContain('import_capacity_exceeded');
-  const terminal = sharedCartReducer(blocked, {
-    generation: 1,
-    snapshot: snapshot({ state: 'completed', lines: [], version: 2 }),
-    type: 'snapshot/polled',
-  });
-  expect(terminal.importWarnings).toEqual([]);
-  expect(terminal.importStatus).toBe('skipped');
+beforeEach(() => {
+  window.localStorage.clear();
 });
 
-it('clears display lines when polling adopts a terminal cart', () => {
-  const started = sharedCartReducer(initialSharedCartState, {
-    cached: [
-      cartItem({ id: 'prod-9', cartItemId: 'prod-9' }),
-      cartItem({
-        id: 'prod-1',
-        cartItemId: 'prod-1',
-        serverLineId: 'purchased-line',
-      } as never),
-    ],
-    generation: 1,
-    merchantId: '11111111-1111-4111-8111-111111111111',
-    products: {},
-    type: 'link/start',
+it('provisions preserved lines when the receipt belongs to a different cart', () => {
+  const item = cartItem({ cartItemId: 'prod-1', quantity: 2 });
+  saveCartToStorage([item], 'shop');
+  saveSharedCartImportReceipt('shop', {
+    cartId: 'cart-a',
+    importedAt: '2026-10-26T00:00:00.000Z',
+    lineCount: 1,
+    consumedCartItemIds: ['prod-1'],
+    consumedQuantities: { 'prod-1': 1 },
   });
-  const linked = sharedCartReducer(started, {
-    generation: 1,
-    snapshot: snapshot({ lines: [], version: 1 }),
-    type: 'link/snapshot',
+  const outcome = adoptTerminalSnapshotCache(
+    'shop',
+    snapshot({ cartId: 'cart-b', state: 'completed' })
+  );
+  expect(outcome.kind).toBe('provision');
+  // The mismatched receipt is left untouched and the preserved lines
+  // are not rolled back.
+  expect(getCartFromStorage('shop')).toHaveLength(1);
+  expect(getSharedCartImportReceipt('shop')?.cartId).toBe('cart-a');
+});
+
+it('retains the remainder and checkpoints a matching receipt', () => {
+  const item = cartItem({ cartItemId: 'prod-1', quantity: 3 });
+  saveCartToStorage([item], 'shop');
+  saveSharedCartImportReceipt('shop', {
+    cartId: 'cart-b',
+    importedAt: '2026-10-26T00:00:00.000Z',
+    lineCount: 1,
+    consumedCartItemIds: ['prod-1'],
+    consumedQuantities: { 'prod-1': 1 },
   });
-  const terminal = sharedCartReducer(linked, {
-    generation: 1,
-    snapshot: snapshot({ state: 'completed', lines: [], version: 2 }),
-    type: 'snapshot/polled',
+  const outcome = adoptTerminalSnapshotCache(
+    'shop',
+    snapshot({ cartId: 'cart-b', state: 'completed' })
+  );
+  expect(outcome.kind).toBe('provision');
+  expect(getCartFromStorage('shop')[0].quantity).toBe(2);
+  expect(getSharedCartImportReceipt('shop')?.consumedQuantities).toEqual({
+    'prod-1': 0,
   });
-  // Display clears on terminal adoption; unimported device lines survive
-  // only in the storage cache, where provisioning re-plans them into
-  // the next cart (covered by the terminal re-plan suite).
-  expect(terminal.unimportedCache).toEqual([]);
-  expect(terminal.display).toEqual([]);
-  expect(terminal.importStatus).toBe('skipped');
 });

@@ -115,5 +115,9 @@ export function unimportedTerminalLines(
   const mirrors = cached.length - fresh.length;
   if (mirrors > 0) return fresh;
   if (fresh.length <= receipt.lineCount) return [];
+  // Count-only fallback: this positional slice is only sound for an
+  // unmodified source cache (storage order equals import order, as
+  // written by the import itself). Receipts carrying consumed IDs
+  // take the identity-based path above and are reorder-safe.
   return fresh.slice(receipt.lineCount);
 }

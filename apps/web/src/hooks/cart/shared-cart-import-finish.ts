@@ -32,6 +32,12 @@ export function createImportFinisher(context: SharedCartRuntime) {
     // snapshot instead of rolling back to the pre-command state.
     const confirmed = outcome.snapshot ?? current.confirmed;
     if (!confirmed) return;
+    // The receipt counts imported source lines, not every line in
+    // the confirmed snapshot (which may include pre-existing server
+    // lines): the terminal filter consumes this count positionally
+    // for receipts without consumed IDs.
+    const importedLineCount =
+      context.importSourceIdsRef?.current.length || confirmed.lines.length;
     dispatch({
       generation,
       lineCount: confirmed.lines.length,
@@ -41,7 +47,7 @@ export function createImportFinisher(context: SharedCartRuntime) {
     saveSharedCartImportReceipt(optionsRef.current.merchantSlug, {
       cartId: confirmed.cartId,
       importedAt: new Date().toISOString(),
-      lineCount: confirmed.lines.length,
+      lineCount: importedLineCount,
       ...(context.importSourceIdsRef?.current.length
         ? consumedReceiptFields(context.importSourceIdsRef.current)
         : {}),

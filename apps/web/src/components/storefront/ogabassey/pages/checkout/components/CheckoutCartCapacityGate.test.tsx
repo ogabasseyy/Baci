@@ -183,8 +183,10 @@ it('surfaces capacity recovery in place once checkout has mounted', () => {
       <button type="button">Place Order</button>
     </CheckoutCartCapacityGate>
   );
-  // The form stays mounted and recovery is offered above it.
+  // The form stays mounted and recovery is offered above it, but
+  // submission stays disabled while capacity is unresolved.
   expect(screen.getByRole('button', { name: 'Place Order' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Place Order' })).toBeDisabled();
   expect(
     screen.getByRole('region', { name: 'Cart import capacity' })
   ).toBeVisible();

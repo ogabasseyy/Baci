@@ -174,6 +174,17 @@ async function requestSharedCartCheckout(
   const body = await readBody(response);
   if (response.ok && body) {
     const review = reviewOf(body.snapshot);
+    // Never bind checkout to a different cart than the one submitted:
+    // a stale or cross-tab-switched response must be rejected, not
+    // adopted verbatim by the caller.
+    if (review && review.cartId !== input.cartId) {
+      return {
+        code: 'refresh_required',
+        currentVersion: null,
+        ok: false,
+        retryable: false,
+      };
+    }
     if (review) {
       return {
         ok: true,

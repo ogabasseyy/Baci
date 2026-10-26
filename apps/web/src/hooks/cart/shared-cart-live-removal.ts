@@ -19,7 +19,9 @@ import { getCartSessionGeneration } from './shared-cart-storage';
  * updated, so the caller can surface a retryable error.
  */
 async function clearLiveGroupNegotiations(
-  merchantSlug: string
+  merchantSlug: string,
+  pinnedCartId?: string,
+  fenceCurrent?: () => boolean
 ): Promise<boolean> {
   // Re-fetch and re-plan on conflict or indeterminate responses so a
   // concurrent mutation cannot leave a partially-voided group deal.
@@ -27,6 +29,10 @@ async function clearLiveGroupNegotiations(
     const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
     if (!fetched.ok) return false;
     if (isTerminalCart(fetched.snapshot)) return true;
+    // Never clear negotiations on a successor cart or after the
+    // removal fence has been superseded.
+    if (pinnedCartId && fetched.snapshot.cartId !== pinnedCartId) return false;
+    if (fenceCurrent && !fenceCurrent()) return false;
     let version = fetched.snapshot.version;
     let replanned = false;
     for (const line of fetched.snapshot.lines) {
@@ -47,6 +53,7 @@ async function clearLiveGroupNegotiations(
         },
         merchantSlug
       );
+      if (fenceCurrent && !fenceCurrent()) return false;
       if (!cleared.ok) {
         replanned = true;
         break;
@@ -143,7 +150,11 @@ export async function removeCapacityLineFromLiveCart(
     );
     if (result.ok)
       return options?.clearGroupNegotiations
-        ? clearLiveGroupNegotiations(merchantSlug)
+        ? clearLiveGroupNegotiations(
+            merchantSlug,
+            result.snapshot?.cartId,
+            fenceCurrent
+          )
         : true;
     if (result.code === 'version_conflict') {
       // A version conflict is a definitive response: the retry may
@@ -161,7 +172,11 @@ export async function removeCapacityLineFromLiveCart(
       !settled || settled.quantity <= Math.max(remainingQuantity, 0);
     if (!reconciled) return false;
     return options?.clearGroupNegotiations
-      ? clearLiveGroupNegotiations(merchantSlug)
+      ? clearLiveGroupNegotiations(
+          merchantSlug,
+          check.snapshot.cartId,
+          fenceCurrent
+        )
       : true;
   }
   return false;

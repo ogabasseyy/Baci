@@ -1,7 +1,7 @@
 'use client';
 // Uses React state/effects and browser storage to edit saved cart lines.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   getCartCookieEpoch,
@@ -45,9 +45,31 @@ export function DeviceCartCapacityItems({
       ),
     [merchantSlug]
   );
+  // Serialize removals end-to-end (cache edit plus live
+  // reconciliation): a second edit must not rotate the epoch before
+  // the first removal's live command has been sent, or that command
+  // would be fenced off and its server line left behind.
+  const removalChainRef = useRef<Promise<void>>(Promise.resolve());
+  const removalBusyRef = useRef(false);
   function remove(index: number) {
     const selected = items[index];
     if (!selected) return;
+    if (!removalBusyRef.current) {
+      // Idle: run now (the no-locks fallback completes synchronously).
+      removalBusyRef.current = true;
+      removalChainRef.current = Promise.resolve(
+        performRemoval(selected)
+      ).finally(() => {
+        removalBusyRef.current = false;
+      });
+      return;
+    }
+    removalChainRef.current = removalChainRef.current.then(
+      () => performRemoval(selected),
+      () => performRemoval(selected)
+    );
+  }
+  function performRemoval(selected: CartItem) {
     // Serialize the edit with in-flight creates in other tabs through
     // the origin-wide cookie-writer lock: the cache is re-read and the
     // epoch rotated only once any active creator has finished, so a
@@ -87,8 +109,8 @@ export function DeviceCartCapacityItems({
       setError('Could not save that change. Check storage access and retry.');
       return;
     }
-    void write
-      .then(() => {
+    return write
+      .then(async () => {
         if (!applied) {
           setItems(getCartFromStorage(merchantSlug));
           setError(
@@ -109,16 +131,15 @@ export function DeviceCartCapacityItems({
         // Reconcile the row actually removed from storage: another
         // tab may have changed its quantity after this list rendered.
         const removed: CartItem = removedRow;
-        void removeCapacityLineFromLiveCart(removed, merchantSlug, {
+        const ok = await removeCapacityLineFromLiveCart(removed, merchantSlug, {
           clearGroupNegotiations: voidedGroupDeal,
           expectedEpoch: removalEpoch,
           expectedGeneration: removalGeneration,
-        }).then((ok) => {
-          if (!ok)
-            setError(
-              'Saved items updated, but the live cart could not be updated. Remove the item from the cart and retry.'
-            );
         });
+        if (!ok)
+          setError(
+            'Saved items updated, but the live cart could not be updated. Remove the item from the cart and retry.'
+          );
       })
       .catch(() => {
         setItems(getCartFromStorage(merchantSlug));

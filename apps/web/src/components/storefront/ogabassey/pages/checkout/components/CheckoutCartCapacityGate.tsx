@@ -63,7 +63,9 @@ export function CheckoutCartCapacityGate({
       return (
         <>
           <CartImportConflicts />
-          {renderCheckout(children, () => setRevealed(true))}
+          <fieldset className="contents" disabled>
+            {renderCheckout(children, () => setRevealed(true))}
+          </fieldset>
         </>
       );
     return (
@@ -86,7 +88,9 @@ export function CheckoutCartCapacityGate({
   return (
     <>
       {null}
-      {renderCheckout(children, () => setRevealed(true))}
+      <fieldset className="contents" disabled={false}>
+        {renderCheckout(children, () => setRevealed(true))}
+      </fieldset>
     </>
   );
 }

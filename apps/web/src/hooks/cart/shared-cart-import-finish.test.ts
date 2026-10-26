@@ -15,7 +15,9 @@ function context(confirmed: unknown) {
     dispatch: vi.fn(),
     generationRef: { current: 7 },
     importOpIdsRef: { current: new Set(['op-1']) },
-    importSourceIdsRef: { current: [] },
+    importSourceIdsRef: {
+      current: [{ cartItemId: 'prod-1', quantity: 2 }],
+    },
     optionsRef: { current: { merchantSlug: 'shop' } },
     stateRef: { current: { confirmed } },
   };
@@ -23,17 +25,19 @@ function context(confirmed: unknown) {
 
 it('finishes with the reconciled snapshot before stateRef commits it', () => {
   const stale = snapshot({ lines: [] });
-  const reconciled = snapshot({ lines: [cartLine()] });
+  const reconciled = snapshot({ lines: [cartLine(), cartLine()] });
   const ctx = context(stale);
   const finish = createImportFinisher(ctx as never);
   finish('op-1', { ok: true, snapshot: reconciled as never });
   expect(ctx.dispatch).toHaveBeenCalledWith(
     expect.objectContaining({
-      lineCount: 1,
+      lineCount: 2,
       snapshot: reconciled,
       type: 'import/finished',
     })
   );
+  // The receipt counts the single imported source line, not both
+  // lines now present in the confirmed snapshot.
   expect(saveSharedCartImportReceipt).toHaveBeenCalledWith(
     'shop',
     expect.objectContaining({ lineCount: 1 })

@@ -40,6 +40,7 @@ psql -X -h "$task_pg_dir" -p "$task_pg_port" -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_repo/supabase/migrations/20260930160085_customer_order_tax_subtotals_rpc.sql" \
   -f "$task_repo/supabase/migrations/20260930160086_manual_order_document_snapshot_rpc.sql" \
   -f "$task_repo/supabase/migrations/20260930160088_receipt_claim_activity_fallback_hashes.sql" \
+  -f "$task_repo/supabase/migrations/20260930160089_suppress_unchanged_tax_subtotal_rebuilds.sql" \
   -f "$task_repo/supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql" \
   -f "$task_repo/supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql" \
   -f "$task_repo/supabase/migrations/20260930160350_manual_document_snapshot_builders.sql" \

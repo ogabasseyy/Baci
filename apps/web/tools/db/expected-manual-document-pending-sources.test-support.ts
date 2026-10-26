@@ -56,8 +56,13 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20260930160089_suppress_unchanged_tax_subtotal_rebuilds.sql',
+    sha256: '2e4e48c04852b3635087a50bb1d080a3e317fd8e011291c5432fbf6688d7beb0',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: '4ccf8c052d8597f6458d6cff91032e2163893b6b605234a5cf308363c2657793',
+    sha256: '5e2ab3564acefc4586670a9c438d535834bd4b15b49269724706bcaaa72bb040',
   },
   {
     repositoryPath:
@@ -67,7 +72,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: '30af7b51490226f938b85a258190680249133ad400650b31103c43fb69d7c525',
+    sha256: '2e1f50b50954daa6be946d787fcff58f625cff68aa944b93f05fcc76450e1a15',
   },
   {
     repositoryPath:

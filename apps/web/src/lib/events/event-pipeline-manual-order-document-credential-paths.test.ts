@@ -18,6 +18,7 @@ describe('eventPipelineManualOrderDocumentCredentialPaths', () => {
     ]);
     expect(eventPipelineManualOrderDocumentCredentialPaths).toContainEqual([
       'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+      'apps/web/src/lib/import-notifications/receipt-claim-preview.ts',
       'apps/web/src/lib/receipts/server-login-hint-client.ts',
       'apps/web/src/lib/supabase/service.ts',
       'apps/web/src/env.ts',

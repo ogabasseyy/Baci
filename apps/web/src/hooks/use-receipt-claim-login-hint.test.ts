@@ -1,12 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useReceiptClaimLoginHint } from './use-receipt-claim-login-hint';
 
 vi.mock('@/lib/customer-login-prefill', () => ({
   fetchCustomerLoginEmailHintForRedirect: vi.fn(),
 }));
 
 import { fetchCustomerLoginEmailHintForRedirect } from '@/lib/customer-login-prefill';
-import { useReceiptClaimLoginHint } from './use-receipt-claim-login-hint';
+
+const mockedFetchHint = vi.mocked(fetchCustomerLoginEmailHintForRedirect);
 
 describe('useReceiptClaimLoginHint', () => {
   beforeEach(() => {
@@ -14,47 +16,61 @@ describe('useReceiptClaimLoginHint', () => {
   });
 
   it('returns the masked hint for a claim redirect without prefill', async () => {
-    vi.mocked(fetchCustomerLoginEmailHintForRedirect).mockResolvedValue(
-      'b***@example.com'
-    );
+    mockedFetchHint.mockResolvedValue('b***@example.com');
     const { result } = renderHook(() =>
       useReceiptClaimLoginHint('/receipts/claim/abc', null)
     );
 
     await act(async () => {});
-
     expect(result.current).toBe('b***@example.com');
   });
 
-  it('clears a stale hint when the redirect target changes', async () => {
-    vi.mocked(fetchCustomerLoginEmailHintForRedirect).mockImplementation(
-      async (redirect) =>
-        redirect === '/receipts/claim/first' ? 'f***@example.com' : ''
-    );
+  it('clears the previous masked hint when navigating between claim redirects', async () => {
+    mockedFetchHint.mockImplementation(async (redirectTo: string) => {
+      if (redirectTo === '/receipts/claim/first') return 'f***@example.com';
+      if (redirectTo === '/receipts/claim/second') {
+        // Hold the second lookup open so the stale hint is observable
+        // between the redirect change and the fresh fetch resolving.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return 's***@example.com';
+      }
+      return '';
+    });
+
     const { result, rerender } = renderHook(
-      ({ redirect }) => useReceiptClaimLoginHint(redirect, null),
-      { initialProps: { redirect: '/receipts/claim/first' } }
+      ({ redirectTo }: { redirectTo: string }) =>
+        useReceiptClaimLoginHint(redirectTo, null),
+      { initialProps: { redirectTo: '/receipts/claim/first' } }
     );
 
-    await act(async () => {});
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(result.current).toBe('f***@example.com');
 
-    rerender({ redirect: '/receipts/claim/second' });
+    // Act: client-side navigation swaps the claim without remounting.
+    rerender({ redirectTo: '/receipts/claim/second' });
 
-    // Cleared synchronously on target change, before the next fetch lands.
+    // Assert: the stale first-claim hint clears synchronously, before the
+    // second lookup resolves.
     expect(result.current).toBe('');
-    await act(async () => {});
-    expect(result.current).toBe('');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(result.current).toBe('s***@example.com');
   });
 
-  it('never fetches when a prefill email is present', async () => {
+  it('stays empty when a prefill email is present', async () => {
     const { result } = renderHook(() =>
-      useReceiptClaimLoginHint('/receipts/claim/abc', 'ada@example.com')
+      useReceiptClaimLoginHint('/receipts/claim/first', 'typed@example.com')
     );
 
-    await act(async () => {});
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(result.current).toBe('');
-    expect(fetchCustomerLoginEmailHintForRedirect).not.toHaveBeenCalled();
+    expect(mockedFetchHint).not.toHaveBeenCalled();
   });
 });

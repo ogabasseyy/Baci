@@ -262,6 +262,46 @@ SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'tax correction preserves the receipt marker');
 DELETE FROM public.order_tax_subtotals WHERE order_id = '10000000-0000-4000-8000-000000000017' AND exemption_reason = 'reset-test-probe';
 DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt';
+-- Unchanged tax rebuilds preserve the invoice marker: a fulfillment-only
+-- item edit recomputes an identical VAT breakdown, so the suppressed
+-- rebuild writes no subtotal rows and the in-flight invoice send is not
+-- duplicated with an identical attachment. Any DELETE would have cleared
+-- the marker, so survival proves suppression (not an identical rewrite).
+-- Uses a dedicated order: shared fixture orders must keep their exact
+-- stored state for later suites. The harness subset has no baseline item
+-- triggers, so the update trigger is created locally for this probe and
+-- dropped before cleanup.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000106', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'taxprobe@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000106', 'Device', 1, 100);
+CREATE TRIGGER probe_update_order_tax_totals_update
+  AFTER UPDATE ON public.order_items FOR EACH ROW
+  EXECUTE FUNCTION public.update_order_tax_totals();
+-- Establish the stored breakdown first: with no stored rows the first
+-- rebuild inserts (a real change), which must not be confused with the
+-- suppression case below.
+UPDATE public.order_items SET fulfillment_data = '{"courier":"DHL"}'::jsonb WHERE order_id = '10000000-0000-4000-8000-000000000106';
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_tax_subtotals WHERE order_id = '10000000-0000-4000-8000-000000000106'), 'first rebuild stores the breakdown');
+-- Re-mark across two statements: the dispatch-boundary trigger clears the
+-- marker on a status transition, so the claim and the marker write split.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000106' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000106' AND event_type = 'manual_order_invoice';
+UPDATE public.order_items SET fulfillment_data = '{"courier":"UPS"}'::jsonb WHERE order_id = '10000000-0000-4000-8000-000000000106';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000106' AND event_type = 'manual_order_invoice'), 'unchanged rebuild preserves the invoice marker');
+-- A genuine breakdown change still invalidates: the suppressed path must
+-- not over-suppress.
+UPDATE public.order_items SET vat_rate = 12.5 WHERE order_id = '10000000-0000-4000-8000-000000000106';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000106' AND event_type = 'manual_order_invoice'), 'changed rebuild resets the invoice marker');
+-- Cleanup mirrors the activation suite (outbox, items, order): the
+-- item delete re-runs the probe rebuild, which clears the now-empty
+-- breakdown, and the itemless enqueue early-returns, so nothing is
+-- recreated and later suites keep their preconditions.
+DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000106';
+DELETE FROM public.order_items WHERE order_id = '10000000-0000-4000-8000-000000000106';
+DELETE FROM public.orders WHERE id = '10000000-0000-4000-8000-000000000106';
+DROP TRIGGER probe_update_order_tax_totals_update ON public.order_items;
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_tax_subtotals WHERE order_id = '10000000-0000-4000-8000-000000000106'), 'probe leaves no stored breakdown');
+
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 INSERT INTO public.transactions (id, order_id, transaction_type, amount, status) VALUES ('10000000-0000-4000-8000-000000000c01', '10000000-0000-4000-8000-000000000003', 'payment', 100, 'completed');
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'settled payment insert resets the in-flight marker');

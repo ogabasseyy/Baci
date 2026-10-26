@@ -15,6 +15,7 @@ export function LoginScreen() {
     dismissAndNavigate,
     email,
     emailError,
+    emailHintGuidance,
     handleAppleSignIn,
     handleBack,
     handleContinue,
@@ -76,6 +77,7 @@ export function LoginScreen() {
             dismissAndNavigate={dismissAndNavigate}
             email={email}
             emailError={emailError}
+            emailHintGuidance={emailHintGuidance}
             handleAppleSignIn={handleAppleSignIn}
             handleContinue={handleContinue}
             handleGoogleSignIn={handleGoogleSignIn}

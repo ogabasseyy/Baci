@@ -9,6 +9,8 @@ const zeptomail = 'apps/web/src/lib/zeptomail.ts';
 const admin = 'apps/web/src/lib/supabase/admin.ts';
 const loginEmailRoute =
   'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts';
+const claimPreview =
+  'apps/web/src/lib/import-notifications/receipt-claim-preview.ts';
 const loginHintClient = 'apps/web/src/lib/receipts/server-login-hint-client.ts';
 const serviceClient = 'apps/web/src/lib/supabase/service.ts';
 
@@ -32,8 +34,9 @@ export const eventPipelineManualOrderDocumentCredentialPaths = [
   [...zeptomailAdminTail],
   // The token-scoped login-email route resolves the recipient address
   // through the branded single-RPC login-hint boundary (PR 3580): the
-  // route imports only the boundary helper, which is the sole importer of
+  // route reaches the boundary helper through the claim-preview loader,
+  // which is the sole importer of
   // the receipt-login-hint service brand. The 256-bit claim Bearer [REDACTED] is the
   // only credential on this path, and no table access flows through it.
-  [loginEmailRoute, loginHintClient, serviceClient, envPath],
+  [loginEmailRoute, claimPreview, loginHintClient, serviceClient, envPath],
 ] as const;

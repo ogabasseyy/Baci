@@ -28,13 +28,13 @@ Activation backfill is bounded by construction plus an abort budget:
 pre-existing orders carry `manual_document_notification_eligible = false`,
 so the postdeploy backfill only sees staff-recorded orders created during
 the deploy's own predeploy-to-postdeploy window that never got an outbox
-row: the scan filters on the same provenance triple the enqueue
-early-returns for (`recorded_by_user_id` set, no import job, blank
-external source), so the 500-row fence counts callable rows, not rows
-that can never mail. Each scanned order runs the enqueue function (which
-re-validates and early-returns for ineligible rows), the `NOT EXISTS`
-anti-join makes retries idempotent, and the 120s statement timeout fails the migration
-loud rather than stalling postdeploy. Past a 500-row scan the migration
+row: the scan mirrors the enqueue's full eligibility (provenance triple
+plus customer link, contactable recipient, shippable status, at least one
+item, and a payable balance state), so the 500-row fence counts callable
+rows, not rows that can never mail. Each scanned order runs the enqueue
+function (which re-validates and early-returns for ineligible rows), the
+`NOT EXISTS` anti-join makes retries idempotent, and the 120s statement
+timeout fails the migration loud rather than stalling postdeploy. Past a 500-row scan the migration
 aborts outright (it never silently strands rows): a gap that large means
 the predeploy-to-postdeploy window stretched far past minutes, so split
 the catch-up manually — run the enqueue calls in chunks, then re-apply —
@@ -93,12 +93,18 @@ The enqueue triggers ship DISABLED and are enabled automatically: migration
 20260930160300 is deferred to the postdeploy phase, so the deployer applies
 it after the new web revision is live and the previous revision has drained
 (305s), when no old cron binary with the all-or-nothing batch parser can
-still claim. The same transaction backfills eligible orders created while
-the triggers were disabled — enabling is not retroactive, so without the
-backfill those orders would silently miss their documents. The backfill is
-re-runnable: orders that already have a manual row are skipped, and the
-enqueue function re-validates all eligibility. In environments without the
-deploy pipeline, run the statements in 20260930160300 manually as one
+still claim. Inside the migration the burst fence runs first (an abort leaves the
+triggers disabled with nothing mailed), then the triggers enable, then
+the backfill scans the disabled window. Enabling before the scan closes
+the concurrent-write gap: staff writes committed between the fence and
+the scan enqueue through the now-live triggers, and the backfill's
+anti-join skips them when the scan reaches them — every gap write fires
+a trigger while the scan only ever sees trigger-covered rows. Enabling
+is not retroactive, so without the backfill pre-enable orders would
+silently miss their documents. The backfill is re-runnable: orders that
+already have a manual row are skipped, and the enqueue function
+re-validates all eligibility. In environments without the deploy
+pipeline, run the statements in 20260930160300 manually as one
 transaction after verifying the new worker drains batches with no 5xx.
 Catch-up scope: the backfill mails post-rollout manual orders created
 while the triggers were disabled (each re-validated by the enqueue

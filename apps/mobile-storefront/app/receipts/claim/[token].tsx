@@ -1,5 +1,5 @@
 import { withReceiptClaimedSearchParam } from '@baci/shared/lib';
-import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
+import { sanitizeMaskedCustomerLoginEmailHint } from '@baci/shared/schemas';
 import { useQueryClient } from '@tanstack/react-query';
 import { type Href, Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -20,7 +20,9 @@ function readParam(value: string | string[] | undefined) {
 }
 
 function readEmailHint(value: string | string[] | undefined) {
-  return sanitizeCustomerLoginEmailHint(value) || null;
+  // The login redirect carries the masked hint (never a full address).
+  const raw = Array.isArray(value) ? value[0] : value;
+  return sanitizeMaskedCustomerLoginEmailHint(raw) || null;
 }
 
 function appendEmailHintToLoginRedirect(href: string, email: string | null) {
@@ -67,8 +69,9 @@ async function readRedirectPath(response: Response) {
 async function readLoginEmailHint(response: Response) {
   try {
     const body = (await response.json()) as { emailHint?: unknown };
-    return sanitizeCustomerLoginEmailHint(
-      typeof body.emailHint === 'string' ? body.emailHint : undefined
+    // The login-email route returns only the masked hint.
+    return sanitizeMaskedCustomerLoginEmailHint(
+      typeof body.emailHint === 'string' ? body.emailHint : null
     );
   } catch {
     return '';

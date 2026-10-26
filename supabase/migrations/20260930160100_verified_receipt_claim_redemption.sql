@@ -208,7 +208,24 @@ BEGIN
   END IF;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
   IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
-  IF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN
+  IF v_claim.manual_notification_id IS NOT NULL THEN
+    -- Manual claims authorize against the claimed orders' CURRENT
+    -- normalized recipient, not the claim row's stored email: a staff
+    -- correction of orders.customer_email does not rotate or revoke the
+    -- claim (terminal outbox rows stay untouched by design), so the
+    -- stored address goes stale. Every claimed order must still agree
+    -- with the verified redeemer, or the corrected-away recipient keeps
+    -- archive access through the old token. A corrected-to recipient
+    -- without a token stays stranded until a deliberate resend — fail
+    -- closed, never open.
+    IF EXISTS (
+      SELECT 1 FROM public.receipt_claim_orders AS rco
+      JOIN public.orders AS o ON o.id = rco.order_id
+      WHERE rco.receipt_claim_id = v_claim.id
+        AND lower(btrim(COALESCE(o.customer_email, '')))
+          IS DISTINCT FROM v_email
+    ) THEN RETURN jsonb_build_object('status', 'email_mismatch'); END IF;
+  ELSIF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN
     RETURN jsonb_build_object('status', 'email_mismatch');
   END IF;
   -- Lock-free read: this row only feeds the checks below, and holding it

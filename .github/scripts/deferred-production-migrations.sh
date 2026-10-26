@@ -5,9 +5,17 @@
 # pre-deploy phase skips them; the deploy job applies them immediately after the
 # new revision is live. Keep this list explicit and short so unrelated schema
 # migrations still run before application deployment.
+#
+# 20260930160100_verified_receipt_claim_redemption deliberately stays OUT of
+# this list: it applies predeploy so no direct-RPC unverified-redemption
+# window exists. It is old-caller-safe — same public signatures, and the old
+# route maps every new status it does not know (email_unverified,
+# customer_link_failed) to a logged 500 while verified happy-path redemptions
+# behave identically — so serving the previous web revision against the
+# verified core fails closed, never open.
 is_postdeploy_migration() {
   case "$1" in
-    20260827140000_enforce_storefront_order_delivery_metadata|20260828091000_harden_storefront_order_rpc_context_and_replays|20260828101000_allow_legacy_quiz_award_order_context|20260828110000_prepare_storefront_order_hash_stamping|20260828110100_finalize_storefront_order_hash_stamping|20260828120000_enforce_storefront_order_replay_route_context|20260828130000_scope_storefront_order_replay_route_context|20260828151000_enforce_storefront_airport_pickup_location|20260828190000_restore_storefront_order_delivery_metadata_enforcement|20260930160100_verified_receipt_claim_redemption|20260930160200_preview_receipt_claim_document_kind|20260930160300_enable_manual_order_document_triggers|20261019000000_revoke_loyalty_resolver_anon_execute)
+    20260827140000_enforce_storefront_order_delivery_metadata|20260828091000_harden_storefront_order_rpc_context_and_replays|20260828101000_allow_legacy_quiz_award_order_context|20260828110000_prepare_storefront_order_hash_stamping|20260828110100_finalize_storefront_order_hash_stamping|20260828120000_enforce_storefront_order_replay_route_context|20260828130000_scope_storefront_order_replay_route_context|20260828151000_enforce_storefront_airport_pickup_location|20260828190000_restore_storefront_order_delivery_metadata_enforcement|20260930160200_preview_receipt_claim_document_kind|20260930160300_enable_manual_order_document_triggers|20261019000000_revoke_loyalty_resolver_anon_execute)
       return 0
       ;;
     *)

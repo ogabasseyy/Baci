@@ -234,6 +234,28 @@ SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('ca', 32), 'web')->>'status' = 'email_mismatch', 'old bearer fails closed on the delivered hash after recipient correction');
 RESET ROLE;
+-- A staff recipient correction on a TERMINAL send does not rotate the
+-- claim (terminal outbox rows stay untouched by design, customer row
+-- unchanged): the claim row keeps the stale address, so the old token
+-- must fail against the orders' CURRENT normalized recipient instead
+-- of the stored claim email.
+-- Reuse the fixture buyer row (...002): the scenario keeps the customer
+-- row unchanged and corrects only the order recipient.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000073', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000073', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000073' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000073' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('e7', 32))->>'status' = 'created'), 'terminal-send claim created for the original recipient');
+UPDATE public.order_notification_outbox SET status = 'sent', locked_by = NULL, locked_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000073' AND event_type = 'manual_order_receipt';
+UPDATE public.orders SET customer_email = 'corrected@example.com' WHERE id = '10000000-0000-4000-8000-000000000073';
+SELECT pg_temp.assert_true((SELECT customer_email = 'buyer@example.com' FROM public.receipt_claims WHERE token_hash = repeat('e7', 32)), 'terminal send leaves the stale claim address in place');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000074', 'buyer@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000074', true);
+SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('e7', 32), 'web')->>'status' = 'email_mismatch', 'corrected-away recipient fails against the current order email');
+RESET ROLE;
+SELECT pg_temp.assert_true((SELECT claimed_by_user_id IS NULL FROM public.receipt_claims WHERE token_hash = repeat('e7', 32)), 'failed redeem links nothing');
 -- A case-variant claim email creates exactly one normalized customer row:
 -- the miss path inserts the normalized redeemer email (never the raw
 -- claim spelling), so the case-sensitive merchant/email unique index

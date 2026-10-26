@@ -10,8 +10,8 @@ import type { createServiceClient } from '@/lib/supabase/service';
 import {
   isPostAcceptanceLeaseReset,
   markCorrectiveRetry,
-  retryDelayMs,
 } from './order-notification-outbox-corrective-retry';
+import { markFailedOrRetry } from './order-notification-outbox-failure';
 import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
@@ -102,40 +102,6 @@ async function markDeliveryOutcomeUnknown(
     skipped_at: new Date().toISOString(),
     status: 'skipped' satisfies OrderNotificationOutboxStatus,
   });
-}
-
-async function markFailedOrRetry(
-  supabase: SupabaseClientLike,
-  row: ClaimedOrderNotificationOutboxRow,
-  error: string,
-  summary: OrderNotificationCronSummary
-) {
-  // Counts follow the durable write: a superseded attempt (lost claim)
-  // must not count an outcome the row never recorded.
-  // A failed marker cleanup strands past the budget (the set marker
-  // blocks re-arm): corrective-retry like a lease reset instead.
-  if (error === 'dispatch_marker_clear_failed') {
-    await markCorrectiveRetry(supabase, row, summary, error);
-    return;
-  }
-  if (row.attempt_count >= row.max_attempts) {
-    await updateOutboxStatus(supabase, row, {
-      last_error: error,
-      next_attempt_at: null,
-      status: 'failed' satisfies OrderNotificationOutboxStatus,
-    });
-    summary.failed += 1;
-    return;
-  }
-
-  await updateOutboxStatus(supabase, row, {
-    last_error: error,
-    next_attempt_at: new Date(
-      Date.now() + retryDelayMs(row.attempt_count)
-    ).toISOString(),
-    status: 'pending' satisfies OrderNotificationOutboxStatus,
-  });
-  summary.retried += 1;
 }
 
 async function processClaimedRow(

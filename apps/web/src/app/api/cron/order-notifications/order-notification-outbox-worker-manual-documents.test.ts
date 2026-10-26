@@ -27,7 +27,8 @@ function createSupabase(
   reclaimRow: Record<string, unknown> | null = {
     dispatch_started_at: null,
     last_error: null,
-  }
+  },
+  reclaimError: unknown = null
 ) {
   const updateErrors = [...errors];
   const select = vi.fn();
@@ -48,7 +49,7 @@ function createSupabase(
       };
     }
     if (lastSelect === 'dispatch_started_at, last_error') {
-      return { data: reclaimRow, error: null };
+      return { data: reclaimError ? null : reclaimRow, error: reclaimError };
     }
     if (typeof lastSelect === 'string' && lastSelect.includes('locked_by')) {
       return { data: classifyError ? null : classifyRow, error: classifyError };
@@ -66,7 +67,7 @@ function createSupabase(
     maybeSingle,
     not: vi.fn(() => builder),
     select,
-    update: vi.fn(() => builder),
+    update: vi.fn((_values: Record<string, unknown>) => builder),
   };
   select.mockImplementation(() => builder);
   return { client: { from: vi.fn(() => builder) }, builder };
@@ -270,6 +271,37 @@ describe('order notification outbox worker manual documents', () => {
     );
     expect(sendDocument).toHaveBeenCalledTimes(1);
     expect(summary).toMatchObject({ retried: 1 });
+  });
+
+  it('preserves stranded-marker evidence across a transient reclaim-read failure', async () => {
+    const { client, builder } = createSupabase(
+      [null],
+      {},
+      null,
+      null,
+      {
+        dispatch_started_at: '2026-09-30T10:00:00Z',
+        last_error: 'dispatch_marker_clear_failed',
+      },
+      new Error('connection reset')
+    );
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_invoice' }],
+      summary
+    );
+    // Ordinary retry budget, not the corrective path — and the update must
+    // not overwrite the stranded-marker sentinel, or the next attempt
+    // would stop recognizing the row as reclaimable and skip an unsent
+    // document.
+    expect(sendDocument).not.toHaveBeenCalled();
+    expect(summary).toMatchObject({ failed: 0, retried: 1 });
+    const updateArg = builder.update.mock.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(updateArg).toMatchObject({ status: 'pending' });
+    expect(updateArg).not.toHaveProperty('last_error');
   });
 
   it('reserves a cleanup retry past the budget on marker-clear failure', async () => {

@@ -51,12 +51,12 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
 
   function handleBlur(event: FocusEvent<HTMLDivElement>) {
     const nextFocus = event.relatedTarget;
-    if (
+    if (nextFocus instanceof Node && !event.currentTarget.contains(nextFocus)) {
+      bannerHasFocusRef.current = false;
+    } else if (
       !dismissThroughBannerRef.current &&
       !viewChangeFocusRef.current &&
-      ((nextFocus instanceof Node &&
-        !event.currentTarget.contains(nextFocus)) ||
-        nextFocus === null)
+      nextFocus === null
     ) {
       bannerHasFocusRef.current = false;
     }
@@ -129,6 +129,7 @@ export function useCookieConsentFocus(isVisible: boolean, viewKey?: boolean) {
       const previous = event.relatedTarget;
       if (
         previous instanceof HTMLElement &&
+        !bannerRef.current?.contains(previous) &&
         previous !== document.body &&
         !previous.closest('.ogabassey-offer-popup, .ogabassey-newsletter-popup')
       ) {

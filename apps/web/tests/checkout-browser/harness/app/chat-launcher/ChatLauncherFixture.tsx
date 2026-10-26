@@ -39,6 +39,7 @@ export function ChatLauncherFixture() {
             onBlurCapture={consentFocus.onBlurCapture}
           >
             Cookie preferences
+            <button type="button">Consent details</button>
             <button
               type="button"
               onClick={consentFocus.dismissWithFocus(() =>

@@ -89,6 +89,7 @@ test('consent dismissal restores the ordinary control focused before banner entr
     .evaluate((button) => {
       (button as HTMLButtonElement).click();
     });
+  await page.getByRole('button', { name: 'Consent details' }).focus();
   const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
   await dismiss.focus();
   await expect(dismiss).toBeFocused();

@@ -147,6 +147,31 @@ describe('CookieConsent', () => {
     expect(outside).toHaveFocus();
   });
 
+  it('keeps focus where the shopper moves during the consent exit animation', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const accept = screen.getByRole('button', { name: 'Accept All' });
+    accept.focus();
+    fireEvent.click(accept);
+
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(outside).toHaveFocus();
+  });
+
   it('does not restore chat focus after consent loses focus to the document body', () => {
     render(
       <div className="ogabassey-chat-anchor">

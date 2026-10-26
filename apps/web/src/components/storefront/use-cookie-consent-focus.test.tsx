@@ -67,6 +67,7 @@ function ConsentFocusHarness() {
           onFocusCapture={focus.onFocusCapture}
           onBlurCapture={focus.onBlurCapture}
         >
+          <button type="button">Consent details</button>
           <button
             type="button"
             onClick={focus.dismissWithFocus(() => setVisible(false))}
@@ -184,4 +185,18 @@ it('restores focus to an ordinary control that was active before consent appeare
   fireEvent.click(dismiss);
 
   expect(newsletter).toHaveFocus();
+});
+
+it('keeps the original page control as origin while focus moves inside consent', () => {
+  render(<ConsentFocusHarness />);
+  const origin = screen.getByRole('button', { name: 'Show newsletter' });
+  origin.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Show consent' }));
+
+  screen.getByRole('button', { name: 'Consent details' }).focus();
+  const dismiss = screen.getByRole('button', { name: 'Dismiss consent' });
+  dismiss.focus();
+  fireEvent.click(dismiss);
+
+  expect(origin).toHaveFocus();
 });

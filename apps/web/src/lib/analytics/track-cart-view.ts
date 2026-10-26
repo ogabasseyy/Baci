@@ -4,6 +4,7 @@ import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import { facebookCatalogEvent } from '@/lib/facebook-catalog-event';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
 import type { Product } from '@/lib/products';
+import { sendFacebookPixelEvent } from './facebook-pixel-client';
 import { sendSocialClientObservation } from './send-social-client-observation';
 import { trackSocialFunnel } from './track-social-funnel';
 
@@ -67,8 +68,7 @@ export function trackCartView(
       item_variant: undefined,
     })),
   });
-  window.fbq?.(
-    'track',
+  sendFacebookPixelEvent(
     'ViewContent',
     facebookCatalogEvent({
       content_ids: products.map(({ product }) => product.id),

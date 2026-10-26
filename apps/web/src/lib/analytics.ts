@@ -1,4 +1,6 @@
-'use client';
+import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
+
+('use client');
 
 import type { Product } from '@/lib/products';
 import { trackCartView } from './analytics/track-cart-view';
@@ -78,9 +80,9 @@ function sendFBEvent(eventName: string, params?: object) {
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    window.fbq('track', eventName, facebookCatalogEvent(params));
+    sendFacebookPixelEvent(eventName, facebookCatalogEvent(params));
   } else {
-    window.fbq('track', eventName);
+    sendFacebookPixelEvent(eventName);
   }
 }
 

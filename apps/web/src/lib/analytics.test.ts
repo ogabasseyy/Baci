@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { analytics } from './analytics';
+import { activateFacebookPixel } from './analytics/facebook-pixel-client';
 
 const phoneProduct: Product = {
   id: 'phone',
@@ -26,12 +27,20 @@ afterEach(() => {
 it('sends parent product IDs as groups without changing the value', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   window.fbq = vi.fn();
+  activateFacebookPixel('123');
+  vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
   analytics.viewItem(phoneProduct, 'NGN');
   expect(window.fbq).toHaveBeenCalledWith(
-    'track',
+    'trackSingle',
+    '123',
     'ViewContent',
     expect.objectContaining({
       content_ids: ['phone'],
@@ -50,6 +59,8 @@ it('keeps the consent gate for catalog matching events', () => {
 it('does not dispatch cart CAPI without consent', () => {
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
+  activateFacebookPixel('123');
+  vi.mocked(window.fbq ?? vi.fn()).mockClear();
   analytics.viewCart([{ product: phoneProduct, quantity: 1 }], 'NGN', {
     merchantId: 'merchant-1',
   });
@@ -60,18 +71,25 @@ it('does not dispatch cart CAPI without consent', () => {
 it('shares the browser event ID with the real cart CAPI envelope', () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   window.fbq = vi.fn();
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
+  activateFacebookPixel('123');
+  vi.mocked(window.fbq ?? vi.fn()).mockClear();
   analytics.viewCart([{ product: phoneProduct, quantity: 1 }], 'NGN', {
     merchantId: 'merchant-1',
   });
   const pixelCall = vi.mocked(window.fbq).mock.calls[0];
   const payload = JSON.parse(fetcher.mock.calls[0][1].body);
-  expect(pixelCall[3]).toEqual({ eventID: expect.any(String) });
-  expect(pixelCall[3]).toEqual({ eventID: payload.eventId });
+  expect(pixelCall[4]).toEqual({ eventID: expect.any(String) });
+  expect(pixelCall[4]).toEqual({ eventID: payload.eventId });
   expect(payload.consent).toBe(true);
   vi.unstubAllGlobals();
 });

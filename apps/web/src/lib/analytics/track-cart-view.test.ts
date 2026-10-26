@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { facebookCapiEventSchema } from '@/schemas/facebook-capi-event';
+import { activateFacebookPixel } from './facebook-pixel-client';
 import { trackCartView } from './track-cart-view';
 
 const product: Product = {
@@ -45,6 +46,8 @@ it('shares an event ID and preserves the tenant and currency in the browser/serv
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
   window.fbq = vi.fn();
+  activateFacebookPixel('123');
+  vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
   trackCartView([{ product, quantity: 1 }], 'NGN', { merchantId });
   const payload = JSON.parse(fetcher.mock.calls[0][1].body);
   expect(facebookCapiEventSchema.safeParse(payload).success).toBe(true);
@@ -53,7 +56,7 @@ it('shares an event ID and preserves the tenant and currency in the browser/serv
     consent: true,
     eventData: { currency: 'NGN' },
   });
-  expect(vi.mocked(window.fbq).mock.calls[0][3]).toEqual({
+  expect(vi.mocked(window.fbq).mock.calls[0][4]).toEqual({
     eventID: payload.eventId,
   });
 });

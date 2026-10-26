@@ -24,7 +24,12 @@ it('requires the visitor decision before posting an observation', async () => {
 it('distinguishes queued ingress from delivered provider events', async () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   vi.stubGlobal(
     'fetch',
@@ -42,7 +47,12 @@ it('distinguishes queued ingress from delivered provider events', async () => {
 it('does not classify a rejected request as accepted even if its body claims queued', async () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: false,
+      functional: false,
+    })
   );
   vi.stubGlobal(
     'fetch',
@@ -55,4 +65,29 @@ it('does not classify a rejected request as accepted even if its body claims que
     sent: false,
     queued: false,
   });
+});
+
+it('refuses a purchase claim before any Facebook ingress request even with analytics consent', async () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ({ queued: true }) });
+  vi.stubGlobal('fetch', fetcher);
+  expect(
+    await sendFacebookClientObservation({ ...input, event: 'Purchase' })
+  ).toMatchObject({
+    platform: 'Facebook',
+    success: false,
+    sent: false,
+    error: 'untrusted_purchase',
+  });
+  expect(fetcher).not.toHaveBeenCalled();
 });

@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import type { ConversionEventRequest } from '@/schemas/conversion-event';
+import { clientMarketingTargets } from './client-marketing-targets';
 
 function toStoredEventData(input: ConversionEventRequest) {
   return {
@@ -8,13 +9,21 @@ function toStoredEventData(input: ConversionEventRequest) {
     items: input.custom_data.contents,
     order_id: input.custom_data.order_id,
     search_string: input.custom_data.search_string,
-    targets: input.targets,
+    targets: clientMarketingTargets(
+      {
+        analytics: input.analytics_consent,
+        marketing: input.marketing_consent,
+      },
+      input.targets
+    ),
     total: input.custom_data.value,
   };
 }
 
 function deliveryData(input: ConversionEventRequest, request: NextRequest) {
   return {
+    analytics_consent: input.analytics_consent === true,
+    marketing_consent: input.marketing_consent === true,
     email: input.user_data.em,
     external_id: input.user_data.external_id,
     fbc: input.user_data.fbc,
@@ -31,4 +40,15 @@ function deliveryData(input: ConversionEventRequest, request: NextRequest) {
   };
 }
 
-export const conversionEventPayload = { deliveryData, toStoredEventData };
+export const conversionEventPayload = {
+  deliveryData,
+  toStoredEventData,
+  targets: (input: ConversionEventRequest) =>
+    clientMarketingTargets(
+      {
+        analytics: input.analytics_consent,
+        marketing: input.marketing_consent,
+      },
+      input.targets
+    ),
+};

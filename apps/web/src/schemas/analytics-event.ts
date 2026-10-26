@@ -100,6 +100,8 @@ export const analyticsEventRequestSchema = z
       .optional(),
     item_count: z.number().int().nonnegative().max(10_000).optional(),
     items: z.array(analyticsItemSchema).max(200).optional(),
+    analytics_consent: z.boolean().optional(),
+    marketing_consent: z.boolean().optional(),
     merchant_id: z.uuid(),
     order_id: z
       .string()

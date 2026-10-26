@@ -12,7 +12,14 @@ export const eventDeadLetterReplaySchema = z.discriminatedUnion('kind', [
     reason: z.string().trim().min(3).max(1_000),
   }),
   z.strictObject({
-    destination: z.enum(['facebook', 'ga4', 'snapchat', 'tiktok', 'chatgpt']),
+    destination: z.enum([
+      'facebook',
+      'ga4',
+      'snapchat',
+      'tiktok',
+      'chatgpt',
+      'x',
+    ]),
     error_code: z.string().min(1).max(100).optional(),
     from: z.iso.datetime({ offset: true }).optional(),
     kind: z.literal('delivery_filter'),

@@ -64,10 +64,16 @@ import { POST } from './route';
 const MERCHANT_ID = '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235';
 const OTHER_MERCHANT_ID = '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a236';
 
-function request(merchantId = MERCHANT_ID) {
+function request(
+  merchantId = MERCHANT_ID,
+  consent = true,
+  eventType = 'page_view'
+) {
   return new NextRequest('https://shop.usebaci.com/api/events', {
     body: JSON.stringify({
-      event_type: 'page_view',
+      event_type: eventType,
+      analytics_consent: consent,
+      marketing_consent: consent,
       merchant_id: merchantId,
       page_url: 'https://shop.usebaci.com/products?customer=private',
     }),
@@ -296,4 +302,33 @@ describe('POST /api/events durable pipeline', () => {
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
     expect(mocks.fanout).not.toHaveBeenCalled();
   });
+});
+
+it('persists a Necessary-only product observation with explicit no-route targets and constructs no provider authority', async () => {
+  vi.clearAllMocks();
+  mocks.isPipelineEnabled.mockReturnValue(true);
+  mocks.isLegacyFanoutDisabled.mockReturnValue(false);
+  mocks.createServerClient.mockResolvedValue({});
+  mocks.isConversionEvent.mockReturnValue(true);
+  mocks.record.mockResolvedValue({ queue_message_id: 1 });
+  mocks.resolveContext.mockResolvedValue({
+    merchantId: MERCHANT_ID,
+    ok: true,
+    trustLevel: 'tenant_verified_client',
+    verified: true,
+  });
+  const response = await POST(request(MERCHANT_ID, false, 'product_view'));
+  expect(response.status).toBe(200);
+  expect(mocks.record).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      eventData: expect.objectContaining({ targets: [] }),
+      deliveryData: expect.objectContaining({
+        analytics_consent: false,
+        marketing_consent: false,
+      }),
+    })
+  );
+  expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  expect(mocks.fanout).not.toHaveBeenCalled();
 });

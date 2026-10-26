@@ -14,7 +14,12 @@ describe('ChatGPT checkout attribution consent', () => {
     expect(getAdTrackingData()).not.toHaveProperty('oppref');
     localStorage.setItem(
       'baci-cookie-consent',
-      JSON.stringify({ analytics: true })
+      JSON.stringify({
+        necessary: true,
+        analytics: true,
+        marketing: false,
+        functional: false,
+      })
     );
     expect(getAdTrackingData()).toMatchObject({
       oppref: 'opaque-click',

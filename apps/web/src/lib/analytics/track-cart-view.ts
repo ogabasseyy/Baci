@@ -2,7 +2,11 @@
 
 import { isAnalyticsAllowed } from '@/lib/analytics-consent';
 import { facebookCatalogEvent } from '@/lib/facebook-catalog-event';
+import { isMarketingAllowed } from '@/lib/marketing-consent';
 import type { Product } from '@/lib/products';
+import { sendFacebookPixelEvent } from './facebook-pixel-client';
+import { queueCartObservation } from './queue-cart-observation';
+import { trackSocialFunnel } from './track-social-funnel';
 
 type CartItem = { product: Product; quantity: number };
 type CartContext = { merchantId: string; userData?: unknown };
@@ -13,12 +17,29 @@ export function trackCartView(
   currency = 'USD',
   context?: CartContext
 ): void {
-  if (!isAnalyticsAllowed() || products.length === 0) return;
+  if (products.length === 0 || (!isAnalyticsAllowed() && !isMarketingAllowed()))
+    return;
   const eventId = crypto.randomUUID();
   const value = products.reduce(
     (total, item) => total + item.product.price * item.quantity,
     0
   );
+  if (isMarketingAllowed()) {
+    trackSocialFunnel(
+      'view_item',
+      products.map(({ product, quantity }) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity,
+      })),
+      currency,
+      eventId
+    );
+  }
+  if (context?.merchantId)
+    void queueCartObservation(products, currency, eventId, context.merchantId);
+  if (!isAnalyticsAllowed()) return;
   window.gtag?.('event', 'view_cart', {
     currency,
     value,
@@ -31,8 +52,7 @@ export function trackCartView(
       item_variant: undefined,
     })),
   });
-  window.fbq?.(
-    'track',
+  sendFacebookPixelEvent(
     'ViewContent',
     facebookCatalogEvent({
       content_ids: products.map(({ product }) => product.id),
@@ -44,34 +64,4 @@ export function trackCartView(
     }),
     { eventID: eventId }
   );
-
-  if (!context?.merchantId) return;
-  void fetch('/api/analytics/facebook-capi', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      event: 'ViewContent',
-      eventId,
-      consent: true,
-      merchantId: context.merchantId,
-      eventData: {
-        value,
-        currency,
-        products: products.map(({ product, quantity }) => ({
-          id: product.id,
-          name: product.name,
-          quantity,
-          price: product.price,
-        })),
-      },
-      eventSourceUrl: window.location.href,
-    }),
-  })
-    .then((response) => {
-      if (!response.ok)
-        console.warn('Facebook CAPI observation was not accepted');
-    })
-    .catch(() => {
-      console.warn('Facebook CAPI observation could not be queued');
-    });
 }

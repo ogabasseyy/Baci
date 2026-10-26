@@ -180,7 +180,9 @@ export async function POST(request: NextRequest) {
 
     const verifiedMerchantId = merchantContext.verifiedMerchantId;
     const results =
-      isLegacyAnalyticsFanoutDisabled() || !verifiedMerchantId
+      isLegacyAnalyticsFanoutDisabled() ||
+      !verifiedMerchantId ||
+      conversionEventPayload.targets(input).length === 0
         ? {}
         : await trustedServerAdPlatformFanout(
             createServiceClient('event-pipeline'),
@@ -191,7 +193,7 @@ export async function POST(request: NextRequest) {
               event_type: eventType,
               merchant_id: verifiedMerchantId,
               source: input.event_source,
-              targets: input.targets,
+              targets: conversionEventPayload.targets(input),
               user_data: conversionEventPayload.deliveryData(input, request),
             }
           );

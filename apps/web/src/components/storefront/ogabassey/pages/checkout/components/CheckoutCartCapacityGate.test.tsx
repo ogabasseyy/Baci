@@ -223,3 +223,17 @@ it('preserves checkout DOM state when capacity recovery appears after mount', ()
   expect(screen.getByLabelText('Shipping name')).toBe(input);
   expect((input as HTMLInputElement).value).toBe('Ada');
 });
+
+it('does not reveal checkout while the initial import is pending for an existing server cart', () => {
+  cart.syncStatus = 'pending';
+  cart.sharedCartRef = { cartId: 'cart-1', version: 1 };
+  render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  expect(
+    screen.getByRole('status', { name: 'Loading your cart' })
+  ).toBeVisible();
+});

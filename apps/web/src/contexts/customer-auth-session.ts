@@ -262,17 +262,24 @@ export async function performCustomerLogout(
     // Complete the deferred revocation cleanup now that logout committed.
     // A storage failure must not strand the committed logout: keep the
     // retirement fence for a later retry, but finish local sign-out.
-    if (eraseRetiredCartCache(merchantSlug, previousUserId ?? userId)) {
+    const erased = eraseRetiredCartCache(
+      merchantSlug,
+      previousUserId ?? userId
+    );
+    if (erased) {
       clearCartDeviceRevocationPending?.(merchantSlug);
       clearCartDeviceSessionActive?.(merchantSlug);
+      // Clear cart on logout to prevent cart data leakage between
+      // users. Only on confirmed erasure: clearing unconditionally
+      // would delete unscoped fallback keys (possibly another
+      // merchant's parked cart) even when scoped erasure failed.
+      clearCartStorage(merchantSlug, previousUserId ?? userId);
     }
     setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
-    // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug, previousUserId ?? userId);
   } catch (error) {
     // The auth logout did not commit: abandon the deferred revocation
     // without erasing the parked cache. If revocation itself failed,

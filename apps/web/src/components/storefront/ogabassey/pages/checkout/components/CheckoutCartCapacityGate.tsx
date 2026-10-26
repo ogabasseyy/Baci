@@ -32,9 +32,10 @@ export function CheckoutCartCapacityGate({
   const initialUnresolved =
     !validatedResume &&
     cart.sharedCartEnabled &&
-    cart.sharedCartRef == null &&
     (cart.syncStatus === 'pending' ||
-      (cart.syncStatus === 'synced' && !cart.isHydrated));
+      (cart.sharedCartRef == null &&
+        cart.syncStatus === 'synced' &&
+        !cart.isHydrated));
   const capacityBlocked =
     !validatedResume &&
     cart.sharedCartEnabled &&

@@ -12,7 +12,11 @@ import type { SharedCartRuntime } from './use-shared-cart-runtime';
 export function createInitialCartProvisioner(
   runtime: Pick<
     SharedCartRuntime,
-    'generationRef' | 'dispatch' | 'setLinkPhase'
+    | 'generationRef'
+    | 'dispatch'
+    | 'setLinkPhase'
+    | 'bootstrappingRef'
+    | 'createRequestRef'
   > &
     Pick<ReturnType<typeof createCartProvisioning>, 'ensureCart'>,
   lifecycle: {
@@ -47,12 +51,25 @@ export function createInitialCartProvisioner(
     // slow-but-healthy in-flight attempt must not flip to failed. Once
     // retries are exhausted, though, a null with no owner in this tab
     // must not strand the import pending behind the checkout gate.
-    if (!result)
+    if (!result) {
+      // A parallel bootstrap/create still in flight owns the import:
+      // keep waiting for it instead of failing its import or forcing
+      // the link ready underneath it.
+      const ownerInFlight =
+        runtime.bootstrappingRef?.current || runtime.createRequestRef?.current;
+      if (ownerInFlight) {
+        lifecycle.schedule(
+          () => void provision(0),
+          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
+        );
+        return;
+      }
       runtime.dispatch({
         generation,
         code: 'temporarily_unavailable',
         type: 'import/failed',
       });
+    }
     if (result && !result.ok)
       runtime.dispatch({
         generation,

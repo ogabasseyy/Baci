@@ -1,3 +1,7 @@
+import {
+  resolveBrandAuthorityEligibility,
+  resolveFamilyAuthorityEligibility,
+} from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { loadBrandAuthorityInventorySafely } from '@/lib/storefront-category/load-brand-authority-inventory-safely';
@@ -5,10 +9,8 @@ import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-fa
 import type { ResolvedEligibleCategoryHubDestinations } from './eligible-hub-destinations';
 
 /**
- * Re-checks resolver hubs against the destination pages' own hydrated
- * inventory. The semantic pool counts raw stock columns, while brand/family
- * pages count hydrated public availability, so a hub is only kept when the
- * destination loader's inventory meets the same minimums.
+ * Resolves taxonomy candidates through the same hydrated inventory contract
+ * used by destination pages. Preview stock/counts never decide live links.
  */
 export async function verifyEligibleHubsAgainstDestination(args: {
   merchantId: string;
@@ -20,9 +22,10 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   }
   // The destination loaders 404 without an active categories row, even
   // when denormalized product data matches the slug. The lookup is bounded
-  // like the inventory scan so a stall degrades to no hub links.
+  // like the inventory scan so a stall degrades to no hub links. Inventory
+  // checks start concurrently so the two 3s budgets overlap, not stack.
   let categoryTimer: ReturnType<typeof setTimeout> | undefined;
-  const category = await Promise.race([
+  const categoryPromise = Promise.race([
     brandAuthorityPublicData
       .getCategory(args.merchantId, args.categorySlug)
       .catch(() => null),
@@ -32,15 +35,12 @@ export async function verifyEligibleHubsAgainstDestination(args: {
   ]).finally(() => {
     if (categoryTimer) clearTimeout(categoryTimer);
   });
-  if (!category) {
-    return { brandHubs: [], familyHubs: [] };
-  }
 
   const brandHubs: ResolvedEligibleCategoryHubDestinations['brandHubs'] = [];
   const familyHubs: ResolvedEligibleCategoryHubDestinations['familyHubs'] = [];
-  const inventoryNamesByBrand = new Map<string, string[]>();
+  const inventoryProductsByBrand = new Map<string, Array<{ name: string }>>();
 
-  const verified = await Promise.all(
+  const verifiedPromise = Promise.all(
     args.hubs.brandHubs.map(async (hub) => {
       if (!hub.brand_key) return null;
       const entry = brandAuthorityTaxonomy.getEntry(
@@ -53,33 +53,48 @@ export async function verifyEligibleHubsAgainstDestination(args: {
         categorySlug: args.categorySlug,
         entry,
       });
-      if (!inventory || inventory.productCount < entry.minimumProducts) {
-        return null;
-      }
-      return { hub, names: inventory.products.map((product) => product.name) };
+      if (!inventory) return null;
+      const eligibility = resolveBrandAuthorityEligibility(
+        inventory.products,
+        args.categorySlug,
+        entry
+      );
+      if (!eligibility.eligible) return null;
+      return {
+        hub: { ...hub, product_count: eligibility.productCount },
+        products: eligibility.products,
+      };
     })
   );
+  const [category, verified] = await Promise.all([
+    categoryPromise,
+    verifiedPromise,
+  ]);
+  if (!category) {
+    return { brandHubs: [], familyHubs: [] };
+  }
   for (const result of verified) {
     if (!result?.hub.brand_key) continue;
     brandHubs.push(result.hub);
-    inventoryNamesByBrand.set(result.hub.brand_key, result.names);
+    inventoryProductsByBrand.set(result.hub.brand_key, result.products);
   }
 
   for (const hub of args.hubs.familyHubs) {
     if (!hub.brand_key || !hub.family_key) continue;
-    const names = inventoryNamesByBrand.get(hub.brand_key);
-    if (!names) continue;
+    const products = inventoryProductsByBrand.get(hub.brand_key);
+    if (!products) continue;
     const familyEntry = modelFamilyAuthorityTaxonomy.getEntry(
       args.categorySlug,
       hub.brand_key,
       hub.family_key
     );
     if (!familyEntry) continue;
-    const count = names.filter((name) =>
-      modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, name)
-    ).length;
-    if (count >= familyEntry.minimumProducts) {
-      familyHubs.push(hub);
+    const eligibility = resolveFamilyAuthorityEligibility(
+      products,
+      familyEntry
+    );
+    if (eligibility.eligible) {
+      familyHubs.push({ ...hub, product_count: eligibility.productCount });
     }
   }
 

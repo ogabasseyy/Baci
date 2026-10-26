@@ -28,6 +28,9 @@ interface NormalizedBrand {
   label: string;
 }
 
+/** Relation metadata, not product specifications. */
+const NON_SPEC_METADATA_KEYS = new Set(['created_at', 'updated_at']);
+
 function normalizeBrand(brand?: string | null): NormalizedBrand | null {
   const label = brand?.trim();
 
@@ -106,7 +109,10 @@ export function buildProductCompareCandidate(input: {
   const rightSpecs = input.rightProduct.product_key_specs ?? {};
   const overlappingKeys = Array.from(
     new Set([...Object.keys(leftSpecs), ...Object.keys(rightSpecs)])
-  ).filter((key) => key in leftSpecs && key in rightSpecs);
+  ).filter(
+    (key) =>
+      !NON_SPEC_METADATA_KEYS.has(key) && key in leftSpecs && key in rightSpecs
+  );
   const differentiatingSpecCount = overlappingKeys.filter((key) =>
     compareProductKeySpecValues(leftSpecs[key], rightSpecs[key])
   ).length;
@@ -162,6 +168,7 @@ export function buildBrandCompareCandidate(input: {
       for (const [key, value] of Object.entries(
         product.product_key_specs ?? {}
       )) {
+        if (NON_SPEC_METADATA_KEYS.has(key)) continue;
         const values = existing.specValues.get(key) ?? new Set<string>();
         values.add(JSON.stringify(value));
         existing.specValues.set(key, values);
@@ -173,6 +180,7 @@ export function buildBrandCompareCandidate(input: {
     for (const [key, value] of Object.entries(
       product.product_key_specs ?? {}
     )) {
+      if (NON_SPEC_METADATA_KEYS.has(key)) continue;
       specValues.set(key, new Set([JSON.stringify(value)]));
     }
     brandsByKey.set(canonicalKey, {
@@ -207,8 +215,8 @@ export function buildBrandCompareCandidate(input: {
     leftBrand: leftBrandEntry[1].label,
     rightBrand: rightBrandEntry[1].label,
     canonicalSlug: buildCanonicalBrandCompareSlug(
-      leftBrandEntry[1].label,
-      rightBrandEntry[1].label
+      leftBrandEntry[0],
+      rightBrandEntry[0]
     ),
     leftBrandActiveCount: leftBrandEntry[1].count,
     rightBrandActiveCount: rightBrandEntry[1].count,

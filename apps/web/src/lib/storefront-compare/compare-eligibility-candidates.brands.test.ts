@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildPriceBandCandidate } from './compare-eligibility';
+import {
+  buildBrandCompareCandidate,
+  buildPriceBandCandidate,
+} from './compare-eligibility';
 
 describe('compare eligibility candidate builders', () => {
   it('applies the price-band floor when selecting products and brand diversity', () => {
@@ -56,5 +59,61 @@ describe('compare eligibility candidate builders', () => {
       differentiatingSpecCount: 2,
       isIndexable: false,
     });
+  });
+
+  it('excludes relation metadata from brand spec differentiation', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'smartphones',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `iphone-${i}`,
+          name: `iPhone ${i}`,
+          brand: 'Apple',
+          price: 500_000,
+          product_key_specs: {
+            ram_gb: 8,
+            storage_gb: 128,
+            created_at: `2026-01-0${i + 1}`,
+          },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `galaxy-${i}`,
+          name: `Galaxy ${i}`,
+          brand: 'Samsung',
+          price: 450_000,
+          product_key_specs: {
+            ram_gb: 12,
+            storage_gb: 256,
+            created_at: `2026-02-0${i + 1}`,
+          },
+        })),
+      ],
+    });
+    expect(candidate?.differentiatingSpecCount).toBe(2);
+    expect(candidate?.isIndexable).toBe(false);
+  });
+
+  it('derives the grouped slug from canonical keys regardless of alias order', () => {
+    const specs = { storage_gb: 825, ram_gb: 16, chipset: 'A' };
+    const sonyFirst = buildBrandCompareCandidate({
+      categorySlug: 'gaming',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `sony-${i}`,
+          name: `Sony ${i}`,
+          brand: i === 0 ? 'Sony' : 'PlayStation',
+          price: 500_000,
+          product_key_specs: specs,
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `ms-${i}`,
+          name: `Microsoft ${i}`,
+          brand: i === 0 ? 'Microsoft' : 'Xbox',
+          price: 450_000,
+          product_key_specs: { storage_gb: 512, ram_gb: 12, chipset: 'B' },
+        })),
+      ],
+    });
+    expect(sonyFirst?.canonicalSlug).toBe('playstation-vs-xbox');
   });
 });

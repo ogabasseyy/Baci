@@ -170,7 +170,8 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       await expect(page.locator('.ogabassey-newsletter-popup')).toBeVisible({
         timeout: 15_000,
       });
-      await page.getByRole('button', { name: 'Close newsletter' }).click();
+      await page.getByRole('button', { name: 'Close newsletter' }).focus();
+      await page.keyboard.press('Enter');
       await expect(
         page.getByRole('button', { name: 'Open AI chat assistant' })
       ).toBeFocused();

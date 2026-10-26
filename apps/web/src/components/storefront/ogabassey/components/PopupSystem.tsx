@@ -24,6 +24,7 @@ export const PopupSystem: React.FC = () => {
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreChatFocusAfterDismissal = useRef(false);
+  const lastInputModality = useRef<'keyboard' | 'pointer' | 'unknown'>('unknown');
   const hasEngaged = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
@@ -74,6 +75,21 @@ export const PopupSystem: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const markKeyboardInput = () => {
+      lastInputModality.current = 'keyboard';
+    };
+    const markPointerInput = () => {
+      lastInputModality.current = 'pointer';
+    };
+    document.addEventListener('keydown', markKeyboardInput, true);
+    document.addEventListener('pointerdown', markPointerInput, true);
+    return () => {
+      document.removeEventListener('keydown', markKeyboardInput, true);
+      document.removeEventListener('pointerdown', markPointerInput, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (showNewsletter || showAdPopup || !restoreChatFocusAfterDismissal.current) {
       return;
     }
@@ -92,7 +108,13 @@ export const PopupSystem: React.FC = () => {
 
   const rememberPromotionFocus = (promotionSelector: string) => {
     const activeElement = document.activeElement;
+    const keyboardFocused =
+      lastInputModality.current === 'keyboard' ||
+      (lastInputModality.current === 'unknown' &&
+        activeElement instanceof HTMLElement &&
+        activeElement.matches(':focus-visible'));
     restoreChatFocusAfterDismissal.current =
+      keyboardFocused &&
       activeElement instanceof HTMLElement &&
       activeElement.closest(promotionSelector) !== null;
   };

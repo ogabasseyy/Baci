@@ -6,7 +6,6 @@ export type SuppressedDragClick = {
   pointerType: string;
   x: number;
   y: number;
-  expiresAt: number;
 };
 
 type GestureLifecycleOptions = {
@@ -19,7 +18,6 @@ type GestureLifecycleOptions = {
   scheduleViewportReclamp: () => void;
   viewportReclampPending: { current: boolean };
   suppressedDragClick: { current: SuppressedDragClick | null };
-  graceMs: number;
 };
 
 export function createChatLauncherGestureLifecycle({
@@ -32,7 +30,6 @@ export function createChatLauncherGestureLifecycle({
   scheduleViewportReclamp,
   viewportReclampPending,
   suppressedDragClick,
-  graceMs,
 }: GestureLifecycleOptions) {
   function finishGesture() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -50,7 +47,6 @@ export function createChatLauncherGestureLifecycle({
         pointerType: start.pointerType,
         x: start.lastX,
         y: start.lastY,
-        expiresAt: Date.now() + graceMs,
       };
     }
     if (viewportReclampPending.current) {

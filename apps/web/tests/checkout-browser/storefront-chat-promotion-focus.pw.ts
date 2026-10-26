@@ -5,7 +5,11 @@ test('timed newsletter yields to page focus after keyboard leaves the launcher',
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/chat-launcher');
-  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+  const enablePromotions = page.getByRole('button', {
+    name: 'Enable timed promotions',
+  });
+  await enablePromotions.click();
+  await enablePromotions.click();
 
   const origin = page.getByRole('button', { name: 'Focus origin' });
   await origin.click();
@@ -57,10 +61,28 @@ test('timed newsletter yields to page focus after keyboard leaves the launcher',
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
   await expect(newsletter).toHaveCSS('opacity', '1');
-  await close.click();
+  await page.keyboard.press('Enter');
   await expect(newsletter).toBeHidden();
   await expect(launcher).toBeVisible();
   await expect(launcher).toBeFocused();
+});
+
+test('pointer dismissal does not redirect focus to the launcher', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+  await page.getByRole('button', { name: 'Enable timed promotions' }).click();
+
+  const close = page.getByRole('button', { name: 'Close newsletter' });
+  await expect(close).toBeAttached({ timeout: 6000 });
+  await close.click();
+
+  await expect(page.locator('.ogabassey-newsletter-popup')).toBeHidden();
+  await expect(
+    page.getByRole('button', { name: 'Open AI chat assistant' })
+  ).not.toBeFocused();
 });
 
 test('unrelated keyboard focus does not hide or disable a timed newsletter', async ({

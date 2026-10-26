@@ -78,6 +78,7 @@ describe('PopupSystem', () => {
     });
 
     const closeNewsletter = screen.getByRole('button', { name: 'Close newsletter' });
+    fireEvent.keyDown(document, { key: 'Tab' });
     closeNewsletter.focus();
     fireEvent.click(closeNewsletter);
     const launcher = screen.getByRole('button', { name: 'Assistant' });
@@ -113,6 +114,7 @@ describe('PopupSystem', () => {
     act(() => vi.advanceTimersByTime(4000));
 
     const close = screen.getByRole('button', { name: 'Close newsletter' });
+    fireEvent.keyDown(document, { key: 'Tab' });
     close.focus();
     fireEvent.click(close);
 
@@ -163,7 +165,36 @@ describe('PopupSystem', () => {
     if (!anchor) throw new Error('Missing chat launcher anchor');
     anchor.style.display = 'none';
     const close = screen.getByRole('button', { name: 'Close newsletter' });
+    fireEvent.keyDown(document, { key: 'Tab' });
     close.focus();
+    fireEvent.click(close);
+
+    expect(document.activeElement).not.toBe(
+      document.querySelector('.ogabassey-chat-button'),
+    );
+    act(() => vi.clearAllTimers());
+  });
+
+  it('does not force focus to chat after a pointer dismisses a promotion', async () => {
+    render(
+      <>
+        <button>Page control</button>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const close = screen.getByRole('button', { name: 'Close newsletter' });
+    close.focus();
+    fireEvent.pointerDown(close);
     fireEvent.click(close);
 
     expect(document.activeElement).not.toBe(

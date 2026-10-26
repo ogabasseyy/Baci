@@ -24,7 +24,6 @@ import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppres
 import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
 
 const DRAG_THRESHOLD = 6;
-const DRAG_CLICK_GRACE_MS = 300;
 const useBrowserLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 export function useChatLauncherDrag(
@@ -45,12 +44,13 @@ export function useChatLauncherDrag(
   const viewportReclampPending = useRef(false);
   const isOpenRef = useRef(isOpen);
   const isHiddenRef = useRef(isHidden);
+  // The one-shot token is cleared by the next click or pointerdown rather than
+  // by a timer, so delayed compatibility clicks still correlate with the drag.
   const suppressedDragClick = useRef<{
     pointerId: number;
     pointerType: string;
     x: number;
     y: number;
-    expiresAt: number;
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
@@ -69,7 +69,6 @@ export function useChatLauncherDrag(
     scheduleViewportReclamp,
     viewportReclampPending,
     suppressedDragClick,
-    graceMs: DRAG_CLICK_GRACE_MS,
   });
 
   useBrowserLayoutEffect(() => {

@@ -185,24 +185,26 @@ describe('useChatLauncherDrag', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it('suppresses a delayed pointer click after a completed drag', () => {
+  it('suppresses a compatibility click delayed beyond 300ms after a drag', () => {
     vi.useFakeTimers();
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(1000);
     click(120, 220);
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it('allows a new pointerless activation after the drag-click grace period', () => {
+  it('allows a new tap after a drag produced no click', () => {
     vi.useFakeTimers();
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320);
     pointer('pointermove', 120, 220);
     pointer('pointerup', 120, 220);
-    vi.advanceTimersByTime(350);
+    vi.advanceTimersByTime(1000);
+    pointer('pointerdown', 120, 220, 8);
+    pointer('pointerup', 120, 220, 8);
     click(120, 220);
     expect(onOpen).toHaveBeenCalledOnce();
   });

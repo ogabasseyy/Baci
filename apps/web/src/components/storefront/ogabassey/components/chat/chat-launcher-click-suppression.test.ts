@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { isSuppressedChatLauncherDragClick } from './chat-launcher-click-suppression';
 
 function clickEvent({
@@ -34,7 +34,6 @@ const release = {
   pointerType: 'mouse',
   x: 100,
   y: 200,
-  expiresAt: Date.now() + 300,
 };
 
 describe('chat launcher click suppression', () => {
@@ -80,22 +79,11 @@ describe('chat launcher click suppression', () => {
     ).toBe(false);
   });
 
-  it('allows a trusted pointerless activation after the drag click window', () => {
-    expect(
-      isSuppressedChatLauncherDragClick(clickEvent(), {
-        ...release,
-        expiresAt: Date.now() - 1,
-      }),
-    ).toBe(false);
-  });
-
-  it('allows a trusted pointerless activation after 300ms', () => {
-    expect(
-      isSuppressedChatLauncherDragClick(clickEvent(), {
-        ...release,
-        expiresAt: Date.now() - 1,
-      }),
-    ).toBe(false);
+  it('suppresses a delayed trusted pointerless compatibility click', () => {
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(1000);
+    expect(isSuppressedChatLauncherDragClick(clickEvent(), release)).toBe(true);
+    vi.useRealTimers();
   });
 
   it('suppresses Firefox touch clicks reported with pointer ID zero', () => {
@@ -125,12 +113,12 @@ describe('chat launcher click suppression', () => {
     ).toBe(false);
   });
 
-  it('suppresses a correlated trusted pointer ID zero with a mismatched pointer type', () => {
+  it('does not suppress pointer ID zero when the pointer type differs', () => {
     expect(
       isSuppressedChatLauncherDragClick(
         clickEvent({ pointerId: 0, pointerType: 'mouse' }),
         { ...release, pointerId: 0, pointerType: 'touch' },
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

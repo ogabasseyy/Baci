@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setup } from './use-chat-launcher-drag.test-support';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -78,6 +79,20 @@ describe('useChatLauncherDrag click correlation', () => {
     pointer('pointerup', 120, 220);
     click(120, 220);
     expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+
+  it('suppresses a delayed pointerless compatibility click after the old grace period', () => {
+    vi.useFakeTimers();
+    const { pointer, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    vi.advanceTimersByTime(1000);
+
+    trustedClick(120, 220);
+
+    expect(onOpen).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('clears pointer-id-less suppression on a new interaction', () => {

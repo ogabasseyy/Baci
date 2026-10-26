@@ -24,6 +24,8 @@ import { CategoryPageToolbar } from './category-page-toolbar';
 import { useServerCategoryGraphicsFilter } from './use-server-category-graphics-filter';
 
 export interface CategorySEOProps {
+  /** Opt-in set from the server-resolved merchant, never the URL spelling. */
+  prioritizeFirstRowImages?: boolean;
   /**
    * Server-rendered category hub sections (intro, trust, cards, FAQ). Composed
    * in the RSC boundary (`category-page-content.tsx`) so `SafeHtml` — and thus
@@ -49,6 +51,7 @@ export interface CategorySEOProps {
 }
 
 export const CategoryPage: React.FC<CategorySEOProps> = ({
+  prioritizeFirstRowImages = false,
   hubSections,
   products = [],
   categoryImage,
@@ -259,6 +262,7 @@ export const CategoryPage: React.FC<CategorySEOProps> = ({
       />
 
       <CategoryPageResults
+        prioritizeFirstRowImages={prioritizeFirstRowImages}
         canShowFilters={canShowFilters}
         showPriceFilter={canUseClientFilters}
         filters={filters}

@@ -1,4 +1,7 @@
-import { MANUAL_ORDER_CURRENCY_CODE_PATTERN } from '@baci/shared/receipt';
+import {
+  formatUnassignedCurrencyPrice,
+  getReceiptPriceFormatter,
+} from '@baci/shared/receipt';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import type React from 'react';
@@ -29,33 +32,6 @@ export function getPaymentConfig(status: unknown) {
   return PAYMENT_STATUS_CONFIG[key] ?? PAYMENT_STATUS_CONFIG.unpaid;
 }
 
-const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
-
-function getPriceFormatter(currency: string): Intl.NumberFormat {
-  let formatter = PRICE_FORMATTER_CACHE.get(currency);
-  if (!formatter) {
-    try {
-      formatter = new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-      });
-    } catch (error) {
-      // Malformed codes (legacy rows the sender would skip) degrade to
-      // NGN, cached under the bad key so they rethrow once. NGN rethrows
-      // so a broken default fails fast; well-formed-but-unassigned codes
-      // rethrow for formatPrice to render code-prefixed like the PDF.
-      if (currency === 'NGN') throw error;
-      if (MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(currency)) throw error;
-      const fallback = getPriceFormatter('NGN');
-      PRICE_FORMATTER_CACHE.set(currency, fallback);
-      return fallback;
-    }
-    PRICE_FORMATTER_CACHE.set(currency, formatter);
-  }
-  return formatter;
-}
-
 export function formatPrice(
   price: number,
   currency: string | null | undefined = 'NGN'
@@ -64,13 +40,10 @@ export function formatPrice(
   if (!Number.isFinite(price)) return '-';
   const code = currency ?? 'NGN';
   try {
-    return getPriceFormatter(code).format(price);
+    return getReceiptPriceFormatter(code).format(price);
   } catch (error) {
     if (code === 'NGN') throw error;
-    // Unassigned on Hermes: prefix the code like Node's ICU and the PDF.
-    // Fraction digits pinned like the primary formatter so grouping and
-    // rounding match it exactly on well-formed-but-unassigned codes.
-    return `${code} ${price.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    return formatUnassignedCurrencyPrice(code, price);
   }
 }
 

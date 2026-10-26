@@ -15,6 +15,7 @@ import {
   DETAIL_HEADER_MONEY_FIELDS,
   DETAIL_ITEM_MONEY_FIELDS,
   receiptMoneyOverrides,
+  rejectInvalidSettledPayments,
 } from './receipt-detail-money';
 import {
   fetchReceiptInvoiceTaxSubtotals,
@@ -22,7 +23,6 @@ import {
 } from './receipt-invoice-tax-gate';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
 import {
-  hasValidSettledPayments,
   isPromotableManualDocument,
   isPromotedManualReceipt,
 } from './receipt-promotion-gates';
@@ -205,10 +205,7 @@ async function fetchReceiptDetail(
 
   const transactions = mapCustomerTransactionRpcRows(transactionRows);
 
-  // Sender parity: settled payments the sender rejects (negative,
-  // non-decimal) fail the manual document closed instead of printing
-  // them — the list and preview gates already demote such rows.
-  if (manualOrder && !hasValidSettledPayments(transactions)) return null;
+  if (rejectInvalidSettledPayments(manualOrder, transactions)) return null;
 
   // Corrupt money must fail the detail closed, never mask to a zero
   // balance: null trips the required-number schema below and the

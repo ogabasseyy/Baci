@@ -2,6 +2,7 @@ import {
   isDecimalMoney,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
 } from '@baci/shared/receipt';
+import { hasValidSettledPayments } from './receipt-promotion-gates';
 
 // PostgREST numeric columns arrive as decimal strings while the detail
 // schema gates numbers: every rendered money field coerces before
@@ -20,6 +21,17 @@ export const DETAIL_ITEM_MONEY_FIELDS = [
   'price',
   ...MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
 ] as const;
+
+// Sender parity for the detail loader: settled payments the sender
+// rejects (negative, non-decimal) fail the manual document closed
+// instead of printing them — the list and preview gates already
+// demote such rows.
+export function rejectInvalidSettledPayments(
+  manualOrder: boolean,
+  transactions: unknown
+): boolean {
+  return manualOrder && !hasValidSettledPayments(transactions);
+}
 
 // Strict like the gates: genuine decimal strings coerce; blanks,
 // booleans, and garbage become NaN so the schema still fails corrupt

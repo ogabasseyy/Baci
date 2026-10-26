@@ -3,6 +3,7 @@ import {
   normalizeMoneyCurrency,
 } from '../money/currency-locales';
 import type { MoneyFormatter } from '../money/money-formatter';
+import { MANUAL_ORDER_CURRENCY_CODE_PATTERN } from './manual-order-document-gates';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -187,6 +188,45 @@ export interface ReceiptLineItemLike {
   vat_rate?: number | null;
   vat_amount?: number | null;
   sellers_item_id?: string | null;
+}
+
+const RECEIPT_PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
+
+// Cached en-NG currency formatter shared by receipt price renderers.
+// Malformed codes (legacy rows the sender would skip) degrade to NGN,
+// cached under the bad key so they rethrow once. NGN rethrows so a
+// broken default fails fast; well-formed-but-unassigned codes rethrow
+// for callers to render code-prefixed like the PDF.
+export function getReceiptPriceFormatter(currency: string): Intl.NumberFormat {
+  let formatter = RECEIPT_PRICE_FORMATTER_CACHE.get(currency);
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+      });
+    } catch (error) {
+      if (currency === 'NGN') throw error;
+      if (MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(currency)) throw error;
+      const fallback = getReceiptPriceFormatter('NGN');
+      RECEIPT_PRICE_FORMATTER_CACHE.set(currency, fallback);
+      return fallback;
+    }
+    RECEIPT_PRICE_FORMATTER_CACHE.set(currency, formatter);
+  }
+  return formatter;
+}
+
+// Hermes ships without ICU data for unassigned currency codes: prefix
+// the code like Node's ICU and the PDF, with fraction digits pinned
+// like the primary formatter so grouping and rounding match it exactly
+// on well-formed-but-unassigned codes.
+export function formatUnassignedCurrencyPrice(
+  code: string,
+  price: number
+): string {
+  return `${code} ${price.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 export function getReceiptItemLineTotal(item: ReceiptLineItemLike): number {

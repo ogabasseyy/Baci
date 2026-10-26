@@ -32,10 +32,12 @@ export {
   shouldAttachFulfillmentToItem,
 } from './receipt-fulfillment';
 export {
+  formatUnassignedCurrencyPrice,
   getReceiptDisplaySubtotal,
   getReceiptItemDetailLines,
   getReceiptItemLineTotal,
   getReceiptItemVatLines,
+  getReceiptPriceFormatter,
   getReceiptVatRate,
   type ReceiptLineItemLike,
   shouldShowVatLine,

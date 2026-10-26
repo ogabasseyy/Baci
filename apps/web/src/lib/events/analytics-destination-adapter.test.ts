@@ -211,3 +211,31 @@ describe('deliverAnalyticsEvent', () => {
     );
   });
 });
+
+it.each([
+  'tiktok',
+  'snapchat',
+] as const)('skips %s paid conversion without stored marketing consent', async (destination) => {
+  mocks.fetchConfig.mockResolvedValue({
+    offline_conversions_enabled: true,
+    tiktok_pixel_id: 'pixel',
+    tiktok_access_token: 'token',
+    snapchat_pixel_id: 'pixel',
+    snapchat_capi_token: 'token',
+  });
+  mocks.loadPaidOrderDeliveryEvent.mockResolvedValue({
+    conversion: { user_data: { marketing_consent: false } },
+    orderNumber: 'order',
+  });
+  const result = await deliverAnalyticsEvent(
+    serviceClient(),
+    { ...event, event_name: 'analytics.purchase.completed.v1' },
+    destination
+  );
+  expect(result).toMatchObject({
+    success: true,
+    terminalOutcome: 'skipped',
+    providerResponseId: 'consent_required',
+  });
+  expect(mocks.sendConfiguredAdPlatforms).not.toHaveBeenCalled();
+});

@@ -71,7 +71,7 @@ function failureDetails(error: string | undefined, httpStatus?: number) {
 export async function deliverPlatformEvent(
   supabase: ServiceRoleClient,
   event: DomainEventV1,
-  destination: Exclude<EventDestination, 'chatgpt'>,
+  destination: Exclude<EventDestination, 'chatgpt' | 'x'>,
   signal?: AbortSignal
 ): Promise<EventDestinationResult> {
   if (destination !== 'facebook' && destination !== 'ga4') {

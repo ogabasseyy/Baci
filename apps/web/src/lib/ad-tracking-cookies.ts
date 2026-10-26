@@ -17,6 +17,7 @@
  */
 
 import { isAnalyticsAllowed } from './analytics-consent';
+import { isMarketingAllowed } from './marketing-consent';
 
 // Cookie names for ad tracking
 export const AD_TRACKING_COOKIES = {
@@ -56,6 +57,8 @@ export interface AdTrackingData {
   oppref?: string;
   obref?: string;
   chatgptConsent?: boolean;
+  marketingConsent?: boolean;
+  twclid?: string;
   // Click IDs from URL params
   fbclid?: string;
   ttclid?: string;
@@ -190,7 +193,16 @@ export function getAdTrackingData(): AdTrackingData {
     delete tracking.oppref;
     delete tracking.obref;
   }
-  return { ...tracking, chatgptConsent: allowed };
+  const marketingConsent = isMarketingAllowed();
+  const twclid = marketingConsent
+    ? new URLSearchParams(window.location.search).get('twclid')
+    : null;
+  return {
+    ...tracking,
+    chatgptConsent: allowed,
+    marketingConsent,
+    ...(twclid && /^[A-Za-z0-9_-]{1,256}$/.test(twclid) ? { twclid } : {}),
+  };
 }
 
 /**

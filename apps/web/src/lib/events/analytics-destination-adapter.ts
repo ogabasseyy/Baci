@@ -17,7 +17,7 @@ import { createStableAnalyticsClientId } from './stable-analytics-client-id';
 
 function configured(
   config: AnalyticsPlatformConfig,
-  destination: Exclude<EventDestination, 'chatgpt'>
+  destination: Exclude<EventDestination, 'chatgpt' | 'x'>
 ): boolean {
   if (destination === 'facebook') {
     return Boolean(config.facebook_pixel_id && config.facebook_capi_token);
@@ -32,7 +32,7 @@ function configured(
 }
 
 function providerTarget(
-  destination: Exclude<EventDestination, 'chatgpt'>
+  destination: Exclude<EventDestination, 'chatgpt' | 'x'>
 ): AdPlatformTarget {
   return destination === 'ga4' ? 'google' : destination;
 }
@@ -118,6 +118,9 @@ function userData(
 ): ConversionEvent['user_data'] {
   const value = asRecord(eventData.delivery_user_data);
   return {
+    ...(typeof value.marketing_consent === 'boolean'
+      ? { marketing_consent: value.marketing_consent }
+      : {}),
     email: stringValue(value.email),
     external_id: stringValue(value.external_id),
     fbc: stringValue(value.fbc),
@@ -167,7 +170,7 @@ function toClientConversion(event: DomainEventV1): ConversionEvent {
 export async function deliverAnalyticsEvent(
   supabase: ServiceRoleClient,
   event: DomainEventV1,
-  destination: Exclude<EventDestination, 'chatgpt'>,
+  destination: Exclude<EventDestination, 'chatgpt' | 'x'>,
   signal?: AbortSignal
 ): Promise<EventDestinationResult> {
   if (!event.merchant_id) {
@@ -207,6 +210,16 @@ export async function deliverAnalyticsEvent(
   const prepared = paid
     ? await loadPaidOrderDeliveryEvent(supabase, event)
     : { conversion: toClientConversion(event), orderNumber: '' };
+
+  if (
+    (destination === 'tiktok' || destination === 'snapchat') &&
+    prepared.conversion.user_data.marketing_consent !== true
+  )
+    return {
+      success: true,
+      terminalOutcome: 'skipped',
+      providerResponseId: 'consent_required',
+    };
 
   if (destination === 'ga4') {
     if (!paid || !config.google_analytics_id || !config.ga4_api_secret) {

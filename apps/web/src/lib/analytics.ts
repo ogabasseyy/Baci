@@ -4,6 +4,7 @@ import type { Product } from '@/lib/products';
 import { trackCartView } from './analytics/track-cart-view';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
+import { measureXEvent } from './x-ads/pixel-client';
 
 // Types for analytics events
 interface EcommerceItem {
@@ -97,7 +98,24 @@ export const analytics = {
   },
 
   // View product details
-  viewItem: (product: Product, currency: string = 'USD') => {
+  viewItem: (
+    product: Product,
+    currency: string = 'USD',
+    eventId: string = crypto.randomUUID()
+  ) => {
+    measureXEvent('viewContent', {
+      conversion_id: eventId,
+      currency,
+      value: product.price,
+      contents: [
+        {
+          content_id: product.id,
+          content_name: product.name,
+          content_price: product.price,
+          num_items: 1,
+        },
+      ],
+    });
     const params: ViewItemParams = {
       currency,
       value: product.price,
@@ -124,8 +142,22 @@ export const analytics = {
     product: Product,
     quantity: number = 1,
     currency: string = 'USD',
-    variant?: string
+    variant?: string,
+    eventId: string = crypto.randomUUID()
   ) => {
+    measureXEvent('addToCart', {
+      conversion_id: eventId,
+      currency,
+      value: product.price * quantity,
+      contents: [
+        {
+          content_id: product.id,
+          content_name: product.name,
+          content_price: product.price,
+          num_items: quantity,
+        },
+      ],
+    });
     const params: AddToCartParams = {
       currency,
       value: product.price * quantity,
@@ -162,8 +194,23 @@ export const analytics = {
   // View cart / Begin checkout
   beginCheckout: (
     products: Array<{ product: Product; quantity: number }>,
-    currency: string = 'USD'
+    currency: string = 'USD',
+    eventId: string = crypto.randomUUID()
   ) => {
+    measureXEvent('initiateCheckout', {
+      conversion_id: eventId,
+      currency,
+      value: products.reduce(
+        (sum, { product, quantity }) => sum + product.price * quantity,
+        0
+      ),
+      contents: products.map(({ product, quantity }) => ({
+        content_id: product.id,
+        content_name: product.name,
+        content_price: product.price,
+        num_items: quantity,
+      })),
+    });
     const value = products.reduce(
       (sum, { product, quantity }) => sum + product.price * quantity,
       0

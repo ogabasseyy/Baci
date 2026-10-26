@@ -74,7 +74,7 @@ describe('AnalyticsPixelProvider', () => {
     expect(screen.queryByText('fb-1')).not.toBeInTheDocument();
     expect(screen.getByText('tt-1')).toBeInTheDocument();
     expect(screen.getByText('snap-1')).toBeInTheDocument();
-    expect(screen.getByText('tw-1')).toBeInTheDocument();
+    expect(screen.queryByText('tw-1')).not.toBeInTheDocument();
   });
 
   it('renders nothing when analytics IDs are empty or whitespace-only', () => {

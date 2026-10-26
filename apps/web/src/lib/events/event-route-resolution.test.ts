@@ -59,7 +59,7 @@ describe('resolveEventRoute', () => {
         })
       )
     ).toEqual({
-      destinations: ['facebook', 'tiktok', 'ga4', 'snapchat', 'chatgpt'],
+      destinations: ['facebook', 'tiktok', 'ga4', 'snapchat', 'chatgpt', 'x'],
       kind: 'route',
     });
   });

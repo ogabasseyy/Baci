@@ -9,21 +9,24 @@ const mocks = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock('@/lib/consent-mode', () => ({
-  getStoredConsent: mocks.getStoredConsent,
+vi.mock('@/lib/marketing-consent', () => ({
+  isMarketingAllowed: () => mocks.getStoredConsent().marketing,
 }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/product' }));
 
 vi.mock('next/script', () => ({
   default: ({
     id,
     strategy,
     children,
+    src,
   }: {
     id?: string;
     strategy?: string;
     children?: ReactNode;
+    src?: string;
   }) => (
-    <script data-testid={id} data-strategy={strategy}>
+    <script data-testid={id} data-strategy={strategy} src={src}>
       {children}
     </script>
   ),
@@ -36,7 +39,7 @@ afterEach(() => {
 
 describe('TwitterPixel', () => {
   it('loads the pixel with the afterInteractive strategy when marketing consent is granted', () => {
-    render(<TwitterPixel pixelId="tw-123" />);
+    render(<TwitterPixel pixelId="abc" />);
 
     // afterInteractive (not lazyOnload): the inline bootstrap defines the
     // window.twq event-queue stub, so it must run right after hydration —
@@ -44,13 +47,17 @@ describe('TwitterPixel', () => {
     // conversion events fired before then.
     const script = screen.getByTestId('twitter-pixel');
     expect(script).toHaveAttribute('data-strategy', 'afterInteractive');
-    expect(script.textContent).toContain("twq('config','tw-123')");
+    expect(script).toHaveAttribute(
+      'src',
+      'https://static.ads-twitter.com/uwt.js'
+    );
+    expect(script.textContent).not.toContain("twq('track'");
   });
 
   it('renders nothing when marketing consent is not granted', () => {
     mocks.getStoredConsent.mockReturnValue({ marketing: false });
 
-    render(<TwitterPixel pixelId="tw-123" />);
+    render(<TwitterPixel pixelId="abc" />);
 
     expect(screen.queryByTestId('twitter-pixel')).not.toBeInTheDocument();
   });

@@ -8,6 +8,8 @@ export interface ConversionEvent {
   limited_data_use?: boolean;
   user_data: {
     measurement_consent?: boolean;
+    marketing_consent?: boolean;
+    twclid?: string;
     oppref?: string;
     obref?: string;
     city?: string;

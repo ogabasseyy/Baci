@@ -9,6 +9,12 @@ const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
 
+vi.mock('@/components/analytics/twitter-pixel', () => ({
+  TwitterPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="x-pixel">{pixelId}</span>
+  ),
+}));
+
 vi.mock('@/components/analytics/chatgpt-pixel', () => ({
   ChatgptPixel: ({ pixelId }: { pixelId: string }) => (
     <span data-testid="chatgpt-pixel">{pixelId}</span>
@@ -232,4 +238,26 @@ it('keeps one Meta Pixel on direct product landing and cart navigation', () => {
     </StorefrontShellFrame>
   );
   expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
+});
+
+it('mounts the merchant X Pixel on a direct product landing independently of the homepage', () => {
+  render(
+    <StorefrontShellFrame
+      preloadHeroLcpImages={false}
+      shellSnapshot={{
+        ...shellSnapshot,
+        merchant: {
+          ...shellSnapshot.merchant,
+          growth_integrations_enabled: true,
+          feature_settings: {
+            twitter_pixel_id: 'abc',
+            twitter_event_ids: { viewContent: 'tw-abc-view' },
+          },
+        },
+      }}
+    >
+      <main>Direct product</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getByTestId('x-pixel')).toHaveTextContent('abc');
 });

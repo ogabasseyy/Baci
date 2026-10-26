@@ -1,17 +1,16 @@
 'use client';
-
+import { usePathname } from 'next/navigation';
 import Script from 'next/script';
-import { useSyncExternalStore } from 'react';
-import { getStoredConsent } from '@/lib/consent-mode';
+import { useEffect, useSyncExternalStore } from 'react';
+import { isMarketingAllowed } from '@/lib/marketing-consent';
+import {
+  initializeXPixel,
+  measureXEvent,
+  resetXPixel,
+} from '@/lib/x-ads/pixel-client';
+import type { XEventIds } from '@/schemas/x-ads-settings';
 
-interface TwitterPixelProps {
-  pixelId: string;
-}
-
-// Consent lives in an external store (browser storage + custom events), so the
-// component subscribes via useSyncExternalStore instead of mirroring it into
-// state from an effect.
-function subscribeToConsentChanges(onChange: () => void): () => void {
+function subscribe(onChange: () => void) {
   window.addEventListener('storage', onChange);
   window.addEventListener('cookie-consent-updated', onChange);
   return () => {
@@ -19,162 +18,96 @@ function subscribeToConsentChanges(onChange: () => void): () => void {
     window.removeEventListener('cookie-consent-updated', onChange);
   };
 }
-
-const getMarketingConsentSnapshot = () =>
-  getStoredConsent()?.marketing === true;
-const getServerMarketingConsentSnapshot = () => false;
-
-/**
- * Twitter/X Pixel Component with Consent Mode Support
- *
- * Implements Twitter's Universal Website Tag with:
- * - Cookie consent integration
- * - E-commerce event tracking
- * - Conversion tracking
- *
- * @see https://business.twitter.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites.html
- */
-export function TwitterPixel({ pixelId }: TwitterPixelProps) {
-  const isAllowed = useSyncExternalStore(
-    subscribeToConsentChanges,
-    getMarketingConsentSnapshot,
-    getServerMarketingConsentSnapshot
-  );
-
-  if (!pixelId || !isAllowed) {
-    return null;
-  }
-
-  return (
-    <Script id="twitter-pixel" strategy="afterInteractive">
-      {`
-        !function(e,t,n,s,u,a){e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments);
-        },s.version='1.1',s.queue=[],u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js',
-        a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))}(window,document,'script');
-        twq('config','${pixelId}');
-        twq('track','PageView');
-      `}
-    </Script>
-  );
+const marketingAllowed = isMarketingAllowed;
+const denied = () => false;
+const EMPTY_EVENTS: XEventIds = {};
+export function TwitterPixel({
+  pixelId,
+  eventIds = EMPTY_EVENTS,
+}: {
+  pixelId: string;
+  eventIds?: XEventIds;
+}) {
+  const allowed = useSyncExternalStore(subscribe, marketingAllowed, denied);
+  const pathname = usePathname();
+  useEffect(() => {
+    initializeXPixel(pixelId, eventIds);
+    return resetXPixel;
+  }, [pixelId, eventIds]);
+  useEffect(() => {
+    if (allowed) {
+      initializeXPixel(pixelId, eventIds);
+      if (pathname)
+        measureXEvent('pageView', { conversion_id: crypto.randomUUID() });
+    }
+  }, [allowed, pixelId, eventIds, pathname]);
+  return allowed && /^[A-Za-z0-9]{1,64}$/.test(pixelId) ? (
+    <Script
+      id="twitter-pixel"
+      src="https://static.ads-twitter.com/uwt.js"
+      strategy="afterInteractive"
+    />
+  ) : null;
 }
-
-/**
- * Twitter/X E-commerce Event Tracking
- *
- * Event names follow Twitter's conversion event taxonomy.
- * Events are only sent if marketing consent is granted.
- */
+// Deprecated wrappers retain the existing exports while using configured event codes.
 export const twitterEvents = {
-  /**
-   * Track product view
-   */
   viewContent: (
     productId: string,
     value?: number,
-    currency: string = 'USD'
-  ) => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'ViewContent', {
-      content_ids: [productId],
-      content_type: 'product',
-      value,
+    currency = 'USD',
+    eventId = crypto.randomUUID()
+  ) =>
+    measureXEvent('viewContent', {
+      conversion_id: eventId,
       currency,
-    });
-  },
-
-  /**
-   * Track add to cart
-   */
-  addToCart: (productId: string, value: number, currency: string = 'USD') => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'AddToCart', {
-      content_ids: [productId],
-      content_type: 'product',
       value,
+      contents: [{ content_id: productId, content_price: value, num_items: 1 }],
+    }),
+  addToCart: (
+    productId: string,
+    value: number,
+    currency = 'USD',
+    eventId = crypto.randomUUID()
+  ) =>
+    measureXEvent('addToCart', {
+      conversion_id: eventId,
       currency,
-    });
-  },
-
-  /**
-   * Track checkout initiation
-   */
+      value,
+      contents: [{ content_id: productId, num_items: 1 }],
+    }),
   initiateCheckout: (
     value: number,
-    currency: string = 'USD',
-    productIds: string[] = []
-  ) => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'InitiateCheckout', {
-      content_ids: productIds,
-      value,
-      currency,
-    });
-  },
-
-  /**
-   * Track purchase completion
-   */
-  purchase: (
-    orderId: string,
-    value: number,
-    currency: string = 'USD',
+    currency = 'USD',
     productIds: string[] = [],
-    numItems?: number
-  ) => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'Purchase', {
-      content_ids: productIds,
-      content_type: 'product',
+    eventId = crypto.randomUUID()
+  ) =>
+    measureXEvent('initiateCheckout', {
+      conversion_id: eventId,
       value,
       currency,
-      order_id: orderId,
-      num_items: numItems,
-    });
-  },
-
-  /**
-   * Track search
-   */
-  search: (searchTerm: string) => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'Search', {
+      contents: productIds.map((content_id) => ({ content_id, num_items: 1 })),
+    }),
+  purchase: (
+    _orderId: string,
+    _value: number,
+    _currency = 'USD',
+    _productIds: string[] = [],
+    _numItems?: number
+  ) => undefined,
+  search: (searchTerm: string) =>
+    measureXEvent('search', {
       search_string: searchTerm,
-    });
-  },
-
-  /**
-   * Track sign up / lead
-   */
-  signUp: () => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'CompleteRegistration');
-  },
-
-  /**
-   * Track add to wishlist
-   */
-  addToWishlist: (
-    productId: string,
-    value?: number,
-    currency: string = 'USD'
-  ) => {
-    if (typeof window === 'undefined' || !window.twq) return;
-
-    window.twq('track', 'AddToWishlist', {
-      content_ids: [productId],
-      value,
+      conversion_id: crypto.randomUUID(),
+    }),
+  signUp: () => measureXEvent('signUp', { conversion_id: crypto.randomUUID() }),
+  addToWishlist: (productId: string, value?: number, currency = 'USD') =>
+    measureXEvent('addToWishlist', {
       currency,
-    });
-  },
+      value,
+      contents: [{ content_id: productId }],
+      conversion_id: crypto.randomUUID(),
+    }),
 };
-
-// Extend Window type for Twitter
 declare global {
   interface Window {
     twq?: (

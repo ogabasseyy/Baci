@@ -1,21 +1,25 @@
 import type { EventDestinationResult } from '@/lib/events/event-destination';
-import type { XAdsCredentials } from '@/schemas/x-ads-settings';
+import type { XAdsAuthentication } from '@/schemas/x-ads-settings';
 import { createXOAuthHeader } from './oauth-header';
 import type { XPaidEvent } from './paid-event';
 export async function sendXEvent(
   pixelId: string,
-  credentials: XAdsCredentials,
+  credentials: XAdsAuthentication,
   event: XPaidEvent,
   signal?: AbortSignal
 ): Promise<EventDestinationResult> {
   if (!/^[A-Za-z0-9]{1,64}$/.test(pixelId))
     return { success: false, errorCode: 'invalid_destination_payload' };
+  // X documents the Events Manager token header for this endpoint here:
+  // https://docs.x.com/x-ads-api/measurement/gtm-server-side#access-token
   const url = `https://ads-api.x.com/12/measurement/conversions/${pixelId}`;
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: createXOAuthHeader(url, 'POST', credentials),
+        ...('pixelToken' in credentials
+          ? { 'X-Pixel-Token': credentials.pixelToken }
+          : { Authorization: createXOAuthHeader(url, 'POST', credentials) }),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ conversions: [event] }),

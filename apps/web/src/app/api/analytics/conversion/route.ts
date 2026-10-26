@@ -180,6 +180,9 @@ export async function POST(request: NextRequest) {
 
     const verifiedMerchantId = merchantContext.verifiedMerchantId;
     const results =
+      // Client purchase/order claims remain observations, even in legacy mode.
+      eventType === 'purchase' ||
+      eventType === 'place_order' ||
       isLegacyAnalyticsFanoutDisabled() ||
       !verifiedMerchantId ||
       conversionEventPayload.targets(input).length === 0

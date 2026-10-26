@@ -210,6 +210,8 @@ export async function POST(request: NextRequest) {
       }
     }
     if (
+      eventType !== 'purchase' &&
+      eventType !== 'place_order' &&
       isConversionEvent(eventType) &&
       !isLegacyAnalyticsFanoutDisabled() &&
       clientMarketingTargets({

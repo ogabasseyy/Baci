@@ -24,7 +24,7 @@ export function generateCSP(
   // Exact browser SDK/collector origins; account configuration and consent still
   // control whether any provider is loaded. Keep these out of admin/auth CSP.
   const socialScripts =
-    'https://connect.facebook.net https://analytics.tiktok.com https://sc-static.net https://static.ads-twitter.com';
+    'https://connect.facebook.net https://analytics.tiktok.com https://sc-static.net https://tr.snapchat.com https://static.ads-twitter.com';
   const socialCollectors =
     'https://www.facebook.com https://analytics.tiktok.com https://tr.snapchat.com https://tr6.snapchat.com https://analytics.twitter.com https://analytics.x.com https://t.co';
 

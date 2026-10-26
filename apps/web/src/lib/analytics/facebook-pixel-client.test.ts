@@ -68,7 +68,7 @@ it('disables automatic configuration before initialization', () => {
       .mocked(window.fbq as NonNullable<typeof window.fbq>)
       .mock.calls.slice(0, 3)
   ).toEqual([
-    ['consent', 'revoke'],
+    ['consent', 'grant'],
     ['set', 'autoConfig', false, '111'],
     ['init', '111'],
   ]);
@@ -145,4 +145,74 @@ it('does not send from a different pathname before the merchant activation catch
   window.history.replaceState({}, '', '/checkout');
   sendFacebookPixelEvent('AddToCart');
   expect(window.fbq).not.toHaveBeenCalled();
+});
+
+// Meta's bootstrap stops draining the stub queue as soon as consent locks it.
+function loadConsentLockingSdk() {
+  const fbq = window.fbq as NonNullable<typeof window.fbq> & {
+    queue: unknown[][];
+    callMethod?: (...args: unknown[]) => void;
+  };
+  const delivered: unknown[][] = [];
+  let locked = false;
+  fbq.callMethod = (...args) => {
+    if (args[0] === 'consent') locked = args[1] === 'revoke';
+    else if (locked) fbq.queue.push(args);
+    else delivered.push(args);
+  };
+  while (fbq.queue.length && !locked) {
+    fbq.callMethod(...(fbq.queue.shift() ?? []));
+  }
+  facebookPixelReady();
+  return { delivered, remaining: fbq.queue };
+}
+
+it('initializes and delivers after the real SDK bootstrap consent lock', () => {
+  delete window.fbq;
+  cleanup = activateFacebookPixel('111');
+  sendFacebookPixelEvent('AddToCart', {}, { eventID: 'queued' });
+  const result = loadConsentLockingSdk();
+  expect(result.remaining).toEqual([]);
+  expect(result.delivered).toEqual([
+    ['set', 'autoConfig', false, '111'],
+    ['init', '111'],
+    ['trackSingle', '111', 'PageView', {}],
+    ['trackSingle', '111', 'AddToCart', {}, { eventID: 'queued' }],
+  ]);
+});
+
+it('never queues a revoked or replaced pixel initialization before readiness', () => {
+  delete window.fbq;
+  const old = activateFacebookPixel('111');
+  old?.();
+  cleanup = activateFacebookPixel('222');
+  const result = loadConsentLockingSdk();
+  expect(result.remaining).toEqual([]);
+  expect(result.delivered).toContainEqual(['init', '222']);
+  expect(result.delivered).not.toContainEqual(['init', '111']);
+});
+
+it('leaves the bootstrap queue empty when activation is revoked before readiness', () => {
+  delete window.fbq;
+  cleanup = activateFacebookPixel('111');
+  cleanup?.();
+  expect(loadConsentLockingSdk()).toEqual({ delivered: [], remaining: [] });
+});
+
+it('unlocks the ready SDK before configuring the next active merchant', () => {
+  delete window.fbq;
+  cleanup = activateFacebookPixel('111');
+  const { delivered } = loadConsentLockingSdk();
+  cleanup?.();
+  delivered.length = 0;
+  cleanup = activateFacebookPixel('222');
+  expect(delivered).toEqual([
+    ['set', 'autoConfig', false, '222'],
+    ['init', '222'],
+    ['trackSingle', '222', 'PageView', {}],
+  ]);
+  cleanup?.();
+  delivered.length = 0;
+  cleanup = activateFacebookPixel('222');
+  expect(delivered).toEqual([['trackSingle', '222', 'PageView', {}]]);
 });

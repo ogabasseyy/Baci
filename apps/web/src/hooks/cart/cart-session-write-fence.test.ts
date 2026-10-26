@@ -55,6 +55,7 @@ it('holds the retirement fence until aborted transition work actually settles', 
       })
   );
   const pending = runCartSessionTransition('shop-fence', 'blocked', operation, {
+    isSuccessful: () => true,
     signal: controller.signal,
   });
   // Let the transition acquire its retirement and start the operation.

@@ -1,4 +1,4 @@
-import type { CartErrorCode } from '@baci/shared/cart';
+import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
 import { saveSharedCartImportReceipt } from './cart-storage';
 import { consumedReceiptFields } from './shared-cart-storage';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
@@ -9,7 +9,9 @@ export function createImportFinisher(context: SharedCartRuntime) {
     context;
   function finishImportOp(
     operationId: string,
-    outcome: { ok: true } | { ok: false; code: CartErrorCode }
+    outcome:
+      | { ok: true; snapshot?: CartSnapshot }
+      | { ok: false; code: CartErrorCode }
   ): void {
     const generation = generationRef.current;
     if (!importOpIdsRef.current.has(operationId)) return;
@@ -25,17 +27,21 @@ export function createImportFinisher(context: SharedCartRuntime) {
     }
     if (importOpIdsRef.current.size > 0) return;
     const current = stateRef.current;
-    if (!current.confirmed) return;
+    // The caller may hold the just-reconciled snapshot before
+    // stateRef publishes it after the React commit; finish with that
+    // snapshot instead of rolling back to the pre-command state.
+    const confirmed = outcome.snapshot ?? current.confirmed;
+    if (!confirmed) return;
     dispatch({
       generation,
-      lineCount: current.confirmed.lines.length,
-      snapshot: current.confirmed,
+      lineCount: confirmed.lines.length,
+      snapshot: confirmed,
       type: 'import/finished',
     });
     saveSharedCartImportReceipt(optionsRef.current.merchantSlug, {
-      cartId: current.confirmed.cartId,
+      cartId: confirmed.cartId,
       importedAt: new Date().toISOString(),
-      lineCount: current.confirmed.lines.length,
+      lineCount: confirmed.lines.length,
       ...(context.importSourceIdsRef?.current.length
         ? consumedReceiptFields(context.importSourceIdsRef.current)
         : {}),

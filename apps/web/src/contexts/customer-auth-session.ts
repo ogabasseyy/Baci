@@ -1,3 +1,4 @@
+import { reconcileOrphanedDeferredCartLogout } from '@/hooks/cart/cart-deferred-logout';
 import { CART_REQUEST_TIMEOUT_MS } from '@/hooks/cart/cart-request-deadline';
 import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
 // Session load/logout orchestration for the storefront customer auth provider.
@@ -22,6 +23,7 @@ import {
 import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
+import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import {
   clearCustomerAuthRollbackPending,
   getRememberedCustomerUserId,
@@ -37,39 +39,6 @@ export { resetRememberedCustomerSessionsForTests };
 interface CustomerSession {
   customer: Customer;
   user: CustomerUser;
-}
-
-async function retirePreviousAccountCartAuthority(
-  merchantSlug: string,
-  previousUserId: string
-): Promise<boolean> {
-  const retirement = beginCartSessionRetirement(merchantSlug);
-  markCartDeviceRevocationPending?.(merchantSlug);
-  bumpCartSessionGeneration({ merchantSlug });
-  try {
-    await retirement.drained;
-    const revoked = await revokeCartDeviceSession(merchantSlug, {
-      retiringUserId: previousUserId,
-    });
-    if (!revoked.ok) {
-      setRememberedCustomerUserId(merchantSlug, previousUserId);
-      return false;
-    }
-    // Revocation can succeed while deliberately retaining the pending
-    // marker because cache erasure failed. Only lift that fence once
-    // the previous account's cache is verifiably gone; otherwise the
-    // new account could adopt the surviving parked cart.
-    const erased = eraseRetiredCartCache(merchantSlug, previousUserId);
-    clearCartStorage(merchantSlug, previousUserId);
-    if (erased) clearCartDeviceRevocationPending?.(merchantSlug);
-    setRememberedCustomerUserId(merchantSlug, null);
-    return true;
-  } catch {
-    setRememberedCustomerUserId(merchantSlug, previousUserId);
-    return false;
-  } finally {
-    retirement.release();
-  }
 }
 
 type CustomerSessionFetchResult =
@@ -126,6 +95,9 @@ export async function loadCustomerSession(
     merchantSlug,
     currentUserId
   );
+  // A page that closed mid-logout leaves a deferred marker behind;
+  // drop it once its lease expires so it cannot fence this load.
+  reconcileOrphanedDeferredCartLogout(merchantSlug);
   try {
     if (isCustomerAuthRollbackPending(merchantSlug)) {
       if (previousUserId) {

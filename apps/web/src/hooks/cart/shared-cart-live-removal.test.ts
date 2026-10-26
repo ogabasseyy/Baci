@@ -103,6 +103,72 @@ it('targets the line matching the assurance lane among same-identity lines', asy
     'shop'
   );
 });
+it('reconciles an indeterminate command that actually committed', async () => {
+  const committed = snapshot(2);
+  vi.mocked(fetchSharedCartSnapshot)
+    .mockResolvedValueOnce(committed as never)
+    .mockResolvedValueOnce({
+      ...committed,
+      snapshot: { ...committed.snapshot, lines: [] },
+    } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+  const firstCall = vi.mocked(sendSharedCartCommand).mock.calls[0][0];
+  expect(firstCall.operationId).toBeTruthy();
+});
+it('clears group negotiations on remaining live lines when asked', async () => {
+  const base = snapshot(2);
+  const negotiated = {
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        base.snapshot.lines[0],
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-2',
+          item: { productId: 'other-product' },
+          negotiatedUnitPriceMinor: 5000,
+          negotiationStatus: 'accepted',
+        },
+      ],
+    },
+  };
+  vi.mocked(fetchSharedCartSnapshot)
+    .mockResolvedValueOnce(negotiated as never)
+    .mockResolvedValueOnce(negotiated as never);
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 4 },
+    } as never)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 5 },
+    } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop', {
+      clearGroupNegotiations: true,
+    })
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      command: {
+        type: 'set_negotiated_price',
+        lineId: 'line-2',
+        negotiatedUnitPriceMinor: null,
+      },
+      expectedVersion: 3,
+    }),
+    'shop'
+  );
+});
 it('reports failure when the snapshot fetch fails retryably', async () => {
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: false,

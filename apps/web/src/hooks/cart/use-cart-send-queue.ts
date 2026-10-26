@@ -173,7 +173,10 @@ export function useCartSendQueue(
           snapshot: result.snapshot,
           type: 'command/reconciled',
         });
-        finishImportOp(pending.operationId, { ok: true });
+        finishImportOp(pending.operationId, {
+          ok: true,
+          snapshot: result.snapshot,
+        });
         void hydrateMissing(result.snapshot);
         return;
       }

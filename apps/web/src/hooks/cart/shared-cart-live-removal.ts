@@ -15,20 +15,45 @@ import { isTerminalCart } from './shared-cart-queue';
  * quantities match). Returns false when the live cart could not be
  * updated, so the caller can surface a retryable error.
  */
-export async function removeCapacityLineFromLiveCart(
-  selected: CartItem,
+async function clearLiveGroupNegotiations(
   merchantSlug: string
 ): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
-    // not_found/unauthorized mean there is no live cart to update;
-    // a retryable fetch failure leaves the outcome unknown, so report
-    // failure instead of silently leaving the line in the live cart.
-    if (!fetched.ok) return !fetched.retryable;
-    const snapshot = fetched.snapshot;
-    if (isTerminalCart(snapshot)) return true;
-    const key = identityKeyOfDisplay(selected);
-    const line = snapshot.lines.find(
+  const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
+  if (!fetched.ok) return false;
+  if (isTerminalCart(fetched.snapshot)) return true;
+  let version = fetched.snapshot.version;
+  for (const line of fetched.snapshot.lines) {
+    if (
+      line.negotiatedUnitPriceMinor == null &&
+      (line.negotiationStatus ?? 'none') === 'none'
+    )
+      continue;
+    const cleared = await sendSharedCartCommand(
+      {
+        command: {
+          type: 'set_negotiated_price',
+          lineId: line.id,
+          negotiatedUnitPriceMinor: null,
+        },
+        expectedVersion: version,
+        operationId: crypto.randomUUID(),
+      },
+      merchantSlug
+    );
+    if (!cleared.ok) return false;
+    version = cleared.snapshot.version;
+  }
+  return true;
+}
+
+export async function removeCapacityLineFromLiveCart(
+  selected: CartItem,
+  merchantSlug: string,
+  options?: { clearGroupNegotiations?: boolean }
+): Promise<boolean> {
+  const key = identityKeyOfDisplay(selected);
+  const findLine = (lines: import('@baci/shared/cart').CartSnapshot['lines']) =>
+    lines.find(
       (candidate) =>
         cartLineIdentity(candidate.item) === key &&
         (candidate.voucherToken ?? undefined) ===
@@ -46,6 +71,19 @@ export async function removeCapacityLineFromLiveCart(
         (candidate.assuranceRate ?? undefined) ===
           (selected.assuranceRate ?? undefined)
     );
+  // One operation ID per removal: an indeterminate response is
+  // replayed/reconciled under the same identity instead of minting a
+  // second, unrelated command.
+  const operationId = crypto.randomUUID();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
+    // not_found/unauthorized mean there is no live cart to update;
+    // a retryable fetch failure leaves the outcome unknown, so report
+    // failure instead of silently leaving the line in the live cart.
+    if (!fetched.ok) return !fetched.retryable;
+    const snapshot = fetched.snapshot;
+    if (isTerminalCart(snapshot)) return true;
+    const line = findLine(snapshot.lines);
     if (!line) return true;
     const remainingQuantity = line.quantity - selected.quantity;
     const result = await sendSharedCartCommand(
@@ -59,12 +97,27 @@ export async function removeCapacityLineFromLiveCart(
               }
             : { type: 'remove', lineId: line.id },
         expectedVersion: snapshot.version,
-        operationId: crypto.randomUUID(),
+        operationId,
       },
       merchantSlug
     );
-    if (result.ok) return true;
-    if (result.code !== 'version_conflict') return false;
+    if (result.ok)
+      return options?.clearGroupNegotiations
+        ? clearLiveGroupNegotiations(merchantSlug)
+        : true;
+    if (result.code === 'version_conflict') continue;
+    // Indeterminate: the command may have committed despite the lost
+    // response. Re-fetch and reconcile before reporting failure.
+    const check = await fetchSharedCartSnapshot(undefined, merchantSlug);
+    if (!check.ok) return false;
+    if (isTerminalCart(check.snapshot)) return true;
+    const settled = findLine(check.snapshot.lines);
+    const reconciled =
+      !settled || settled.quantity <= Math.max(remainingQuantity, 0);
+    if (!reconciled) return false;
+    return options?.clearGroupNegotiations
+      ? clearLiveGroupNegotiations(merchantSlug)
+      : true;
   }
   return false;
 }

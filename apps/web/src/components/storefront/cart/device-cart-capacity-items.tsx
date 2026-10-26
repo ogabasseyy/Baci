@@ -29,6 +29,9 @@ export function DeviceCartCapacityItems({
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Set by applyRemoval when the cache edit voided a group deal, so
+  // the live-cart reconciliation clears the same deal server-side.
+  let removalVoidedGroupDeal = false;
   useEffect(() => {
     setItems(getCartFromStorage(merchantSlug));
   }, [merchantSlug]);
@@ -95,14 +98,14 @@ export function DeviceCartCapacityItems({
         // Reconcile the row actually removed from storage: another
         // tab may have changed its quantity after this list rendered.
         const removed: CartItem = removedRow;
-        void removeCapacityLineFromLiveCart(removed, merchantSlug).then(
-          (ok) => {
-            if (!ok)
-              setError(
-                'Saved items updated, but the live cart could not be updated. Remove the item from the cart and retry.'
-              );
-          }
-        );
+        void removeCapacityLineFromLiveCart(removed, merchantSlug, {
+          clearGroupNegotiations: removalVoidedGroupDeal,
+        }).then((ok) => {
+          if (!ok)
+            setError(
+              'Saved items updated, but the live cart could not be updated. Remove the item from the cart and retry.'
+            );
+        });
       })
       .catch(() => {
         setItems(getCartFromStorage(merchantSlug));
@@ -150,6 +153,11 @@ export function DeviceCartCapacityItems({
           );
     if (!target) {
       setItems(current);
+      // Matching rows exist but cannot be disambiguated: surface the
+      // failure instead of a dead click. (No candidates means another
+      // tab already removed the row, which the refresh reflects.)
+      if (candidates.length > 0)
+        setError('Could not save that change. Check storage access and retry.');
       return null;
     }
     const targetIndex = current.indexOf(target);
@@ -157,6 +165,7 @@ export function DeviceCartCapacityItems({
       (_, currentIndex) => currentIndex !== targetIndex
     );
     const hadGroupNegotiation = getCartWideNegotiationFromStorage(merchantSlug);
+    removalVoidedGroupDeal = Boolean(hadGroupNegotiation);
     if (hadGroupNegotiation) {
       remaining = remaining.map(
         ({ negotiatedPrice: _price, negotiationStatus: _status, ...item }) =>

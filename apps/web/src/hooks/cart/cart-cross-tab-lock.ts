@@ -102,9 +102,23 @@ export function withCartCookieWrite<T>(
     // its result instead of letting it rewrite retired state.
     const startedEpoch = epoch(slug);
     if (signal.aborted) return Promise.resolve(fallback);
-    return operation().then((result) =>
-      epoch(slug) === startedEpoch && !signal.aborted ? result : fallback
-    );
+    // Track the write so revocation draining observes it, matching
+    // the lock-managed path's activeWrites accounting.
+    activeWrites += 1;
+    let pending: Promise<T>;
+    try {
+      pending = operation();
+    } catch (error) {
+      activeWrites -= 1;
+      throw error;
+    }
+    return pending
+      .then((result) =>
+        epoch(slug) === startedEpoch && !signal.aborted ? result : fallback
+      )
+      .finally(() => {
+        activeWrites -= 1;
+      });
   }
   const startedEpoch = epoch(slug);
   return manager.request(LOCK_NAME, { mode: 'exclusive', signal }, () => {

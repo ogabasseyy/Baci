@@ -274,8 +274,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         <button
           type="button"
           {...drag.buttonProps}
-          onClick={() => {
-            if (!drag.suppressClick()) setIsOpen(!isOpen);
+          onClick={(event) => {
+            if (!drag.suppressClick(event)) setIsOpen(!isOpen);
           }}
           className={buttonClasses}
           aria-label="Toggle chat"

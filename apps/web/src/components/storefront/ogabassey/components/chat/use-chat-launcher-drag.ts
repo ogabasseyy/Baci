@@ -3,17 +3,20 @@
 import {
   type CSSProperties,
   type DragEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from 'react';
+import {
+  clampChatLauncherPosition,
+  type Overflow,
+  type Position,
+} from './chat-launcher-geometry';
 
-const EDGE_GAP = 16;
 const DRAG_THRESHOLD = 6;
-type Position = { x: number; y: number };
-type Overflow = { left: number; top: number; right: number; bottom: number };
 type Gesture = {
   pointerId: number;
   x: number;
@@ -27,39 +30,6 @@ type Gesture = {
   base: Position;
   next: Position;
 };
-
-function clampAxis(value: number, min: number, max: number, fallback: number) {
-  return min <= max ? Math.max(min, Math.min(value, max)) : Math.max(0, Math.min(value, fallback));
-}
-
-function clamp(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  bottomSafeArea = 0,
-  overflow: Overflow = { left: 0, top: 0, right: 0, bottom: 0 },
-): Position {
-  const minX = EDGE_GAP + overflow.left;
-  const maxX = window.innerWidth - width - EDGE_GAP - overflow.right;
-  const minY = EDGE_GAP + overflow.top;
-  const maxY =
-    window.innerHeight -
-    height -
-    EDGE_GAP -
-    bottomSafeArea -
-    overflow.bottom;
-
-  return {
-    x: clampAxis(x, minX, maxX, window.innerWidth - width),
-    y: clampAxis(
-      y,
-      minY,
-      maxY,
-      window.innerHeight - height - bottomSafeArea,
-    ),
-  };
-}
 
 /** No layout reads or React renders in the pointer-move path. */
 export function useChatLauncherDrag(
@@ -76,6 +46,7 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
   const clickSuppressionTimer = useRef<number | null>(null);
+  const clickSuppressionUntil = useRef(0);
 
   function clearClickSuppressionTimer() {
     if (clickSuppressionTimer.current !== null) {
@@ -127,7 +98,7 @@ export function useChatLauncherDrag(
     const overflow = readOverflow(button, rect);
     setPosition((current) => {
       if (!current) return current;
-      const next = clamp(
+      const next = clampChatLauncherPosition(
         current.x,
         current.y,
         rect.width,
@@ -147,8 +118,13 @@ export function useChatLauncherDrag(
         ? new ResizeObserver(reclampPosition)
         : null;
     if (button) observer?.observe(button);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener('resize', reclampPosition);
+    visualViewport?.addEventListener('scroll', reclampPosition);
     return () => {
       window.removeEventListener('resize', reclampPosition);
+      visualViewport?.removeEventListener('resize', reclampPosition);
+      visualViewport?.removeEventListener('scroll', reclampPosition);
       observer?.disconnect();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       clearClickSuppressionTimer();
@@ -195,7 +171,7 @@ export function useChatLauncherDrag(
     const dy = y - start.y;
     if (!dragged.current && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
     dragged.current = true;
-    start.next = clamp(
+    start.next = clampChatLauncherPosition(
       start.left + dx,
       start.top + dy,
       start.width,
@@ -238,10 +214,12 @@ export function useChatLauncherDrag(
     if (start && dragged.current) {
       setPosition(start.next);
       clearClickSuppressionTimer();
+      clickSuppressionUntil.current = performance.now() + 500;
       clickSuppressionTimer.current = window.setTimeout(() => {
         clickSuppressionTimer.current = null;
+        clickSuppressionUntil.current = 0;
         dragged.current = false;
-      }, 0);
+      }, 500);
     }
   }
 
@@ -255,10 +233,16 @@ export function useChatLauncherDrag(
     }
   }
 
-  function suppressClick() {
-    const suppress = dragged.current;
-    dragged.current = false;
-    clearClickSuppressionTimer();
+  function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
+    const suppress =
+      dragged.current &&
+      event.detail > 0 &&
+      performance.now() <= clickSuppressionUntil.current;
+    if (suppress || event.detail === 0) {
+      dragged.current = false;
+      clickSuppressionUntil.current = 0;
+      clearClickSuppressionTimer();
+    }
     return suppress;
   }
 

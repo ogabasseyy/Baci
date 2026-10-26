@@ -1,6 +1,7 @@
 'use client';
 
 import { Sparkles } from 'lucide-react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
@@ -55,8 +56,8 @@ export function DeferredChatWidget({
     .filter(Boolean)
     .join(' ');
 
-  const activateChat = () => {
-    if (drag.suppressClick() || ChatRuntime || isLoading) {
+  const activateChat = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (drag.suppressClick(event) || ChatRuntime || isLoading) {
       return;
     }
 

@@ -41,8 +41,8 @@ function Harness({
         <button
           type="button"
           {...drag.buttonProps}
-          onClick={() => {
-            if (!drag.suppressClick()) onOpen();
+          onClick={(event) => {
+            if (!drag.suppressClick(event)) onOpen();
           }}
         >
           Chat

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import dragTestSupport from './use-chat-launcher-drag.test-support';
 
 const { Harness, setup } = dragTestSupport;
@@ -34,11 +34,11 @@ describe('useChatLauncherDrag', () => {
     expect(screen.getByTestId('anchor').style.transform).toBe(
       'translate3d(16px, 16px, 0)',
     );
-    fireEvent.click(button);
+    fireEvent.click(button, { detail: 1 });
     expect(onOpen).not.toHaveBeenCalled();
     pointer('pointerdown', 20, 20);
     pointer('pointerup', 20, 20);
-    fireEvent.click(button);
+    fireEvent.click(button, { detail: 1 });
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
@@ -111,6 +111,41 @@ describe('useChatLauncherDrag', () => {
     );
   });
 
+  it('re-clamps against visual viewport size and offset changes', () => {
+    const viewport = Object.assign(new EventTarget(), {
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 320,
+      height: 480,
+    }) as unknown as VisualViewport;
+    vi.stubGlobal('visualViewport', viewport);
+    const setViewportValue = (key: keyof VisualViewport, value: number) =>
+      Object.defineProperty(viewport, key, { configurable: true, value });
+    const { pointer } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 2000, 2000);
+    pointer('pointerup', 2000, 2000);
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(248px, 374px, 0)',
+    );
+
+    setViewportValue('offsetLeft', 40);
+    setViewportValue('offsetTop', 20);
+    setViewportValue('width', 200);
+    setViewportValue('height', 300);
+    act(() => viewport.dispatchEvent(new Event('resize')));
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(168px, 214px, 0)',
+    );
+
+    setViewportValue('offsetLeft', 200);
+    setViewportValue('offsetTop', 200);
+    act(() => viewport.dispatchEvent(new Event('scroll')));
+    expect(screen.getByTestId('anchor').style.transform).toBe(
+      'translate3d(216px, 216px, 0)',
+    );
+  });
+
   it('keeps click suppression after pointer capture is released on pointerup', () => {
     const { pointer, button, onOpen } = setup();
     pointer('pointerdown', 220, 320);
@@ -119,7 +154,7 @@ describe('useChatLauncherDrag', () => {
     const lostCapture = new MouseEvent('lostpointercapture', { bubbles: true });
     Object.defineProperty(lostCapture, 'pointerId', { value: 1 });
     fireEvent(button, lostCapture);
-    fireEvent.click(button);
+    fireEvent.click(button, { detail: 1 });
     expect(onOpen).not.toHaveBeenCalled();
   });
 
@@ -132,6 +167,17 @@ describe('useChatLauncherDrag', () => {
     vi.runOnlyPendingTimers();
     fireEvent.click(button, { detail: 0 });
     expect(onOpen).toHaveBeenCalledOnce();
+  });
+
+  it('suppresses a delayed pointer click after a completed drag', () => {
+    vi.useFakeTimers();
+    const { pointer, button, onOpen } = setup();
+    pointer('pointerdown', 220, 320);
+    pointer('pointermove', 120, 220);
+    pointer('pointerup', 120, 220);
+    vi.advanceTimersByTime(400);
+    fireEvent.click(button, { detail: 1 });
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('restores the previous transform when a drag is cancelled', () => {

@@ -249,3 +249,30 @@ it('rejects a handoff queued before another tab retires authority', async () => 
   await expect(selection).resolves.toBe('blocked');
   expect(operation).not.toHaveBeenCalled();
 });
+it('scopes the cookie lock by merchant so unrelated merchants do not serialize', async () => {
+  const { withCartCookieWrite } = await import('./cart-cross-tab-lock');
+  let finishA!: (value: string) => void;
+  const opA = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        finishA = resolve;
+      })
+  );
+  const opB = vi.fn().mockResolvedValue('b');
+  const pendingA = withCartCookieWrite(
+    'blocked',
+    new AbortController().signal,
+    opA,
+    'shop-a'
+  );
+  const resultB = await withCartCookieWrite(
+    'blocked',
+    new AbortController().signal,
+    opB,
+    'shop-b'
+  );
+  expect(resultB).toBe('b');
+  expect(opB).toHaveBeenCalledOnce();
+  finishA('a');
+  await expect(pendingA).resolves.toBe('a');
+});

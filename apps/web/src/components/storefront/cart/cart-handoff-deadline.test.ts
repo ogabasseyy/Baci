@@ -76,7 +76,7 @@ it('cancels queued lock acquisition without sending a late redeem POST', async (
   });
   let release!: () => void;
   const otherTab = locks.request(
-    'baci-cart-cookie-authority',
+    'baci-cart-cookie-authority:shop',
     { mode: 'exclusive' },
     () =>
       new Promise<void>((resolve) => {

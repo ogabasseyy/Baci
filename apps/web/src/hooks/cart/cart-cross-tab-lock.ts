@@ -1,6 +1,10 @@
 import { bumpCartSessionGeneration } from './shared-cart-storage';
 
 const LOCK_NAME = 'baci-cart-cookie-authority';
+// Epochs and storage are merchant-scoped, so serialize only writers
+// for the same merchant; the merchant-less case keeps the base name.
+const lockName = (slug?: string | null) =>
+  slug?.trim() ? `${LOCK_NAME}:${slug.trim()}` : LOCK_NAME;
 const EPOCH_KEY = 'baci-cart-authority-epoch';
 let listening = false;
 let activeWrites = 0;
@@ -121,7 +125,7 @@ export function withCartCookieWrite<T>(
       });
   }
   const startedEpoch = epoch(slug);
-  return manager.request(LOCK_NAME, { mode: 'exclusive', signal }, () => {
+  return manager.request(lockName(slug), { mode: 'exclusive', signal }, () => {
     // A request queued before retirement must not mint authority afterward.
     if (signal.aborted || epoch(slug) !== startedEpoch) return fallback;
     // Every realm must prove coordination storage is writable before sending.
@@ -142,7 +146,7 @@ export function withCartCookieWrite<T>(
   });
 }
 
-/** Hold an origin-wide exclusive lock until the caller finishes revocation. */
+/** Hold the merchant-scoped exclusive lock until the caller finishes revocation. */
 export function beginCartCookieRetirement(
   timeoutMs: number,
   guard?: { expectedEpoch: string | null | undefined },
@@ -184,7 +188,7 @@ export function beginCartCookieRetirement(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   void manager
     .request(
-      LOCK_NAME,
+      lockName(slug),
       { mode: 'exclusive', signal: controller.signal },
       async () => {
         acquired = true;

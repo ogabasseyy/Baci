@@ -3,6 +3,7 @@ import {
   getCartFromStorage,
   getSharedCartImportReceipt,
   saveCartToStorage,
+  saveSharedCartImportReceipt,
 } from './cart-storage';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
@@ -10,6 +11,7 @@ import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { isTerminalCart } from './shared-cart-queue';
 import {
   terminalCachePersisted,
+  terminalConsumptionCheckpoint,
   unimportedTerminalLines,
 } from './terminal-cart-cache';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
@@ -53,12 +55,22 @@ export async function adoptPreservedFallback(
       getCartFromStorage(merchantSlug),
       preservedLines
     );
-    if (!persistedOk)
+    if (!persistedOk) {
+      // The create was definitively rejected: clear it so the retry
+      // can re-enter this fallback instead of repeating the create
+      // under the terminal proof and stranding recovery.
+      context.createRequestRef.current = null;
       return {
         ok: false,
         code: 'temporarily_unavailable',
         retryable: true,
       };
+    }
+    const checkpoint = terminalConsumptionCheckpoint(
+      getSharedCartImportReceipt(merchantSlug),
+      preserved.snapshot.cartId
+    );
+    if (checkpoint) saveSharedCartImportReceipt(merchantSlug, checkpoint);
     context.retiredCartIdRef.current = preserved.snapshot.cartId;
     context.adoptOutcomeRef.current = 'expired';
     context.createRequestRef.current = null;

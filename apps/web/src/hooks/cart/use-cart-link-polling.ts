@@ -50,7 +50,21 @@ export function useCartLinkPolling(
         if (stopped || generationRef.current !== generation) return;
         const committed = stateRef.current.confirmed;
         if (committed && isTerminalCart(committed)) {
-          void context.ensureCart();
+          // A transient create failure leaves the import pending
+          // with no queue head to retry it: replay the retained
+          // create request here instead of stranding recovery.
+          for (
+            let provisionAttempt = 0;
+            provisionAttempt < 5;
+            provisionAttempt += 1
+          ) {
+            if (stopped || generationRef.current !== generation) return;
+            const result = await context.ensureCart();
+            if (!result || result.ok || !result.retryable) return;
+            await new Promise((resolve) =>
+              setTimeout(resolve, jittered(baseMs))
+            );
+          }
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 0));

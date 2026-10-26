@@ -73,3 +73,27 @@ it('keeps only genuinely unimported lines when a receipt belongs to another cart
     )
   ).toEqual([fresh]);
 });
+
+it('checkpoints a persisted filter so re-filtering retains the remainder', async () => {
+  const { terminalConsumptionCheckpoint, unimportedTerminalLines } =
+    await import('./terminal-cart-cache');
+  const receipt = {
+    cartId: 'cart-1',
+    importedAt: '2026-10-26T00:00:00.000Z',
+    lineCount: 1,
+    consumedCartItemIds: ['prod-1'],
+    consumedQuantities: { 'prod-1': 1 },
+  } as never;
+  const cached = [{ cartItemId: 'prod-1', quantity: 3 }] as never;
+  const filtered = unimportedTerminalLines(cached, 'cart-1', receipt);
+  expect(filtered).toHaveLength(1);
+  expect(filtered[0].quantity).toBe(2);
+  const checkpoint = terminalConsumptionCheckpoint(receipt, 'cart-1');
+  const refiltered = unimportedTerminalLines(
+    filtered as never,
+    'cart-1',
+    checkpoint
+  );
+  expect(refiltered).toHaveLength(1);
+  expect(refiltered[0].quantity).toBe(2);
+});

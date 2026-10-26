@@ -9,6 +9,7 @@ vi.mock('./cart-storage', () => ({
   getCartFromStorage: vi.fn(),
   getSharedCartImportReceipt: vi.fn(),
   saveCartToStorage: vi.fn(),
+  saveSharedCartImportReceipt: vi.fn(),
 }));
 vi.mock('./shared-cart-client', () => ({
   fetchSharedCartSnapshot: vi.fn(),

@@ -21,6 +21,21 @@ export function CheckoutCartCapacityGate({
   validatedResume?: boolean;
 }) {
   const cart = useCart();
+  // Do not mount checkout (and its payment/session hooks) before the
+  // shared-cart import resolution is known: an empty warnings list on
+  // first mount only means the link lifecycle has not reported yet.
+  if (
+    !validatedResume &&
+    cart.sharedCartEnabled &&
+    cart.syncStatus !== 'synced' &&
+    cart.syncStatus !== 'error'
+  ) {
+    return (
+      <p role="status" aria-label="Loading your cart">
+        Loading your cart…
+      </p>
+    );
+  }
   if (
     !validatedResume &&
     cart.sharedCartEnabled &&

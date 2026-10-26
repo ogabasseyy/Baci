@@ -170,6 +170,7 @@ it('clears group negotiations on remaining live lines when asked', async () => {
   );
 });
 it('reports failure when the snapshot fetch fails retryably', async () => {
+  window.localStorage.setItem('baci-cart-device-session-active:shop', '1');
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
     ok: false,
     code: 'temporarily_unavailable',
@@ -178,6 +179,40 @@ it('reports failure when the snapshot fetch fails retryably', async () => {
   await expect(
     removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
   ).resolves.toBe(false);
+});
+it('treats a retryable fetch failure as done when no live cart is known', async () => {
+  window.localStorage.removeItem('baci-cart-device-session-active:shop');
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+});
+it('matches an unassured live line despite a default cached assurance rate', async () => {
+  const base = snapshot(3);
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [{ ...base.snapshot.lines[0], assuranceRate: undefined }],
+    },
+  } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({ ok: true } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(
+      cartItem({ quantity: 1, hasAssurance: false, assuranceRate: 0.1 }),
+      'shop'
+    )
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: { type: 'set_quantity', lineId: 'line-1', quantity: 2 },
+    }),
+    'shop'
+  );
 });
 it('treats a missing live cart as nothing to update', async () => {
   vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({

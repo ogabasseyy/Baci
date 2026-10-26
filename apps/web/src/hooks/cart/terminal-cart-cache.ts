@@ -27,6 +27,30 @@ export function terminalCachePersisted(
     })
   );
 }
+/**
+ * Checkpoint a persisted terminal filter: the saved remainder is the
+ * new baseline, so a reload re-filtering it against the terminal
+ * receipt must retain it whole instead of subtracting the imported
+ * quantities a second time.
+ */
+export function terminalConsumptionCheckpoint(
+  receipt: SharedCartImportReceipt | null,
+  terminalCartId: string
+): SharedCartImportReceipt | null {
+  if (!receipt || receipt.cartId !== terminalCartId) return receipt;
+  return {
+    ...receipt,
+    lineCount: 0,
+    ...(receipt.consumedQuantities
+      ? {
+          consumedQuantities: Object.fromEntries(
+            Object.keys(receipt.consumedQuantities).map((id) => [id, 0])
+          ),
+        }
+      : {}),
+  };
+}
+
 /** A stable server line ID marks consumed canonical data, not a new device import. */
 export function unimportedTerminalLines(
   cached: SharedCartDisplayItem[],

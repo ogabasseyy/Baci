@@ -1,7 +1,8 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
+import { getCartFromStorage } from './cart-storage';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
-import { snapshot } from './shared-cart-provisioning.test-support';
+import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
 import { useCartLinkPolling } from './use-cart-link-polling';
 
 vi.mock('./shared-cart-client', () => ({
@@ -10,6 +11,11 @@ vi.mock('./shared-cart-client', () => ({
 vi.mock('./cart-storage', () => ({
   getCartFromStorage: vi.fn(() => []),
   getSharedCartImportReceipt: vi.fn(() => null),
+}));
+vi.mock('./shared-cart-hook-support', () => ({
+  FALLBACK_POLL_MS: 1,
+  RECONCILE_POLL_MS: 1,
+  jittered: (ms: number) => ms,
 }));
 
 function context(overrides: Record<string, unknown> = {}) {
@@ -43,4 +49,38 @@ it('does not poll while the surface is inactive', () => {
     useCartLinkPolling(context({ surfaceActive: false }) as never)
   );
   expect(fetchSharedCartSnapshot).not.toHaveBeenCalled();
+});
+
+it('replays a retryable terminal provisioning failure', async () => {
+  const terminal = snapshot({ state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([cartItem()] as never);
+  const ensureCart = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: false,
+      code: 'temporarily_unavailable',
+      retryable: true,
+    })
+    .mockResolvedValueOnce({
+      ok: false,
+      code: 'temporarily_unavailable',
+      retryable: true,
+    })
+    .mockResolvedValue({ ok: true });
+  renderHook(() =>
+    useCartLinkPolling(
+      context({
+        ensureCart,
+        stateRef: { current: { confirmed: terminal } },
+      }) as never
+    )
+  );
+  await waitFor(() =>
+    expect(ensureCart.mock.calls.length).toBeGreaterThanOrEqual(3)
+  );
 });

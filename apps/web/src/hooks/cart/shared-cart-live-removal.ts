@@ -1,4 +1,5 @@
 import { cartLineIdentity } from '@baci/shared/cart';
+import { hasActiveCartDeviceSession } from './cart-device-session-markers';
 import type { CartItem } from './cart-types';
 import {
   fetchSharedCartSnapshot,
@@ -68,8 +69,12 @@ export async function removeCapacityLineFromLiveCart(
           (selected.negotiationStatus ?? 'none') &&
         (candidate.hasAssurance ?? false) ===
           (selected.hasAssurance ?? false) &&
-        (candidate.assuranceRate ?? undefined) ===
-          (selected.assuranceRate ?? undefined)
+        // Device rows carry a default rate even when assurance is
+        // off, while server lines store none: only compare the rate
+        // for assured lines, or unassured lines never match.
+        (!(selected.hasAssurance ?? false) ||
+          (candidate.assuranceRate ?? undefined) ===
+            (selected.assuranceRate ?? undefined))
     );
   // One operation ID per removal: an indeterminate response is
   // replayed/reconciled under the same identity instead of minting a
@@ -80,7 +85,10 @@ export async function removeCapacityLineFromLiveCart(
     // not_found/unauthorized mean there is no live cart to update;
     // a retryable fetch failure leaves the outcome unknown, so report
     // failure instead of silently leaving the line in the live cart.
-    if (!fetched.ok) return !fetched.retryable;
+    // With no known device session there is no live cart to reconcile,
+    // so a transient failure must not fail the saved-cart trim.
+    if (!fetched.ok)
+      return !fetched.retryable || !hasActiveCartDeviceSession(merchantSlug);
     const snapshot = fetched.snapshot;
     if (isTerminalCart(snapshot)) return true;
     const line = findLine(snapshot.lines);

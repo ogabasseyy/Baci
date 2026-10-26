@@ -5,6 +5,7 @@ import {
   getCartFromStorage,
   getSharedCartImportReceipt,
   saveCartToStorage,
+  saveSharedCartImportReceipt,
 } from './cart-storage';
 import { createCartVisibilityWaiter } from './cart-visibility-waiter';
 import { fetchSharedCartSnapshot } from './shared-cart-client';
@@ -28,6 +29,7 @@ import {
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import {
   terminalCachePersisted,
+  terminalConsumptionCheckpoint,
   unimportedTerminalLines,
 } from './terminal-cart-cache';
 import { useCartLinkPolling } from './use-cart-link-polling';
@@ -192,6 +194,13 @@ export function useCartLinkLifecycle(
             retryAdopt(attempt, run);
             return;
           }
+          // The filtered remainder is the new baseline: checkpoint
+          // the receipt so a reload cannot subtract it twice.
+          const checkpoint = terminalConsumptionCheckpoint(
+            getSharedCartImportReceipt(merchantSlug),
+            result.snapshot.cartId
+          );
+          if (checkpoint) saveSharedCartImportReceipt(merchantSlug, checkpoint);
           adoptOutcomeRef.current = 'expired';
           await provision(attempt, run);
           return;

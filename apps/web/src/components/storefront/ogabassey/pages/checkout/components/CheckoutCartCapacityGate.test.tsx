@@ -4,6 +4,7 @@ import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 
 const cart = vi.hoisted(() => ({
   sharedCartEnabled: true,
+  syncStatus: 'synced' as string,
   importWarnings: [] as string[],
   importConflicts: [],
   resolveImportConflicts: vi.fn(),
@@ -13,6 +14,7 @@ const cart = vi.hoisted(() => ({
 vi.mock('@/hooks/cart', () => ({ useCart: () => cart }));
 beforeEach(() => {
   cart.sharedCartEnabled = true;
+  cart.syncStatus = 'synced';
   cart.importWarnings = [];
   vi.clearAllMocks();
 });
@@ -92,4 +94,15 @@ it('does not bypass recovery for an unvalidated order query', () => {
     screen.getByRole('region', { name: 'Cart import capacity' })
   ).toBeVisible();
   window.history.replaceState({}, '', '/');
+});
+
+it('does not mount checkout while shared-cart import resolution is pending', () => {
+  cart.syncStatus = 'pending';
+  render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
+  expect(screen.getByRole('status', { name: 'Loading your cart' })).toBeVisible();
 });

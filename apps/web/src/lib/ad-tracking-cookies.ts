@@ -58,6 +58,7 @@ export interface AdTrackingData {
   obref?: string;
   chatgptConsent?: boolean;
   marketingConsent?: boolean;
+  analyticsConsent?: boolean;
   twclid?: string;
   // Click IDs from URL params
   fbclid?: string;
@@ -200,6 +201,7 @@ export function getAdTrackingData(): AdTrackingData {
   return {
     ...tracking,
     chatgptConsent: allowed,
+    analyticsConsent: allowed,
     marketingConsent,
     ...(twclid && /^[A-Za-z0-9_-]{1,256}$/.test(twclid) ? { twclid } : {}),
   };

@@ -9,6 +9,7 @@ export interface ConversionEvent {
   user_data: {
     measurement_consent?: boolean;
     marketing_consent?: boolean;
+    analytics_consent?: boolean;
     twclid?: string;
     oppref?: string;
     obref?: string;

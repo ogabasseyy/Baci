@@ -118,6 +118,9 @@ function userData(
 ): ConversionEvent['user_data'] {
   const value = asRecord(eventData.delivery_user_data);
   return {
+    ...(typeof value.analytics_consent === 'boolean'
+      ? { analytics_consent: value.analytics_consent }
+      : {}),
     ...(typeof value.marketing_consent === 'boolean'
       ? { marketing_consent: value.marketing_consent }
       : {}),
@@ -181,6 +184,23 @@ export async function deliverAnalyticsEvent(
     };
   }
 
+  const paid = event.event_name === 'analytics.purchase.completed.v1';
+  const prepared = paid
+    ? await loadPaidOrderDeliveryEvent(supabase, event)
+    : { conversion: toClientConversion(event), orderNumber: '' };
+
+  if (
+    ((destination === 'tiktok' || destination === 'snapchat') &&
+      prepared.conversion.user_data.marketing_consent !== true) ||
+    ((destination === 'facebook' || destination === 'ga4') &&
+      prepared.conversion.user_data.analytics_consent !== true)
+  )
+    return {
+      success: true,
+      terminalOutcome: 'skipped',
+      providerResponseId: 'consent_required',
+    };
+
   const config = await fetchAnalyticsPlatformConfig(
     supabase,
     event.merchant_id
@@ -205,21 +225,6 @@ export async function deliverAnalyticsEvent(
       terminalOutcome: 'skipped',
     };
   }
-
-  const paid = event.event_name === 'analytics.purchase.completed.v1';
-  const prepared = paid
-    ? await loadPaidOrderDeliveryEvent(supabase, event)
-    : { conversion: toClientConversion(event), orderNumber: '' };
-
-  if (
-    (destination === 'tiktok' || destination === 'snapchat') &&
-    prepared.conversion.user_data.marketing_consent !== true
-  )
-    return {
-      success: true,
-      terminalOutcome: 'skipped',
-      providerResponseId: 'consent_required',
-    };
 
   if (destination === 'ga4') {
     if (!paid || !config.google_analytics_id || !config.ga4_api_secret) {

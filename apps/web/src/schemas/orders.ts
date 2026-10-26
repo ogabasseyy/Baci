@@ -190,6 +190,7 @@ const orderCreateSchemaBase = z
         userAgent: z.string().optional(),
         limitedDataUse: z.boolean().optional(),
         marketingConsent: z.boolean().optional(),
+        analyticsConsent: z.boolean().optional(),
         twclid: z
           .string()
           .regex(/^[A-Za-z0-9_-]{1,256}$/)

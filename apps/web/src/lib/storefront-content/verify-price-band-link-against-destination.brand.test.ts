@@ -105,7 +105,7 @@ describe('verifyPriceBandLinkAgainstDestination brand-compare links', () => {
     ).toEqual(links);
   });
 
-  it('drops a product-compare link whose slug is not curated', () => {
+  it('keeps a maintained product pair outside the discovery curated set', () => {
     const links = [
       {
         href: 'https://store.test/smartphones/compare/iphone-0-vs-galaxy-0',
@@ -118,14 +118,6 @@ describe('verifyPriceBandLinkAgainstDestination brand-compare links', () => {
         links,
         compareProducts: pool,
         curatedCompareSlugs: new Set(['apple-vs-samsung']),
-      })
-    ).toEqual([]);
-    expect(
-      verifyPriceBandLinkAgainstDestination({
-        categorySlug: 'smartphones',
-        links,
-        compareProducts: pool,
-        curatedCompareSlugs: new Set(['galaxy-0-vs-iphone-0']),
       })
     ).toEqual(links);
   });

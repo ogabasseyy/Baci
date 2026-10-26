@@ -21,6 +21,8 @@ export interface EligibleHubProductInput {
   price?: number;
   category_slug?: string | null;
   category_slugs?: string[] | null;
+  /** Legacy denormalized category text, matched via generateSlug. */
+  category?: string | null;
   product_key_specs?: Record<string, unknown> | null;
   is_parent?: boolean | null;
   parent_product_id?: string | null;
@@ -56,6 +58,7 @@ export function resolveEligibleCategoryHubDestinations(
       // the caller, so child-only rows count toward the parent hub.
       (input.assumeCategoryScoped === true ||
         generateSlug(product.category_slug ?? '') === categorySlug ||
+        generateSlug(product.category ?? '') === categorySlug ||
         (product.category_slugs ?? []).some(
           (slug) => generateSlug(slug) === categorySlug
         )) &&

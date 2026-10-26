@@ -15,7 +15,7 @@ export async function sendServerConversion(
   eventId: string,
   data: ConversionData
 ): Promise<void> {
-  if (!getIsTrackingAllowed()) return;
+  if (getIsTrackingAllowed() !== true) return;
 
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -35,6 +35,10 @@ export async function sendServerConversion(
         event_time: Math.floor(Date.now() / 1000),
         event_source: 'mobile_app',
         platform: AD_TRACKING_PLATFORM,
+        // Native advertising permission gates the entire external fanout.
+        // Carry that verified local decision across the server purpose filter.
+        analytics_consent: true,
+        marketing_consent: true,
         ...(getCachedMerchantId() && { merchant_id: getCachedMerchantId() }),
         user_data: {
           em: data.email || userData.email,

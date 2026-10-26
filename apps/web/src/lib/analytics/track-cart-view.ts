@@ -5,7 +5,7 @@ import { facebookCatalogEvent } from '@/lib/facebook-catalog-event';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
 import type { Product } from '@/lib/products';
 import { sendFacebookPixelEvent } from './facebook-pixel-client';
-import { sendSocialClientObservation } from './send-social-client-observation';
+import { queueCartObservation } from './queue-cart-observation';
 import { trackSocialFunnel } from './track-social-funnel';
 
 type CartItem = { product: Product; quantity: number };
@@ -36,25 +36,9 @@ export function trackCartView(
       currency,
       eventId
     );
-    if (context?.merchantId)
-      for (const destination of ['tiktok', 'snapchat'] as const)
-        void sendSocialClientObservation(destination, {
-          baseUrl: window.location.origin,
-          event: 'view_item',
-          eventId,
-          merchantId: context.merchantId,
-          eventData: {
-            value,
-            currency,
-            products: products.map(({ product, quantity }) => ({
-              id: product.id,
-              name: product.name,
-              price: product.price,
-              quantity,
-            })),
-          },
-        });
   }
+  if (context?.merchantId)
+    void queueCartObservation(products, currency, eventId, context.merchantId);
   if (!isAnalyticsAllowed()) return;
   window.gtag?.('event', 'view_cart', {
     currency,
@@ -80,34 +64,4 @@ export function trackCartView(
     }),
     { eventID: eventId }
   );
-
-  if (!context?.merchantId) return;
-  void fetch('/api/analytics/facebook-capi', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      event: 'ViewContent',
-      eventId,
-      consent: true,
-      merchantId: context.merchantId,
-      eventData: {
-        value,
-        currency,
-        products: products.map(({ product, quantity }) => ({
-          id: product.id,
-          name: product.name,
-          quantity,
-          price: product.price,
-        })),
-      },
-      eventSourceUrl: window.location.href,
-    }),
-  })
-    .then((response) => {
-      if (!response.ok)
-        console.warn('Facebook CAPI observation was not accepted');
-    })
-    .catch(() => {
-      console.warn('Facebook CAPI observation could not be queued');
-    });
 }

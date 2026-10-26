@@ -77,3 +77,14 @@ it('rejects invalid monetary data', () => {
     )
   ).toThrow();
 });
+
+it.each([
+  'tw-abc-paid.extra',
+  'tw-abc-',
+  'tw-abc-paid\n',
+  `tw-abc-${'x'.repeat(129)}`,
+])('rejects malformed bounded event suffix %s', (code) => {
+  expect(() => buildXPaidEvent(event, 'abc', code)).toThrow(
+    'invalid_x_event_code'
+  );
+});

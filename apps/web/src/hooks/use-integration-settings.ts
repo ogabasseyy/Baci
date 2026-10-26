@@ -1,11 +1,10 @@
-import { omitBlankIntegrationSecrets } from '@/lib/integration-secret-settings';
-
-('use client');
+'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { omitBlankIntegrationSecrets } from '@/lib/integration-secret-settings';
 
 interface UseIntegrationSettingsOptions<T> {
   /** Keys to fetch from the merchant features API */

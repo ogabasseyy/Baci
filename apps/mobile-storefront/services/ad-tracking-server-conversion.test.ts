@@ -52,7 +52,12 @@ describe('sendServerConversion', () => {
     global.fetch = mockFetch;
   });
 
-  it('does not forward advertising conversions without ATT authorization', async () => {
+  it.each([
+    false,
+    undefined,
+    null,
+  ])('does not forward advertising conversions without explicit permission (%s)', async (permission) => {
+    mockGetIsTrackingAllowed.mockReturnValue(permission as boolean);
     const { sendServerConversion } = await import(
       './ad-tracking-server-conversion'
     );
@@ -74,6 +79,15 @@ describe('sendServerConversion', () => {
     await sendServerConversion('PURCHASE', 'event-2', {
       currency: 'NGN',
       value: 1000,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+    expect(body).toMatchObject({
+      event_id: 'event-2',
+      merchant_id: 'merchant-1',
+      analytics_consent: true,
+      marketing_consent: true,
+      targets: ['facebook', 'tiktok', 'snapchat', 'google'],
     });
 
     expect(mockFetch).toHaveBeenCalledWith(

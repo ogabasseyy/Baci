@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
-import { facebookCapiEventSchema } from '@/schemas/facebook-capi-event';
+import { conversionEventRequestSchema } from '@/schemas/conversion-event';
 import {
   activateFacebookPixel,
   facebookPixelReady,
@@ -55,14 +55,15 @@ it('shares an event ID and preserves the tenant and currency in the browser/serv
   vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
   trackCartView([{ product, quantity: 1 }], 'NGN', { merchantId });
   const payload = JSON.parse(fetcher.mock.calls[0][1].body);
-  expect(facebookCapiEventSchema.safeParse(payload).success).toBe(true);
+  expect(conversionEventRequestSchema.safeParse(payload).success).toBe(true);
   expect(payload).toMatchObject({
-    merchantId,
-    consent: true,
-    eventData: { currency: 'NGN' },
+    merchant_id: merchantId,
+    analytics_consent: true,
+    targets: ['facebook'],
+    custom_data: { currency: 'NGN' },
   });
   expect(vi.mocked(window.fbq).mock.calls[0][4]).toEqual({
-    eventID: payload.eventId,
+    eventID: payload.event_id,
   });
 });
 it('leaves server delivery off when there is no merchant context', () => {
@@ -113,13 +114,35 @@ it('queues a marketing-consented cart view for both social destinations without 
   const fetcher = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal('fetch', fetcher);
   trackCartView([{ product, quantity: 2 }], 'NGN', { merchantId });
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher).toHaveBeenCalledTimes(1);
   const payloads = fetcher.mock.calls.map((call) => JSON.parse(call[1].body));
-  expect(new Set(payloads.map((p) => p.eventId)).size).toBe(1);
+  expect(new Set(payloads.map((p) => p.event_id)).size).toBe(1);
   expect(payloads[0]).toMatchObject({
-    event: 'view_item',
-    consent: true,
-    merchantId,
-    eventData: { currency: 'NGN', value: 400 },
+    event_name: 'view_item',
+    marketing_consent: true,
+    analytics_consent: false,
+    targets: ['tiktok', 'snapchat'],
+    merchant_id: merchantId,
+    custom_data: { currency: 'NGN', value: 400 },
   });
+});
+
+it('queues one combined durable observation when both consent purposes are granted', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const fetcher = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', fetcher);
+  trackCartView([{ product, quantity: 2 }], 'NGN', { merchantId });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][0]).toBe('/api/analytics/conversion');
+  const payload = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(conversionEventRequestSchema.safeParse(payload).success).toBe(true);
+  expect(payload.targets).toEqual(['facebook', 'tiktok', 'snapchat']);
 });

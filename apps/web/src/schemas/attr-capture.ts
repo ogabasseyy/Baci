@@ -27,16 +27,30 @@ const attrCaptureObject = z.strictObject({
   ttclid: clickIdValue.optional(),
   gclid: clickIdValue.optional(),
   sccid: clickIdValue.optional(),
+  twclid: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,256}$/)
+    .optional(),
+  marketing_consent: z.literal('true').optional(),
 });
 
-export const attrCaptureSchema = attrCaptureObject.refine(
-  (value) => Object.values(value).some(Boolean),
-  { message: 'At least one ad click ID is required' }
-);
+export const attrCaptureSchema = attrCaptureObject
+  .refine(
+    (value) =>
+      Object.entries(value).some(
+        ([key, entry]) => key !== 'marketing_consent' && Boolean(entry)
+      ),
+    { message: 'At least one ad click ID is required' }
+  )
+  .refine((value) => !value.twclid || value.marketing_consent === 'true', {
+    message: 'X click capture requires marketing consent',
+  });
 
 export type AttrCaptureInput = z.infer<typeof attrCaptureSchema>;
 
 /** Known param keys accepted by the schema (used by the drift test). */
 export const ATTR_CAPTURE_PARAM_KEYS = Object.keys(
   attrCaptureObject.shape
+).filter(
+  (key) => key !== 'marketing_consent'
 ) as (keyof typeof CLICK_ID_PARAMS)[];

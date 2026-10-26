@@ -7,6 +7,7 @@ import {
 
 let cleanup: (() => void) | undefined;
 beforeEach(() => {
+  window.history.replaceState({}, '', '/products/phone?color=black');
   localStorage.setItem(
     'baci-cookie-consent',
     JSON.stringify({
@@ -105,5 +106,43 @@ it('drops observations revoked before SDK readiness', () => {
   cleanup?.();
   vi.mocked(window.fbq).mockClear();
   facebookPixelReady();
+  expect(window.fbq).not.toHaveBeenCalled();
+});
+
+it('sends current events after query-only navigation without reactivating the ready pixel', () => {
+  cleanup = activateFacebookPixel('111');
+  vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
+  window.history.replaceState({}, '', '/products/phone?color=blue');
+  sendFacebookPixelEvent(
+    'AddToCart',
+    { color: 'blue' },
+    { eventID: 'current-query' }
+  );
+  expect(window.fbq).toHaveBeenCalledExactlyOnceWith(
+    'trackSingle',
+    '111',
+    'AddToCart',
+    { color: 'blue' },
+    { eventID: 'current-query' }
+  );
+});
+it('drops stale pre-ready URL observations but delivers observations from the current query', () => {
+  window.fbq = vi.fn();
+  cleanup = activateFacebookPixel('111');
+  sendFacebookPixelEvent('AddToCart', {}, { eventID: 'old-query' });
+  window.history.replaceState({}, '', '/products/phone?color=blue');
+  sendFacebookPixelEvent('AddToCart', {}, { eventID: 'current-query' });
+  facebookPixelReady();
+  expect(
+    vi.mocked(window.fbq).mock.calls.filter((call) => call[0] === 'trackSingle')
+  ).toEqual([
+    ['trackSingle', '111', 'AddToCart', {}, { eventID: 'current-query' }],
+  ]);
+});
+it('does not send from a different pathname before the merchant activation catches up', () => {
+  cleanup = activateFacebookPixel('111');
+  vi.mocked(window.fbq as NonNullable<typeof window.fbq>).mockClear();
+  window.history.replaceState({}, '', '/checkout');
+  sendFacebookPixelEvent('AddToCart');
   expect(window.fbq).not.toHaveBeenCalled();
 });

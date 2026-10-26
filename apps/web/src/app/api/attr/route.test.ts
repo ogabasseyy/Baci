@@ -99,3 +99,15 @@ describe('POST /api/attr', () => {
     expect(response.status).toBe(400);
   });
 });
+
+it('requires an explicit marketing grant before persisting X attribution', async () => {
+  expect((await POST(requestFor('twclid=landing_click'))).status).toBe(400);
+  const response = await POST(
+    requestFor('twclid=landing_click&marketing_consent=true')
+  );
+  expect(response.status).toBe(204);
+  expect(response.headers.getSetCookie()).toEqual([
+    'baci_twclid=landing_click; Path=/; Max-Age=7776000; SameSite=Lax; Secure',
+  ]);
+  expect((await POST(requestFor('marketing_consent=true'))).status).toBe(400);
+});

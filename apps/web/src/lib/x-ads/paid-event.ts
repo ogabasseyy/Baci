@@ -30,7 +30,8 @@ export function buildXPaidEvent(
     return null;
   if (
     !/^[A-Za-z0-9]{1,64}$/.test(pixelId) ||
-    !new RegExp(`^tw-${pixelId}-[A-Za-z0-9]{1,128}$`).test(eventCode)
+    !eventCode.startsWith(`tw-${pixelId}-`) ||
+    !/^[A-Za-z0-9]{1,128}$/.test(eventCode.slice(`tw-${pixelId}-`.length))
   )
     throw new Error('invalid_x_event_code');
   const value = event.custom_data.value;

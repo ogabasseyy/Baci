@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { analytics } from '@/lib/analytics';
 import type { Product } from '@/lib/products';
-import { initializeXPixel, resetXPixel } from './pixel-client';
+import { initializeXPixel, markXPixelReady, resetXPixel } from './pixel-client';
 
 const product = { id: 'catalog-one', name: 'Phone', price: 500 } as Product;
 afterEach(() => {
@@ -21,11 +21,12 @@ it('dispatches actual product, cart and checkout calls to the configured merchan
   );
   const twq = vi.fn();
   window.twq = twq;
-  initializeXPixel('abc', {
+  const activation = initializeXPixel('abc', {
     viewContent: 'tw-abc-view',
     addToCart: 'tw-abc-cart',
     initiateCheckout: 'tw-abc-checkout',
   });
+  markXPixelReady(activation);
   twq.mockClear();
   analytics.viewItem(product, 'NGN');
   analytics.addToCart(product, 2, 'NGN');

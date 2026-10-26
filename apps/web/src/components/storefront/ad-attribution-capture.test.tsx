@@ -220,4 +220,45 @@ describe('AdAttributionCapture (runtime behaviour)', () => {
     expect(onUpdate).not.toHaveBeenCalled();
     window.removeEventListener('baci:ad-attribution-updated', onUpdate);
   });
+  it('captures X only after a complete marketing grant and retries when consent arrives', () => {
+    localStorage.clear();
+    setSearch('?twclid=landing_click');
+    let retry: EventListener | undefined;
+    const listen = vi
+      .spyOn(window, 'addEventListener')
+      .mockImplementation((name, callback) => {
+        if (name === 'cookie-consent-updated')
+          retry = callback as EventListener;
+      });
+    runScript();
+    expect(fetchMock).not.toHaveBeenCalled();
+    localStorage.setItem(
+      'baci-cookie-consent',
+      JSON.stringify({
+        necessary: true,
+        analytics: false,
+        marketing: true,
+        functional: false,
+      })
+    );
+    retry?.(new Event('cookie-consent-updated'));
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(
+      'twclid=landing_click&marketing_consent=true'
+    );
+    fetchMock.mockClear();
+    document.cookie = 'baci_twclid=landing_click';
+    runScript();
+    expect(fetchMock).not.toHaveBeenCalled();
+    listen.mockRestore();
+    localStorage.clear();
+  });
+  it('does not capture X with incomplete or malformed preference data', () => {
+    setSearch('?twclid=landing_click');
+    for (const preference of ['{"marketing":true}', 'bad-json']) {
+      localStorage.setItem('baci-cookie-consent', preference);
+      runScript();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    localStorage.clear();
+  });
 });

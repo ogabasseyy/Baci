@@ -39,6 +39,7 @@ export function CheckoutCartCapacityGate({
     !validatedResume &&
     cart.sharedCartEnabled &&
     (cart.syncStatus === 'pending' ||
+      cart.importStatus === 'pending' ||
       (cart.sharedCartRef == null &&
         cart.syncStatus === 'synced' &&
         !cart.isHydrated));

@@ -7,10 +7,16 @@ import {
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
 } from '@/hooks/cart/cart-storage';
+import { removeCapacityLineFromLiveCart } from '@/hooks/cart/shared-cart-live-removal';
 import { cartItem } from '@/hooks/cart/shared-cart-provisioning.test-support';
 import { DeviceCartCapacityItems } from './device-cart-capacity-items';
 
+vi.mock('@/hooks/cart/shared-cart-live-removal', () => ({
+  removeCapacityLineFromLiveCart: vi.fn().mockResolvedValue(true),
+}));
+
 beforeEach(() => {
+  vi.mocked(removeCapacityLineFromLiveCart).mockClear();
   window.localStorage.clear();
   // Exercise the synchronous no-Web-Locks fallback (see setup mock).
   Object.defineProperty(navigator, 'locks', {
@@ -227,4 +233,36 @@ it('fences the merchant session when removing a capacity line', () => {
   expect(
     window.localStorage.getItem('baci-cart-authority-epoch:shop')
   ).not.toBe('before');
+});
+
+it('keeps group-deal clearing for the first of two rapid removals', async () => {
+  saveCartToStorage(
+    [
+      cartItem({
+        name: 'Phone',
+        negotiatedPrice: 100,
+        negotiationStatus: 'accepted',
+      }),
+      cartItem({ id: 'charger', cartItemId: 'charger', name: 'Charger' }),
+      cartItem({ id: 'cable', cartItemId: 'cable', name: 'Cable' }),
+    ],
+    'shop'
+  );
+  saveCartWideNegotiationToStorage(true, 'shop');
+  render(<DeviceCartCapacityItems merchantSlug="shop" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Charger' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Cable' }));
+  await vi.waitFor(() =>
+    expect(removeCapacityLineFromLiveCart).toHaveBeenCalledTimes(2)
+  );
+  expect(removeCapacityLineFromLiveCart).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'Charger' }),
+    'shop',
+    { clearGroupNegotiations: true }
+  );
+  expect(removeCapacityLineFromLiveCart).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'Cable' }),
+    'shop',
+    { clearGroupNegotiations: false }
+  );
 });

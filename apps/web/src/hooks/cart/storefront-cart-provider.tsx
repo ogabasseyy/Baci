@@ -275,6 +275,7 @@ export function StorefrontCartProvider({
           retryPendingSync: shared.retryPendingSync,
           importConflicts: shared.importConflicts,
           importWarnings: shared.importWarnings,
+          importStatus: shared.importStatus,
           discardLegacyImport: shared.discardLegacyImport,
           resolveImportConflicts: shared.resolveImportConflicts,
           sharedCartRef:

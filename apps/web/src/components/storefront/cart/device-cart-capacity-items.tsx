@@ -29,9 +29,6 @@ export function DeviceCartCapacityItems({
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Set by applyRemoval when the cache edit voided a group deal, so
-  // the live-cart reconciliation clears the same deal server-side.
-  let removalVoidedGroupDeal = false;
   useEffect(() => {
     setItems(getCartFromStorage(merchantSlug));
   }, [merchantSlug]);
@@ -57,6 +54,7 @@ export function DeviceCartCapacityItems({
         : new AbortController().signal;
     let applied = false;
     let removedRow: CartItem | null = null;
+    let voidedGroupDeal = false;
     let write: Promise<unknown>;
     try {
       write = withCartCookieWrite(
@@ -64,7 +62,9 @@ export function DeviceCartCapacityItems({
         signal,
         () => {
           applied = true;
-          removedRow = applyRemoval(selected);
+          const appliedRemoval = applyRemoval(selected);
+          removedRow = appliedRemoval?.row ?? null;
+          voidedGroupDeal = appliedRemoval?.voidedGroupDeal ?? false;
           return Promise.resolve(undefined);
         },
         merchantSlug
@@ -99,7 +99,7 @@ export function DeviceCartCapacityItems({
         // tab may have changed its quantity after this list rendered.
         const removed: CartItem = removedRow;
         void removeCapacityLineFromLiveCart(removed, merchantSlug, {
-          clearGroupNegotiations: removalVoidedGroupDeal,
+          clearGroupNegotiations: voidedGroupDeal,
         }).then((ok) => {
           if (!ok)
             setError(
@@ -112,7 +112,9 @@ export function DeviceCartCapacityItems({
         setError('Could not save that change. Check storage access and retry.');
       });
   }
-  function applyRemoval(selected: CartItem): CartItem | null {
+  function applyRemoval(
+    selected: CartItem
+  ): { row: CartItem; voidedGroupDeal: boolean } | null {
     const current = getCartFromStorage(merchantSlug);
     const matchesSelected = (item: CartItem) =>
       identityKeyOfDisplay(item) === identityKeyOfDisplay(selected) &&
@@ -165,7 +167,7 @@ export function DeviceCartCapacityItems({
       (_, currentIndex) => currentIndex !== targetIndex
     );
     const hadGroupNegotiation = getCartWideNegotiationFromStorage(merchantSlug);
-    removalVoidedGroupDeal = Boolean(hadGroupNegotiation);
+    const voidedGroupDeal = Boolean(hadGroupNegotiation);
     if (hadGroupNegotiation) {
       remaining = remaining.map(
         ({ negotiatedPrice: _price, negotiationStatus: _status, ...item }) =>
@@ -209,7 +211,7 @@ export function DeviceCartCapacityItems({
       saveCartWideNegotiationToStorage(false, merchantSlug);
     setError(null);
     setItems(remaining);
-    return target;
+    return { row: target, voidedGroupDeal };
   }
   return (
     <>

@@ -7,6 +7,7 @@ const cart = vi.hoisted(() => ({
   sharedCartEnabled: true,
   syncStatus: 'synced' as string,
   isHydrated: true,
+  importStatus: 'done' as string,
   sharedCartRef: { cartId: 'cart-1', version: 1 } as { cartId: string; version: number } | null,
   importWarnings: [] as string[],
   importConflicts: [],
@@ -19,6 +20,7 @@ beforeEach(() => {
   cart.sharedCartEnabled = true;
   cart.syncStatus = 'synced';
   cart.isHydrated = true;
+  cart.importStatus = 'done';
   cart.sharedCartRef = { cartId: 'cart-1', version: 1 };
   cart.importWarnings = [];
   vi.clearAllMocks();
@@ -264,4 +266,18 @@ it('does not count a suspended checkout as revealed when capacity blocks', () =>
   ).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
   resolved = true;
+});
+
+it('does not reveal checkout while the initial import is pending in provisioning', () => {
+  // Real derived state during direct-create provisioning: synced,
+  // hydrated, no shared ref yet, but the import is still pending.
+  cart.syncStatus = 'synced';
+  cart.sharedCartRef = null;
+  cart.importStatus = 'pending';
+  render(
+    <CheckoutCartCapacityGate onReturnToCart={cart.returnToCart}>
+      <button type="button">Place Order</button>
+    </CheckoutCartCapacityGate>
+  );
+  expect(screen.queryByRole('button', { name: 'Place Order' })).toBeNull();
 });

@@ -28,6 +28,29 @@ function product(id: string, brand: string, price: number) {
 }
 
 describe('verifyPriceBandLinkAgainstDestination', () => {
+  it('derives band indexability from the normalized band pool when supplied', () => {
+    const comparePool = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`apple-${i}`, 'Apple', 300_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`samsung-${i}`, 'Samsung', 320_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`tecno-${i}`, 'Tecno', 340_000)
+      ),
+    ];
+    // The destination-shaped pool has too few active rows for the band.
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: comparePool,
+        bandProducts: comparePool.slice(0, 2),
+      })
+    ).toEqual([]);
+  });
+
   it('keeps the band link when the compare pool makes it indexable', () => {
     const products = [
       ...Array.from({ length: 3 }, (_, i) =>

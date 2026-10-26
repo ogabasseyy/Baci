@@ -38,6 +38,8 @@ export function verifyPriceBandLinkAgainstDestination(args: {
   categorySlug: string;
   links: PriceBandLinkLike[];
   compareProducts: PriceBandProductLike[] | null;
+  /** Normalized scoped pool the destination price-band page derives from. */
+  bandProducts?: PriceBandProductLike[] | null;
   curatedCompareSlugs?: ReadonlySet<string>;
 }): PriceBandLinkLike[] {
   const brandCandidate = args.compareProducts
@@ -46,12 +48,10 @@ export function verifyPriceBandLinkAgainstDestination(args: {
         products: args.compareProducts,
       })
     : null;
+  const bandPool = args.bandProducts ?? args.compareProducts;
   const indexableBandSlugs = new Set(
-    args.compareProducts
-      ? buildCategoryPriceBandCandidates(
-          args.categorySlug,
-          args.compareProducts
-        )
+    bandPool
+      ? buildCategoryPriceBandCandidates(args.categorySlug, bandPool)
           .filter((candidate) => candidate.isIndexable)
           .map((candidate) => candidate.band.slug)
       : []

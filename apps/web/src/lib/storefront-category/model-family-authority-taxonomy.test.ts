@@ -186,6 +186,12 @@ describe('model family authority taxonomy', () => {
     ).toBe(true);
     expect(
       modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyS,
+        'iPhone 16 vs Samsung S24'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
         galaxyA,
         'Samsung Galaxy A55 review'
       )

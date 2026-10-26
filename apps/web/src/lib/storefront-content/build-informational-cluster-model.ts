@@ -217,6 +217,7 @@ export async function buildInformationalClusterModel(
           categorySlug,
           links: commerceLinks,
           compareProducts: compareInventory?.products ?? null,
+          bandProducts: compareInventory ? products : undefined,
           curatedCompareSlugs: compareInventory
             ? buildCuratedCompareSlugSet({
                 storeUrl: input.storeUrl,

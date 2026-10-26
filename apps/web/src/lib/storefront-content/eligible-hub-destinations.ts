@@ -52,15 +52,13 @@ export function resolveEligibleCategoryHubDestinations(
   const availableProducts = input.products.filter(
     (product) =>
       isAvailableProduct(product) &&
-      (generateSlug(product.category_slug ?? '') === categorySlug ||
+      // Explicitly scoped pools are already category+children filtered by
+      // the caller, so child-only rows count toward the parent hub.
+      (input.assumeCategoryScoped === true ||
+        generateSlug(product.category_slug ?? '') === categorySlug ||
         (product.category_slugs ?? []).some(
           (slug) => generateSlug(slug) === categorySlug
-        ) ||
-        // No category info counts only for explicitly scoped pools.
-        (input.assumeCategoryScoped === true &&
-          product.category_slug == null &&
-          (product.category_slugs == null ||
-            product.category_slugs.length === 0))) &&
+        )) &&
       (product.is_parent === true || product.parent_product_id == null)
   );
 

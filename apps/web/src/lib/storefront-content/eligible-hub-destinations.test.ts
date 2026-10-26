@@ -80,8 +80,8 @@ describe('eligible-hub-destinations', () => {
       // 5 Apple products listed, but 2 are out of stock (stock: 0)
       const products = [
         { name: 'iPhone 15 Pro Max', brand: 'Apple', stock: 10 },
-        { name: 'iPhone 15 Pro', brand: 'Apple', stock: 0 },
-        { name: 'iPhone 15', brand: 'Apple', stock: 0 },
+        { name: 'iPhone 15 Pro', brand: 'Apple', stock: 0, manage_stock: true },
+        { name: 'iPhone 15', brand: 'Apple', stock: 0, manage_stock: true },
         { name: 'iPhone 14', brand: 'Apple', stock: 5 },
         { name: 'iPhone 13', brand: 'Apple', stock: 2 },
       ];
@@ -295,6 +295,30 @@ describe('eligible-hub-destinations', () => {
       const result = resolveEligibleCategoryHubDestinations({
         categorySlug: 'smartphones',
         products,
+      });
+      expect(result.brandHubs).toHaveLength(1);
+      expect(result.familyHubs).toHaveLength(1);
+    });
+
+    it('counts child-category rows from an explicitly scoped pool', () => {
+      const products = [
+        'iPhone 15 Pro Max',
+        'iPhone 15 Pro',
+        'iPhone 15',
+        'iPhone 14',
+        'iPhone 13',
+      ].map((name) => ({
+        name,
+        brand: 'Apple',
+        stock: 5,
+        manage_stock: true,
+        category_slug: 'android-phones',
+        category_slugs: ['android-phones'],
+      }));
+      const result = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products,
+        assumeCategoryScoped: true,
       });
       expect(result.brandHubs).toHaveLength(1);
       expect(result.familyHubs).toHaveLength(1);

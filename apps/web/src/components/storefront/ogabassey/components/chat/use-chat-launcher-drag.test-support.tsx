@@ -163,12 +163,12 @@ export function setup() {
     ...view,
     button,
     click,
-    trustedClick: (x: number, y: number, pointerId: number) => {
+    trustedClick: (x: number, y: number, pointerId?: number) => {
       const event = {
         detail: 1,
         clientX: x,
         clientY: y,
-        nativeEvent: { pointerId, isTrusted: true },
+        nativeEvent: { ...(pointerId === undefined ? {} : { pointerId }), isTrusted: true },
       };
       if (!suppressClick?.(
         event as unknown as ReactMouseEvent<HTMLButtonElement>,

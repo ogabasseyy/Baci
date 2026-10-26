@@ -90,6 +90,29 @@ describe('CookieConsent', () => {
     expect(launcher).toHaveFocus();
   });
 
+  it('does not steal focus back after the shopper moves outside consent', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(outside).toHaveFocus();
+  });
+
   it('does not move focus out of an open chat conversation', () => {
     render(
       <div className="ogabassey-chat-anchor">

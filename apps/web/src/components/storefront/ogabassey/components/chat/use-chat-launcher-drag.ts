@@ -253,9 +253,7 @@ export function useChatLauncherDrag(
   function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
     const pending = suppressedDragClick.current;
     const nativeEvent = event.nativeEvent as MouseEvent & { pointerId?: number };
-    // The storefront targets current Safari/iOS Safari releases, where clicks
-    // are PointerEvents. Keep the correlation exact rather than guessing for
-    // pointer-id-less clicks, which may be independent assistive activation.
+    // Keep keyboard/assistive clicks independent of drag suppression.
     const matchesRelease =
       pending &&
       event.detail > 0 &&
@@ -263,12 +261,11 @@ export function useChatLauncherDrag(
       Math.abs(event.clientY - pending.y) <= 2;
     const matchesPointer = Boolean(
       pending &&
-        nativeEvent.pointerId === pending.pointerId &&
-        (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted),
+        ((nativeEvent.pointerId === pending.pointerId &&
+          (nativeEvent.pointerId !== 0 || nativeEvent.isTrusted)) ||
+          (nativeEvent.pointerId === undefined && nativeEvent.isTrusted)),
     );
-    const suppress = Boolean(
-      matchesRelease && matchesPointer,
-    );
+    const suppress = Boolean(matchesRelease && matchesPointer);
     if (pending) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;
     return suppress;

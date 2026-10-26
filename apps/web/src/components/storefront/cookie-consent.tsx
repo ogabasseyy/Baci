@@ -30,6 +30,7 @@ export function CookieConsent() {
   const basePath = merchantContext?.basePath || '';
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const consentHasFocusRef = useRef(false);
 
   useEffect(() => {
     if (isVisible) {
@@ -46,13 +47,16 @@ export function CookieConsent() {
         dialogRef.current
           ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
           ?.focus();
+        consentHasFocusRef.current = true;
       }
       return;
     }
 
     const previousFocus = restoreFocusRef.current;
     restoreFocusRef.current = null;
-    if (previousFocus?.isConnected) previousFocus.focus();
+    if (consentHasFocusRef.current && previousFocus?.isConnected)
+      previousFocus.focus();
+    consentHasFocusRef.current = false;
   }, [isVisible]);
 
   if (!isVisible) return null;
@@ -72,6 +76,17 @@ export function CookieConsent() {
       role="dialog"
       aria-label="Cookie consent"
       ref={dialogRef}
+      onFocusCapture={() => {
+        consentHasFocusRef.current = true;
+      }}
+      onBlurCapture={(event) => {
+        const nextFocus = event.relatedTarget;
+        if (
+          nextFocus instanceof Node &&
+          !event.currentTarget.contains(nextFocus)
+        )
+          consentHasFocusRef.current = false;
+      }}
     >
       <div
         className={cn(

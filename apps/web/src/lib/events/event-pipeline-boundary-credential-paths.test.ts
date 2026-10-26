@@ -33,6 +33,16 @@ describe('event pipeline credential-path authority', () => {
 
     expect(manifest.authority.credentialPaths).toEqual([
       ...eventPipelineCartCredentialPaths,
+      // One host-verified public observation may mint only the existing
+      // short-lived event-ingress capability; it cannot read provider credentials.
+      [
+        'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+        'apps/web/src/lib/events/event-ingress-capability.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+
       [
         'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
         'apps/web/src/lib/agentic/mutation-request.ts',

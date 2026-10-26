@@ -51,13 +51,13 @@ describe('AnalyticsPixelProvider', () => {
     );
 
     expect(screen.getByText('G-STORE')).toBeInTheDocument();
-    expect(screen.getByText('fb-1')).toBeInTheDocument();
+    expect(screen.queryByText('fb-1')).not.toBeInTheDocument();
     expect(screen.getByText('tt-1')).toBeInTheDocument();
     expect(screen.queryByText('snap-1')).not.toBeInTheDocument();
     expect(screen.queryByText('tw-1')).not.toBeInTheDocument();
   });
 
-  it('renders all supported merchant pixel types when all IDs are configured', () => {
+  it('leaves Meta to the persistent shell while rendering route-owned pixels', () => {
     render(
       <AnalyticsPixelProvider
         merchant={{
@@ -71,7 +71,7 @@ describe('AnalyticsPixelProvider', () => {
     );
 
     expect(screen.getByText('G-STORE')).toBeInTheDocument();
-    expect(screen.getByText('fb-1')).toBeInTheDocument();
+    expect(screen.queryByText('fb-1')).not.toBeInTheDocument();
     expect(screen.getByText('tt-1')).toBeInTheDocument();
     expect(screen.getByText('snap-1')).toBeInTheDocument();
     expect(screen.getByText('tw-1')).toBeInTheDocument();

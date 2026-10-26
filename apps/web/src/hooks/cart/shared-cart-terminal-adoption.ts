@@ -16,7 +16,7 @@ import {
 
 export type TerminalAdoptionOutcome =
   | { kind: 'provision'; cached: CartItem[] }
-  | { kind: 'retry' }
+  | { kind: 'retry'; cached: CartItem[] }
   | { kind: 'settled'; cached: CartItem[] };
 
 /**
@@ -46,7 +46,7 @@ export function adoptTerminalSnapshotCache(
     // Provisioning re-reads storage: if the filtered cache did
     // not persist, it would recreate already-consumed items.
     if (!terminalCachePersisted(getCartFromStorage(merchantSlug), cached))
-      return { kind: 'retry' };
+      return { kind: 'retry', cached };
     // The filtered remainder is the new baseline: checkpoint the
     // receipt so a reload cannot subtract it twice.
     const checkpoint = terminalConsumptionCheckpoint(
@@ -64,7 +64,7 @@ export function adoptTerminalSnapshotCache(
         // Roll the filtered cache back so a reload cannot re-filter
         // it against the original receipt.
         saveCartToStorage(storedNow, merchantSlug);
-        return { kind: 'retry' };
+        return { kind: 'retry', cached };
       }
     }
     return { kind: 'provision', cached };
@@ -74,7 +74,8 @@ export function adoptTerminalSnapshotCache(
     // empty filter so mirrored rows cannot be re-planned as a fresh
     // import once the proof expires.
     saveCartToStorage([], merchantSlug);
-    if (getCartFromStorage(merchantSlug).length) return { kind: 'retry' };
+    if (getCartFromStorage(merchantSlug).length)
+      return { kind: 'retry', cached };
   }
   return { kind: 'settled', cached };
 }

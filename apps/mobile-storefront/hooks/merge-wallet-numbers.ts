@@ -13,7 +13,8 @@ export function mergeWalletNumbers(
     const latest = amounts.get(goal.id);
     return (
       latest?.status === goal.status &&
-      latest.target_amount === goal.target_amount
+      latest.target_amount === goal.target_amount &&
+      cached.goalMetadata?.[goal.id] === latest.metadata
     );
   };
   const active = cached.wallet.active_savings_goal;

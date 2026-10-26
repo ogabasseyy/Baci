@@ -26,6 +26,7 @@ export function PiggyvestWalletSetupForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
+  const createDisabled = busy || !consent;
 
   async function submit() {
     if (submitting.current) return;
@@ -179,8 +180,8 @@ export function PiggyvestWalletSetupForm({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Create account number"
-        accessibilityState={{ disabled: busy || !consent }}
-        disabled={busy || !consent}
+        accessibilityState={{ disabled: createDisabled }}
+        disabled={createDisabled}
         onPress={submit}
         style={{
           backgroundColor: consent ? BRAND.primary : colors.muted,
@@ -190,9 +191,19 @@ export function PiggyvestWalletSetupForm({
         }}
       >
         {busy ? (
-          <ActivityIndicator color={palette.white} />
+          <ActivityIndicator
+            accessible
+            accessibilityRole="progressbar"
+            accessibilityLabel="Creating account number"
+            color={consent ? palette.white : colors.text}
+          />
         ) : (
-          <Text style={{ color: palette.white, fontWeight: '700' }}>
+          <Text
+            style={{
+              color: consent ? palette.white : colors.text,
+              fontWeight: '700',
+            }}
+          >
             Create account number
           </Text>
         )}

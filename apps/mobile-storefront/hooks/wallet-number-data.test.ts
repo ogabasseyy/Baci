@@ -1,9 +1,25 @@
+import { WalletNumberGoalsSchema } from '@/schemas/wallet-number-goals';
+import { walletGoalMetadata } from './wallet-goal-metadata';
 import { fetchWalletNumbers } from './wallet-number-data';
 
 const mockFrom = jest.fn();
 const mockInterest = jest.fn();
 const calls: Record<string, { columns: string[]; filters: unknown[][] }> = {};
 let responses: Record<string, { data: unknown; error: unknown }>;
+const rawGoal = {
+  id: 'goal-1',
+  current_amount: '200',
+  target_amount: '1000',
+  product_id: 'product-1',
+  variant_id: 'variant-1',
+  title: 'Phone',
+  product_snapshot: { storage: '128GB' },
+  contribution_amount: '100',
+  contribution_frequency: 'monthly',
+  source_mode: 'manual',
+  status: 'active',
+  maturity_date: '2026-11-01',
+};
 jest.mock('@/lib/supabase', () => ({
   supabase: { from: (...args: unknown[]) => mockFrom(...args) },
 }));
@@ -27,14 +43,7 @@ beforeEach(() => {
     },
     customer_wallets: { data: { available_balance: '100' }, error: null },
     customer_savings_goals: {
-      data: [
-        {
-          id: 'goal-1',
-          current_amount: '200',
-          target_amount: 1000,
-          status: 'active',
-        },
-      ],
+      data: [rawGoal],
       error: null,
     },
   };
@@ -74,6 +83,11 @@ it('reads only scoped numeric projections and includes paid interest exactly onc
     },
     goals: [{ id: 'goal-1', current_amount: 205.05 }],
   });
+  const fullLoadMetadata = walletGoalMetadata(rawGoal);
+  expect(result?.goals[0]?.metadata).toBe(fullLoadMetadata);
+  expect(WalletNumberGoalsSchema.parse(result?.goals)[0]?.metadata).toBe(
+    fullLoadMetadata
+  );
   expect(Object.keys(calls)).toEqual([
     'customers',
     'customer_wallets',
@@ -81,7 +95,7 @@ it('reads only scoped numeric projections and includes paid interest exactly onc
   ]);
   expect(calls.customer_wallets.columns).toEqual(['available_balance']);
   expect(calls.customer_savings_goals.columns).toEqual([
-    'id, current_amount, target_amount, status',
+    'id, current_amount, target_amount, product_id, variant_id, title, product_snapshot, contribution_amount, contribution_frequency, source_mode, status, maturity_date',
   ]);
   for (const table of ['customer_wallets', 'customer_savings_goals']) {
     expect(calls[table].filters).toEqual([

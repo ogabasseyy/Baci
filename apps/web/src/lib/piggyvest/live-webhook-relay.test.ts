@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { forwardLiveWebhook } from './live-webhook-relay';
+import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
 
 const rawBody = Buffer.from('{ "eventId": "fixture" }');
 const signature = 'a'.repeat(128);
@@ -117,6 +118,42 @@ describe('forwardLiveWebhook', () => {
     expect(options.redirect).toBe('error');
     expect(options.headers['x-pvb-signature']).toBe(signature);
     expect(options.headers.Authorization).toBe(`Bearer ${config.relayToken}`);
+  });
+
+  it('normalizes an uppercase valid signature for the lowercase-only receiver without changing raw bytes', async () => {
+    const secret = randomBytes(32).toString('hex');
+    const uppercaseSignature = createHmac('sha512', secret)
+      .update(rawBody)
+      .digest('hex')
+      .toUpperCase();
+    const fetchImplementation = vi.fn(
+      async (_url: Parameters<typeof fetch>[0], options: RequestInit = {}) => {
+        const headers = new Headers(options.headers);
+        const receiverAccepts = verifyPiggyvestPayloadSignature({
+          payload: new Uint8Array(
+            await new Response(options.body).arrayBuffer()
+          ),
+          signature: headers.get('x-pvb-signature'),
+          secret,
+        });
+        return response(receiverAccepts ? 'accepted' : 'invalid_signature');
+      }
+    );
+
+    const result = await forwardLiveWebhook({
+      rawBody,
+      signature: uppercaseSignature,
+      config,
+      fetchImplementation,
+    });
+
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual({ received: true });
+    const options = fetchImplementation.mock.calls[0][1] ?? {};
+    expect(new Headers(options.headers).get('x-pvb-signature')).toBe(
+      uppercaseSignature.toLowerCase()
+    );
+    expect(options.body).toEqual(rawBody);
   });
 
   it('preserves explicit nonacceptance for an invalid signature', async () => {

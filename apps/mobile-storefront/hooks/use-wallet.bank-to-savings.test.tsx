@@ -132,6 +132,7 @@ it('updates a confirmed bank credit then an internal savings transfer without co
         current_amount: 200,
         target_amount: 1000,
         status: 'active',
+        metadata: walletGoalMetadata(goal) ?? '',
       },
     ],
   });
@@ -168,6 +169,7 @@ it('updates a confirmed bank credit then an internal savings transfer without co
         current_amount: 300,
         target_amount: 1000,
         status: 'active',
+        metadata: walletGoalMetadata(goal) ?? '',
       },
     ],
   });

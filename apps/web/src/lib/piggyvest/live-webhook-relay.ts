@@ -85,7 +85,7 @@ export async function forwardLiveWebhook(input: {
         headers: {
           Authorization: `Bearer ${config.relayToken}`,
           'Content-Type': 'application/octet-stream',
-          'x-pvb-signature': input.signature,
+          'x-pvb-signature': input.signature.toLowerCase(),
         },
         body: Buffer.from(input.rawBody),
       }

@@ -15,8 +15,8 @@ export interface WalletNumbers {
     | 'earnings_available'
     | 'earnings_balance'
   >;
-  goals: Pick<
+  goals: (Pick<
     WalletActiveSavingsGoal,
     'id' | 'current_amount' | 'target_amount' | 'status'
-  >[];
+  > & { metadata: string })[];
 }

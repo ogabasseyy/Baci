@@ -4,7 +4,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import Colors, { BRAND } from '@/constants/Colors';
+import Colors, { BRAND, palette } from '@/constants/Colors';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -37,11 +37,69 @@ it('keeps create disabled and muted until identity-verification consent is check
   const button = screen.getByRole('button', { name: 'Create account number' });
   expect(button).toBeDisabled();
   expect(button).toHaveStyle({ backgroundColor: Colors.dark.muted });
+  expect(screen.getByText('Create account number')).toHaveStyle({
+    color: Colors.dark.text,
+  });
   fireEvent.press(screen.getByRole('checkbox'));
   expect(button).toBeEnabled();
   expect(button).toHaveStyle({ backgroundColor: BRAND.primary });
+  expect(screen.getByText('Create account number')).toHaveStyle({
+    color: palette.white,
+  });
   fireEvent.press(screen.getByRole('checkbox'));
   expect(button).toBeDisabled();
+});
+
+it.each([
+  'light',
+  'dark',
+] as const)('uses readable disabled foreground colors in the %s theme', (theme) => {
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors[theme]}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  const button = screen.getByRole('button', {
+    name: 'Create account number',
+  });
+  expect(button).toBeDisabled();
+  expect(button).toHaveStyle({ backgroundColor: Colors[theme].muted });
+  expect(screen.getByText('Create account number')).toHaveStyle({
+    color: Colors[theme].text,
+  });
+});
+
+it('keeps the busy spinner white on the enabled primary button', async () => {
+  let resolveSubmit!: () => void;
+  const onSubmit = jest.fn(
+    () => new Promise<void>((resolve) => (resolveSubmit = resolve))
+  );
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create account number' })
+  );
+  expect(
+    screen.getByRole('button', { name: 'Create account number' })
+  ).toBeDisabled();
+  expect(
+    screen.getByRole('progressbar', { name: 'Creating account number' })
+  ).toHaveProp('color', palette.white);
+  resolveSubmit();
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('progressbar', { name: 'Creating account number' })
+    ).toBeNull()
+  );
 });
 
 it.each([

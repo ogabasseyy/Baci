@@ -7,6 +7,7 @@ import { type WalletQueryData, walletKeys } from './wallet-query';
 
 const mockFull = jest.fn();
 const mockNumbers = jest.fn();
+const mockHistory = jest.fn();
 let mockFocused = true;
 jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
 jest.mock('./wallet-data', () => ({
@@ -15,6 +16,9 @@ jest.mock('./wallet-data', () => ({
 }));
 jest.mock('./wallet-number-data', () => ({
   fetchWalletNumbers: (...args: unknown[]) => mockNumbers(...args),
+}));
+jest.mock('./wallet-transaction-data', () => ({
+  fetchWalletTransactions: (...args: unknown[]) => mockHistory(...args),
 }));
 jest.mock('@/lib/supabase', () => ({
   supabase: {
@@ -45,6 +49,7 @@ const key = walletKeys.data({
   userId: 'user-1',
 });
 const saved: WalletQueryData = {
+  walletId: 'wallet-1',
   wallet: {
     balance: 0,
     loyalty_points: 0,
@@ -84,6 +89,7 @@ let onAppState!: (state: AppStateStatus) => void;
 beforeEach(() => {
   mockFull.mockReset().mockResolvedValue(saved);
   mockNumbers.mockReset().mockResolvedValue(latest);
+  mockHistory.mockReset().mockResolvedValue(saved.transactions);
   mockFocused = true;
   jest
     .spyOn(AppState, 'addEventListener')
@@ -113,7 +119,7 @@ function setup(cached = true, snapshot: WalletQueryData = saved) {
   };
 }
 
-it('refreshes only numbers on opening a cached wallet while preserving account and transaction history', async () => {
+it('refreshes numbers and history on opening a cached wallet while preserving account details', async () => {
   const { result, cleanup } = setup();
   expect(mockFull).not.toHaveBeenCalled();
   await waitFor(() =>

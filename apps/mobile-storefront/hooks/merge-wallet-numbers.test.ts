@@ -1,4 +1,5 @@
 import { mergeWalletNumbers } from './merge-wallet-numbers';
+import { walletGoalMetadata } from './wallet-goal-metadata';
 import type { WalletNumbers } from './wallet-number.types';
 import type { WalletQueryData } from './wallet-query';
 
@@ -16,6 +17,22 @@ const goal = {
   product_variant_label: 'Blue',
 };
 const cached: WalletQueryData = {
+  goalMetadata: {
+    [goal.id]:
+      walletGoalMetadata({
+        id: goal.id,
+        product_id: 'product-1',
+        variant_id: 'variant-1',
+        title: goal.title,
+        product_snapshot: { storage: '128GB' },
+        target_amount: goal.target_amount,
+        contribution_amount: goal.contribution_amount,
+        contribution_frequency: goal.contribution_frequency,
+        source_mode: goal.source_mode,
+        status: goal.status,
+        maturity_date: goal.maturity_date,
+      }) ?? '',
+  },
   wallet: {
     balance: 0,
     loyalty_points: 0,
@@ -42,7 +59,26 @@ const fresh: WalletNumbers = {
     loyalty_points: 10,
   },
   goals: [
-    { id: goal.id, current_amount: 205, target_amount: 1000, status: 'active' },
+    {
+      id: goal.id,
+      current_amount: 205,
+      target_amount: 1000,
+      status: 'active',
+      metadata:
+        walletGoalMetadata({
+          id: goal.id,
+          product_id: 'product-1',
+          variant_id: 'variant-1',
+          title: goal.title,
+          product_snapshot: { storage: '128GB' },
+          target_amount: goal.target_amount,
+          contribution_amount: goal.contribution_amount,
+          contribution_frequency: goal.contribution_frequency,
+          source_mode: goal.source_mode,
+          status: goal.status,
+          maturity_date: goal.maturity_date,
+        }) ?? '',
+    },
   ],
 };
 
@@ -69,4 +105,30 @@ it.each([
   null,
 ])('requires a full reload when goal structure or owner resolution changes', (snapshot) => {
   expect(mergeWalletNumbers(cached, snapshot)).toBeNull();
+});
+
+it('requires a full reload when an equal-target product or variant changes', () => {
+  const swapped = {
+    ...fresh,
+    goals: [
+      {
+        ...fresh.goals[0],
+        metadata:
+          walletGoalMetadata({
+            id: goal.id,
+            product_id: 'product-2',
+            variant_id: 'variant-2',
+            title: 'Different phone',
+            product_snapshot: { storage: '256GB' },
+            target_amount: goal.target_amount,
+            contribution_amount: goal.contribution_amount,
+            contribution_frequency: goal.contribution_frequency,
+            source_mode: goal.source_mode,
+            status: goal.status,
+            maturity_date: goal.maturity_date,
+          }) ?? '',
+      },
+    ],
+  };
+  expect(mergeWalletNumbers(cached, swapped)).toBeNull();
 });

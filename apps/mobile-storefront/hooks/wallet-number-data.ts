@@ -2,6 +2,7 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { WalletNumberGoalsSchema } from '@/schemas/wallet-number-goals';
 import { coerceWalletDatabaseNumber } from './wallet-data-number';
+import { walletGoalMetadata } from './wallet-goal-metadata';
 import type { WalletNumbers } from './wallet-number.types';
 import { readWalletOwner } from './wallet-owner-data';
 import {
@@ -29,7 +30,9 @@ export async function fetchWalletNumbers(
       .maybeSingle(),
     supabase
       .from('customer_savings_goals')
-      .select('id, current_amount, target_amount, status')
+      .select(
+        'id, current_amount, target_amount, product_id, variant_id, title, product_snapshot, contribution_amount, contribution_frequency, source_mode, status, maturity_date'
+      )
       .eq('merchant_id', merchantId)
       .eq('customer_id', owner.customerId)
       .in('status', [...REDEEMABLE_SAVINGS_STATUSES]),
@@ -39,13 +42,19 @@ export async function fetchWalletNumbers(
   if (goals.error) throw goals.error;
   if (interest.status !== 'available')
     throw new Error('Could not refresh savings interest');
+  const goalsWithMetadata = Array.isArray(goals.data)
+    ? goals.data.map((goal) => ({
+        ...goal,
+        metadata: walletGoalMetadata(goal),
+      }))
+    : goals.data;
   const balance =
     wallet.data === null
       ? 0
       : coerceWalletDatabaseNumber(wallet.data?.available_balance);
   if (balance === null) throw new Error('Invalid wallet balance');
   const projected = projectWalletSavingsInterest({
-    goals: WalletNumberGoalsSchema.parse(goals.data),
+    goals: WalletNumberGoalsSchema.parse(goalsWithMetadata),
     goalInterestKobo: interest.goalInterestKobo,
   });
   return {

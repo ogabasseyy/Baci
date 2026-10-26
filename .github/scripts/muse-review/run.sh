@@ -23,6 +23,7 @@ jsonl_file="${RUNNER_TEMP}/muse-stream.jsonl"
 session_export="${RUNNER_TEMP}/muse-session-export.json"
 stderr_file="${RUNNER_TEMP}/muse-stderr.log"
 export XDG_DATA_HOME="${RUNNER_TEMP}/muse-data"
+mkdir -p -m 700 "${XDG_DATA_HOME}"
 : > "${review_file}"
 : > "${model_file}"
 
@@ -109,6 +110,10 @@ else
   else
     echo "::notice::Muse completed, but its temporary session export was unavailable; exact model ID is unavailable."
   fi
+  # Remove the raw session store immediately: a hard kill of this step
+  # would otherwise bypass the EXIT trap and leave the unredacted
+  # session (prompt, diff, tool traces) on the runner for later steps.
+  rm -rf "${XDG_DATA_HOME}"
 fi
 
 if (( capture_rc == 0 )); then

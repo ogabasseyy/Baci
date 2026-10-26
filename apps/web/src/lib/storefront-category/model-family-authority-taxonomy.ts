@@ -158,7 +158,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-a',
     'Samsung Galaxy A',
-    /^(?:Samsung )?(?:Galaxy )?A(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?A(?=\d|\s+\d|\s+(?:Series|Ultra|Plus|FE)\b|$)/i,
     [
       /\bGalaxy\s+A(?=\s|\d|$)/i,
       /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)A[0-9]{2}\b|(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\bA[0-9]{2}\b(?!\s+(?:Pro|Bionic|chip)\b)(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,
@@ -168,7 +168,7 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-s',
     'Samsung Galaxy S',
-    /^(?:Samsung )?(?:Galaxy )?S(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?S(?=\d|\s+\d|\s+(?:Ultra|Plus|FE)\b|$)/i,
     [
       /\bGalaxy\s+S(?=\s|\d|$)/i,
       /(?:\b(?:Galaxy\s+|Samsung\s+(?:Galaxy\s+)?)S[0-9]{2}\b|(?<!\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\s+)\bS[0-9]{2}\b(?=[^.!?]*\b(?:Samsung|Galaxy)\b))/i,

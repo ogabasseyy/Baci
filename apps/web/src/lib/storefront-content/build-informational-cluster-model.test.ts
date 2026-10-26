@@ -176,14 +176,10 @@ describe('buildInformationalClusterModel', () => {
       post: smartphoneGuidePost,
     });
 
-    // category_slug falls back to the inferred category slug (not the
-    // slugless /products/ href), and null stock is treated as in-stock so the
-    // product is still featured — matching the old getCachedCategoryPageData
-    // normalization the swap must preserve.
-    expect(model?.featuredProducts).toHaveLength(1);
-    expect(model?.featuredProducts[0]?.href).toBe(
-      'https://ogabassey.com/smartphones/mystery-phone'
-    );
+    // Featured picks stay on-brand: an inferred-brand article does not
+    // fall back to unrelated pool products, so this NoName row is not
+    // featured even though its category_slug fallbacks are preserved.
+    expect(model?.featuredProducts).toHaveLength(0);
   });
 
   it('returns null when the scoped inventory resolves to a collection', async () => {

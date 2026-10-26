@@ -2,6 +2,7 @@ import { normalizeAnalyticsId } from './analytics-id';
 import type { MerchantWithAnalytics } from './analytics-pixel-provider';
 
 const ANALYTICS_ID_KEYS = [
+  'chatgpt_pixel_id',
   'google_analytics_id',
   'facebook_pixel_id',
   'tiktok_pixel_id',
@@ -24,6 +25,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function hasGrowthIntegrationAccess(merchant: Record<string, unknown>) {
+  // Public snapshots carry a derived hint, never private billing fields.
+  if (typeof merchant.growth_integrations_enabled === 'boolean') {
+    return merchant.growth_integrations_enabled;
+  }
   const premiumFeatures = Array.isArray(merchant.premium_features)
     ? new Set(
         merchant.premium_features
@@ -76,7 +81,9 @@ export function buildMerchantAnalyticsSettings(
     ANALYTICS_ID_KEYS.map((key) => [
       key,
       normalizeAnalyticsId(featureSettings?.[key]) ??
-        normalizeAnalyticsId(merchant[key]),
+        (key === 'chatgpt_pixel_id'
+          ? null
+          : normalizeAnalyticsId(merchant[key])),
     ])
   ) as MerchantWithAnalytics;
 }

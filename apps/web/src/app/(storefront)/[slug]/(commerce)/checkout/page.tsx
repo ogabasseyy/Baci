@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { CheckoutThemeProvider } from '@/components/checkout-theme-provider';
 import { NewTemplateCheckoutPage } from '@/components/storefront/new-template';
+import { CheckoutCartCapacityGate } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutCartCapacityGate';
 import { CheckoutPage as OgabasseyCheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
 import {
   getCachedMerchant,
@@ -35,9 +37,17 @@ export default async function CheckoutPage({
     (merchant as unknown as { template_id?: string }).template_id ===
     'new-template'
   ) {
+    // This template reads only the live cart/local steps; it has no orderId
+    // lookup or validated resumed-order path, so no resume bypass applies.
     return (
       <CheckoutThemeProvider>
-        <NewTemplateCheckoutPage />
+        <CheckoutCartCapacityGate
+          cartHref={isDomainIdentifier(slug) ? '/cart' : `/${slug}/cart`}
+        >
+          <Suspense fallback={<p role="status">Loading checkout…</p>}>
+            <NewTemplateCheckoutPage />
+          </Suspense>
+        </CheckoutCartCapacityGate>
       </CheckoutThemeProvider>
     );
   }
@@ -46,7 +56,9 @@ export default async function CheckoutPage({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      <OgabasseyCheckoutPage />
+      <Suspense fallback={<p role="status">Loading checkout…</p>}>
+        <OgabasseyCheckoutPage />
+      </Suspense>
     </CheckoutThemeProvider>
   );
 }

@@ -1,3 +1,4 @@
+import type { CartErrorCode } from './error-codes';
 /**
  * Shared server cart contracts.
  *
@@ -107,21 +108,7 @@ export interface CreateCartInput {
   currency?: string;
 }
 
-export type CartErrorCode =
-  | 'unauthorized'
-  | 'merchant_unavailable'
-  | 'not_found'
-  | 'expired'
-  | 'version_conflict'
-  | 'idempotency_conflict'
-  | 'invalid_item'
-  | 'cart_locked'
-  | 'refresh_required'
-  | 'temporarily_unavailable'
-  | 'rate_limited'
-  | 'merge_conflict'
-  | 'too_many_lines'
-  | 'handoff_consumed';
+export type { CartErrorCode } from './error-codes';
 
 export interface CartWarning {
   code: string;

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "repository": "/home/bassey/ogabassey-agents",
+  "captured_head": "9d154f77b42831f1d55f50eff9569973d2a842bd",
+  "note": "Baseline captures the dirty VPS working files at inspection time, not only HEAD. Require per-file hashes before applying. No credentials or data files included.",
+  "patch_sha256": "68af7203e178cc0890d3fdb36fa7f0821fb660dd7dfc571131b846275ec18cae",
+  "files": [
+    {
+      "path": "codex_content_agent/content_inventory.py",
+      "before_sha256": "dcd1258787ea5cf83ad531bec7f0a73116be4e21c441bc14a39e61269b3902d4",
+      "after_sha256": "fb15065333addabf2ee64f794a439f34fa9468946ce4a209c8425dc43d54f32a"
+    },
+    {
+      "path": "codex_content_agent/merchant_blog_classification.py",
+      "before_sha256": null,
+      "after_sha256": "ed51f424b7fc8e9d42b79d57b5c50beaba336473ab663af5440f2afa41d9c5e2"
+    },
+    {
+      "path": "codex_content_agent/outcome_dashboard.py",
+      "before_sha256": "57098ebaf71a71ff740f62c74754157902c0f7738cefd42ada40c5ee371de59d",
+      "after_sha256": "b50f463d8528c3a33992bf6e3beb290a7169f2a49c9a8b31120c739b165c73fd"
+    },
+    {
+      "path": "codex_content_agent/publisher.py",
+      "before_sha256": "d787f614005e83a1229e9dad1554d409545a88d9b1b7f8399d85ad9b3fc50133",
+      "after_sha256": "558b093ec8d64a1a1d0da3036a1d46ad8d2ba973c91d229b32b96292c8274755"
+    },
+    {
+      "path": "scripts/backfill_merchant_blog_classifications.py",
+      "before_sha256": null,
+      "after_sha256": "f4ca835c0ec20decf236b37b89df246c5eb5ec771df775d4c62c8afdace03989"
+    },
+    {
+      "path": "tests/test_merchant_blog_classification.py",
+      "before_sha256": null,
+      "after_sha256": "4e7bceaa22b2804fb30d224289e1404303a526afec89590d1c24db0938935dee"
+    }
+  ]
+}

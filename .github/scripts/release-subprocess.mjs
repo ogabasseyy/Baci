@@ -6,6 +6,9 @@ import { spawnSync } from 'node:child_process';
 // may have landed, so the caller must hold the release lock for
 // reconcile-before-removal.
 export const API_COMMAND_TIMEOUT_MS = 60000;
+// Workflow history and job listings can exceed Node's default 1 MiB cap.
+// Keep a finite ceiling even when callers request compact API projections.
+export const COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function run(binary, args, cwd, capture, timeoutMs, trim = true) {
   const result = spawnSync(binary, args, {
@@ -13,6 +16,7 @@ function run(binary, args, cwd, capture, timeoutMs, trim = true) {
     encoding: 'utf8',
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
     timeout: timeoutMs,
+    maxBuffer: COMMAND_MAX_BUFFER_BYTES,
     // SIGKILL, not SIGTERM: spawnSync sends the signal once and then
     // waits, so a SIGTERM-ignoring child would wedge the release with
     // the lock held. Hung gh/vercel/ssh children need no grace.

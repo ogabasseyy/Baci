@@ -348,4 +348,106 @@ describe('ProductsPageContent', () => {
       })
     );
   });
+
+  it('omits Popular Product Links on page 1 to prevent duplication of current grid items', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
+    mockGetCachedStorefrontProductIndex.mockResolvedValue({
+      hasError: false,
+      totalCount: 40,
+      totalPages: 2,
+      products: [
+        {
+          id: 'prod-1',
+          name: 'Galaxy S25',
+          slug: 'galaxy-s25',
+          price: 2500,
+          images: [],
+          categories: [{ name: 'Smartphones', slug: 'smartphones' }],
+        },
+      ],
+    });
+
+    const result = await ProductsPageContent({
+      params: Promise.resolve({ slug: 'demo-store' }),
+      searchParams: Promise.resolve({ page: '1' }),
+    });
+
+    render(result as React.ReactElement);
+
+    expect(
+      screen.queryByRole('heading', { name: 'Popular Product Links' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders Popular Product Links on page 2+ linking to top products', async () => {
+    mockGetRequestScopedMerchant.mockResolvedValue({
+      id: 'merchant-1',
+      business_name: 'Demo Store',
+      slug: 'demo-store',
+      country: 'NG',
+      payout_currency: 'NGN',
+      site_description: 'Browse products',
+    });
+    mockGetCachedStorefrontProductIndex.mockImplementation(
+      (_merchantId, options: { page?: number } | number) => {
+        const page =
+          typeof options === 'object' && options !== null
+            ? options.page
+            : options;
+        if (page === 1) {
+          return Promise.resolve({
+            hasError: false,
+            totalCount: 40,
+            totalPages: 2,
+            products: [
+              {
+                id: 'prod-page1',
+                name: 'First Page Product',
+                slug: 'first-page-product',
+                price: 2500,
+                images: [],
+                category_slug: 'smartphones',
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          hasError: false,
+          totalCount: 40,
+          totalPages: 2,
+          products: [
+            {
+              id: 'prod-page2',
+              name: 'Second Page Product',
+              slug: 'second-page-product',
+              price: 3000,
+              images: [],
+              category_slug: 'smartphones',
+            },
+          ],
+        });
+      }
+    );
+
+    const result = await ProductsPageContent({
+      params: Promise.resolve({ slug: 'demo-store' }),
+      searchParams: Promise.resolve({ page: '2' }),
+    });
+
+    render(result as React.ReactElement);
+
+    expect(
+      screen.getByRole('heading', { name: 'Popular Product Links' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'First Page Product' })
+    ).toHaveAttribute('href', '/demo-store/smartphones/first-page-product');
+  });
 });

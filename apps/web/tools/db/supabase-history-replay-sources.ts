@@ -15,6 +15,7 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
+import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
@@ -281,6 +282,7 @@ const PENDING_SOURCES = [
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
   BLOG_PENDING_REPLAY_SOURCE_ROWS,
+  MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,

@@ -3,8 +3,13 @@ import type { CartErrorCode } from '@baci/shared/cart';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { CartCheckoutLine } from '@/lib/cart/checkout-snapshot';
 import { parseSnapshot } from '@/lib/cart/checkout-snapshot';
+import { runBoundedCartSessionWrite } from './cart-session-write-fence';
 import type { CartItem } from './cart-types';
 import { cartRoute, failureOf, readBody } from './shared-cart-client';
+import {
+  ensureCartDeviceRevocationCleared,
+  isCartDeviceRevocationPending,
+} from './shared-cart-session-revoke-client';
 
 export interface SharedCartCheckoutReview {
   checkoutSessionId: string;
@@ -109,7 +114,7 @@ export function reviewOf(value: unknown): SharedCartCheckoutReview | null {
  * reference the order submit binds to; version drift fails with the
  * live version so the caller refreshes instead of submitting stale.
  */
-export async function prepareSharedCartCheckout(
+export function prepareSharedCartCheckout(
   input: {
     cartId: string;
     expectedVersion: number;
@@ -117,6 +122,33 @@ export async function prepareSharedCartCheckout(
   },
   merchantSlug?: string | null
 ): Promise<PrepareSharedCartCheckoutResult> {
+  return runBoundedCartSessionWrite<PrepareSharedCartCheckoutResult>(
+    merchantSlug,
+    {
+      code: 'temporarily_unavailable',
+      currentVersion: null,
+      ok: false,
+      retryable: true,
+    },
+    (signal) => requestSharedCartCheckout(input, merchantSlug, signal),
+    undefined,
+    isCartDeviceRevocationPending(merchantSlug)
+      ? (signal) => ensureCartDeviceRevocationCleared(merchantSlug, signal)
+      : undefined
+  );
+}
+async function requestSharedCartCheckout(
+  input: { cartId: string; expectedVersion: number; operationId: string },
+  merchantSlug: string | null | undefined,
+  signal: AbortSignal
+): Promise<PrepareSharedCartCheckoutResult> {
+  if (isCartDeviceRevocationPending(merchantSlug))
+    return {
+      code: 'temporarily_unavailable',
+      currentVersion: null,
+      ok: false,
+      retryable: true,
+    };
   let response: Response;
   try {
     response = await fetchWithCsrf(
@@ -129,6 +161,7 @@ export async function prepareSharedCartCheckout(
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal,
       }
     );
   } catch {
@@ -142,6 +175,17 @@ export async function prepareSharedCartCheckout(
   const body = await readBody(response);
   if (response.ok && body) {
     const review = reviewOf(body.snapshot);
+    // Never bind checkout to a different cart than the one submitted:
+    // a stale or cross-tab-switched response must be rejected, not
+    // adopted verbatim by the caller.
+    if (review && review.cartId !== input.cartId) {
+      return {
+        code: 'refresh_required',
+        currentVersion: null,
+        ok: false,
+        retryable: false,
+      };
+    }
     if (review) {
       return {
         ok: true,

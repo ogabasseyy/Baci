@@ -38,6 +38,7 @@ export interface MerchantData {
    */
   paystack_subaccount_configured?: boolean;
   price_negotiation_enabled?: boolean;
+  growth_integrations_enabled?: boolean;
   shared_cart_enabled?: boolean;
   shared_cart_accounts_enabled?: boolean;
   shared_cart_realtime_enabled?: boolean;
@@ -153,12 +154,15 @@ export interface StaffAccess {
 export type RoutingMode = 'domain' | 'path';
 
 export interface StorefrontShellSnapshotBase {
+  /** Public, entitlement-checked Pixel ID resolved before merchant projection. */
+  chatgptPixelId?: string | null;
   merchant: MerchantData;
   routingMode: RoutingMode;
   basePath: string;
 }
 
 export interface StorefrontShellSnapshot {
+  chatgptPixelId?: StorefrontShellSnapshotBase['chatgptPixelId'];
   merchant: StorefrontShellSnapshotBase['merchant'];
   routingMode: StorefrontShellSnapshotBase['routingMode'];
   basePath: StorefrontShellSnapshotBase['basePath'];

@@ -147,20 +147,33 @@ export function normalizeProduct(
   const primaryImage = extractPrimaryImage(raw.images);
   const normalizedImages = normalizeImages(raw.images);
   const joinedCategories = getJoinedCategories(raw);
-  const joinedCategory =
-    (options.preferredCategorySlug
-      ? joinedCategories.find(
-          (category) => category.slug === options.preferredCategorySlug
-        )
-      : undefined) || joinedCategories[0];
+  const preferredCategory = options.preferredCategorySlug
+    ? joinedCategories.find(
+        (category) => category.slug === options.preferredCategorySlug
+      )
+    : undefined;
 
-  // Determine category name
-  const categoryName = joinedCategory?.name || raw.category || 'General';
+  let categoryName: string;
+  let categorySlug: string;
 
-  // Determine category slug
-  const categorySlug =
-    joinedCategory?.slug ||
-    (raw.category ? generateSlug(raw.category) : 'general');
+  if (preferredCategory) {
+    categoryName = preferredCategory.name || raw.category || 'General';
+    categorySlug = preferredCategory.slug;
+  } else if (
+    options.preferredCategorySlug &&
+    typeof raw.category === 'string' &&
+    raw.category.trim().length > 0 &&
+    generateSlug(raw.category) === options.preferredCategorySlug
+  ) {
+    categoryName = raw.category;
+    categorySlug = options.preferredCategorySlug;
+  } else {
+    const defaultJoined = joinedCategories[0];
+    categoryName = defaultJoined?.name || raw.category || 'General';
+    categorySlug =
+      defaultJoined?.slug ||
+      (raw.category ? generateSlug(raw.category) : 'general');
+  }
 
   const agentAvailability = getStorefrontAgentAvailability({
     manage_stock: coerceStorefrontManageStock(raw.manage_stock),

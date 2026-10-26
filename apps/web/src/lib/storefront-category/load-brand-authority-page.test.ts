@@ -211,7 +211,7 @@ describe('loadBrandAuthorityPage', () => {
     expect(page?.metaDescription).toContain('a selection of 5 Samsung phones');
   });
 
-  it('fails the hub closed when the brand-scoped product read fails', async () => {
+  it('propagates database failure when brand-scoped product read fails', async () => {
     mockGetCachedBrandAuthorityProducts.mockRejectedValueOnce(
       new Error('database timeout')
     );
@@ -225,7 +225,40 @@ describe('loadBrandAuthorityPage', () => {
         categorySlug: 'smartphones',
         brandSlug: 'samsung',
       })
-    ).resolves.toBeNull();
+    ).rejects.toThrow('database timeout');
+  });
+
+  it('includes model families appearing after index 48 in familyLinks while capping page.products at 48', async () => {
+    const genericProducts = Array.from({ length: 48 }, (_, index) => ({
+      ...makeProduct(index, 'Samsung'),
+      name: `Samsung Generic Phone ${index}`,
+    }));
+    const galaxySProducts = [
+      { ...makeProduct(48, 'Samsung'), name: 'Galaxy S24' },
+      { ...makeProduct(49, 'Samsung'), name: 'Galaxy S25' },
+      { ...makeProduct(50, 'Samsung'), name: 'Galaxy S26' },
+    ];
+    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce([
+      ...genericProducts,
+      ...galaxySProducts,
+    ]);
+
+    const { brandAuthorityPageLoader } = await import(
+      './load-brand-authority-page'
+    );
+
+    const page = await brandAuthorityPageLoader.load({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      brandSlug: 'samsung',
+    });
+
+    expect(page?.products).toHaveLength(48);
+    expect(page?.familyLinks).toContainEqual({
+      href: 'https://ogabassey.com/smartphones/brands/samsung/families/galaxy-s',
+      label: 'Samsung Galaxy S phones',
+      productCount: 3,
+    });
   });
 
   it('rejects missing merchants and unsafe route slugs before catalog reads', async () => {

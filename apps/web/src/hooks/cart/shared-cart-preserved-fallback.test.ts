@@ -1,0 +1,118 @@
+import { expect, it, vi } from 'vitest';
+import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
+import { fetchSharedCartSnapshot } from './shared-cart-client';
+import { adoptPreservedFallback } from './shared-cart-preserved-fallback';
+import { adoptPreservedCart } from './shared-cart-preserved-session';
+import { cartItem, snapshot } from './shared-cart-provisioning.test-support';
+
+vi.mock('./cart-storage', () => ({
+  getCartFromStorage: vi.fn(),
+  getSharedCartImportReceipt: vi.fn(),
+  saveCartToStorage: vi.fn(),
+  saveSharedCartImportReceipt: vi.fn(),
+}));
+vi.mock('./shared-cart-client', () => ({
+  fetchSharedCartSnapshot: vi.fn(),
+}));
+vi.mock('./shared-cart-preserved-session', () => ({
+  adoptPreservedCart: vi.fn(),
+}));
+
+function context() {
+  return {
+    adoptOutcomeRef: { current: null },
+    dispatch: vi.fn(),
+    generationRef: { current: 3 },
+    createAttemptedRef: { current: true },
+    createOpRef: { current: 'op' },
+    createRequestRef: { current: { id: 'req' } },
+    retiredCartIdRef: { current: null },
+  };
+}
+
+it('drops the populated create request on a retryable preserved read', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  const ctx = context();
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, vi.fn())
+  ).resolves.toEqual({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  });
+  expect(ctx.createRequestRef.current).toBeNull();
+});
+
+it('returns null for a definitive missing preserved cart', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'not_found',
+    retryable: false,
+  } as never);
+  await expect(
+    adoptPreservedFallback(context() as never, 'shop', () => true, vi.fn())
+  ).resolves.toBeNull();
+});
+
+it('adopts a live preserved snapshot', async () => {
+  const snap = snapshot();
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snap,
+    warnings: [],
+  } as never);
+  vi.mocked(adoptPreservedCart).mockReturnValue(true as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([] as never);
+  vi.mocked(getSharedCartImportReceipt).mockReturnValue(null as never);
+  const ctx = { ...context(), hydrateMissing: vi.fn() };
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, vi.fn())
+  ).resolves.toEqual({ ok: true });
+  expect(adoptPreservedCart).toHaveBeenCalledWith(ctx, snap);
+});
+
+it('resets the pending import before retrying after a terminal preserved cart', async () => {
+  const terminal = snapshot({ state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([] as never);
+  vi.mocked(getSharedCartImportReceipt).mockReturnValue(null as never);
+  const retryProvisioning = vi.fn().mockResolvedValue({ ok: true });
+  const ctx = context();
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, retryProvisioning)
+  ).resolves.toEqual({ ok: true });
+  expect(ctx.dispatch).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'import/failed' })
+  );
+  expect(retryProvisioning).toHaveBeenCalledOnce();
+  expect(ctx.createAttemptedRef.current).toBe(false);
+});
+
+it('provisions preserved lines when the stored receipt is from another cart', async () => {
+  const terminal = snapshot({ cartId: 'cart-b', state: 'completed' });
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: terminal,
+    warnings: [],
+  } as never);
+  vi.mocked(getCartFromStorage).mockReturnValue([cartItem()] as never);
+  vi.mocked(getSharedCartImportReceipt).mockReturnValue({
+    cartId: 'cart-a',
+    importedAt: '2026-10-26T00:00:00.000Z',
+    lineCount: 1,
+  } as never);
+  const retryProvisioning = vi.fn().mockResolvedValue({ ok: true });
+  const ctx = context();
+  await expect(
+    adoptPreservedFallback(ctx as never, 'shop', () => true, retryProvisioning)
+  ).resolves.toEqual({ ok: true });
+  expect(retryProvisioning).toHaveBeenCalledOnce();
+});

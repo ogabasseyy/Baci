@@ -366,6 +366,7 @@ export interface CachedMerchant {
    */
   paystack_subaccount_configured?: boolean;
   price_negotiation_enabled?: boolean;
+  growth_integrations_enabled?: boolean;
   shared_cart_enabled?: boolean;
   shared_cart_accounts_enabled?: boolean;
   shared_cart_realtime_enabled?: boolean;
@@ -2726,7 +2727,7 @@ async function getCachedBlogListingCore(
   let query = supabase
     .from('blog_posts')
     .select(
-      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, author_name, published_at, reading_time_minutes, view_count',
+      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, author_name, published_at, classification_revision, reading_time_minutes, view_count',
       PUBLIC_BLOG_COUNT_OPTIONS
     )
     .eq('merchant_id', merchant.id)

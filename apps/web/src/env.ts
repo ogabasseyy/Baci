@@ -1,5 +1,6 @@
 // src/env.ts
 import z from 'zod';
+import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
@@ -266,6 +267,8 @@ const serverSchema = z
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
     GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: optionalTrimmedUrlSchema,
+    ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: optionalTrimmedStringSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
     ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
@@ -408,6 +411,16 @@ const serverSchema = z
     ),
   })
   .strict()
+  .superRefine((value, ctx) => {
+    const credentialIssue = getAddressAutocompleteKvCredentialIssue(value);
+    if (credentialIssue) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: credentialIssue.message,
+        path: [credentialIssue.field],
+      });
+    }
+  })
   .superRefine((value, ctx) => {
     const isGitHubActionsBuild =
       process.env.GITHUB_ACTIONS === 'true' &&
@@ -744,6 +757,10 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
         GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_URL:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
+        ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN:
+          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_URL:
           process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
         ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN:

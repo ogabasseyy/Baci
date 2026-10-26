@@ -63,6 +63,20 @@ describe('storefrontProductsRouteData', () => {
     });
   });
 
+  it('includes assigned category names in compact product output', () => {
+    const product = storefrontProductsRouteData.mapProduct({
+      id: 'product-secondary-category',
+      name: 'Galaxy S24',
+      category: 'Featured',
+      categories: { name: 'Featured', slug: 'featured' },
+      product_categories: [
+        { categories: { name: 'Smartphones', slug: 'smartphones' } },
+      ],
+    });
+
+    expect(product.category_names).toEqual(['Featured', 'Smartphones']);
+  });
+
   it('falls back to color_images keys when colors are absent', () => {
     expect(
       storefrontProductsRouteData.mapProduct({

@@ -2,9 +2,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import {
+  baseMerchant,
   baseShellSnapshot,
   baseShellSnapshotWithoutCategories,
   createDeferred,
+  generateMetadata,
+  getRequestScopedMerchant,
   getStorefrontNavigationCategories,
   getStorefrontShellSnapshot,
   getStorefrontShellSnapshotBase,
@@ -263,5 +266,21 @@ describe('storefront layout', () => {
     ]);
     expect(getStorefrontShellSnapshot).not.toHaveBeenCalled();
     expect(providerSnapshots).toEqual([]);
+  });
+
+  it('isolates canonicals, adds applicationName and authors, and omits title template', async () => {
+    getRequestScopedMerchant.mockResolvedValue(baseMerchant);
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+
+    expect(metadata.alternates).toBeNull();
+    expect(metadata.applicationName).toBe(baseMerchant.business_name);
+    expect(metadata.authors).toEqual([{ name: baseMerchant.business_name }]);
+    expect(
+      metadata.title == null ||
+        (typeof metadata.title === 'object' && !('template' in metadata.title))
+    ).toBe(true);
   });
 });

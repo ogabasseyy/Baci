@@ -145,10 +145,10 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
       className={`bg-white rounded-xl shadow-sm border border-gray-100 p-5 ${className}`}
     >
       <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
-        <h3 className="font-bold text-gray-900 flex items-center gap-2">
+        <h2 className="font-bold text-gray-900 flex items-center gap-2">
           <Search size={16} className="text-red-600" />
           Filters
-        </h3>
+        </h2>
         <button type="button"
           onClick={onClearFilters}
           className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline"
@@ -160,9 +160,9 @@ export const CategoryFiltersSidebar: React.FC<CategoryFiltersSidebarProps> = ({
       {/* Price Range Filter */}
       {showPriceFilter && (
         <div className="border-b border-gray-100 pb-6 mb-2">
-        <h4 className="font-bold text-sm text-gray-900 mb-3">
+        <h3 className="font-bold text-sm text-gray-900 mb-3">
           Price Range (₦)
-        </h4>
+        </h3>
         <div className="flex items-center gap-2 mb-4">
           <div className="relative flex-1">
             <input

@@ -32,6 +32,17 @@ export type ContentClusterKind =
   | 'troubleshooting'
   | 'decision-support';
 
+export type MerchantBlogIntent =
+  | 'news'
+  | 'comparison'
+  | 'repair-guide'
+  | 'buying-guide';
+
+export type MerchantBlogIntentSource =
+  | 'merchant_declared'
+  | 'verified_receipt'
+  | 'reviewed';
+
 export interface PublishedClusterPost {
   slug: string;
   title: string;
@@ -42,6 +53,9 @@ export interface PublishedClusterPost {
   featured_image_url: string | null;
   published_at: string | null;
   reading_time_minutes: number | null;
+  /** Only supplied by the current, publication-gated classification read. */
+  merchant_intent?: MerchantBlogIntent | null;
+  merchant_intent_source?: MerchantBlogIntentSource | null;
 }
 
 export interface InferredContentClusterContext {

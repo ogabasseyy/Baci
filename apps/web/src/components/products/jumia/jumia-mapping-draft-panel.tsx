@@ -1,35 +1,26 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { JumiaAttributeSetResponseSchema } from '@/schemas/jumia/catalog';
 import { jumiaDestinationContextSchema } from '@/schemas/jumia/metadata-query';
 import { type JumiaBrandItem, JumiaBrandSelector } from './brand-selector';
 import {
   type JumiaCategorySelection,
   JumiaCategorySelector,
 } from './category-selector';
-import { JumiaAttributeFields } from './jumia-attribute-fields';
-import {
-  type JumiaDraftValues,
-  validateAttributeValue,
-} from './jumia-attribute-values';
+import { JumiaAttributeDraftEditor } from './jumia-attribute-draft-editor';
+import type {
+  JumiaMappingDestination as Destination,
+  JumiaMappingDraft,
+} from './jumia-mapping-draft-types';
 import { useJumiaMetadata } from './use-jumia-metadata';
 
-type Destination = {
+type Props = {
   merchantId: string;
   integrationId: string;
-  businessClientCode: string;
+  onDraftChange?: (draft: JumiaMappingDraft | null) => void;
 };
-export type JumiaMappingDraft = Destination & {
-  category: JumiaCategorySelection;
-  brand: JumiaBrandItem;
-  attributeSetId: string;
-  attributes: JumiaDraftValues;
-  categoryConfirmed: boolean;
-};
-type Props = { merchantId: string; integrationId: string };
 
 export function JumiaMappingDraftPanel(props: Props) {
   return (
@@ -40,7 +31,7 @@ export function JumiaMappingDraftPanel(props: Props) {
   );
 }
 
-function DestinationPanel({ merchantId, integrationId }: Props) {
+function DestinationPanel({ merchantId, integrationId, onDraftChange }: Props) {
   const id = useId();
   const [businessClientCode, setBusinessClientCode] = useState('');
   const query = new URLSearchParams({ merchantId, integrationId });
@@ -49,6 +40,9 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
     jumiaDestinationContextSchema,
     true
   );
+  useEffect(() => {
+    onDraftChange?.(null);
+  }, [onDraftChange]);
   const clients = context.data?.businessClients ?? [];
   // Only a fresh provider-authorized option can mount the mapping controls.
   const selectedClient = clients.find(
@@ -95,7 +89,9 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
           className="rounded-md border bg-background p-2"
           value={selectedClient?.code ?? ''}
           disabled={context.status !== 'success'}
-          onChange={(event) => setBusinessClientCode(event.target.value)}
+          onChange={(event) => {
+            setBusinessClientCode(event.target.value);
+          }}
         >
           <option value="">Choose an exact business client</option>
           {clients.map((client) => (
@@ -111,6 +107,8 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
           merchantId={merchantId}
           integrationId={integrationId}
           businessClientCode={selectedClient.code}
+          countryCode={selectedClient.countryCode}
+          onDraftChange={onDraftChange}
         />
       )}
       <p className="text-xs text-muted-foreground">
@@ -123,7 +121,12 @@ function DestinationPanel({ merchantId, integrationId }: Props) {
   );
 }
 
-function MappingControls(destination: Destination) {
+function MappingControls({
+  onDraftChange,
+  ...destination
+}: Destination & {
+  onDraftChange?: (draft: JumiaMappingDraft | null) => void;
+}) {
   const [category, setCategory] = useState<JumiaCategorySelection | null>(null);
   const [brand, setBrand] = useState<JumiaBrandItem | null>(null);
   const [revision, setRevision] = useState(0);
@@ -137,6 +140,7 @@ function MappingControls(destination: Destination) {
           value={category?.code}
           onSelect={(next) => {
             setCategory(next);
+            onDraftChange?.(null);
             setRevision((value) => value + 1);
           }}
         />
@@ -157,95 +161,16 @@ function MappingControls(destination: Destination) {
         />
       </div>
       {category && (
-        <AttributeDraft
+        <JumiaAttributeDraftEditor
           key={JSON.stringify([category.code, category.attributeSetId])}
           destination={destination}
           category={category}
           brand={brand}
           revision={revision}
+          onDraftRevision={() => setRevision((value) => value + 1)}
+          onDraftChange={onDraftChange}
         />
       )}
     </>
-  );
-}
-
-function AttributeDraft({
-  destination,
-  category,
-  brand,
-  revision,
-}: {
-  destination: Destination;
-  category: JumiaCategorySelection;
-  brand: JumiaBrandItem | null;
-  revision: number;
-}) {
-  const [values, setValues] = useState<JumiaDraftValues>({});
-  const [confirmation, setConfirmation] = useState<number | null>(null);
-  const query = new URLSearchParams(destination);
-  const metadata = useJumiaMetadata(
-    `/api/marketplace/jumia/attribute-sets/${encodeURIComponent(category.attributeSetId)}?${query}`,
-    JumiaAttributeSetResponseSchema,
-    true
-  );
-  const attributes = metadata.data?.attributes ?? [];
-  const complete =
-    Boolean(brand) &&
-    metadata.status === 'success' &&
-    attributes.every(
-      (attribute) =>
-        validateAttributeValue(attribute, values[String(attribute.code)]) ===
-        null
-    );
-  const confirmed = confirmation === revision && complete;
-  return (
-    <div className="grid gap-3">
-      <p className="text-sm">
-        Draft category: {category.name}. Provider product categories cannot be
-        changed after creation; confirm this exact category for the draft.
-      </p>
-      {metadata.status === 'loading' && <p>Loading category attributes…</p>}
-      {metadata.error && (
-        <div role="alert">
-          <p>{metadata.error}</p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setValues({});
-              setConfirmation(null);
-              metadata.retry();
-            }}
-          >
-            Retry metadata
-          </Button>
-        </div>
-      )}
-      {metadata.status === 'success' && attributes.length === 0 && (
-        <p>No attributes returned for this category.</p>
-      )}
-      <JumiaAttributeFields
-        attributes={attributes}
-        values={values}
-        onChange={(code, value) => {
-          setValues((current) => ({ ...current, [code]: value }));
-          setConfirmation(null);
-        }}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        disabled={!complete}
-        onClick={() => setConfirmation(revision)}
-      >
-        Confirm draft category: {category.name}
-      </Button>
-      {confirmed && (
-        <p role="status">
-          Draft category confirmed: {category.name}. Draft only; not ready for
-          submission.
-        </p>
-      )}
-    </div>
   );
 }

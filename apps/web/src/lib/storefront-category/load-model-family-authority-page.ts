@@ -1,5 +1,6 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { buildStoreUrl } from '@/lib/store-url';
+import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
@@ -31,10 +32,36 @@ async function loadModelFamilyAuthorityPage(args: {
   );
   if (!brandPage) return null;
 
-  const products = brandPage.products.filter((product) =>
+  const brandInventory = brandPage.brandInventory ?? {
+    products: brandPage.products,
+  };
+  const allMatchedProducts = brandInventory.products.filter((product) =>
     modelFamilyAuthorityTaxonomy.matchesProduct(family, product.name)
   );
-  if (products.length < family.minimumProducts) return null;
+  if (allMatchedProducts.length < family.minimumProducts) return null;
+
+  const matchedProducts = allMatchedProducts.slice(
+    0,
+    BRAND_AUTHORITY_PRODUCT_LIMIT
+  );
+
+  const siblingFamilyLinks = modelFamilyAuthorityTaxonomy
+    .getEntries(args.categorySlug, brandPage.brand.brandKey)
+    .filter((entry) => entry.familyKey !== family.familyKey)
+    .flatMap((entry) => {
+      const productCount = brandInventory.products.filter((product) =>
+        modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
+      ).length;
+      return productCount >= entry.minimumProducts
+        ? [
+            {
+              href: `${brandPage.canonicalUrl}/families/${entry.familyKey}`,
+              label: `${entry.displayName} phones`,
+              productCount,
+            },
+          ]
+        : [];
+    });
 
   const canonicalUrl = `${brandPage.canonicalUrl}/families/${family.familyKey}`;
   const countryContext = getCountryShoppingContext(brandPage.merchant.country);
@@ -50,8 +77,8 @@ async function loadModelFamilyAuthorityPage(args: {
         categorySlug: supportedCategory,
         brands: [brandPage.brand.displayName, brandPage.brand.brandKey],
         modelFamilySlug: family.familyKey,
-        productNames: products.map((product) => product.name),
-        productSlugs: products.map((product) => product.slug),
+        productNames: matchedProducts.map((product) => product.name),
+        productSlugs: matchedProducts.map((product) => product.slug),
       }
     : null;
   const guidePosts = guideContext
@@ -62,14 +89,14 @@ async function loadModelFamilyAuthorityPage(args: {
     ...brandPage,
     canonicalUrl,
     heading,
-    intro: `Compare ${products.length} available ${family.displayName} phones from ${brandPage.merchant.business_name}, including current prices, specifications, condition, and availability.`,
+    intro: `Compare ${matchedProducts.length} available ${family.displayName} phones from ${brandPage.merchant.business_name}, including current prices, specifications, condition, and availability.`,
     metaTitle: buildStorefrontMetadataTitle({
       title: heading,
       suffix: brandPage.merchant.business_name,
       fallback: family.displayName,
     }).title,
-    metaDescription: `Compare ${products.length} ${family.displayName} phones from ${brandPage.merchant.business_name}, with current prices, specifications, condition, and availability${countrySuffix}.`,
-    products,
+    metaDescription: `Compare ${matchedProducts.length} ${family.displayName} phones from ${brandPage.merchant.business_name}, with current prices, specifications, condition, and availability${countrySuffix}.`,
+    products: matchedProducts,
     guideLinks: guideContext
       ? buildCommercialGuideLinks({
           storeUrl: buildStoreUrl(brandPage.merchant),
@@ -78,7 +105,7 @@ async function loadModelFamilyAuthorityPage(args: {
         })
       : [],
     brand: { ...brandPage.brand, displayName: family.displayName },
-    familyLinks: [],
+    familyLinks: siblingFamilyLinks,
     breadcrumbItems: [
       ...brandPage.breadcrumbItems,
       { name: family.displayName, url: canonicalUrl },

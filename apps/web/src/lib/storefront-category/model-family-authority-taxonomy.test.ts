@@ -128,4 +128,97 @@ describe('model family authority taxonomy', () => {
     expect(matchesA5WithExtraWhitespace).toBe(true);
     expect(matchesAce).toBe(false);
   });
+
+  it('matches Apple iPhone model families correctly including iPhone 17e, 16e, 15 Pro Max, and SE', () => {
+    // Arrange
+    const iphone17Entry = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'apple',
+      'iphone-17'
+    );
+    const iphone16Entry = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'apple',
+      'iphone-16'
+    );
+    const iphone15Entry = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'apple',
+      'iphone-15'
+    );
+    const iphoneSeEntry = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'apple',
+      'iphone-se'
+    );
+
+    // Assert entries exist and have expected minimum products
+    expect(iphone17Entry).toMatchObject({
+      displayName: 'iPhone 17 Series',
+      minimumProducts: 3,
+    });
+    expect(iphone16Entry).toMatchObject({
+      displayName: 'iPhone 16 Series',
+      minimumProducts: 3,
+    });
+    expect(iphone15Entry).toMatchObject({
+      displayName: 'iPhone 15 Series',
+      minimumProducts: 3,
+    });
+    expect(iphoneSeEntry).toMatchObject({
+      displayName: 'iPhone SE Series',
+      minimumProducts: 2,
+    });
+
+    if (!iphone17Entry || !iphone16Entry || !iphone15Entry || !iphoneSeEntry) {
+      throw new Error('Expected Apple iPhone entries');
+    }
+
+    // Matching assertions
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 17e')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        iphone17Entry,
+        'Apple iPhone 17 Pro Max'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 16')
+    ).toBe(false);
+
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(iphone16Entry, 'iPhone 16e')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        iphone16Entry,
+        'Apple iPhone 16 Plus'
+      )
+    ).toBe(true);
+
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        iphone15Entry,
+        'iPhone 15 Pro Max'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        iphone15Entry,
+        'Apple iPhone 15'
+      )
+    ).toBe(true);
+
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(iphoneSeEntry, 'iPhone SE')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        iphoneSeEntry,
+        'Apple iPhone SE 2022'
+      )
+    ).toBe(true);
+  });
 });

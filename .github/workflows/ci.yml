@@ -325,6 +325,8 @@ jobs:
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
+      - name: Test merchant blog classification permissions and lifecycle
+        run: bash supabase/tests/run-merchant-blog-classification.sh
       # The loyalty aggregator enroll_customer_loyalty.sql \ir-includes
       # every sibling enroll_customer_loyalty*.sql suite as a part in
       # one transaction (guarded by
@@ -419,6 +421,7 @@ jobs:
           --sql-check supabase/migrations/tests/plan_transfer_interest_headroom.sql
           --sql-check supabase/migrations/tests/staging_wallet_restriction_state.sql
           --sql-check supabase/tests/repair_booking_rpc.sql
+          --sql-check supabase/tests/repair_device_typeahead_search.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql
           --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql
@@ -439,6 +442,7 @@ jobs:
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
+          --sql-check supabase/tests/merchant_blog_classification_schema_contract.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/migrations/tests/storefront_product_request_canonical_idempotency.sql
@@ -509,6 +513,8 @@ jobs:
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
           --sql-check supabase/tests/vtu_intent_claim.sql
           --sql-check supabase/tests/vtu_intent_claim_concurrency.sql
+          --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
+          --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL
@@ -620,6 +626,10 @@ jobs:
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
           .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-installed-equivalence.test.mjs
+          .github/scripts/deploy-gigl-recovery.test.mjs
+          .github/scripts/refresh-gigl-cutover-latch.test.mjs
+          .github/scripts/check-production-release-outcome.test.mjs
           .github/scripts/check-gigl-enforcement-migration-names.test.mjs
           .github/scripts/check-gigl-cutover-latch-scope.test.mjs
           .github/scripts/gigl-dotenv.test.mjs

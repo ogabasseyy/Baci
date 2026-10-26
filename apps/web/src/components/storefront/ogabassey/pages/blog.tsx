@@ -145,18 +145,6 @@ export function OgabasseyV2Blog({
   return (
     <div className="min-h-screen bg-gray-50 pt-4 pb-20">
       <div className="mx-auto max-w-[1400px] px-4 pt-8 md:px-6 md:pt-12">
-        {!hideFeaturedStory &&
-          !isSearching &&
-          activeCategory === 'All' &&
-          featuredPost && (
-          <BlogFeaturedStory
-            basePath={basePath}
-            featuredPost={featuredPost}
-            imageSrc={getBlogListingImageSrc(featuredPost.featured_image_url)}
-            publishedDateLabel={formatDate(featuredPost.published_at)}
-          />
-        )}
-
         <div className="mb-12 flex flex-col items-center justify-center text-center">
           {isSearching ? (
             <div className="w-full max-w-3xl text-left">
@@ -185,6 +173,18 @@ export function OgabasseyV2Blog({
             </div>
           )}
         </div>
+
+        {!hideFeaturedStory &&
+          !isSearching &&
+          activeCategory === 'All' &&
+          featuredPost && (
+          <BlogFeaturedStory
+            basePath={basePath}
+            featuredPost={featuredPost}
+            imageSrc={getBlogListingImageSrc(featuredPost.featured_image_url)}
+            publishedDateLabel={formatDate(featuredPost.published_at)}
+          />
+        )}
 
         <div className="sticky top-20 z-30 -mx-4 mb-10 border-gray-200/50 border-b bg-gray-50/95 px-4 pt-2 pb-6 backdrop-blur-xs md:mx-0 md:px-0">
           <div className="hide-scrollbar flex items-center gap-2 overflow-x-auto md:gap-3">
@@ -245,9 +245,9 @@ export function OgabasseyV2Blog({
                       <span className="size-1 rounded-full bg-gray-300" />
                       <span>{post.reading_time_minutes || 3} MIN READ</span>
                     </div>
-                    <h3 className="mb-3 font-black text-gray-900 text-xl leading-tight line-clamp-2 transition-colors group-hover:text-red-600 md:text-2xl">
+                    <h2 className="mb-3 font-black text-gray-900 text-xl leading-tight line-clamp-2 transition-colors group-hover:text-red-600 md:text-2xl">
                       {post.title}
-                    </h3>
+                    </h2>
                     <p className="mb-6 flex-1 text-gray-500 text-sm leading-relaxed line-clamp-3 md:text-base">
                       {post.excerpt}
                     </p>

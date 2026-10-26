@@ -71,6 +71,10 @@ describe('search pending replay sources', () => {
       '20261016170000_storefront_search_merchant_visibility_rpc.sql',
       '20261020120000_storefront_offer_resolution_authority.sql',
       '20261020130000_pdp_core_snapshot_effective_policy.sql',
+      '20261023111630_repair_device_typeahead_search.sql',
+      '20261024170000_repair_device_catalog_search_limit.sql',
+      '20261024180000_repair_device_catalog_preserve_private_boundary.sql',
+      '20261024230000_ogabassey_seo_data_remediation.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

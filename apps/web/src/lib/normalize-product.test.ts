@@ -199,4 +199,39 @@ describe('normalizeProduct', () => {
     expect(result.category).toBe('Smartphones');
     expect(result.category_slug).toBe('smartphones');
   });
+
+  it('matches preferredCategorySlug against legacy raw.category when joined categories do not match or are absent', () => {
+    const mismatchResult = normalizeProduct(
+      {
+        ...baseRawProduct,
+        category: 'Smartphones',
+        categories: [
+          {
+            name: 'Accessories',
+            slug: 'accessories',
+          },
+        ],
+      },
+      {
+        preferredCategorySlug: 'smartphones',
+      }
+    );
+
+    expect(mismatchResult.category).toBe('Smartphones');
+    expect(mismatchResult.category_slug).toBe('smartphones');
+
+    const absentResult = normalizeProduct(
+      {
+        ...baseRawProduct,
+        category: 'Smartphones',
+        categories: [],
+      },
+      {
+        preferredCategorySlug: 'smartphones',
+      }
+    );
+
+    expect(absentResult.category).toBe('Smartphones');
+    expect(absentResult.category_slug).toBe('smartphones');
+  });
 });

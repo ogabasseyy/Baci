@@ -981,6 +981,7 @@ export type Database = {
           author_name: string;
           author_title: string | null;
           category: string | null;
+          classification_revision: string;
           content: string;
           content_embedding: string | null;
           created_at: string | null;
@@ -1018,6 +1019,7 @@ export type Database = {
           author_name: string;
           author_title?: string | null;
           category?: string | null;
+          classification_revision?: string;
           content: string;
           content_embedding?: string | null;
           created_at?: string | null;
@@ -1055,6 +1057,7 @@ export type Database = {
           author_name?: string;
           author_title?: string | null;
           category?: string | null;
+          classification_revision?: string;
           content?: string;
           content_embedding?: string | null;
           created_at?: string | null;
@@ -5951,6 +5954,63 @@ export type Database = {
           },
         ];
       };
+      merchant_blog_classifications: {
+        Row: {
+          actor_id: string | null;
+          classified_at: string;
+          classifier_version: string;
+          evidence_sha256: string | null;
+          input_fingerprint: string;
+          intent: string;
+          merchant_id: string;
+          post_id: string;
+          source: string;
+          stale_at: string | null;
+          taxonomy_version: number;
+        };
+        Insert: {
+          actor_id?: string | null;
+          classified_at?: string;
+          classifier_version: string;
+          evidence_sha256?: string | null;
+          input_fingerprint: string;
+          intent: string;
+          merchant_id: string;
+          post_id: string;
+          source: string;
+          stale_at?: string | null;
+          taxonomy_version?: number;
+        };
+        Update: {
+          actor_id?: string | null;
+          classified_at?: string;
+          classifier_version?: string;
+          evidence_sha256?: string | null;
+          input_fingerprint?: string;
+          intent?: string;
+          merchant_id?: string;
+          post_id?: string;
+          source?: string;
+          stale_at?: string | null;
+          taxonomy_version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_blog_classifications_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'merchant_blog_classifications_post_merchant_fkey';
+            columns: ['post_id', 'merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'blog_posts';
+            referencedColumns: ['id', 'merchant_id'];
+          },
+        ];
+      };
       merchant_daily_counters: {
         Row: {
           created_at: string | null;
@@ -6070,6 +6130,46 @@ export type Database = {
           },
         ];
       };
+      merchant_chatgpt_ads_credentials: {
+        Row: {
+          capi_key: string;
+          merchant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          capi_key: string;
+          merchant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          capi_key?: string;
+          merchant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'merchant_chatgpt_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+        ];
+      };
       merchant_feature_settings: {
         Row: {
           about_page_enabled: boolean | null;
@@ -6078,6 +6178,7 @@ export type Database = {
           auto_generate_schema: boolean | null;
           blog_discover_image_validation_enabled: boolean;
           blog_enabled: boolean | null;
+          chatgpt_pixel_id: string | null;
           checkout_collect_phone: boolean | null;
           checkout_require_account: boolean | null;
           checkout_show_order_notes: boolean | null;
@@ -6161,6 +6262,7 @@ export type Database = {
           auto_generate_schema?: boolean | null;
           blog_discover_image_validation_enabled?: boolean;
           blog_enabled?: boolean | null;
+          chatgpt_pixel_id?: string | null;
           checkout_collect_phone?: boolean | null;
           checkout_require_account?: boolean | null;
           checkout_show_order_notes?: boolean | null;
@@ -6244,6 +6346,7 @@ export type Database = {
           auto_generate_schema?: boolean | null;
           blog_discover_image_validation_enabled?: boolean;
           blog_enabled?: boolean | null;
+          chatgpt_pixel_id?: string | null;
           checkout_collect_phone?: boolean | null;
           checkout_require_account?: boolean | null;
           checkout_show_order_notes?: boolean | null;
@@ -16245,6 +16348,43 @@ export type Database = {
       };
     };
     Functions: {
+      search_repair_devices: {
+        Args: { p_merchant_id: string; p_query: string };
+        Returns: {
+          aliases: string[];
+          brand: string;
+          device_type: string | null;
+          id: string;
+          image_url: string | null;
+          model: string;
+          product_id: string | null;
+          slug: string;
+          sort_order: number;
+        }[];
+      };
+      search_repair_device_suggestions: {
+        Args: { p_merchant_id: string; p_query: string };
+        Returns: {
+          aliases: string[];
+          brand: string;
+          device_type: string | null;
+          id: string;
+          image_url: string | null;
+          model: string;
+          product_id: string | null;
+          slug: string;
+          sort_order: number;
+        }[];
+      };
+      save_chatgpt_ads_settings: {
+        Args: {
+          p_capi_key?: string;
+          p_disconnect?: boolean;
+          p_merchant_id: string;
+          p_pixel_id?: string;
+        };
+        Returns: undefined;
+      };
       blog_media_objects_present_v1: {
         Args: { p_paths: string[] };
         Returns: {
@@ -18531,6 +18671,41 @@ export type Database = {
         Args: { currency_param: string; merchant_id_param: string };
         Returns: number;
       };
+      get_merchant_blog_classification_context_v1: {
+        Args: { p_merchant_id: string; p_post_ids: string[] };
+        Returns: {
+          category: string;
+          classified_at: string;
+          classifier_version: string;
+          content: string;
+          evidence_sha256: string;
+          excerpt: string;
+          input_fingerprint: string;
+          intent: string;
+          keywords: string[];
+          post_id: string;
+          slug: string;
+          source: string;
+          stale_at: string;
+          tags: string[];
+          taxonomy_version: number;
+          title: string;
+        }[];
+      };
+      get_merchant_blog_classification_snapshot_v1: {
+        Args: { p_merchant_id: string; p_post_ids: string[] };
+        Returns: {
+          classified_at: string;
+          classifier_version: string;
+          intent: string;
+          post_id: string;
+          post_updated_at: string;
+          post_revision: string;
+          source: string;
+          stale_at: string;
+          taxonomy_version: number;
+        }[];
+      };
       get_merchant_id_for_user: {
         Args: { user_uuid: string };
         Returns: string;
@@ -18538,6 +18713,18 @@ export type Database = {
       get_merchant_identity_verified: {
         Args: { p_merchant_id: string };
         Returns: boolean;
+      };
+      set_merchant_blog_classification_v1: {
+        Args: {
+          p_classifier_version: string;
+          p_evidence_sha256?: string;
+          p_expected_fingerprint: string;
+          p_intent: string;
+          p_merchant_id: string;
+          p_post_id: string;
+          p_source?: string;
+        };
+        Returns: Json;
       };
       get_merchant_inventory_stats: {
         Args: { p_merchant_id: string };
@@ -18988,6 +19175,19 @@ export type Database = {
           total_count: number;
         }[];
       };
+      get_storefront_blog_classifications_v1: {
+        Args: { p_merchant_id: string; p_post_ids: string[] };
+        Returns: {
+          classified_at: string;
+          classifier_version: string;
+          intent: string;
+          post_id: string;
+          post_updated_at: string;
+          post_revision: string;
+          source: string;
+          taxonomy_version: number;
+        }[];
+      };
       get_storefront_blog_post_status: {
         Args: { p_identifier: string; p_post_slug: string };
         Returns: {
@@ -19016,6 +19216,28 @@ export type Database = {
           excerpt: string;
           featured_image_url: string;
           keywords: string[];
+          published_at: string;
+          reading_time_minutes: number;
+          slug: string;
+          tags: string[];
+          title: string;
+        }[];
+      };
+      get_storefront_cluster_guide_candidates_v2: {
+        Args: {
+          p_category_slug: string;
+          p_cluster_rules: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_search_query: string;
+        };
+        Returns: {
+          category: string;
+          excerpt: string;
+          featured_image_url: string;
+          keywords: string[];
+          merchant_intent: string;
+          merchant_intent_source: string;
           published_at: string;
           reading_time_minutes: number;
           slug: string;

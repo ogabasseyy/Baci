@@ -71,6 +71,7 @@ import {
 import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
 import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
+import { createCheckoutOrder } from './create-checkout-order';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
 import { recordLegacyCheckoutRedirect } from './legacy-checkout-redirect-retirement';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
@@ -171,73 +172,6 @@ async function verifyOtpCode(
 // component body memoizable.
 function redirectToExternalUrl(url: string) {
   window.location.href = url;
-}
-
-interface CreateCheckoutOrderInput {
-  merchantId: string;
-  data: ShippingFormValues;
-  orderItems: ReturnType<typeof buildCheckoutOrderItems>;
-  subtotal: number;
-  finalShippingFee: number;
-  selectedGateway: 'paystack' | 'korapay' | 'pod' | 'credit_direct';
-  selectedShippingQuote: ShippingQuote;
-  shippingSessionId: string;
-  discountCode?: string | null;
-  idempotencyKey?: string | null;
-}
-
-interface CheckoutOrderResponse {
-  order: Record<string, unknown>;
-  paystackAuthUrl?: string;
-}
-
-// Create the order server-side. Kept at module scope so the order-submit
-// handler stays free of the try/throw control flow the compiler can't lower.
-function createCheckoutOrder(
-  input: CreateCheckoutOrderInput
-): Promise<CheckoutOrderResponse> {
-  return apiPost<CheckoutOrderResponse>(
-    '/api/orders',
-    {
-      merchant_id: input.merchantId,
-      customer_email: input.data.email,
-      customer_name: `${input.data.firstName} ${input.data.lastName}`,
-      customer_phone: input.data.phone,
-      items: input.orderItems,
-      subtotal: input.subtotal,
-      shipping_fee: input.finalShippingFee,
-      payment_method: input.selectedGateway,
-      payment_status: 'unpaid', // Order starts unpaid, changes to pending when payment initiated, then paid on confirmation
-      shipping_status: 'pending',
-      shipping_address: {
-        firstName: input.data.firstName,
-        lastName: input.data.lastName,
-        address: input.data.address,
-        city: input.data.city,
-        state: input.data.state,
-      },
-      source: 'online_store',
-      // The submit guard guarantees a selected quote. Carrier quotes reference
-      // their persisted quote row; merchant rates send their bare configured
-      // rate id and intentionally null the carrier fields.
-      ...buildCheckoutShippingSelectionPayload(
-        input.selectedShippingQuote,
-        input.shippingSessionId
-      ),
-      // Only the trusted code string is sent; the route recomputes + validates
-      // the amount server-side. No expected_total here (this legacy flow has no
-      // VAT-aware total object), so the wrapper's two-sided amount check guards.
-      ...(input.discountCode ? { discount_code: input.discountCode } : {}),
-    },
-    // Code-bearing checkouts carry the persisted idempotency key so a
-    // response lost after commit replays the original order instead of
-    // failing against the now-claimed single-use code.
-    {
-      ...(input.idempotencyKey
-        ? { headers: { 'Idempotency-Key': input.idempotencyKey } }
-        : {}),
-    }
-  );
 }
 
 interface CreditDirectSignResult {

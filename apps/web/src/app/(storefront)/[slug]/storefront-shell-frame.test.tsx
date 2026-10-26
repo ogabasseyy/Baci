@@ -2,11 +2,24 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
+import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 
 const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
+
+vi.mock('@/components/analytics/chatgpt-pixel', () => ({
+  ChatgptPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="chatgpt-pixel">{pixelId}</span>
+  ),
+}));
+
+vi.mock('@/components/analytics/facebook-pixel', () => ({
+  FacebookPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="facebook-pixel">{pixelId}</span>
+  ),
+}));
 
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
@@ -41,17 +54,22 @@ vi.mock('./storefront-layout-renderer', () => ({
 const shellSnapshot = {
   merchant: {
     id: 'merchant-1',
+    user_id: 'user-1',
+    business_name: 'Ogabassey',
+    business_type: 'electronics',
     slug: 'ogabassey',
   },
-  routingMode: 'domain' as const,
-};
+  routingMode: 'domain',
+  basePath: '',
+  navigationCategories: [],
+} satisfies StorefrontShellSnapshot;
 
 describe('StorefrontShellFrame', () => {
   it('renders children inside the merchant shell', () => {
     render(
       <StorefrontShellFrame
         preloadHeroLcpImages={false}
-        shellSnapshot={shellSnapshot as never}
+        shellSnapshot={shellSnapshot}
       >
         <main>Shell body</main>
       </StorefrontShellFrame>
@@ -60,6 +78,32 @@ describe('StorefrontShellFrame', () => {
     expect(screen.getByTestId('layout-renderer')).toHaveTextContent(
       'Shell body'
     );
+  });
+
+  it('mounts the consent-aware Pixel in the persistent shell for a direct product landing and checkout navigation', () => {
+    const props = {
+      preloadHeroLcpImages: false,
+      shellSnapshot: {
+        ...shellSnapshot,
+        chatgptPixelId: 'pixel-landing',
+      } satisfies StorefrontShellSnapshot,
+    };
+    const view = render(
+      <StorefrontShellFrame {...props}>
+        <main>Product landing</main>
+      </StorefrontShellFrame>
+    );
+    expect(screen.getAllByTestId('chatgpt-pixel')).toHaveLength(1);
+    expect(screen.getByTestId('chatgpt-pixel')).toHaveTextContent(
+      'pixel-landing'
+    );
+    view.rerender(
+      <StorefrontShellFrame {...props}>
+        <main>Checkout</main>
+      </StorefrontShellFrame>
+    );
+    expect(screen.getAllByTestId('chatgpt-pixel')).toHaveLength(1);
+    expect(screen.getByText('Checkout')).toBeInTheDocument();
   });
 
   it('calls notFound when the shell snapshot is missing', () => {
@@ -85,14 +129,16 @@ describe('StorefrontShellFrame cart wiring', () => {
         preloadHeroLcpImages={false}
         shellSnapshot={
           {
+            ...shellSnapshot,
             merchant: {
+              ...shellSnapshot.merchant,
               id: 'merchant-1',
               plan_tier: 'free',
               premium_features: ['shared_cart'],
               slug: 'ogabassey',
             },
             routingMode: 'domain',
-          } as never
+          } satisfies StorefrontShellSnapshot
         }
       >
         <main>Shell body</main>
@@ -112,14 +158,16 @@ describe('StorefrontShellFrame cart wiring', () => {
         preloadHeroLcpImages={false}
         shellSnapshot={
           {
+            ...shellSnapshot,
             merchant: {
+              ...shellSnapshot.merchant,
               id: 'merchant-1',
               plan_tier: 'pro',
               premium_features: [],
               slug: 'ogabassey',
             },
             routingMode: 'domain',
-          } as never
+          } satisfies StorefrontShellSnapshot
         }
       >
         <main>Shell body</main>
@@ -147,7 +195,7 @@ it('wires anonymous derived capability hints into the storefront cart', () => {
             shared_cart_accounts_enabled: false,
             shared_cart_realtime_enabled: true,
           },
-        } as never
+        } satisfies StorefrontShellSnapshot
       }
     >
       <main>Public shell</main>
@@ -158,4 +206,30 @@ it('wires anonymous derived capability hints into the storefront cart', () => {
     sharedCartAccountsEnabled: false,
     sharedCartRealtimeEnabled: true,
   });
+});
+
+it('keeps one Meta Pixel on direct product landing and cart navigation', () => {
+  const props = {
+    preloadHeroLcpImages: false,
+    shellSnapshot: {
+      ...shellSnapshot,
+      merchant: {
+        ...shellSnapshot.merchant,
+        growth_integrations_enabled: true,
+        feature_settings: { facebook_pixel_id: '2099259280261589' },
+      },
+    } satisfies StorefrontShellSnapshot,
+  };
+  const view = render(
+    <StorefrontShellFrame {...props}>
+      <main>Product</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
+  view.rerender(
+    <StorefrontShellFrame {...props}>
+      <main>Cart</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
 });

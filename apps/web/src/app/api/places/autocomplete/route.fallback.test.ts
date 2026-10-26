@@ -11,7 +11,7 @@ import {
 } from './route.test-helpers';
 
 vi.mock('../provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
   reserveGeoapifyRequest: vi.fn(async () => true),
 }));
 
@@ -41,7 +41,7 @@ describe('address provider fallback', () => {
     vi.clearAllMocks();
     vi.stubEnv('GEOAPIFY_API_KEY', 'test-geo-key');
     vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
-    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue(true);
+    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue({ reserved: true });
     vi.mocked(reserveGeoapifyRequest).mockResolvedValue(true);
   });
   afterEach(() => vi.unstubAllEnvs());
@@ -127,7 +127,10 @@ describe('address provider fallback', () => {
   });
 
   it('does not call Google after the application monthly cap', async () => {
-    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue(false);
+    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue({
+      reserved: false,
+      reason: 'limit_reached',
+    });
     mockFetch.mockResolvedValueOnce(respond({ results: [geoResult] }));
     const data = await (
       await GET(
@@ -202,7 +205,10 @@ describe('address provider fallback', () => {
   });
 
   it('exposes manual entry when both budgets are unavailable, without calling a provider', async () => {
-    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue(false);
+    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue({
+      reserved: false,
+      reason: 'limit_reached',
+    });
     vi.mocked(reserveGeoapifyRequest).mockResolvedValue(false);
     const response = await GET(
       makeRequest({

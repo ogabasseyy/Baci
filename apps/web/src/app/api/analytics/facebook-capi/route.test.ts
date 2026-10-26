@@ -54,8 +54,10 @@ beforeEach(() => {
   mocks.record.mockResolvedValue({ domain_event_id: 'domain-1' });
 });
 describe('storefront CAPI ingress', () => {
-  it('queues a host-verified event without reading private credentials as the visitor', async () => {
-    const response = await POST(request(payload));
+  it('queues a client-asserted purpose claim after verifying the merchant, without a consent receipt', async () => {
+    const observation = request(payload);
+    expect(observation.headers.has('cookie')).toBe(false);
+    const response = await POST(observation);
     expect(response.status).toBe(202);
     expect(await response.json()).toMatchObject({
       queued: true,
@@ -118,6 +120,7 @@ describe('storefront CAPI ingress', () => {
   it.each([
     { ...payload, event: 'Purchase' },
     { ...payload, consent: false },
+    { ...payload, consent: undefined },
     { ...payload, eventData: { ...payload.eventData, products: [] } },
   ])('rejects untrusted purchases, denied consent and invalid content', async (body) => {
     expect((await POST(request(body))).status).toBe(400);

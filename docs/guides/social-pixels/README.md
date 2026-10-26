@@ -42,6 +42,16 @@ Events wait for that pixel's normal bootstrap rather than being lost before its
 SDK queue exists. A merchant change clears ownership of the old Pixel. A later
 consent revocation blocks further event calls even if the SDK remains loaded.
 
+The public observation endpoints receive a client-asserted purpose choice.
+Their host verification establishes the merchant, not the visitor's consent:
+the stored `analytics_consent` and `marketing_consent` fields preserve that
+claim for worker filtering. They are not independently verified consent receipts.
+Baci's storefront reads the visitor's saved choice before sending observations
+and stops on revocation. A custom client must enforce the same preference;
+a forged `consent: true` request is not corroborated against a signed server
+consent record. These endpoints still reject missing or denied consent claims,
+cross-merchant events, and client-supplied purchases.
+
 ## Event identities
 
 TikTok uses the same `event_id` for the browser Pixel event and Events API event.

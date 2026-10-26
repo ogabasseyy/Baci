@@ -150,3 +150,24 @@ describe('storefront CAPI ingress', () => {
     ).toBe(400);
   });
 });
+it('keeps TikTok identifiers and excludes native Snapchat attribution', async () => {
+  const incoming = request({
+    ...payload,
+    eventSourceUrl: 'https://ogabassey.com/cart?ttclid=tiktok-click',
+  });
+  incoming.cookies.set('_ttp', 'tiktok-browser');
+  incoming.cookies.set('ScCid', 'snap-click');
+  expect((await POST(incoming)).status).toBe(202);
+  expect(mocks.record).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      deliveryData: expect.objectContaining({
+        marketing_consent: true,
+        ttclid: 'tiktok-click',
+        ttp: 'tiktok-browser',
+      }),
+    })
+  );
+  const queued = mocks.record.mock.calls[0]?.[1];
+  expect(queued.deliveryData).not.toHaveProperty('sccid');
+});

@@ -15,7 +15,7 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/snapchat/route.ts':
     '9c6c1db9696259aef5526a6913610377fd4d9b27c4bdd99d8516240a2b3a0b1c',
   'apps/web/src/app/api/analytics/tiktok/route.ts':
-    '6d9d17df68d13a16b3bcd35bb5acfa1a7caac02d73996a656012d18a4146854e',
+    'f056ef330fc2a65f97e2cef6607c0fa3a1ab48149bd5941632eed38c1cee2283',
   'apps/web/src/app/api/platform/events/route.ts':
     '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification

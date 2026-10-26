@@ -127,7 +127,7 @@ describe('browser observation compatibility', () => {
     ).toBe(false);
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
-  it('does not send untrusted purchase events to the public social endpoints', async () => {
+  it('refuses client purchase claims before any platform request', async () => {
     const results = await trackServerSidePurchase(
       merchantId,
       'order-one',
@@ -136,17 +136,29 @@ describe('browser observation compatibility', () => {
       products,
       user
     );
-    expect(
-      fetcher.mock.calls.some(
-        ([url]) => url.includes('tiktok') || url.includes('snapchat')
-      )
-    ).toBe(false);
-    for (const platform of ['TikTok', 'Snapchat'])
+    expect(fetcher).not.toHaveBeenCalled();
+    for (const platform of ['GA4', 'Facebook', 'TikTok', 'Snapchat'])
       expect(results.find((r) => r.platform === platform)).toMatchObject({
         success: false,
         sent: false,
         error: 'untrusted_purchase',
       });
+  });
+  it('also refuses direct generic purchase calls without fetching any endpoint', async () => {
+    const results = await sendServerSideAnalytics(
+      merchantId,
+      'purchase',
+      user,
+      { value: 200, currency: 'NGN', products, transactionId: 'order-one' },
+      { socialAlreadyQueued: true }
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(results).toHaveLength(4);
+    expect(
+      results.every(
+        (result) => result.error === 'untrusted_purchase' && !result.sent
+      )
+    ).toBe(true);
   });
   it('does not report provider delivery when ingress rejects a request', async () => {
     fetcher.mockImplementation((url: string) =>

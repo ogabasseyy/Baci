@@ -37,8 +37,8 @@ export function createXOAuthHeader(
   // X Ads requires OAuth 1.0a HMAC-SHA1 over HTTPS; SHA-256 is not accepted.
   // This is a keyed protocol authenticator, not an unkeyed collision-sensitive hash.
   // https://docs.x.com/x-ads-api/fundamentals/making-authenticated-requests#custom-implementation
-  // nosemgrep: javascript.node-stdlib.cryptography.crypto-weak-algorithm.crypto-weak-algorithm
   oauth.oauth_signature = createHmac(
+    // nosemgrep: javascript.node-stdlib.cryptography.crypto-weak-algorithm.crypto-weak-algorithm
     'sha1',
     `${encode(credentials.consumerSecret)}&${encode(credentials.accessTokenSecret)}`
   )

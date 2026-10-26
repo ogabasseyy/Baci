@@ -66,3 +66,28 @@ it('does not classify a rejected request as accepted even if its body claims que
     queued: false,
   });
 });
+
+it('refuses a purchase claim before any Facebook ingress request even with analytics consent', async () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ({ queued: true }) });
+  vi.stubGlobal('fetch', fetcher);
+  expect(
+    await sendFacebookClientObservation({ ...input, event: 'Purchase' })
+  ).toMatchObject({
+    platform: 'Facebook',
+    success: false,
+    sent: false,
+    error: 'untrusted_purchase',
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+});

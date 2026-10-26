@@ -90,6 +90,15 @@ export async function sendServerSideAnalytics(
     clientId?: string; // GA4 client ID from _ga cookie
   }
 ): Promise<AnalyticsResult[]> {
+  // Only confirmed server payment handling may originate paid conversions.
+  if (event === 'purchase') {
+    return ['GA4', 'Facebook', 'TikTok', 'Snapchat'].map((platform) => ({
+      platform,
+      success: false,
+      sent: false,
+      error: 'untrusted_purchase',
+    }));
+  }
   const results: AnalyticsResult[] = [];
   const baseUrl = getBaseUrl();
 
@@ -151,13 +160,11 @@ export async function sendServerSideAnalytics(
 
   // 2. Facebook Conversions API
   const fbEvent =
-    event === 'purchase'
-      ? 'Purchase'
-      : event === 'begin_checkout'
-        ? 'InitiateCheckout'
-        : event === 'add_to_cart'
-          ? 'AddToCart'
-          : 'ViewContent';
+    event === 'begin_checkout'
+      ? 'InitiateCheckout'
+      : event === 'add_to_cart'
+        ? 'AddToCart'
+        : 'ViewContent';
 
   requests.push(
     sendFacebookClientObservation({
@@ -199,7 +206,8 @@ export async function sendServerSideAnalytics(
 }
 
 /**
- * Convenience function for tracking purchases
+ * Compatibility purchase entry point; refuses untrusted client purchase claims.
+ * Confirmed payments must use triggerPurchaseConversion from server payment handling.
  */
 export async function trackServerSidePurchase(
   merchantId: string,

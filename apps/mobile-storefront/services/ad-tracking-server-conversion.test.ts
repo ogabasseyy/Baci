@@ -70,7 +70,7 @@ describe('sendServerConversion', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('forwards advertising conversions after ATT authorization', async () => {
+  it('records internal observations after ATT authorization without fabricating purpose grants', async () => {
     mockGetIsTrackingAllowed.mockReturnValue(true);
     const { sendServerConversion } = await import(
       './ad-tracking-server-conversion'
@@ -85,9 +85,9 @@ describe('sendServerConversion', () => {
     expect(body).toMatchObject({
       event_id: 'event-2',
       merchant_id: 'merchant-1',
-      analytics_consent: true,
-      marketing_consent: true,
-      targets: ['facebook', 'tiktok', 'snapchat', 'google'],
+      analytics_consent: false,
+      marketing_consent: false,
+      targets: [],
     });
 
     expect(mockFetch).toHaveBeenCalledWith(

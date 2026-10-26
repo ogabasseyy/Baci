@@ -102,7 +102,6 @@ export async function POST(request: NextRequest) {
             undefined)
           : undefined,
         ttp: request.cookies.get('_ttp')?.value,
-        sccid: request.cookies.get('ScCid')?.value,
       },
     });
     // Acceptance is not a provider receipt. Never claim delivery from ingress.

@@ -189,6 +189,12 @@ const orderCreateSchemaBase = z
         userIp: z.string().optional(),
         userAgent: z.string().optional(),
         limitedDataUse: z.boolean().optional(),
+        marketingConsent: z.boolean().optional(),
+        analyticsConsent: z.boolean().optional(),
+        twclid: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]{1,256}$/)
+          .optional(),
       })
       .optional(),
     use_wallet_credit: z.boolean().default(false),

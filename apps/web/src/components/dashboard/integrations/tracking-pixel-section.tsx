@@ -16,7 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 interface TrackingPixelSectionProps {
   platform: string;
   pixelId: string;
-  accessToken?: string;
+  tokenConfigured?: boolean;
+  onDisconnect?: () => Promise<void>;
   pixelLabel: string;
   tokenLabel?: string;
   onSave: (pixelId: string, token: string) => Promise<void>;
@@ -27,7 +28,8 @@ interface TrackingPixelSectionProps {
 export function TrackingPixelSection({
   platform,
   pixelId,
-  accessToken,
+  tokenConfigured,
+  onDisconnect,
   pixelLabel,
   tokenLabel,
   onSave,
@@ -35,7 +37,7 @@ export function TrackingPixelSection({
   children,
 }: TrackingPixelSectionProps) {
   const [localPixelId, setLocalPixelId] = useState(pixelId);
-  const [localToken, setLocalToken] = useState(accessToken || '');
+  const [localToken, setLocalToken] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
@@ -43,6 +45,7 @@ export function TrackingPixelSection({
     setIsSaving(true);
     onSave(localPixelId, localToken)
       .then(() => {
+        setLocalToken('');
         toast({
           title: 'Settings Saved',
           description: `${platform} tracking settings have been updated.`,
@@ -91,12 +94,36 @@ export function TrackingPixelSection({
               value={localToken}
               onChange={(e) => setLocalToken(e.target.value)}
               type="password"
-              placeholder="Enter Access Token"
+              placeholder={
+                tokenConfigured
+                  ? 'Saved securely; enter a replacement'
+                  : 'Enter Access Token'
+              }
             />
             <p className="text-xs text-muted-foreground">
-              Required for server-side tracking (maximum accuracy).
+              {tokenConfigured
+                ? 'Credential saved. Leave blank to keep it.'
+                : 'Required for server-side tracking.'}
             </p>
           </div>
+        )}
+        {tokenConfigured && onDisconnect && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => {
+              setIsSaving(true);
+              onDisconnect()
+                .then(() => setLocalToken(''))
+                .catch(() =>
+                  toast({ title: 'Disconnect failed', variant: 'destructive' })
+                )
+                .finally(() => setIsSaving(false));
+            }}
+          >
+            Disconnect server tracking
+          </Button>
         )}
         {children}
         <Button type="button" onClick={handleSave} disabled={isSaving}>

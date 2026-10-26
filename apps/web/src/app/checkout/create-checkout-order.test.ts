@@ -52,7 +52,12 @@ it.each([
   );
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: allowed })
+    JSON.stringify({
+      necessary: true,
+      analytics: allowed,
+      marketing: allowed,
+      functional: allowed,
+    })
   );
   await createCheckoutOrder(input);
   expect(apiPost).toHaveBeenCalledWith(
@@ -60,9 +65,12 @@ it.each([
     expect.objectContaining({
       payment_status: 'unpaid',
       discount_code: 'SAVE',
-      ad_tracking: allowed
-        ? { chatgptConsent: true, oppref: 'click', obref: 'browser' }
-        : { chatgptConsent: false },
+      ad_tracking: expect.objectContaining({
+        analyticsConsent: allowed,
+        marketingConsent: allowed,
+        chatgptConsent: allowed,
+        ...(allowed ? { oppref: 'click', obref: 'browser' } : {}),
+      }),
     }),
     { headers: { 'Idempotency-Key': 'stable-key' } }
   );
@@ -70,12 +78,22 @@ it.each([
 it('reads consent again for a later submission', async () => {
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
   );
   await createCheckoutOrder(input);
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: false })
+    JSON.stringify({
+      necessary: true,
+      analytics: false,
+      marketing: false,
+      functional: false,
+    })
   );
   await createCheckoutOrder(input);
   expect(apiPost.mock.calls[1]?.[1].ad_tracking.chatgptConsent).toBe(false);

@@ -9,6 +9,8 @@ export function conversionRouteRequest(
 ) {
   return new NextRequest('https://shop.usebaci.com/api/analytics/conversion', {
     body: JSON.stringify({
+      analytics_consent: true,
+      marketing_consent: true,
       custom_data: { currency: 'NGN', value: 100 },
       event_name: 'START_CHECKOUT',
       event_source: 'web',

@@ -1,5 +1,16 @@
+import { withCartRequestDeadline } from '@/hooks/cart/cart-request-deadline';
+import { runCartSessionTransition } from '@/hooks/cart/cart-session-write-fence';
+import { isCartDeviceRevocationPending } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { MergeConflictView } from './cart-handoff-support';
+
+/** Bound the post-outcome preview refresh so a stalled refresh cannot strand the redeeming state; the deadline signal cancels the refresh so it cannot mutate state after a retry starts. */
+function refreshPreviewBounded(deps: HandoffRedeemDeps): Promise<unknown> {
+  return withCartRequestDeadline(null, async (signal) => {
+    await deps.refreshPreview(signal);
+    return null;
+  });
+}
 
 export interface HandoffRedeemDeps {
   handoffId: string;
@@ -16,7 +27,7 @@ export interface HandoffRedeemDeps {
   onTerminalOutcome(): void;
   /** Definitive merge conflict: release the sent body for fresh picks. */
   onMergeConflict(): void;
-  refreshPreview(): Promise<unknown>;
+  refreshPreview(signal?: AbortSignal): Promise<unknown>;
 }
 
 /**
@@ -32,36 +43,32 @@ export async function postHandoffRedeem(
   deps.setRedeeming(true);
   deps.setRedeemError(null);
   try {
-    const slug = deps.merchantSlug;
-    if (deps.bootstrapRequired.current) {
-      const bootstrap = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
-        body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-        referrerPolicy: 'no-referrer',
-      });
-      if (!bootstrap.ok) {
-        deps.setRedeemError(
-          'Could not connect your cart session. Please try again.'
-        );
-        return false;
-      }
-      // Keep this retry identity after an indeterminate redeem response.
-      deps.bootstrapRequired.current = false;
+    const result = await withCartRequestDeadline(null, (signal) =>
+      runCartSessionTransition<Awaited<ReturnType<typeof requestHandoff>>>(
+        deps.merchantSlug,
+        null,
+        () =>
+          withCartRequestDeadline(
+            null,
+            (requestSignal) => requestHandoff(deps, body, requestSignal),
+            signal
+          ),
+        { isSuccessful: (reply) => reply?.response.ok === true, signal }
+      )
+    );
+    if (!result) {
+      deps.setRedeemError(
+        'Could not continue this cart. Check your connection.'
+      );
+      return false;
     }
-    const url = slug
-      ? `/api/storefront/cart/handoff/redeem?merchantSlug=${encodeURIComponent(slug)}`
-      : '/api/storefront/cart/handoff/redeem';
-    const response = await fetchWithCsrf(url, {
-      body: JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-      referrerPolicy: 'no-referrer',
-    });
-    const payload = (await response.json()) as {
-      code?: string;
-      conflicts?: MergeConflictView[];
-    };
+    const { response, payload } = result;
+    if (payload.code === 'bootstrap_failed') {
+      deps.setRedeemError(
+        'Could not connect your cart session. Please try again.'
+      );
+      return false;
+    }
     if (response.ok) {
       deps.onAttemptConsumed();
       deps.onTerminalOutcome();
@@ -89,7 +96,7 @@ export async function postHandoffRedeem(
       deps.setRedeemError(
         'Your cart session expired. Review your cart and try again.'
       );
-      await deps.refreshPreview();
+      await refreshPreviewBounded(deps);
       return false;
     }
     if (response.status === 409 && payload.code === 'version_conflict') {
@@ -105,7 +112,7 @@ export async function postHandoffRedeem(
       // instead of applying a stale incoming/existing choice.
       deps.setConflicts([]);
       deps.setResolutions({});
-      await deps.refreshPreview();
+      await refreshPreviewBounded(deps);
       return false;
     }
     if (payload.code === 'handoff_consumed') {
@@ -132,4 +139,47 @@ export async function postHandoffRedeem(
   } finally {
     deps.setRedeeming(false);
   }
+}
+
+/** Only network/cookie work holds the lock; recovery callbacks run after release. */
+async function requestHandoff(
+  deps: HandoffRedeemDeps,
+  body: Record<string, unknown>,
+  signal: AbortSignal
+): Promise<{
+  response: Response;
+  payload: { code?: string; conflicts?: MergeConflictView[] };
+} | null> {
+  const slug = deps.merchantSlug;
+  if (isCartDeviceRevocationPending(slug)) return null;
+  if (deps.bootstrapRequired.current) {
+    const bootstrap = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
+      body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      referrerPolicy: 'no-referrer',
+      signal,
+    });
+    if (signal.aborted) return null;
+    if (!bootstrap.ok)
+      return { response: bootstrap, payload: { code: 'bootstrap_failed' } };
+    // Keep this retry identity after an indeterminate redeem response.
+    deps.bootstrapRequired.current = false;
+  }
+  const url = slug
+    ? `/api/storefront/cart/handoff/redeem?merchantSlug=${encodeURIComponent(slug)}`
+    : '/api/storefront/cart/handoff/redeem';
+  const response = await fetchWithCsrf(url, {
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    referrerPolicy: 'no-referrer',
+    signal,
+  });
+  const payload = (await response.json()) as {
+    code?: string;
+    conflicts?: MergeConflictView[];
+  };
+  if (signal.aborted) return null;
+  return { response, payload };
 }

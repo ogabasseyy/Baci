@@ -35,6 +35,7 @@ describe('loadPaidOrderDeliveryEvent', () => {
           fbc: 'fb.1.123.click',
           gaClientId: '123.456',
           limitedDataUse: true,
+          analyticsConsent: true,
           ttclid: 'tt-click-1',
         },
         currency: 'NGN',
@@ -65,6 +66,7 @@ describe('loadPaidOrderDeliveryEvent', () => {
       merchant_id: event.merchant_id,
       occurred_at: event.occurred_at,
       user_data: {
+        analytics_consent: true,
         email: 'person@example.com',
         city: 'Lagos',
         country: 'NG',

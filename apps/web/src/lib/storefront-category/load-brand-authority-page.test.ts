@@ -459,7 +459,7 @@ describe('loadBrandAuthorityPage', () => {
 
   it('resolves correct category nouns and handles fallbacks', async () => {
     const { getCategoryAuthorityNoun } = await import(
-      './load-brand-authority-page'
+      './get-category-authority-noun'
     );
     expect(getCategoryAuthorityNoun('smartphones', 'Smartphones')).toEqual({
       titleNoun: 'Phones',

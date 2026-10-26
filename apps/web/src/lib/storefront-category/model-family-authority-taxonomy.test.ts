@@ -129,6 +129,49 @@ describe('model family authority taxonomy', () => {
     expect(matchesAce).toBe(false);
   });
 
+  it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
+    const phantom = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'tecno',
+      'phantom'
+    );
+    if (!phantom) throw new Error('Expected Tecno Phantom family entry');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(phantom, 'Tecno Phantom X2')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(phantom, 'Tecno Spark 20')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        phantom,
+        'The Tecno Phantom V Fold is here'
+      )
+    ).toBe(true);
+
+    const cases: [string, string, string[]][] = [
+      ['a-series', 'Itel A70', ['Itel S23', 'Itel P55']],
+      ['s-series', 'Itel S23', ['Itel A70', 'Itel P55']],
+      ['p-series', 'Itel P55', ['Itel A70', 'Itel S23']],
+    ];
+    for (const [familyKey, matching, nonMatching] of cases) {
+      const entry = modelFamilyAuthorityTaxonomy.getEntry(
+        'smartphones',
+        'itel',
+        familyKey
+      );
+      if (!entry) throw new Error(`Expected Itel ${familyKey} family entry`);
+      expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, matching)).toBe(
+        true
+      );
+      for (const name of nonMatching) {
+        expect(modelFamilyAuthorityTaxonomy.matchesProduct(entry, name)).toBe(
+          false
+        );
+      }
+    }
+  });
+
   it('matches Apple iPhone model families correctly including iPhone 17e, 16e, 15 Pro Max, and SE', () => {
     // Arrange
     const iphone17Entry = modelFamilyAuthorityTaxonomy.getEntry(

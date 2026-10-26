@@ -13,6 +13,7 @@ import type {
 } from './content-cluster-types';
 import { resolveEligibleCategoryHubDestinations } from './eligible-hub-destinations';
 import { inferContentClusterContext } from './infer-content-cluster-context';
+import { verifyEligibleHubsAgainstDestination } from './verify-eligible-hubs-against-destination';
 
 interface CategoryInventoryProduct {
   slug: string;
@@ -166,11 +167,20 @@ export async function buildInformationalClusterModel(
   const familyHubLinks: Array<{ href: string; label: string }> = [];
 
   if (inferred.brands.length > 0) {
-    const eligibleHubs = resolveEligibleCategoryHubDestinations({
+    const resolvedHubs = resolveEligibleCategoryHubDestinations({
       storeUrl: input.storeUrl,
       categorySlug,
       products,
     });
+    // Override data is caller-authoritative; the live path must agree with
+    // the destination pages' hydrated inventory before linking to a hub.
+    const eligibleHubs = input.categoryDataOverride
+      ? resolvedHubs
+      : await verifyEligibleHubsAgainstDestination({
+          merchantId: input.merchantId,
+          categorySlug,
+          hubs: resolvedHubs,
+        });
     const matchedBrandKeys = new Set<string>();
     for (const inferredBrand of inferred.brands) {
       const matchingBrandHub = eligibleHubs.brandHubs.find((hub) => {

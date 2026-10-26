@@ -202,6 +202,19 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /\b(?:Tecno\s+)?Pop\s+[0-9]+\b/i,
     /\bTecno\s+Pop\b/i,
   ]),
+  fam('tecno', 'phantom', 'Tecno Phantom', /^(?:Tecno )?Phantom/i, [
+    /\b(?:Tecno\s+)?Phantom\s+(?:X|V|[0-9])\b/i,
+    /\bTecno\s+Phantom\b/i,
+  ]),
+  fam('itel', 'a-series', 'Itel A Series', /^(?:Itel )?A(?=\s|\d)/i, [
+    /\bItel\s+A(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,
+  ]),
+  fam('itel', 's-series', 'Itel S Series', /^(?:Itel )?S(?=\s|\d)/i, [
+    /\bItel\s+S(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,
+  ]),
+  fam('itel', 'p-series', 'Itel P Series', /^(?:Itel )?P(?=\s|\d)/i, [
+    /\bItel\s+P(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,
+  ]),
   fam('xiaomi', 'redmi-note', 'Redmi Note', /^(?:Xiaomi )?Redmi Note/i, [
     /\b(?:Xiaomi\s+)?Redmi\s+Note\b/i,
   ]),

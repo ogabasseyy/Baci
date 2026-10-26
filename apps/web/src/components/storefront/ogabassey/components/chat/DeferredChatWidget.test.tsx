@@ -133,6 +133,28 @@ describe('DeferredChatWidget', () => {
     ).toBeInTheDocument();
   });
 
+  it('announces a failed runtime load and leaves the launcher retryable', async () => {
+    const loadChatWidget = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Chunk unavailable'))
+      .mockResolvedValue({ ChatWidget: () => <div>Loaded chat runtime</div> });
+    const user = userEvent.setup();
+    render(<DeferredChatWidget loadChatWidget={loadChatWidget} />);
+    const launcher = screen.getByRole('button', {
+      name: 'Open AI chat assistant',
+    });
+
+    await user.click(launcher);
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Chat did not load. Activate again to retry.',
+    );
+    expect(launcher).toBeEnabled();
+    await user.click(launcher);
+    expect(await screen.findByText('Loaded chat runtime')).toBeInTheDocument();
+    expect(loadChatWidget).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps keyboard focus on the loaded launcher after activation', async () => {
     const loadChatWidget = vi.fn().mockResolvedValue({
       ChatWidget: ({ focusLauncherOnMount }: { focusLauncherOnMount?: boolean }) => (

@@ -37,6 +37,7 @@ export function DeferredChatWidget({
     ChatWidgetModule['ChatWidget'] | null
   >(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const focusLauncherOnMount = useRef(false);
 
   const isSanta = theme === 'santa';
@@ -69,6 +70,7 @@ export function DeferredChatWidget({
     }
 
     focusLauncherOnMount.current = event.detail === 0;
+    setLoadFailed(false);
     setIsLoading(true);
     const resolveChatWidget = loadChatWidget ?? loadDefaultChatWidget;
 
@@ -76,6 +78,7 @@ export function DeferredChatWidget({
       .then((module) => {
         setChatRuntime(() => module.ChatWidget);
       })
+      .catch(() => setLoadFailed(true))
       .finally(() => {
         setIsLoading(false);
       });
@@ -109,7 +112,11 @@ export function DeferredChatWidget({
           className={buttonClasses}
           aria-label="Open AI chat assistant"
           aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-          aria-describedby="ogabassey-deferred-chat-keyboard-help"
+          aria-describedby={
+            loadFailed
+              ? 'ogabassey-deferred-chat-keyboard-help ogabassey-deferred-chat-load-error'
+              : 'ogabassey-deferred-chat-keyboard-help'
+          }
         >
           <span
             id="ogabassey-deferred-chat-keyboard-help"
@@ -118,6 +125,15 @@ export function DeferredChatWidget({
             Use arrow keys to move the assistant launcher. Hold Shift for
             48-pixel steps.
           </span>
+          {loadFailed && (
+            <span
+              id="ogabassey-deferred-chat-load-error"
+              className="sr-only"
+              role="status"
+            >
+              Chat did not load. Activate again to retry.
+            </span>
+          )}
           {isSanta ? (
             <div className="relative w-full h-full">
               <img

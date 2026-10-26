@@ -5,6 +5,17 @@ import { defineConfig } from '@playwright/test';
 const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
 const port = Number(configuredPort || 3217);
 const firefoxHome = process.getuid?.() === 0 ? '/root' : os.homedir();
+const firefoxEnv = Object.fromEntries(
+  [
+    'PATH',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'DISPLAY',
+    'WAYLAND_DISPLAY',
+    'LD_LIBRARY_PATH',
+  ].flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))
+);
 export default defineConfig({
   testDir: './tests/checkout-browser',
   testMatch: '**/*.pw.ts',
@@ -33,7 +44,7 @@ export default defineConfig({
       use: {
         browserName: 'firefox',
         launchOptions: {
-          env: { ...process.env, HOME: firefoxHome },
+          env: { ...firefoxEnv, HOME: firefoxHome },
         },
       },
     },

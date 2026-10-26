@@ -24,6 +24,8 @@ export function isSuppressedChatLauncherDragClick(
           nativeEvent.pointerType === 'touch' &&
           nativeEvent.isTrusted)),
   );
+  // Older engines dispatch a trusted MouseEvent for the compatibility click.
+  // detail === 0 keyboard/AT activations stay independent of the drag token.
   const trustedPointerlessClick =
     nativeEvent.pointerId === undefined && nativeEvent.isTrusted;
   return Boolean(

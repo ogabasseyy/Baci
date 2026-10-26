@@ -11,6 +11,11 @@ type XQueue = ((
   version?: string;
   exe?: (...args: unknown[]) => void;
 };
+declare global {
+  interface Window {
+    twq?: XQueue;
+  }
+}
 let current: { pixelId: string; events: XEventIds } | undefined;
 let configured: { pixelId: string; queue: Window['twq'] } | undefined;
 const allowed = isMarketingAllowed;

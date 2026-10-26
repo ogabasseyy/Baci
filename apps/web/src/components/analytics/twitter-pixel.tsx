@@ -108,12 +108,3 @@ export const twitterEvents = {
       conversion_id: crypto.randomUUID(),
     }),
 };
-declare global {
-  interface Window {
-    twq?: (
-      action: string,
-      event: string,
-      params?: Record<string, unknown>
-    ) => void;
-  }
-}

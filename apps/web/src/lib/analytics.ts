@@ -1,8 +1,7 @@
-import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
-
-('use client');
+'use client';
 
 import type { Product } from '@/lib/products';
+import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
 import { trackCartView } from './analytics/track-cart-view';
 import { trackSocialFunnel } from './analytics/track-social-funnel';
 import { isAnalyticsAllowed } from './analytics-consent';

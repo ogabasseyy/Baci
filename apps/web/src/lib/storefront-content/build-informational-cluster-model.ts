@@ -1,11 +1,17 @@
 import { formatCurrencyCompact } from '@/lib/currency';
+import { generateSlug } from '@/lib/seo-utils';
+import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
+import type { ModelFamilyAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
+import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
   InformationalClusterModel,
+  PublishedClusterPost,
 } from './content-cluster-types';
+import { resolveEligibleCategoryHubDestinations } from './eligible-hub-destinations';
 import { inferContentClusterContext } from './infer-content-cluster-context';
 
 interface CategoryInventoryProduct {
@@ -95,6 +101,61 @@ function buildFeaturedProducts(
     }));
 }
 
+function postMatchesModelFamily(
+  post: PublishedClusterPost,
+  tokens: string[],
+  familyEntry: ModelFamilyAuthorityEntry
+): boolean {
+  if (modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, post.title)) {
+    return true;
+  }
+  const normalizedSlugText = post.slug.replace(/[-_]/g, ' ');
+  if (
+    modelFamilyAuthorityTaxonomy.matchesProduct(familyEntry, normalizedSlugText)
+  ) {
+    return true;
+  }
+  const familyTokens = familyEntry.familyKey
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  if (familyTokens.length >= 2) {
+    const unanchoredPattern = new RegExp(
+      familyEntry.productNamePattern.source.replace(/^\^/, ''),
+      'i'
+    );
+    const escapedFamilyKey = familyEntry.familyKey.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&'
+    );
+    const slugBoundaryPattern = new RegExp(
+      `(?:^|[-_])${escapedFamilyKey}(?:[-_]|$)`,
+      'i'
+    );
+    if (
+      unanchoredPattern.test(post.title) ||
+      unanchoredPattern.test(normalizedSlugText) ||
+      slugBoundaryPattern.test(post.slug) ||
+      familyTokens.every((token) => tokens.includes(token))
+    ) {
+      return true;
+    }
+  } else if (familyTokens.length === 1) {
+    const singleToken = familyTokens[0];
+    const contextualSinglePattern = new RegExp(
+      `\\b${familyEntry.brandKey}\\s+${singleToken}\\b|\\b${singleToken}\\s+\\d+`,
+      'i'
+    );
+    if (
+      contextualSinglePattern.test(post.title) ||
+      contextualSinglePattern.test(normalizedSlugText)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function buildInformationalClusterModel(
   input: BuildInformationalClusterModelInput
 ): Promise<InformationalClusterModel | null> {
@@ -135,12 +196,91 @@ export async function buildInformationalClusterModel(
       toCategoryInventoryProduct(categorySlug, product)
     );
   }
+
+  const brandHubLinks: Array<{ href: string; label: string }> = [];
+  const familyHubLinks: Array<{ href: string; label: string }> = [];
+
+  const eligibleHubs = resolveEligibleCategoryHubDestinations({
+    storeUrl: input.storeUrl,
+    categorySlug,
+    products,
+  });
+
+  if (inferred.brands.length > 0) {
+    const matchedBrandKeys = new Set<string>();
+    for (const inferredBrand of inferred.brands) {
+      const matchingBrandHub = eligibleHubs.brandHubs.find((hub) => {
+        if (generateSlug(hub.brand_key ?? '') === generateSlug(inferredBrand)) {
+          return true;
+        }
+        const entry = brandAuthorityTaxonomy.getEntry(
+          categorySlug,
+          hub.brand_key ?? ''
+        );
+        return entry
+          ? brandAuthorityTaxonomy.matchesBrand(entry, inferredBrand)
+          : false;
+      });
+
+      if (matchingBrandHub) {
+        if (matchingBrandHub.brand_key) {
+          matchedBrandKeys.add(matchingBrandHub.brand_key);
+        }
+        const entry = brandAuthorityTaxonomy.getEntry(
+          categorySlug,
+          matchingBrandHub.brand_key ?? ''
+        );
+        const displayName = entry?.displayName ?? inferredBrand;
+        brandHubLinks.push({
+          href: matchingBrandHub.href,
+          label: `Explore ${displayName} ${categoryName.toLowerCase()}`,
+        });
+      }
+    }
+
+    for (const familyHub of eligibleHubs.familyHubs) {
+      if (!familyHub.brand_key || !matchedBrandKeys.has(familyHub.brand_key)) {
+        continue;
+      }
+      const familyEntry = modelFamilyAuthorityTaxonomy.getEntry(
+        categorySlug,
+        familyHub.brand_key,
+        familyHub.family_key ?? ''
+      );
+      if (
+        familyEntry &&
+        postMatchesModelFamily(input.post, inferred.tokens, familyEntry)
+      ) {
+        familyHubLinks.push({
+          href: familyHub.href,
+          label: `Explore ${familyEntry.displayName}`,
+        });
+      }
+    }
+  }
+
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,
     categoryName,
     products,
+    inferredBrands: inferred.brands,
   });
+
+  const combinedLinkCandidates = [
+    ...brandHubLinks,
+    ...familyHubLinks,
+    ...commerceLinks,
+  ];
+
+  const seenHrefs = new Set<string>();
+  const finalCommerceLinks: Array<{ href: string; label: string }> = [];
+  for (const link of combinedLinkCandidates) {
+    if (!seenHrefs.has(link.href)) {
+      seenHrefs.add(link.href);
+      finalCommerceLinks.push(link);
+    }
+  }
 
   return {
     heading: `Continue shopping ${categoryName.toLowerCase()}`,
@@ -148,7 +288,7 @@ export async function buildInformationalClusterModel(
       href: `${input.storeUrl}/${categorySlug}`,
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
-    commerceLinks: commerceLinks.slice(0, 3),
+    commerceLinks: finalCommerceLinks.slice(0, 5),
     featuredProducts: buildFeaturedProducts(
       input.storeUrl,
       inferred.brands,

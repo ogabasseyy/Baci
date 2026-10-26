@@ -221,4 +221,95 @@ describe('model family authority taxonomy', () => {
       )
     ).toBe(true);
   });
+
+  it('resolves distinct, non-overlapping Apple MacBook model families under laptops', () => {
+    const laptopFamilies = modelFamilyAuthorityTaxonomy.getEntries(
+      'laptops',
+      'apple'
+    );
+    expect(laptopFamilies.map((f) => f.familyKey)).toEqual([
+      'macbook-air',
+      'macbook-pro',
+    ]);
+
+    const airEntry = modelFamilyAuthorityTaxonomy.getEntry(
+      'laptops',
+      'apple',
+      'macbook-air'
+    );
+    const proEntry = modelFamilyAuthorityTaxonomy.getEntry(
+      'laptops',
+      'apple',
+      'macbook-pro'
+    );
+
+    expect(airEntry).toMatchObject({
+      displayName: 'MacBook Air',
+      familyKey: 'macbook-air',
+      minimumProducts: 3,
+    });
+    expect(proEntry).toMatchObject({
+      displayName: 'MacBook Pro',
+      familyKey: 'macbook-pro',
+      minimumProducts: 3,
+    });
+
+    if (!airEntry || !proEntry) {
+      throw new Error('Expected MacBook Air and Pro entries');
+    }
+
+    // MacBook Air matching
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(airEntry, 'MacBook Air 13 M2')
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        airEntry,
+        '13" MacBook Air M4 (2025)'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        airEntry,
+        'Apple MacBook Air M3'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        airEntry,
+        'MacBook Pro 14 M3 Pro'
+      )
+    ).toBe(false);
+
+    // MacBook Pro matching
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        proEntry,
+        'MacBook Pro 14 M3 Pro'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        proEntry,
+        '14" MacBook Pro M4 Pro (2024)'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        proEntry,
+        'Apple MacBook Pro 16 M3 Max'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(proEntry, 'MacBook Air 15')
+    ).toBe(false);
+
+    // Neither
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(airEntry, 'MacBook 12')
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(proEntry, 'MacBook 12')
+    ).toBe(false);
+  });
 });

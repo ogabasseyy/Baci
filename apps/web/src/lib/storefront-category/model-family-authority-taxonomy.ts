@@ -117,8 +117,40 @@ const APPLE_IPHONE_MODEL_FAMILIES: readonly ModelFamilyAuthorityEntry[] = [
   },
 ];
 
+const APPLE_MACBOOK_MODEL_FAMILIES: readonly ModelFamilyAuthorityEntry[] = [
+  {
+    brandDisplayName: 'Apple MacBook',
+    brandKey: 'apple',
+    brandSlug: 'apple',
+    categorySlug: 'laptops',
+    displayName: 'MacBook Air',
+    familyKey: 'macbook-air',
+    minimumProducts: 3,
+    modelPatterns: [
+      /^(?:[0-9]{2}(?:\.[0-9])?["”']?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
+    ],
+    productNamePattern:
+      /^(?:[0-9]{2}(?:\.[0-9])?["”']?\s+)?(?:Apple\s+)?MacBook\s+Air\b/i,
+  },
+  {
+    brandDisplayName: 'Apple MacBook',
+    brandKey: 'apple',
+    brandSlug: 'apple',
+    categorySlug: 'laptops',
+    displayName: 'MacBook Pro',
+    familyKey: 'macbook-pro',
+    minimumProducts: 3,
+    modelPatterns: [
+      /^(?:[0-9]{2}(?:\.[0-9])?["”']?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
+    ],
+    productNamePattern:
+      /^(?:[0-9]{2}(?:\.[0-9])?["”']?\s+)?(?:Apple\s+)?MacBook\s+Pro\b/i,
+  },
+];
+
 const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
   ...APPLE_IPHONE_MODEL_FAMILIES,
+  ...APPLE_MACBOOK_MODEL_FAMILIES,
   ...(
     [
       ['samsung', 'galaxy-a', 'Samsung Galaxy A', /^(?:Samsung )?Galaxy A/i],

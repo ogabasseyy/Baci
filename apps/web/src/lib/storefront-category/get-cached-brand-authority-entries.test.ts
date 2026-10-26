@@ -40,7 +40,7 @@ describe('getCachedBrandAuthorityEntries', () => {
       ['samsung', 5],
       ['google', 6],
     ]);
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(8);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(9);
   });
 
   it('fails optional category links open when the query fails', async () => {
@@ -62,7 +62,7 @@ describe('getCachedBrandAuthorityEntries', () => {
     );
 
     await expect(
-      getCachedBrandAuthorityEntries('merchant-1', 'laptops')
+      getCachedBrandAuthorityEntries('merchant-1', 'tablets')
     ).resolves.toEqual([]);
     expect(mockGetCachedBrandAuthorityInventory).not.toHaveBeenCalled();
   });

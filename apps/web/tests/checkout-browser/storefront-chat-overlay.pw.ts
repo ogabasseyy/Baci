@@ -175,24 +175,29 @@ test('real drag hook clamps, suppresses drag click, and hands position to chat',
       await expect(
         page.getByRole('button', { name: 'Open AI chat assistant' })
       ).toBeFocused();
-      await page.keyboard.press('Tab');
-      await expect(
-        page.getByRole('button', { name: 'Open AI chat assistant' })
-      ).not.toBeFocused();
+      await page.getByRole('button', { name: 'Focus origin' }).focus();
       await expect(page.locator('.ogabassey-offer-popup')).toBeVisible({
         timeout: 15_000,
       });
-      await page.getByRole('button', { name: 'Close ad' }).focus();
-      await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
-      await expect(
-        page.locator('button[aria-label="Open AI chat assistant"]')
-      ).not.toBeFocused();
-      await page.keyboard.press('Enter');
+      const launcher = page.getByRole('button', {
+        name: 'Open AI chat assistant',
+      });
+      const anchor = page.locator('.ogabassey-chat-anchor');
+      await expect(anchor).toHaveCSS('opacity', '0');
+      await expect(anchor).toHaveCSS('pointer-events', 'none');
+      let launcherReachedByTab = false;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await page.keyboard.press('Tab');
+        if (
+          await launcher.evaluate((button) => button === document.activeElement)
+        ) {
+          launcherReachedByTab = true;
+          break;
+        }
+      }
+      expect(launcherReachedByTab).toBe(true);
+      await expect(anchor).toBeVisible();
       await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
-      await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: 'Open AI chat assistant' })
-      ).toBeFocused();
       await page.keyboard.press('Enter');
       await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
     }

@@ -17,11 +17,15 @@ body:has(.ogabassey-newsletter-popup):not(
   .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
     :focus-within
   ):not([data-chat-launcher-dragging]) {
-  display: none;
+  /* Keep non-modal promotions visually in front while leaving the launcher
+     in keyboard order; focus-within makes the promotion yield. */
+  opacity: 0;
+  pointer-events: none;
 }
 body:has(.ogabassey-newsletter-popup :focus-visible)
   .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Keep promotional overlays from covering an active conversation. */
@@ -64,10 +68,12 @@ body:has(.ogabassey-chat-anchor[data-chat-launcher-offer-collision])
     .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)):not(
       :focus-within
     ):not([data-chat-launcher-dragging]):not([data-chat-launcher-positioned]) {
-    display: none;
+    opacity: 0;
+    pointer-events: none;
   }
   body:has(.ogabassey-offer-popup :focus-visible)
     .ogabassey-chat-anchor:not(:has(.ogabassey-chat-window)) {
-    display: none;
+    opacity: 0;
+    pointer-events: none;
   }
 }

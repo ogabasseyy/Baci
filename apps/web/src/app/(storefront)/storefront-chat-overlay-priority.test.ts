@@ -44,13 +44,25 @@ describe('storefront chat overlay priority CSS', () => {
 
   it('limits launcher suppression for the offer to narrow viewports', () => {
     expect(overlayCss).toMatch(
-      /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\):not\([\s\S]*?data-chat-promotion-focus-handoff[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?display:\s*none/
+      /@media\s*\(max-width:\s*423px\)[\s\S]*?body:has\(\.ogabassey-offer-popup\):not\(:has\(\.storefront-cookie-consent\)\):not\([\s\S]*?data-chat-promotion-focus-handoff[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?opacity:\s*0;\s*pointer-events:\s*none/
     );
     const narrowOfferRule = overlayCss.slice(
       overlayCss.indexOf('@media (max-width: 423px)')
     );
     expect(narrowOfferRule).toMatch(
       /\.ogabassey-chat-anchor[\s\S]*?:not\(\s*\[data-chat-launcher-positioned\]\s*\)/
+    );
+    expect(narrowOfferRule).toMatch(
+      /\.ogabassey-chat-anchor[\s\S]*?opacity:\s*0;\s*pointer-events:\s*none/
+    );
+  });
+
+  it('keeps promo-suppressed launchers keyboard reachable', () => {
+    expect(overlayCss).toMatch(
+      /body:has\(\.ogabassey-newsletter-popup\)[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?opacity:\s*0;\s*pointer-events:\s*none/
+    );
+    expect(overlayCss).toMatch(
+      /body:has\(\.ogabassey-offer-popup\)[\s\S]*?\.ogabassey-chat-anchor[\s\S]*?opacity:\s*0;\s*pointer-events:\s*none/
     );
   });
 });

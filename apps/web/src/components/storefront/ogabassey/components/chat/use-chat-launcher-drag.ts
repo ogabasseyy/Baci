@@ -39,6 +39,7 @@ export function useChatLauncherDrag(
   const dragged = useRef(false);
   const frame = useRef<number | null>(null);
   const viewportFrame = useRef<number | null>(null);
+  const viewportReclampPending = useRef(false);
   const isOpenRef = useRef(isOpen);
   const isHiddenRef = useRef(isHidden);
   const suppressedDragClick = useRef<{
@@ -81,7 +82,10 @@ export function useChatLauncherDrag(
   }
 
   function scheduleViewportReclamp() {
-    if (gesture.current) return;
+    if (gesture.current) {
+      viewportReclampPending.current = true;
+      return;
+    }
     if (viewportFrame.current !== null) return;
     viewportFrame.current = requestAnimationFrame(() => {
       viewportFrame.current = null;
@@ -95,7 +99,6 @@ export function useChatLauncherDrag(
     if (!target.matches('[data-chat-launcher-overflow]')) return;
     scheduleViewportReclamp();
   }
-
   useEffect(() => {
     const probe = document.createElement('div');
     probe.style.cssText =
@@ -127,7 +130,6 @@ export function useChatLauncherDrag(
         cancelAnimationFrame(viewportFrame.current);
     };
   }, []);
-
   useLayoutEffect(() => {
     if (!isOpen && !isHidden && position) reclampPosition();
   }, [constraintKey, isHidden, isOpen, overflowKey, position]);
@@ -161,7 +163,6 @@ export function useChatLauncherDrag(
     suppressedDragClick.current = null;
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
-
   function onKeyboardMove(event: ReactKeyboardEvent<HTMLButtonElement>) {
     if (isOpen || isHidden) return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -180,7 +181,6 @@ export function useChatLauncherDrag(
     event.preventDefault();
     commitPosition(next);
   }
-
   function updateGesturePosition(x: number, y: number) {
     const start = gesture.current;
     if (!start) return;
@@ -207,12 +207,10 @@ export function useChatLauncherDrag(
       anchorRef.current.style.transform = `translate3d(${base.x + next.x - left}px, ${base.y + next.y - top}px, 0)`;
     });
   }
-
   function onPointerMove(event: PointerEvent<HTMLButtonElement>) {
     if (gesture.current?.pointerId !== event.pointerId) return;
     updateGesturePosition(event.clientX, event.clientY);
   }
-
   function cancelGesture() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
@@ -225,8 +223,11 @@ export function useChatLauncherDrag(
         ? `translate3d(${position.x}px, ${position.y}px, 0)`
         : '';
     }
+    if (viewportReclampPending.current) {
+      viewportReclampPending.current = false;
+      scheduleViewportReclamp();
+    }
   }
-
   function finishGesture() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
@@ -245,18 +246,20 @@ export function useChatLauncherDrag(
         y: start.lastY,
       };
     }
+    if (viewportReclampPending.current) {
+      viewportReclampPending.current = false;
+      scheduleViewportReclamp();
+    }
   }
-
   function onPointerUp(event: PointerEvent<HTMLButtonElement>) {
     if (gesture.current?.pointerId !== event.pointerId) return;
-    // Pointer-up can carry the only event for the final part of a fast flick.
+    // Pointer-up may contain the final coordinates of a fast flick.
     updateGesturePosition(event.clientX, event.clientY);
     finishGesture();
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
-
   function suppressClick(event: Parameters<typeof isSuppressedChatLauncherDragClick>[0]) {
     const suppress = isSuppressedChatLauncherDragClick(
       event,
@@ -268,7 +271,6 @@ export function useChatLauncherDrag(
     if (event.detail === 0) dragged.current = false;
     return suppress;
   }
-
   const anchorStyle = getChatLauncherAnchorStyle(position, isOpen);
 
   return {

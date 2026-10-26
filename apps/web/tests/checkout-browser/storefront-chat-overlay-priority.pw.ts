@@ -33,6 +33,27 @@ test('mobile launcher advertises keyboard movement without snapping upward', asy
   expect(movedBounds.y).toBe(initialBounds.y);
 });
 
+test('consent focus handoff works with storefront overlay CSS', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/chat-launcher');
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await expect(launcher).toBeVisible();
+  await launcher.focus();
+
+  await page
+    .getByRole('button', { name: 'Show consent' })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+  const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
+  await expect(dismiss).toBeFocused();
+  await expect(page.locator('.ogabassey-chat-anchor')).toBeHidden();
+
+  await dismiss.click();
+  await expect(launcher).toBeFocused();
+  await expect(launcher).toBeVisible();
+});
+
 test('focused launcher remains reachable and pauses promotional overlays', async ({
   page,
 }) => {

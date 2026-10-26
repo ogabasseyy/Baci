@@ -31,6 +31,7 @@ import {
 } from './supabase-history-replay-savings-pending-sources';
 import { SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-savings-runtime-pending-sources';
 import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-search-pending-sources';
+import { combineReplaySourceBlocks } from './supabase-history-replay-source-blocks';
 import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-replay-storefront-cluster-guide-pending-sources';
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
@@ -215,7 +216,7 @@ f2b640bac8c3f3d41158313bc910aec6de0058cf652c47f0595c635bd98ecee1 20260803120000_
 7fb0cc1e0fa7f837bc4bf3eb233549d539875b96b072fb65b2edf25a582c9a91 20260804110000_quiz_final_results_and_product_winner.sql
 54feed9b89d28855d7d6f4bb83ea04d708f2d1e75c9cff814d6f49845d26e5bc 20260804120000_restore_storefront_order_private_schema_usage.sql
 ${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 300-line modularity limit
-const PENDING_SOURCES = [
+const PENDING_SOURCES = combineReplaySourceBlocks([
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,
@@ -288,10 +289,7 @@ const PENDING_SOURCES = [
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
   RECOVERED_STAGING_PENDING_REPLAY_SOURCE_ROWS,
-]
-  .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
-  .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })
-  .join('\n'); // biome-ignore format: keep the manifest at the 300-line modularity limit
+]);
 // One primary export (repo one-export-per-file rule): manifest module/tests destructure the collection.
 export const REPLAY_SOURCE_DATA = {
   PIPELINE_SOURCES,

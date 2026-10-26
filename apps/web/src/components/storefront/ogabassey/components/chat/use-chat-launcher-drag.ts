@@ -57,7 +57,6 @@ export function useChatLauncherDrag(
     pointerId: number;
     x: number;
     y: number;
-    releasedAt: number;
   } | null>(null);
   const safeAreaProbe = useRef<HTMLDivElement | null>(null);
 
@@ -223,7 +222,6 @@ export function useChatLauncherDrag(
         pointerId: start.pointerId,
         x: start.lastX,
         y: start.lastY,
-        releasedAt: performance.now(),
       };
     }
   }
@@ -241,19 +239,17 @@ export function useChatLauncherDrag(
   function suppressClick(event: ReactMouseEvent<HTMLButtonElement>) {
     const pending = suppressedDragClick.current;
     const nativeEvent = event.nativeEvent as MouseEvent & { pointerId?: number };
+    // The storefront targets the last two Safari releases, whose click events
+    // expose pointerId. Exact gesture correlation also leaves independent
+    // pointer-id-less assistive clicks available.
     const matchesRelease =
       pending &&
       event.detail > 0 &&
       Math.abs(event.clientX - pending.x) <= 2 &&
       Math.abs(event.clientY - pending.y) <= 2;
-    // Modern click events carry the originating pointer id. Older Safari
-    // dispatches a compatibility MouseEvent; correlate that immediate followup
-    // by release position and a short event-sequence window instead.
     const suppress = Boolean(
       matchesRelease &&
-        (nativeEvent.pointerId === pending.pointerId ||
-          (nativeEvent.pointerId === undefined &&
-            performance.now() - pending.releasedAt <= 250)),
+        nativeEvent.pointerId === pending.pointerId,
     );
     if (suppress) suppressedDragClick.current = null;
     if (event.detail === 0) dragged.current = false;

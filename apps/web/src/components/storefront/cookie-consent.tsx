@@ -2,6 +2,7 @@
 
 import { Cookie, Settings2, Shield, X } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -27,6 +28,28 @@ export function CookieConsent() {
   } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isVisible) {
+      const activeElement = document.activeElement;
+      if (
+        activeElement instanceof HTMLElement &&
+        activeElement.closest('.ogabassey-chat-anchor')
+      ) {
+        restoreFocusRef.current = activeElement;
+        dialogRef.current
+          ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+          ?.focus();
+      }
+      return;
+    }
+
+    const previousFocus = restoreFocusRef.current;
+    restoreFocusRef.current = null;
+    if (previousFocus?.isConnected) previousFocus.focus();
+  }, [isVisible]);
 
   if (!isVisible) return null;
 
@@ -44,6 +67,7 @@ export function CookieConsent() {
       }}
       role="dialog"
       aria-label="Cookie consent"
+      ref={dialogRef}
     >
       <div
         className={cn(

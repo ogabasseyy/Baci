@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CookieConsent, useCookieConsent } from './cookie-consent';
@@ -62,5 +62,29 @@ describe('CookieConsent', () => {
     expect(
       screen.getByRole('link', { name: /read our policy/i })
     ).toHaveAttribute('href', '/privacy');
+  });
+
+  it('moves focus into consent when it covers the chat and restores focus on dismiss', () => {
+    const { container } = render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button type="button">Assistant launcher</button>
+        </div>
+        <CookieConsent />
+      </>
+    );
+    const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+    launcher.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    const customizeButton = screen.getByRole('button', { name: 'Customize' });
+    expect(customizeButton).toHaveFocus();
+    expect(container.querySelector('.storefront-cookie-consent')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(launcher).toHaveFocus();
   });
 });

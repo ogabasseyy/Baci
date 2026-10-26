@@ -32,6 +32,30 @@ ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_
 -- window holds minutes of manual volume, so the timeout is a backstop,
 -- not an expected path. The NOT EXISTS anti-join keeps retries safe
 -- under non-transactional appliers by skipping already-enqueued rows.
+-- Burst fence: a long predeploy-to-postdeploy gap would mail the whole
+-- gap's manual volume at activation. Fail loud past a scan size no
+-- minutes-long deploy window can legitimately reach — single-row enqueue
+-- calls run orders of magnitude faster than this budget inside the 120s
+-- statement timeout below — so the operator splits the catch-up manually
+-- instead of burst-mailing it. Nothing is silently dropped: exceeding the
+-- budget aborts the migration for an explicit operator decision, and the
+-- NOT EXISTS anti-join keeps the manual retry safe.
+DO $$
+DECLARE
+  v_scanned integer;
+BEGIN
+  SELECT count(*) INTO v_scanned FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    );
+  IF v_scanned > 500 THEN
+    RAISE EXCEPTION 'manual-order activation backfill scanned % eligible orders (budget 500): keep the predeploy-to-postdeploy gap minutes-long or split the catch-up manually before enabling triggers', v_scanned;
+  END IF;
+END
+$$;
 -- Session SET (not LOCAL): the applier may run statements outside an
 -- explicit transaction, and RESET restores the default either way.
 SET statement_timeout = '120s';

@@ -61,7 +61,6 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/immediate-order/confirmation-email.ts',
       'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
       'apps/web/src/lib/send-manual-order-document.ts',
-      'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
@@ -74,6 +73,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/ads/server-spend-client.ts',
       'apps/web/src/lib/jumia/server-credential-client.ts',
       'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      'apps/web/src/lib/receipts/server-login-hint-client.ts',
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',

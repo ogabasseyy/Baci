@@ -13,6 +13,10 @@ describe('eventPipelineAuthorityServicePaths', () => {
         'apps/web/src/lib/loyalty/server-resolver-client.ts',
       ],
       [
+        'apps/web/src/app/api/storefront/receipts/claims/[token]/login-email/route.ts',
+        'apps/web/src/lib/receipts/server-login-hint-client.ts',
+      ],
+      [
         'apps/web/src/app/api/orders/route.ts',
         'apps/web/src/lib/checkout/prepare-loyalty-checkout.ts',
         'apps/web/src/lib/checkout/resolve-loyalty-checkout-code.ts',

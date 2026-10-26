@@ -11,6 +11,7 @@ import { adoptPreservedCart } from './shared-cart-preserved-session';
 import { isTerminalCart } from './shared-cart-queue';
 import {
   terminalCachePersisted,
+  terminalCheckpointPersisted,
   terminalConsumptionCheckpoint,
   unimportedTerminalLines,
 } from './terminal-cart-cache';
@@ -43,8 +44,9 @@ export async function adoptPreservedFallback(
     return null;
   }
   if (isTerminalCart(preserved.snapshot)) {
+    const cachedBeforeFilter = getCartFromStorage(merchantSlug);
     const preservedLines = unimportedTerminalLines(
-      getCartFromStorage(merchantSlug),
+      cachedBeforeFilter,
       preserved.snapshot.cartId,
       getSharedCartImportReceipt(merchantSlug)
     );
@@ -70,7 +72,26 @@ export async function adoptPreservedFallback(
       getSharedCartImportReceipt(merchantSlug),
       preserved.snapshot.cartId
     );
-    if (checkpoint) saveSharedCartImportReceipt(merchantSlug, checkpoint);
+    if (checkpoint) {
+      saveSharedCartImportReceipt(merchantSlug, checkpoint);
+      // The filtered cache and its checkpoint must land together:
+      // if the receipt write failed, roll the cache back so a reload
+      // cannot re-filter the remainder against the original receipt.
+      if (
+        !terminalCheckpointPersisted(
+          getSharedCartImportReceipt(merchantSlug),
+          preserved.snapshot.cartId
+        )
+      ) {
+        saveCartToStorage(cachedBeforeFilter, merchantSlug);
+        context.createRequestRef.current = null;
+        return {
+          ok: false,
+          code: 'temporarily_unavailable',
+          retryable: true,
+        };
+      }
+    }
     // The rejected create already dispatched import/started: reset
     // the pending import so provisioning re-plans the preserved lines
     // instead of sending an empty replacement create.

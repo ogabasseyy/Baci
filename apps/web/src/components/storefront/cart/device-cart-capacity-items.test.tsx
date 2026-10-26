@@ -258,11 +258,11 @@ it('keeps group-deal clearing for the first of two rapid removals', async () => 
   expect(removeCapacityLineFromLiveCart).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'Charger' }),
     'shop',
-    { clearGroupNegotiations: true }
+    expect.objectContaining({ clearGroupNegotiations: true })
   );
   expect(removeCapacityLineFromLiveCart).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'Cable' }),
     'shop',
-    { clearGroupNegotiations: false }
+    expect.objectContaining({ clearGroupNegotiations: false })
   );
 });

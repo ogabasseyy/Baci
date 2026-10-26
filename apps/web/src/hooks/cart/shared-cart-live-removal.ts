@@ -1,4 +1,5 @@
 import { cartLineIdentity } from '@baci/shared/cart';
+import { getCartCookieEpoch } from './cart-cross-tab-lock';
 import { hasActiveCartDeviceSession } from './cart-device-session-markers';
 import type { CartItem } from './cart-types';
 import {
@@ -7,6 +8,7 @@ import {
 } from './shared-cart-client';
 import { identityKeyOfDisplay } from './shared-cart-display-identity';
 import { isTerminalCart } from './shared-cart-queue';
+import { getCartSessionGeneration } from './shared-cart-storage';
 
 /**
  * Remove one saved device line from a live server cart that another tab
@@ -19,39 +21,68 @@ import { isTerminalCart } from './shared-cart-queue';
 async function clearLiveGroupNegotiations(
   merchantSlug: string
 ): Promise<boolean> {
-  const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
-  if (!fetched.ok) return false;
-  if (isTerminalCart(fetched.snapshot)) return true;
-  let version = fetched.snapshot.version;
-  for (const line of fetched.snapshot.lines) {
-    if (
-      line.negotiatedUnitPriceMinor == null &&
-      (line.negotiationStatus ?? 'none') === 'none'
-    )
-      continue;
-    const cleared = await sendSharedCartCommand(
-      {
-        command: {
-          type: 'set_negotiated_price',
-          lineId: line.id,
-          negotiatedUnitPriceMinor: null,
+  // Re-fetch and re-plan on conflict or indeterminate responses so a
+  // concurrent mutation cannot leave a partially-voided group deal.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const fetched = await fetchSharedCartSnapshot(undefined, merchantSlug);
+    if (!fetched.ok) return false;
+    if (isTerminalCart(fetched.snapshot)) return true;
+    let version = fetched.snapshot.version;
+    let replanned = false;
+    for (const line of fetched.snapshot.lines) {
+      if (
+        line.negotiatedUnitPriceMinor == null &&
+        (line.negotiationStatus ?? 'none') === 'none'
+      )
+        continue;
+      const cleared = await sendSharedCartCommand(
+        {
+          command: {
+            type: 'set_negotiated_price',
+            lineId: line.id,
+            negotiatedUnitPriceMinor: null,
+          },
+          expectedVersion: version,
+          operationId: crypto.randomUUID(),
         },
-        expectedVersion: version,
-        operationId: crypto.randomUUID(),
-      },
-      merchantSlug
-    );
-    if (!cleared.ok) return false;
-    version = cleared.snapshot.version;
+        merchantSlug
+      );
+      if (!cleared.ok) {
+        replanned = true;
+        break;
+      }
+      version = cleared.snapshot.version;
+    }
+    if (!replanned) return true;
   }
-  return true;
+  return false;
 }
 
 export async function removeCapacityLineFromLiveCart(
   selected: CartItem,
   merchantSlug: string,
-  options?: { clearGroupNegotiations?: boolean }
+  options?: {
+    clearGroupNegotiations?: boolean;
+    expectedEpoch?: string | null;
+    expectedGeneration?: number;
+  }
 ): Promise<boolean> {
+  // A newer capacity edit, retirement, or session generation since
+  // the parked-cache trim supersedes this reconciliation: a late
+  // removal must not subtract from a line re-added in the meantime.
+  const fenceCurrent = () => {
+    if (options?.expectedEpoch != null) {
+      const epochNow = getCartCookieEpoch(merchantSlug);
+      if (epochNow !== undefined && epochNow !== options.expectedEpoch)
+        return false;
+    }
+    if (
+      options?.expectedGeneration != null &&
+      getCartSessionGeneration(merchantSlug) !== options.expectedGeneration
+    )
+      return false;
+    return true;
+  };
   const key = identityKeyOfDisplay(selected);
   const findLine = (lines: import('@baci/shared/cart').CartSnapshot['lines']) =>
     lines.find(
@@ -94,6 +125,7 @@ export async function removeCapacityLineFromLiveCart(
     const line = findLine(snapshot.lines);
     if (!line) return true;
     const remainingQuantity = line.quantity - selected.quantity;
+    if (!fenceCurrent()) return true;
     const result = await sendSharedCartCommand(
       {
         command:

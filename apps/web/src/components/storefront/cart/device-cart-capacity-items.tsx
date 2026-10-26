@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
+  getCartCookieEpoch,
   rotateCartCookieEpoch,
   withCartCookieWrite,
 } from '@/hooks/cart/cart-cross-tab-lock';
@@ -19,7 +20,10 @@ import {
   identityKeyOfDisplay,
 } from '@/hooks/cart/shared-cart-display-identity';
 import { removeCapacityLineFromLiveCart } from '@/hooks/cart/shared-cart-live-removal';
-import { subscribeCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
+import {
+  getCartSessionGeneration,
+  subscribeCartSessionGeneration,
+} from '@/hooks/cart/shared-cart-storage';
 
 /** Edit only the parked merchant-scoped device cache, before any create exists. */
 export function DeviceCartCapacityItems({
@@ -55,6 +59,8 @@ export function DeviceCartCapacityItems({
     let applied = false;
     let removedRow: CartItem | null = null;
     let voidedGroupDeal = false;
+    let removalEpoch: string | null | undefined;
+    let removalGeneration: number | undefined;
     let write: Promise<unknown>;
     try {
       write = withCartCookieWrite(
@@ -65,6 +71,11 @@ export function DeviceCartCapacityItems({
           const appliedRemoval = applyRemoval(selected);
           removedRow = appliedRemoval?.row ?? null;
           voidedGroupDeal = appliedRemoval?.voidedGroupDeal ?? false;
+          // Capture the fence after the trim (which rotates the
+          // epoch) so a later edit or retirement supersedes the
+          // live reconciliation below.
+          removalEpoch = getCartCookieEpoch(merchantSlug);
+          removalGeneration = getCartSessionGeneration(merchantSlug);
           return Promise.resolve(undefined);
         },
         merchantSlug
@@ -100,6 +111,8 @@ export function DeviceCartCapacityItems({
         const removed: CartItem = removedRow;
         void removeCapacityLineFromLiveCart(removed, merchantSlug, {
           clearGroupNegotiations: voidedGroupDeal,
+          expectedEpoch: removalEpoch,
+          expectedGeneration: removalGeneration,
         }).then((ok) => {
           if (!ok)
             setError(

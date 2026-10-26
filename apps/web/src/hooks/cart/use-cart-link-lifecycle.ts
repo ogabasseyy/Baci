@@ -29,6 +29,7 @@ import {
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import {
   terminalCachePersisted,
+  terminalCheckpointPersisted,
   terminalConsumptionCheckpoint,
   unimportedTerminalLines,
 } from './terminal-cart-cache';
@@ -200,7 +201,21 @@ export function useCartLinkLifecycle(
             getSharedCartImportReceipt(merchantSlug),
             result.snapshot.cartId
           );
-          if (checkpoint) saveSharedCartImportReceipt(merchantSlug, checkpoint);
+          if (checkpoint) {
+            saveSharedCartImportReceipt(merchantSlug, checkpoint);
+            if (
+              !terminalCheckpointPersisted(
+                getSharedCartImportReceipt(merchantSlug),
+                result.snapshot.cartId
+              )
+            ) {
+              // Roll the filtered cache back so a reload cannot
+              // re-filter it against the original receipt.
+              saveCartToStorage(storedNow, merchantSlug);
+              retryAdopt(attempt, run);
+              return;
+            }
+          }
           adoptOutcomeRef.current = 'expired';
           await provision(attempt, run);
           return;

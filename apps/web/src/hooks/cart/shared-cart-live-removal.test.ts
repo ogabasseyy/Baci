@@ -237,3 +237,56 @@ it('reports failure when the live cart cannot be updated', async () => {
     removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
   ).resolves.toBe(false);
 });
+it('does not send a live removal when the removal fence is superseded', async () => {
+  vi.mocked(sendSharedCartCommand).mockClear();
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(snapshot(3) as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 1 }), 'shop', {
+      expectedEpoch: 'stale-epoch',
+    })
+  ).resolves.toBe(true);
+  // The fetch happens, but no command may be sent under a stale fence.
+  expect(sendSharedCartCommand).not.toHaveBeenCalled();
+});
+it('retries group-negotiation clearing after a version conflict', async () => {
+  const base = snapshot(2);
+  const negotiated = {
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        base.snapshot.lines[0],
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-2',
+          item: { productId: 'other-product' },
+          negotiatedUnitPriceMinor: 5000,
+          negotiationStatus: 'accepted',
+        },
+      ],
+    },
+  };
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(negotiated as never);
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 4 },
+    } as never)
+    .mockResolvedValueOnce({ ok: false, code: 'version_conflict' } as never)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 5 },
+    } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop', {
+      clearGroupNegotiations: true,
+    })
+  ).resolves.toBe(true);
+  const clearCalls = vi
+    .mocked(sendSharedCartCommand)
+    .mock.calls.filter(
+      (call) =>
+        (call[0].command as { type: string }).type === 'set_negotiated_price'
+    );
+  expect(clearCalls.length).toBeGreaterThanOrEqual(2);
+});

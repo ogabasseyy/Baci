@@ -97,3 +97,29 @@ it('checkpoints a persisted filter so re-filtering retains the remainder', async
   expect(refiltered).toHaveLength(1);
   expect(refiltered[0].quantity).toBe(2);
 });
+
+it('verifies a persisted consumption checkpoint', async () => {
+  const { terminalCheckpointPersisted } = await import('./terminal-cart-cache');
+  expect(
+    terminalCheckpointPersisted(
+      {
+        cartId: 'cart-1',
+        importedAt: '2026-10-26T00:00:00.000Z',
+        lineCount: 0,
+        consumedQuantities: { 'prod-1': 0 },
+      } as never,
+      'cart-1'
+    )
+  ).toBe(true);
+  expect(
+    terminalCheckpointPersisted(
+      {
+        cartId: 'cart-1',
+        importedAt: '2026-10-26T00:00:00.000Z',
+        lineCount: 1,
+        consumedQuantities: { 'prod-1': 1 },
+      } as never,
+      'cart-1'
+    )
+  ).toBe(false);
+});

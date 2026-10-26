@@ -51,6 +51,18 @@ export function terminalConsumptionCheckpoint(
   };
 }
 
+/** Verify a checkpointed receipt actually landed in storage. */
+export function terminalCheckpointPersisted(
+  receipt: SharedCartImportReceipt | null,
+  terminalCartId: string
+): boolean {
+  if (!receipt || receipt.cartId !== terminalCartId) return false;
+  if (receipt.lineCount !== 0) return false;
+  return Object.values(receipt.consumedQuantities ?? {}).every(
+    (quantity) => quantity === 0
+  );
+}
+
 /** A stable server line ID marks consumed canonical data, not a new device import. */
 export function unimportedTerminalLines(
   cached: SharedCartDisplayItem[],

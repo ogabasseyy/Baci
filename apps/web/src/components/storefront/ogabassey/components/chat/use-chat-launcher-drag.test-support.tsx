@@ -63,7 +63,7 @@ function Harness({
   );
 }
 
-function setup() {
+export function setup() {
   let frame: FrameRequestCallback | undefined;
   let notifyResizeObserver: ResizeObserverCallback | undefined;
   vi.stubGlobal(

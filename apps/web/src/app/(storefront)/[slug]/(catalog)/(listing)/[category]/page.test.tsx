@@ -335,6 +335,9 @@ const smartphoneHubProducts = [
     price: 480000,
     main_camera_mp: 50,
     battery_mah: 5000,
+    charging_watt: 25,
+    ram_gb: 12,
+    storage_gb: 256,
   }),
   makeSmartphoneProduct(7, {
     name: 'Tecno C',

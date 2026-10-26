@@ -87,6 +87,7 @@ export function verifyPriceBandLinkAgainstDestination(args: {
         rightProduct,
       }).isIndexable;
     }
-    return true;
+    // Fail closed: only best-under and compare shapes are verifiable here.
+    return false;
   });
 }

@@ -69,6 +69,16 @@ describe('verifyPriceBandLinkAgainstDestination', () => {
     ).toEqual([]);
   });
 
+  it('drops unrecognized link shapes instead of keeping them unverified', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [{ href: 'https://shop.test/smartphones/guides/x', label: 'X' }],
+        compareProducts: [],
+      })
+    ).toEqual([]);
+  });
+
   it('drops unverifiable compare links when no compare inventory is available', () => {
     expect(
       verifyPriceBandLinkAgainstDestination({

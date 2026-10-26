@@ -29,3 +29,60 @@ describe('proxy CSP', () => {
     expect(forwarded).toContain(`'nonce-${nonce}'`);
   });
 });
+
+const socialScriptOrigins = [
+  'https://connect.facebook.net',
+  'https://analytics.tiktok.com',
+  'https://sc-static.net',
+  'https://static.ads-twitter.com',
+];
+const socialCollectorOrigins = [
+  'https://www.facebook.com',
+  'https://analytics.tiktok.com',
+  'https://tr.snapchat.com',
+  'https://tr6.snapchat.com',
+  'https://analytics.twitter.com',
+  'https://analytics.x.com',
+  'https://t.co',
+];
+function directive(policy: string, name: string): string[] {
+  return (
+    policy
+      .split('; ')
+      .find((part) => part.startsWith(`${name} `))
+      ?.split(' ')
+      .slice(1) ?? []
+  );
+}
+it('permits consent-gated social SDKs and collectors only on storefronts', () => {
+  const policy = generateCSP('storefront', false);
+  expect(directive(policy, 'script-src')).toEqual(
+    expect.arrayContaining(socialScriptOrigins)
+  );
+  expect(directive(policy, 'connect-src')).toEqual(
+    expect.arrayContaining(socialCollectorOrigins)
+  );
+  expect(directive(policy, 'script-src')).not.toContain("'unsafe-eval'");
+  expect(directive(policy, 'default-src')).toEqual(["'self'"]);
+  for (const source of [
+    ...directive(policy, 'script-src'),
+    ...directive(policy, 'connect-src'),
+  ]) {
+    expect(source).not.toMatch(
+      /\*\.(facebook|tiktok|snapchat|twitter|x)\.(com|net)/
+    );
+  }
+});
+it.each([
+  'admin',
+  'auth',
+  'api',
+] as const)('keeps social SDKs and collectors out of %s CSP', (route) => {
+  const policy = generateCSP(route, false, 'test_nonce');
+  for (const origin of [...socialScriptOrigins, ...socialCollectorOrigins])
+    expect(policy).not.toContain(origin);
+  if (route !== 'api') {
+    expect(directive(policy, 'script-src')).toContain("'nonce-test_nonce'");
+    expect(directive(policy, 'script-src')).not.toContain("'unsafe-inline'");
+  }
+});

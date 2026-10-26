@@ -69,6 +69,8 @@ export interface OrderConversionData {
   userAgent?: string; // Client user agent
   eventId?: string; // For deduplication between Pixel and CAPI
   // Privacy compliance
+  analyticsConsent?: boolean;
+  marketingConsent?: boolean;
   limitedDataUse?: boolean; // CCPA/LDU flag - restricts data processing
 }
 
@@ -93,7 +95,11 @@ export async function sendPurchaseConversion(
   const promises: Promise<void>[] = [];
 
   // Facebook CAPI
-  if (merchantConfig.facebook_pixel_id && merchantConfig.facebook_capi_token) {
+  if (
+    orderData.analyticsConsent === true &&
+    merchantConfig.facebook_pixel_id &&
+    merchantConfig.facebook_capi_token
+  ) {
     const fbPromise = sendFacebookConversion(
       merchantConfig.facebook_pixel_id,
       merchantConfig.facebook_capi_token,
@@ -105,7 +111,11 @@ export async function sendPurchaseConversion(
   }
 
   // TikTok Events API
-  if (merchantConfig.tiktok_pixel_id && merchantConfig.tiktok_access_token) {
+  if (
+    orderData.marketingConsent === true &&
+    merchantConfig.tiktok_pixel_id &&
+    merchantConfig.tiktok_access_token
+  ) {
     const ttPromise = sendTikTokConversion(
       merchantConfig.tiktok_pixel_id,
       merchantConfig.tiktok_access_token,
@@ -117,7 +127,11 @@ export async function sendPurchaseConversion(
   }
 
   // GA4 Measurement Protocol
-  if (merchantConfig.google_analytics_id && merchantConfig.ga4_api_secret) {
+  if (
+    orderData.analyticsConsent === true &&
+    merchantConfig.google_analytics_id &&
+    merchantConfig.ga4_api_secret
+  ) {
     const gaPromise = sendGA4Conversion(
       merchantConfig.google_analytics_id,
       merchantConfig.ga4_api_secret,
@@ -129,7 +143,11 @@ export async function sendPurchaseConversion(
   }
 
   // Snapchat CAPI
-  if (merchantConfig.snapchat_pixel_id && merchantConfig.snapchat_capi_token) {
+  if (
+    orderData.marketingConsent === true &&
+    merchantConfig.snapchat_pixel_id &&
+    merchantConfig.snapchat_capi_token
+  ) {
     const snapPromise = sendSnapchatConversion(
       merchantConfig.snapchat_pixel_id,
       merchantConfig.snapchat_capi_token,

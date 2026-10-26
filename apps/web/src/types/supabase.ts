@@ -6170,6 +6170,55 @@ export type Database = {
           },
         ];
       };
+      merchant_x_ads_credentials: {
+        Row: {
+          consumer_key: string;
+          consumer_secret: string;
+          access_token: string;
+          access_token_secret: string;
+          merchant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          consumer_key: string;
+          consumer_secret: string;
+          access_token: string;
+          access_token_secret: string;
+          merchant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          consumer_key?: string;
+          consumer_secret?: string;
+          access_token?: string;
+          access_token_secret?: string;
+          merchant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_x_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'merchant_x_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'merchant_x_ads_credentials_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: true;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+        ];
+      };
       merchant_feature_settings: {
         Row: {
           about_page_enabled: boolean | null;
@@ -6238,6 +6287,7 @@ export type Database = {
           tiktok_access_token: string | null;
           tiktok_pixel_id: string | null;
           twitter_pixel_id: string | null;
+          twitter_event_ids: Json;
           updated_at: string | null;
           vtu_airtime_enabled: boolean | null;
           vtu_betting_enabled: boolean | null;
@@ -6322,6 +6372,7 @@ export type Database = {
           tiktok_access_token?: string | null;
           tiktok_pixel_id?: string | null;
           twitter_pixel_id?: string | null;
+          twitter_event_ids?: Json;
           updated_at?: string | null;
           vtu_airtime_enabled?: boolean | null;
           vtu_betting_enabled?: boolean | null;
@@ -6406,6 +6457,7 @@ export type Database = {
           tiktok_access_token?: string | null;
           tiktok_pixel_id?: string | null;
           twitter_pixel_id?: string | null;
+          twitter_event_ids?: Json;
           updated_at?: string | null;
           vtu_airtime_enabled?: boolean | null;
           vtu_betting_enabled?: boolean | null;
@@ -16382,6 +16434,17 @@ export type Database = {
           p_disconnect?: boolean;
           p_merchant_id: string;
           p_pixel_id?: string;
+        };
+
+        save_x_ads_settings: {
+          Args: {
+            p_merchant_id: string;
+            p_pixel_id: string | null;
+            p_event_ids?: Json;
+            p_credentials?: Json;
+            p_disconnect?: boolean;
+          };
+          Returns: undefined;
         };
         Returns: undefined;
       };

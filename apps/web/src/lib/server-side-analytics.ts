@@ -2,7 +2,8 @@
  * Server-Side Analytics Service
  *
  * Unified interface for sending events to all server-side analytics platforms.
- * This should be called from checkout/purchase flows for accurate tracking.
+ * Browser checkout observations are queued through consent-aware ingress.
+ * Confirmed paid conversions use triggerPurchaseConversion instead.
  *
  * Supported platforms:
  * - Google Analytics 4 (Measurement Protocol)
@@ -11,7 +12,7 @@
  * - Snapchat Conversions API
  *
  * Benefits of server-side tracking:
- * - Bypasses ad blockers (captures 100% of events)
+ * - Separates queue acceptance from provider delivery
  * - More accurate attribution
  * - Better privacy compliance
  * - Reduced client-side JavaScript
@@ -19,6 +20,7 @@
 
 import { getAppUrl } from '@/env';
 import { sendFacebookClientObservation } from './analytics/send-facebook-client-observation';
+import { sendSocialClientObservation } from './analytics/send-social-client-observation';
 
 export interface ServerAnalyticsUserData {
   email?: string;
@@ -84,9 +86,19 @@ export async function sendServerSideAnalytics(
   options?: {
     eventSourceUrl?: string;
     eventId?: string;
+    socialAlreadyQueued?: boolean;
     clientId?: string; // GA4 client ID from _ga cookie
   }
 ): Promise<AnalyticsResult[]> {
+  // Only confirmed server payment handling may originate paid conversions.
+  if (event === 'purchase') {
+    return ['GA4', 'Facebook', 'TikTok', 'Snapchat'].map((platform) => ({
+      platform,
+      success: false,
+      sent: false,
+      error: 'untrusted_purchase',
+    }));
+  }
   const results: AnalyticsResult[] = [];
   const baseUrl = getBaseUrl();
 
@@ -148,13 +160,11 @@ export async function sendServerSideAnalytics(
 
   // 2. Facebook Conversions API
   const fbEvent =
-    event === 'purchase'
-      ? 'Purchase'
-      : event === 'begin_checkout'
-        ? 'InitiateCheckout'
-        : event === 'add_to_cart'
-          ? 'AddToCart'
-          : 'ViewContent';
+    event === 'begin_checkout'
+      ? 'InitiateCheckout'
+      : event === 'add_to_cart'
+        ? 'AddToCart'
+        : 'ViewContent';
 
   requests.push(
     sendFacebookClientObservation({
@@ -170,74 +180,24 @@ export async function sendServerSideAnalytics(
     })
   );
 
-  // 3. TikTok Events API
-  requests.push(
-    fetch(`${baseUrl}/api/analytics/tiktok`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event,
-        merchantId,
-        userData: {
-          email: userData.email,
-          phone: userData.phone,
-          externalId: userData.externalId,
-        },
-        eventData: commonEventData,
-      }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        results.push({
-          platform: 'TikTok',
-          success: data.success ?? false,
-          error: data.error,
-          sent: data.sent !== false,
-        });
-      })
-      .catch((error) => {
-        results.push({
-          platform: 'TikTok',
-          success: false,
-          error: error.message,
-          sent: false,
-        });
-      })
-  );
-
-  // 4. Snapchat Conversions API
-  requests.push(
-    fetch(`${baseUrl}/api/analytics/snapchat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event,
-        merchantId,
-        userData: {
-          email: userData.email,
-          phone: userData.phone,
-        },
-        eventData: commonEventData,
-      }),
-    })
-      .then(async (res) => {
-        const data = await res.json();
-        results.push({
-          platform: 'Snapchat',
-          success: data.success ?? false,
-          error: data.error,
-          sent: data.sent !== false,
-        });
-      })
-      .catch((error) => {
-        results.push({
-          platform: 'Snapchat',
-          success: false,
-          error: error.message,
-          sent: false,
-        });
-      })
-  );
+  // Storefront trackEvent already owns its generic durable observation. Avoid
+  // enqueuing the same checkout again through compatibility endpoints.
+  if (!options?.socialAlreadyQueued) {
+    for (const destination of ['tiktok', 'snapchat'] as const) {
+      requests.push(
+        sendSocialClientObservation(destination, {
+          baseUrl,
+          event,
+          merchantId,
+          eventData: commonEventData,
+          eventId: options?.eventId,
+          eventSourceUrl: options?.eventSourceUrl,
+        }).then((result) => {
+          results.push(result);
+        })
+      );
+    }
+  }
 
   // Wait for all requests to complete
   await Promise.allSettled(requests);
@@ -246,7 +206,8 @@ export async function sendServerSideAnalytics(
 }
 
 /**
- * Convenience function for tracking purchases
+ * Compatibility purchase entry point; refuses untrusted client purchase claims.
+ * Confirmed payments must use triggerPurchaseConversion from server payment handling.
  */
 export async function trackServerSidePurchase(
   merchantId: string,
@@ -255,7 +216,11 @@ export async function trackServerSidePurchase(
   currency: string,
   products: ServerAnalyticsProduct[],
   customer: ServerAnalyticsUserData,
-  options?: { eventSourceUrl?: string; clientId?: string }
+  options?: {
+    eventSourceUrl?: string;
+    clientId?: string;
+    socialAlreadyQueued?: boolean;
+  }
 ): Promise<AnalyticsResult[]> {
   return await sendServerSideAnalytics(
     merchantId,
@@ -280,7 +245,11 @@ export async function trackServerSideBeginCheckout(
   currency: string,
   products: ServerAnalyticsProduct[],
   customer?: ServerAnalyticsUserData,
-  options?: { eventSourceUrl?: string; clientId?: string }
+  options?: {
+    eventSourceUrl?: string;
+    clientId?: string;
+    socialAlreadyQueued?: boolean;
+  }
 ): Promise<AnalyticsResult[]> {
   return await sendServerSideAnalytics(
     merchantId,

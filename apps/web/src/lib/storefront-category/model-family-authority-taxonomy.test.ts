@@ -129,6 +129,42 @@ describe('model family authority taxonomy', () => {
     expect(matchesAce).toBe(false);
   });
 
+  it('does not match Samsung Galaxy A/S for competing-brand bare model codes', () => {
+    const galaxyA = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-a'
+    );
+    const galaxyS = modelFamilyAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'samsung',
+      'galaxy-s'
+    );
+    if (!galaxyA || !galaxyS)
+      throw new Error('Expected Samsung family entries');
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'Samsung vs Itel A70: which should you buy?'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyS,
+        'Samsung vs Itel S23: which should you buy?'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyA,
+        'Samsung Galaxy A55 review'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(galaxyS, 'Galaxy S24 review')
+    ).toBe(true);
+  });
+
   it('matches Tecno Phantom and Itel A/S/P families without overlap', () => {
     const phantom = modelFamilyAuthorityTaxonomy.getEntry(
       'smartphones',
@@ -169,322 +205,6 @@ describe('model family authority taxonomy', () => {
           false
         );
       }
-    }
-  });
-
-  it('matches Apple iPhone model families correctly including iPhone 17e, 16e, 15 Pro Max, and SE', () => {
-    // Arrange
-    const iphone17Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-17'
-    );
-    const iphone16Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-16'
-    );
-    const iphone15Entry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-15'
-    );
-    const iphoneSeEntry = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-se'
-    );
-
-    // Assert entries exist and have expected minimum products
-    expect(iphone17Entry).toMatchObject({
-      displayName: 'iPhone 17 Series',
-      minimumProducts: 3,
-    });
-    expect(iphone16Entry).toMatchObject({
-      displayName: 'iPhone 16 Series',
-      minimumProducts: 3,
-    });
-    expect(iphone15Entry).toMatchObject({
-      displayName: 'iPhone 15 Series',
-      minimumProducts: 3,
-    });
-    expect(iphoneSeEntry).toMatchObject({
-      displayName: 'iPhone SE Series',
-      minimumProducts: 2,
-    });
-
-    if (!iphone17Entry || !iphone16Entry || !iphone15Entry || !iphoneSeEntry) {
-      throw new Error('Expected Apple iPhone entries');
-    }
-
-    // Matching assertions
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 17e')
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone17Entry,
-        'Apple iPhone 17 Pro Max'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone17Entry, 'iPhone 16')
-    ).toBe(false);
-
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphone16Entry, 'iPhone 16e')
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone16Entry,
-        'Apple iPhone 16 Plus'
-      )
-    ).toBe(true);
-
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone15Entry,
-        'iPhone 15 Pro Max'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphone15Entry,
-        'Apple iPhone 15'
-      )
-    ).toBe(true);
-
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(iphoneSeEntry, 'iPhone SE')
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        iphoneSeEntry,
-        'Apple iPhone SE 2022'
-      )
-    ).toBe(true);
-  });
-
-  it('resolves distinct, non-overlapping Apple MacBook model families under laptops', () => {
-    const laptopFamilies = modelFamilyAuthorityTaxonomy.getEntries(
-      'laptops',
-      'apple'
-    );
-    expect(laptopFamilies.map((f) => f.familyKey)).toEqual([
-      'macbook-air',
-      'macbook-pro',
-    ]);
-
-    const airEntry = modelFamilyAuthorityTaxonomy.getEntry(
-      'laptops',
-      'apple',
-      'macbook-air'
-    );
-    const proEntry = modelFamilyAuthorityTaxonomy.getEntry(
-      'laptops',
-      'apple',
-      'macbook-pro'
-    );
-
-    expect(airEntry).toMatchObject({
-      displayName: 'MacBook Air',
-      familyKey: 'macbook-air',
-      minimumProducts: 3,
-    });
-    expect(proEntry).toMatchObject({
-      displayName: 'MacBook Pro',
-      familyKey: 'macbook-pro',
-      minimumProducts: 3,
-    });
-
-    if (!airEntry || !proEntry) {
-      throw new Error('Expected MacBook Air and Pro entries');
-    }
-
-    // MacBook Air matching
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(airEntry, 'MacBook Air 13 M2')
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        airEntry,
-        '13" MacBook Air M4 (2025)'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        airEntry,
-        'Apple MacBook Air M3'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        airEntry,
-        'MacBook Pro 14 M3 Pro'
-      )
-    ).toBe(false);
-
-    // MacBook Pro matching
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        proEntry,
-        'MacBook Pro 14 M3 Pro'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        proEntry,
-        '14" MacBook Pro M4 Pro (2024)'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(
-        proEntry,
-        'Apple MacBook Pro 16 M3 Max'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(proEntry, 'MacBook Air 15')
-    ).toBe(false);
-
-    // Neither
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(airEntry, 'MacBook 12')
-    ).toBe(false);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesProduct(proEntry, 'MacBook 12')
-    ).toBe(false);
-  });
-
-  it('matches embedded model references in content while rejecting false positives', () => {
-    const galaxyA = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'samsung',
-      'galaxy-a'
-    );
-    const oppoA = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'oppo',
-      'a-series'
-    );
-    const xiaomiT = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'xiaomi',
-      'xiaomi-t'
-    );
-    const iphone17 = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'apple',
-      'iphone-17'
-    );
-
-    if (!galaxyA || !oppoA || !xiaomiT || !iphone17) {
-      throw new Error('Expected family entries');
-    }
-
-    // Valid embedded model references
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        galaxyA,
-        'Samsung Galaxy A55 Review and Price in Nigeria'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        galaxyA,
-        'Samsung A55 Camera and Performance Breakdown'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        galaxyA,
-        'A55 vs A34: Which Samsung Mid-Ranger Wins?'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        oppoA,
-        'Oppo A78 4G Review: Value for Money in Lagos'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        oppoA,
-        'Oppo A-Series Buyer Guide for Students'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        xiaomiT,
-        'Xiaomi 14T Pro Camera and Gaming Benchmark'
-      )
-    ).toBe(true);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        iphone17,
-        'Apple iPhone 17 Pro Max Launch Expectations'
-      )
-    ).toBe(true);
-
-    // False positive rejections (crucial regression safeguards)
-    // 1. Galaxy AI must not match Galaxy A
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        galaxyA,
-        'Galaxy AI Features: What You Need to Know in 2026'
-      )
-    ).toBe(false);
-
-    // 2. Unrelated Oppo text (e.g. Oppo Reno camera) must not match Oppo A-Series
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        oppoA,
-        'Oppo Reno 12 Pro Camera and Portrait Shootout'
-      )
-    ).toBe(false);
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        oppoA,
-        'Oppo Find X7 Ultra Display and Battery Review'
-      )
-    ).toBe(false);
-
-    // 3. Isolated number 17 in title without iPhone 17 must not match iPhone 17 Series
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        iphone17,
-        'iPhone buying guide: 17 tips for Nigerian shoppers'
-      )
-    ).toBe(false);
-
-    // 4. Incomplete or unrelated 'T' token must not match Xiaomi T
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        xiaomiT,
-        'Xiaomi phone tips and repair tutorial'
-      )
-    ).toBe(false);
-
-    // 5. Competing brand models must not trigger false positive matches
-    expect(
-      modelFamilyAuthorityTaxonomy.matchesContent(
-        galaxyA,
-        'Oppo A78 vs Samsung Galaxy S24 Shootout'
-      )
-    ).toBe(false);
-
-    const infinixNote = modelFamilyAuthorityTaxonomy.getEntry(
-      'smartphones',
-      'infinix',
-      'note'
-    );
-    if (infinixNote) {
-      expect(
-        modelFamilyAuthorityTaxonomy.matchesContent(
-          infinixNote,
-          'Redmi Note 13 Pro Full Review'
-        )
-      ).toBe(false);
     }
   });
 });

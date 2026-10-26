@@ -172,6 +172,29 @@ export async function buildInformationalClusterModel(
       categorySlug,
       products,
     });
+    // Only brands the article actually matches can emit links, so only
+    // those hubs need destination verification (family hubs follow parent).
+    const matchedBrandKeys = new Set<string>();
+    for (const inferredBrand of inferred.brands) {
+      const hub = resolvedHubs.brandHubs.find((candidate) => {
+        if (
+          generateSlug(candidate.brand_key ?? '') ===
+          generateSlug(inferredBrand)
+        ) {
+          return true;
+        }
+        const entry = brandAuthorityTaxonomy.getEntry(
+          categorySlug,
+          candidate.brand_key ?? ''
+        );
+        return entry
+          ? brandAuthorityTaxonomy.matchesBrand(entry, inferredBrand)
+          : false;
+      });
+      if (hub?.brand_key) {
+        matchedBrandKeys.add(hub.brand_key);
+      }
+    }
     // Override data is caller-authoritative; the live path must agree with
     // the destination pages' hydrated inventory before linking to a hub.
     const eligibleHubs = input.categoryDataOverride
@@ -179,9 +202,15 @@ export async function buildInformationalClusterModel(
       : await verifyEligibleHubsAgainstDestination({
           merchantId: input.merchantId,
           categorySlug,
-          hubs: resolvedHubs,
+          hubs: {
+            brandHubs: resolvedHubs.brandHubs.filter(
+              (hub) => hub.brand_key && matchedBrandKeys.has(hub.brand_key)
+            ),
+            familyHubs: resolvedHubs.familyHubs.filter(
+              (hub) => hub.brand_key && matchedBrandKeys.has(hub.brand_key)
+            ),
+          },
         });
-    const matchedBrandKeys = new Set<string>();
     for (const inferredBrand of inferred.brands) {
       const matchingBrandHub = eligibleHubs.brandHubs.find((hub) => {
         if (generateSlug(hub.brand_key ?? '') === generateSlug(inferredBrand)) {

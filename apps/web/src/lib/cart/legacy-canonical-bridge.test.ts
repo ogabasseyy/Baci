@@ -182,6 +182,54 @@ it('refuses product-only changes that could select voucher or condition siblings
   expect(deps.mutate).not.toHaveBeenCalled();
 });
 
+it('targets the sole exact-offer line by id for product-only edits instead of adding a condition-only duplicate', async () => {
+  const { deps } = setup();
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      version: 4,
+      lines: [{ ...state.lines[0], id: 'offer-line', offerId }],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await operateLegacyCanonicalCart(cart, {
+    edit: { productId, quantity: 2 },
+    expectedVersion: 4,
+    operationId: 'op-offer-edit',
+  });
+  expect(deps.mutate).toHaveBeenCalledWith(expect.anything(), {
+    cartId,
+    command: { type: 'set_quantity', lineId: 'offer-line', quantity: 2 },
+    expectedVersion: 4,
+    operationId: 'op-offer-edit',
+  });
+});
+
+it('refuses product-only edits when condition-only and exact-offer lanes both exist', async () => {
+  const { deps } = setup();
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      lines: [state.lines[0], { ...state.lines[0], id: 'offer-line', offerId }],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await expect(
+    operateLegacyCanonicalCart(cart, { edit: { productId, quantity: 2 } })
+  ).rejects.toMatchObject({ code: 'refresh_required' });
+  expect(deps.mutate).not.toHaveBeenCalled();
+});
+
 it('reads authoritative revision four after replaying a revision two mutation receipt', async () => {
   const { deps } = setup();
   const current = { ...state, version: 4 };

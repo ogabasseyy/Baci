@@ -6,7 +6,7 @@ import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.t
 import { supabaseHistoryReplayManifest as manifest } from './supabase-history-replay-manifest';
 
 it('pins every cart addition as pending, never as deployed replay evidence', async () => {
-  expect(EXPECTED_CART_PENDING_SOURCES).toHaveLength(89);
+  expect(EXPECTED_CART_PENDING_SOURCES).toHaveLength(91);
   for (const source of EXPECTED_CART_PENDING_SOURCES) {
     expect(
       manifest.pendingSources.filter(

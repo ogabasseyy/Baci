@@ -122,7 +122,7 @@ BEGIN
     'snapshot dropped stored offer ids'
   );
 
-  result := public.commerce_cart_prepare_checkout(cart, 4, 'offer-checkout');
+  result := public.commerce_cart_prepare_checkout(cart, 5, 'offer-checkout');
   PERFORM pg_temp.check_cart_offer(
     result->>'ok' = 'true'
       AND (SELECT count(*) = 2 FROM jsonb_array_elements(result->'snapshot'->'lines') line WHERE line->>'offerId' IN (offer_a::text, offer_b::text)),

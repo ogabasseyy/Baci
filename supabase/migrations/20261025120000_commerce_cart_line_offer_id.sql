@@ -109,7 +109,7 @@ $$;
 
 REVOKE ALL ON FUNCTION public.commerce_cart_offer_price_minor(uuid, uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE FUNCTION pg_temp.patch_cart_fn(
+CREATE OR REPLACE FUNCTION pg_temp.patch_cart_fn(
   signature text,
   old text,
   replacement text,
@@ -561,7 +561,7 @@ SELECT pg_temp.patch_cart_fn(
   'public.commerce_cart_redeem_handoff(text,uuid,text,text,text,uuid,integer,integer,jsonb,jsonb)',
   $old$      AND coalesce(line->'item'->'options','{}'::jsonb)=coalesce(l.options,'{}'::jsonb))) THEN$old$,
   $new$      AND coalesce(line->'item'->'options','{}'::jsonb)=coalesce(l.options,'{}'::jsonb)
-      AND nullif(line->'item'->>'offerId','') IS NOT DISTINCT FROM l.offer_id::text))) THEN$new$,
+      AND nullif(line->'item'->>'offerId','') IS NOT DISTINCT FROM l.offer_id::text)) THEN$new$,
   1
 );
 

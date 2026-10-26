@@ -38,7 +38,7 @@ $$;
 REVOKE ALL ON FUNCTION public.commerce_cart_negotiation_status(uuid, uuid, uuid, text, bigint, text, uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE FUNCTION pg_temp.patch_cart_fn(
+CREATE OR REPLACE FUNCTION pg_temp.patch_cart_fn(
   signature text,
   old text,
   replacement text,

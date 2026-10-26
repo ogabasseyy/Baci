@@ -112,22 +112,8 @@ describe('checkCartQuota degraded store', () => {
         subject: 'ip-degraded',
       })
     ).resolves.toMatchObject({ allowed: false, remaining: 0 });
-    await expect(
-      checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'bootstrap',
-        subject: 'ip-degraded',
-      })
-    ).resolves.toMatchObject({ allowed: false });
-    // Cart creation and handoff redemption materialize carts/grants
-    // from anonymous capabilities, so they fail closed too.
-    await expect(
-      checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'create',
-        subject: 'ip-degraded',
-      })
-    ).resolves.toMatchObject({ allowed: false });
+    // Handoff redemption materializes grants from anonymous
+    // capabilities, so it fails closed too.
     await expect(
       checkCartQuota({
         merchantId: MERCHANT_ID,
@@ -150,6 +136,28 @@ describe('checkCartQuota degraded store', () => {
         subject: 'ip-degraded',
       })
     ).resolves.toMatchObject({ allowed: false });
+  });
+
+  it('keeps bootstrap and create on the degraded memory budget in production', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    // A Redis outage must not blank every shopper's cart: bootstrap is
+    // a stateless proof mint and create is bounded by its database
+    // operation receipt, so both degrade like authenticated reads.
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: true });
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'create',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: true });
   });
 
   it('fails revocation closed in production without Redis', async () => {
@@ -209,7 +217,7 @@ describe('checkCartQuota degraded store', () => {
       await expect(
         checkCartQuota({
           merchantId: MERCHANT_ID,
-          operation: 'bootstrap',
+          operation: 'handoff_preview',
           subject: 'ip-malformed',
         })
       ).resolves.toMatchObject({ allowed: false, remaining: 0 });
@@ -222,7 +230,7 @@ describe('checkCartQuota degraded store', () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');
     for (let index = 0; index <= MEMORY_COUNTER_MAX_ENTRIES; index++) {
-      for (const operation of ['bootstrap', 'account_link'] as const) {
+      for (const operation of ['handoff_redeem', 'account_link'] as const) {
         await expect(
           checkCartQuota({
             merchantId: MERCHANT_ID,

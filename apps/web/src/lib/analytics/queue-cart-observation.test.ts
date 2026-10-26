@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
+import { conversionEventRequestSchema } from '@/schemas/conversion-event';
+import { normalizeEventType } from './normalize-ad-platform-event-type';
 import { queueCartObservation } from './queue-cart-observation';
 
 afterEach(() => {
@@ -62,4 +64,49 @@ it('handles a network failure without blocking the cart', async () => {
     queueCartObservation([], 'NGN', 'event', 'merchant')
   ).resolves.toBeUndefined();
   expect(warn).toHaveBeenCalledWith('Cart observation could not be queued');
+});
+
+it('queues a cart view accepted by the conversion transport and event normalizer', async () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: false,
+    })
+  );
+  const fetcher = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', fetcher);
+  const merchantId = '22222222-2222-4222-8222-222222222222';
+  await queueCartObservation(
+    [
+      {
+        product: { id: 'phone', name: 'Phone', price: 300 } as Product,
+        quantity: 2,
+      },
+    ],
+    'NGN',
+    'cart-view-identity',
+    merchantId
+  );
+  const [endpoint, request] = fetcher.mock.calls[0];
+  expect(endpoint).toBe('/api/analytics/conversion');
+  expect(request.method).toBe('POST');
+  const payload = conversionEventRequestSchema.parse(JSON.parse(request.body));
+  expect(normalizeEventType(payload.event_name)).toBe('product_view');
+  expect(payload).toMatchObject({
+    event_id: 'cart-view-identity',
+    merchant_id: merchantId,
+    event_source: 'web',
+    analytics_consent: true,
+    marketing_consent: true,
+    targets: ['facebook', 'tiktok', 'snapchat'],
+    custom_data: {
+      currency: 'NGN',
+      value: 600,
+      url: window.location.href,
+      contents: [{ id: 'phone', name: 'Phone', price: 300, quantity: 2 }],
+    },
+  });
 });

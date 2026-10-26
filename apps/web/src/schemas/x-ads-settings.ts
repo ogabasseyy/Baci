@@ -26,11 +26,21 @@ export const xAdsCredentialsSchema = z.strictObject({
   accessTokenSecret: z.string().trim().min(1).max(4096),
 });
 export type XAdsCredentials = z.infer<typeof xAdsCredentialsSchema>;
+export const xAdsAuthenticationSchema = z.union([
+  xAdsCredentialsSchema,
+  z.strictObject({
+    pixelToken: z
+      .string()
+      .trim()
+      .regex(/^[\x21-\x7E]{1,4096}$/),
+  }),
+]);
+export type XAdsAuthentication = z.infer<typeof xAdsAuthenticationSchema>;
 export const xAdsSettingsSchema = z
   .strictObject({
     pixelId: pixel.nullable(),
     eventIds: xEventIdsSchema.default({}),
-    credentials: xAdsCredentialsSchema.optional(),
+    credentials: xAdsAuthenticationSchema.optional(),
     disconnect: z.boolean().default(false),
   })
   .superRefine((value, ctx) => {

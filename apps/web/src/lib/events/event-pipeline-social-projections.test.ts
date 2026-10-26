@@ -11,6 +11,7 @@ it('keeps provider credentials on their dedicated worker projections', () => {
     'chatgpt_pixel_id',
   ]);
   expect(xDelivery.merchant_x_ads_credentials).toEqual([
+    'pixel_token',
     'consumer_key',
     'consumer_secret',
     'access_token',

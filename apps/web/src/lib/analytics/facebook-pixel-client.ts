@@ -15,7 +15,13 @@ type Observation = {
   options?: { eventID: string };
 };
 let active:
-  | { id: string; token: symbol; pathname: string; pending: Observation[] }
+  | {
+      id: string;
+      token: symbol;
+      pathname: string;
+      pending: Observation[];
+      fbq: FacebookQueue;
+    }
   | undefined;
 const ready = new WeakSet<FacebookQueue>();
 const initialized = new WeakMap<FacebookQueue, Set<string>>();
@@ -37,13 +43,10 @@ function sdk(): FacebookQueue {
   return queue;
 }
 
-export function activateFacebookPixel(id: string): (() => void) | undefined {
-  if (!validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
-  const token = Symbol(id);
-  active = { id, token, pathname: window.location.pathname, pending: [] };
-  const fbq = sdk();
-  fbq.disablePushState = true;
-  fbq('consent', 'revoke');
+function configure(fbq: FacebookQueue, id: string): void {
+  // Grant directly before configuring: a queued revoke locks Meta bootstrap,
+  // and a ready SDK may still be locked by the preceding activation cleanup.
+  fbq('consent', 'grant');
   let ids = initialized.get(fbq);
   if (!ids) {
     ids = new Set();
@@ -54,12 +57,20 @@ export function activateFacebookPixel(id: string): (() => void) | undefined {
     fbq('init', id);
     ids.add(id);
   }
-  fbq('consent', 'grant');
+}
+
+export function activateFacebookPixel(id: string): (() => void) | undefined {
+  if (!validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
+  const token = Symbol(id);
+  const fbq = sdk();
+  active = { id, token, pathname: window.location.pathname, pending: [], fbq };
+  fbq.disablePushState = true;
+  if (ready.has(fbq)) configure(fbq, id);
   sendFacebookPixelEvent('PageView');
   return () => {
     if (active?.token !== token) return;
     active = undefined;
-    fbq('consent', 'revoke');
+    if (ready.has(fbq)) fbq('consent', 'revoke');
   };
 }
 
@@ -92,10 +103,12 @@ export function facebookPixelReady(): void {
   ready.add(fbq);
   if (
     !active ||
+    active.fbq !== fbq ||
     !isAnalyticsAllowed() ||
     active.pathname !== window.location.pathname
   )
     return;
+  configure(fbq, active.id);
   const pending = active.pending;
   active.pending = [];
   for (const observation of pending) {

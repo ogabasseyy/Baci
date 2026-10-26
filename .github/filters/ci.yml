@@ -96,6 +96,7 @@ quiz_db:
   - '.github/filters/ci.yml'
   - '.github/workflows/ci.yml'
   - '.github/actions/postdeploy-migrations/**'
+  - '.github/scripts/x-pixel-token-authentication.sql.test.mjs'
   - 'supabase/migrations/**'
   - 'supabase/tests/**'
   - '.github/scripts/deferred-production-migrations.sh'

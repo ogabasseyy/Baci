@@ -16,10 +16,13 @@ import { FAQPageClient } from './(content)/pages/faq/faq-page-client';
 import { PrivacyPageClient } from './(content)/pages/privacy/privacy-page-client';
 import { TermsPageClient } from './(content)/pages/terms/terms-page-client';
 import {
+  expectMetaEventsBlocked,
+  expectMetaPixelConfigured,
   expectNoPixels,
   merchant,
   revealPrompt,
   shell,
+  withdrawOptionalConsent,
 } from './storefront-consent-fixtures.test-support';
 import { consentScriptMocks as sdkMocks } from './storefront-consent-script.test-support';
 
@@ -114,26 +117,32 @@ describe('storefront consent wiring', () => {
     vi.useRealTimers();
   });
 
-  it('removes the mounted SDK gates and revokes Meta after the visitor withdraws consent', () => {
+  it('waits for Meta readiness, then revokes consent and blocks later events', () => {
     render(shell(<main>Product</main>));
     revealPrompt();
     fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
     const fbq = window.fbq as unknown as { queue: unknown[][] };
     expect(screen.getByTestId('facebook-pixel-sdk')).toBeInTheDocument();
-    act(() => {
-      localStorage.setItem(
-        'baci-cookie-consent',
-        JSON.stringify({
-          necessary: true,
-          analytics: false,
-          marketing: false,
-          functional: false,
-        })
-      );
-      window.dispatchEvent(new Event('cookie-consent-updated'));
-    });
+    act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expectMetaPixelConfigured(fbq.queue);
+
+    withdrawOptionalConsent();
     expectNoPixels();
     expect(fbq.queue.at(-1)).toEqual(['consent', 'revoke']);
+    expectMetaEventsBlocked(fbq.queue);
+  });
+
+  it('does not initialize or revoke Meta when consent is withdrawn before SDK readiness', () => {
+    render(shell(<main>Product</main>));
+    revealPrompt();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    const fbq = window.fbq as unknown as { queue: unknown[][] };
+    expect(fbq.queue).toEqual([]);
+
+    withdrawOptionalConsent();
+    expectNoPixels();
+    act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expect(fbq.queue).toEqual([]);
   });
 
   it('offers fresh visitors one consent prompt while both configured pixels remain denied', () => {
@@ -158,9 +167,10 @@ describe('storefront consent wiring', () => {
     );
     expect(metaSdk).toHaveTextContent('');
     const fbq = window.fbq as unknown as { queue: unknown[][] };
-    expect(fbq.queue).toContainEqual(['init', '123456789']);
+    expect(fbq.queue).toEqual([]);
     expect(fbq.queue.some(([action]) => action === 'trackSingle')).toBe(false);
     act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expectMetaPixelConfigured(fbq.queue);
     expect(fbq.queue).toContainEqual([
       'trackSingle',
       '123456789',

@@ -1,12 +1,8 @@
 -- Synthetic transaction-local fixture. It preserves the no-intent, incomplete
 -- intent, cross-customer, and pending-operation recovery contracts.
 BEGIN;
--- Model the separately provisioned LOGIN and its sole restricted capability
--- group inside this disposable transaction; the production migration creates
--- only the NOLOGIN group role.
-CREATE ROLE baci_piggyvest_primary_authorizer LOGIN INHERIT NOSUPERUSER
-  NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-GRANT piggyvest_primary_authorizer TO baci_piggyvest_primary_authorizer;
+-- Bind the fixture to the replay connection's actual SESSION_USER. Do not
+-- impersonate a worker login: SET SESSION AUTHORIZATION requires superuser.
 INSERT INTO auth.users (id, email) VALUES
   ('f3810000-0000-4000-8000-000000000001', 'piggyvest-recovery@example.test'),
   ('f3810000-0000-4000-8000-000000000011', 'piggyvest-recovery-other@example.test');
@@ -43,9 +39,9 @@ INSERT INTO public.customer_savings_goals (
 INSERT INTO piggyvest_primary.integrations
   (id, merchant_id, business_id, environment, executor_login, enabled)
 VALUES ('f3810000-0000-4000-8000-000000000006', 'f3810000-0000-4000-8000-000000000002',
-  'synthetic-recovery-business', 'staging', 'baci_piggyvest_primary_authorizer', true);
+  'synthetic-recovery-business', 'staging', SESSION_USER, true);
 INSERT INTO piggyvest_primary.savings_authorities (integration_id, executor_login, enabled)
-VALUES ('f3810000-0000-4000-8000-000000000006', 'baci_piggyvest_primary_authorizer', true);
+VALUES ('f3810000-0000-4000-8000-000000000006', SESSION_USER, true);
 SELECT set_config('test.recovery_scope', jsonb_build_object(
   'merchantId', 'f3810000-0000-4000-8000-000000000002',
   'customerId', 'f3810000-0000-4000-8000-000000000003',
@@ -53,7 +49,6 @@ SELECT set_config('test.recovery_scope', jsonb_build_object(
   'integrationId', 'f3810000-0000-4000-8000-000000000006',
   'businessId', 'synthetic-recovery-business', 'environment', 'staging')::text, true);
 
-SET SESSION AUTHORIZATION baci_piggyvest_primary_authorizer;
 DO $preonboarding$
 DECLARE scope jsonb:=current_setting('test.recovery_scope')::jsonb; result jsonb;
 BEGIN
@@ -67,7 +62,6 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END;
 $preonboarding$;
-RESET SESSION AUTHORIZATION;
 
 -- An unknown intent has no provider identity, but a dispatched operation
 -- associated with it must remain recoverable while onboarding is incomplete.
@@ -99,10 +93,21 @@ INSERT INTO piggyvest_primary.savings_operations (
   'synthetic-recovery-reference', 'dispatched', 'f3810000-0000-4000-8000-000000000009'
 );
 
-SET SESSION AUTHORIZATION baci_piggyvest_primary_authorizer;
 DO $test$
 DECLARE scope jsonb:=current_setting('test.recovery_scope')::jsonb; field text;
 BEGIN
+  UPDATE piggyvest_primary.integrations SET executor_login = SESSION_USER || '_mismatch'
+    WHERE id = 'f3810000-0000-4000-8000-000000000006';
+  UPDATE piggyvest_primary.savings_authorities SET executor_login = SESSION_USER || '_mismatch'
+    WHERE integration_id = 'f3810000-0000-4000-8000-000000000006';
+  BEGIN
+    PERFORM piggyvest_primary.read_pending_savings(scope,'f3810000-0000-4000-8000-000000000005');
+    RAISE EXCEPTION 'Mismatched SESSION_USER binding was accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  UPDATE piggyvest_primary.integrations SET executor_login = SESSION_USER
+    WHERE id = 'f3810000-0000-4000-8000-000000000006';
+  UPDATE piggyvest_primary.savings_authorities SET executor_login = SESSION_USER
+    WHERE integration_id = 'f3810000-0000-4000-8000-000000000006';
   -- This is a real goal belonging to the second synthetic customer.
   BEGIN
     PERFORM piggyvest_primary.read_pending_savings(scope,'f3810000-0000-4000-8000-000000000013');
@@ -143,5 +148,4 @@ BEGIN
   END IF;
 END;
 $pending$;
-RESET SESSION AUTHORIZATION;
 ROLLBACK;

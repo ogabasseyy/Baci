@@ -54,13 +54,21 @@ function matchesSandboxCondition(
   if (!condition) return true;
   const rowCondition =
     typeof row.condition === 'string' ? row.condition : 'new';
+  const availableConditions = Array.isArray(row.available_conditions)
+    ? row.available_conditions.filter(
+        (value): value is string => typeof value === 'string'
+      )
+    : [];
   const accepted =
     condition === 'used'
       ? ['used', 'uk_used']
       : condition === 'open_box'
         ? ['open_box', 'refurbished']
         : [condition];
-  return accepted.includes(rowCondition);
+  return (
+    accepted.includes(rowCondition) ||
+    availableConditions.some((value) => accepted.includes(value))
+  );
 }
 
 export function buildSandboxProductQuery(
@@ -99,7 +107,7 @@ export function buildSandboxProductQuery(
           ? ['open_box', 'refurbished']
           : [condition];
     query = query.or(
-      `condition.eq.${condition},available_conditions.cs.{${conditions.join(',')}}`
+      `condition.in.(${conditions.join(',')}),available_conditions.ov.{${conditions.join(',')}}`
     );
   }
 

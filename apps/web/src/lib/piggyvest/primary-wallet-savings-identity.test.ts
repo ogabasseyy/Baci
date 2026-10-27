@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { savingsIdentityFixture as fixture } from './primary-wallet-savings-identity.test-fixture';
 import { requestInput } from './primary-wallet-savings-identity.test-utils';
+import { primaryWalletSavingsIdentityLimits as limits } from './primary-wallet-savings-identity-limits';
 
 // Sanitized user-provided read-only QA observation, 2026-10-27: three existing
 // staging transfers each returned successful /verify amount +10000; their
@@ -215,16 +216,18 @@ describe('primary savings transfer identity corroboration', () => {
     expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
   });
 
-  it('requires a complete list and stops after five pages', async () => {
+  it('requires a complete list and stops after the bounded page limit', async () => {
     const input = requestInput(
-      Array.from({ length: 5 }, (_, page) => ({
+      Array.from({ length: limits.maxPages }, (_, page) => ({
         edges: [{ id: `other-${page}` }],
         pageInfo: { hasNextPage: true, endCursor: `cursor-${page}` },
       }))
     );
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
-    expect(input.fetchImplementation).toHaveBeenCalledTimes(6);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(
+      limits.maxPages + 1
+    );
   });
 
   it('does not infer success from an absent transaction or an unavailable provider', async () => {

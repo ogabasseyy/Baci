@@ -64,17 +64,25 @@ function mockCreateQuery() {
     }),
     or: jest.fn((expression: string) => {
       mockOperations.push({ method: 'or', args: [expression] });
-      const condition = expression.match(/^condition\.eq\.([^,]+)/)?.[1];
-      const available = expression
-        .match(/available_conditions\.cs\.\{([^}]+)\}/)?.[1]
+      const scalarConditions = expression
+        .match(/^condition\.in\.\(([^)]+)\)/)?.[1]
         ?.split(',');
-      if (condition && available) {
+      const arrayFilter = expression.match(
+        /available_conditions\.(cs|ov)\.\{([^}]+)\}/
+      );
+      const arrayOperator = arrayFilter?.[1];
+      const arrayConditions = arrayFilter?.[2]?.split(',');
+      if (scalarConditions && arrayOperator && arrayConditions) {
         filters.push((row) => {
           const values = row.available_conditions;
+          const matchesArray =
+            Array.isArray(values) &&
+            (arrayOperator === 'cs'
+              ? arrayConditions.every((value) => values.includes(value))
+              : arrayConditions.some((value) => values.includes(value)));
           return (
-            row.condition === condition ||
-            (Array.isArray(values) &&
-              available.some((value) => values.includes(value)))
+            scalarConditions.includes(String(row.condition ?? '')) ||
+            matchesArray
           );
         });
       }

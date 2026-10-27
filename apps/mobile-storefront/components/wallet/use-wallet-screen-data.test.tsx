@@ -8,17 +8,21 @@ let mockCustomerUserId = 'user-1';
 let mockFetchStatus = 'idle';
 let mockHasSnapshot = true;
 let mockNumberStatus = 'idle';
+const mockUseWallet = jest.fn();
 const mockRefetch = jest.fn().mockResolvedValue({});
 const mockRefreshNumbers = jest.fn().mockResolvedValue(undefined);
 jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
 jest.mock('@/hooks/use-wallet', () => ({
-  useWallet: () => ({
-    data: mockHasSnapshot ? { wallet: { total_balance: 200 } } : undefined,
-    isError: false,
-    isRefetching: false,
-    fetchStatus: mockFetchStatus,
-    refetch: mockRefetch,
-  }),
+  useWallet: (...args: unknown[]) => {
+    mockUseWallet(...args);
+    return {
+      data: mockHasSnapshot ? { wallet: { total_balance: 200 } } : undefined,
+      isError: false,
+      isRefetching: false,
+      fetchStatus: mockFetchStatus,
+      refetch: mockRefetch,
+    };
+  },
 }));
 jest.mock('@/hooks/use-wallet-number-refresh', () => ({
   useWalletNumberRefresh: () => ({
@@ -67,6 +71,18 @@ it('passes full-read failures through to the refresh owner instead of claiming s
   expect(mockRefetch).toHaveBeenCalledWith({
     cancelRefetch: false,
     throwOnError: true,
+  });
+  unmount();
+});
+
+it('uses the display wallet cache policy and numeric navigation refresh', () => {
+  mockHasSnapshot = false;
+  const { unmount } = renderHook(() => useWalletScreenData());
+
+  expect(mockUseWallet).toHaveBeenCalledWith({
+    cachePolicy: 'display',
+    navigationRefresh: 'numbers',
+    progressive: true,
   });
   unmount();
 });

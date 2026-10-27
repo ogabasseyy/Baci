@@ -585,16 +585,6 @@ describe('WalletScreen', () => {
     expect(walletContentProps?.transactions).toHaveLength(1);
   });
 
-  it('uses the display wallet cache policy for the wallet screen', () => {
-    render(<WalletScreen />);
-
-    expect(mockUseWallet).toHaveBeenCalledWith({
-      cachePolicy: 'display',
-      navigationRefresh: 'numbers',
-      progressive: true,
-    });
-  });
-
   it('passes wallet DVA availability through to wallet content', () => {
     render(<WalletScreen />);
 

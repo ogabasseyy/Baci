@@ -5,6 +5,7 @@ import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-ca
 import { primaryWalletSavingsIdentitySchemas as schemas } from '@/schemas/primary-wallet-savings-identity';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
+import { primaryWalletSavingsIdentityLimits as limits } from './primary-wallet-savings-identity-limits';
 
 export async function resolvePrimaryWalletSavingsIdentity(input: {
   reservation: unknown;
@@ -43,15 +44,21 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     )
       return null;
 
+    const deadline = performance.now() + limits.timeBudgetMs;
+
     async function getData(path: string, maxResponseBytes: number) {
+      const remainingMs = deadline - performance.now();
+      if (remainingMs < 1) throw new Error('SAVINGS_IDENTITY_DEADLINE');
       const response = await requestPrefundedCardProviderJson({
         url: `${origin}${path}`,
         token: input.token,
-        timeoutMs: 10000,
+        timeoutMs: Math.min(limits.requestTimeoutMs, Math.floor(remainingMs)),
         maxResponseBytes,
         fetchImplementation: input.fetchImplementation ?? fetch,
         init: { method: 'GET' },
       });
+      if (performance.now() >= deadline)
+        throw new Error('SAVINGS_IDENTITY_DEADLINE');
       if (
         !response ||
         typeof response !== 'object' ||
@@ -66,7 +73,7 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     const wallet = schemas.wallet.parse(
       await getData(
         `/api/v1/wallet/${encodeURIComponent(expected.sourceWalletId)}`,
-        65536
+        limits.walletResponseBytes
       )
     );
     if (
@@ -80,7 +87,7 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       const transaction = schemas.singleTransaction.parse(
         await getData(
           `/api/v1/transaction/${encodeURIComponent(actual.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
-          65536
+          limits.transactionResponseBytes
         )
       );
       if (
@@ -110,7 +117,7 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       const direct = schemas.singleTransaction.parse(
         await getData(
           `/api/v1/transaction/${encodeURIComponent(candidate.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
-          65536
+          limits.transactionResponseBytes
         )
       );
       return (
@@ -132,15 +139,18 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     let cursor: string | null = null;
     const cursors = new Set<string>();
     const identifiers = new Set<string>();
-    for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
+    for (let pageNumber = 0; pageNumber < limits.maxPages; pageNumber++) {
       const query = new URLSearchParams({
         wallet_id: wallet.id,
-        limit: '100',
+        limit: String(limits.pageSize),
         collapse_batch: '0',
       });
       if (cursor !== null) query.set('cursor', cursor);
       const page = schemas.page.parse(
-        await getData(`/api/v1/transaction?${query.toString()}`, 1048576)
+        await getData(
+          `/api/v1/transaction?${query.toString()}`,
+          limits.pageResponseBytes
+        )
       );
       if (
         page.edges.length === 0 &&

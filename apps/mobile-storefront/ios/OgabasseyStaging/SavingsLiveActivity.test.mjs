@@ -115,7 +115,7 @@ public enum TestEvents {
   }()
   public static func emit(_ event: String) { continuation?.yield(event) }
 }
-public struct ActivityAuthorizationInfo { public init() {}; public var areActivitiesEnabled: Bool { true } }
+public struct ActivityAuthorizationInfo { public static var activitiesEnabled = true; public init() {}; public var areActivitiesEnabled: Bool { Self.activitiesEnabled } }
 @MainActor public final class Activity<Attributes: ActivityAttributes> {
   public let attributes: Attributes
   public static var activities: [Activity<Attributes>] { Registry.lock.lock(); defer { Registry.lock.unlock() }; return Registry.items.compactMap { $0 as? Activity<Attributes> }.filter { !$0.ended } }
@@ -166,6 +166,7 @@ struct SavingsAttributes: ActivityAttributes {
     bridge.sync(b, title: "Plan B", saved: 25, target: 200)
     await waitFor("update")
     await TestGate.waitUntilEntered()
+    precondition(Activity<SavingsAttributes>.activities[0].content.state.saved == 25, "sync must update the exact active goal")
     bridge.track(a, title: "stale", saved: 1, target: 10, phase: "pending")
     bridge.clear()
     TestGate.release()
@@ -193,6 +194,21 @@ struct SavingsAttributes: ActivityAttributes {
     await waitFor("request")
     precondition(Activity<SavingsAttributes>.activities.count == 1)
     precondition(Activity<SavingsAttributes>.activities[0].attributes.goalId == b, "old-owner cleanup must not erase the new owner's activity")
+
+    bridge.clear()
+    await waitFor("end")
+    bridge.track(a, title: "Opted-in plan", saved: 10, target: 100, phase: "pending")
+    await waitFor("request")
+    let optedInActivity = Activity<SavingsAttributes>.activities[0]
+    TestGate.shouldPause = true
+    ActivityAuthorizationInfo.activitiesEnabled = false
+    bridge.sync(a, title: "Opted-in plan", saved: 99, target: 100)
+    ActivityAuthorizationInfo.activitiesEnabled = true
+    bridge.track(a, title: "Opted-in plan", saved: 10, target: 100, phase: "pending")
+    await waitFor("update")
+    await TestGate.waitUntilEntered()
+    precondition(optedInActivity.content.state.saved == 10, "sync must honor the user's ActivityKit opt-in")
+    TestGate.release()
     print("SavingsLiveActivity behavioral scenarios passed")
   }
   static var events = TestEvents.stream.makeAsyncIterator()

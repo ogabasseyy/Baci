@@ -54,4 +54,14 @@ export const EXPECTED_RECOVERED_STAGING_PENDING_SOURCES = [
       'supabase/migrations/20261027084837_customer_savings_interest_snapshot.sql',
     sha256: '8162e65f64a548fd1a029e0c3d352b8726a1cbece44341027e9943f34c070e63',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027200820_paid_interest_earnings_reversal_semantics.sql',
+    sha256: 'ccee1ad77bb82618c3e1aa478e660d8a90f4b21b62cd15129bb6e8e076f850f2',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027211500_piggyvest_primary_savings_reconciliation_checkpoint.sql',
+    sha256: '92307a336a799417a387b13e01fbf2c68d6c7f2b00742a07109dd18f45b33b37',
+  },
 ];

@@ -46,6 +46,17 @@ SELECT pg_temp.assert_true((SELECT count(*)=1 AND bool_and(body='Your savings gr
   'Production net payout enqueues one savings-only interest notice');
 
 SET ROLE authenticated;
+SELECT pg_temp.assert_true(
+  NOT has_function_privilege('anon','public.get_customer_savings_earnings(uuid)','EXECUTE')
+  AND has_function_privilege('authenticated','public.get_customer_savings_earnings(uuid)','EXECUTE')
+  AND NOT has_function_privilege('service_role','public.get_customer_savings_earnings(uuid)','EXECUTE')
+  AND NOT has_function_privilege('anon','public.get_customer_savings_earnings(uuid,boolean)','EXECUTE')
+  AND has_function_privilege('authenticated','public.get_customer_savings_earnings(uuid,boolean)','EXECUTE')
+  AND NOT has_function_privilege('service_role','public.get_customer_savings_earnings(uuid,boolean)','EXECUTE')
+  AND (SELECT bool_and(prosecdef) FROM pg_proc
+    WHERE oid IN ('public.get_customer_savings_earnings(uuid)'::regprocedure,
+      'public.get_customer_savings_earnings(uuid,boolean)'::regprocedure)),
+  'Both earnings overloads retain authenticated-only execution and SECURITY DEFINER tenant checks');
 SELECT pg_temp.assert_true((public.get_customer_savings_earnings('00000000-0000-4000-8000-000000000001',true)
   ->'goal_interest_kobo') @> jsonb_build_array(jsonb_build_object('goal_id',pg_temp.goal_id(45),'credited_interest_kobo',3000)),
   'Existing authenticated per-goal earnings RPC includes production net interest');

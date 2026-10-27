@@ -1,5 +1,12 @@
 import { vi } from 'vitest';
+import type { z } from 'zod';
+import type { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
 import { savingsIdentityFixture as fixture } from './primary-wallet-savings-identity.test-fixture';
+
+type Checkpoint = {
+  state: z.infer<typeof checkpointSchemas.state>;
+  save: (state: z.infer<typeof checkpointSchemas.state>) => Promise<boolean>;
+};
 
 export function requestInput(
   pages: unknown[] = [fixture.page],
@@ -27,5 +34,10 @@ export function requestInput(
     environment,
     token: 'unit-test-token',
     fetchImplementation,
+    checkpointScope: {
+      integrationId: '00000000-0000-4000-8000-000000000004',
+      environment: 'production' as const,
+    },
+    checkpoint: undefined as Checkpoint | undefined,
   };
 }

@@ -6,6 +6,7 @@ import { useWalletFundingAccountController } from '@/components/wallet/use-walle
 import { useWalletRouteActionSetup } from '@/components/wallet/use-wallet-route-action-setup';
 import { WalletScreenView } from '@/components/wallet/WalletScreenView';
 import { useRequireAuth } from '@/hooks/use-auth-guard';
+import { useSavingsLiveActivity } from '@/hooks/use-savings-live-activity';
 import {
   useCreateWalletFundingAccount,
   useRedeemPoints,
@@ -13,6 +14,7 @@ import {
 import { useMerchantPaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { CONFIG } from '@/lib/config';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { walletIdentitiesAgree } from '@/lib/live-wallet-query';
 import { normalizeWalletFundAmountParam } from '@/lib/normalize-wallet-fund-amount-param';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
@@ -156,6 +158,14 @@ export function WalletScreen({
   });
   const display =
     data && deriveWalletDisplayData(data.wallet, routeSavingsGoalId);
+  const walletIdentityAgrees =
+    !!user?.id && walletIdentitiesAgree(customer, user.id);
+  const liveActivityGoal = data
+    ? walletIdentityAgrees
+      ? (display?.activeSavingsGoal ?? null)
+      : undefined
+    : undefined;
+  useSavingsLiveActivity(liveActivityGoal, user?.id ?? null);
   const {
     hasPendingSavingsContribution,
     handleAddSavingsContribution,

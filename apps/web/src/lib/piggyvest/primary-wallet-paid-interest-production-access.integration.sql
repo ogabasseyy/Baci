@@ -52,8 +52,15 @@ CREATE TEMP TABLE staging_earnings_after_primary AS SELECT
 FROM piggyvest_savings_ledger.operations operation
 JOIN piggyvest_savings_ledger.postings posting
   ON posting.operation_id=operation.id AND posting.account='paid_interest'
+LEFT JOIN piggyvest_savings_ledger.operations original
+  ON original.id=operation.reference_id AND original.integration_id=operation.integration_id
+  AND original.merchant_id=operation.merchant_id AND original.customer_id=operation.customer_id
+  AND original.goal_id=operation.goal_id
 WHERE operation.merchant_id='00000000-0000-4000-8000-000000000001'
-  AND operation.customer_id='00000000-0000-4000-8000-000000000002';
+  AND operation.customer_id='00000000-0000-4000-8000-000000000002'
+  AND ((operation.command->>'kind'='credit_eligible_paid_interest' AND posting.amount_kobo>0)
+    OR (operation.command->>'kind'='reverse_credit'
+      AND original.command->>'kind'='credit_eligible_paid_interest' AND posting.amount_kobo<0));
 GRANT SELECT ON staging_earnings_after_primary TO authenticated;
 ALTER TABLE savings_interest_private.deployment_environment
   DISABLE TRIGGER savings_interest_environment_write_once;

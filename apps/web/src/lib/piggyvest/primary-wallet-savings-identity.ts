@@ -3,11 +3,15 @@ import type { z } from 'zod';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
 import { primaryWalletSavingsIdentitySchemas as schemas } from '@/schemas/primary-wallet-savings-identity';
+import { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
-import { isExplicitUnsupportedSavingsDateFilterError } from './primary-wallet-savings-identity-date-filter-error';
 import { primarySavingsIdentityDateWindow } from './primary-wallet-savings-identity-date-window';
 import { primaryWalletSavingsIdentityLimits as limits } from './primary-wallet-savings-identity-limits';
+import {
+  primarySavingsIdentityCheckpointFingerprint,
+  scanPrimarySavingsIdentityList,
+} from './primary-wallet-savings-identity-scan';
 
 export async function resolvePrimaryWalletSavingsIdentity(input: {
   reservation: unknown;
@@ -15,6 +19,11 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
   environment: unknown;
   token: string;
   fetchImplementation?: typeof fetch;
+  checkpointScope?: { integrationId: string; environment: 'production' };
+  checkpoint?: {
+    state: z.infer<typeof checkpointSchemas.state>;
+    save: (state: z.infer<typeof checkpointSchemas.state>) => Promise<boolean>;
+  };
 }): Promise<unknown | null> {
   try {
     const expected = piggyvestPrimarySavingsTransferSchemas.reserved.parse(
@@ -166,112 +175,82 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       }
     }
 
-    async function scanProductionList(
-      window: ReturnType<typeof primarySavingsIdentityDateWindow>
-    ): Promise<
-      | { status: 'matched'; transaction: z.infer<typeof schemas.transaction> }
-      | { status: 'not-found' | 'invalid' | 'unsupported' }
-    > {
-      let transaction: z.infer<typeof schemas.transaction> | null = null;
-      let cursor: string | null = null;
-      const cursors = new Set<string>();
-      const identifiers = new Set<string>();
-      for (let pageNumber = 0; pageNumber < limits.maxPages; pageNumber++) {
-        const query = new URLSearchParams({
-          wallet_id: wallet.id,
-          limit: String(limits.pageSize),
-          collapse_batch: '0',
-        });
-        if (window) {
-          query.set('start_date', window.startDate);
-          query.set('end_date', window.endDate);
-        }
-        if (cursor !== null) query.set('cursor', cursor);
-        let data: unknown;
-        try {
-          data = await getData(
-            `/api/v1/transaction?${query.toString()}`,
-            limits.pageResponseBytes,
-            window ? limits.unfilteredFallbackReserveMs : 0
-          );
-        } catch (error) {
-          if (
-            window &&
-            (isExplicitUnsupportedSavingsDateFilterError(error) ||
-              (error instanceof Error &&
-                [
-                  'PROVIDER_TIMEOUT',
-                  'PROVIDER_UNAVAILABLE',
-                  'SAVINGS_IDENTITY_DEADLINE',
-                ].includes(error.message)))
-          )
-            return { status: 'unsupported' };
-          return { status: 'invalid' };
-        }
-        const parsedPage = schemas.page.safeParse(data);
-        if (!parsedPage.success) return { status: 'invalid' };
-        const page = parsedPage.data;
-        if (
-          page.edges.length === 0 &&
-          (page.pageInfo.hasNextPage || pageNumber > 0)
-        )
-          return { status: 'invalid' };
-        let matchedCandidate: z.infer<typeof schemas.transaction> | null = null;
-        for (const candidate of page.edges) {
-          if (identifiers.has(candidate.id)) return { status: 'invalid' };
-          identifiers.add(candidate.id);
-          if (candidate.id !== actual.id) continue;
-          if (transaction !== null || matchedCandidate !== null)
-            return { status: 'invalid' };
-          matchedCandidate =
-            schemas.transaction.safeParse(candidate).data ?? null;
-          if (
-            !matchedCandidate ||
-            matchedCandidate.business_id !== expected.businessId ||
-            matchedCandidate.wallet_id !== wallet.id ||
-            matchedCandidate.api_customer_id !== expected.providerCustomerId ||
-            matchedCandidate.amount !== -expected.amountKobo ||
-            matchedCandidate.third_party_reference !== expected.reference ||
-            matchedCandidate.provider_reference !== actual.reference
-          )
-            return { status: 'invalid' };
-        }
-        cursor = page.pageInfo.endCursor;
-        if (cursor !== null) {
-          if (cursors.has(cursor)) return { status: 'invalid' };
-          cursors.add(cursor);
-        }
-        if (matchedCandidate !== null) {
-          if (page.pageInfo.hasNextPage && directTransaction)
-            return { status: 'matched', transaction: matchedCandidate };
-          transaction = matchedCandidate;
-        }
-        if (!page.pageInfo.hasNextPage)
-          return transaction === null
-            ? { status: 'not-found' }
-            : { status: 'matched', transaction };
-      }
-      return { status: 'invalid' };
-    }
+    if (input.checkpoint && (!directTransaction || !input.checkpointScope))
+      return null;
+    const checkpoint = input.checkpoint
+      ? { state: input.checkpoint.state, save: input.checkpoint.save }
+      : undefined;
+    const resetCheckpoint = async () => {
+      if (!checkpoint) return true;
+      if (!(await checkpoint.save(checkpointSchemas.emptyState)))
+        throw new Error('Savings checkpoint fence lost');
+      return true;
+    };
+    const scan = (
+      window: ReturnType<typeof primarySavingsIdentityDateWindow>,
+      stage: 'date-window' | 'full'
+    ) =>
+      scanPrimarySavingsIdentityList({
+        getData,
+        reservation: expected,
+        actual,
+        direct: directTransaction ?? undefined,
+        walletId: wallet.id,
+        scope: input.checkpointScope,
+        stage,
+        window,
+        checkpoint,
+        pageSize: limits.pageSize,
+        maxPages: limits.maxPages,
+        pageResponseBytes: limits.pageResponseBytes,
+        fallbackReserveMs: limits.unfilteredFallbackReserveMs,
+      });
 
-    if (dateWindow) {
-      const located = await scanProductionList(dateWindow);
-      if (located.status === 'matched')
+    const resumeFull = Boolean(
+      input.checkpoint &&
+        directTransaction &&
+        dateWindow &&
+        input.checkpoint.state.stage === 'full' &&
+        input.checkpoint.state.fingerprint ===
+          primarySavingsIdentityCheckpointFingerprint({
+            stage: 'full',
+            window: null,
+            reservation: expected,
+            direct: directTransaction,
+            actual,
+            walletId: wallet.id,
+            scope: input.checkpointScope,
+          })
+    );
+    if (dateWindow && !resumeFull) {
+      const located = await scan(dateWindow, 'date-window');
+      if (located.status === 'matched') {
+        await resetCheckpoint();
         return schemas.evidence.parse({
           environment: 'production',
           wallet,
           transaction: located.transaction,
         });
-      if (located.status === 'invalid') return null;
+      }
+      if (located.status === 'incomplete') return null;
+      if (located.status === 'invalid') {
+        await resetCheckpoint();
+        return null;
+      }
+      if (!(await resetCheckpoint())) return null;
     }
-    const scanned = await scanProductionList(null);
-    return scanned.status === 'matched'
-      ? schemas.evidence.parse({
-          environment: 'production',
-          wallet,
-          transaction: scanned.transaction,
-        })
-      : null;
+    const scanned = await scan(null, 'full');
+    if (scanned.status === 'matched') {
+      await resetCheckpoint();
+      return schemas.evidence.parse({
+        environment: 'production',
+        wallet,
+        transaction: scanned.transaction,
+      });
+    }
+    if (scanned.status === 'not-found' || scanned.status === 'invalid')
+      await resetCheckpoint();
+    return null;
   } catch {
     return null;
   }

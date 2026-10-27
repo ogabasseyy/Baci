@@ -19,6 +19,9 @@ class SavingsLiveActivity: NSObject {
 
   @objc(sync:title:saved:target:)
   func sync(_ goalId: String, title: String, saved: Double, target: Double) {
+    guard Bundle.main.bundleIdentifier == "com.ogabassey.staging", UUID(uuidString: goalId) != nil,
+      saved.isFinite, target.isFinite, saved >= 0, target > 0,
+      ActivityAuthorizationInfo().areActivitiesEnabled else { return }
     let operationGeneration = currentGeneration()
     enqueue(.sync(generation: operationGeneration, goalId: goalId, saved: saved, target: target))
   }

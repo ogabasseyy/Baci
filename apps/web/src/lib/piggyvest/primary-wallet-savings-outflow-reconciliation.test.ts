@@ -68,9 +68,27 @@ function mockLookup(result: unknown) {
               ? parameters?.includes(operationId)
                 ? reservation
                 : null
-              : statement.includes('release_failed_savings')
-                ? 'released'
-                : 'confirmed',
+              : statement.includes('claim_savings_reconciliation_checkpoint')
+                ? {
+                    status: 'acquired',
+                    claimToken: '44444444-4444-4444-8444-444444444444',
+                    state: {
+                      stage: null,
+                      fingerprint: null,
+                      cursor: null,
+                      pageDigest: null,
+                    },
+                  }
+                : statement.includes(
+                      'save_savings_reconciliation_checkpoint'
+                    ) ||
+                    statement.includes(
+                      'finish_savings_reconciliation_checkpoint'
+                    )
+                  ? true
+                  : statement.includes('release_failed_savings')
+                    ? 'released'
+                    : 'confirmed',
           database_name: 'postgres',
           login_name: configuration.database.login,
           role_name: configuration.database.login,

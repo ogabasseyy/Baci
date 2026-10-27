@@ -20,15 +20,20 @@ function postMatchesModelFamily(
   post: PublishedClusterPost,
   familyEntry: ModelFamilyAuthorityEntry
 ): boolean {
-  const haystacks = [
+  // Match against the combined post context: a bare model token in the
+  // title ("A55 vs A35") may only be attributable when the brand is named
+  // in tags/keywords, so brand-bearing fields lead. The matcher's
+  // sentence-level rival-brand safeguards still apply to the combined text.
+  const combinedContext = [
+    ...(post.tags ?? []),
+    ...(post.keywords ?? []),
     post.title,
     post.slug.replace(/[-_]/g, ' '),
     post.excerpt ?? '',
-    ...(post.tags ?? []),
-    ...(post.keywords ?? []),
-  ];
-  return haystacks.some((text) =>
-    modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, text)
+  ].join(' ');
+  return modelFamilyAuthorityTaxonomy.matchesContent(
+    familyEntry,
+    combinedContext
   );
 }
 

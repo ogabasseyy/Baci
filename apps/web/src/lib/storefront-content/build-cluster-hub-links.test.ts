@@ -157,6 +157,44 @@ describe('buildClusterHubLinks', () => {
     expect(mockLoad).not.toHaveBeenCalled();
   });
 
+  it('matches bare Samsung model tokens against the combined post context', async () => {
+    const result = await buildClusterHubLinks({
+      post: {
+        ...post,
+        slug: 'a55-vs-a35-best-budget-phones',
+        title: 'A55 vs A35: Best Budget Phones in Nigeria',
+        excerpt: 'Two mid-rangers compared for Nigerian buyers.',
+        tags: ['samsung'],
+        keywords: ['budget phones'],
+      },
+      inferredBrands: ['Samsung'],
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      storeUrl: 'https://store.test',
+      merchantId: 'merchant-1',
+      products: [
+        'Galaxy A55',
+        'Galaxy A35',
+        'Galaxy A25',
+        'Galaxy A15',
+        'Galaxy A05',
+      ].map((name) => ({
+        name,
+        brand: 'Samsung',
+        stock: 5,
+        category_slug: 'smartphones',
+      })),
+      skipDestinationVerification: true,
+    });
+    expect(result.brandHubLinks).toHaveLength(1);
+    expect(result.familyHubLinks).toEqual([
+      {
+        href: 'https://store.test/smartphones/brands/samsung/families/galaxy-a',
+        label: 'Explore Samsung Galaxy A',
+      },
+    ]);
+  });
+
   it('returns no links when no brand is inferred', async () => {
     const result = await buildClusterHubLinks({
       post,

@@ -331,6 +331,19 @@ BEGIN
     RAISE EXCEPTION 'expected exactly one audited reuse release event for the legacy unit';
   END IF;
 
+  -- The stock-sync trigger must resync projections on the helper's
+  -- status flip: exactly the freed unit is available again.
+  SELECT stock_quantity INTO v_offer_stock
+  FROM public.products WHERE id = v_product_id;
+  IF v_offer_stock <> 1 THEN
+    RAISE EXCEPTION 'expected resynced product stock 1 after legacy release, got %', v_offer_stock;
+  END IF;
+  SELECT stock_quantity INTO v_offer_stock
+  FROM public.product_variants WHERE id = v_anchor_id;
+  IF v_offer_stock <> 1 THEN
+    RAISE EXCEPTION 'expected resynced anchor stock 1 after legacy release, got %', v_offer_stock;
+  END IF;
+
   -- Post-deletion legacy shape: a condition-only offer line created
   -- before 19100000 whose offer was later deleted carries offer_line
   -- false with both FKs nulled (ON DELETE SET NULL) while the
@@ -396,6 +409,11 @@ BEGIN
       AND event_context->>'fulfillmentPath' = 'order_reuse') <> 1 THEN
     RAISE EXCEPTION 'expected exactly one audited reuse release event for the post-deletion unit';
   END IF;
+  SELECT stock_quantity INTO v_offer_stock
+  FROM public.products WHERE id = v_product_id;
+  IF v_offer_stock <> 2 THEN
+    RAISE EXCEPTION 'expected resynced product stock 2 after post-deletion release, got %', v_offer_stock;
+  END IF;
 
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
@@ -455,6 +473,11 @@ BEGIN
       AND event_context->>'fulfillmentPath' = 'payment_confirmation') <> 1 THEN
     RAISE EXCEPTION 'expected exactly one audited confirm release event for the snapshot-only unit';
   END IF;
+  SELECT stock_quantity INTO v_offer_stock
+  FROM public.products WHERE id = v_product_id;
+  IF v_offer_stock <> 3 THEN
+    RAISE EXCEPTION 'expected resynced product stock 3 after confirm release, got %', v_offer_stock;
+  END IF;
 
   -- Paid-without-reuse legacy case: a durable (NULL-expiry) reserved
   -- hold that never passed the reuse cleanup must be released by
@@ -489,6 +512,17 @@ BEGIN
   END IF;
   IF v_legacy_item IS NOT NULL THEN
     RAISE EXCEPTION 'expected durable legacy unit detached, got %', v_legacy_item;
+  END IF;
+  SELECT stock_quantity INTO v_offer_stock
+  FROM public.products WHERE id = v_product_id;
+  IF v_offer_stock <> 4 THEN
+    RAISE EXCEPTION 'expected resynced product stock 4 after durable release, got %', v_offer_stock;
+  END IF;
+  -- The plain control product must be untouched by every release above.
+  SELECT stock_quantity INTO v_plain_claimed
+  FROM public.products WHERE id = v_plain_product_id;
+  IF v_plain_claimed <> 0 THEN
+    RAISE EXCEPTION 'expected plain product stock 0 (unit still reserved), got %', v_plain_claimed;
   END IF;
 END;
 $$;

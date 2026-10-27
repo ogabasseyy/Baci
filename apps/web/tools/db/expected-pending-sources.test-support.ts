@@ -381,7 +381,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261027004500_storefront_order_serialized_claim_exclusion_3734.sql',
-    sha256: 'e558c492dae88ad6aa2ef3a0baa440f9c9120f1c78d5a5d2a6502c1fb9c4241f',
+    sha256: 'de0f9886c30c925db914af20030b9b4711729705ea33db2e3a990684bbbe3464',
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,

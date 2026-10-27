@@ -96,6 +96,7 @@ DECLARE
   v_release_branch_id uuid;
   v_release_from_status text;
   v_released_count integer := 0;
+  v_current_fulfillment jsonb;
 BEGIN
   -- Durable holds are status 'reserved' with reservation_expires_at
   -- NULL (no separate status exists), so status = 'reserved' covers
@@ -131,10 +132,23 @@ BEGIN
     v_released_count := v_released_count + 1;
   END LOOP;
   -- Freed lines return to the clean offer-line state (NULL, same as
-  -- untouched offer lines): any unit references they carried were
-  -- definitionally stale, and serialized fields are inapplicable to
-  -- offer-fulfilled lines.
-  IF v_released_count > 0 THEN
+  -- untouched offer lines). The clear also fires when this call freed
+  -- nothing but the snapshot still claims units while the line holds
+  -- none (detached elsewhere): such references are definitionally
+  -- stale for offer-fulfilled lines. Snapshots without an
+  -- inventoryUnits claim (e.g. refund-only shapes) are preserved.
+  SELECT fulfillment_data INTO v_current_fulfillment
+  FROM public.order_items WHERE id = p_item_id;
+  IF v_current_fulfillment IS NOT NULL AND (
+       v_released_count > 0 OR (
+         jsonb_typeof(v_current_fulfillment->'inventoryUnits') = 'array'
+         AND jsonb_array_length(v_current_fulfillment->'inventoryUnits') > 0
+         AND NOT EXISTS (
+           SELECT 1 FROM public.variant_inventory vi
+           WHERE vi.order_item_id = p_item_id AND vi.status <> 'available'
+         )
+       )
+     ) THEN
     UPDATE public.order_items AS oi
     SET fulfillment_data = NULL
     WHERE oi.id = p_item_id;
@@ -142,10 +156,10 @@ BEGIN
 END $release_helper$;
 
 -- Internal mutation primitive: same privilege profile as the sibling
--- private.record_variant_inventory_event (revoked from all API roles;
--- reachable only through the privileged reuse/confirm paths).
+-- reuse/confirm paths themselves (revoked from all API roles
+-- including service_role; reachable only through privileged callers).
 REVOKE ALL ON FUNCTION private.release_stale_offer_line_serialized_units(uuid, uuid, uuid, uuid, jsonb)
-FROM PUBLIC, anon, authenticated;
+FROM PUBLIC, anon, authenticated, service_role;
 DO $claim_exclusion_prepare_3734$
 DECLARE
   function_oid oid;

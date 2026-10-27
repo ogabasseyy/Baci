@@ -31,6 +31,10 @@ it('defers sign out until idle and redirects after success', async () => {
   const { result } = renderHook(() => useConfirmSignOut(signOut));
   act(() => result.current());
   expect(signOut).not.toHaveBeenCalled();
+  expect(global.requestIdleCallback).toHaveBeenCalledWith(
+    expect.any(Function),
+    { timeout: 500 }
+  );
   await act(async () => pending?.());
   expect(signOut).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith('/');
@@ -88,4 +92,51 @@ it('does not navigate after an in-flight sign out resolves following unmount', a
   unmount();
   await act(async () => finish?.());
   expect(router.replace).not.toHaveBeenCalled();
+});
+
+it('uses a timer when idle callbacks are unavailable', async () => {
+  jest.useFakeTimers();
+  Object.defineProperty(global, 'requestIdleCallback', {
+    configurable: true,
+    writable: true,
+    value: undefined,
+  });
+  const signOut = jest.fn(async () => undefined);
+  const { result } = renderHook(() => useConfirmSignOut(signOut));
+  act(() => result.current());
+  expect(signOut).not.toHaveBeenCalled();
+  await act(async () => {
+    jest.runAllTimers();
+  });
+  expect(signOut).toHaveBeenCalledTimes(1);
+  expect(router.replace).toHaveBeenCalledWith('/');
+  jest.useRealTimers();
+});
+
+it('cancels a fallback timer on unmount', () => {
+  jest.useFakeTimers();
+  Object.defineProperty(global, 'requestIdleCallback', {
+    configurable: true,
+    writable: true,
+    value: undefined,
+  });
+  const signOut = jest.fn(async () => undefined);
+  const { result, unmount } = renderHook(() => useConfirmSignOut(signOut));
+  act(() => result.current());
+  unmount();
+  act(() => jest.runAllTimers());
+  expect(signOut).not.toHaveBeenCalled();
+  jest.useRealTimers();
+});
+
+it('ignores a cancelled idle callback when sign-out is scheduled again', async () => {
+  const signOut = jest.fn(async () => undefined);
+  const { result } = renderHook(() => useConfirmSignOut(signOut));
+  act(() => result.current());
+  const previousCallback = pending;
+  act(() => result.current());
+  await act(async () => previousCallback?.());
+  expect(signOut).not.toHaveBeenCalled();
+  await act(async () => pending?.());
+  expect(signOut).toHaveBeenCalledTimes(1);
 });

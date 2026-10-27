@@ -5,23 +5,23 @@ import { Alert } from 'react-native';
 /** Defers auth teardown until the confirmation UI has yielded to idle work. */
 export function useConfirmSignOut(signOut: () => Promise<void>): () => void {
   const mounted = useRef(true);
-  const idleHandle = useRef<number | null>(null);
+  const cancelPending = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (idleHandle.current !== null) {
-        cancelIdleCallback(idleHandle.current);
-        idleHandle.current = null;
-      }
+      cancelPending.current?.();
+      cancelPending.current = null;
     };
   }, []);
 
   const confirmSignOut = () => {
-    if (idleHandle.current !== null) cancelIdleCallback(idleHandle.current);
-    idleHandle.current = requestIdleCallback(() => {
-      idleHandle.current = null;
+    cancelPending.current?.();
+    let cancelled = false;
+    const runSignOut = () => {
+      if (cancelled) return;
+      cancelPending.current = null;
       if (!mounted.current) return;
       signOut()
         .then(() => {
@@ -39,7 +39,23 @@ export function useConfirmSignOut(signOut: () => Promise<void>): () => void {
             ]
           );
         });
-    });
+    };
+    if (
+      typeof requestIdleCallback === 'function' &&
+      typeof cancelIdleCallback === 'function'
+    ) {
+      const handle = requestIdleCallback(runSignOut, { timeout: 500 });
+      cancelPending.current = () => {
+        cancelled = true;
+        cancelIdleCallback(handle);
+      };
+    } else {
+      const handle = setTimeout(runSignOut, 0);
+      cancelPending.current = () => {
+        cancelled = true;
+        clearTimeout(handle);
+      };
+    }
   };
 
   return confirmSignOut;

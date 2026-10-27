@@ -1,13 +1,14 @@
 diff --git a/ios/Utilities/Utilities.swift b/ios/Utilities/Utilities.swift
 --- a/ios/Utilities/Utilities.swift
 +++ b/ios/Utilities/Utilities.swift
-@@ -128,13 +128,16 @@
+@@ -128,13 +128,17 @@
     Returns the app's key window. On iOS and tvOS it is resolved from the foregrounded scene, so
     callers presenting UI don't reach a window in a scene the user isn't looking at.
     */
 -  @MainActor
 -  public static func keyWindow() -> UIWindow? {
 +  nonisolated public static func keyWindow() -> UIWindow? {
++    // Call only on the main queue; assumeIsolated enforces this contract.
 +    return MainActor.assumeIsolated {
  #if os(iOS) || os(tvOS)
 -    return SceneGeometry.keyWindow()

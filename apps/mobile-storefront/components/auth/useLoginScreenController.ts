@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import type { TextInputInstance } from 'react-native';
-import { Alert } from 'react-native';
+import { Alert, type TextInputInstance } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import type { LoginAuthMethod } from '@/components/auth/LoginEmailStep';
 import { useColorScheme } from '@/components/useColorScheme';

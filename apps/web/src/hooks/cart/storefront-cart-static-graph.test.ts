@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
  * lands on Lighthouse's simulated-LCP critical path (every script that loads
  * before first paint is charged to LCP). Heavy, on-demand-only dependencies
  * must stay behind `await import()`.
+ *
+ * Scope: local + @baci/shared traversal only; package internals unwalked.
  */
 const SRC = path.resolve(process.cwd(), 'src');
 const ENTRY = path.join(SRC, 'hooks/cart/storefront-cart-provider.tsx');
@@ -50,10 +52,15 @@ function resolveLocal(fromFile: string, specifier: string): string | null {
   } else {
     return null;
   }
-  for (const ext of EXTENSIONS) {
-    try {
-      if (statSync(base + ext).isFile()) return base + ext;
-    } catch {}
+  // moduleResolution:'bundler' maps './foo.js' to foo.ts/foo.tsx sources.
+  const bases = [base.replace(/\.jsx?$/, '')];
+  if (bases[0] === base) bases.push(base);
+  for (const candidate of bases) {
+    for (const ext of EXTENSIONS) {
+      try {
+        if (statSync(candidate + ext).isFile()) return candidate + ext;
+      } catch {}
+    }
   }
   return null;
 }

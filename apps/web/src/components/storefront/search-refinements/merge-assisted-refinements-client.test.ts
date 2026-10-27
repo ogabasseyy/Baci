@@ -94,6 +94,17 @@ const VALID_CASES: Array<{
     proposal: { query: 'phone', explanation: 'Falsy fields', filters: {} },
     committedQuery: 'phone',
   },
+  {
+    name: 'coerces array and toString prices like the shared merge',
+    current: {
+      brands: [],
+      sort: 'relevance',
+      minPrice: [500] as unknown as number,
+      minRating: ['4.5'] as unknown as number,
+    },
+    proposal: { query: 'phone', explanation: 'Coerced prices', filters: {} },
+    committedQuery: 'phone',
+  },
 ];
 
 const INVALID_CASES: Array<{

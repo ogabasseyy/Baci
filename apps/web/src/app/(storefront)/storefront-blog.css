@@ -227,6 +227,8 @@ body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
 @config "../../../tailwind.storefront-blog.config.mjs";
 
 @source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
 
 /*
   Blog CSS entrypoint.

@@ -1,14 +1,17 @@
-@import "tailwindcss" source(none);
-@import "./storefront-foundation.css";
+@import "tailwindcss/theme" theme(reference);
+@import "tailwindcss/utilities" source(none);
+@import "./storefront-theme-tokens.css";
 
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-blog.config.mjs";
 
-@source "../../components/storefront/cookie-consent.tsx";
-
 /*
   Blog post CSS. Keep renderer / embed / shadcn surfaces off the listing
-  render-blocking path; the listing layout loads storefront-blog.css only.
+  render-blocking path; the listing layout loads storefront-blog.css first,
+  so this additive sheet emits utilities only without duplicating Tailwind
+  preflight, storefront-foundation.css, or the blog sheet's Badge/Card and
+  cookie-consent button closure (themed-button + ui/button). The post layout
+  always imports storefront-blog.css immediately before this sheet.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
 @source not "./**/*.test.ts";
@@ -17,7 +20,4 @@
 @source "../../components/blog/renderer";
 @source "../../components/blog/product-embed.tsx";
 @source "../../components/blog/table-of-contents.tsx";
-@source "../../components/ui/badge.tsx";
-@source "../../components/ui/button.tsx";
-@source "../../components/ui/card.tsx";
 /* stylelint-enable scss/at-rule-no-unknown */

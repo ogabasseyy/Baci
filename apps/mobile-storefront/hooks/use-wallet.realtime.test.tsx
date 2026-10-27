@@ -59,6 +59,29 @@ const { credit, key, saved, setup, walletKeys } =
     mockNumbers,
     mockHistory,
   });
+it('debounces savings realtime invalidations across goals and contributions', async () => {
+  const { result, client, cleanup } = setup();
+  const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
+  const derivedWalletKey = [...key, 'derived-numbers'] as const;
+  client.setQueryData(derivedWalletKey, { total: 750 });
+  invalidateSpy.mockClear();
+
+  act(() => {
+    handlers.customer_savings_goals(undefined);
+    handlers.customer_savings_contributions(undefined);
+    handlers.customer_savings_contributions(undefined);
+  });
+
+  expect(invalidateSpy).not.toHaveBeenCalled();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(300);
+  });
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(invalidateSpy).toHaveBeenCalledTimes(1);
+  expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: key, exact: false });
+  expect(client.getQueryState(derivedWalletKey)?.isInvalidated).toBe(true);
+  cleanup();
+});
 it('coalesces a bank-credit burst and updates money and history without fetching account or products', async () => {
   const { result, cleanup } = setup();
   act(() => {

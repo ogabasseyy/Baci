@@ -1,9 +1,25 @@
+-- Synthetic, transaction-local fixture: this contract must not depend on a
+-- staging customer or a previously recorded PiggyVest operation.
 BEGIN;
-SELECT set_config('test.scope',jsonb_build_object('merchantId',customer.merchant_id,
-  'customerId',customer.id,'userId',customer.user_id,'integrationId',binding.id,
-  'businessId',binding.business_id,'environment',binding.environment)::text,true)
-FROM public.customers customer JOIN piggyvest_primary.integrations binding ON binding.merchant_id=customer.merchant_id
-WHERE customer.id='9e89a139-c098-4eac-a11b-8a3ea53e0e6e';
+INSERT INTO auth.users (id, email) VALUES
+  ('f3800000-0000-4000-8000-000000000001', 'piggyvest-presence@example.test');
+INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
+  ('f3800000-0000-4000-8000-000000000002', 'f3800000-0000-4000-8000-000000000001',
+   'piggyvest-presence@example.test', 'PiggyVest Presence Fixture', 'piggyvest-presence-fixture');
+INSERT INTO public.customers (id, merchant_id, user_id, email) VALUES
+  ('f3800000-0000-4000-8000-000000000003', 'f3800000-0000-4000-8000-000000000002',
+   'f3800000-0000-4000-8000-000000000001', 'piggyvest-customer@example.test');
+INSERT INTO piggyvest_primary.integrations
+  (id, merchant_id, business_id, environment, executor_login, enabled)
+VALUES ('f3800000-0000-4000-8000-000000000004', 'f3800000-0000-4000-8000-000000000002',
+  'synthetic-presence-business', 'staging', 'baci_piggyvest_primary_provisioner', true);
+SELECT set_config('test.scope', jsonb_build_object(
+  'merchantId', 'f3800000-0000-4000-8000-000000000002',
+  'customerId', 'f3800000-0000-4000-8000-000000000003',
+  'userId', 'f3800000-0000-4000-8000-000000000001',
+  'integrationId', 'f3800000-0000-4000-8000-000000000004',
+  'businessId', 'synthetic-presence-business', 'environment', 'staging')::text, true);
+
 SET SESSION AUTHORIZATION baci_piggyvest_primary_provisioner;
 DO $test$
 BEGIN

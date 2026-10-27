@@ -8,6 +8,8 @@ const AUTHENTICATED_SAVINGS_RPCS = new Set([
   'get_customer_savings_notifications',
   'mark_customer_savings_notification_read',
   'register_push_token',
+  'set_customer_wallet_phone',
+  'set_customer_wallet_profile',
   'update_customer_savings_notification_preferences',
 ]);
 

@@ -108,26 +108,38 @@ describe('ReceiptClaimScreen', () => {
     global.fetch = originalFetch;
   });
 
-  it('preserves the claim route and masked email hint when unauthenticated customers are sent to login', () => {
-    // The claim link and the login-email route carry only the masked hint
-    // (for example `b***@yahoo.co.uk`); full addresses must never ride the
-    // login redirect.
+  it('ignores a crafted email param and uses only the server-issued hint', async () => {
+    // A crafted link can carry any masked-shape address; the page must not
+    // render or forward it. The login redirect carries the token-scoped
+    // server hint instead.
     mockUseLocalSearchParams.mockReturnValue({
-      email: '  b***@yahoo.co.uk  ',
+      email: 'e***@evil.com',
       token: 'claim-token',
     });
     mockUseRequireAuth.mockReturnValue({
       isLoading: false,
       redirectTo: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token',
     });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ emailHint: 'b***@yahoo.co.uk' }),
+      ok: true,
+    });
 
     render(<ReceiptClaimScreen />);
 
-    expect(mockRedirect).toHaveBeenCalledWith({
-      href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=b***%40yahoo.co.uk',
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://ogabassey.com/api/storefront/receipts/claims/claim-token/login-email?source=app',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockRedirect).toHaveBeenCalledWith({
+        href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=b***%40yahoo.co.uk',
+      });
     });
+    expect(mockRedirect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ href: expect.stringContaining('evil') })
+    );
     expect(mockGetSession).not.toHaveBeenCalled();
-    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('loads the masked login email hint from the claim token before redirecting unauthenticated customers', async () => {

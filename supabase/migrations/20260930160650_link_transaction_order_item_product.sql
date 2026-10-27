@@ -104,3 +104,5 @@ GRANT EXECUTE ON FUNCTION public.link_transaction_order_item_product(
   uuid,
   uuid
 ) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';

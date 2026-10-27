@@ -211,7 +211,7 @@ BEGIN
 
   -- Document dates follow the reviewer's day via the shared helper
   -- (20260930160550): same rights, same raises, only relocated.
-  PERFORM private.sync_transaction_review_document_dates(
+  PERFORM public.sync_transaction_review_document_dates(
     p_order_id, p_merchant_id, p_transaction_date, v_transaction_time_zone
   );
 

@@ -1,8 +1,10 @@
 -- Sync document dates on a transaction-review date correction,
 -- extracted from 20260930160600 (300-line rule). Runs with the
 -- caller’s rights (SECURITY INVOKER) so row visibility matches the
--- review RPC exactly: no privilege change, only relocation.
-CREATE OR REPLACE FUNCTION private.sync_transaction_review_document_dates(
+-- review RPC exactly: no privilege change, only relocation. Lives in
+-- public (not private) because authenticated has no USAGE on the private
+-- schema; grants mirror the review RPC itself.
+CREATE OR REPLACE FUNCTION public.sync_transaction_review_document_dates(
   p_order_id uuid,
   p_merchant_id uuid,
   p_transaction_date timestamptz,
@@ -78,7 +80,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION private.sync_transaction_review_document_dates(uuid, uuid, timestamptz, text)
+REVOKE EXECUTE ON FUNCTION public.sync_transaction_review_document_dates(uuid, uuid, timestamptz, text)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.sync_transaction_review_document_dates(uuid, uuid, timestamptz, text)
+GRANT EXECUTE ON FUNCTION public.sync_transaction_review_document_dates(uuid, uuid, timestamptz, text)
   TO authenticated, service_role;
+
+NOTIFY pgrst, 'reload schema';

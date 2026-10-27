@@ -8,40 +8,55 @@ credentials, env files, provider endpoints or EAS services are read or changed.
 
 ## Run
 
-From `/Users/mac/Baci-worktrees/cursor-savings-phase1`:
+From the harness checkout root, set the receiver source root and PostgreSQL 18
+binary directory explicitly. The receiver root may be this same checkout or a
+different checkout whose receiver source you intend to exercise. The harness
+does not infer or silently substitute a receiver root.
 
 ```sh
+export BACI_CONTRACT_E2E_RECEIVER_ROOT="/absolute/path/to/receiver-checkout"
+export BACI_CONTRACT_E2E_POSTGRES_BIN="/absolute/path/to/postgresql/18/bin"
 pnpm exec node --test --test-concurrency=1 tools/staging/interest-bridge/contract-e2e/*.test.mjs
 pnpm exec node tools/staging/interest-bridge/contract-e2e/run.mjs
 pnpm exec biome check tools/staging/interest-bridge/contract-e2e
 ```
 
-Requires the already installed PostgreSQL 18 binaries at
-`/opt/homebrew/opt/postgresql@18/bin`, existing pnpm dependencies and the receiving
-worktree `/Users/mac/.codex/worktrees/0d77/Baci-app`. No installs/builds are run.
-Keep test concurrency at one on this disk-constrained host. The harness refuses
-below 128 MiB free. It creates a uniquely owned `/private/tmp/baci-contract-e2e-*`
-cluster, uses one-MiB WAL segments, binds **no TCP address**, ignores inherited
-PG credentials/targets and stops/removes only its own cluster in `finally`.
-Server query/error-statement logging is disabled. Failures withhold SQL output.
-No other worktree or temporary directory is cleaned.
+Both paths must be absolute and resolve to existing directories. The receiver
+must contain `apps/web/tools/piggyvest-staging`; the PostgreSQL directory must
+contain executable PostgreSQL 18 `initdb`, `pg_ctl`, `postgres`, and `psql`
+binaries. Each binary's reported version is checked before use. Missing or invalid
+configuration fails closed. No installs/builds are run. Keep test concurrency at
+one on this disk-constrained host. The harness refuses below 128 MiB free. It
+creates a uniquely owned `baci-contract-e2e-*` cluster under Node's operating
+system temporary directory and refuses paths too long for a local Unix socket.
+It uses one-MiB WAL segments, binds **no TCP address**, ignores inherited PG credentials/targets
+and stops/removes only its own cluster in `finally`. Server query/error-statement
+logging is disabled. Failures withhold SQL output. No other worktree or temporary
+directory is cleaned.
 
-For a recovered checkout, explicitly select its existing receiver source root:
+To exercise receiver source from a recovered checkout, explicitly select that
+checkout's root. To exercise the receiver source in the harness checkout itself,
+set `BACI_CONTRACT_E2E_RECEIVER_ROOT` to the harness checkout root instead.
 
 ```sh
-cd /Users/mac/Documents/Codex/staging-runtime-20261018/workspace
+cd /absolute/path/to/recovered-checkout
 export BACI_CONTRACT_E2E_RECEIVER_ROOT="$PWD"
+export BACI_CONTRACT_E2E_POSTGRES_BIN="/absolute/path/to/postgresql/18/bin"
 pnpm exec node --test --test-concurrency=1 tools/staging/interest-bridge/contract-e2e/*.test.mjs
 pnpm exec node tools/staging/interest-bridge/contract-e2e/run.mjs
 ```
 
-The override must resolve to an existing absolute source directory containing
-`apps/web/tools/piggyvest-staging`. Invalid explicit roots fail closed; there is
-no dependency-install or peer-worktree fallback. Without the override, the
-original receiver pointer remains unchanged. The source manifest fingerprints
-the actual selected files. Physical database guards, synthetic keys, import
-allowlists and disposable database isolation are unchanged. Missing recovered
-SQL inputs remain failures; this option neither substitutes nor fabricates them.
+The receiver override selects where receiver modules and SQL inputs are loaded
+from. Harness code and its TypeScript compiler remain in the harness checkout;
+allowed package imports resolve relative to each loaded source file. The source
+manifest hashes only files actually read through the contract source loader,
+including selected receiver files and tracked harness-side source files. It is
+not a fingerprint of the whole checkout, and selecting a different root does
+not by itself prove that the checkout is independent or immutable. Confirm the
+configured path and reported loaded-source manifest when that distinction
+matters. Physical database guards, synthetic keys, import allowlists and
+disposable database isolation are unchanged. Missing receiver SQL inputs remain
+failures; root selection neither substitutes nor fabricates them.
 
 ## Actual contracts exercised
 

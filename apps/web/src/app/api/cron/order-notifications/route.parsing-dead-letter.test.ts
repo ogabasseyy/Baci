@@ -142,34 +142,31 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
   it.each([
     ['rpc-decline', { data: false, error: null }],
     ['rpc-error', { data: null, error: new Error('rpc unavailable') }],
-  ])(
-    'loops when the dead-letter RPC does not terminalize (%s)',
-    async (_case, rpcResult) => {
-      mockSupabase.rpc.mockResolvedValueOnce({
-        data: [
-          {
-            attempt_count: 1,
-            event_type: 'manual_order_receipt',
-            id: 'outbox-half-corrupt',
-            max_attempts: 5,
-          },
-        ],
-        error: null,
-      });
-      mockSupabase.rpc.mockResolvedValueOnce(rpcResult);
+  ])('loops when the dead-letter RPC does not terminalize (%s)', async (_case, rpcResult) => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 1,
+          event_type: 'manual_order_receipt',
+          id: 'outbox-half-corrupt',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+    mockSupabase.rpc.mockResolvedValueOnce(rpcResult);
 
-      const response = await GET(cronRequest());
-      const body = await response.json();
+    const response = await GET(cronRequest());
+    const body = await response.json();
 
-      expect(response.status).toBe(200);
-      expect(body).toMatchObject({
-        claimed: 1,
-        skipped: 0,
-        unparseable: 1,
-      });
-      expect(mockSupabase.from).not.toHaveBeenCalled();
-    }
-  );
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 0,
+      unparseable: 1,
+    });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
 
   it('loops when the claim projection drops fields the stored row still has', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({

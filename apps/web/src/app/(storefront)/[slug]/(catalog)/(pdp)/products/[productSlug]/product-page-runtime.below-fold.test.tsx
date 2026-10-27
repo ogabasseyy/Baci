@@ -276,20 +276,12 @@ describe('ProductPageBelowFold — repair device link integration', () => {
         },
       ],
     });
-    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce([
-      {
-        slug: 'apple-iphone-13',
-        name: 'iPhone 13',
-        brand: 'Apple',
-        price: 450000,
-        availability: 'InStock' as const,
-        stock: 5,
-        category_slug: 'phones',
-      },
-    ]);
-
     await renderBelowFold(enabledMerchant);
 
+    // Collection scopes discard hub eligibility, so the scan must not run.
+    expect(
+      mockLoadPdpBrandHubEligibilityInventorySafely
+    ).not.toHaveBeenCalled();
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
         inventory: [],

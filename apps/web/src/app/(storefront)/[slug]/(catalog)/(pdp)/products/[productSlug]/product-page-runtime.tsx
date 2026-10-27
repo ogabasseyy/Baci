@@ -158,36 +158,38 @@ export async function ProductPageBelowFold({
     categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (categorySlug as SupportedClusterCategory)
       : null;
-  const [
-    reviewStats,
-    recentReviews,
-    scopedInventory,
-    guidePosts,
-    hubEligibilityInventory,
-  ] = await Promise.all([
-    getCachedProductRatingStats(product.id),
-    getCachedProductReviews(product.id, { limit: 10 }),
-    loadCategoryScopedSemanticInventorySafely({
-      merchantId: merchant.id,
-      categorySlug,
-      storeSlug: slug,
-      warningMessage: 'Failed to load PDP semantic inventory',
-    }),
-    supportedClusterCategory
-      ? loadPublishedClusterPostsSafely(merchant.id, {
-          pageKind: 'product',
-          categorySlug: supportedClusterCategory,
-          brands: product.brand ? [product.brand] : undefined,
-          productNames: [product.name],
-          productSlugs: product.slug ? [product.slug] : undefined,
-        })
-      : Promise.resolve([]),
-    loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: merchant.id,
-      categorySlug,
-      productBrand: product.brand,
-    }),
-  ]);
+  const [reviewStats, recentReviews, scopedInventory, guidePosts] =
+    await Promise.all([
+      getCachedProductRatingStats(product.id),
+      getCachedProductReviews(product.id, { limit: 10 }),
+      loadCategoryScopedSemanticInventorySafely({
+        merchantId: merchant.id,
+        categorySlug,
+        storeSlug: slug,
+        warningMessage: 'Failed to load PDP semantic inventory',
+      }),
+      supportedClusterCategory
+        ? loadPublishedClusterPostsSafely(merchant.id, {
+            pageKind: 'product',
+            categorySlug: supportedClusterCategory,
+            brands: product.brand ? [product.brand] : undefined,
+            productNames: [product.name],
+            productSlugs: product.slug ? [product.slug] : undefined,
+          })
+        : Promise.resolve([]),
+    ]);
+
+  // Hub eligibility is discarded for collection scopes, so only pay the
+  // brand-authority inventory scan for real categories. This deferred
+  // below-fold read runs after the parallel batch; the inventory is the
+  // destination's cached read, so the serial tail is normally milliseconds.
+  const hubEligibilityInventory = scopedInventory.isCollection
+    ? []
+    : await loadPdpBrandHubEligibilityInventorySafely({
+        merchantId: merchant.id,
+        categorySlug,
+        productBrand: product.brand,
+      });
 
   const reviewEnhancementSchema = buildProductReviewEnhancementSchema({
     productName: product.name,
@@ -231,9 +233,7 @@ export async function ProductPageBelowFold({
     countryCode: merchant.country,
     currentProduct,
     inventory: inventoryCandidates,
-    hubEligibilityInventory: scopedInventory.isCollection
-      ? []
-      : hubEligibilityInventory,
+    hubEligibilityInventory,
     guidePosts,
   });
   const priceSeoCopy = buildProductPriceSeoCopy({

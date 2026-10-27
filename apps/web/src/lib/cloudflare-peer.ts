@@ -142,25 +142,51 @@ export function normalizedClientIp(ip: string): string {
   const value = ipv6ToBigInt(ip);
   if (value === null) return ip;
   if (value >> 32n === 0xffffn) {
-    const embedded = value & 0xffffffffn;
-    return [24n, 16n, 8n, 0n]
-      .map((shift) => Number((embedded >> shift) & 0xffn))
-      .join('.');
+    return dottedIpv4(value & 0xffffffffn);
   }
   return ip;
+}
+
+function dottedIpv4(value: bigint): string {
+  return [24n, 16n, 8n, 0n]
+    .map((shift) => Number((value >> shift) & 0xffn))
+    .join('.');
+}
+
+/**
+ * Embedded IPv4 of a NAT64-translated address, or null. The
+ * well-known prefix 64:ff9b::/96 (RFC 6052) carries the IPv4 in the
+ * final 32 bits; the local-use 64:ff9b:1::/48 (RFC 8215) embeds it
+ * at bits 48-79. Behind carrier NAT64 — a common mobile path —
+ * distinct shoppers differ only in that embedded address, so the
+ * one-subscriber-per-/64 assumption is false for these prefixes.
+ */
+function nat64EmbeddedIpv4(value: bigint): string | null {
+  if (value >> 32n === 0x64ff9bn << 64n) {
+    return dottedIpv4(value & 0xffffffffn);
+  }
+  if (value >> 80n === 0x64ff9b0001n) {
+    return dottedIpv4((value >> 48n) & 0xffffffffn);
+  }
+  return null;
 }
 
 /**
  * Quota identity for a verified visitor address. IPv6 visitors are
  * bucketed by their /64 network so rotating the interface identifier
- * cannot mint a fresh budget. This is a quota key, not an IP address:
- * only the trusted cart identifier may return it.
+ * cannot mint a fresh budget — except NAT64-translated visitors,
+ * whose /64 is the shared translation prefix: they key on the
+ * embedded IPv4 instead, or every NAT64 shopper would collapse into
+ * one bucket. This is a quota key, not an IP address: only the
+ * trusted cart identifier may return it.
  */
 export function visitorQuotaIdentity(ip: string): string {
   const normalized = normalizedClientIp(ip);
   if (IPV4_REGEX.test(normalized)) return normalized;
   const value = ipv6ToBigInt(normalized);
   if (value === null) return normalized;
+  const nat64 = nat64EmbeddedIpv4(value);
+  if (nat64 !== null) return nat64;
   const groups = [48n, 32n, 16n, 0n].map((shift) =>
     Number((value >> (64n + shift)) & 0xffffn).toString(16)
   );

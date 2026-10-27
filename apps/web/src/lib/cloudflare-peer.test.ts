@@ -51,6 +51,17 @@ describe('visitorQuotaIdentity', () => {
     expect(visitorQuotaIdentity('203.0.113.9')).toBe('203.0.113.9');
     expect(visitorQuotaIdentity('::ffff:203.0.113.9')).toBe('203.0.113.9');
   });
+
+  it('keys NAT64 visitors on the embedded IPv4, not the shared /64', () => {
+    // 64:ff9b::/96 (well-known NAT64): shoppers differ only in the
+    // embedded final 32 bits, so /64 bucketing would collapse every
+    // carrier-NAT64 shopper into one quota bucket.
+    expect(visitorQuotaIdentity('64:ff9b::c000:20a')).toBe('192.0.2.10');
+    expect(visitorQuotaIdentity('64:ff9b::c633:6405')).toBe('198.51.100.5');
+    // 64:ff9b:1::/48 (local-use NAT64): IPv4 embedded at bits 48-79.
+    expect(visitorQuotaIdentity('64:ff9b:1:c000:20a::')).toBe('192.0.2.10');
+    expect(visitorQuotaIdentity('64:ff9b:1:c633:6405::')).toBe('198.51.100.5');
+  });
 });
 
 describe('platformPeerIp', () => {

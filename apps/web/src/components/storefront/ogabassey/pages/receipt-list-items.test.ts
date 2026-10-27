@@ -163,6 +163,9 @@ describe('fetchReceiptListItems', () => {
       quantity: 1,
       price: 15000,
     });
+    // The VAT breakdown reconciles from the projected items: dropping the
+    // fee here omits the outside-scope assurance subtotal from previews.
+    expect(item.rawOrder.items[0]).toMatchObject({ assurance_fee: 15000 });
   });
 
   it('carries the proforma kind for unresolved 325 orders', async () => {

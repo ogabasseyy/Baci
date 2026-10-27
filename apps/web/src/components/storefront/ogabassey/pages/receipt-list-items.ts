@@ -141,6 +141,9 @@ export async function fetchReceiptListItems(
         vat_rate?: number | null | undefined;
         vat_amount?: number | null | undefined;
         sellers_item_id?: string | null | undefined;
+        // Preserved so renderVatBreakdownHtml reconciles the outside-scope
+        // assurance subtotal exactly like the emailed PDF and download.
+        assurance_fee?: number | null | undefined;
       }> = items.map((item) => ({
         product_name: getReceiptItemName(item),
         variant_name: getReceiptItemVariantName(item) || undefined,
@@ -156,6 +159,7 @@ export async function fetchReceiptListItems(
         vat_rate: getOptionalReceiptItemNumber(item, 'vat_rate') ?? null,
         vat_amount: getOptionalReceiptItemNumber(item, 'vat_amount') ?? null,
         sellers_item_id: getReceiptListItemStringValue(item.sellers_item_id),
+        assurance_fee: getOptionalReceiptItemNumber(item, 'assurance_fee'),
       }));
       // Itemize the premium like the emailed PDF and download so the
       // preview lines reconcile with the displayed total.

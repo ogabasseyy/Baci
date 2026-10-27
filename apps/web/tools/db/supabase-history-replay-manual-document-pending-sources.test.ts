@@ -24,6 +24,7 @@ const MANUAL_DOCUMENT_MIGRATIONS = [
   '20260930160350_manual_document_snapshot_builders.sql',
   '20260930160400_atomic_manual_document_dispatch.sql',
   '20260930160500_parent_first_custom_item_lock.sql',
+  '20260930160600_parent_first_review_link_locks.sql',
 ] as const;
 
 describe('manual document pending replay sources', () => {

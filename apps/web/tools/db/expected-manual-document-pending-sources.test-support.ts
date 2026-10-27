@@ -89,4 +89,9 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
       'supabase/migrations/20260930160500_parent_first_custom_item_lock.sql',
     sha256: '865c95871bda0dc4914e6d3563a7047b76782334b0ae5cbcffe6bd1c1e38f3c8',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260930160600_parent_first_review_link_locks.sql',
+    sha256: '9e3052f37dc568c533ea6528278524385b2605a30bfb9498c04648e49c3650a5',
+  },
 ];

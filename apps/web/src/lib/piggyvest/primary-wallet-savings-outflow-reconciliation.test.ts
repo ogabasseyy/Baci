@@ -111,7 +111,40 @@ it('confirms a matched dispatched operation through the shared proof', async () 
   mockLookup(reservation);
   const fetchImplementation = vi
     .fn()
-    .mockResolvedValue(verifiedResponse('successful'));
+    .mockResolvedValueOnce(verifiedResponse('successful'))
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: true,
+          data: {
+            id: 'source',
+            business_id: 'business',
+            api_customer_id: 'source-customer',
+            currency: 'NGN',
+            status: 'active',
+            is_frozen: false,
+          },
+        })
+      )
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: true,
+          data: {
+            id: 'transaction',
+            customer_id: 'source-customer',
+            source_wallet: 'source',
+            destination_wallet: 'destination',
+            status: 'successful',
+            amount: 2000,
+            fee: 0,
+            reference: 'provider-reference',
+            third_party_reference: reservation.reference,
+          },
+        })
+      )
+    );
   expect(
     await runPrimaryWalletSavingsOutflowReconciliation({
       configuration,
@@ -120,7 +153,7 @@ it('confirms a matched dispatched operation through the shared proof', async () 
       fetchImplementation,
     })
   ).toBe('confirmed');
-  expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  expect(fetchImplementation).toHaveBeenCalledTimes(3);
   expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain(
     `reference=${encodeURIComponent(reservation.reference)}`
   );
@@ -130,7 +163,7 @@ it('confirms a matched dispatched operation through the shared proof', async () 
     )
   ).toBe(true);
 });
-it('releases a matched operation the provider reports as failed', async () => {
+it('keeps staging failed evidence pending because its units and terminal identity are uncorroborated', async () => {
   mockLookup(reservation);
   const fetchImplementation = vi
     .fn()
@@ -142,12 +175,12 @@ it('releases a matched operation the provider reports as failed', async () => {
       references: [reservation.reference],
       fetchImplementation,
     })
-  ).toBe('cancelled');
+  ).toBe('pending');
   expect(
     mocks.query.mock.calls.some(([statement]) =>
       String(statement).includes('release_failed_savings')
     )
-  ).toBe(true);
+  ).toBe(false);
 });
 it('stays pending when the provider re-query cannot confirm', async () => {
   mockLookup(reservation);

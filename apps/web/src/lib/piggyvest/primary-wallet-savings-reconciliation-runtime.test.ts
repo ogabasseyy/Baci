@@ -54,25 +54,54 @@ it.each([
   ['staging', 'https://staging.piggyvest.business'],
   ['production', 'https://api.piggyvest.business'],
 ] as const)('connects settlement to the %s provider instead of crossing environments', async (environment, origin) => {
-  const fetchImplementation = vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify({
-        status: true,
-        data: {
-          status: 'successful',
-          id: 'transaction',
-          internal_reference: 'transaction',
-          reference: 'provider-reference',
-          third_party_reference: 'reference',
-          amount: 2000,
-          fee: 0,
-          customer_id: 'source-customer',
-          source_wallet: 'source',
-          destination_wallet: 'destination',
-        },
-      })
-    )
+  const providerResponse = {
+    status: true,
+    data: {
+      status: 'successful',
+      id: 'transaction',
+      internal_reference: 'transaction',
+      reference: 'provider-reference',
+      third_party_reference: 'reference',
+      amount: 2000,
+      fee: 0,
+      customer_id: 'source-customer',
+      source_wallet: 'source',
+      destination_wallet: 'destination',
+    },
+  };
+  const fetchImplementation = vi.fn();
+  fetchImplementation.mockResolvedValueOnce(
+    new Response(JSON.stringify(providerResponse))
   );
+  if (environment === 'staging') {
+    fetchImplementation
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: true,
+            data: {
+              id: 'source',
+              business_id: 'business',
+              api_customer_id: 'source-customer',
+              currency: 'NGN',
+              status: 'active',
+              is_frozen: false,
+            },
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: true,
+            data: {
+              ...providerResponse.data,
+              third_party_reference: 'reference',
+            },
+          })
+        )
+      );
+  }
   expect(
     await runPrimaryWalletSavingsReconciliation({
       configuration: { ...configuration, environment },
@@ -89,6 +118,8 @@ it.each([
       cache: 'no-store',
     })
   );
+  if (environment === 'staging')
+    expect(fetchImplementation).toHaveBeenCalledTimes(3);
   expect(mocks.query).toHaveBeenLastCalledWith(
     expect.stringContaining('settle_savings'),
     [

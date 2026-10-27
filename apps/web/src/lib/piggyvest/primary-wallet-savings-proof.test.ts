@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyPrimaryWalletSavingsProof } from './primary-wallet-savings-proof';
+import { verifyPrimaryWalletSavingsProof as verifySavingsProof } from './primary-wallet-savings-proof';
 
 const reservation = {
   operationId: '11111111-1111-4111-8111-111111111111',
@@ -26,6 +26,20 @@ const response = {
     destination_wallet: 'savings-wallet',
   },
 };
+
+function verifyPrimaryWalletSavingsProof(
+  storedReservation: unknown,
+  providerResponse: unknown,
+  identityEvidence?: unknown,
+  environment: 'staging' | 'production' = 'production'
+) {
+  return verifySavingsProof(
+    storedReservation,
+    providerResponse,
+    identityEvidence,
+    environment
+  );
+}
 
 describe('primary wallet savings settlement proof', () => {
   it('accepts an exact provider transaction without using provider reference as our reference', () => {
@@ -114,11 +128,7 @@ describe('primary wallet savings settlement proof', () => {
       });
   });
 
-  it('settles on the transaction-verify TSQ success bound to the reservation', () => {
-    // The verify endpoint never returns the rich envelope: without TSQ
-    // acceptance every reconciled contribution would hold pending
-    // forever. The unguessable reference plus the amount, over the
-    // authenticated provider channel, is the success signal.
+  it('preserves the production TSQ success fallback', () => {
     expect(
       verifyPrimaryWalletSavingsProof(reservation, {
         status: true,
@@ -140,7 +150,7 @@ describe('primary wallet savings settlement proof', () => {
     });
   });
 
-  it('releases the hold on a TSQ failure bound to the reservation', () => {
+  it('preserves the production TSQ failure fallback', () => {
     expect(
       verifyPrimaryWalletSavingsProof(reservation, {
         status: true,
@@ -160,6 +170,130 @@ describe('primary wallet savings settlement proof', () => {
       destinationWalletId: 'savings-wallet',
       businessId: 'business',
     });
+  });
+
+  it.each([
+    'success',
+    'failed',
+  ])('keeps staging TSQ %s pending because its identity and amount unit are unproven', (status) => {
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        {
+          status: true,
+          data: { status, reference: reservation.reference, amount: 10000 },
+        },
+        undefined,
+        'staging'
+      )
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('accepts the staging single-read evidence only with staging environment', () => {
+    const stagingResponse = {
+      ...response,
+      data: { ...response.data, customer_id: 'business' },
+    };
+    const stagingEvidence = {
+      environment: 'staging',
+      wallet: {
+        id: 'source-wallet',
+        business_id: 'business',
+        api_customer_id: 'source-customer',
+        currency: 'NGN',
+        status: 'active',
+        is_frozen: false,
+      },
+      transaction: {
+        id: 'provider-transaction',
+        customer_id: 'business',
+        source_wallet: 'source-wallet',
+        destination_wallet: 'savings-wallet',
+        status: 'successful',
+        amount: 10000,
+        fee: 0,
+        reference: 'provider-reference',
+        third_party_reference: reservation.reference,
+      },
+    };
+
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        stagingResponse,
+        stagingEvidence,
+        'staging'
+      )
+    ).toMatchObject({ status: 'verified' });
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        stagingResponse,
+        stagingEvidence,
+        'production'
+      )
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('requires direct staging corroboration when customer_id is provider customer ID', () => {
+    const stagingResponse = {
+      ...response,
+      data: { ...response.data, customer_id: reservation.providerCustomerId },
+    };
+    const stagingEvidence = {
+      environment: 'staging',
+      wallet: {
+        id: reservation.sourceWalletId,
+        business_id: reservation.businessId,
+        api_customer_id: reservation.providerCustomerId,
+        currency: 'NGN',
+        status: 'active',
+        is_frozen: false,
+      },
+      transaction: {
+        id: 'provider-transaction',
+        customer_id: reservation.providerCustomerId,
+        source_wallet: reservation.sourceWalletId,
+        destination_wallet: reservation.destinationWalletId,
+        status: 'successful',
+        amount: 10000,
+        fee: 0,
+        reference: 'provider-reference',
+        third_party_reference: reservation.reference,
+      },
+    };
+
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        stagingResponse,
+        stagingEvidence,
+        'staging'
+      )
+    ).toMatchObject({ status: 'verified' });
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        stagingResponse,
+        undefined,
+        'staging'
+      )
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('keeps rich staging failed responses unverified without releasing holds', () => {
+    const failedResponse = {
+      ...response,
+      data: { ...response.data, status: 'failed' },
+    };
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        failedResponse,
+        undefined,
+        'staging'
+      )
+    ).toEqual({ status: 'unverified' });
   });
 
   it.each([

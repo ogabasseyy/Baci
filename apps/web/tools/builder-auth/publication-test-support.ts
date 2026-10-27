@@ -4,6 +4,10 @@ import type { PoolClient } from 'pg';
 import { createPrivateHome } from '../../src/lib/website-builder/create-private-home';
 import { installPreviewProjectionFixture } from '../builder-preview-spike/preview-gateway.test-support';
 import { asActor, draftFixture } from './draft-fixture';
+// A fresh Docker-backed PostgreSQL fixture plus the publication migration set
+// can exceed 30s when the full web suite is running concurrently. Keep this
+// bounded allowance shared by all publication fixture users.
+export const PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS = 60_000;
 export const publicationMigrations = [
   '20261022121000_builder_public_versions.sql',
   '20261022121100_builder_publication_receipts.sql',

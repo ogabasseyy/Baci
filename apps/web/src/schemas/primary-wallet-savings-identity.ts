@@ -35,10 +35,37 @@ const page = z
   .refine(
     (value) => !value.pageInfo.hasNextPage || value.pageInfo.endCursor !== null
   );
+// The provider's single-transaction envelope includes additional fields. Keep
+// the settlement proof's allowlist, while stripping unrelated response data.
+const singleTransaction = z.object({
+  id: identifier,
+  customer_id: identifier,
+  source_wallet: identifier,
+  destination_wallet: identifier,
+  status: z.literal('successful'),
+  amount: z.number().int().positive().safe(),
+  fee: z.number().int().nonnegative().safe(),
+  reference: identifier,
+  third_party_reference: identifier.nullable().optional(),
+  internal_reference: identifier.nullable().optional(),
+});
+const evidence = z.discriminatedUnion('environment', [
+  z.strictObject({
+    environment: z.literal('production'),
+    wallet,
+    transaction,
+  }),
+  z.strictObject({
+    environment: z.literal('staging'),
+    wallet,
+    transaction: singleTransaction,
+  }),
+]);
 
 export const primaryWalletSavingsIdentitySchemas = {
   wallet,
   page,
   transaction,
-  evidence: z.strictObject({ wallet, transaction }),
+  singleTransaction,
+  evidence,
 };

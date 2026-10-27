@@ -20,6 +20,18 @@ const transaction = {
   third_party_reference: 'reserved-reference',
   provider_reference: 'provider-reference',
 };
+const singleTransaction = {
+  id: transaction.id,
+  customer_id: 'business',
+  source_wallet: 'source-wallet',
+  destination_wallet: 'destination-wallet',
+  status: 'successful',
+  amount: 10000,
+  fee: 0,
+  reference: 'provider-reference',
+  third_party_reference: transaction.third_party_reference,
+  internal_reference: transaction.id,
+};
 
 export const savingsIdentityFixture = {
   reservation: {
@@ -52,6 +64,7 @@ export const savingsIdentityFixture = {
   },
   wallet,
   transaction,
+  singleTransaction,
   page: {
     edges: [transaction],
     pageInfo: { hasNextPage: false, endCursor: null },

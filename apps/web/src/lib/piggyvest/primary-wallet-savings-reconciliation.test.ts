@@ -14,6 +14,7 @@ const reservation = {
 };
 function ports() {
   return {
+    environment: 'production' as const,
     loadDispatched: vi.fn().mockResolvedValue(reservation),
     queryProvider: vi.fn().mockResolvedValue({
       status: true,
@@ -30,6 +31,7 @@ function ports() {
         destination_wallet: 'destination',
       },
     }),
+    resolveIdentity: vi.fn().mockResolvedValue(null),
     settle: vi.fn().mockResolvedValue('confirmed'),
     release: vi.fn().mockResolvedValue('released'),
   };
@@ -173,6 +175,36 @@ describe('primary savings reconciliation', () => {
         destination_wallet: 'destination',
       },
     });
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'pending' });
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
+  it('keeps rich staging failure pending without releasing the hold', async () => {
+    const dependencies = {
+      ...ports(),
+      environment: 'staging' as const,
+    };
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'failed',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'our-reference',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'source-customer',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    dependencies.resolveIdentity.mockResolvedValue({
+      environment: 'staging',
+    });
+
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
     ).toEqual({ status: 'pending' });

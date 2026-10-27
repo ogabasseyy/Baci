@@ -34,6 +34,7 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
     execute: createPrimaryWalletEvidenceExecutor(configuration),
   });
   const ports = {
+    environment: configuration.environment,
     ...store,
     queryProvider: createSavingsVerifyQueryProvider({
       environment: configuration.environment,

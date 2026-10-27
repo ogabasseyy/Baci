@@ -51,6 +51,7 @@ export async function runPrimaryWalletSavingsReconciliation(input: {
     execute: createPrimaryWalletEvidenceExecutor(configuration),
   });
   return await reconcilePrimaryWalletSavings(input.operationId, {
+    environment: configuration.environment,
     ...store,
     queryProvider: createSavingsVerifyQueryProvider({
       environment: configuration.environment,

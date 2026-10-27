@@ -26,6 +26,10 @@ const config = {
   // not a hard cap on memory used by one individual suite.
   maxWorkers: 2,
   workerIdleMemoryLimit: '768MB',
+  // Full React Native renders can exceed Jest's 5s default under suite-wide
+  // worker/GC pressure. Keep a hard per-test ceiling while the 5s RNTL
+  // asyncUtilTimeout continues to bound waitFor/findBy assertions.
+  testTimeout: 15_000,
   testPathIgnorePatterns: ['/node_modules/', '\\.test-utils\\.(t|j)sx?$'],
   // React Native native-module mocks can leave idle handles after every suite
   // has passed; exit explicitly so the run terminates instead of hanging on

@@ -20,10 +20,17 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     const actual = prefundedCardTransferVerificationSchemas.rich.parse(
       input.providerResponse
     ).data;
+    const origin = getPrimaryWalletProviderOrigin(input.environment);
+    const isStaging = origin === 'https://staging.piggyvest.business';
+    const customerIdentityMatches = isStaging
+      ? [expected.businessId, expected.providerCustomerId].includes(
+          actual.customer_id
+        )
+      : actual.customer_id === expected.businessId &&
+        actual.customer_id !== expected.providerCustomerId;
     if (
       !input.token.trim() ||
-      actual.customer_id !== expected.businessId ||
-      actual.customer_id === expected.providerCustomerId ||
+      !customerIdentityMatches ||
       actual.amount !== expected.amountKobo ||
       actual.third_party_reference !== expected.reference ||
       actual.source_wallet !== expected.sourceWalletId ||
@@ -36,7 +43,6 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     )
       return null;
 
-    const origin = getPrimaryWalletProviderOrigin(input.environment);
     async function getData(path: string, maxResponseBytes: number) {
       const response = await requestPrefundedCardProviderJson({
         url: `${origin}${path}`,
@@ -69,6 +75,34 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       wallet.api_customer_id !== expected.providerCustomerId
     )
       return null;
+
+    if (isStaging) {
+      const transaction = schemas.singleTransaction.parse(
+        await getData(
+          `/api/v1/transaction/${encodeURIComponent(actual.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
+          65536
+        )
+      );
+      if (
+        transaction.id !== actual.id ||
+        transaction.status !== 'successful' ||
+        transaction.customer_id !== actual.customer_id ||
+        transaction.source_wallet !== expected.sourceWalletId ||
+        transaction.destination_wallet !== expected.destinationWalletId ||
+        transaction.amount !== actual.amount ||
+        transaction.fee !== 0 ||
+        transaction.reference !== actual.reference ||
+        transaction.third_party_reference !== expected.reference ||
+        (transaction.internal_reference != null &&
+          transaction.internal_reference !== actual.id)
+      )
+        return null;
+      return schemas.evidence.parse({
+        environment: 'staging',
+        wallet,
+        transaction,
+      });
+    }
 
     let transaction: z.infer<typeof schemas.transaction> | null = null;
     let cursor: string | null = null;
@@ -113,7 +147,11 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       if (!page.pageInfo.hasNextPage)
         return transaction === null
           ? null
-          : schemas.evidence.parse({ wallet, transaction });
+          : schemas.evidence.parse({
+              environment: 'production',
+              wallet,
+              transaction,
+            });
     }
     return null;
   } catch {

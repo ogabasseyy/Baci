@@ -11,6 +11,7 @@ type FailedProof = Extract<
   { status: 'failed' }
 >;
 interface Ports {
+  environment: 'staging' | 'production';
   loadDispatched: (operationId: string) => Promise<unknown>;
   queryProvider: (selection: {
     reference: string;
@@ -43,7 +44,12 @@ export async function reconcilePrimaryWalletSavings(
       reference: reservation.data.reference,
       walletId: reservation.data.sourceWalletId,
     });
-    let proof = verifyPrimaryWalletSavingsProof(reservation.data, response);
+    let proof = verifyPrimaryWalletSavingsProof(
+      reservation.data,
+      response,
+      undefined,
+      ports.environment
+    );
     if (proof.status === 'unverified' && ports.resolveIdentity) {
       const identity = await ports.resolveIdentity({
         reservation: reservation.data,
@@ -52,7 +58,8 @@ export async function reconcilePrimaryWalletSavings(
       proof = verifyPrimaryWalletSavingsProof(
         reservation.data,
         response,
-        identity
+        identity,
+        ports.environment
       );
     }
     if (proof.status === 'failed') {

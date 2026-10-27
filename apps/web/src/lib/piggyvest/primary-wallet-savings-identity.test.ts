@@ -2,12 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { savingsIdentityFixture as fixture } from './primary-wallet-savings-identity.test-fixture';
 
+// Sanitized user-provided read-only QA observation, 2026-10-27: three existing
+// staging transfers each returned successful /verify amount +10000; their
+// single-transaction reads returned successful amount +10000, fee 0, and
+// matching IDs, source/destination wallets, provider reference, and merchant
+// reference. Each first list page had exactly one matching successful debit
+// amount -10000 kobo, fee 0, with the same merchant reference. These three
+// staging samples do not establish production behavior or a general provider
+// contract. No wallet/customer identifiers or raw response bodies are stored.
 function requestInput(
   pages: unknown[] = [fixture.page],
-  wallet: unknown = fixture.wallet
+  wallet: unknown = fixture.wallet,
+  environment: 'staging' | 'production' = 'production',
+  singleTransaction: unknown = fixture.singleTransaction
 ) {
   const fetchImplementation = vi.fn<typeof fetch>();
-  for (const data of [wallet, ...pages]) {
+  const responses = [
+    wallet,
+    ...(environment === 'staging' ? [singleTransaction] : pages),
+  ];
+  for (const data of responses) {
     fetchImplementation.mockResolvedValueOnce(
       new Response(JSON.stringify({ status: true, data }))
     );
@@ -15,7 +29,7 @@ function requestInput(
   return {
     reservation: fixture.reservation,
     providerResponse: fixture.providerResponse,
-    environment: 'staging',
+    environment,
     token: 'unit-test-token',
     fetchImplementation,
   };
@@ -26,6 +40,7 @@ describe('primary savings transfer identity corroboration', () => {
     const input = requestInput();
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toEqual({
+      environment: 'production',
       wallet: fixture.wallet,
       transaction: fixture.transaction,
     });
@@ -33,9 +48,87 @@ describe('primary savings transfer identity corroboration', () => {
     expect(
       input.fetchImplementation.mock.calls.map(([url]) => String(url))
     ).toEqual([
-      'https://staging.piggyvest.business/api/v1/wallet/source-wallet',
-      'https://staging.piggyvest.business/api/v1/transaction?wallet_id=source-wallet&limit=100&collapse_batch=0',
+      'https://api.piggyvest.business/api/v1/wallet/source-wallet',
+      'https://api.piggyvest.business/api/v1/transaction?wallet_id=source-wallet&limit=100&collapse_batch=0',
     ]);
+  });
+
+  it('uses the exact single-transaction lookup only for staging', async () => {
+    const input = requestInput([fixture.page], fixture.wallet, 'staging');
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toEqual({
+      environment: 'staging',
+      wallet: fixture.wallet,
+      transaction: fixture.singleTransaction,
+    });
+    expect(
+      input.fetchImplementation.mock.calls.map(([url]) => String(url))
+    ).toEqual([
+      'https://staging.piggyvest.business/api/v1/wallet/source-wallet',
+      'https://staging.piggyvest.business/api/v1/transaction/transfer-id?wallet_id=source-wallet',
+    ]);
+  });
+
+  it('strips unneeded fields from a richer staging single-transaction response', async () => {
+    const input = requestInput([fixture.page], fixture.wallet, 'staging', {
+      ...fixture.singleTransaction,
+      business_id: 'business',
+      wallet_id: 'source-wallet',
+      currency: 'NGN',
+      type: 'debit',
+      category: 'p2p',
+      charge: 0,
+      provider_reference: 'provider-reference',
+      unrelated_provider_metadata: { retainedByProvider: true },
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toEqual({
+      environment: 'staging',
+      wallet: fixture.wallet,
+      transaction: fixture.singleTransaction,
+    });
+  });
+
+  it('corroborates staging when verify customer_id is the provider customer ID', async () => {
+    const input = requestInput([fixture.page], fixture.wallet, 'staging', {
+      ...fixture.singleTransaction,
+      customer_id: fixture.reservation.providerCustomerId,
+    });
+    input.providerResponse = {
+      ...fixture.providerResponse,
+      data: {
+        ...fixture.providerResponse.data,
+        customer_id: fixture.reservation.providerCustomerId,
+      },
+    };
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toMatchObject({
+      environment: 'staging',
+      transaction: { customer_id: fixture.reservation.providerCustomerId },
+    });
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { id: 'another-transaction' },
+    { status: 'pending' },
+    { customer_id: 'another-business' },
+    { source_wallet: 'another-source' },
+    { destination_wallet: 'another-destination' },
+    { amount: 9999 },
+    { fee: 1 },
+    { reference: 'another-provider-reference' },
+    { third_party_reference: null },
+    { third_party_reference: 'another-merchant-reference' },
+    { internal_reference: 'another-transaction' },
+  ])('fails closed on a staging single-transaction mismatch: %j', async (change) => {
+    const input = requestInput([fixture.page], fixture.wallet, 'staging', {
+      ...fixture.singleTransaction,
+      ...change,
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -106,6 +199,7 @@ describe('primary savings transfer identity corroboration', () => {
     ]);
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toEqual({
+      environment: 'production',
       wallet: fixture.wallet,
       transaction: fixture.transaction,
     });

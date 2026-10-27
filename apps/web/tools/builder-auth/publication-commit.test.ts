@@ -2,12 +2,15 @@
 
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { publicationFixture } from './publication-test-support';
+import {
+  PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS,
+  publicationFixture,
+} from './publication-test-support';
 
 let f: Awaited<ReturnType<typeof publicationFixture>>;
 beforeAll(async () => {
   f = await publicationFixture();
-}, 30000);
+}, PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS);
 afterAll(async () => {
   await f?.close();
 });

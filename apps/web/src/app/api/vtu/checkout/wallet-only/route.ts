@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
         authSupabase: auth.supabase,
         input,
         keyRow: existing,
-        supabase: createAdminClient(),
+        supabase: adminSupabase,
         user: auth.user,
       });
     }
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
 
     // Sole service-role use on this route (narrowed exception).
     const fulfillment = await fulfillPendingVtuTransaction({
-      supabase: createAdminClient(),
+      supabase: adminSupabase,
       transactionId: prepared.transaction.id,
     });
     return mapFulfillmentToResponse(fulfillment);

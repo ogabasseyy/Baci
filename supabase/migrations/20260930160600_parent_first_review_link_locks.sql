@@ -1,16 +1,9 @@
--- Align the remaining item-first writers with the manual-document
--- dispatch lock order (order, children): dispatch takes the order FOR SHARE
--- before child locks, so writers that UPDATE order_items first and reach
--- the order through the tax trigger must lock the parent first. Covers
--- update_transaction_review_details (incl. the mobile-admin cost-only path)
--- and link_transaction_order_item_product; mark_transaction_order_item_custom
--- was aligned in 20260930160500.
--- Syncs document dates when transaction review corrects the transaction date.
+-- Align update_transaction_review_details with the manual-document dispatch
+-- lock order (order, children); document-date sync lives in 20260930160550
+-- and link_transaction_order_item_product in 20260930160650 (300-line rule).
 -- Identical to 20260702213000_update_transaction_review_unit_edit_lookup.sql
--- except the public.orders UPDATE, which additionally moves invoice_issue_date
--- and tax_point_date to the reviewer's selected calendar day (client timezone)
--- and marks both explicit. Required because manual orders carry explicit
--- device-local dates that the sync trigger preserves by design.
+-- except the orders UPDATE moves invoice_issue_date/tax_point_date to the
+-- reviewer's calendar day and marks both explicit.
 CREATE OR REPLACE FUNCTION public.update_transaction_review_details(
   p_merchant_id uuid,
   p_order_id uuid,
@@ -31,15 +24,12 @@ SECURITY INVOKER
 SET search_path TO 'public'
 AS $$
 DECLARE
-  v_day_changed boolean := false;
   v_identifier_type text := NULLIF(btrim(COALESCE(p_identifier_type, '')), '');
-  v_is_manual_order boolean := false;
   v_identifier_value text := NULLIF(btrim(COALESCE(p_identifier_value, '')), '');
   v_order_item_product_id uuid;
   v_order_item_quantity integer;
   v_order_item_rows integer := 0;
   v_order_item_variant_id uuid;
-  v_order_rows integer;
   v_product_rows integer;
   v_supplier_name text := btrim(COALESCE(p_supplier_name, ''));
   v_transaction_time_zone text := NULLIF(
@@ -219,63 +209,11 @@ BEGIN
     END IF;
   END IF;
 
-  -- A transaction review is an explicit human date correction: when the
-  -- reviewer changes the calendar day, the transaction date follows the
-  -- reviewer's selected day (client timezone, defaulting to Africa/Lagos
-  -- above). Manual-origin orders derive their document dates from the same
-  -- picker selection, so both dates follow and stay explicit (FALSE);
-  -- without this the receipt would keep showing the original day. For
-  -- non-manual orders only generated (TRUE-flag) dates follow; explicit or
-  -- unknown-provenance dates (e.g. an already-issued invoice differing
-  -- from the sale day) are preserved so a sale-date correction cannot
-  -- silently rewrite them.
-  -- Compare calendar days, not instants: the editor always re-serializes the
-  -- date field as reviewer-local midnight, so the instant normally differs
-  -- even for cost-only edits. When the day is unchanged the whole date block
-  -- (including the stored instant) is preserved as-is.
-  SELECT (
-    transaction_date AT TIME ZONE v_transaction_time_zone
-  )::date IS DISTINCT FROM (
-    p_transaction_date AT TIME ZONE v_transaction_time_zone
-  )::date,
-    source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga')
-  INTO v_day_changed, v_is_manual_order
-  FROM public.orders
-  WHERE id = p_order_id
-    AND merchant_id = p_merchant_id;
-
-  UPDATE public.orders
-  SET transaction_date = CASE
-        WHEN v_day_changed THEN p_transaction_date ELSE transaction_date END,
-      invoice_issue_date = CASE
-        WHEN v_day_changed
-         AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)
-        THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
-        ELSE invoice_issue_date
-      END,
-      tax_point_date = CASE
-        WHEN v_day_changed
-         AND (v_is_manual_order OR tax_point_date_generated IS TRUE)
-        THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
-        ELSE tax_point_date
-      END,
-      invoice_issue_date_generated = CASE
-        WHEN v_day_changed
-         AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)
-        THEN false ELSE invoice_issue_date_generated END,
-      tax_point_date_generated = CASE
-        WHEN v_day_changed
-         AND (v_is_manual_order OR tax_point_date_generated IS TRUE)
-        THEN false ELSE tax_point_date_generated END
-  WHERE id = p_order_id
-    AND merchant_id = p_merchant_id;
-
-  GET DIAGNOSTICS v_order_rows = ROW_COUNT;
-
-  IF v_order_rows = 0 THEN
-    RAISE EXCEPTION 'Transaction not found for this merchant'
-      USING ERRCODE = 'P0001';
-  END IF;
+  -- Document dates follow the reviewer's day via the shared helper
+  -- (20260930160550): same rights, same raises, only relocated.
+  PERFORM private.sync_transaction_review_document_dates(
+    p_order_id, p_merchant_id, p_transaction_date, v_transaction_time_zone
+  );
 
   IF p_update_product_default THEN
     IF p_variant_id IS NOT NULL THEN
@@ -357,105 +295,3 @@ GRANT EXECUTE ON FUNCTION public.update_transaction_review_details(
 ) TO authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
-
-CREATE OR REPLACE FUNCTION public.link_transaction_order_item_product(
-  p_merchant_id uuid,
-  p_order_item_id uuid,
-  p_product_id uuid,
-  p_variant_id uuid
-) RETURNS void
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_rows integer;
-  v_order_id uuid;
-BEGIN
-  IF p_merchant_id IS NULL THEN
-    RAISE EXCEPTION 'Merchant is required' USING ERRCODE = '22023';
-  END IF;
-
-  IF p_order_item_id IS NULL THEN
-    RAISE EXCEPTION 'Transaction line item is required'
-      USING ERRCODE = '22023';
-  END IF;
-
-  IF p_product_id IS NULL THEN
-    RAISE EXCEPTION 'Product is required' USING ERRCODE = '22023';
-  END IF;
-
-  IF p_variant_id IS NULL THEN
-    PERFORM 1
-    FROM public.products p
-    WHERE p.id = p_product_id
-      AND p.merchant_id = p_merchant_id;
-  ELSE
-    PERFORM 1
-    FROM public.product_variants v
-    JOIN public.products p ON p.id = v.product_id
-    WHERE v.id = p_variant_id
-      AND v.product_id = p_product_id
-      AND v.merchant_id = p_merchant_id
-      AND p.merchant_id = p_merchant_id;
-  END IF;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Could not verify product or variant for this merchant'
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  -- Parent-first (PR 3580 dispatch): mirror the UPDATE predicates so the
-  -- parent lock is taken only when the link will succeed; every failure
-  -- mode still raises the same P0001 below without holding a lock.
-  SELECT oi.order_id INTO v_order_id
-  FROM public.order_items oi
-  JOIN public.orders o ON o.id = oi.order_id
-  WHERE oi.id = p_order_item_id
-    AND o.merchant_id = p_merchant_id
-    AND oi.product_id IS NULL
-    AND COALESCE(oi.product_match_status, 'unreviewed') <> 'custom';
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Could not link this item to that product for this merchant'
-      USING ERRCODE = 'P0001';
-  END IF;
-
-  PERFORM 1 FROM public.orders o
-  WHERE o.id = v_order_id
-  FOR UPDATE;
-
-  UPDATE public.order_items oi
-  SET
-    product_id = p_product_id,
-    product_match_status = 'linked',
-    variant_id = p_variant_id
-  FROM public.orders o
-  WHERE oi.id = p_order_item_id
-    AND oi.order_id = o.id
-    AND o.merchant_id = p_merchant_id
-    AND oi.product_id IS NULL
-    AND COALESCE(oi.product_match_status, 'unreviewed') <> 'custom';
-
-  GET DIAGNOSTICS v_rows = ROW_COUNT;
-
-  IF v_rows = 0 THEN
-    RAISE EXCEPTION 'Could not link this item to that product for this merchant'
-      USING ERRCODE = 'P0001';
-  END IF;
-END;
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.link_transaction_order_item_product(
-  uuid,
-  uuid,
-  uuid,
-  uuid
-) FROM PUBLIC;
-
-GRANT EXECUTE ON FUNCTION public.link_transaction_order_item_product(
-  uuid,
-  uuid,
-  uuid,
-  uuid
-) TO authenticated;

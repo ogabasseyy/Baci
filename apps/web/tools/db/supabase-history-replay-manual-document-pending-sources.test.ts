@@ -24,7 +24,9 @@ const MANUAL_DOCUMENT_MIGRATIONS = [
   '20260930160350_manual_document_snapshot_builders.sql',
   '20260930160400_atomic_manual_document_dispatch.sql',
   '20260930160500_parent_first_custom_item_lock.sql',
+  '20260930160550_sync_transaction_review_document_dates.sql',
   '20260930160600_parent_first_review_link_locks.sql',
+  '20260930160650_link_transaction_order_item_product.sql',
   '20260930160700_dead_letter_corrupt_outbox_rpc.sql',
   '20260930160800_narrow_anon_receipt_claim_preview.sql',
 ] as const;

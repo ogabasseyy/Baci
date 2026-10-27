@@ -35,6 +35,16 @@ and enrollment gates in the release sequence below.
   non-canonical stored values silently keep every cart surface
   disabled. (Trim + lowercase normalization in the web helper applies
   only to non-cart feature gates.)
+- Cloudflare visitor trust for anonymous cart quotas
+  (`apps/web/src/lib/cloudflare-peer.ts`): `CF-Connecting-IP` is only
+  used as a quota identity when the platform-verified peer is inside
+  Cloudflare's published egress ranges. Hard deploy prerequisite:
+  restrict origin ingress to the proxied Cloudflare zone
+  (Authenticated Origin Pulls or equivalent) so callers originating
+  from other Cloudflare egress (e.g. a Worker fetching the origin
+  directly) cannot present forged `CF-Connecting-IP`/`CF-Ray` headers.
+  Until that restriction is verifiably in place, treat this trust as
+  quota-shaping only — it is never an authentication signal.
 - Bounded retention: `cleanup_commerce_carts()` (final body in
   `20261015163000`, batching every statement to 1000 rows per call)
   deletes expired operations/creation requests/events, handoffs
@@ -96,14 +106,21 @@ and enrollment gates in the release sequence below.
    `CART_PROOF_ENVIRONMENT` shared by all its instances: proof issuance
    and verification fail closed without it, and distinct deployments
    must never share a value (or the master secret).
-3. Deploy compatible server adapters with enrollment still disabled.
-4. Activate terminal-cart retention explicitly (only with the release
+3. Before deploying the Cloudflare visitor-quota trust: verify the
+   origin is restricted to the proxied Cloudflare zone
+   (Authenticated Origin Pulls or equivalent) and confirm a
+   direct-to-origin request with forged `CF-Connecting-IP`/`CF-Ray`
+   headers is rejected or ignored; record the evidence. This is a
+   hard gate for that change, not a follow-up. Also wire an operator
+   alert on the `Cart quota store degraded` warning before rollout.
+4. Deploy compatible server adapters with enrollment still disabled.
+5. Activate terminal-cart retention explicitly (only with the release
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
-5. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
+6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
-6. Expand only after convergence, checkout-binding and isolation
+7. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
 ## Signing keys
@@ -253,9 +270,15 @@ callers; no anonymous fallback or new production secret is introduced.
   against the real worker scheduler.
 - Quota degradation is an explicit pre-activation gate: when the
   Redis quota store is degraded, anonymous/enumeration operations
-  and the server-to-server legacy bridge fail closed, but
-  authenticated shopper operations (commands, snapshot,
-  checkout_prepare) deliberately fall back to per-instance in-memory
+  (create, handoff preview/redeem/issue, account link, session
+  revoke) and the server-to-server legacy bridge fail closed.
+  Bootstrap is the exception — it is a stateless proof mint and
+  degrades to a reduced per-instance ceiling
+  (`DEGRADED_BOOTSTRAP_LIMIT`) so a Redis outage cannot blank every
+  shopper's cart at the first step; proofs minted then still cannot
+  materialize carts because create stays fail-closed. Authenticated
+  shopper operations (commands, snapshot, checkout_prepare)
+  deliberately fall back to per-instance in-memory
   counters, so one valid proof's effective budget multiplies by the
   instance count for the outage duration. Before any merchant is
   enrolled, put an operator alert on the throttled

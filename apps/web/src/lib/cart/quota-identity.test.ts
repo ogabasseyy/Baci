@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -38,8 +37,14 @@ afterEach(() => {
 });
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_MERCHANT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CREDENTIAL_A = '11111111-1111-4111-8111-111111111111';
 const CREDENTIAL_B = '22222222-2222-4222-8222-222222222222';
+
+/** Deterministic distinct valid v4 credentials for rotation tests. */
+function rotatedCredential(index: number): string {
+  return `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
+}
 
 function requestWith(headers: Record<string, string>): NextRequest {
   return new NextRequest('http://localhost:3000/api/storefront/cart', {
@@ -55,13 +60,15 @@ describe('getCartQuotaClientIdentity', () => {
       requestWith({
         ...sharedEgress,
         'x-baci-client-credential': CREDENTIAL_A,
-      })
+      }),
+      MERCHANT_ID
     );
     const second = getCartQuotaClientIdentity(
       requestWith({
         ...sharedEgress,
         'x-baci-client-credential': CREDENTIAL_B,
-      })
+      }),
+      MERCHANT_ID
     );
     // Two shoppers behind one egress get independent budgets.
     expect(first).not.toBe(second);
@@ -70,19 +77,35 @@ describe('getCartQuotaClientIdentity', () => {
     expect(first).not.toContain(CREDENTIAL_A);
   });
 
+  it('derives unlinkable identities for one credential across merchants', () => {
+    vi.stubEnv('VERCEL', '1');
+    const headers = { 'x-baci-client-credential': CREDENTIAL_A };
+    const atFirst = getCartQuotaClientIdentity(
+      requestWith(headers),
+      MERCHANT_ID
+    );
+    const atOther = getCartQuotaClientIdentity(
+      requestWith(headers),
+      OTHER_MERCHANT_ID
+    );
+    expect(atOther).not.toBe(atFirst);
+  });
+
   it('is stable for one credential across changing network addresses', () => {
     vi.stubEnv('VERCEL', '1');
     const atHome = getCartQuotaClientIdentity(
       requestWith({
         'x-baci-client-credential': CREDENTIAL_A,
         'x-real-ip': '192.0.2.10',
-      })
+      }),
+      MERCHANT_ID
     );
     const onCarrierNat = getCartQuotaClientIdentity(
       requestWith({
         'x-baci-client-credential': CREDENTIAL_A,
         'x-real-ip': '198.51.100.7',
-      })
+      }),
+      MERCHANT_ID
     );
     expect(onCarrierNat).toBe(atHome);
   });
@@ -90,12 +113,14 @@ describe('getCartQuotaClientIdentity', () => {
   it('treats UUID case variants as one identity', () => {
     vi.stubEnv('VERCEL', '1');
     const lower = getCartQuotaClientIdentity(
-      requestWith({ 'x-baci-client-credential': CREDENTIAL_A })
+      requestWith({ 'x-baci-client-credential': CREDENTIAL_A }),
+      MERCHANT_ID
     );
     const upper = getCartQuotaClientIdentity(
       requestWith({
         'x-baci-client-credential': CREDENTIAL_A.toUpperCase(),
-      })
+      }),
+      MERCHANT_ID
     );
     expect(upper).toBe(lower);
   });
@@ -103,7 +128,10 @@ describe('getCartQuotaClientIdentity', () => {
   it('falls back to the legacy trusted network identity without a credential', () => {
     vi.stubEnv('VERCEL', '1');
     expect(
-      getCartQuotaClientIdentity(requestWith({ 'x-real-ip': '192.0.2.44' }))
+      getCartQuotaClientIdentity(
+        requestWith({ 'x-real-ip': '192.0.2.44' }),
+        MERCHANT_ID
+      )
     ).toBe('192.0.2.44');
   });
 
@@ -114,7 +142,8 @@ describe('getCartQuotaClientIdentity', () => {
         requestWith({
           'x-baci-client-credential': 'not-a-credential',
           'x-real-ip': '192.0.2.44',
-        })
+        }),
+        MERCHANT_ID
       )
     ).toBe('192.0.2.44');
   });
@@ -136,7 +165,7 @@ describe('checkAnonymousCartQuota', () => {
     for (let attempt = 0; attempt < backstopLimit; attempt++) {
       const result = await checkAnonymousCartQuota(
         requestWith({
-          'x-baci-client-credential': randomUUID(),
+          'x-baci-client-credential': rotatedCredential(attempt),
           'x-real-ip': '192.0.2.44',
         }),
         create
@@ -145,7 +174,7 @@ describe('checkAnonymousCartQuota', () => {
     }
     const denied = await checkAnonymousCartQuota(
       requestWith({
-        'x-baci-client-credential': randomUUID(),
+        'x-baci-client-credential': rotatedCredential(backstopLimit),
         'x-real-ip': '192.0.2.44',
       }),
       create
@@ -156,7 +185,7 @@ describe('checkAnonymousCartQuota', () => {
   it('keeps per-credential budgets independent below the backstop', async () => {
     vi.stubEnv('VERCEL', '1');
     // Per-credential fairness applies while the shared store is
-    // healthy; degraded mode falls back to network identity (next test).
+    // healthy; degraded mode falls back to network identity (below).
     useHealthyRedis();
     __resetCartQuotaStoreForTesting();
     const limit = CART_QUOTA_BUDGETS.create.limit;
@@ -206,7 +235,7 @@ describe('checkAnonymousCartQuota', () => {
     for (let attempt = 0; attempt < degradedBackstop + 100; attempt++) {
       const result = await checkAnonymousCartQuota(
         requestWith({
-          'x-baci-client-credential': randomUUID(),
+          'x-baci-client-credential': rotatedCredential(attempt),
           'x-real-ip': '192.0.2.44',
         }),
         bootstrap
@@ -222,7 +251,7 @@ describe('checkAnonymousCartQuota', () => {
     expect(bootstrapMemoryCounters.size).toBe(1);
     const denied = await checkAnonymousCartQuota(
       requestWith({
-        'x-baci-client-credential': randomUUID(),
+        'x-baci-client-credential': rotatedCredential(9999),
         'x-real-ip': '192.0.2.44',
       }),
       bootstrap

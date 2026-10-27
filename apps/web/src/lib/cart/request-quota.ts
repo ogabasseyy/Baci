@@ -54,6 +54,9 @@ export interface CartQuotaResult {
   degraded: boolean;
 }
 
+/** Ratio between a credential budget and its network backstop. */
+export const NETWORK_BACKSTOP_MULTIPLIER = 25;
+
 export const CART_QUOTA_BUDGETS: Record<
   CartQuotaOperation,
   { limit: number; windowMs: number }
@@ -73,10 +76,16 @@ export const CART_QUOTA_BUDGETS: Record<
   // traffic (many shoppers, roughly one bootstrap each), so fairness
   // comes from the credential budget and the backstop only bounds
   // scripted rotation.
-  bootstrap_network_backstop: { limit: 3000, windowMs: 60 * 60 * 1000 },
+  bootstrap_network_backstop: {
+    limit: 120 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 60 * 1000,
+  },
   // A bootstrap proof should create about once; retries need headroom.
   create: { limit: 10, windowMs: 60 * 60 * 1000 },
-  create_network_backstop: { limit: 250, windowMs: 60 * 60 * 1000 },
+  create_network_backstop: {
+    limit: 10 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 60 * 1000,
+  },
   // Burst-friendly for quantity taps, bounded per principal.
   commands: { limit: 240, windowMs: 60 * 1000 },
   snapshot: { limit: 240, windowMs: 60 * 1000 },
@@ -85,7 +94,10 @@ export const CART_QUOTA_BUDGETS: Record<
   handoff_issue: { limit: 60, windowMs: 60 * 60 * 1000 },
   handoff_redeem: { limit: 120, windowMs: 60 * 60 * 1000 },
   handoff_preview: { limit: 120, windowMs: 60 * 1000 },
-  handoff_preview_network_backstop: { limit: 3000, windowMs: 60 * 1000 },
+  handoff_preview_network_backstop: {
+    limit: 120 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 1000,
+  },
   // MCP legacy-bridge writes are token-authenticated server-to-server
   // calls: budgeted per merchant and legacy token, never by the shared
   // broker egress identity, and fail-closed on quota degradation
@@ -151,9 +163,6 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
  * store cannot bound abuse, so degraded instances grant far less.
  */
 export const DEGRADED_BOOTSTRAP_LIMIT = 20;
-
-/** Ratio between a credential budget and its network backstop. */
-export const NETWORK_BACKSTOP_MULTIPLIER = 25;
 
 /**
  * While degraded, a backstop IS the effective identity (the

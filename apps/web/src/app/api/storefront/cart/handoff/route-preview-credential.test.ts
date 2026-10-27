@@ -150,7 +150,7 @@ describe('GET /api/storefront/cart/handoff client credential quotas', () => {
       `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       { headers: credentialA, method: 'GET' }
     );
-    const subject = getCartQuotaClientIdentity(probe);
+    const subject = getCartQuotaClientIdentity(probe, 'handoff-preview');
     for (let index = 0; index < 120; index += 1) {
       await checkCartQuota({
         merchantId: 'handoff-preview',

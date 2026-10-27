@@ -1,3 +1,6 @@
+const randomUUIDMock = jest.fn((): string =>
+  require('node:crypto').randomUUID()
+);
 const storage = new Map<string, string>();
 const getItemAsync = jest.fn(async (key: string) => storage.get(key) ?? null);
 const setItemAsync = jest.fn(async (key: string, value: string) => {
@@ -19,9 +22,12 @@ beforeEach(() => {
   setItemAsync.mockImplementation(async (key: string, value: string) => {
     storage.set(key, value);
   });
+  randomUUIDMock.mockImplementation((): string =>
+    require('node:crypto').randomUUID()
+  );
   jest.doMock('expo-secure-store', () => ({ getItemAsync, setItemAsync }));
   jest.doMock('expo-crypto', () => ({
-    randomUUID: () => require('node:crypto').randomUUID(),
+    randomUUID: randomUUIDMock,
   }));
 });
 
@@ -50,6 +56,19 @@ describe('getCartClientCredential', () => {
     const { getCartClientCredential } = loadModule();
     const first = await getCartClientCredential();
     expect(await getCartClientCredential()).toBe(first);
+  });
+
+  it('omits the header instead of rejecting when generation fails', async () => {
+    getItemAsync.mockRejectedValue(new Error('denied'));
+    randomUUIDMock.mockImplementation((): string => {
+      throw new Error('unavailable');
+    });
+    const { cartClientCredentialHeaders, getCartClientCredential } =
+      loadModule();
+    await expect(getCartClientCredential()).resolves.toBeNull();
+    // The settled (not rejected) result is cached, never a rejection.
+    await expect(getCartClientCredential()).resolves.toBeNull();
+    await expect(cartClientCredentialHeaders()).resolves.toEqual({});
   });
 
   it('exposes the credential under the shared header name', async () => {

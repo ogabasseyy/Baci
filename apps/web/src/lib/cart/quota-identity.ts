@@ -24,12 +24,19 @@ import {
  * Clients without a credential (older app versions) keep the legacy
  * trusted network identity, so this is fully backward compatible.
  */
-export function getCartQuotaClientIdentity(request: NextRequest): string {
+export function getCartQuotaClientIdentity(
+  request: NextRequest,
+  merchantId: string
+): string {
   const credential = request.headers.get(CART_CLIENT_CREDENTIAL_HEADER);
   if (isValidCartClientCredential(credential)) {
-    // Lowercase before hashing: UUID hex case is not identity, and
-    // case rotation must not multiply buckets.
-    return `client-credential:${hashSubject(credential.toLowerCase())}`;
+    // Salted per merchant and lowercased before hashing: UUID hex
+    // case is not identity (case rotation must not multiply
+    // buckets), and the stored hash must not be joinable across
+    // merchants by anyone with quota-key visibility.
+    return `client-credential:${hashSubject(
+      `${merchantId}:${credential.toLowerCase()}`
+    )}`;
   }
   return getTrustedClientIdentifier(request);
 }
@@ -99,6 +106,6 @@ export async function checkAnonymousCartQuota(
     ...input,
     // Single derivation: the enforced subject is exactly the tested
     // identity (prefix, lowercasing, hashing live in one place).
-    subject: getCartQuotaClientIdentity(request),
+    subject: getCartQuotaClientIdentity(request, input.merchantId),
   });
 }

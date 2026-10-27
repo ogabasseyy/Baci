@@ -29,13 +29,16 @@ export function useSearchAssistance(query: string, enabled: boolean) {
     try {
       if (!enabled) throw new Error('Unavailable');
       const requestId = crypto.randomUUID();
+      // Load the stream reader before starting the request: a chunk-load
+      // failure must not discard an in-flight assist response, and stream
+      // consumption must not wait on a serial import after headers arrive.
+      const { readAssistanceStream } = await import('@baci/shared/lib');
       const response = await fetchWithCsrf('/api/search/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, requestId }),
         signal: request.signal,
       });
-      const { readAssistanceStream } = await import('@baci/shared/lib');
       await readAssistanceStream(
         response,
         requestId,

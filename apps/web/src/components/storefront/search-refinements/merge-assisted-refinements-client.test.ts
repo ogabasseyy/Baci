@@ -82,6 +82,18 @@ const VALID_CASES: Array<{
     },
     committedQuery: 'phone',
   },
+  {
+    name: 'treats falsy condition, processor, and category as absent',
+    current: {
+      brands: [],
+      sort: 'relevance',
+      condition: false as unknown as SearchRefinements['condition'],
+      processor: 0 as unknown as string,
+      categoryId: false as unknown as string,
+    },
+    proposal: { query: 'phone', explanation: 'Falsy fields', filters: {} },
+    committedQuery: 'phone',
+  },
 ];
 
 const INVALID_CASES: Array<{

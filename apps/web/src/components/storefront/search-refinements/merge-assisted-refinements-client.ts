@@ -26,7 +26,9 @@ function parseNumber(value: unknown, max: number): number | undefined {
 }
 
 function parseText(val: unknown, max: number): string | undefined {
-  if (val == null || val === '') return undefined;
+  // Shared parseSearchRefinements coerces falsy values to absent
+  // (`input.processor || undefined`); mirror that before type checks.
+  if (!val) return undefined;
   if (typeof val !== 'string') throw new Error(ERR);
   const trimmed = val.trim();
   if (trimmed.length < 1 || trimmed.length > max) throw new Error(ERR);
@@ -34,13 +36,13 @@ function parseText(val: unknown, max: number): string | undefined {
 }
 
 function parseUuid(val: unknown): string | undefined {
-  if (val == null || val === '') return undefined;
+  if (!val) return undefined;
   if (typeof val !== 'string' || !UUID_RE.test(val)) throw new Error(ERR);
   return val;
 }
 
 function parseCondition(val: unknown): 'new' | 'used' | 'open_box' | undefined {
-  if (val == null || val === '') return undefined;
+  if (!val) return undefined;
   if (!CONDITIONS.has(val as string)) throw new Error(ERR);
   return val as 'new' | 'used' | 'open_box';
 }

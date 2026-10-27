@@ -45,6 +45,26 @@ it('preserves keyword search when assistance is unavailable', async () => {
   expect(result.current.query).toBe('iphone');
   expect(result.current.error).toContain('Keep searching');
 });
+it('does not start the request when the stream reader chunk fails to load', async () => {
+  vi.resetModules();
+  vi.doMock('@baci/shared/lib', () => {
+    throw new Error('chunk load failed');
+  });
+  try {
+    const { useSearchAssistance: loadHook } = await import(
+      './use-search-assistance'
+    );
+    const { result } = renderHook(() => loadHook('iphone', true));
+    await act(async () => {
+      await result.current.ask();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.error).toContain('Keep searching');
+  } finally {
+    vi.doUnmock('@baci/shared/lib');
+    vi.resetModules();
+  }
+});
 it('shows an assistance error when id generation throws', async () => {
   const uuid = vi.spyOn(crypto, 'randomUUID').mockImplementationOnce(() => {
     throw new Error('no crypto');
@@ -77,6 +97,8 @@ it('cancels requests when the shopper changes the query', async () => {
   act(() => {
     request = result.current.ask();
   });
+  // The stream reader chunk loads before the request starts.
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
   const signal = fetchMock.mock.calls[0][1].signal;
   rerender({ query: 'samsung' });
   expect(signal.aborted).toBe(true);

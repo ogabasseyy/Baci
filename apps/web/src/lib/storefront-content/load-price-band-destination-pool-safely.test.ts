@@ -1,92 +1,44 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCachedCategoryPageData } from '@/lib/cached-data';
+import { getCachedPriceBandDestinationProjection } from './get-cached-price-band-destination-projection';
 import { loadPriceBandDestinationPoolSafely } from './load-price-band-destination-pool-safely';
 
-vi.mock('@/lib/cached-data', () => ({
-  getCachedCategoryPageData: vi.fn(),
+vi.mock('./get-cached-price-band-destination-projection', () => ({
+  getCachedPriceBandDestinationProjection: vi.fn(),
 }));
-
-const mockGetCategoryPageData = vi.mocked(getCachedCategoryPageData);
+// Importing the rich loader on this optional path would regress the query fanout.
+vi.mock('@/lib/cached-data', () => {
+  throw new Error('Full category loader must not be imported');
+});
+const read = vi.mocked(getCachedPriceBandDestinationProjection);
+const args = {
+  merchantId: 'm1',
+  merchantSlug: 'ogabassey',
+  categorySlug: 'smartphones',
+};
+beforeEach(() => vi.clearAllMocks());
 
 describe('loadPriceBandDestinationPoolSafely', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  it('uses the bounded projection with tenant and category scope', async () => {
+    const products = [
+      { slug: 'phone', name: 'Phone', brand: 'Apple', price: 500000 },
+    ];
+    read.mockResolvedValue(products);
+    expect(await loadPriceBandDestinationPoolSafely(args)).toEqual(products);
+    expect(read).toHaveBeenCalledWith('m1', 'smartphones');
   });
 
-  it('maps destination category products to band pool rows', async () => {
-    mockGetCategoryPageData.mockResolvedValue({
-      isCollection: false,
-      category: { slug: 'smartphones' },
-      products: [
-        {
-          id: 'p1',
-          name: 'iPhone 17',
-          brand: 'Apple',
-          price: 500_000,
-          stock: 3,
-          category_slug: 'smartphones',
-        },
-      ],
-    } as never);
-    const pool = await loadPriceBandDestinationPoolSafely({
-      merchantId: 'm1',
-      merchantSlug: 'ogabassey',
-      categorySlug: 'smartphones',
-    });
-    expect(pool).toHaveLength(1);
-    expect(pool?.[0]).toMatchObject({
-      name: 'iPhone 17',
-      brand: 'Apple',
-      price: 500_000,
-    });
+  it.each([
+    { result: null },
+    { result: [] },
+  ])('preserves a fail-closed or genuinely empty result', async ({
+    result,
+  }) => {
+    read.mockResolvedValue(result);
+    expect(await loadPriceBandDestinationPoolSafely(args)).toEqual(result);
   });
 
-  it('retains out-of-stock rows, mirroring the destination candidate pool', async () => {
-    // The destination price-band loader counts every normalized row in
-    // its candidate (no availability filter), so verification must too.
-    mockGetCategoryPageData.mockResolvedValue({
-      isCollection: false,
-      category: { slug: 'smartphones' },
-      products: [
-        {
-          id: 'p1',
-          name: 'iPhone 17',
-          brand: 'Apple',
-          price: 500_000,
-          stock: 0,
-          manage_stock: true,
-          category_slug: 'smartphones',
-        },
-      ],
-    } as never);
-    const pool = await loadPriceBandDestinationPoolSafely({
-      merchantId: 'm1',
-      merchantSlug: 'ogabassey',
-      categorySlug: 'smartphones',
-    });
-    expect(pool).toHaveLength(1);
-  });
-
-  it('returns null for collections and load failures', async () => {
-    mockGetCategoryPageData.mockResolvedValue({
-      isCollection: true,
-      products: [],
-    } as never);
-    await expect(
-      loadPriceBandDestinationPoolSafely({
-        merchantId: 'm1',
-        merchantSlug: 'ogabassey',
-        categorySlug: 'smartphones',
-      })
-    ).resolves.toBeNull();
-
-    mockGetCategoryPageData.mockRejectedValue(new Error('down'));
-    await expect(
-      loadPriceBandDestinationPoolSafely({
-        merchantId: 'm1',
-        merchantSlug: 'ogabassey',
-        categorySlug: 'smartphones',
-      })
-    ).resolves.toBeNull();
+  it('drops optional links on read errors and aborted requests', async () => {
+    read.mockRejectedValue(new DOMException('deadline', 'TimeoutError'));
+    expect(await loadPriceBandDestinationPoolSafely(args)).toBeNull();
   });
 });

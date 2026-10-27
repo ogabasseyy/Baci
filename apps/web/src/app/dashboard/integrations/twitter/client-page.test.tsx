@@ -21,6 +21,7 @@ it('keeps credentials masked and omits empty credential fields from a browser-on
     <XAdsIntegrationClient
       initialMerchantId="merchant-a"
       initialConnection={initial}
+      setupGuide={<div>Server rendered X setup guide</div>}
     />
   );
   expect(screen.getByLabelText('API key secret')).toHaveAttribute(
@@ -28,6 +29,7 @@ it('keeps credentials masked and omits empty credential fields from a browser-on
     'password'
   );
   expect(screen.getByLabelText('API key secret')).toHaveValue('');
+  expect(screen.getByText('Server rendered X setup guide')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
   await waitFor(() =>
     expect(screen.getByRole('status')).toHaveTextContent('saved')
@@ -52,6 +54,7 @@ it('clears typed credentials and old event mappings when switching merchant', as
     <XAdsIntegrationClient
       initialMerchantId="merchant-a"
       initialConnection={initial}
+      setupGuide={<div>Server rendered X setup guide</div>}
     />
   );
   fireEvent.change(screen.getByLabelText('API key secret'), {
@@ -62,6 +65,7 @@ it('clears typed credentials and old event mappings when switching merchant', as
     <XAdsIntegrationClient
       initialMerchantId="merchant-a"
       initialConnection={initial}
+      setupGuide={<div>Server rendered X setup guide</div>}
     />
   );
   await waitFor(() =>
@@ -78,6 +82,7 @@ it('saves a masked pixel token without OAuth fields and clears it after success'
     <XAdsIntegrationClient
       initialMerchantId="merchant-a"
       initialConnection={initial}
+      setupGuide={<div>Server rendered X setup guide</div>}
     />
   );
   const input = screen.getByLabelText('Conversions API access token');
@@ -98,6 +103,7 @@ it('rejects mixed token and OAuth input before sending', () => {
     <XAdsIntegrationClient
       initialMerchantId="merchant-a"
       initialConnection={initial}
+      setupGuide={<div>Server rendered X setup guide</div>}
     />
   );
   fireEvent.change(screen.getByLabelText('Conversions API access token'), {

@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { SetupInstructions } from '@/components/analytics/setup-instructions';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { TrackingPixelSection } from '@/components/dashboard/integrations/tracking-pixel-section';
 import { Button } from '@/components/ui/button';
 import { useIntegrationSettings } from '@/hooks/use-integration-settings';
@@ -63,7 +63,7 @@ export default function FacebookIntegrationPage() {
         tokenLabel="Conversion API Access Token"
         onSave={handleSave}
       >
-        <SetupInstructions platform="facebook" />
+        <AdPlatformSetupGuide platform="facebook" />
       </TrackingPixelSection>
     </div>
   );

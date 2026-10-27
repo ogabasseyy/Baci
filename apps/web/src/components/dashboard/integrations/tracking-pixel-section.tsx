@@ -103,10 +103,20 @@ export function TrackingPixelSection({
             <p className="text-xs text-muted-foreground">
               {tokenConfigured
                 ? 'Credential saved. Leave blank to keep it.'
-                : 'Required for server-side tracking.'}
+                : 'Optional: only needed for server-side tracking.'}
             </p>
           </div>
         )}
+        <Button type="button" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            'Save Changes'
+          )}
+        </Button>
         {tokenConfigured && onDisconnect && (
           <Button
             type="button"
@@ -126,16 +136,6 @@ export function TrackingPixelSection({
           </Button>
         )}
         {children}
-        <Button type="button" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Saving…
-            </>
-          ) : (
-            'Save Changes'
-          )}
-        </Button>
       </CardContent>
     </Card>
   );

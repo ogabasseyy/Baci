@@ -21,6 +21,46 @@ const row = (index: number) => ({
 });
 
 describe('authority hub eligibility contract', () => {
+  it('uses the same brand threshold for destination rows and already available link candidates', () => {
+    const entry = { ...apple, minimumProducts: 6 };
+    const products = [
+      ...Array.from({ length: 5 }, (_, index) => row(index)),
+      { ...row(6), brand: 'Samsung' },
+    ];
+    const raw = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      products,
+      'smartphones',
+      entry
+    );
+    const available =
+      authorityHubEligibility.resolveAvailableBrandAuthorityEligibility(
+        products,
+        entry
+      );
+    expect(raw.productCount).toBe(5);
+    expect(available.productCount).toBe(5);
+    expect(raw.eligible).toBe(false);
+    expect(available.eligible).toBe(false);
+  });
+
+  it('accepts the exact brand threshold in both destination and link contracts', () => {
+    const entry = { ...apple, minimumProducts: 6 };
+    const products = Array.from({ length: 6 }, (_, index) => row(index));
+    const destination =
+      authorityHubEligibility.resolveBrandAuthorityEligibility(
+        products,
+        'smartphones',
+        entry
+      );
+    const links =
+      authorityHubEligibility.resolveAvailableBrandAuthorityEligibility(
+        products,
+        entry
+      );
+    expect(destination).toMatchObject({ eligible: true, productCount: 6 });
+    expect(links).toMatchObject({ eligible: true, productCount: 6 });
+  });
+
   it('normalizes unmanaged zero-stock products exactly as destination pages do', () => {
     const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
       Array.from({ length: apple.minimumProducts }, (_, index) => row(index)),

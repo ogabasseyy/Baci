@@ -21,6 +21,28 @@ describe('createPublicClient', () => {
     vi.restoreAllMocks();
   });
 
+  it('applies the shared operation deadline to every hydration request and blocks later fetches', async () => {
+    const deadline = new AbortController();
+    const request = new AbortController();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null));
+    createPublicClient({ clientInfo: 'bounded-hub', signal: deadline.signal });
+    const options = mockCreateClient.mock.calls[0][2] as {
+      global: { fetch: (url: string, init?: RequestInit) => Promise<Response> };
+    };
+    await options.global.fetch('https://example.com/products', {
+      signal: request.signal,
+    });
+    await options.global.fetch('https://example.com/variants');
+    const signals = fetchSpy.mock.calls.map((call) => call[1]?.signal);
+    expect(signals.every((signal) => signal && !signal.aborted)).toBe(true);
+    deadline.abort();
+    expect(signals.every((signal) => signal?.aborted)).toBe(true);
+    expect(() => options.global.fetch('https://example.com/counts')).toThrow();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it('uses only the timeout signal when no caller signal is provided', async () => {
     const timeoutSignal = new AbortController().signal;
     const timeoutSpy = vi

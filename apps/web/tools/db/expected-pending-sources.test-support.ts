@@ -343,6 +343,11 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20261020090000_storefront_order_entrypoint_body_squash.sql',
     sha256: '491280c5ab0d9bf01b60052893ed3909c4963384169b5965031c50fad871ed75',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027004500_storefront_order_serialized_claim_exclusion_3734.sql',
+    sha256: '75ccf83c7ae325690a63c84b3d7f7a6a42d3b87f0725461474e0d5065316ce86',
+  },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]

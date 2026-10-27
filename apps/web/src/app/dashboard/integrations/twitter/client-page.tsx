@@ -151,7 +151,6 @@ function ConnectionForm({
         event code belongs to that Pixel. Successful-payment events are sent
         only after Baci confirms the full payment.
       </p>
-      <AdPlatformSetupGuide platform="x" />
       <form
         className="space-y-4"
         onSubmit={(event) => {
@@ -238,6 +237,7 @@ function ConnectionForm({
           </Button>
         </div>
       </form>
+      <AdPlatformSetupGuide platform="x" />
       <p>
         Test browser events in X Events Manager, then verify server receipts
         after a controlled paid order. Saved credentials alone do not confirm

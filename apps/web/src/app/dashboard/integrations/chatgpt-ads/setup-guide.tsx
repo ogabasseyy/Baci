@@ -5,22 +5,56 @@ const steps = [
   {
     title: '1. Create a website data source',
     text: 'In Ads Manager, open Conversions → Data Source → Create data source. Review the Conversion Terms and copy your new Pixel ID.',
-    images: ['01-pixel-setup.png'],
+    images: [
+      {
+        src: '01-pixel-setup.png',
+        alt: 'Create a website data source; the Pixel ID and setup code are masked',
+        width: 717,
+        height: 384,
+      },
+    ],
   },
   {
     title: '2. Create the successful payment conversion',
     text: 'Choose your data source, select Order created, and name it Successful payment. Baci sends this event after full payment confirmation.',
-    images: ['02-successful-payment.png'],
+    images: [
+      {
+        src: '02-successful-payment.png',
+        alt: 'Create a Successful payment conversion; source and attribution values are masked',
+        width: 500,
+        height: 552,
+      },
+    ],
   },
   {
     title: '3. Connect the Pixel',
     text: 'Paste the Pixel ID into the Baci form above. Baci loads the SDK after Analytics consent; you do not need a second theme snippet.',
-    images: ['03-pixel-event.png'],
+    images: [
+      {
+        src: '03-pixel-event.png',
+        alt: 'Example order_created browser Pixel event call with account source masked',
+        width: 500,
+        height: 400,
+      },
+    ],
   },
   {
     title: '4. Create a server key',
     text: 'Open the Conversions API instructions, choose Create conversion key, and give it a recognizable name. Paste the secret into Baci’s Conversions API key field. Never share a screenshot of the generated key.',
-    images: ['04-capi-event.png', '05-create-capi-key.png'],
+    images: [
+      {
+        src: '04-capi-event.png',
+        alt: 'ChatGPT Ads Conversions API request example with the full code block masked',
+        width: 500,
+        height: 400,
+      },
+      {
+        src: '05-create-capi-key.png',
+        alt: 'Create a conversion key dialog with the account key name and character count masked',
+        width: 685,
+        height: 214,
+      },
+    ],
   },
 ];
 export function ChatgptSetupGuide() {
@@ -44,11 +78,11 @@ export function ChatgptSetupGuide() {
             <p className="my-3 text-sm">{step.text}</p>
             {step.images?.map((image) => (
               <Image
-                key={image}
-                src={`/guides/chatgpt-ads/${image}`}
-                alt={`${step.title} example screen`}
-                width={717}
-                height={988}
+                key={image.src}
+                src={`/guides/chatgpt-ads/${image.src}`}
+                alt={image.alt}
+                width={image.width}
+                height={image.height}
                 className="h-auto w-full max-w-xl rounded-lg"
               />
             ))}

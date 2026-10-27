@@ -50,7 +50,12 @@ it('previews by public id plus pairing token, binds both merchant projections, a
     credentials: 'omit',
     redirect: 'error',
   });
+  // Exactly the pairing token plus the anonymous quota credential:
+  // no session proof or Authorization may ride on a preview.
   expect(fetcher.mock.calls[0][1].headers).toEqual({
+    'x-baci-client-credential': expect.stringMatching(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    ),
     'x-handoff-token': 'ch1.fixture.token',
   });
   fetcher.mockResolvedValue(

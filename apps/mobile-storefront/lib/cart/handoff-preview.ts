@@ -1,5 +1,6 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { nativeHandoffPreviewSchema } from '@/schemas/cart-pairing';
+import { cartClientCredentialHeaders } from './client-credential';
 import type { CartFetch, NativeCartConfig } from './shared-cart-client';
 export async function previewNativeHandoff(
   config: NativeCartConfig,
@@ -16,7 +17,10 @@ export async function previewNativeHandoff(
       `${config.apiOrigin}/api/storefront/cart/handoff?merchantSlug=${encodeURIComponent(config.merchantSlug)}&handoff_id=${handoffId}`,
       {
         credentials: 'omit',
-        headers: { 'x-handoff-token': token },
+        headers: {
+          'x-handoff-token': token,
+          ...(await cartClientCredentialHeaders()),
+        },
         redirect: 'error',
         cache: 'no-store',
         signal: abort.signal,

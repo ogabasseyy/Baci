@@ -9,6 +9,7 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { nativeCartReplySchema } from '@/schemas/cart';
 import type { NativeCheckoutSnapshot } from '@/schemas/cart-checkout-snapshot';
 import { isAllowedCartApiProtocol } from './api-origin';
+import { cartClientCredentialHeaders } from './client-credential';
 import { previewNativeHandoff } from './handoff-preview';
 import { createNativeAccountCheckout } from './native-account-checkout';
 import { NativeCartError } from './native-cart-error';
@@ -94,6 +95,13 @@ export function createNativeCartClient(
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 15000);
     try {
+      // Cart creation carries an anonymous per-client budget on top of
+      // the per-principal one; send the quota credential so it keys on
+      // this install instead of the shared network address.
+      const credentialHeaders =
+        route === '' && method === 'POST'
+          ? await cartClientCredentialHeaders()
+          : {};
       const response = await fetcher(url(route), {
         method,
         credentials: 'omit',
@@ -103,6 +111,7 @@ export function createNativeCartClient(
         headers: {
           Authorization: `Bearer ${proof}`,
           'Content-Type': 'application/json',
+          ...credentialHeaders,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });

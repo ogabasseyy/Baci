@@ -1,4 +1,5 @@
 import { nativeCartReplySchema } from '@/schemas/cart';
+import { cartClientCredentialHeaders } from './client-credential';
 import { NativeCartError } from './native-cart-error';
 import type { CartSessionStorage } from './session-storage';
 import type {
@@ -48,6 +49,7 @@ export async function bootstrapNativeCart(
           'Content-Type': 'application/json',
           'x-csrf-token': raw.token,
           Cookie: `__Host-csrf-token=${raw.token}`,
+          ...(await cartClientCredentialHeaders()),
         },
         body: JSON.stringify({ merchantSlug: config.merchantSlug }),
       }

@@ -101,4 +101,13 @@ describe('OgabasseyPdpCriticalShell ratings and order', () => {
 
     expect(screen.queryByLabelText(/out of 5 stars/i)).not.toBeInTheDocument();
   });
+
+  it('renders the star row for a rating-only product without counts', () => {
+    renderCriticalShell({ rating: 4.5, ratingCount: 0, reviewCount: 0 });
+
+    expect(
+      screen.getByRole('img', { name: '4.5 out of 5 stars' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0 Ratings/)).not.toBeInTheDocument();
+  });
 });

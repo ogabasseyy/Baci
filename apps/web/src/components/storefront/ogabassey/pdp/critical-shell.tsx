@@ -111,8 +111,10 @@ export function OgabasseyPdpCriticalShell({
     product.reviewCount,
     product.ratingCount
   );
-  const hasRatingRow = aggregateRatingCount > 0;
-  const hasRatingSignal = aggregateRatingCount > 0 && product.rating > 0;
+  // A positive rating value is itself a signal (schema ratingValue can
+  // arrive without counts); only a product with neither renders no row.
+  const hasRatingSignal = product.rating > 0;
+  const hasRatingRow = aggregateRatingCount > 0 || hasRatingSignal;
   const ratingText = formatRating(product.rating);
   const reviewCountText =
     product.reviewCount > 0
@@ -168,7 +170,11 @@ export function OgabasseyPdpCriticalShell({
                     {ratingText} ★
                   </span>
                 ) : null}
-                <span data-ogabassey-pdp-review-count>{reviewCountText}</span>
+                {aggregateRatingCount > 0 ? (
+                  <span data-ogabassey-pdp-review-count>
+                    {reviewCountText}
+                  </span>
+                ) : null}
               </div>
             ) : null}
             {summaryCommerce || (

@@ -13,6 +13,14 @@ export interface LoadPdpBrandHubEligibilityInventorySafelyInput {
 
 const PDP_BRAND_HUB_ELIGIBILITY_TIMEOUT_MS = 3_000;
 
+/**
+ * PDP below-fold callers pass this tighter budget: hub links are optional,
+ * fail-closed enrichment, so the scan may add at most this much latency to
+ * deferred semantic rendering. The raced-away scan still completes
+ * server-side and warms the destination cache for later requests.
+ */
+export const PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS = 1_000;
+
 function coerceStockQuantity(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;

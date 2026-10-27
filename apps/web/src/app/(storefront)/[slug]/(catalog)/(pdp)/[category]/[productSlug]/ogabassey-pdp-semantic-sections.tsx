@@ -12,7 +12,10 @@ import {
   getCachedProductSeoLinkData,
   type ProductSeoLinkData,
 } from '@/lib/storefront-product/get-cached-product-seo-link-data';
-import { loadPdpBrandHubEligibilityInventorySafely } from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
+import {
+  loadPdpBrandHubEligibilityInventorySafely,
+  PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
+} from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 
 interface OgabasseyPdpSemanticMerchant {
@@ -68,6 +71,7 @@ export async function OgabasseyPdpSemanticSections({
         merchantId: merchant.id,
         categorySlug,
         productBrand: product.brand,
+        timeoutMs: PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
       }),
     ]);
   } catch (error) {

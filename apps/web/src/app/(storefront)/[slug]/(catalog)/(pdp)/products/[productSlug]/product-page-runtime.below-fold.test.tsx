@@ -78,6 +78,7 @@ vi.mock(
   () => ({
     loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
       mockLoadPdpBrandHubEligibilityInventorySafely(...args),
+    PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS: 1_000,
   })
 );
 
@@ -226,6 +227,7 @@ describe('ProductPageBelowFold — repair device link integration', () => {
       categorySlug: 'phones',
       merchantId: 'merchant-1',
       productBrand: 'Apple',
+      timeoutMs: 1_000,
     });
 
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(

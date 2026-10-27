@@ -46,6 +46,7 @@ vi.mock(
   () => ({
     loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
       mockLoadPdpBrandHubEligibilityInventorySafely(...args),
+    PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS: 1_000,
   })
 );
 

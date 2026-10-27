@@ -26,7 +26,10 @@ import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { buildProductContextParagraphs } from '@/lib/storefront-product/build-product-context-paragraphs';
 import { buildProductSemanticModel } from '@/lib/storefront-product/build-product-semantic-model';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
-import { loadPdpBrandHubEligibilityInventorySafely } from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
+import {
+  loadPdpBrandHubEligibilityInventorySafely,
+  PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
+} from '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely';
 import { resolveStorefrontProductCategoryName } from '@/lib/storefront-product-category-name';
 import { buildProductPriceSeoCopy } from '@/lib/storefront-product-price-seo';
 import { isUnsupportedSpecValue } from '@/lib/storefront-specs/is-unsupported-spec-value';
@@ -207,6 +210,7 @@ export async function ProductPageBelowFold({
         merchantId: merchant.id,
         categorySlug,
         productBrand: product.brand,
+        timeoutMs: PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
       });
 
   const reviewEnhancementSchema = buildProductReviewEnhancementSchema({

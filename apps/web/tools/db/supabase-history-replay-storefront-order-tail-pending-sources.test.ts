@@ -21,6 +21,7 @@ describe('storefront order tail pending replay sources', () => {
       '20261019100000_storefront_order_item_offer_line_condition_identity.sql',
       '20261020090000_storefront_order_entrypoint_body_squash.sql',
       '20261027004500_storefront_order_serialized_claim_exclusion_3734.sql',
+      '20261027164947_preserve_attached_offer_unit_snapshots.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

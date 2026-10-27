@@ -35,6 +35,7 @@ import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup
 import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
 import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
+import { EXPECTED_SERIALIZED_CLAIM_REPAIR_PENDING_SOURCES } from './expected-serialized-claim-repair-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
@@ -476,11 +477,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20261020090106_vtu_orphan_fail_rpc.sql',
     sha256: '215ed9498eeec2c74937ab88ea9fad3c44954efe9dc385a15e18b2b90f06f9ec',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20261027004500_storefront_order_serialized_claim_exclusion_3734.sql',
-    sha256: 'fdcca3b4d454503a18d589381676185d8d0d449cd04ffdbc5e9be87acd471a61',
-  },
+  ...EXPECTED_SERIALIZED_CLAIM_REPAIR_PENDING_SOURCES,
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]

@@ -31,6 +31,7 @@ import {
   type ProductComparisonMatrix,
 } from '@/lib/storefront-specs/spec-matrix';
 import type { ComparableProductKeySpecs } from '@/lib/storefront-specs/spec-taxonomy';
+import { buildBrandComparisonRows } from './build-brand-comparison-rows';
 import { buildCompareGuideContexts } from './build-compare-guide-contexts';
 import { extractComparableKeySpecs } from './comparable-key-specs';
 import {
@@ -67,16 +68,6 @@ interface ComparisonRow {
   label: string;
   leftValue: string;
   rightValue: string;
-}
-
-interface ComparableCategoryProduct {
-  slug: string;
-  name: string;
-  brand: string | null;
-  price: number;
-  category_slug: string;
-  status?: string | null;
-  product_key_specs: ComparableProductKeySpecs | null;
 }
 
 interface ProductComparePageModel {
@@ -203,36 +194,6 @@ function summarizeDifferenceLabels(keyDifferences: string[]) {
     .slice(0, 2);
 
   return labels.length > 0 ? labels.join(' and ') : 'price and specifications';
-}
-
-function formatPriceRange(
-  products: ComparableCategoryProduct[],
-  priceFormatter: Intl.NumberFormat
-) {
-  const prices = products.map((product) => product.price);
-
-  if (prices.length === 0) {
-    return '—';
-  }
-
-  return `${priceFormatter.format(Math.min(...prices))} to ${priceFormatter.format(
-    Math.max(...prices)
-  )}`;
-}
-
-function selectByPrice(
-  products: ComparableCategoryProduct[],
-  direction: 'asc' | 'desc'
-) {
-  return (
-    products
-      .slice()
-      .sort((left, right) =>
-        direction === 'asc'
-          ? left.price - right.price
-          : right.price - left.price
-      )[0]?.name || '—'
-  );
 }
 
 function getSupportedClusterCategory(
@@ -936,36 +897,13 @@ async function getCachedComparePageModel(
     return null;
   }
 
-  const leftBrandKey = generateSlug(brandCandidate.leftBrand);
-  const rightBrandKey = generateSlug(brandCandidate.rightBrand);
-  const leftBrandProducts = normalizedProducts.filter(
-    (product) => generateSlug(product.brand || '') === leftBrandKey
-  );
-  const rightBrandProducts = normalizedProducts.filter(
-    (product) => generateSlug(product.brand || '') === rightBrandKey
-  );
-  const comparisonRows: ComparisonRow[] = [
-    {
-      label: 'Active models',
-      leftValue: String(leftBrandProducts.length),
-      rightValue: String(rightBrandProducts.length),
-    },
-    {
-      label: 'Price range',
-      leftValue: formatPriceRange(leftBrandProducts, priceFormatter),
-      rightValue: formatPriceRange(rightBrandProducts, priceFormatter),
-    },
-    {
-      label: 'Cheapest model',
-      leftValue: selectByPrice(leftBrandProducts, 'asc'),
-      rightValue: selectByPrice(rightBrandProducts, 'asc'),
-    },
-    {
-      label: 'Premium model',
-      leftValue: selectByPrice(leftBrandProducts, 'desc'),
-      rightValue: selectByPrice(rightBrandProducts, 'desc'),
-    },
-  ];
+  const { comparisonRows } = buildBrandComparisonRows({
+    categorySlug: args.categorySlug,
+    leftBrand: brandCandidate.leftBrand,
+    rightBrand: brandCandidate.rightBrand,
+    products: normalizedProducts,
+    priceFormatter,
+  });
   const keyDifferences = [
     `${brandCandidate.leftBrand} has ${brandCandidate.leftBrandActiveCount} active models in this category.`,
     `${brandCandidate.rightBrand} has ${brandCandidate.rightBrandActiveCount} active models in this category.`,

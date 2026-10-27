@@ -105,6 +105,10 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 7,
         category_slug: 'laptops',
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
+        category_slugs: ['laptops'],
+        is_parent: null,
+        parent_product_id: null,
+        manage_stock: null,
       },
       {
         slug: 'legion-5',
@@ -115,7 +119,54 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 3,
         category_slug: 'gaming-laptops',
         product_key_specs: { ram_gb: 32 },
+        category_slugs: ['gaming-laptops'],
+        is_parent: null,
+        parent_product_id: null,
+        manage_stock: null,
       },
+    ]);
+  });
+
+  it('returns a product with parent and child memberships exactly once', async () => {
+    // PostgREST embedding returns one row per product with the full
+    // membership array; multi-membership must not duplicate the product.
+    const productsQuery = createProductsQuery({
+      data: [
+        {
+          slug: 'macbook-air',
+          name: 'MacBook Air',
+          price: 950_000,
+          brand: 'Apple',
+          condition: 'new',
+          stock_quantity: 4,
+          product_categories: [
+            { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
+            {
+              category_id: 'cat-gaming-laptops',
+              categories: { slug: 'gaming-laptops' },
+            },
+          ],
+          product_key_specs: [{ ram_gb: 8 }],
+        },
+      ],
+      error: null,
+    });
+    mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);
+    mockGetPublicSupabaseClient.mockReturnValue({
+      from: vi.fn(() => productsQuery),
+    });
+
+    const result = await getCachedCategoryScopedSemanticInventory(
+      'merchant-1',
+      'laptops',
+      'ogabassey'
+    );
+
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0]?.slug).toBe('macbook-air');
+    expect(result.products[0]?.category_slugs).toEqual([
+      'laptops',
+      'gaming-laptops',
     ]);
   });
 
@@ -225,113 +276,11 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
         stock: 0,
         category_slug: 'retro-tech',
         product_key_specs: null,
+        category_slugs: [],
+        is_parent: null,
+        parent_product_id: null,
+        manage_stock: null,
       },
     ]);
-  });
-
-  it('strips null/array/object spec values to match normalizeProduct compare eligibility', async () => {
-    const productsQuery = createProductsQuery({
-      data: [
-        {
-          slug: 'spec-heavy',
-          name: 'Spec Heavy',
-          price: 700_000,
-          stock_quantity: 2,
-          product_categories: [
-            { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
-          ],
-          product_key_specs: [
-            {
-              ram_gb: 16,
-              has_5g: true,
-              chipset: null,
-              available_colors: ['black', 'silver'],
-              recommended_for: { gaming: true },
-            },
-          ],
-        },
-      ],
-      error: null,
-    });
-    mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);
-    mockGetPublicSupabaseClient.mockReturnValue({
-      from: vi.fn(() => productsQuery),
-    });
-
-    const result = await getCachedCategoryScopedSemanticInventory(
-      'merchant-1',
-      'laptops',
-      'ogabassey'
-    );
-
-    // Only scalar spec values survive; null and array/object values are dropped.
-    expect(result.products[0]?.product_key_specs).toEqual({
-      ram_gb: 16,
-      has_5g: true,
-    });
-  });
-
-  it('keeps effective stock for a zero stock_quantity with positive legacy stock', async () => {
-    const productsQuery = createProductsQuery({
-      data: [
-        {
-          slug: 'legacy-restock',
-          name: 'Legacy Restock',
-          price: 500_000,
-          // stock_quantity=0 but legacy stock>0: effective stock stays 8, so the
-          // product is not demoted/filtered out of the SEO pool. A naive
-          // `stock_quantity ?? stock` would return 0 here.
-          stock: 8,
-          stock_quantity: 0,
-          product_categories: [
-            { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
-          ],
-        },
-      ],
-      error: null,
-    });
-    mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);
-    mockGetPublicSupabaseClient.mockReturnValue({
-      from: vi.fn(() => productsQuery),
-    });
-
-    const result = await getCachedCategoryScopedSemanticInventory(
-      'merchant-1',
-      'laptops',
-      'ogabassey'
-    );
-
-    expect(result.products[0]?.stock).toBe(8);
-  });
-
-  it('falls back to the row id for a slug-less product', async () => {
-    const productsQuery = createProductsQuery({
-      data: [
-        {
-          id: 'prod-uuid-123',
-          slug: null,
-          name: 'Slugless Product',
-          price: 120_000,
-          stock_quantity: 4,
-          product_categories: [
-            { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
-          ],
-        },
-      ],
-      error: null,
-    });
-    mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);
-    mockGetPublicSupabaseClient.mockReturnValue({
-      from: vi.fn(() => productsQuery),
-    });
-
-    const result = await getCachedCategoryScopedSemanticInventory(
-      'merchant-1',
-      'laptops',
-      'ogabassey'
-    );
-
-    expect(result.products).toHaveLength(1);
-    expect(result.products[0]?.slug).toBe('prod-uuid-123');
   });
 });

@@ -1,15 +1,13 @@
 import { headers } from 'next/headers';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import {
-  normalizeProduct,
-  type ProductKeySpecsRecord,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { ProductKeySpecsRecord } from '@/lib/normalize-product';
 import { buildStoreUrl } from '@/lib/store-url';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
+import { getCategoryAuthorityNoun } from '@/lib/storefront-category/get-category-authority-noun';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
@@ -35,16 +33,6 @@ export interface BrandAuthorityPageProduct {
   product_key_specs?: ProductKeySpecsRecord | null;
   image: string;
   description: string;
-}
-
-function isRawDbProduct(value: unknown): value is RawDbProduct {
-  return Boolean(
-    value &&
-      typeof value === 'object' &&
-      'id' in value &&
-      'name' in value &&
-      'price' in value
-  );
 }
 
 async function getBrandAuthorityStorefrontPathPrefix(
@@ -106,21 +94,14 @@ async function loadBrandAuthorityPage(
     { limit: null }
   );
 
-  const allInStockProducts: BrandAuthorityPageProduct[] = (
-    brandProducts as unknown[]
-  )
-    .filter(isRawDbProduct)
-    .map((product) =>
-      normalizeProduct(product, { preferredCategorySlug: args.categorySlug })
-    )
-    .filter(
-      (product) =>
-        brandAuthorityTaxonomy.matchesBrand(
-          authorityEntry,
-          product.brand ?? null
-        ) && product.availability === 'InStock'
-    )
-    .map((product) => ({
+  const eligibility = authorityHubEligibility.resolveBrandAuthorityEligibility(
+    brandProducts,
+    args.categorySlug,
+    authorityEntry
+  );
+  if (!eligibility.eligible) return null;
+  const allInStockProducts: BrandAuthorityPageProduct[] =
+    eligibility.products.map((product) => ({
       id: product.id,
       name: product.name,
       slug: product.slug,
@@ -137,12 +118,6 @@ async function loadBrandAuthorityPage(
       description: product.description,
     }));
 
-  const isIndexable =
-    allInStockProducts.length >= authorityEntry.minimumProducts;
-  if (!isIndexable) {
-    return null;
-  }
-
   const products: BrandAuthorityPageProduct[] = allInStockProducts.slice(
     0,
     BRAND_AUTHORITY_PRODUCT_LIMIT
@@ -150,10 +125,14 @@ async function loadBrandAuthorityPage(
 
   const storeUrl = buildStoreUrl(merchant);
   const categoryName = categoryData.name;
+  const categoryNoun = getCategoryAuthorityNoun(
+    args.categorySlug,
+    categoryName
+  );
   const canonicalUrl = `${storeUrl}/${args.categorySlug}/brands/${authorityEntry.brandKey}`;
   const countryContext = getCountryShoppingContext(merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `${authorityEntry.displayName} Phones and Prices${countrySuffix}`;
+  const heading = `${authorityEntry.displayName} ${categoryNoun.titleNoun} and Prices${countrySuffix}`;
   const supportedCategory =
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
@@ -178,14 +157,16 @@ async function loadBrandAuthorityPage(
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
-      const productCount = allInStockProducts.filter((product) =>
-        modelFamilyAuthorityTaxonomy.matchesProduct(entry, product.name)
-      ).length;
-      return productCount >= entry.minimumProducts
+      const { productCount, eligible } =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          allInStockProducts,
+          entry
+        );
+      return eligible
         ? [
             {
               href: `${canonicalUrl}/families/${entry.familyKey}`,
-              label: `${entry.displayName} phones`,
+              label: `${entry.displayName} ${categoryNoun.lowerNoun}`,
               productCount,
             },
           ]
@@ -200,9 +181,14 @@ async function loadBrandAuthorityPage(
       suffix: merchant.business_name,
       fallback: authorityEntry.displayName,
     }).title,
-    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
+    metaDescription: `Compare a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}, with current prices, key specs, condition, and availability${countrySuffix}.`,
     heading,
-    intro: `Explore a selection of ${products.length} ${authorityEntry.displayName} phones from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
+    intro: authorityEntry.intro
+      ? authorityEntry.intro.replaceAll(
+          '{merchantName}',
+          merchant.business_name
+        )
+      : `Explore a selection of ${products.length} ${authorityEntry.displayName} ${categoryNoun.lowerNoun} from ${merchant.business_name}. Compare current prices, specifications, condition, and availability before choosing a model.`,
     categoryName,
     brand: authorityEntry,
     products,

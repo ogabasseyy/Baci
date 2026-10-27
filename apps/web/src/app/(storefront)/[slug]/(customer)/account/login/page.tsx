@@ -18,10 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import {
-  fetchCustomerLoginEmailPrefillForRedirect,
-  sanitizeCustomerLoginEmailPrefill,
-} from '@/lib/customer-login-prefill';
+import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
+import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
 
 // Validate redirect URL to prevent open redirect vulnerabilities
@@ -96,6 +94,7 @@ function DefaultLoginPage() {
   } = useCustomerAuth();
 
   const [email, setEmail] = useState(prefillEmail);
+  const emailHint = useReceiptClaimLoginHint(redirectTo, prefillEmail);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -110,28 +109,6 @@ function DefaultLoginPage() {
       router.push(asRoute(redirectTo));
     }
   }, [authLoading, isAuthenticated, router, redirectTo]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (prefillEmail) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void fetchCustomerLoginEmailPrefillForRedirect(redirectTo).then(
-      (emailHint) => {
-        if (!cancelled && emailHint) {
-          setEmail((currentEmail) => currentEmail || emailHint);
-        }
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [prefillEmail, redirectTo]);
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -294,6 +271,12 @@ function DefaultLoginPage() {
               <form onSubmit={handleSendCode} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email address</Label>
+                  {emailHint ? (
+                    <p className="text-sm text-muted-foreground">
+                      This receipt was sent to {emailHint} — sign in with that
+                      address to continue.
+                    </p>
+                  ) : null}
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
                     <Input

@@ -1,3 +1,4 @@
+import { isNonNegativeMoney } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
@@ -77,6 +78,39 @@ export async function GET(
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
     });
+    // Manual orders live or die by the availability gate like the archive:
+    // a sender-refused manual row (failed content validity, cancelled)
+    // must not serve a direct-URL download. Non-manual invoice downloads
+    // keep their legacy ungated behavior.
+    if (data.order.is_manual_order && !data.order.manual_document_available) {
+      return NextResponse.json(
+        {
+          error: 'Invoice is not available for this order',
+          code: 'INVOICE_NOT_AVAILABLE',
+        },
+        { status: 409 }
+      );
+    }
+    // The availability gate skips tax for paid orders (the archive links
+    // the receipt, which prints no breakdown), but this route renders
+    // the breakdown on demand: validate what it prints, like the sender.
+    if (data.order.is_manual_order) {
+      const taxValid = (data.invoiceData.tax_subtotals ?? []).every((row) =>
+        [row.vat_rate, row.taxable_amount, row.tax_amount].every(
+          isNonNegativeMoney
+        )
+      );
+      if (!taxValid) {
+        return NextResponse.json(
+          {
+            error: 'Invoice is not available for this order',
+            code: 'INVOICE_NOT_AVAILABLE',
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     try {
       generatePeppolInvoiceXml(data.invoiceData);
     } catch (error) {

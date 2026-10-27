@@ -84,9 +84,9 @@ describe('storefront account document content validity', () => {
     // NOTE: each case is ONE item object (it.each spreads the row): wrap it
     // so the gate validates content, not just array-ness. A bare object
     // fails the Array check without exercising any field rule.
-    expect(
-      isManualOrderDocumentAvailable(manualInput({ items: [item] }))
-    ).toBe(false);
+    expect(isManualOrderDocumentAvailable(manualInput({ items: [item] }))).toBe(
+      false
+    );
   });
 
   it.each([

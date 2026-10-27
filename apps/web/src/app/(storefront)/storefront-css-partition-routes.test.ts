@@ -11,7 +11,6 @@ describe('storefront CSS partitioning (route sheets)', () => {
     'storefront-pdp.css',
     'storefront-listing.css',
     'storefront-blog.css',
-    'storefront-blog-post.css',
     'storefront-utility.css',
     'storefront-content.css',
     'storefront-not-found.css',
@@ -24,6 +23,17 @@ describe('storefront CSS partitioning (route sheets)', () => {
       '@source "../../components/themed/themed-button.tsx";'
     );
     expect(content).toContain('@source "../../components/ui/button.tsx";');
+  });
+
+  it('keeps blog-post additive over the blog sheet consent closure', () => {
+    // [postSlug]/layout.tsx always imports storefront-blog.css (which owns
+    // the cookie-consent + themed-button + ui/button closure) immediately
+    // before storefront-blog-post.css, so the delta sheet must not re-emit
+    // those utilities.
+    const content = readStorefrontFile('storefront-blog-post.css');
+    expect(content).not.toContain('components/storefront/cookie-consent.tsx');
+    expect(content).not.toContain('components/themed/themed-button.tsx');
+    expect(content).not.toContain('components/ui/button.tsx');
   });
 
   it.each([

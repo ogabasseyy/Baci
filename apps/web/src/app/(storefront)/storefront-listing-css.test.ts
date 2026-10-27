@@ -93,14 +93,15 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
       { from, map: false }
     );
     expect(result.css.length).toBeLessThan(60_000);
-    expect(result.css).toContain('.bg-store-primary');
     expect(result.css).toContain('.prose');
     expect(result.css).toContain('.font-mono');
     expect(result.css).toContain('.max-w-none');
-    // The additive sheet must not emit Card utilities itself: the blog
-    // listing sheet (loaded first) owns Badge/Card. See the combined-order
-    // test in storefront-blog-css.test.ts.
+    // The additive sheet must not emit Card or Button utilities itself:
+    // the blog listing sheet (loaded first) owns Badge/Card and the
+    // cookie-consent button closure. See the combined-order test in
+    // storefront-blog-css.test.ts.
     expect(result.css).not.toContain('.bg-card');
+    expect(result.css).not.toContain('.ring-offset-background');
     expect(result.css).not.toContain('--store-primary:');
     expect(result.css).not.toContain('--touch-target-min');
     expect(result.css).not.toContain('--dashboard-surface');

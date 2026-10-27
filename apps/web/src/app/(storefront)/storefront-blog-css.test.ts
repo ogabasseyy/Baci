@@ -68,7 +68,11 @@ describe('blog sheets compiled in layout order', () => {
       (await compile('storefront-blog.css')) +
         (await compile('storefront-blog-post.css'))
     );
-    for (const selector of ['.bg-card', '.text-card-foreground']) {
+    for (const selector of [
+      '.bg-card',
+      '.text-card-foreground',
+      '.ring-offset-background',
+    ]) {
       let count = 0;
       combined.walkRules((rule) => {
         if (rule.selector === selector) {

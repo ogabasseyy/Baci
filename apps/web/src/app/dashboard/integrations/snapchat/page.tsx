@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { SetupInstructions } from '@/components/analytics/setup-instructions';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { TrackingPixelSection } from '@/components/dashboard/integrations/tracking-pixel-section';
 import { Button } from '@/components/ui/button';
 import { useIntegrationSettings } from '@/hooks/use-integration-settings';
@@ -64,7 +64,7 @@ export default function SnapchatIntegrationPage() {
         onSave={handleSave}
         description="The Snap Pixel helps you measure the cross-device impact of your campaigns."
       >
-        <SetupInstructions platform="snapchat" />
+        <AdPlatformSetupGuide platform="snapchat" />
       </TrackingPixelSection>
     </div>
   );

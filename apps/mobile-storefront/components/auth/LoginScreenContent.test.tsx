@@ -14,6 +14,7 @@ function createProps(): ComponentProps<typeof LoginScreenContent> {
     colors: Colors.light,
     email: 'shopper@example.com',
     emailError: null,
+    emailHintGuidance: '',
     colorScheme: 'light',
     dismissAndNavigate: jest.fn(),
     handleAppleSignIn: jest.fn(),

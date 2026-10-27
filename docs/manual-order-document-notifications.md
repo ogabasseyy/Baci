@@ -129,7 +129,14 @@ as live. During the same window the new preview's login-hint RPC is also
 absent, so `loadReceiptClaimLoginEmailHint` falls back to the claim
 record's stored email as the mask input; the GET output stays masked
 (`b***@domain`) on both paths — the fallback changes where the mask input
-is read server-side, never what leaves the server.
+is read server-side, never what leaves the server. Moving the narrowing
+predeploy was evaluated and rejected: the previous revision's
+`receiptClaimRecordSchema` requires `customer_email` (z.string) and throws
+`invalid response structure` (500) when it is absent, and its preview route
+calls through the user-scoped server client, so both removing the key and
+revoking the anon grant would 500 every claim preview on the old revision
+for the whole window. The deferred postdeploy apply plus the minutes-long
+window and the verify-email-gone gate above is the safe shape.
 
 This ordering matters because old revisions 500 the whole claimed batch
 (including unrelated shipped/delivered rows, which then wait for lease

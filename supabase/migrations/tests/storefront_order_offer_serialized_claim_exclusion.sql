@@ -29,6 +29,8 @@ DECLARE
   v_condition text;
   v_offer_stock integer;
   v_claimed integer;
+  v_legacy_status text;
+  v_legacy_item uuid;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug, is_published)
   VALUES (v_merchant_id, 'claim-exclusion@example.com',
@@ -122,6 +124,41 @@ BEGIN
   WHERE order_item_id = v_item_id;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
+  END IF;
+
+  -- Legacy state: an order created before the fix holds a wrongly
+  -- reserved unit. Reuse must release it instead of refreshing it.
+  INSERT INTO public.variant_inventory (
+    id, variant_id, merchant_id, identifier_type, identifier_value,
+    status, order_id, order_item_id, reserved_at, first_reserved_at,
+    reservation_expires_at
+  )
+  VALUES (
+    '03d00000-0000-4000-8000-000000000006', v_anchor_id, v_merchant_id,
+    'imei', '933730000000002', 'reserved', v_order_id, v_item_id,
+    now(), now(), now() + interval '1 hour'
+  );
+
+  BEGIN
+    PERFORM private.prepare_storefront_order_for_checkout(
+      p_order_id => v_order_id,
+      p_merchant_id => v_merchant_id,
+      p_tracking_token => v_tracking_token,
+      p_customer_email => 'claim-exclusion-buyer@example.com',
+      p_payment_method => 'card'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order second reuse failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  SELECT status, order_item_id INTO v_legacy_status, v_legacy_item
+  FROM public.variant_inventory
+  WHERE id = '03d00000-0000-4000-8000-000000000006';
+  IF v_legacy_status IS DISTINCT FROM 'available' THEN
+    RAISE EXCEPTION 'expected legacy unit released to available, got %', v_legacy_status;
+  END IF;
+  IF v_legacy_item IS NOT NULL THEN
+    RAISE EXCEPTION 'expected legacy unit detached from the offer line, got %', v_legacy_item;
   END IF;
 END;
 $$;

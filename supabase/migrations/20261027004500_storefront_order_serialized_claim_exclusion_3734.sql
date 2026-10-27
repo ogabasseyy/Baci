@@ -103,3 +103,52 @@ BEGIN
   definition := replace(definition, old_claim, new_claim);
   EXECUTE definition;
 END $claim_exclusion_reuse_3734$;
+DO $claim_exclusion_release_3734$
+DECLARE
+  function_oid oid;
+  definition text;
+  old_reserved text := $marker$    IF v_has_reserved THEN
+      IF v_is_pod THEN$marker$;
+  new_reserved text := $marker$    IF v_has_reserved AND v_item.offer_line IS TRUE THEN
+      -- Offer lines are fulfilled from offer stock: release units the
+      -- pre-fix loop wrongly reserved instead of refreshing them.
+      DECLARE
+        v_release_id uuid;
+      BEGIN
+        FOR v_release_id IN
+          SELECT vi.id FROM public.variant_inventory vi
+          WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
+          FOR UPDATE
+        LOOP
+          PERFORM private.record_variant_inventory_event(
+            v_release_id, p_merchant_id, v_item.product_id, v_item.variant_id, 'reservation_released',
+            'reserved', 'available', p_order_id, v_item.id, NULL, NULL, NULL,
+            jsonb_build_object('reason', 'offer_line_double_reservation_repair')
+          );
+          UPDATE public.variant_inventory
+          SET status = 'available',
+              order_id = NULL,
+              order_item_id = NULL,
+              reserved_at = NULL,
+              reservation_expires_at = NULL,
+              updated_at = now()
+          WHERE id = v_release_id;
+        END LOOP;
+      END;
+    ELSIF v_has_reserved THEN
+      IF v_is_pod THEN$marker$;
+BEGIN
+  SELECT p.oid INTO STRICT function_oid
+  FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private' AND p.proname = 'prepare_storefront_order_for_checkout' AND p.pronargs = 9;
+  definition := pg_catalog.pg_get_functiondef(function_oid);
+  IF position(new_reserved IN definition) > 0 THEN RETURN; END IF;
+  IF position(old_reserved IN definition) = 0 THEN
+    RAISE EXCEPTION 'reuse reserved branch source does not match expected shape';
+  END IF;
+  IF (length(definition) - length(replace(definition, old_reserved, ''))) <> length(old_reserved) THEN
+    RAISE EXCEPTION 'reuse reserved branch anchor is not unique';
+  END IF;
+  definition := replace(definition, old_reserved, new_reserved);
+  EXECUTE definition;
+END $claim_exclusion_release_3734$;

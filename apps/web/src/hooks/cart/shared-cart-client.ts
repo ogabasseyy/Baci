@@ -118,7 +118,7 @@ async function requestCreateSharedCart(
         }),
         headers: {
           'Content-Type': 'application/json',
-          ...cartClientCredentialHeaders(),
+          ...cartClientCredentialHeaders(merchantSlug),
         },
         method: 'POST',
         signal,

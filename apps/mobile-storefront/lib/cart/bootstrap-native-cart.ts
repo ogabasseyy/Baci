@@ -49,7 +49,7 @@ export async function bootstrapNativeCart(
           'Content-Type': 'application/json',
           'x-csrf-token': raw.token,
           Cookie: `__Host-csrf-token=${raw.token}`,
-          ...(await cartClientCredentialHeaders()),
+          ...(await cartClientCredentialHeaders(config.merchantSlug)),
         },
         body: JSON.stringify({ merchantSlug: config.merchantSlug }),
       }

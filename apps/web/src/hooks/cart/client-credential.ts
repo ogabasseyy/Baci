@@ -3,9 +3,13 @@ import {
   isValidCartClientCredential,
 } from '@baci/shared/cart';
 
-const STORAGE_KEY = 'baci:cart-client-credential';
+const STORAGE_KEY_PREFIX = 'baci:cart-client-credential';
 
-let ephemeralCredential: string | null = null;
+const ephemeralCredentials = new Map<string, string | null>();
+
+function storageKey(scope: string): string {
+  return `${STORAGE_KEY_PREFIX}:${scope}`;
+}
 
 /**
  * UUID v4 generation that never throws: crypto.randomUUID is
@@ -31,32 +35,44 @@ function generateCredential(): string | null {
 }
 
 /**
- * This browser profile's anonymous cart quota credential: generated
- * once, persisted in localStorage, and sent on bootstrap/create/
- * handoff-preview calls so the server keys anonymous budgets on it
- * instead of the shared network address. It is not an authentication
- * credential and grants no access to any cart. When storage is
- * unavailable (blocked cookies/storage), a per-page-load credential
- * still separates this shopper from other egress-sharers for the
- * session; when no crypto source exists, returns null and callers
- * simply omit the header.
+ * This browser profile's anonymous cart quota credential for one
+ * merchant: generated once, persisted in localStorage under a
+ * per-merchant key, and sent on bootstrap/create/handoff-preview
+ * calls so the server keys anonymous budgets on it instead of the
+ * shared network address. Per-merchant storage means one shopper
+ * presents unlinkable credentials across merchants on a shared
+ * platform origin; when the merchant is not yet known (handoff
+ * preview) the 'shared' scope applies — on a merchant subdomain
+ * origin that is still effectively per-merchant. It is not an
+ * authentication credential and grants no access to any cart. When
+ * storage is unavailable, a per-page-load credential still
+ * separates this shopper from other egress-sharers for the session;
+ * when no crypto source exists, returns null and callers omit the
+ * header.
  */
-export function getCartClientCredential(): string | null {
+export function getCartClientCredential(
+  merchantSlug?: string | null
+): string | null {
+  const scope = merchantSlug ?? 'shared';
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = window.localStorage.getItem(storageKey(scope));
     if (isValidCartClientCredential(stored)) return stored;
     const generated = generateCredential();
     if (generated === null) return null;
-    window.localStorage.setItem(STORAGE_KEY, generated);
+    window.localStorage.setItem(storageKey(scope), generated);
     return generated;
   } catch {
-    ephemeralCredential ??= generateCredential();
-    return ephemeralCredential;
+    if (!ephemeralCredentials.has(scope)) {
+      ephemeralCredentials.set(scope, generateCredential());
+    }
+    return ephemeralCredentials.get(scope) ?? null;
   }
 }
 
-export function cartClientCredentialHeaders(): Record<string, string> {
-  const credential = getCartClientCredential();
+export function cartClientCredentialHeaders(
+  merchantSlug?: string | null
+): Record<string, string> {
+  const credential = getCartClientCredential(merchantSlug);
   return credential === null
     ? {}
     : { [CART_CLIENT_CREDENTIAL_HEADER]: credential };

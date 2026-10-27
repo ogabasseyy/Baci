@@ -4,7 +4,7 @@ import {
   getCartClientCredential,
 } from './client-credential';
 
-const STORAGE_KEY = 'baci:cart-client-credential';
+const STORAGE_KEY = 'baci:cart-client-credential:shared';
 const FIXED_UUID = '44444444-4444-4444-8444-444444444444';
 
 beforeEach(() => {
@@ -23,6 +23,26 @@ describe('getCartClientCredential', () => {
     expect(getCartClientCredential()).toBe(FIXED_UUID);
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe(FIXED_UUID);
     expect(getCartClientCredential()).toBe(FIXED_UUID);
+  });
+
+  it('scopes credentials per merchant so they are unlinkable across merchants', () => {
+    const uuids = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ] as const;
+    vi.mocked(crypto.randomUUID)
+      .mockReturnValueOnce(uuids[0])
+      .mockReturnValueOnce(uuids[1]);
+    expect(getCartClientCredential('ogabassey')).toBe(uuids[0]);
+    expect(getCartClientCredential('second-store')).toBe(uuids[1]);
+    expect(
+      window.localStorage.getItem('baci:cart-client-credential:ogabassey')
+    ).toBe(uuids[0]);
+    expect(
+      window.localStorage.getItem('baci:cart-client-credential:second-store')
+    ).toBe(uuids[1]);
+    // Each merchant reuses only its own credential.
+    expect(getCartClientCredential('ogabassey')).toBe(uuids[0]);
   });
 
   it('replaces a malformed stored value', () => {

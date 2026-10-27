@@ -72,7 +72,7 @@ async function requestBootstrap(
       body: JSON.stringify(merchantSlug ? { merchantSlug } : {}),
       headers: {
         'Content-Type': 'application/json',
-        ...cartClientCredentialHeaders(),
+        ...cartClientCredentialHeaders(merchantSlug),
       },
       method: 'POST',
       signal,

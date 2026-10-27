@@ -100,7 +100,7 @@ export function createNativeCartClient(
       // this install instead of the shared network address.
       const credentialHeaders =
         route === '' && method === 'POST'
-          ? await cartClientCredentialHeaders()
+          ? await cartClientCredentialHeaders(config.merchantSlug)
           : {};
       const response = await fetcher(url(route), {
         method,

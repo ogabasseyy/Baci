@@ -158,7 +158,7 @@ async function requestHandoff(
       body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
       headers: {
         'Content-Type': 'application/json',
-        ...cartClientCredentialHeaders(),
+        ...cartClientCredentialHeaders(slug),
       },
       method: 'POST',
       referrerPolicy: 'no-referrer',

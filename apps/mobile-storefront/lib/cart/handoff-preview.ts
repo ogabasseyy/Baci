@@ -19,7 +19,7 @@ export async function previewNativeHandoff(
         credentials: 'omit',
         headers: {
           'x-handoff-token': token,
-          ...(await cartClientCredentialHeaders()),
+          ...(await cartClientCredentialHeaders(config.merchantSlug)),
         },
         redirect: 'error',
         cache: 'no-store',

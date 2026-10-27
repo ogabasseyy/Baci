@@ -209,8 +209,9 @@ cannot be poisoned by credential churn.
 Privacy basis: the credential is a persistent random per-profile /
 per-install quota key. It exists solely so anonymous budgets follow
 the shopper instead of their network address. It is never used for
-authentication, advertising, or cross-merchant joins; quota keys
-are merchant-scoped SHA-256 hashes with the budget window as their
+authentication, advertising, or cross-merchant joins; clients
+store a separate credential per merchant and quota keys are
+merchant-salted SHA-256 hashes with the budget window as their
 retention, and the raw value is redacted from telemetry (below).
 Deleting site/app data rotates it.
 

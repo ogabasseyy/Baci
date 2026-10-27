@@ -80,8 +80,13 @@ describe('storefront account document content validity', () => {
     [{ name: 'Device', quantity: 1.5, price: 100 }],
     [{ name: 'Device', quantity: 1, price: -100 }],
     [{ name: null, quantity: 1, price: 100 }],
-  ])('hides unpaid orders with an invalid item (%#)', (items) => {
-    expect(isManualOrderDocumentAvailable(manualInput({ items }))).toBe(false);
+  ])('hides unpaid orders with an invalid item (%#)', (item) => {
+    // NOTE: each case is ONE item object (it.each spreads the row): wrap it
+    // so the gate validates content, not just array-ness. A bare object
+    // fails the Array check without exercising any field rule.
+    expect(
+      isManualOrderDocumentAvailable(manualInput({ items: [item] }))
+    ).toBe(false);
   });
 
   it.each([

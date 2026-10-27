@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ManualDocumentDispatchDb } from '@/lib/load-manual-document-dispatch';
 import {
   assertManualDocumentClaimMatchesOrder,
   type ManualDocumentClaimOrderSnapshot,
@@ -36,7 +36,7 @@ export type PreparedManualDocumentClaim =
  * authority so the event-pipeline boundary contract holds.
  */
 export async function prepareManualDocumentClaim(input: {
-  supabase: SupabaseClient;
+  supabase: ManualDocumentDispatchDb;
   row: ClaimRow;
   order: ManualDocumentClaimOrderSnapshot;
   recipientEmail: string;
@@ -70,7 +70,7 @@ export async function prepareManualDocumentClaim(input: {
  * post-acceptance path, so later rotations cannot orphan the link.
  */
 export async function recordManualDocumentAcceptedToken(input: {
-  supabase: SupabaseClient;
+  supabase: ManualDocumentDispatchDb;
   claimId: string;
   merchantId: string;
   mailedTokenHash: string;

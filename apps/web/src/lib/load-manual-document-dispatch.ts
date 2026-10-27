@@ -23,6 +23,13 @@ export type ManualDocumentDispatchRow = {
   event_type: 'manual_order_invoice' | 'manual_order_receipt';
 };
 
+// Restricted worker capability for the manual dispatch path: RPC-only, so
+// no helper on this path can touch a table directly through the worker's
+// service-role client. The compiler enforces it — the service client still
+// satisfies this interface, but any future .from()/.storage/.auth use
+// inside the sender or its helpers fails the build.
+export type ManualDocumentDispatchDb = Pick<SupabaseClient, 'rpc'>;
+
 export type LoadedManualDocumentDispatch =
   | {
       status: 'ready';
@@ -41,7 +48,7 @@ export type LoadedManualDocumentDispatch =
 // throwing into max_attempts retries; only transient fetch/RPC failures
 // keep throw/retry.
 export async function loadManualDocumentDispatch(input: {
-  supabase: SupabaseClient;
+  supabase: ManualDocumentDispatchDb;
   row: ManualDocumentDispatchRow;
 }): Promise<LoadedManualDocumentDispatch> {
   const { supabase, row } = input;

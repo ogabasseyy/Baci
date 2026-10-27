@@ -123,6 +123,18 @@ describe('isPromotedManualReceipt', () => {
       'array quantity',
       { items: [{ name: 'Phone', quantity: [2], price: 500 }] },
     ],
+    [
+      'fractional quantity',
+      { items: [{ name: 'Phone', quantity: 1.5, price: 500 }] },
+    ],
+    [
+      'zero quantity',
+      { items: [{ name: 'Phone', quantity: 0, price: 500 }] },
+    ],
+    [
+      'negative quantity',
+      { items: [{ name: 'Phone', quantity: -1, price: 500 }] },
+    ],
     ['bad currency', { currency: 'NAIRA' }],
     ['numeric payment status', { paymentStatus: 7 }],
     ['numeric shipping status', { shippingStatus: 3 }],

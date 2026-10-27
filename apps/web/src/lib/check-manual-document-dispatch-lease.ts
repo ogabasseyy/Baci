@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * data instead of recording a clean sent.
  */
 export async function checkManualDocumentDispatchLease(
-  supabase: SupabaseClient,
+  supabase: Pick<SupabaseClient, 'from'>,
   outboxId: string,
   expectedOwner: string
 ): Promise<'held' | 'reset' | 'unknown'> {
@@ -58,7 +58,7 @@ const MARKER_CLEAR_ATTEMPTS = 3;
  * immediately since retrying is useless.
  */
 export async function clearManualDocumentDispatchMarker(
-  supabase: SupabaseClient,
+  supabase: Pick<SupabaseClient, 'from'>,
   row: DispatchMarkerRow
 ): Promise<void> {
   let lastError: unknown = null;
@@ -104,7 +104,7 @@ export async function clearManualDocumentDispatchMarker(
  * signal error so the worker preserves last_error for the next attempt.
  */
 export async function reclaimStaleManualDocumentDispatchMarker(
-  supabase: SupabaseClient,
+  supabase: Pick<SupabaseClient, 'from'>,
   row: DispatchMarkerRow
 ): Promise<void> {
   const { data: current, error: readError } = await supabase

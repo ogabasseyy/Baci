@@ -52,14 +52,15 @@ export type ManualOrderDocumentResult =
 
 // Only a CRON_SECRET-authenticated outbox worker calls this helper. No customer
 // request constructs a privileged client or chooses the recipient/tenant.
-// The worker's service-role client touches no table directly on this path:
-// the dispatch loader fetches one claim-bound snapshot RPC and every helper
-// below selects from those rows in memory.
+// The dispatch capability is RPC-only (ManualDocumentDispatchDb): the
+// loader fetches one claim-bound snapshot RPC and every helper below
+// selects from those rows in memory. No table is touched directly here,
+// and the type forbids adding any.
 export async function sendManualOrderDocument({
   supabase,
   row,
 }: {
-  supabase: SupabaseClient;
+  supabase: Pick<SupabaseClient, 'rpc' | 'from'>;
   row: DocumentRow;
 }): Promise<ManualOrderDocumentResult> {
   const loaded = await loadManualDocumentDispatch({ supabase, row });

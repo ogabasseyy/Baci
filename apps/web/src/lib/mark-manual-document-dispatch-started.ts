@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clearManualDocumentDispatchMarker } from '@/lib/check-manual-document-dispatch-lease';
+import type { ManualDocumentDispatchDb } from '@/lib/load-manual-document-dispatch';
 
 import type {
   DispatchMerchantIdentitySnapshot,
@@ -49,7 +50,7 @@ export type {
  * values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
-  supabase: SupabaseClient,
+  supabase: ManualDocumentDispatchDb,
   row: DispatchOutboxRow,
   order: DispatchOrderSnapshot,
   documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
@@ -103,7 +104,7 @@ export interface DispatchMerchantRow {
  * lease-holding write, not a second mark.
  */
 export async function persistManualDocumentDispatch(
-  supabase: SupabaseClient,
+  supabase: Pick<SupabaseClient, 'rpc' | 'from'>,
   row: DispatchOutboxRow,
   order: DispatchOrderSnapshot,
   documentKind: 'invoice' | 'proforma_invoice' | 'receipt',

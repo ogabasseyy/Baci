@@ -18,9 +18,11 @@ const number = z.preprocess(
   (value) => (isDecimalMoney(value) ? value : Number.NaN),
   z.coerce.number().finite().nonnegative()
 );
-const positiveNumber = z.preprocess(
+// Item quantities are device counts (order_items.quantity is INTEGER):
+// fractional quantities are corrupt data, never weight-based amounts.
+const positiveInteger = z.preprocess(
   (value) => (isDecimalMoney(value) ? value : Number.NaN),
-  z.coerce.number().finite().positive()
+  z.coerce.number().finite().positive().int()
 );
 // Receipts print no item VAT detail: the value only needs to be finite,
 // never nonnegative — an unrendered negative rate must not sink the send.
@@ -54,7 +56,7 @@ const manualDocumentOrderReceiptVatShape: Record<
 const manualDocumentOrderItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  quantity: positiveNumber,
+  quantity: positiveInteger,
   price: number,
   variant_name: nullableText,
   condition: nullableText,
@@ -168,7 +170,7 @@ const manualDocumentArchiveMoneySchema = manualDocumentOrderSchema.pick({
 const manualDocumentArchiveItemSchema = z.object({
   name: z.string(),
   price: number,
-  quantity: positiveNumber,
+  quantity: positiveInteger,
   ...manualDocumentOrderItemFinancialShape,
 });
 // Receipts print no item VAT: same keys, finite-only values, so the

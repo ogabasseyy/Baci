@@ -120,8 +120,11 @@ function hasValidContent(
       typeof label !== 'string' ||
       !isValidMoney(row.price) ||
       // Strict decimal: bare Number() coerces true to 1 and [2] to 2,
-      // promoting corrupt quantities the sender rejects.
+      // promoting corrupt quantities the sender rejects. Quantities are
+      // device counts (order_items.quantity is INTEGER): fractional
+      // quantities fail closed like the sender and archive gates.
       !isDecimalMoney(row.quantity) ||
+      !Number.isInteger(Number(row.quantity)) ||
       Number(row.quantity) <= 0
     ) {
       return false;

@@ -24,6 +24,7 @@ DECLARE
   v_anchor_id uuid := '03d00000-0000-4000-8000-000000000004';
   v_unit_id uuid := '03d00000-0000-4000-8000-000000000005';
   v_order_id uuid;
+  v_tracking_token text;
   v_item_id uuid;
   v_condition text;
   v_offer_stock integer;
@@ -64,7 +65,7 @@ BEGIN
     'available');
 
   BEGIN
-    SELECT o.id INTO v_order_id
+    SELECT o.id, o.tracking_token INTO v_order_id, v_tracking_token
     FROM public.create_storefront_order(
       p_merchant_id => v_merchant_id,
       p_customer_email => 'claim-exclusion-buyer@example.com',
@@ -99,6 +100,28 @@ BEGIN
   WHERE order_item_id = v_item_id;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line, got %', v_claimed;
+  END IF;
+
+  -- The pending-order reuse path must skip it too: run the order through
+  -- prepare_storefront_order_for_checkout (unpaid + pending = reusable)
+  -- and assert still zero claimed units.
+  BEGIN
+    PERFORM private.prepare_storefront_order_for_checkout(
+      p_order_id => v_order_id,
+      p_merchant_id => v_merchant_id,
+      p_tracking_token => v_tracking_token,
+      p_customer_email => 'claim-exclusion-buyer@example.com',
+      p_payment_method => 'card'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order reuse failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  SELECT count(*) INTO v_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_item_id;
+  IF v_claimed <> 0 THEN
+    RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
   END IF;
 END;
 $$;

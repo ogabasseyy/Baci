@@ -158,26 +158,44 @@ export async function ProductPageBelowFold({
     categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (categorySlug as SupportedClusterCategory)
       : null;
-  const [reviewStats, recentReviews, scopedInventory, guidePosts] =
-    await Promise.all([
-      getCachedProductRatingStats(product.id),
-      getCachedProductReviews(product.id, { limit: 10 }),
-      loadCategoryScopedSemanticInventorySafely({
-        merchantId: merchant.id,
-        categorySlug,
-        storeSlug: slug,
-        warningMessage: 'Failed to load PDP semantic inventory',
-      }),
-      supportedClusterCategory
-        ? loadPublishedClusterPostsSafely(merchant.id, {
-            pageKind: 'product',
-            categorySlug: supportedClusterCategory,
-            brands: product.brand ? [product.brand] : undefined,
-            productNames: [product.name],
-            productSlugs: product.slug ? [product.slug] : undefined,
-          })
-        : Promise.resolve([]),
-    ]);
+  // The repair-device link is independent of every other read here, so it
+  // runs inside this batch: a slow optional read (including the hub scan
+  // below) must not hold it up serially.
+  // Awaited directly (not rendered as `<PdpRepairDeviceLink />`) because this
+  // is an async component: React's client renderer (used by
+  // @testing-library/react in tests) cannot invoke async components as JSX,
+  // only the RSC server renderer can.
+  const [
+    reviewStats,
+    recentReviews,
+    scopedInventory,
+    guidePosts,
+    repairDeviceLink,
+  ] = await Promise.all([
+    getCachedProductRatingStats(product.id),
+    getCachedProductReviews(product.id, { limit: 10 }),
+    loadCategoryScopedSemanticInventorySafely({
+      merchantId: merchant.id,
+      categorySlug,
+      storeSlug: slug,
+      warningMessage: 'Failed to load PDP semantic inventory',
+    }),
+    supportedClusterCategory
+      ? loadPublishedClusterPostsSafely(merchant.id, {
+          pageKind: 'product',
+          categorySlug: supportedClusterCategory,
+          brands: product.brand ? [product.brand] : undefined,
+          productNames: [product.name],
+          productSlugs: product.slug ? [product.slug] : undefined,
+        })
+      : Promise.resolve([]),
+    (async () =>
+      PdpRepairDeviceLink({
+        basePath: getStorefrontPathPrefix(await headers(), merchant),
+        merchant,
+        productId: product.id,
+      }))(),
+  ]);
 
   // Hub eligibility is discarded for collection scopes, so only pay the
   // brand-authority inventory scan for real categories. This deferred
@@ -242,17 +260,6 @@ export async function ProductPageBelowFold({
     categoryName,
     currency,
     country: merchant.country,
-  });
-
-  // Awaited directly (not rendered as `<PdpRepairDeviceLink />`) because this
-  // is an async component: React's client renderer (used by
-  // @testing-library/react in tests) cannot invoke async components as JSX,
-  // only the RSC server renderer can — matching how this function itself is
-  // pre-awaited in tests instead of rendered as JSX.
-  const repairDeviceLink = await PdpRepairDeviceLink({
-    basePath: getStorefrontPathPrefix(await headers(), merchant),
-    merchant,
-    productId: product.id,
   });
 
   return (

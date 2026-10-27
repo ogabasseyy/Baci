@@ -13,6 +13,17 @@ export interface LoadPdpBrandHubEligibilityInventorySafelyInput {
 
 const PDP_BRAND_HUB_ELIGIBILITY_TIMEOUT_MS = 3_000;
 
+function coerceStockQuantity(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function isRawDbProduct(value: unknown): value is RawDbProduct {
   return Boolean(
     value &&
@@ -66,25 +77,47 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
       return [];
     }
 
+    // Carry the raw parity fields (manage_stock, stock_quantity, is_parent,
+    // parent_product_id) through alongside the normalized row: the
+    // eligibility resolver's destination-parity guards (variant exclusion,
+    // explicitly-managed stock) can only execute on inputs that still carry
+    // them, so an upstream inventory change that loosens its own filtering
+    // cannot silently start counting variants or unknown-stock rows here.
     return rawProducts
       .filter(isRawDbProduct)
-      .map((product) =>
-        normalizeProduct(product, { preferredCategorySlug: input.categorySlug })
-      )
+      .map((rawProduct) => ({
+        rawProduct,
+        product: normalizeProduct(rawProduct, {
+          preferredCategorySlug: input.categorySlug,
+        }),
+      }))
       .filter(
-        (product) =>
+        ({ product }) =>
           brandAuthorityTaxonomy.matchesBrand(
             authorityEntry,
             product.brand ?? null
           ) && product.availability === 'InStock'
       )
-      .map((product) => ({
+      .map(({ rawProduct, product }) => ({
         slug: product.slug,
         name: product.name,
         brand: product.brand,
         price: product.price,
         availability: 'InStock' as const,
         stock: product.stock,
+        stock_quantity: coerceStockQuantity(rawProduct.stock_quantity),
+        manage_stock:
+          typeof rawProduct.manage_stock === 'boolean'
+            ? rawProduct.manage_stock
+            : null,
+        is_parent:
+          typeof rawProduct.is_parent === 'boolean'
+            ? rawProduct.is_parent
+            : null,
+        parent_product_id:
+          typeof rawProduct.parent_product_id === 'string'
+            ? rawProduct.parent_product_id
+            : null,
         category_slug: input.categorySlug,
         product_key_specs: product.product_key_specs ?? null,
       }));

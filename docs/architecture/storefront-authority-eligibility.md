@@ -65,7 +65,18 @@ at the anonymous client's transport so nested variant/count requests also abort;
 checks between phases prevent late work. Errors escape the cached reader and are
 caught outside it, preventing transient failures from becoming cached empty pools.
 Budget arguments form a separate cache key from the complete destination scan.
-Product and category cache tags invalidate the bounded result.
+Product and category cache tags invalidate the bounded result. Bounded entries
+use the shorter `storefront-page` cache lifetime (300-second revalidation), so
+active-category freshness does not inherit the 1800-second products lifetime.
+As with the former cached category lookup, changes can remain visible until
+revalidation unless a category tag is invalidated.
+
+The 1-second PDP and 3-second article policies intentionally have distinct cache
+entries, despite sharing the same reader and eligibility contract. Each cold fill
+owns its abort signal: cancelling a PDP fill must not cancel an article fill, and
+a timed-out PDP must not leave a shared background fill running for 3 seconds.
+This can duplicate one bounded scan per policy on a cold cache; moving deadlines
+outside a shared cache fill would sacrifice that cancellation guarantee.
 
 The adapter delegates normalization and brand eligibility to
 `authorityHubEligibility`; provisional link builders now delegate brand and family

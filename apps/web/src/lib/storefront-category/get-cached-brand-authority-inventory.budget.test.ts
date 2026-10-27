@@ -1,3 +1,4 @@
+import { cacheLife } from 'next/cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory as read } from './get-cached-brand-authority-inventory';
@@ -60,6 +61,20 @@ describe('shared brand inventory work budget', () => {
     );
   });
   afterEach(() => vi.useRealTimers());
+  it.each([
+    1000, 3000,
+  ])('keeps category freshness on the storefront profile for the %ims policy', async (timeoutMs) => {
+    await read('merchant-1', 'smartphones', entry, {
+      maxProducts: 100,
+      timeoutMs,
+    });
+    expect(cacheLife).toHaveBeenCalledExactlyOnceWith('storefront-page');
+    category.mockResolvedValueOnce(null);
+    await expect(
+      read('merchant-1', 'smartphones', entry, { maxProducts: 100, timeoutMs })
+    ).rejects.toThrow('category unavailable');
+    expect(query.range).toHaveBeenCalledTimes(1);
+  });
   it('bounds the query before hydration and shares destination category, stock and parent scope', async () => {
     expect((await load()).products).toEqual(rows);
     expect(query.range).toHaveBeenCalledExactlyOnceWith(0, 100);

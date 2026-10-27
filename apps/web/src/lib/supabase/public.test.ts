@@ -39,7 +39,9 @@ describe('createPublicClient', () => {
     expect(signals.every((signal) => signal && !signal.aborted)).toBe(true);
     deadline.abort();
     expect(signals.every((signal) => signal?.aborted)).toBe(true);
-    expect(() => options.global.fetch('https://example.com/counts')).toThrow();
+    await expect(
+      options.global.fetch('https://example.com/counts')
+    ).rejects.toThrow();
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 

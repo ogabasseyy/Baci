@@ -33,7 +33,7 @@ export function createPublicClient(options: {
       },
       fetch: signal
         ? (input, init = {}) => {
-            signal.throwIfAborted();
+            if (signal.aborted) return Promise.reject(signal.reason);
             return publicFetch(input, {
               ...init,
               signal: init.signal

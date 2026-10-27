@@ -115,7 +115,9 @@ async function readCachedBrandAuthorityInventory(
   'use cache';
 
   try {
-    cacheLife('products');
+    // Category activity must refresh at least as often as storefront pages.
+    if (budget) cacheLife('storefront-page');
+    else cacheLife('products');
     cacheTag(
       'products',
       `products-${merchantId}`,

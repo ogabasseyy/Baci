@@ -1,4 +1,4 @@
-import { getImeiDeviceProfile } from '@baci/shared/imei';
+import { getImeiBlacklistState, getImeiDeviceProfile } from '@baci/shared/imei';
 import {
   type ProviderLabelInput,
   parseProviderLabelMap,
@@ -7,7 +7,6 @@ import type { ImeiCheckResult } from './sickw-parser.types';
 import {
   buildVerdict,
   getProviderField,
-  hasBlacklistIssue,
   hasRiskToken,
   inferDeviceType,
 } from './sickw-parser-helpers';
@@ -138,7 +137,8 @@ export function parseSickwResponse(
   const { miLockStatus, miLostStatus } = getXiaomiStatuses(data, device);
 
   const deviceType = inferDeviceType(device);
-  const isBlacklisted = hasBlacklistIssue(blacklist);
+  const blacklistState = getImeiBlacklistState(blacklist);
+  const isBlacklisted = blacklistState === 'risk';
   const hasIcloudLockOn = hasRiskToken(icloudLock, ['on', 'locked', 'lost']);
   const hasIcloudStatusIssue = hasRiskToken(icloudStatus, ['lost', 'locked']);
   const isSimLocked = hasRiskToken(simLock, ['locked']);
@@ -168,12 +168,12 @@ export function parseSickwResponse(
   if (isSimLocked) score -= SCORE_PENALTIES.SIM_LOCK;
   if (!device) score -= SCORE_PENALTIES.MISSING_DEVICE;
 
-  let status: 'Clean' | 'Blacklisted' | 'Unknown' = 'Clean';
-  if (!device && !blacklist && !icloudStatus && !icloudLock) {
-    status = 'Unknown';
-  } else if (isBlacklisted || hasIcloudStatusIssue || hasMiLostIssue) {
-    status = 'Blacklisted';
-  }
+  const status: 'Clean' | 'Blacklisted' | 'Unknown' =
+    isBlacklisted || hasIcloudStatusIssue || hasMiLostIssue
+      ? 'Blacklisted'
+      : blacklistState === 'clean'
+        ? 'Clean'
+        : 'Unknown';
 
   const verdict = buildVerdict({
     hasIcloudLockOn,

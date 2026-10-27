@@ -18,6 +18,9 @@ it('passes code changes and actions to the caller and blocks changes during veri
     onDifferentEmail,
   };
   const { rerender } = render(<CustomerCodeForm {...props} />);
+  expect(
+    screen.getByRole('group', { name: 'Verification code' })
+  ).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Digit 1 of 6'), {
     target: { value: '123456' },
   });

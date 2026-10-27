@@ -88,8 +88,8 @@ describe('parseSickwResponse', () => {
       'Model Name: Pixel 8<br>Blacklist Status:   Not found   '
     );
 
-    expect(result.status).toBe('Clean');
-    expect(result.verdictType).toBe('safe');
+    expect(result.status).toBe('Unknown');
+    expect(result.verdictType).toBe('caution');
     expect(result.deviceType).toBe('android');
   });
 
@@ -132,7 +132,7 @@ describe('parseSickwResponse', () => {
 
     expect(result.miLockStatus).toBe('Locked');
     expect(result.miLostStatus).toBe('Clean');
-    expect(result.status).toBe('Clean');
+    expect(result.status).toBe('Unknown');
     expect(result.verdictType).toBe('caution');
     expect(result.verdict).toContain('Xiaomi account lock');
   });
@@ -177,7 +177,7 @@ describe('parseSickwResponse', () => {
 
   it('does not treat inactive mdm status as a risk token', () => {
     const result = parseSickwResponse(
-      'Model Name: iPhone 14 Pro<br>MDM Status: Not locked'
+      'Model Name: iPhone 14 Pro<br>Blacklist Status: Clean<br>MDM Status: Not locked'
     );
 
     expect(result.mdmStatus).toBe('Not locked');
@@ -209,7 +209,7 @@ describe('parseSickwResponse', () => {
 
   it('does not treat a cleared Knox Guard status as a risk token', () => {
     const result = parseSickwResponse(
-      'Model Name: Galaxy S24<br>Knox Guard Status: Not active'
+      'Model Name: Galaxy S24<br>Blacklist Status: Clean<br>Knox Guard Status: Not active'
     );
 
     expect(result.knoxGuardStatus).toBe('Not active');
@@ -226,4 +226,32 @@ describe('parseSickwResponse', () => {
     expect(result.verdictType).toBe('danger');
     expect(result.verdict).not.toContain('Samsung Knox Guard');
   });
+});
+
+it('does not present a model-only report as safe', () => {
+  const result = parseSickwResponse({ model: 'iPhone 15' });
+  expect(result.status).toBe('Unknown');
+  expect(result.verdictType).toBe('caution');
+});
+
+it.each([
+  'Not blocked',
+  'Unblocked',
+  'Not stolen',
+  'No blacklist record found?',
+])('does not assert blacklist risk for %s', (blacklist) => {
+  const result = parseSickwResponse({
+    model: 'iPhone',
+    'blacklist status': blacklist,
+  });
+  expect(result.status).toBe('Unknown');
+  expect(result.verdictType).toBe('caution');
+});
+it('retains danger when a partial report also says reported stolen', () => {
+  const result = parseSickwResponse({
+    model: 'iPhone',
+    'blacklist status': 'Unknown / Reported stolen',
+  });
+  expect(result.status).toBe('Blacklisted');
+  expect(result.verdictType).toBe('danger');
 });

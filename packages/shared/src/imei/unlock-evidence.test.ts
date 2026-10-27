@@ -113,3 +113,60 @@ it.each([
     canAssessImeiNetworkUnlock({ blacklistStatus, simLock: 'Locked' })
   ).toBe(false);
 });
+
+it.each([
+  'Not on blacklist',
+  'Not on the GSMA blacklist',
+])('recognizes explicit absence: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('clean');
+});
+it('does not infer a clean verdict from an ambiguous lookup or question', () => {
+  expect(getImeiBlacklistState('No blacklist record found')).toBe('unknown');
+  expect(getImeiBlacklistState('Not on blacklist?')).toBe('unknown');
+  expect(getImeiBlacklistState('Not on blacklist / Reported lost')).toBe(
+    'risk'
+  );
+});
+
+it.each([
+  'Not blocked',
+  'Unblocked',
+  'Not stolen',
+  'No blacklist record found?',
+])('does not report ambiguous or negated evidence as a risk: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('unknown');
+});
+it('preserves explicit risk alongside an unknown result', () => {
+  expect(getImeiBlacklistState('Unknown / Reported stolen')).toBe('risk');
+});
+
+it.each([
+  'Blacklist status unknown',
+  'Blacklist unavailable',
+  'Unable to check blacklist',
+  'Error checking blacklist',
+  'Pending blacklist check',
+])('does not treat unavailable check as risk: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('unknown');
+});
+
+it.each([
+  'Unable to check lost/stolen status',
+  'Lost / stolen status unavailable',
+])('keeps an unavailable lost/stolen report unknown: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('unknown');
+});
+
+it.each([
+  'Not lost/stolen',
+  'No lost or stolen',
+  'Unable to check lost and stolen status',
+  'Lost and stolen status unavailable',
+])('does not assert risk for a negated or unavailable compound: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('unknown');
+});
+it('recognizes explicitly unreported lost and stolen evidence', () => {
+  expect(getImeiBlacklistState('Not reported as lost and stolen')).toBe(
+    'clean'
+  );
+});

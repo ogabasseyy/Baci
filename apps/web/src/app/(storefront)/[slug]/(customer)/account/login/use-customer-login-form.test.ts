@@ -319,3 +319,19 @@ it('does not submit a second code while verification is pending', () => {
   expect(mocks.verifyOtp).toHaveBeenCalledTimes(1);
   pending.resolve({ success: false });
 });
+
+it('prompts for a new code rather than submitting an expired challenge', async () => {
+  mocks.auth.otpState = {
+    codeSent: true,
+    email: 'buyer@example.com',
+    expiresAt: Date.now() - 1,
+  };
+  mocks.verifyOtp.mockClear();
+  mocks.sendOtp.mockReset().mockResolvedValue({ success: true });
+  const { result } = renderHook(() => useCustomerLoginForm());
+  act(() => result.current.handleCodeChange(0, '123456'));
+  expect(mocks.verifyOtp).not.toHaveBeenCalled();
+  expect(result.current.error).toMatch(/expired.*new code/i);
+  await act(async () => result.current.handleResendCode());
+  expect(mocks.sendOtp).toHaveBeenCalledOnce();
+});

@@ -3,7 +3,6 @@ import { Loader2 } from 'lucide-react';
 import type { ClipboardEvent, KeyboardEvent, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
 type Props = {
   code: string[];
@@ -36,8 +35,8 @@ export function CustomerCodeForm({
 }: Props) {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <Label>Verification code</Label>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Verification code</legend>
         <div className="flex gap-2 justify-center" onPaste={handlePaste}>
           {(['d1', 'd2', 'd3', 'd4', 'd5', 'd6'] as const).map(
             (slot, index) => (
@@ -61,7 +60,7 @@ export function CustomerCodeForm({
             )
           )}
         </div>
-      </div>
+      </fieldset>
 
       {error && <p className="text-sm text-destructive text-center">{error}</p>}
 

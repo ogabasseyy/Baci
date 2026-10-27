@@ -4,21 +4,33 @@ export type ImeiBlacklistState = 'clean' | 'risk' | 'unknown';
 export function getImeiBlacklistState(
   value: string | undefined
 ): ImeiBlacklistState {
-  const status = value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
-  if (
-    !status ||
-    /unknown|unavailable|pending|error|unable|not (?:clean|clear)/.test(status)
-  )
-    return 'unknown';
+  const status = (
+    value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? ''
+  ).replace(/\blost\s*(?:\/|and|or)\s*stolen\b/g, 'lost or stolen');
+  if (!status) return 'unknown';
   const withoutExplicitUnreported = status.replace(
-    /\bnot reported(?: as)? (?:lost(?:\s*(?:or|\/)\s*stolen)?|stolen|on (?:the )?(?:gsma )?blacklist)\b/g,
+    /\b(?:not reported(?: as)? (?:lost(?:\s*(?:or|\/)\s*stolen)?|stolen|on (?:the )?(?:gsma )?blacklist)|not on (?:the )?(?:gsma )?blacklist)\b/g,
     ''
   );
   const riskTerms = withoutExplicitUnreported.replace(
-    /\bnot blacklisted\b|\bnot reported\b/g,
+    /\bnot blacklisted\b|\bnot reported\b|\b(?:not|no) (?:blocked|stolen|lost(?: or stolen)?)\b|\bunblocked\b|\bno blacklist record found\b/g,
     ''
   );
-  if (/blacklist|blocked|reported|stolen|lost/.test(riskTerms)) return 'risk';
+  const riskClauses = riskTerms
+    .replace(/\blost\s*\/\s*stolen\b/g, 'lost or stolen')
+    .split(/[,;|/]|\s+and\s+/);
+  if (
+    riskClauses.some(
+      (clause) =>
+        !/unknown|unavailable|pending|error|unable/.test(clause) &&
+        /\b(?:blacklist(?:ed)?|blocked|reported|stolen|lost)\b/.test(clause)
+    )
+  )
+    return 'risk';
+  if (
+    /unknown|unavailable|pending|error|unable|not (?:clean|clear)/.test(status)
+  )
+    return 'unknown';
   const hasPositiveVerdict =
     withoutExplicitUnreported !== status ||
     /\bnot blacklisted\b|\bclean\b|\bclear\b/.test(status);

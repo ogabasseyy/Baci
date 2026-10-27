@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
@@ -45,7 +46,13 @@ export async function getBrandAuthoritySitemapEntries({
                 categorySlug,
                 entry
               );
-              if (inventory.productCount < entry.minimumProducts) {
+              const eligibility =
+                authorityHubEligibility.resolveBrandAuthorityEligibility(
+                  inventory.products ?? [],
+                  categorySlug,
+                  entry
+                );
+              if (!eligibility.eligible) {
                 return [];
               }
               const brandEntry = {
@@ -59,14 +66,12 @@ export async function getBrandAuthoritySitemapEntries({
               const familyEntries = modelFamilyAuthorityTaxonomy
                 .getEntries(categorySlug, entry.brandKey)
                 .flatMap((family) => {
-                  const matchingProducts = (inventory.products ?? []).filter(
-                    (product) =>
-                      modelFamilyAuthorityTaxonomy.matchesProduct(
-                        family,
-                        product.name
-                      )
-                  );
-                  if (matchingProducts.length < family.minimumProducts) {
+                  const familyEligibility =
+                    authorityHubEligibility.resolveFamilyAuthorityEligibility(
+                      eligibility.products,
+                      family
+                    );
+                  if (!familyEligibility.eligible) {
                     return [];
                   }
                   return [

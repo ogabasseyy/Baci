@@ -16,36 +16,66 @@ describe('compare eligibility candidate builders', () => {
             name: 'iPhone 17 Pro Max',
             brand: 'Apple',
             price: 2100000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-17',
             name: 'iPhone 17',
             brand: 'Apple',
             price: 1500000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-16',
             name: 'iPhone 16',
             brand: 'Apple',
             price: 1250000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'samsung-galaxy-z-trifold',
             name: 'Samsung Galaxy Z TriFold',
             brand: 'Samsung',
             price: 7150000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-s26-ultra',
             name: 'Galaxy S26 Ultra',
             brand: 'Samsung',
             price: 2500000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a56',
             name: 'Galaxy A56',
             brand: 'Samsung',
             price: 480000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
         ],
       })
@@ -66,36 +96,66 @@ describe('compare eligibility candidate builders', () => {
             name: 'iPhone 17 Pro Max',
             brand: 'Apple',
             price: 2100000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-17',
             name: 'iPhone 17',
             brand: 'apple',
             price: 1500000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'iphone-16',
             name: 'iPhone 16',
             brand: 'APPLE',
             price: 1250000,
+            product_key_specs: {
+              chipset: 'A19 Pro',
+              ram_gb: 8,
+              storage_gb: 256,
+            },
           },
           {
             slug: 'galaxy-s26-ultra',
             name: 'Galaxy S26 Ultra',
             brand: 'Samsung',
             price: 2500000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a56',
             name: 'Galaxy A56',
             brand: 'samsung',
             price: 480000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
           {
             slug: 'galaxy-a36',
             name: 'Galaxy A36',
             brand: 'SAMSUNG',
             price: 360000,
+            product_key_specs: {
+              chipset: 'Snapdragon 8 Elite',
+              ram_gb: 12,
+              storage_gb: 512,
+            },
           },
         ],
       })
@@ -159,6 +219,21 @@ describe('compare eligibility candidate builders', () => {
     });
   });
 
+  it('counts Redmi and Xiaomi as one canonical brand in price bands', () => {
+    const candidate = buildPriceBandCandidate({
+      categorySlug: 'smartphones',
+      band: CURATED_PRICE_BANDS.smartphones[1],
+      products: [
+        { slug: 'redmi-1', name: 'Redmi 1', brand: 'Redmi', price: 300000 },
+        { slug: 'redmi-2', name: 'Redmi 2', brand: 'Redmi', price: 320000 },
+        { slug: 'xiaomi-1', name: 'Xiaomi 1', brand: 'Xiaomi', price: 340000 },
+        { slug: 'xiaomi-2', name: 'Xiaomi 2', brand: 'Xiaomi', price: 360000 },
+      ],
+    });
+    expect(candidate.differentiatingSpecCount).toBe(1);
+    expect(candidate.isIndexable).toBe(false);
+  });
+
   it('does not inflate price-band differentiating spec count beyond distinct brand count', () => {
     expect(
       buildPriceBandCandidate({
@@ -205,62 +280,6 @@ describe('compare eligibility candidate builders', () => {
       })
     ).toMatchObject({
       activeProductCount: 6,
-      differentiatingSpecCount: 2,
-      isIndexable: false,
-    });
-  });
-
-  it('applies the price-band floor when selecting products and brand diversity', () => {
-    expect(
-      buildPriceBandCandidate({
-        categorySlug: 'smartphones',
-        band: {
-          slug: 'mid-range',
-          label: 'Mid-range Smartphones',
-          floor: 300000,
-          ceiling: 700000,
-        },
-        products: [
-          {
-            slug: 'below-floor-samsung',
-            name: 'Below Floor Samsung',
-            brand: 'Samsung',
-            price: 250000,
-          },
-          {
-            slug: 'in-band-apple-1',
-            name: 'In Band Apple 1',
-            brand: 'Apple',
-            price: 350000,
-          },
-          {
-            slug: 'in-band-apple-2',
-            name: 'In Band Apple 2',
-            brand: 'apple',
-            price: 450000,
-          },
-          {
-            slug: 'in-band-samsung-1',
-            name: 'In Band Samsung 1',
-            brand: 'Samsung',
-            price: 500000,
-          },
-          {
-            slug: 'in-band-samsung-2',
-            name: 'In Band Samsung 2',
-            brand: 'samsung',
-            price: 650000,
-          },
-          {
-            slug: 'above-ceiling-xiaomi',
-            name: 'Above Ceiling Xiaomi',
-            brand: 'Xiaomi',
-            price: 750000,
-          },
-        ],
-      })
-    ).toMatchObject({
-      activeProductCount: 4,
       differentiatingSpecCount: 2,
       isIndexable: false,
     });

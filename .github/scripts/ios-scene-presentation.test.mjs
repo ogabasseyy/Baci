@@ -88,7 +88,8 @@ ${scene}
 public struct Utilities { ${helper()} }
 // ExpoPrint's main-queue callbacks have synchronous, nonisolated signatures.
 func synchronousPrintWindowLookup() -> UIWindow? { Utilities.keyWindow() }
-@MainActor final class AppleAnchorProbe: NSObject, ASAuthorizationControllerPresentationContextProviding { ${apple} }
+@MainActor final class AppleAnchorProbe: NSObject, ASAuthorizationControllerPresentationContextProviding { private var presentationAnchorWindow: UIWindow?
+${apple} }
 ${web}
 `);
     const sdk = spawnSync('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path'], { encoding: 'utf8' });

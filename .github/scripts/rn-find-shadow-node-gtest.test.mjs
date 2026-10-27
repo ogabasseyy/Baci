@@ -123,3 +123,10 @@ test('workflow pins immutable checkout SHA without persisted credentials', () =>
   assert.match(body, /persist-credentials:\s*false/);
   assert.doesNotMatch(body, /actions\/checkout@v4\b/);
 });
+
+test('ReactCommon headers are visible to oscompat and other native targets', () => {
+  const body = readFileSync(cmake, 'utf8');
+  const rootInclude = body.indexOf('include_directories(${REACT_COMMON_DIR})');
+  const oscompat = body.indexOf('add_react_common_subdir(oscompat)');
+  assert.ok(rootInclude >= 0 && rootInclude < oscompat);
+});

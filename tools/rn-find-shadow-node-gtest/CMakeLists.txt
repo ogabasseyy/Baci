@@ -97,6 +97,8 @@ add_library(yoga INTERFACE)
 target_link_libraries(yoga INTERFACE yogacore)
 target_include_directories(yoga INTERFACE ${REACT_COMMON_DIR}/yoga)
 
+include_directories(${REACT_COMMON_DIR})
+
 add_react_common_subdir(jsi)
 add_react_common_subdir(oscompat)
 add_react_common_subdir(callinvoker)

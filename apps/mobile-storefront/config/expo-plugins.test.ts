@@ -104,7 +104,10 @@ describe('createExpoPlugins', () => {
         ),
       },
     });
-    expect(plugins).toContain('expo-audio');
+    expect(plugins).toContainEqual([
+      'expo-audio',
+      { enableBackgroundPlayback: false },
+    ]);
   });
 
   it('includes supplied conditional plugins and omits them when unconfigured', () => {

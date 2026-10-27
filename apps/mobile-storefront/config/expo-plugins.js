@@ -27,7 +27,7 @@ function createExpoPlugins({
       },
     ],
     'expo-font',
-    'expo-audio',
+    ['expo-audio', { enableBackgroundPlayback: false }],
     'expo-image',
     'expo-secure-store',
     'expo-sharing',

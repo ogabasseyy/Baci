@@ -1,11 +1,18 @@
 -- =============================================
 -- REGRESSION TEST (issue #3734): serialized-claim exclusion must match
--- the persisted condition shape.
+-- the persisted line identity.
 --   An offer_id-only line (no client condition) stages t.condition from
 --   the product fallback while t.offer_condition carries the offer's
 --   live condition; the persisted oi.condition is the COALESCE of both.
 --   The serialized-unit claim loop must exclude that line, otherwise it
 --   reserves base-product units after the offer stock decrement.
+--   NOTE: a condition-only line (condition without offer_id) is not a
+--   valid shape on a serialized product: condition_valid requires a
+--   quantity-managed pool, and serialized policies are never managed.
+--   The fixture therefore covers the supported offer shapes only:
+--   two offer_id-only units of one offer (A/B), a same-product plain
+--   line colliding with the product fallback condition (C), a second
+--   offer's unit (D), and a plain control line on another product (E).
 --
 -- USAGE:
 --   psql $DATABASE_URL -f supabase/migrations/tests/storefront_order_offer_serialized_claim_exclusion.sql
@@ -113,7 +120,7 @@ BEGIN
         ),
         jsonb_build_object(
           'product_id', v_product_id,
-          'condition', 'used',
+          'offer_id', v_offer_id,
           'quantity', 1
         ),
         jsonb_build_object(
@@ -138,7 +145,8 @@ BEGIN
   SELECT id, condition INTO v_item_id, v_condition
   FROM public.order_items
   WHERE order_id = v_order_id AND product_id = v_product_id
-    AND offer_id = v_offer_id;
+    AND offer_id = v_offer_id
+  ORDER BY id LIMIT 1;
   IF v_condition IS DISTINCT FROM 'used' THEN
     RAISE EXCEPTION 'expected live offer condition used, got %', v_condition;
   END IF;
@@ -146,9 +154,9 @@ BEGIN
   SELECT id INTO v_item_b
   FROM public.order_items
   WHERE order_id = v_order_id AND product_id = v_product_id
-    AND offer_id IS NULL AND condition = 'used';
+    AND offer_id = v_offer_id AND id IS DISTINCT FROM v_item_id;
   IF v_item_b IS NULL THEN
-    RAISE EXCEPTION 'expected condition-only line to persist';
+    RAISE EXCEPTION 'expected second same-offer line to persist';
   END IF;
 
   -- Collision case (wi-oo): same product/variant, plain line whose
@@ -189,8 +197,8 @@ BEGIN
     RAISE EXCEPTION 'expected new-offer stock 4 after quantity 1, got %', v_newoffer_stock;
   END IF;
 
-  -- The serialized claim loop must skip the condition-offer line: no
-  -- base-product unit may be reserved for it.
+  -- The serialized claim loop must skip the offer lines: no
+  -- base-product unit may be reserved for them.
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
   WHERE order_item_id IN (v_item_id, v_item_b, v_item_d);

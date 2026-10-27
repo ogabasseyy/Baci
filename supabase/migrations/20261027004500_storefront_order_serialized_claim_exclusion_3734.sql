@@ -19,21 +19,25 @@
 -- offer-line exclusion at all. The reuse loop now selects the same
 -- persisted markers and skips the claim for offer lines. Because the
 -- pre-fix code ran unguarded, legacy orders may already hold wrongly
--- reserved units: the reuse loop releases them (reservation_released
+-- reserved units: the reuse path releases them (reservation_released
 -- events, units detached) instead of refreshing expiry, and skips the
 -- claim. There is no separate non-expiring status in this schema;
 -- durable holds are status 'reserved' with reservation_expires_at NULL,
 -- so the release predicate is status = 'reserved'. fulfillment_data is
--- rewritten only when the loop actually freed a unit, so ordinary
+-- rewritten only when the release actually freed a unit, so ordinary
 -- offer lines (including policy-off products, which the claim helper
--- deliberately leaves untouched) keep their prior value.
+-- deliberately leaves untouched) keep their prior value. The release
+-- lives in private.release_stale_offer_line_serialized_units (one
+-- helper for both paths) so the patched loops contain no loop
+-- terminator and the claim-loop ordering guard keeps passing.
 --
 -- The payment-confirmation path had the same hole:
 -- private.confirm_order_inventory_reservations iterated every item and
 -- reclaimed units for held lines (or raised late_payment_reservation_lost
 -- for strict policies). It now releases stale reservations on offer
--- lines first, then skips them; fulfillment_data is rewritten only when
--- a release occurred, so freed units are not listed as assigned.
+-- lines first (same helper), then skips them; fulfillment_data is
+-- rewritten only when a release occurred, so freed units are not
+-- listed as assigned.
 --
 -- Legacy marker shape: rows created before 20261019100000 may carry
 -- product_offer_id with offer_line false (the backfill keyed on
@@ -67,6 +71,72 @@ BEGIN
   definition := replace(definition, old_marker, new_marker);
   EXECUTE definition;
 END $claim_exclusion_3734$;
+-- Shared release helper: frees wrongly reserved serialized units on an
+-- offer line (reservation_released events, units detached) and rewrites
+-- fulfillment_data only when a unit was actually freed. It lives in its
+-- own function (rather than inline in the patched loops) so the
+-- claim-loop ordering guard (storefront_order_claim_loop_ordering)
+-- still sees the claim call inside the ordered loop with no intervening
+-- END LOOP. CREATE OR REPLACE converges on rerun.
+CREATE OR REPLACE FUNCTION private.release_stale_offer_line_serialized_units(
+  p_merchant_id uuid,
+  p_order_id uuid,
+  p_item_id uuid,
+  p_item_product_id uuid,
+  p_item_quantity integer,
+  p_event_context jsonb
+) RETURNS void LANGUAGE plpgsql AS $release_helper$
+DECLARE
+  v_release_id uuid;
+  v_release_variant_id uuid;
+  v_release_product_id uuid;
+  v_release_branch_id uuid;
+  v_release_from_status text;
+  v_released_count integer := 0;
+BEGIN
+  -- Durable holds are status 'reserved' with reservation_expires_at
+  -- NULL (no separate status exists), so status = 'reserved' covers
+  -- expiring and NULL-expiry holds. Deterministic id order keeps
+  -- concurrent releases locking in a common order.
+  FOR v_release_id IN
+    SELECT vi.id FROM public.variant_inventory vi
+    WHERE vi.order_item_id = p_item_id AND vi.status = 'reserved'
+    ORDER BY vi.id
+    FOR UPDATE
+  LOOP
+    -- Attributes are read in a second step because FOR UPDATE cannot
+    -- lock the nullable side of the outer join.
+    SELECT vi.variant_id, pv.product_id, vi.branch_id, vi.status
+    INTO v_release_variant_id, v_release_product_id, v_release_branch_id, v_release_from_status
+    FROM public.variant_inventory vi
+    LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
+    WHERE vi.id = v_release_id;
+    PERFORM private.record_variant_inventory_event(
+      v_release_id, p_merchant_id, COALESCE(v_release_product_id, p_item_product_id), v_release_variant_id, 'reservation_released',
+      v_release_from_status, 'available', p_order_id, p_item_id, v_release_branch_id, NULL, NULL,
+      p_event_context
+    );
+    UPDATE public.variant_inventory
+    SET status = 'available',
+        order_id = NULL,
+        order_item_id = NULL,
+        reserved_at = NULL,
+        reservation_expires_at = NULL,
+        updated_at = now()
+    WHERE id = v_release_id;
+    v_released_count := v_released_count + 1;
+  END LOOP;
+  IF v_released_count > 0 THEN
+    UPDATE public.order_items AS oi
+    SET fulfillment_data = jsonb_build_object(
+      'source', 'merchant_stock',
+      'reservationExpiresAt', NULL,
+      'inventoryUnits', '[]'::jsonb,
+      'missingUnitCount', p_item_quantity
+    )
+    WHERE oi.id = p_item_id;
+  END IF;
+END $release_helper$;
 DO $claim_exclusion_prepare_3734$
 DECLARE
   function_oid oid;
@@ -104,61 +174,15 @@ DECLARE
   new_reserved text := $marker$    IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL OR v_item.offer_labels_snapshotted IS TRUE THEN
       -- Offer lines are fulfilled from offer stock: release units the
       -- pre-fix loop wrongly reserved instead of refreshing them,
-      -- then skip the claim branch below. Durable holds are status
-      -- 'reserved' with reservation_expires_at NULL (no separate
-      -- status exists), so status = 'reserved' covers them. The
-      -- snapshotted flag routes post-deletion legacy lines whose FKs
-      -- nulled out. The unit's own variant/branch/product is logged
-      -- (order lines on simple products carry NULL variant_id; the
-      -- unit sits on the anchor variant). Attributes are read in a
-      -- second step because FOR UPDATE cannot lock the nullable side
-      -- of the outer join. Fulfillment_data is rewritten only when a
-      -- unit was actually freed, so untouched offer lines keep their
-      -- prior value instead of being stamped missing.
-      DECLARE
-        v_release_id uuid;
-        v_release_variant_id uuid;
-        v_release_product_id uuid;
-        v_release_branch_id uuid;
-        v_release_from_status text;
-        v_released_count integer := 0;
-      BEGIN
-        FOR v_release_id IN
-          SELECT vi.id FROM public.variant_inventory vi
-          WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
-          FOR UPDATE
-        LOOP
-          SELECT vi.variant_id, pv.product_id, vi.branch_id, vi.status
-          INTO v_release_variant_id, v_release_product_id, v_release_branch_id, v_release_from_status
-          FROM public.variant_inventory vi
-          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
-          WHERE vi.id = v_release_id;
-          PERFORM private.record_variant_inventory_event(
-            v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
-            v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
-jsonb_build_object('releaseReason', 'checkout_reuse')
-          );
-          UPDATE public.variant_inventory
-          SET status = 'available',
-              order_id = NULL,
-              order_item_id = NULL,
-              reserved_at = NULL,
-              reservation_expires_at = NULL,
-              updated_at = now()
-          WHERE id = v_release_id;
-          v_released_count := v_released_count + 1;
-        END LOOP;
-        IF v_released_count > 0 THEN
-          UPDATE public.order_items AS oi
-          SET fulfillment_data = jsonb_build_object(
-            'source', 'merchant_stock',
-            'reservationExpiresAt', NULL,
-            'inventoryUnits', '[]'::jsonb,
-            'missingUnitCount', v_item.quantity
-          )
-          WHERE oi.id = v_item.id;
-        END IF;
-      END;
+      -- then skip the claim branch below. The snapshotted flag routes
+      -- post-deletion legacy lines whose FKs nulled out. The release
+      -- itself lives in a helper (no loop terminator here) so the
+      -- claim-loop ordering guard still sees the claim call inside
+      -- the ordered loop.
+      PERFORM private.release_stale_offer_line_serialized_units(
+        p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
+        jsonb_build_object('releaseReason', 'checkout_reuse')
+      );
     ELSIF v_has_reserved THEN
       IF v_is_pod THEN$marker$;
 BEGIN
@@ -209,56 +233,17 @@ DECLARE
     INTO v_has_variants, v_variant_model, v_prod_policy, v_anchor_id$marker$;
   new_cbody text := $marker$  LOOP
     -- Offer lines are fulfilled from offer stock: release any stale
-    -- reserved units (pre-fix double reservations, expiring or
-    -- NULL-expiry durable holds), then skip confirmation entirely
-    -- (no reclaim, no late-payment reservation error). The
-    -- snapshotted flag routes post-deletion legacy lines whose FKs
-    -- nulled out.
+    -- reserved units (pre-fix double reservations), then skip
+    -- confirmation entirely (no reclaim, no late-payment reservation
+    -- error). The snapshotted flag routes post-deletion legacy lines
+    -- whose FKs nulled out. The release itself lives in a helper (no
+    -- loop terminator here) so the claim-loop ordering guard still
+    -- sees the ordered loop shape.
     IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL OR v_item.offer_labels_snapshotted IS TRUE THEN
-      DECLARE
-        v_release_id uuid;
-        v_release_variant_id uuid;
-        v_release_product_id uuid;
-        v_release_branch_id uuid;
-        v_release_from_status text;
-        v_released_count integer := 0;
-      BEGIN
-        FOR v_release_id IN
-          SELECT vi.id FROM public.variant_inventory vi
-          WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
-          FOR UPDATE
-        LOOP
-          SELECT vi.variant_id, pv.product_id, vi.branch_id, vi.status
-          INTO v_release_variant_id, v_release_product_id, v_release_branch_id, v_release_from_status
-          FROM public.variant_inventory vi
-          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
-          WHERE vi.id = v_release_id;
-          PERFORM private.record_variant_inventory_event(
-            v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
-            v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
-'{}'::jsonb
-          );
-          UPDATE public.variant_inventory
-          SET status = 'available',
-              order_id = NULL,
-              order_item_id = NULL,
-              reserved_at = NULL,
-              reservation_expires_at = NULL,
-              updated_at = now()
-          WHERE id = v_release_id;
-          v_released_count := v_released_count + 1;
-        END LOOP;
-        IF v_released_count > 0 THEN
-          UPDATE public.order_items AS oi
-          SET fulfillment_data = jsonb_build_object(
-            'source', 'merchant_stock',
-            'reservationExpiresAt', NULL,
-            'inventoryUnits', '[]'::jsonb,
-            'missingUnitCount', v_item.quantity
-          )
-          WHERE oi.id = v_item.id;
-        END IF;
-      END;
+      PERFORM private.release_stale_offer_line_serialized_units(
+        p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
+        '{}'::jsonb
+      );
       CONTINUE;
     END IF;
     SELECT has_variants, variant_model, inventory_tracking_policy, inventory_anchor_variant_id

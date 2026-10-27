@@ -135,6 +135,7 @@ function createDocumentData(
         street: '99 Registered Road',
       },
     } as StorefrontAccountDocumentData['receiptMerchant'],
+    receiptCompletionDate: null,
   } as StorefrontAccountDocumentData;
 }
 

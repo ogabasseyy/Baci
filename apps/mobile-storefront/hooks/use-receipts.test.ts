@@ -113,7 +113,7 @@ describe('receiptDetailQueryOptions', () => {
     expect(mockSelectCalls.orders?.[0]).toEqual(
       expect.stringContaining('variant_name')
     );
-    expect(detail.items[0]).toEqual(
+    expect(detail?.items[0]).toEqual(
       expect.objectContaining({
         condition: 'open_box',
         product_name: '13" MacBook Air M2 (2022)',
@@ -178,6 +178,7 @@ describe('receiptDetailQueryOptions', () => {
           description: 'Paystack DVA payment',
           dva_account_number: '1111111111',
           gateway: 'paystack',
+          order_id: 'order-1',
           status: 'completed',
           transaction_type: 'payment',
         },
@@ -190,7 +191,7 @@ describe('receiptDetailQueryOptions', () => {
       userId: 'user-1',
     }).queryFn();
 
-    expect(detail.virtual_account?.account_number).toBe('1111111111');
+    expect(detail?.virtual_account?.account_number).toBe('1111111111');
     expect(mockTransactionsRpc).toHaveBeenCalledWith(
       'get_customer_order_transactions',
       { p_order_ids: ['order-1'] }
@@ -280,7 +281,7 @@ describe('receiptDetailQueryOptions', () => {
       userId: 'user-1',
     }).queryFn();
 
-    expect(detail.items[0]).toEqual(
+    expect(detail?.items[0]).toEqual(
       expect.objectContaining({
         condition: null,
         product_name: '13" MacBook Air M2 (2022)',

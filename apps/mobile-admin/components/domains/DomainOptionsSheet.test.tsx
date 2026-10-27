@@ -5,11 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DomainOptionsSheet from './DomainOptionsSheet';
 import type { Domain } from './domain-types';
 
-const mocks = vi.hoisted(() => ({
-  interactionCallback: null as null | (() => void),
-  idleOptions: null as null | { timeout: number },
-}));
-
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     colors: {
@@ -57,7 +52,7 @@ vi.mock('react-native-reanimated', () => {
     FadeIn: {},
     FadeOut: {},
     SlideInDown: {},
-    SlideOutDown: {},
+    SlideOutDown: { duration: () => ({}) },
   };
 });
 
@@ -113,29 +108,14 @@ const baseDomain: Domain = {
 
 describe('DomainOptionsSheet', () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      'requestIdleCallback',
-      (callback: () => void, options: { timeout: number }) => {
-        mocks.idleOptions = options;
-        mocks.interactionCallback = callback;
-        return 1;
-      }
-    );
-    vi.stubGlobal('cancelIdleCallback', () => {
-      mocks.interactionCallback = null;
-    });
+    vi.useFakeTimers();
   });
   afterEach(() => {
     cleanup();
-    mocks.interactionCallback = null;
-    mocks.idleOptions = null;
     vi.useRealTimers();
-    vi.unstubAllGlobals();
   });
 
   it('uses a timer when idle callbacks are unavailable', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('requestIdleCallback', undefined);
     const onAction = vi.fn();
     const onClose = vi.fn();
     const { rerender } = render(
@@ -160,10 +140,9 @@ describe('DomainOptionsSheet', () => {
     expect(onAction).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
-    vi.useRealTimers();
   });
 
-  it('runs selected action only after close and an idle callback', () => {
+  it('runs selected action only after the close animation', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
 
@@ -189,9 +168,9 @@ describe('DomainOptionsSheet', () => {
       />
     );
 
-    expect(mocks.interactionCallback).not.toBeNull();
-    expect(mocks.idleOptions).toEqual({ timeout: 500 });
-    mocks.interactionCallback?.();
+    vi.advanceTimersByTime(299);
+    expect(onAction).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
 
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
   });
@@ -216,11 +195,8 @@ describe('DomainOptionsSheet', () => {
         onAction={onAction}
       />
     );
-    const lateCallback = mocks.interactionCallback;
-    expect(lateCallback).not.toBeNull();
     unmount();
-    expect(mocks.interactionCallback).toBeNull();
-    lateCallback?.();
+    vi.runAllTimers();
     expect(onAction).not.toHaveBeenCalled();
   });
 
@@ -250,7 +226,7 @@ describe('DomainOptionsSheet', () => {
       />
     );
 
-    mocks.interactionCallback?.();
+    vi.runAllTimers();
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onAction).toHaveBeenCalledWith('delete', baseDomain);
   });
@@ -297,7 +273,7 @@ describe('DomainOptionsSheet', () => {
       />
     );
 
-    expect(mocks.interactionCallback).toBeNull();
+    vi.runAllTimers();
     expect(onAction).not.toHaveBeenCalled();
   });
 });

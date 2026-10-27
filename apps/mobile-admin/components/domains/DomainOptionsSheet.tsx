@@ -13,6 +13,8 @@ import DomainOptionsSheetHeader from './DomainOptionsSheetHeader';
 import { domainOptionsSheetStyles } from './domain-options-sheet.styles';
 import type { Domain, DomainAction } from './domain-types';
 
+const CLOSE_DURATION_MS = 300;
+
 interface DomainOptionsSheetProps {
   visible: boolean;
   domain: Domain | null;
@@ -59,16 +61,8 @@ export default function DomainOptionsSheet({
       onAction(pendingAction.action, pendingAction.domain);
     };
 
-    if (
-      typeof requestIdleCallback === 'function' &&
-      typeof cancelIdleCallback === 'function'
-    ) {
-      const idleHandle = requestIdleCallback(runAction, { timeout: 500 });
-      return () => cancelIdleCallback(idleHandle);
-    }
-
-    // Reanimated exit defaults to 300 ms; wait for the sheet to close.
-    const timer = setTimeout(runAction, 300);
+    // Wait for the explicitly configured sheet exit animation to complete.
+    const timer = setTimeout(runAction, CLOSE_DURATION_MS);
     return () => clearTimeout(timer);
   }, [onAction, visible]);
 
@@ -112,7 +106,7 @@ export default function DomainOptionsSheet({
       >
         <Animated.View
           entering={SlideInDown}
-          exiting={SlideOutDown}
+          exiting={SlideOutDown.duration(CLOSE_DURATION_MS)}
           style={[
             domainOptionsSheetStyles.sheet,
             { backgroundColor: colors.card, paddingBottom: SPACING.xl * 2 },

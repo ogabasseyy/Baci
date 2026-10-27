@@ -98,3 +98,20 @@ ${web}
     assert.equal(build.status, 0, build.stderr);
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
+
+test('patched synchronous window lookup has main-queue callers', () => {
+  const request = native('expo-apple-authentication', 'AppleAuthenticationRequest.swift');
+  const module = native('expo-apple-authentication', 'AppleAuthenticationModule.swift');
+  assert.match(request, /Utilities\.keyWindow\(\)/);
+  assert.match(module, /AsyncFunction\("requestAsync"\)[\s\S]*?performRequest[\s\S]*?\.runOnQueue\(\.main\)/);
+  const core = native('expo-modules-core', 'Utilities/Utilities.swift');
+  assert.match(declaration(core, 'nonisolated public func currentViewController()'), /MainActor\.assumeIsolated[\s\S]*Utilities\.keyWindow\(\)/);
+  for (const [name, path] of [
+    ['expo-print', 'ExpoPrinterSelector.swift'],
+    ['expo-print', 'ExpoPrintWithPrinter.swift'],
+    ['expo-web-browser', 'WebAuthSession.swift'],
+    ['expo-web-browser', 'WebBrowserSession.swift'],
+  ]) {
+    assert.doesNotMatch(native(name, path), /Utilities\.keyWindow\(\)/);
+  }
+});

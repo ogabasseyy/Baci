@@ -40,6 +40,8 @@ const config = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^@baci/shared$': '<rootDir>/../../packages/shared/src/index.ts',
+    '^@baci/shared/android-system-bars$':
+      '<rootDir>/../../packages/shared/android-system-bars.cjs',
     '^@baci/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1',
     '^react$': reactPath,
     '^react-dom$': reactDomPath,

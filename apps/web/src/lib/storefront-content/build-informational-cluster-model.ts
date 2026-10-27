@@ -245,9 +245,11 @@ export async function buildInformationalClusterModel(
             : undefined,
         });
 
+  // Cap family hubs so verified commerce links are not crowded out of
+  // the final five-link slice by a roundup mentioning many generations.
   const combinedLinkCandidates = [
     ...brandHubLinks,
-    ...familyHubLinks,
+    ...familyHubLinks.slice(0, 3),
     ...verifiedCommerceLinks,
   ];
 

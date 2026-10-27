@@ -41,6 +41,32 @@ describe('loadPriceBandDestinationPoolSafely', () => {
     });
   });
 
+  it('retains out-of-stock rows, mirroring the destination candidate pool', async () => {
+    // The destination price-band loader counts every normalized row in
+    // its candidate (no availability filter), so verification must too.
+    mockGetCategoryPageData.mockResolvedValue({
+      isCollection: false,
+      category: { slug: 'smartphones' },
+      products: [
+        {
+          id: 'p1',
+          name: 'iPhone 17',
+          brand: 'Apple',
+          price: 500_000,
+          stock: 0,
+          manage_stock: true,
+          category_slug: 'smartphones',
+        },
+      ],
+    } as never);
+    const pool = await loadPriceBandDestinationPoolSafely({
+      merchantId: 'm1',
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+    });
+    expect(pool).toHaveLength(1);
+  });
+
   it('returns null for collections and load failures', async () => {
     mockGetCategoryPageData.mockResolvedValue({
       isCollection: true,

@@ -8,6 +8,7 @@ import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
+import { cartClientCredentialHeaders } from './client-credential';
 import {
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
@@ -115,7 +116,10 @@ async function requestCreateSharedCart(
           ...(input.lines ? { lines: input.lines } : {}),
           operationId: input.operationId,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...cartClientCredentialHeaders(),
+        },
         method: 'POST',
         signal,
       }

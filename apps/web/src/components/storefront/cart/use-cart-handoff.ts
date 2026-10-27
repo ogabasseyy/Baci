@@ -1,6 +1,7 @@
 'use client';
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { cartClientCredentialHeaders } from '@/hooks/cart/client-credential';
 import { loadDestinationCart } from './cart-handoff-destination-loader';
 import {
   type Choice,
@@ -86,7 +87,13 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     try {
       const response = await fetchJson(
         `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
-        { headers: { 'x-handoff-token': token }, signal }
+        {
+          headers: {
+            ...cartClientCredentialHeaders(),
+            'x-handoff-token': token,
+          },
+          signal,
+        }
       );
       const payload = (await response.json()) as PreviewResponse;
       // A superseded refresh (deadline elapsed, retry started) must not

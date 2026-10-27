@@ -4,6 +4,7 @@ import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
+import { cartClientCredentialHeaders } from './client-credential';
 import { failureOf, readBody } from './shared-cart-client-support';
 import {
   ensureCartDeviceRevocationCleared,
@@ -69,7 +70,10 @@ async function requestBootstrap(
   try {
     response = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
       body: JSON.stringify(merchantSlug ? { merchantSlug } : {}),
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...cartClientCredentialHeaders(),
+      },
       method: 'POST',
       signal,
     });

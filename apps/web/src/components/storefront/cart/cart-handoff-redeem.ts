@@ -1,5 +1,6 @@
 import { withCartRequestDeadline } from '@/hooks/cart/cart-request-deadline';
 import { runCartSessionTransition } from '@/hooks/cart/cart-session-write-fence';
+import { cartClientCredentialHeaders } from '@/hooks/cart/client-credential';
 import { isCartDeviceRevocationPending } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { fetchWithCsrf } from '@/lib/api-client';
 import type { MergeConflictView } from './cart-handoff-support';
@@ -155,7 +156,10 @@ async function requestHandoff(
   if (deps.bootstrapRequired.current) {
     const bootstrap = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
       body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...cartClientCredentialHeaders(),
+      },
       method: 'POST',
       referrerPolicy: 'no-referrer',
       signal,

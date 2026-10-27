@@ -18,6 +18,11 @@ import { PRODUCT_SELECT } from './product-select';
 import { transformProduct } from './product-transform';
 import type { ProductsPage, UseProductsOptions } from './product-utils.types';
 import { fetchRefinedProductsPage } from './refined-product-pages';
+import {
+  buildSandboxProductQuery,
+  fetchSandboxProcessorRefinementsPage,
+  getSandboxProductSort,
+} from './sandbox-product-pages';
 
 const log = createLogger('Products');
 
@@ -125,32 +130,53 @@ export async function fetchProductsPage(
     };
   }
 
-  let query = supabase
-    .from('products')
-    .select(PRODUCT_SELECT, { count: 'exact' })
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active');
-
-  if (normalizedSearch && useSandboxCatalogSearch) {
-    query = query.ilike('name', `%${normalizedSearch}%`);
-  }
-
-  if (options.category) query = query.eq('category_id', options.category);
-  if (normalizedCondition) {
-    query = query.or(
-      `condition.eq.${normalizedCondition},available_conditions.cs.{${normalizedCondition}}`
+  if (useSandboxCatalogSearch && options.refinements?.processor) {
+    return fetchSandboxProcessorRefinementsPage(
+      merchantId,
+      normalizedSearch,
+      options,
+      normalizedCondition,
+      limit,
+      offset
     );
   }
-  if (options.brand) query = query.eq('brand', options.brand);
-  if (options.minPrice !== undefined)
-    query = query.gte('price', options.minPrice);
-  if (options.maxPrice !== undefined)
-    query = query.lte('price', options.maxPrice);
-  if (options.minRating !== undefined && options.minRating > 0) {
-    query = query.gte('average_rating', options.minRating);
+
+  let query = useSandboxCatalogSearch
+    ? buildSandboxProductQuery(
+        merchantId,
+        normalizedSearch,
+        options,
+        normalizedCondition
+      )
+    : supabase
+        .from('products')
+        .select(PRODUCT_SELECT, { count: 'exact' })
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active');
+
+  if (!useSandboxCatalogSearch) {
+    if (options.category) query = query.eq('category_id', options.category);
+    if (normalizedCondition) {
+      query = query.or(
+        `condition.eq.${normalizedCondition},available_conditions.cs.{${normalizedCondition}}`
+      );
+    }
+    if (options.brand) query = query.eq('brand', options.brand);
+    if (options.minPrice !== undefined) {
+      query = query.gte('price', options.minPrice);
+    }
+    if (options.maxPrice !== undefined) {
+      query = query.lte('price', options.maxPrice);
+    }
+    if (options.minRating !== undefined && options.minRating > 0) {
+      query = query.gte('average_rating', options.minRating);
+    }
   }
 
-  switch (options.sortBy) {
+  const sort = useSandboxCatalogSearch
+    ? getSandboxProductSort(options)
+    : options.sortBy;
+  switch (sort) {
     case 'price_asc':
       query = query.order('price', { ascending: true });
       break;

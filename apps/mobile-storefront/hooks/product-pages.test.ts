@@ -127,6 +127,66 @@ it('keeps ranked provider search for production instead of using sandbox name fi
   }
 });
 
+it('preserves production browse filters, projection, and sort when refinements are present', async () => {
+  const previous = { ...process.env };
+  try {
+    process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
+    process.env.EXPO_PUBLIC_API_URL = 'https://ogabassey.com';
+    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://staging-auth.ogabassey.com';
+    jest.clearAllMocks();
+    queryResult.data = [];
+    queryResult.count = 0;
+    queryResult.error = null;
+
+    await fetchProductsPage(
+      '10000000-0000-4000-8000-000000000001',
+      {
+        category: 'production-category',
+        condition: 'used',
+        brand: 'Legacy brand',
+        minPrice: 100,
+        maxPrice: 500,
+        minRating: 4,
+        sortBy: 'popular',
+        refinements: {
+          brands: ['Sandbox brand'],
+          categoryId: 'sandbox-category',
+          processor: 'Intel Core i7',
+          sort: 'price_asc',
+        },
+      },
+      0
+    );
+
+    expect(mockFrom).toHaveBeenCalledWith('products');
+    expect(query.select).toHaveBeenCalledWith(PRODUCT_SELECT, {
+      count: 'exact',
+    });
+    expect(query.eq).toHaveBeenCalledWith('category_id', 'production-category');
+    expect(query.or).toHaveBeenCalledWith(
+      'condition.eq.used,available_conditions.cs.{used}'
+    );
+    expect(query.eq).toHaveBeenCalledWith('brand', 'Legacy brand');
+    expect(query.gte).toHaveBeenCalledWith('price', 100);
+    expect(query.lte).toHaveBeenCalledWith('price', 500);
+    expect(query.gte).toHaveBeenCalledWith('average_rating', 4);
+    expect(query.order).toHaveBeenCalledWith('view_count', {
+      ascending: false,
+    });
+    expect(query.range).toHaveBeenCalledWith(0, 19);
+    expect(mockRpc).not.toHaveBeenCalled();
+  } finally {
+    for (const name of [
+      'EXPO_PUBLIC_HOSTED_STOREFRONT',
+      'EXPO_PUBLIC_API_URL',
+      'EXPO_PUBLIC_SUPABASE_URL',
+    ]) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+  }
+});
+
 it('searches the pinned sandbox catalog without calling its unavailable search RPC', async () => {
   const previous = { ...process.env };
   try {

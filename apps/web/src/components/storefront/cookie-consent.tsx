@@ -55,9 +55,12 @@ export function CookieConsent() {
     >
       <div
         style={{
-          background: 'var(--store-background, var(--background, #ffffff))',
-          color: 'var(--store-background-text, var(--foreground, #111827))',
-          border: '1px solid var(--store-border, var(--border, #e5e7eb))',
+          background:
+            'var(--store-background, hsl(var(--background, 0 0% 100%)))',
+          color:
+            'var(--store-background-text, hsl(var(--foreground, 240 10% 3.9%)))',
+          border:
+            '1px solid var(--store-border, hsl(var(--border, 240 5.9% 90%)))',
           borderRadius: '1rem',
           padding: '1rem',
         }}

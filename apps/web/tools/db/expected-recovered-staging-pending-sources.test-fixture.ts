@@ -44,4 +44,14 @@ export const EXPECTED_RECOVERED_STAGING_PENDING_SOURCES = [
       'supabase/migrations/20261027061553_restrict_primary_onboarding_presence_execute.sql',
     sha256: '12821754992a278352e62b19d24be4c9efd8a7683df78af44a1af01514aa46a0',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027072530_customer_savings_interest_history.sql',
+    sha256: '2c4d5f4a2804104da2e9575362ee291d37fe15bd9c919b7c099f0b2c1f77bdc5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027084837_customer_savings_interest_snapshot.sql',
+    sha256: '8162e65f64a548fd1a029e0c3d352b8726a1cbece44341027e9943f34c070e63',
+  },
 ];

@@ -64,7 +64,8 @@ BEGIN
   RETURNING id INTO v_crosswalk;
   INSERT INTO piggyvest_primary.paid_interest_receipts VALUES(v_integration,'detach-payout',v_crosswalk,v_goal,v_merchant,v_customer,1000,'{}',repeat('b',64),clock_timestamp());
   INSERT INTO piggyvest_primary.paid_interest_delivery_ids VALUES(v_integration,'detach-event','detach-payout');
-  INSERT INTO piggyvest_primary.paid_interest_reversals VALUES(v_integration,'detach-reversal','detach-payout',100,repeat('c',64),'detach-evidence');
+  INSERT INTO piggyvest_primary.paid_interest_reversals(integration_id,provider_reversal_id,payout_id,amount_kobo,provider_evidence_sha256,evidence_reference)
+    VALUES(v_integration,'detach-reversal','detach-payout',100,repeat('c',64),'detach-evidence');
   -- The delete previously aborted here on the NO ACTION customer/goal links.
   DELETE FROM public.customers WHERE id = v_customer;
   IF EXISTS (SELECT 1 FROM public.customer_savings_goals WHERE id = v_goal) THEN RAISE EXCEPTION 'goal not cascaded'; END IF;

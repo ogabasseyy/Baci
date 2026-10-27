@@ -3,6 +3,8 @@ import { isHostedStagingTestPaymentsEnabled } from './is-hosted-staging-wallet-t
 
 const AUTHENTICATED_SAVINGS_RPCS = new Set([
   'get_customer_savings_earnings',
+  'get_customer_savings_interest_history',
+  'get_customer_savings_interest_snapshot',
   'get_customer_savings_notifications',
   'mark_customer_savings_notification_read',
   'register_push_token',

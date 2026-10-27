@@ -67,6 +67,9 @@ function topUp(
 }
 
 function positionOf(transaction: WalletTopUpCandidate): WalletLedgerPosition {
+  if (transaction.created_at === null) {
+    throw new Error('Wallet credit watch fixtures need a dated top-up');
+  }
   return {
     createdAt: Date.parse(transaction.created_at),
     id: transaction.id,

@@ -10,6 +10,7 @@ export const SavingsInterestActivitySchema = z.strictObject({
     .max(Number.MAX_SAFE_INTEGER / 100),
   type: z.enum(['credit', 'adjustment']),
   description: z.string(),
+  date_basis: z.enum(['ledger', 'received', 'observed', 'unknown']).optional(),
   source_type: z.literal('savings_interest'),
-  created_at: z.iso.datetime({ offset: true }),
+  created_at: z.iso.datetime({ offset: true }).nullable(),
 });

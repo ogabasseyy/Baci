@@ -14,10 +14,17 @@ export function mergeSavingsHistory(
     unique.set(entry.id, entry);
   }
   return [...unique.values()]
-    .sort(
-      (first, second) =>
+    .sort((first, second) => {
+      if (first.created_at === null || second.created_at === null) {
+        if (first.created_at !== second.created_at) {
+          return first.created_at === null ? 1 : -1;
+        }
+        return first.id.localeCompare(second.id);
+      }
+      return (
         Date.parse(second.created_at) - Date.parse(first.created_at) ||
         first.id.localeCompare(second.id)
-    )
+      );
+    })
     .slice(0, WALLET_HISTORY_PAGE_SIZE);
 }

@@ -56,7 +56,8 @@ export interface Transaction {
     | 'refund';
   amount: number;
   description: string;
-  created_at: string;
+  created_at: string | null;
+  date_basis?: 'ledger' | 'received' | 'observed' | 'unknown';
   /** `customer_wallet_transactions.source_type` — `wallet_topup` for funding. */
   source_type?: string | null;
 }

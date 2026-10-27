@@ -19,6 +19,16 @@ it('validates goal-linked paid interest and negative reversals', () => {
     }).amount
   ).toBe(-7.33);
 });
+it('accepts an explicitly unknown timestamp for historical reversals', () => {
+  expect(
+    SavingsInterestActivitySchema.parse({
+      ...row,
+      amount: -7.33,
+      type: 'adjustment',
+      created_at: null,
+    }).created_at
+  ).toBeNull();
+});
 it.each([
   { goal_id: 'wrong' },
   { amount: Number.POSITIVE_INFINITY },

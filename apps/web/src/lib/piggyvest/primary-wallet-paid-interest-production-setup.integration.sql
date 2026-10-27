@@ -13,6 +13,9 @@ ALTER TABLE public.customer_savings_goals ADD COLUMN non_withdrawable_accepted_a
 \else
 \ir ../../../../../supabase/migrations/20261007220003_piggyvest_primary_interest_reads_notifications.sql
 \endif
+\ir ../../../../../supabase/migrations/20261027072530_customer_savings_interest_history.sql
+\ir ../../../../../supabase/migrations/20261027084837_customer_savings_interest_snapshot.sql
+INSERT INTO public.merchants(id) VALUES('00000000-0000-4000-8000-000000000099');
 
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
@@ -89,4 +92,3 @@ SELECT pg_temp.assert_true(piggyvest_primary.manage_savings(pg_temp.production_s
 RESET SESSION AUTHORIZATION;
 CREATE TEMP TABLE production_cash_before AS SELECT available_balance,total_earned FROM public.customer_wallets;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000003',false);
-CREATE TEMP TABLE legacy_earnings_before AS SELECT public.get_customer_savings_earnings('00000000-0000-4000-8000-000000000001');

@@ -425,21 +425,57 @@ describe('fetchWalletData', () => {
     ]);
   });
 
-  it('exposes accrued interest earnings when the interest lookup succeeds', async () => {
+  it('exposes accrued interest from the combined history snapshot RPC', async () => {
     setupSupabaseTables();
     mockRpc.mockImplementation(async () => ({
-      data: { credited_interest_kobo: 125000, goal_interest_kobo: [] },
+      data: {
+        credited_interest_kobo: 125000,
+        goal_interest_kobo: [],
+        interest_history: [],
+      },
       error: null,
     }));
     const merchantId = '10000000-0000-4000-8000-000000000001';
 
     const result = await fetchWalletData('customer-1', merchantId, 'user-1');
 
-    expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
-      p_merchant_id: merchantId,
-      p_include_goals: true,
-      p_include_history: true,
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_customer_savings_interest_snapshot',
+      { p_merchant_id: merchantId }
+    );
+    expect(result.wallet).toMatchObject({
+      earnings_available: true,
+      earnings_balance: 1250,
     });
+  });
+
+  it('falls back to earnings RPC when the combined snapshot RPC is unavailable', async () => {
+    setupSupabaseTables();
+    mockRpc.mockImplementation(async (name) => {
+      if (name === 'get_customer_savings_interest_snapshot')
+        return {
+          data: null,
+          error: { code: 'PGRST202', message: 'snapshot RPC unavailable' },
+        };
+      return {
+        data: { credited_interest_kobo: 125000, goal_interest_kobo: [] },
+        error: null,
+      };
+    });
+    const merchantId = '10000000-0000-4000-8000-000000000001';
+
+    const result = await fetchWalletData('customer-1', merchantId, 'user-1');
+
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      1,
+      'get_customer_savings_interest_snapshot',
+      { p_merchant_id: merchantId }
+    );
+    expect(mockRpc).toHaveBeenNthCalledWith(
+      2,
+      'get_customer_savings_earnings',
+      { p_merchant_id: merchantId, p_include_goals: true }
+    );
     expect(result.wallet).toMatchObject({
       earnings_available: true,
       earnings_balance: 1250,

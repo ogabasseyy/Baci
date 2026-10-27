@@ -11,7 +11,8 @@ type WalletColors = (typeof Colors)['light'];
 export interface WalletTransaction {
   goal_id?: string;
   amount: number;
-  created_at: string;
+  created_at: string | null;
+  date_basis?: 'ledger' | 'received' | 'observed' | 'unknown';
   description: string;
   id: string;
   /**
@@ -51,13 +52,24 @@ function humanizeTransactionType(type: WalletTransaction['type']): string {
   return TRANSACTION_TYPE_LABELS[type];
 }
 
-function formatWalletDate(dateString: string) {
-  return new Date(dateString).toLocaleString('en-NG', {
+function formatWalletDate(
+  dateString: string | null,
+  dateBasis?: WalletTransaction['date_basis']
+) {
+  if (!dateString || !Number.isFinite(Date.parse(dateString))) {
+    return 'Date unavailable';
+  }
+  if (dateBasis === 'unknown') return 'Date unavailable';
+  const formatted = new Date(dateString).toLocaleString('en-NG', {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
   });
+  if (dateBasis === 'observed') return `Observed ${formatted}`;
+  if (dateBasis === 'received') return `Received ${formatted}`;
+  if (dateBasis === 'ledger') return `Recorded ${formatted}`;
+  return formatted;
 }
 
 export function WalletTransactionHistory({
@@ -116,7 +128,7 @@ export function WalletTransactionHistory({
             <View
               accessible
               accessibilityRole="text"
-              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
+              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at, transaction.date_basis)}.`}
               key={transaction.id}
               style={[
                 styles.transactionItem,
@@ -148,7 +160,10 @@ export function WalletTransactionHistory({
                   {transaction.description}
                 </Text>
                 <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-                  {formatWalletDate(transaction.created_at)}
+                  {formatWalletDate(
+                    transaction.created_at,
+                    transaction.date_basis
+                  )}
                 </Text>
               </View>
               <Text style={[styles.txAmount, { color: amountColor }]}>

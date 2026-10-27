@@ -34,6 +34,20 @@ it('preserves cached history if the old backend has no interest history', () => 
     bank,
   ]);
 });
+it('keeps undated legacy reversals visible after dated activity without inventing a date', () => {
+  const undated: Transaction = {
+    ...interest,
+    id: 'undated-reversal',
+    type: 'adjustment',
+    amount: -2,
+    created_at: null,
+  };
+  expect(mergeSavingsHistory([undated, bank], [undated, bank])).toEqual([
+    bank,
+    undated,
+  ]);
+  expect(undated.created_at).toBeNull();
+});
 it('keeps at most twenty entries without changing signed reversal amounts', () => {
   const reversal: Transaction = {
     ...interest,

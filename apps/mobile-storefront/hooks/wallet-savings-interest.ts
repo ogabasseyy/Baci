@@ -8,12 +8,10 @@ import { fetchWalletSavingsEarnings } from './wallet-savings-earnings';
 
 type InterestRpcClient = {
   rpc: (
-    functionName: 'get_customer_savings_earnings',
-    args: {
-      p_merchant_id: string;
-      p_include_goals: true;
-      p_include_history?: true;
-    }
+    functionName:
+      | 'get_customer_savings_earnings'
+      | 'get_customer_savings_interest_snapshot',
+    args: { p_merchant_id: string; p_include_goals?: true }
   ) => Promise<{ data: unknown; error: { code?: string } | null }>;
 };
 
@@ -25,6 +23,10 @@ type WalletSavingsInterest = {
 };
 
 const missingFunctionCodes = new Set(['PGRST202', '42883']);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
 
 function unavailable(): WalletSavingsInterest {
   return {
@@ -43,19 +45,58 @@ export async function fetchWalletSavingsInterest(
   });
   if (!request.success) return unavailable();
 
-  const client = supabase as unknown as InterestRpcClient;
+  const client: InterestRpcClient = {
+    rpc: async (functionName, args) => {
+      const { data, error } = await supabase.rpc(functionName, args);
+      return { data, error: error ? { code: error.code } : null };
+    },
+  };
   try {
-    let { data, error } = await client.rpc('get_customer_savings_earnings', {
-      ...request.data,
-      p_include_history: true,
-    });
-    if (error && missingFunctionCodes.has(error.code ?? '')) {
-      const legacy = await client.rpc(
-        'get_customer_savings_earnings',
-        request.data
+    const snapshot = await client.rpc(
+      'get_customer_savings_interest_snapshot',
+      { p_merchant_id: request.data.p_merchant_id }
+    );
+    if (!snapshot.error) {
+      const parsed = WalletSavingsInterestResponseSchema.safeParse(
+        snapshot.data
       );
+      if (!parsed.success) return unavailable();
+      return {
+        status: 'available',
+        creditedInterestKobo: parsed.data.credited_interest_kobo,
+        goalInterestKobo: parsed.data.goal_interest_kobo,
+        transactions: parsed.data.interest_history,
+      };
+    }
+    if (!missingFunctionCodes.has(snapshot.error.code ?? ''))
+      return unavailable();
+
+    let { data, error } = await client.rpc(
+      'get_customer_savings_earnings',
+      request.data
+    );
+    if (error && missingFunctionCodes.has(error.code ?? '')) {
+      const legacy = await client.rpc('get_customer_savings_earnings', {
+        p_merchant_id: request.data.p_merchant_id,
+      });
       data = legacy.data;
       error = legacy.error;
+      const legacyData = legacy.data;
+      const legacyKobo = isRecord(legacyData)
+        ? legacyData.credited_interest_kobo
+        : undefined;
+      if (
+        !legacy.error &&
+        typeof legacyKobo === 'number' &&
+        Number.isSafeInteger(legacyKobo) &&
+        legacyKobo >= 0
+      ) {
+        return {
+          status: 'available',
+          creditedInterestKobo: legacyKobo,
+          goalInterestKobo: [],
+        };
+      }
     }
     if (error) {
       if (!missingFunctionCodes.has(error.code ?? '')) return unavailable();
@@ -81,9 +122,6 @@ export async function fetchWalletSavingsInterest(
       status: 'available',
       creditedInterestKobo: parsed.data.credited_interest_kobo,
       goalInterestKobo: parsed.data.goal_interest_kobo,
-      ...(parsed.data.interest_history
-        ? { transactions: parsed.data.interest_history }
-        : {}),
     };
   } catch {
     return unavailable();

@@ -371,7 +371,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261020090105_harden_claim_vtu_intent.sql',
-    sha256: '8a71cdb875811ff9421b9e14ae45a4907d7c9890242c3d53f34fcda66e78557c',
+    sha256: '54bbd0fd70c94a2f747ddc91e7d289b23f5b72e8f46bb2e335399d02b48ee805',
   },
   {
     repositoryPath:

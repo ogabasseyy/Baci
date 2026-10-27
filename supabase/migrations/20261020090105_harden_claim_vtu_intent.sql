@@ -80,12 +80,20 @@ BEGIN
   END IF;
 
   -- Transaction scope (Codex P1): fail fast before taking the lock.
+  -- FOR UPDATE serializes against fail_orphan_vtu_transaction's
+  -- DELETE (Codex P2): the orphan cleanup's NOT EXISTS anti-join
+  -- runs under READ COMMITTED and could otherwise miss a mapping
+  -- this claim is about to insert, deleting the row (and, by
+  -- cascade, the fresh mapping) underneath us. Holding the row
+  -- lock to transaction end makes the DELETE wait and then
+  -- re-evaluate against the committed mapping.
   SELECT t.source, t.amount, t.metadata
     INTO v_txn_source, v_txn_amount, v_txn_metadata
   FROM public.vtu_transactions AS t
   WHERE t.id = p_transaction_id
     AND t.merchant_id = p_merchant_id
-    AND t.customer_id = p_customer_id;
+    AND t.customer_id = p_customer_id
+  FOR UPDATE OF t;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'claim_scope_mismatch: claimed transaction is outside the customer scope';
   END IF;

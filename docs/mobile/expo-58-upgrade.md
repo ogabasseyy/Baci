@@ -1,6 +1,6 @@
 # Expo SDK 58 mobile upgrade
 
-Both mobile apps move together from Expo 57 / React Native 0.86.2 / React 19.2.3 to Expo 58.0.19 / React Native 0.88.0 / React 19.3.0. The base is origin/main at de0e4a5f2fab01aa06964293d0c713fbea07ae6b, fetched before implementation. The original checkout and its uncommitted work are separate from this branch.
+Both mobile apps move together from Expo 57 / React Native 0.86.2 / React 19.2.3 to Expo 58.0.19 / React Native 0.88.0 / React 19.3.0. Implementation began from origin/main at de0e4a5f2fab01aa06964293d0c713fbea07ae6b; the branch was subsequently rebased onto origin/main at bb10afdf07e1825a29948dda873274b7c05040cd. The original checkout and its uncommitted work are separate from this branch.
 
 ## Runtime and native configuration
 

@@ -125,8 +125,8 @@ BEGIN
   operation:=piggyvest_primary.read_pending_savings(
     current_setting('test.recovery_scope')::jsonb,
     'f3810000-0000-4000-8000-000000000005');
-  IF operation IS NULL OR operation->>'state'<>'dispatched'
-    OR operation->>'operationId'<>'f3810000-0000-4000-8000-000000000010' THEN
+  IF operation IS NULL OR operation->>'state' IS DISTINCT FROM 'dispatched'
+    OR operation->>'operationId' IS DISTINCT FROM 'f3810000-0000-4000-8000-000000000010' THEN
     RAISE EXCEPTION 'Synthetic pending transfer was not recovered';
   END IF;
 END;

@@ -93,35 +93,7 @@ describe('CustomTabBar', () => {
       ) => handler,
     });
 
-    mockProps = {
-      insets: { top: 0, bottom: 0, left: 0, right: 0 },
-      state: {
-        index: 0,
-        routes: [
-          { key: 'home-key', name: 'index', params: {} },
-          { key: 'saved-key', name: 'saved', params: {} },
-          { key: 'wallet-key', name: 'wallet', params: {} },
-          { key: 'hidden-key', name: 'categories', params: {} },
-        ],
-        type: 'tab',
-        routeNames: ['index', 'saved', 'wallet', 'categories'],
-        history: [],
-        key: 'state-key',
-        stale: false,
-        preloadedRouteKeys: [],
-      },
-      descriptors: {
-        'home-key': customTabBarTestUtils.createTabDescriptor('Home'),
-        'saved-key': customTabBarTestUtils.createTabDescriptor('Saved'),
-        'wallet-key': customTabBarTestUtils.createTabDescriptor('Wallet'),
-        'hidden-key': customTabBarTestUtils.createHiddenDescriptor('Explore'),
-      },
-      navigation: {
-        emit: jest.fn().mockReturnValue({ defaultPrevented: false }),
-        dispatch: jest.fn(),
-        navigate: jest.fn(),
-      } as unknown as BottomTabBarProps['navigation'],
-    };
+    mockProps = customTabBarTestUtils.createDefaultProps();
   });
 
   it('renders visible tab items and ignores hidden routes', () => {

@@ -228,6 +228,38 @@ describe('buildClusterHubLinks', () => {
     expect(result.familyHubLinks).toEqual([]);
   });
 
+  it('does not attribute a rival-owned title token even when Samsung is tagged', async () => {
+    const result = await buildClusterHubLinks({
+      post: {
+        ...post,
+        slug: 'oppo-a55-vs-a35-budget-shootout',
+        title: 'Oppo A55 vs A35: Budget Shootout',
+        excerpt: 'Two mid-rangers compared for Nigerian buyers.',
+        tags: ['samsung'],
+        keywords: ['budget phones'],
+      },
+      inferredBrands: ['Samsung'],
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      storeUrl: 'https://store.test',
+      merchantId: 'merchant-1',
+      products: [
+        'Galaxy A55',
+        'Galaxy A35',
+        'Galaxy A25',
+        'Galaxy A15',
+        'Galaxy A05',
+      ].map((name) => ({
+        name,
+        brand: 'Samsung',
+        stock: 5,
+        category_slug: 'smartphones',
+      })),
+      skipDestinationVerification: true,
+    });
+    expect(result.familyHubLinks).toEqual([]);
+  });
+
   it('returns no links when no brand is inferred', async () => {
     const result = await buildClusterHubLinks({
       post,

@@ -86,6 +86,19 @@ describe('authority hub eligibility contract', () => {
     expect(decision.productCount).toBe(apple.minimumProducts);
   });
 
+  it('slug-normalizes stored brand variants when recounting', () => {
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      Array.from({ length: apple.minimumProducts }, (_, index) => ({
+        ...row(index),
+        brand: index % 2 === 0 ? ' Apple ' : 'APPLE',
+      })),
+      'smartphones',
+      apple
+    );
+    expect(decision.eligible).toBe(true);
+    expect(decision.productCount).toBe(apple.minimumProducts);
+  });
+
   it('documents the caller-scope contract: brand and availability only', () => {
     // Category/parent/active scoping is owned by callers supplying the
     // destination pool; this helper must not double-filter child rows.

@@ -6,6 +6,7 @@ import {
   render,
   screen,
 } from '@testing-library/react';
+import { Suspense, startTransition } from 'react';
 import {
   afterEach,
   beforeAll,
@@ -88,6 +89,36 @@ describe('DomainOptionsSheet', () => {
     act(() => mocks.onExit?.(false));
     act(() => vi.runAllTimers());
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('does not strand an action after a suspended close render is discarded', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const never = new Promise<never>(() => {});
+    const Suspend = () => {
+      throw never;
+    };
+    const { rerender } = render(
+      <Suspense fallback={null}>{sheet(true, onClose, onAction)}</Suspense>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    const committedExit = mocks.onExit;
+    act(() => {
+      startTransition(() =>
+        rerender(
+          <Suspense fallback={null}>
+            {sheet(false, onClose, onAction)}
+            <Suspend />
+          </Suspense>
+        )
+      );
+    });
+    rerender(
+      <Suspense fallback={null}>{sheet(false, onClose, onAction)}</Suspense>
+    );
+    act(() => committedExit?.(true));
+    act(() => vi.runAllTimers());
+    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
   });
 
   it('uses the latest callback when the parent rerenders during closing', () => {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, Text, View } from 'react-native';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Modal, Pressable, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -7,6 +7,7 @@ import Animated, {
   SlideInDown,
   SlideOutDown,
 } from 'react-native-reanimated';
+import { isRuntimePlatform } from '@/config/runtime-platform';
 import { SPACING } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import DomainOptionsSheetActions from './DomainOptionsSheetActions';
@@ -36,17 +37,21 @@ export default function DomainOptionsSheet({
   const [modalVisible, setModalVisible] = useState(visible);
   const [awaitingDismiss, setAwaitingDismiss] = useState(false);
   const transitionRef = useRef(0);
+  const [transition, setTransition] = useState(0);
   const pendingActionRef = useRef<{
     action: DomainAction;
     domain: Domain;
   } | null>(null);
 
-  if (visibleRef.current !== visible) {
+  useLayoutEffect(() => {
+    const wasVisible = visibleRef.current;
     visibleRef.current = visible;
-    transitionRef.current += 1;
-  }
-  onActionRef.current = onAction;
-  const transition = transitionRef.current;
+    onActionRef.current = onAction;
+    if (visible && !wasVisible) {
+      transitionRef.current += 1;
+      setTransition(transitionRef.current);
+    }
+  }, [visible, onAction]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -85,7 +90,7 @@ export default function DomainOptionsSheet({
   // Android and web do not expose Modal.onDismiss. With native modal animation
   // disabled, wait for the render that removes the modal before dispatching.
   useEffect(() => {
-    if (!awaitingDismiss || modalVisible || Platform.OS === 'ios') return;
+    if (!awaitingDismiss || modalVisible || isRuntimePlatform('ios')) return;
     const afterCommit = () => {
       setAwaitingDismiss(false);
       if (!isMountedRef.current || visibleRef.current) return;
@@ -119,7 +124,7 @@ export default function DomainOptionsSheet({
       visible={visible || modalVisible}
       animationType="none"
       onDismiss={() => {
-        if (Platform.OS === 'ios' && awaitingDismiss) {
+        if (isRuntimePlatform('ios') && awaitingDismiss) {
           setAwaitingDismiss(false);
           dispatchPending();
         }
@@ -153,7 +158,7 @@ export default function DomainOptionsSheet({
             entering={SlideInDown}
             exiting={SlideOutDown.duration(CLOSE_DURATION_MS).withCallback(
               (finished) => {
-                if (finished) runOnJS(finishExit)(transition + 1);
+                if (finished) runOnJS(finishExit)(transition);
               }
             )}
             style={[

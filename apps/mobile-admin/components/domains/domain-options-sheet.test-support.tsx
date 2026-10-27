@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
 
 export { mocks };
 
+vi.mock('@/config/runtime-platform', () => ({
+  isRuntimePlatform: (platform: string) => mocks.platform.OS === platform,
+}));
+
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     colors: {

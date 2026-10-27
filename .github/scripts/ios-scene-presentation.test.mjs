@@ -68,6 +68,12 @@ precondition(Utilities.keyWindow() == nil, "connected scenes must never use a le
 UIApplication.shared.connectedScenes = []
 UIApplication.shared.windows = []
 precondition(Utilities.keyWindow() == nil, "missing windows must stay missing")
+let backgroundDone = DispatchSemaphore(value: 0)
+DispatchQueue.global().async {
+  precondition(Utilities.keyWindow() == nil, "off-main callers must fail safely")
+  backgroundDone.signal()
+}
+precondition(backgroundDone.wait(timeout: .now() + 2) == .success, "off-main lookup must return")
 `);
     const build = spawnSync('xcrun', ['swiftc', '-swift-version', '6', join(folder, 'main.swift'), '-o', join(folder, 'probe')], { encoding: 'utf8' });
     assert.equal(build.status, 0, build.stderr);

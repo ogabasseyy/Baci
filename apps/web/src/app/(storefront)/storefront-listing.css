@@ -2,7 +2,7 @@
 @import "./storefront-foundation.css";
 
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
-@config "../../../tailwind.storefront-blog.config.mjs";
+@config "../../../tailwind.storefront.scoped.config.mjs";
 
 /*
   Catalog listing CSS entrypoint.
@@ -18,6 +18,8 @@
 @source not "../../**/*.test.ts";
 @source not "../../**/*.test.tsx";
 @source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
 @source "./[slug]/(catalog)/(listing)";
 @source "./[slug]/storefront-loading-ui.tsx";
 @source "./[slug]/storefront-route-not-found-content.tsx";
@@ -40,6 +42,8 @@
 @source "../../components/storefront/ogabassey/components/product-slide-body.tsx";
 @source "../../components/storefront/ogabassey/components/promo-slide-body.tsx";
 @source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/ogabassey/storefront-deferred-footer-chrome.tsx";
+@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";
 @source "../../components/storefront/ogabassey/pages/category-page*.tsx";
 @source "../../components/storefront/ogabassey/pages/category-page*.ts";
 @source "../../components/storefront/ogabassey/providers";

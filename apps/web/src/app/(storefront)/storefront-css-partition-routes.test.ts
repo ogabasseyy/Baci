@@ -15,9 +15,24 @@ describe('storefront CSS partitioning (route sheets)', () => {
     'storefront-utility.css',
     'storefront-content.css',
     'storefront-not-found.css',
-  ])('includes the shared consent prompt in %s before it mounts', (file) => {
-    expect(readStorefrontFile(file)).toContain(
+  ])('includes the shared consent prompt and button dependency closure in %s before it mounts', (file) => {
+    const content = readStorefrontFile(file);
+    expect(content).toContain(
       '@source "../../components/storefront/cookie-consent.tsx";'
+    );
+    expect(content).toContain(
+      '@source "../../components/themed/themed-button.tsx";'
+    );
+    expect(content).toContain('@source "../../components/ui/button.tsx";');
+  });
+
+  it.each([
+    'storefront-listing.css',
+    'storefront-content.css',
+    'storefront-utility.css',
+  ])('includes the shared layout chrome in %s for semantic footer reservations', (file) => {
+    expect(readStorefrontFile(file)).toContain(
+      '@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";'
     );
   });
 

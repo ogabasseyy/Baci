@@ -5,7 +5,7 @@ import tailwind from '@tailwindcss/postcss';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
-describe('storefront route-scoped listing and content CSS', () => {
+describe('storefront route-scoped listing, content, and utility CSS', () => {
   it('compiles catalog listing styles under 120 KB without dashboard utilities', async () => {
     const from = fileURLToPath(
       new URL('./storefront-listing.css', import.meta.url)
@@ -22,6 +22,8 @@ describe('storefront route-scoped listing and content CSS', () => {
     ]) {
       expect(result.css).toContain(`.${parts.join('-')}`);
     }
+    expect(result.css).toContain('.min-h-\\[1100px\\]');
+    expect(result.css).toContain('.bg-store-primary');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 
@@ -41,6 +43,29 @@ describe('storefront route-scoped listing and content CSS', () => {
     ]) {
       expect(result.css).toContain(`.${parts.join('-')}`);
     }
+    expect(result.css).toContain('.min-h-\\[1100px\\]');
+    expect(result.css).toContain('.bg-store-primary');
+    expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
+  }, 20_000);
+
+  it('compiles utility route styles under 200 KB without dashboard utilities', async () => {
+    const from = fileURLToPath(
+      new URL('./storefront-utility.css', import.meta.url)
+    );
+    const result = await postcss([tailwind({ optimize: true })]).process(
+      await readFile(from, 'utf8'),
+      { from, map: false }
+    );
+    expect(result.css.length).toBeLessThan(200_000);
+    for (const parts of [
+      ['min-h', 'screen'],
+      ['items', 'center'],
+      ['flex', 'col'],
+    ]) {
+      expect(result.css).toContain(`.${parts.join('-')}`);
+    }
+    expect(result.css).toContain('.min-h-\\[1100px\\]');
+    expect(result.css).toContain('.bg-store-primary');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 });

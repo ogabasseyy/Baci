@@ -1,6 +1,6 @@
 @import "tailwindcss" source(none);
 @import "./storefront-foundation.css";
-@config "../../../tailwind.storefront-blog.config.mjs";
+@config "../../../tailwind.storefront.scoped.config.mjs";
 
 @source "../../components/storefront/cookie-consent.tsx";
 
@@ -10,6 +10,8 @@
 @source not "../../**/*.test.ts";
 @source not "../../**/*.test.tsx";
 @source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
 @source "./[slug]/(utility)";
 @source "./[slug]/customer-auth-layout.tsx";
 @source "./[slug]/storefront-loading-ui.tsx";
@@ -38,6 +40,8 @@
 @source "../../components/storefront/ogabassey/pages/unlock-orders.tsx";
 @source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
 @source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/ogabassey/storefront-deferred-footer-chrome.tsx";
+@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";
 @source "../../components/storefront/blocks/ogabassey-nav.tsx";
 @source "../../components/storefront/search-autocomplete.tsx";
 @source "../../components/themed";

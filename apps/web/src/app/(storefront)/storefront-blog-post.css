@@ -20,5 +20,6 @@
 @source "../../components/blog/renderer";
 @source "../../components/blog/product-embed.tsx";
 @source "../../components/blog/table-of-contents.tsx";
+@source "../../components/themed/themed-button.tsx";
 @source "../../components/ui/button.tsx";
 /* stylelint-enable scss/at-rule-no-unknown */

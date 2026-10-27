@@ -2,7 +2,7 @@
 @import "./storefront-foundation.css";
 
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
-@config "../../../tailwind.storefront-blog.config.mjs";
+@config "../../../tailwind.storefront.scoped.config.mjs";
 
 /*
   Public content and trust-policy CSS entrypoint.
@@ -17,6 +17,8 @@
 @source not "../../**/*.test.ts";
 @source not "../../**/*.test.tsx";
 @source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
 @source "./[slug]/(content)";
 @source "./[slug]/storefront-loading-ui.tsx";
 @source "../../components/app-body.tsx";
@@ -28,6 +30,8 @@
 @source "../../components/storefront/loyalty";
 @source "../../components/storefront/newsletter-widget.tsx";
 @source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/ogabassey/storefront-deferred-footer-chrome.tsx";
+@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";
 @source "../../components/storefront/ogabassey/pages/about-us.tsx";
 @source "../../components/storefront/ogabassey/pages/help-support.tsx";
 @source "../../components/storefront/ogabassey/pages/legal-dispute.tsx";

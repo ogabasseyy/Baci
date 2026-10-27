@@ -3,6 +3,8 @@
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
 @source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
 
 @source "./[slug]/layout.tsx";
 @source "./[slug]/(catalog)/(pdp)/layout.tsx";

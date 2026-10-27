@@ -261,6 +261,8 @@ BEGIN
 
   -- Legacy state: an order created before the fix holds a wrongly
   -- reserved unit. Reuse must release it instead of refreshing it.
+  -- Seed a stale snapshot on the line first so the post-release NULL
+  -- proves the helper actually cleared it (rather than NULL-to-NULL).
   INSERT INTO public.variant_inventory (
     id, variant_id, merchant_id, identifier_type, identifier_value,
     status, order_id, order_item_id, reserved_at, first_reserved_at,
@@ -271,6 +273,17 @@ BEGIN
     'imei', '933730000000002', 'reserved', v_order_id, v_item_id,
     now(), now(), now() + interval '1 hour'
   );
+
+  UPDATE public.order_items SET fulfillment_data = jsonb_build_object(
+    'source', 'merchant_stock',
+    'reservationExpiresAt', now() + interval '1 hour',
+    'inventoryUnits', jsonb_build_array(jsonb_build_object(
+      'inventoryUnitId', '03d00000-0000-4000-8000-000000000006',
+      'identifierType', 'imei',
+      'identifierValue', '933730000000002'
+    )),
+    'missingUnitCount', 0
+  ) WHERE id = v_item_id;
 
   BEGIN
     PERFORM private.prepare_storefront_order_for_checkout(
@@ -386,6 +399,20 @@ BEGIN
 
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
+  -- Attach a unit to the snapshot-only (post-deletion) line so the
+  -- first confirmation exercises the confirm guard's snapshot term
+  -- and its payment_confirmation event context.
+  INSERT INTO public.variant_inventory (
+    id, variant_id, merchant_id, identifier_type, identifier_value,
+    status, order_id, order_item_id, reserved_at, first_reserved_at,
+    reservation_expires_at
+  )
+  VALUES (
+    '03d00000-0000-4000-8000-000000000013', v_anchor_id, v_merchant_id,
+    'imei', '933730000000013', 'reserved', v_order_id, v_item_b,
+    now(), now(), now() + interval '1 hour'
+  );
+
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
 
   BEGIN
@@ -408,6 +435,25 @@ BEGIN
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
+  END IF;
+
+  SELECT status, order_item_id INTO v_legacy_status, v_legacy_item
+  FROM public.variant_inventory
+  WHERE id = '03d00000-0000-4000-8000-000000000013';
+  IF v_legacy_status IS DISTINCT FROM 'available' THEN
+    RAISE EXCEPTION 'expected confirm to release the snapshot-only legacy unit, got %', v_legacy_status;
+  END IF;
+  IF v_legacy_item IS NOT NULL THEN
+    RAISE EXCEPTION 'expected snapshot-only legacy unit detached on confirm, got %', v_legacy_item;
+  END IF;
+  IF (SELECT count(*) FROM private.variant_inventory_events
+      WHERE inventory_unit_id = '03d00000-0000-4000-8000-000000000013'
+      AND event_type = 'reservation_released'
+      AND from_status = 'reserved' AND to_status = 'available'
+      AND order_id = v_order_id AND order_item_id = v_item_b
+      AND variant_id = v_anchor_id
+      AND event_context->>'fulfillmentPath' = 'payment_confirmation') <> 1 THEN
+    RAISE EXCEPTION 'expected exactly one audited confirm release event for the snapshot-only unit';
   END IF;
 
   -- Paid-without-reuse legacy case: a durable (NULL-expiry) reserved

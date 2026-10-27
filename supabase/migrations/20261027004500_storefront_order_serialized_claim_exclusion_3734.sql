@@ -101,6 +101,7 @@ BEGIN
   FOR v_release_id IN
     SELECT vi.id FROM public.variant_inventory vi
     WHERE vi.order_item_id = p_item_id AND vi.status = 'reserved'
+      AND vi.merchant_id = p_merchant_id AND vi.order_id = p_order_id
     ORDER BY vi.id
     FOR UPDATE
   LOOP

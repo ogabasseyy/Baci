@@ -86,19 +86,23 @@ DECLARE
   new_reserved text := $marker$    IF v_has_reserved AND (v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL) THEN
       -- Offer lines are fulfilled from offer stock: release units the
       -- pre-fix loop wrongly reserved instead of refreshing them. The
-      -- unit's own variant is logged (order lines on simple products
-      -- carry NULL variant_id; the unit sits on the anchor variant).
+      -- unit's own variant/branch/product is logged (order lines on
+      -- simple products carry NULL variant_id; the unit sits on the
+      -- anchor variant), then fulfillment_data is rewritten so the
+      -- freed unit is not listed as assigned to the offer line.
       DECLARE
         v_release record;
       BEGIN
         FOR v_release IN
-          SELECT vi.id, vi.variant_id FROM public.variant_inventory vi
+          SELECT vi.id, vi.variant_id, pv.product_id, vi.branch_id
+          FROM public.variant_inventory vi
+          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
           WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
           FOR UPDATE
         LOOP
           PERFORM private.record_variant_inventory_event(
-            v_release.id, p_merchant_id, v_item.product_id, v_release.variant_id, 'reservation_released',
-            'reserved', 'available', p_order_id, v_item.id, NULL, NULL, NULL,
+            v_release.id, p_merchant_id, COALESCE(v_release.product_id, v_item.product_id), v_release.variant_id, 'reservation_released',
+            'reserved', 'available', p_order_id, v_item.id, v_release.branch_id, NULL, NULL,
             jsonb_build_object('reason', 'offer_line_double_reservation_repair')
           );
           UPDATE public.variant_inventory
@@ -110,6 +114,14 @@ DECLARE
               updated_at = now()
           WHERE id = v_release.id;
         END LOOP;
+        UPDATE public.order_items AS oi
+        SET fulfillment_data = jsonb_build_object(
+          'source', 'merchant_stock',
+          'reservationExpiresAt', NULL,
+          'inventoryUnits', '[]'::jsonb,
+          'missingUnitCount', v_item.quantity
+        )
+        WHERE oi.id = v_item.id;
       END;
     ELSIF v_has_reserved THEN
       IF v_is_pod THEN$marker$;

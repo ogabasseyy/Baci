@@ -23,12 +23,17 @@ DECLARE
   v_offer_id uuid := '03d00000-0000-4000-8000-000000000003';
   v_anchor_id uuid := '03d00000-0000-4000-8000-000000000004';
   v_unit_id uuid := '03d00000-0000-4000-8000-000000000005';
+  v_plain_product_id uuid := '03d00000-0000-4000-8000-000000000008';
+  v_plain_anchor_id uuid := '03d00000-0000-4000-8000-000000000009';
+  v_plain_unit_id uuid := '03d00000-0000-4000-8000-000000000010';
   v_order_id uuid;
   v_tracking_token text;
   v_item_id uuid;
+  v_plain_item_id uuid;
   v_condition text;
   v_offer_stock integer;
   v_claimed integer;
+  v_plain_claimed integer;
   v_legacy_status text;
   v_legacy_item uuid;
 BEGIN
@@ -60,10 +65,31 @@ BEGIN
   VALUES (v_offer_id, v_product_id, v_merchant_id, 'used', 400000, 5,
     'active', 'A', 'Light scratches');
 
+  -- Positive control: a plain serialized line (no offer) must still
+  -- claim exactly one unit through creation, reuse, and confirmation.
+  INSERT INTO public.products (id, merchant_id, name, price, status,
+    condition, stock_quantity, manage_stock, has_condition_offers,
+    has_variants, inventory_tracking_policy)
+  VALUES (v_plain_product_id, v_merchant_id, 'Claim exclusion plain', 90000,
+    'active', 'new', 5, false, false, false, 'serialized_strict');
+
+  INSERT INTO public.product_variants (
+    id, product_id, merchant_id, attributes, price_override,
+    inventory_tracking_policy, is_inventory_anchor
+  )
+  VALUES (v_plain_anchor_id, v_plain_product_id, v_merchant_id,
+    '{"is_anchor": true}'::jsonb, 0, 'inherit', true);
+
+  UPDATE public.products
+  SET inventory_anchor_variant_id = v_plain_anchor_id
+  WHERE id = v_plain_product_id;
+
   INSERT INTO public.variant_inventory (
     id, variant_id, merchant_id, identifier_type, identifier_value, status
   )
   VALUES (v_unit_id, v_anchor_id, v_merchant_id, 'imei', '933730000000001',
+    'available'),
+    (v_plain_unit_id, v_plain_anchor_id, v_merchant_id, 'imei', '933730000000003',
     'available');
 
   BEGIN
@@ -72,11 +98,17 @@ BEGIN
       p_merchant_id => v_merchant_id,
       p_customer_email => 'claim-exclusion-buyer@example.com',
       p_customer_name => 'Claim Buyer',
-      p_items => jsonb_build_array(jsonb_build_object(
-        'product_id', v_product_id,
-        'offer_id', v_offer_id,
-        'quantity', 1
-      ))
+      p_items => jsonb_build_array(
+        jsonb_build_object(
+          'product_id', v_product_id,
+          'offer_id', v_offer_id,
+          'quantity', 1
+        ),
+        jsonb_build_object(
+          'product_id', v_plain_product_id,
+          'quantity', 1
+        )
+      )
     ) AS o;
   EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'offer-only order creation failed: % (%)', SQLERRM, SQLSTATE;
@@ -84,9 +116,16 @@ BEGIN
 
   SELECT id, condition INTO v_item_id, v_condition
   FROM public.order_items
-  WHERE order_id = v_order_id;
+  WHERE order_id = v_order_id AND product_id = v_product_id;
   IF v_condition IS DISTINCT FROM 'used' THEN
     RAISE EXCEPTION 'expected live offer condition used, got %', v_condition;
+  END IF;
+
+  SELECT id INTO v_plain_item_id
+  FROM public.order_items
+  WHERE order_id = v_order_id AND product_id = v_plain_product_id;
+  IF v_plain_item_id IS NULL THEN
+    RAISE EXCEPTION 'expected plain control line to persist';
   END IF;
 
   SELECT stock_quantity INTO v_offer_stock
@@ -100,6 +139,12 @@ BEGIN
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
   WHERE order_item_id = v_item_id;
+  SELECT count(*) INTO v_plain_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_plain_item_id;
+  IF v_plain_claimed <> 1 THEN
+    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line, got %', v_claimed;
   END IF;
@@ -131,6 +176,12 @@ BEGIN
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
   WHERE order_item_id = v_item_id;
+  SELECT count(*) INTO v_plain_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_plain_item_id;
+  IF v_plain_claimed <> 1 THEN
+    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
   END IF;
@@ -170,6 +221,13 @@ BEGIN
     RAISE EXCEPTION 'expected legacy unit detached from the offer line, got %', v_legacy_item;
   END IF;
 
+  SELECT count(*) INTO v_plain_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_plain_item_id;
+  IF v_plain_claimed <> 1 THEN
+    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit after legacy release, got %', v_plain_claimed;
+  END IF;
+
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
@@ -186,6 +244,12 @@ BEGIN
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
   WHERE order_item_id = v_item_id;
+  SELECT count(*) INTO v_plain_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_plain_item_id;
+  IF v_plain_claimed <> 1 THEN
+    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
   END IF;

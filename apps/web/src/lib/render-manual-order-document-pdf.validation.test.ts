@@ -55,40 +55,41 @@ describe('render manual order document pdf child-row validation', () => {
     expect(mockedPdf).not.toHaveBeenCalled();
   });
 
-  it.each([['vat_rate'], ['taxable_amount'], ['tax_amount']])(
-    'fails a NULL %s closed instead of coercing it to zero and emailing',
-    async (nullField) => {
-      const order = manualDocumentOrderSchema.parse(orderFixture);
-      const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
+  it.each([
+    ['vat_rate'],
+    ['taxable_amount'],
+    ['tax_amount'],
+  ])('fails a NULL %s closed instead of coercing it to zero and emailing', async (nullField) => {
+    const order = manualDocumentOrderSchema.parse(orderFixture);
+    const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
 
-      const error = await renderManualOrderDocumentPdf({
-        taxRows: [
-          {
-            id: 'tax-1',
-            vat_category_code: 'S',
-            vat_rate: 7.5,
-            taxable_amount: 883721,
-            tax_amount: 66279,
-            exemption_reason: null,
-            [nullField]: null,
-          },
-        ],
-        transactionRows: [],
-        order,
-        merchant,
-        recipientEmail: 'ada@example.com',
-        preferredPaymentAccount: null,
-        isPaid: false,
-        pdfDocumentKind: 'invoice',
-        invoiceTypeCode: '380',
-      }).catch((cause: unknown) => cause);
-      expect(error).toBeInstanceOf(ManualDocumentValidationError);
-      expect((error as ManualDocumentValidationError).reason).toBe(
-        'tax_breakdown_invalid'
-      );
-      expect(mockedPdf).not.toHaveBeenCalled();
-    }
-  );
+    const error = await renderManualOrderDocumentPdf({
+      taxRows: [
+        {
+          id: 'tax-1',
+          vat_category_code: 'S',
+          vat_rate: 7.5,
+          taxable_amount: 883721,
+          tax_amount: 66279,
+          exemption_reason: null,
+          [nullField]: null,
+        },
+      ],
+      transactionRows: [],
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: false,
+      pdfDocumentKind: 'invoice',
+      invoiceTypeCode: '380',
+    }).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ManualDocumentValidationError);
+    expect((error as ManualDocumentValidationError).reason).toBe(
+      'tax_breakdown_invalid'
+    );
+    expect(mockedPdf).not.toHaveBeenCalled();
+  });
 
   it('fails a negative settled payment closed instead of emailing it', async () => {
     const order = manualDocumentOrderSchema.parse(orderFixture);

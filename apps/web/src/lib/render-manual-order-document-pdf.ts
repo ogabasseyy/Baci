@@ -129,11 +129,9 @@ export async function renderManualOrderDocumentPdf({
   // semantics) hide. Every surface must agree on corrupt tax rows.
   if (!isPaid) {
     for (const row of taxRows as SnapshotChildRow[]) {
-      const valid = [
-        row.vat_rate,
-        row.taxable_amount,
-        row.tax_amount,
-      ].every(isNonNegativeMoney);
+      const valid = [row.vat_rate, row.taxable_amount, row.tax_amount].every(
+        isNonNegativeMoney
+      );
       if (!valid)
         throw new ManualDocumentValidationError('tax_breakdown_invalid');
     }

@@ -1,6 +1,6 @@
 'use client';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -38,9 +38,11 @@ const emptyCredentials = {
 export default function XAdsIntegrationClient({
   initialMerchantId,
   initialConnection,
+  setupGuide,
 }: {
   initialMerchantId: string;
   initialConnection: XAdsConnection;
+  setupGuide: ReactNode;
 }) {
   const { merchant } = useMerchant();
   const merchantId = merchant?.id ?? initialMerchantId;
@@ -56,15 +58,18 @@ export default function XAdsIntegrationClient({
       initialConnection={
         snapshot?.merchantId === merchantId ? snapshot.connection : undefined
       }
+      setupGuide={setupGuide}
     />
   );
 }
 function ConnectionForm({
   merchantId,
   initialConnection,
+  setupGuide,
 }: {
   merchantId: string;
   initialConnection?: XAdsConnection;
+  setupGuide: ReactNode;
 }) {
   const endpoint = `/api/integrations/x-ads?${new URLSearchParams({ merchantId })}`;
   const [connection, setConnection] = useState(initialConnection ?? null);
@@ -237,7 +242,7 @@ function ConnectionForm({
           </Button>
         </div>
       </form>
-      <AdPlatformSetupGuide platform="x" />
+      {setupGuide}
       <p>
         Test browser events in X Events Manager, then verify server receipts
         after a controlled paid order. Saved credentials alone do not confirm

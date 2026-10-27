@@ -9,7 +9,7 @@ import { AdPlatformSetupGuide } from './ad-platform-setup-guide';
 // Digests detect changed binaries; they do not validate that a mask is present.
 const pinnedAssetDigests: Record<string, string> = {
   '/guides/ad-platforms/meta-settings.jpg':
-    '89bee9add5c8ed98f5633d71ee0cbf5c5ae14924019eaa87b907c4dd307564a9',
+    'aced92857b686a695c7e9940701b2a8b77bcb9b92d2f3d9b4ec99ae3704c9402',
   '/guides/ad-platforms/tiktok-settings.jpg':
     '65d62ae47eb904e6567fb8c3ed018da0a9ccf20738ba82dececc52693d3c821d',
   '/guides/ad-platforms/snapchat-pixel-settings.jpg':
@@ -131,6 +131,9 @@ describe('AdPlatformSetupGuide', () => {
       /do not determine whether an\s+image is private/i
     );
     expect(checklist).toContain('no store domain is shown.');
+    expect(checklist).toMatch(
+      /meta-settings\.jpg.*complete Pixel ID and Conversions API token/is
+    );
     expect(checklist).toMatch(
       /no\s+save\/disconnect controls or saved-connection state/
     );

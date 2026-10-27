@@ -7,8 +7,9 @@ checklist aligned with the images used by the merchant guides.
 
 ## Baci provider settings
 
-- [ ] `meta-settings.jpg`: Pixel ID and Conversions API token fields are blank
-      or masked; no store domain is shown.
+- [ ] `meta-settings.jpg`: the complete Pixel ID and Conversions API token
+      fields are visible; values are blank or masked, and no store domain is
+      shown. The crop ends before helper text below the token field.
 - [ ] `tiktok-settings.jpg`: Pixel ID and saved-token status are masked; the
       crop contains only the complete Pixel ID and Access Token fields, with no
       save/disconnect controls or saved-connection state.

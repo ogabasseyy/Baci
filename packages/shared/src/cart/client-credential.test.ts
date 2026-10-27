@@ -9,18 +9,26 @@ describe('cart client credential contract', () => {
     expect(CART_CLIENT_CREDENTIAL_HEADER).toBe('x-baci-client-credential');
   });
 
-  it('accepts UUID and high-entropy token forms', () => {
+  it('accepts the UUID v4 form clients generate', () => {
     expect(
       isValidCartClientCredential('11111111-1111-4111-8111-111111111111')
     ).toBe(true);
-    expect(isValidCartClientCredential('a'.repeat(32))).toBe(true);
-    expect(isValidCartClientCredential('Ab3_-x'.repeat(8))).toBe(true);
+    expect(
+      isValidCartClientCredential('22222222-2222-4222-a222-222222222222')
+    ).toBe(true);
   });
 
-  it('rejects low-entropy, oversized, and non-string values', () => {
+  it('rejects non-v4, constant, free-form, and non-string values', () => {
+    // The nil UUID and other versions are not client credentials.
+    expect(
+      isValidCartClientCredential('00000000-0000-0000-0000-000000000000')
+    ).toBe(false);
+    expect(
+      isValidCartClientCredential('11111111-1111-1111-8111-111111111111')
+    ).toBe(false);
+    expect(isValidCartClientCredential('a'.repeat(32))).toBe(false);
+    expect(isValidCartClientCredential('Ab3_-x'.repeat(8))).toBe(false);
     expect(isValidCartClientCredential('short')).toBe(false);
-    expect(isValidCartClientCredential('a'.repeat(65))).toBe(false);
-    expect(isValidCartClientCredential('has spaces in it........')).toBe(false);
     expect(isValidCartClientCredential('')).toBe(false);
     expect(isValidCartClientCredential(null)).toBe(false);
     expect(isValidCartClientCredential(undefined)).toBe(false);

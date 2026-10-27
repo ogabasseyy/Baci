@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CART_QUOTA_BUDGETS, checkCartQuota } from '@/lib/cart/request-context';
 import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
   CART_SESSION_PROOF_TTL_SECONDS,
@@ -272,5 +273,64 @@ describe('POST /api/storefront/cart', () => {
     });
     expect(exhausted.status).toBe(429);
     expect((await exhausted.json()).code).toBe('quota_exceeded');
+  });
+
+  it('gives distinct client credentials independent create budgets', async () => {
+    mocks.cartPayload = {
+      code: null,
+      grantId: GRANT_ID,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const credentialA = '11111111-1111-4111-8111-111111111111';
+    const credentialB = '22222222-2222-4222-8222-222222222222';
+    const attempt = (credential: string, index: number) =>
+      postCart({
+        body: { operationId: `create-cred-${index}` },
+        headers: {
+          cookie: cartCookie(bootstrapProofFor(`guest-cred-${index}`)),
+          'x-baci-client-credential': credential,
+        },
+      });
+    for (let index = 0; index < 10; index++) {
+      expect((await attempt(credentialA, index)).status).toBe(201);
+    }
+    expect((await attempt(credentialA, 10)).status).toBe(429);
+    // The second shopper behind the same network identity can create.
+    expect((await attempt(credentialB, 11)).status).toBe(201);
+  });
+
+  it('bounds credential rotation with the network backstop', async () => {
+    mocks.cartPayload = {
+      code: null,
+      grantId: GRANT_ID,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    // Fill this network identity's backstop bucket directly (the
+    // harness requests carry no platform address, so their trusted
+    // network identity is the shared 'unknown' subject).
+    for (
+      let index = 0;
+      index < CART_QUOTA_BUDGETS.create_network_backstop.limit;
+      index++
+    ) {
+      await checkCartQuota({
+        merchantId: MERCHANT.id,
+        operation: 'create_network_backstop',
+        subject: 'unknown',
+      });
+    }
+    const response = await postCart({
+      body: { operationId: 'create-rotated-credential' },
+      headers: {
+        cookie: cartCookie(bootstrapProofFor('guest-rotated')),
+        'x-baci-client-credential': '33333333-3333-4333-8333-333333333333',
+      },
+    });
+    expect(response.status).toBe(429);
+    expect((await response.json()).code).toBe('quota_exceeded');
   });
 });

@@ -6,9 +6,8 @@ import {
   cartSessionCookieName,
   readCookieFromRequest,
 } from '@/lib/cart/principal';
-import { getCartQuotaClientIdentity } from '@/lib/cart/quota-identity';
+import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
-  checkCartQuota,
   createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartMerchant,
@@ -47,14 +46,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Cheap pre-resolution quota keyed only by the quota client
-    // identity (client credential when present, else the trusted
-    // network identity): unauthenticated callers must not drive
-    // merchant resolution DB work unbounded before the merchant-scoped
+    // identity (client credential when present, backed by a
+    // non-rotatable network bound; else the trusted network
+    // identity): unauthenticated callers must not drive merchant
+    // resolution DB work unbounded before the merchant-scoped
     // bootstrap budget below can apply.
-    const preQuota = await checkCartQuota({
+    const preQuota = await checkAnonymousCartQuota(request, {
       merchantId: 'pre-resolution',
       operation: 'bootstrap',
-      subject: getCartQuotaClientIdentity(request),
     });
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
@@ -79,10 +78,9 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse(merchant.error);
     }
 
-    const quota = await checkCartQuota({
+    const quota = await checkAnonymousCartQuota(request, {
       merchantId: merchant.merchant.id,
       operation: 'bootstrap',
-      subject: getCartQuotaClientIdentity(request),
     });
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');

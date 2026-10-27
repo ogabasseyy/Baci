@@ -194,11 +194,12 @@ that header exactly like `Authorization` before activation; in-repo
 logging never records request headers for these routes. This is an
 explicit pre-activation checklist item (not a documentation-only
 note): before any merchant is enrolled, verify against the deployed
-proxy and APM configuration that (1) `x-handoff-token` is on the
-header denylist alongside `Authorization`, and (2) a synthetic
-handoff preview request leaves no token value in proxy, APM, or
-error-reporting captures; record both checks in the activation
-evidence. Enrollment stays closed until they pass.
+proxy and APM configuration that (1) `x-handoff-token` and
+`x-baci-client-credential` are on the header denylist alongside
+`Authorization`, and (2) a synthetic handoff preview request and a
+synthetic bootstrap request leave no token or credential value in
+proxy, APM, or error-reporting captures; record both checks in the
+activation evidence. Enrollment stays closed until they pass.
 
 Preview RPC authority: both preview functions require the dedicated
 `commerce_cart_previewer` role and a server-signed `cart_handoff_id`

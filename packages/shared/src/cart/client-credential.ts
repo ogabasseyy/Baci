@@ -14,19 +14,18 @@
  */
 export const CART_CLIENT_CREDENTIAL_HEADER = 'x-baci-client-credential';
 
-const UUID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,64}$/;
+const UUID_V4_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 
 /**
- * Strict shape check with an entropy floor: a canonical UUID, or a
- * 32–64 character base64url token. Anything else (short strings,
- * whitespace, separators, oversized values) is not a credential and
- * callers must fall back to legacy network identity.
+ * Accepts exactly the credential form real clients emit: a version-4
+ * UUID from crypto.randomUUID(). Anything else (other UUID versions,
+ * free-form tokens, whitespace, separators, oversized values) is not
+ * a credential and callers must fall back to legacy network identity.
+ * Shape alone cannot prove randomness — the server therefore never
+ * lets this value be the sole abuse bound (see the network backstop
+ * in the web quota identity).
  */
 export function isValidCartClientCredential(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    (UUID_PATTERN.test(value) || TOKEN_PATTERN.test(value))
-  );
+  return typeof value === 'string' && UUID_V4_PATTERN.test(value);
 }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
+import { getCartQuotaClientIdentity } from '@/lib/cart/quota-identity';
 import {
   __resetCartQuotaStoreForTesting,
   checkCartQuota,
@@ -193,14 +194,17 @@ function _postIssue(init: {
 }
 
 describe('GET /api/storefront/cart/handoff', () => {
-  function getPreview(handoffId: string | null) {
+  function getPreview(
+    handoffId: string | null,
+    extraHeaders: Record<string, string> = {}
+  ) {
     const url =
       handoffId === null
         ? HANDOFF_URL
         : `${HANDOFF_URL}?handoff_id=${handoffId}`;
     return GET(
       new NextRequest(url, {
-        headers: { 'x-handoff-token': 'ch1.fixture.token' },
+        headers: { 'x-handoff-token': 'ch1.fixture.token', ...extraHeaders },
         method: 'GET',
       })
     );
@@ -326,6 +330,47 @@ describe('GET /api/storefront/cart/handoff', () => {
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('quota_exceeded');
     expect(mocks.previewCalls).toBe(previewCallsBefore);
+  });
+
+  it('keys preview quotas on the client credential when one is presented', async () => {
+    mocks.handoffMerchantId = MERCHANT_ID;
+    mocks.previewPayload = {
+      code: null,
+      expiresAt: '2026-10-12T06:05:00.000Z',
+      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+      ok: true,
+      snapshot: rawState(),
+      status: 'pending',
+    };
+    const credentialA = {
+      'x-baci-client-credential': '11111111-1111-4111-8111-111111111111',
+    };
+    const credentialB = {
+      'x-baci-client-credential': '22222222-2222-4222-8222-222222222222',
+    };
+    const probe = new NextRequest(
+      `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+      { headers: credentialA, method: 'GET' }
+    );
+    const subject = getCartQuotaClientIdentity(probe);
+    for (let index = 0; index < 120; index += 1) {
+      await checkCartQuota({
+        merchantId: 'handoff-preview',
+        operation: 'handoff_preview',
+        subject,
+      });
+    }
+    const exhausted = await getPreview(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      credentialA
+    );
+    expect(exhausted.status).toBe(429);
+    // A different shopper behind the same network identity still previews.
+    const otherShopper = await getPreview(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      credentialB
+    );
+    expect(otherShopper.status).not.toBe(429);
   });
 
   it('applies the merchant quota before the preview RPC assembles anything', async () => {

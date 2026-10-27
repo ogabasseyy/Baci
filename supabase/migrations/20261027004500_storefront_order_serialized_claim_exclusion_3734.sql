@@ -23,10 +23,13 @@
 -- events, units detached) instead of refreshing expiry, and skips the
 -- claim. There is no separate non-expiring status in this schema;
 -- durable holds are status 'reserved' with reservation_expires_at NULL,
--- so the release predicate is status = 'reserved'. fulfillment_data is
--- rewritten only when the release actually freed a unit, so ordinary
+-- so the release predicate is status = 'reserved'. The line snapshot
+-- is reconciled in the same pass: unit-derived keys are stripped when
+-- the call freed units, or when the snapshot still claims units while
+-- the line holds none (detached elsewhere — definitionally stale for
+-- offer lines); unit-less shapes keep their prior value, so ordinary
 -- offer lines (including policy-off products, which the claim helper
--- deliberately leaves untouched) keep their prior value. The release
+-- deliberately leaves untouched) are never stamped. The release
 -- lives in private.release_stale_offer_line_serialized_units (one
 -- helper for both paths) so the patched loops contain no loop
 -- terminator and the claim-loop ordering guard keeps passing.
@@ -35,8 +38,8 @@
 -- private.confirm_order_inventory_reservations iterated every item and
 -- reclaimed units for held lines (or raised late_payment_reservation_lost
 -- for strict policies). It now releases stale reservations on offer
--- lines first (same helper), then skips them; fulfillment_data is
--- rewritten only when a release occurred, so freed units are not
+-- lines first (same helper), then skips them; the same snapshot
+-- reconciliation applies, so freed or already-detached units are not
 -- listed as assigned.
 --
 -- Legacy marker shape: rows created before 20261019100000 may carry

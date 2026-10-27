@@ -427,6 +427,41 @@ BEGIN
     RAISE EXCEPTION 'expected resynced product stock 2 after post-deletion release, got %', v_offer_stock;
   END IF;
 
+  -- Detached-elsewhere stale snapshot: unit 012 is now available and
+  -- detached, but a leftover snapshot still claims it. Reuse must
+  -- strip the unit keys even though this call frees nothing
+  -- (released_count = 0); the unit-less remainder collapses to NULL.
+  UPDATE public.order_items SET fulfillment_data = jsonb_build_object(
+    'source', 'merchant_stock',
+    'reservationExpiresAt', now() + interval '1 hour',
+    'inventoryUnits', jsonb_build_array(jsonb_build_object(
+      'inventoryUnitId', '03d00000-0000-4000-8000-000000000012',
+      'identifierType', 'imei',
+      'identifierValue', '933730000000012'
+    )),
+    'missingUnitCount', 0
+  ) WHERE id = v_item_b;
+
+  BEGIN
+    PERFORM private.prepare_storefront_order_for_checkout(
+      p_order_id => v_order_id,
+      p_merchant_id => v_merchant_id,
+      p_tracking_token => v_tracking_token,
+      p_customer_email => 'claim-exclusion-buyer@example.com',
+      p_payment_method => 'card'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order stale-snapshot reuse failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  IF (SELECT fulfillment_data FROM public.order_items WHERE id = v_item_b) IS NOT NULL THEN
+    RAISE EXCEPTION 'expected detached-elsewhere stale snapshot stripped to NULL on reuse';
+  END IF;
+  IF (SELECT fulfillment_data FROM public.order_items WHERE id = v_item_d)
+     IS DISTINCT FROM jsonb_build_object('source', 'merchant_stock', 'fulfillmentQuantity', 1) THEN
+    RAISE EXCEPTION 'expected refund-like fulfillment to survive the stale-snapshot reuse';
+  END IF;
+
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
   -- Attach a unit to the snapshot-only (post-deletion) line so the

@@ -442,31 +442,12 @@ END;
 $c4$;
 
 -- --- C5: anon claim is forbidden --------------------------------------
-SET LOCAL ROLE anon;
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
-SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
-
-DO $c5$
-BEGIN
-  BEGIN
-    PERFORM public.claim_vtu_intent(
-      'e5e5e5e5-0000-4000-8000-000000000015',
-      'wrpc-fp-claim-5',
-      'd4d4d4d4-0000-4000-8000-000000000001',
-      'e2e2e2e2-0000-4000-8000-000000000001',
-      'f3f3f3f3-0000-4000-8000-000000000001',
-      now(),
-      '{}'
-    );
-    RAISE EXCEPTION 'C5: anon claim unexpectedly allowed';
-  EXCEPTION WHEN insufficient_privilege OR raise_exception THEN
-    -- Either the missing grant or the in-function role gate.
-    IF SQLSTATE = 'P0001' AND SQLERRM NOT LIKE 'forbidden%' THEN
-      RAISE EXCEPTION 'C5: wrong raise: %', SQLERRM;
-    END IF;
-  END;
-END;
-$c5$;
+-- Asserted via the $grants$ catalog pins at the end of this file
+-- (anon must NOT have EXECUTE on claim_vtu_intent): on the pinned
+-- replay image a denied function EXECUTE surfaces as an error the
+-- exception handler cannot trap, so no behavioral call is made
+-- here (same pattern as
+-- order_notification_outbox_rpc_privileges.sql).
 
 -- --- D1: mapped row is refused (active purchase, never orphan) -------
 -- ...001 was mapped by C1: deleting it would cascade away its

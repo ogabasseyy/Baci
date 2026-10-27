@@ -83,6 +83,40 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
+  it('grants the full shared bootstrap budget while the store is healthy', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    let count = 0;
+    mockGetRedis.mockReturnValue({
+      createScript: () => ({
+        eval: async () => [++count, 3_600_000],
+      }),
+    });
+    try {
+      const input = {
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'ip-healthy-limit',
+      } as const;
+      await expect(checkCartQuota(input)).resolves.toMatchObject({
+        allowed: true,
+        limit: 120,
+      });
+      count = 119;
+      await expect(checkCartQuota(input)).resolves.toMatchObject({
+        allowed: true,
+        limit: 120,
+        remaining: 0,
+      });
+      await expect(checkCartQuota(input)).resolves.toMatchObject({
+        allowed: false,
+        limit: 120,
+      });
+    } finally {
+      mockGetRedis.mockReturnValue(null);
+    }
+  });
+
   it('grants a reduced per-instance bootstrap limit while degraded', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');

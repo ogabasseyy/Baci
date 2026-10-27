@@ -79,10 +79,12 @@ Audit boundary and remaining findings:
   commerce or above-fold rendering path gains a new query.
 - Primary brand/family destinations still use the existing complete scan (up to
   20 pages of 100 rows). Their counts are not replaced by the optional PDP budget.
-- The adjacent article verifier still uses `loadBrandAuthorityInventorySafely`,
-  whose 3-second Promise race only bounds waiting and allows the complete scan to
-  continue. Its separate category race has the same cancellation limitation.
-  This is a remaining performance follow-up outside this focused PDP patch.
+- Article verification uses `loadBrandAuthorityInventorySafely` with the same
+  complete-pool ceiling as PDP enrichment and a 3-second shared deadline per
+  brand. Active-category validation runs inside that operation; the verifier no
+  longer starts a separate uncancellable category read. Category, product and
+  hydration aborts omit both brand and dependent family links. Parallel brands
+  retain their own deadlines; primary destination reads remain unchanged.
 - Serialized hydration retains its existing policy/variant/count implementation;
   this patch bounds its input product IDs and elapsed time, not the number of
   variants a product may have. There is no new inventory policy or RLS exception.

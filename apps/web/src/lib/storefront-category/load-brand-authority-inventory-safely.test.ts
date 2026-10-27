@@ -4,7 +4,10 @@ import { loadBrandAuthorityInventorySafely } from './load-brand-authority-invent
 
 vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-inventory',
-  () => ({ getCachedBrandAuthorityInventory: vi.fn() })
+  () => ({
+    getCachedBrandAuthorityInventory: vi.fn(),
+    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
+  })
 );
 
 const mockGet = vi.mocked(getCachedBrandAuthorityInventory);
@@ -28,8 +31,10 @@ describe('loadBrandAuthorityInventorySafely', () => {
     ).resolves.toEqual(inventory);
   });
 
-  it('returns null when the destination inventory exceeds the timeout', async () => {
-    mockGet.mockImplementation(() => new Promise(() => undefined) as never);
+  it('passes a work budget to the shared reader instead of racing a background scan', async () => {
+    mockGet.mockRejectedValueOnce(
+      new DOMException('timed out', 'TimeoutError')
+    );
     await expect(
       loadBrandAuthorityInventorySafely({
         merchantId: 'merchant-1',
@@ -38,6 +43,12 @@ describe('loadBrandAuthorityInventorySafely', () => {
         timeoutMs: 10,
       })
     ).resolves.toBeNull();
+    expect(mockGet).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'smartphones',
+      entry,
+      { maxProducts: 100, timeoutMs: 10 }
+    );
   });
 
   it('returns null instead of throwing on failure', async () => {

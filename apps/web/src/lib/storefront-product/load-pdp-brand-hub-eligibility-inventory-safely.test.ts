@@ -8,6 +8,7 @@ vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-inventory',
   () => ({
     getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),
+    OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS: 100,
   })
 );
 const input = {

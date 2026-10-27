@@ -93,6 +93,26 @@ describe('useCustomerLoginForm', () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
 
+  it('shows an error and unlocks the form if verification unexpectedly throws', async () => {
+    mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+    mocks.verifyOtp.mockRejectedValue(new Error('unexpected'));
+    const { result } = renderHook(() => useCustomerLoginForm());
+    const input = render(
+      createElement('input', {
+        onPaste: result.current.handlePaste,
+        'aria-label': 'Code',
+      })
+    );
+    fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+      clipboardData: { getData: () => '123456' },
+    });
+    await waitFor(() =>
+      expect(result.current.error).toBe('Verification failed')
+    );
+    expect(result.current.isVerifying).toBe(false);
+    expect(result.current.code).toEqual(['', '', '', '', '', '']);
+  });
+
   it('resends to the challenge address and reports failure', async () => {
     mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
     mocks.sendOtp.mockResolvedValue({ success: false, error: 'Resend failed' });
@@ -175,4 +195,28 @@ describe('useCustomerLoginForm', () => {
     await waitFor(() => expect(mocks.verifyOtp).toHaveBeenCalledWith('123456'));
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/imei-check'));
   });
+});
+
+it('does not submit a second code while verification is pending', () => {
+  mocks.verifyOtp.mockReset();
+  mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+  const pending = Promise.withResolvers<{ success: boolean }>();
+  mocks.verifyOtp.mockReturnValue(pending.promise);
+  const { result } = renderHook(() => useCustomerLoginForm());
+  const input = render(
+    createElement('input', {
+      onPaste: result.current.handlePaste,
+      'aria-label': 'Code',
+    })
+  );
+  act(() => {
+    fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+      clipboardData: { getData: () => '123456' },
+    });
+    fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+      clipboardData: { getData: () => '123456' },
+    });
+  });
+  expect(mocks.verifyOtp).toHaveBeenCalledTimes(1);
+  pending.resolve({ success: false });
 });

@@ -10,7 +10,6 @@ type Props = {
   error: string;
   isSending: boolean;
   isGoogleLoading: boolean;
-  primaryColor: string;
   onSendCode: (event: FormEvent) => Promise<void>;
   onEmailChange: (value: string) => void;
   onGoogleSignIn: () => Promise<void>;
@@ -20,7 +19,6 @@ export function CustomerEmailForm({
   error,
   isSending,
   isGoogleLoading,
-  primaryColor,
   onSendCode,
   onEmailChange,
   onGoogleSignIn,
@@ -49,8 +47,7 @@ export function CustomerEmailForm({
 
       <Button
         type="submit"
-        className="w-full text-white"
-        style={{ backgroundColor: primaryColor }}
+        className="w-full bg-store-primary text-store-primary-text hover:bg-store-primary/90"
         disabled={isSending || isGoogleLoading || !email}
       >
         {isSending ? (

@@ -92,13 +92,10 @@ function DefaultLoginPage() {
     );
   }
 
-  // Use merchant's primary color if available, fallback to default blue
-  const primaryColor = merchant?.brand_colors?.primary || '#3F51B5';
-
   return (
     <div className="min-h-screen flex flex-col bg-white">
       {/* Subtle accent line at top using merchant's primary color */}
-      <div className="h-1 w-full" style={{ backgroundColor: primaryColor }} />
+      <div className="h-1 w-full bg-store-primary" />
 
       {/* Header */}
       <header className="border-b border-gray-100 bg-white">
@@ -152,7 +149,6 @@ function DefaultLoginPage() {
                 error={error}
                 isSending={isSending}
                 isGoogleLoading={isGoogleLoading}
-                primaryColor={primaryColor}
                 onEmailChange={setEmail}
                 onSendCode={handleSendCode}
                 onGoogleSignIn={async () => {

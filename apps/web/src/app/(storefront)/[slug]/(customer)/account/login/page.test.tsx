@@ -82,6 +82,29 @@ describe('CustomerLoginPage', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/account'));
   });
 
+  it('uses the storefront theme for the sign-in button', () => {
+    render(<CustomerLoginPage />);
+    expect(
+      screen.getByRole('button', { name: 'Send sign-in code' })
+    ).toHaveClass('bg-store-primary');
+  });
+
+  it('submits a six-digit code delivered via autofill', async () => {
+    const { verifyOtp } = renderCodeStep();
+    fireEvent.change(screen.getByLabelText('Digit 1 of 6'), {
+      target: { value: '123456' },
+    });
+    await waitFor(() => expect(verifyOtp).toHaveBeenCalledWith('123456'));
+  });
+
+  it('offers native one-time-code autofill', () => {
+    renderCodeStep();
+    expect(screen.getByLabelText('Digit 1 of 6')).toHaveAttribute(
+      'autocomplete',
+      'one-time-code'
+    );
+  });
+
   it('prefills a valid email query parameter', () => {
     mockSearchParams.set('email', '  BasseyBJohn@Yahoo.CO.UK  ');
 

@@ -185,7 +185,7 @@ describe('reconcilePetrockRemediationOrder', () => {
     expect(reconcileState.markSubmissionUnknown).not.toHaveBeenCalled();
   });
 
-  it('refunds an unresolved no-id remediation submission', async () => {
+  it('does not refund an unresolved no-id remediation submission', async () => {
     const reconcileState = state();
 
     const result = await reconcilePetrockRemediationOrder({
@@ -203,10 +203,34 @@ describe('reconcilePetrockRemediationOrder', () => {
       state: reconcileState,
     });
 
-    expect(result.kind).toBe('failed');
-    expect(reconcileState.failBeforeAcceptance).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'provider_submission_unresolved' })
+    expect(result.kind).toBe('submission_unknown');
+    expect(reconcileState.failBeforeAcceptance).not.toHaveBeenCalled();
+    expect(reconcileState.reschedule).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerStatus: 'provider_submission_unresolved',
+      })
     );
+  });
+
+  it('flags an unresolved paid submission for review after repeated attempts', async () => {
+    const reconcileState = state();
+    const result = await reconcilePetrockRemediationOrder({
+      client: { getOrder: vi.fn() },
+      decryptIdentifier: () => '490154203237518',
+      loadProducts: vi.fn().mockResolvedValue([]),
+      order: order({
+        eligibility_next_check: null,
+        payment_currency: 'NGN',
+        provider_order_id: null,
+        status: 'submission_unknown',
+        reconcile_attempts: 12,
+      }),
+      origin: 'https://ogabassey.com',
+      readProduct: vi.fn(),
+      state: reconcileState,
+    });
+    expect(result).toEqual({ kind: 'submission_unknown', needsReview: true });
+    expect(reconcileState.failBeforeAcceptance).not.toHaveBeenCalled();
   });
 
   it('suppresses an unresolved no-id eligibility submission', async () => {

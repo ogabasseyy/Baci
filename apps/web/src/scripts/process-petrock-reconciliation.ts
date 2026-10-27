@@ -43,6 +43,10 @@ function sanitizePetrockSummary({
       summary[key] = body[key];
     }
   }
+  if ('remediation' in body && typeof body.remediation.manualReview === 'number' && body.remediation.manualReview > 0) {
+    summary.remediationManualReview = body.remediation.manualReview;
+    summary.attention = 'provider_submission_unresolved';
+  }
   if ('skipped' in body && body.skipped === 'petrock_not_configured') {
     summary.skipped = body.skipped;
   }

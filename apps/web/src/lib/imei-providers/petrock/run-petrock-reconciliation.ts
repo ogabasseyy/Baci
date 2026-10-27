@@ -98,6 +98,8 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
       remediation.errored > 0 ||
       notifications.errored > 0
         ? 500
-        : 200,
+        : remediation.manualReview > 0
+          ? 503
+          : 200,
   };
 }

@@ -56,6 +56,29 @@ const input = {
 };
 
 describe('placePetrockRemediationOrder submission outcomes', () => {
+  it('does not report a refund when a provider receipt wins the rejection race', async () => {
+    const orderState = state();
+    orderState.failBeforeAcceptance.mockResolvedValue(false);
+    const result = await placePetrockRemediationOrder({
+      ...input,
+      client: {
+        getAccount: vi.fn().mockResolvedValue({
+          data: { balance: 100, currency: 'USD' },
+          ok: true,
+          rawText: '{}',
+        }),
+        submitOrder: vi.fn().mockResolvedValue({
+          kind: 'http',
+          message: 'rejected',
+          ok: false,
+          status: 400,
+        }),
+      },
+      state: orderState,
+    });
+    expect(result.kind).toBe('already_started');
+  });
+
   it('holds funds and marks an ambiguous POST timeout without refunding', async () => {
     const orderState = state();
     const result = await placePetrockRemediationOrder({

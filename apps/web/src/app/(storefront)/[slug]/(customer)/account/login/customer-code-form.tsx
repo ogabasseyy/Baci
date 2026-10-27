@@ -46,7 +46,8 @@ export function CustomerCodeForm({
                 }}
                 type="text"
                 inputMode="numeric"
-                maxLength={1}
+                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                maxLength={index === 0 ? 6 : 1}
                 value={code[index]}
                 onChange={(e) => handleCodeChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}

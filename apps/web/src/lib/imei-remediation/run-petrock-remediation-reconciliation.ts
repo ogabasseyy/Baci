@@ -36,6 +36,7 @@ export async function runPetrockRemediationReconciliation({
     eligibilityAdvanced: 0,
     errored: 0,
     failed: 0,
+    manualReview: 0,
     pending: 0,
     submissionUnknown: 0,
   };
@@ -66,6 +67,8 @@ export async function runPetrockRemediationReconciliation({
         summary.eligibilityAdvanced += 1;
       } else if (result.kind === 'submission_unknown') {
         summary.submissionUnknown += 1;
+        if ('needsReview' in result && result.needsReview)
+          summary.manualReview += 1;
       } else if (result.kind === 'failed' || result.kind === 'suppressed') {
         summary.failed += 1;
       } else summary.pending += 1;

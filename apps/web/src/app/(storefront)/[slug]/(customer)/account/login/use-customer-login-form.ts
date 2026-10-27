@@ -54,6 +54,7 @@ export function useCustomerLoginForm() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  const verifyLock = useRef(false);
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Redirect if already authenticated
@@ -102,7 +103,13 @@ export function useCustomerLoginForm() {
   };
 
   const handleCodeChange = (index: number, value: string) => {
-    // Only allow digits
+    // Native OTP autofill can deliver the entire code in the first field.
+    if (index === 0 && /^\d{6}$/.test(value)) {
+      setCode(value.split(''));
+      handleVerifyCode(value);
+      return;
+    }
+    // Only allow individual digits otherwise.
     if (value && !/^\d$/.test(value)) return;
 
     const newCode = [...code];
@@ -147,20 +154,29 @@ export function useCustomerLoginForm() {
   };
 
   const handleVerifyCode = async (codeString: string) => {
+    if (verifyLock.current) return;
+    verifyLock.current = true;
     setError('');
     setIsVerifying(true);
 
-    const result = await verifyOtp(codeString);
+    try {
+      const result = await verifyOtp(codeString);
 
-    if (!result.success) {
-      setError(result.error || 'Verification failed');
+      if (!result.success) {
+        setError(result.error || 'Verification failed');
+        setCode(['', '', '', '', '', '']);
+        codeInputRefs.current[0]?.focus();
+      } else {
+        router.push(asRoute(redirectTo));
+      }
+    } catch {
+      setError('Verification failed');
       setCode(['', '', '', '', '', '']);
       codeInputRefs.current[0]?.focus();
-    } else {
-      router.push(asRoute(redirectTo));
+    } finally {
+      verifyLock.current = false;
+      setIsVerifying(false);
     }
-
-    setIsVerifying(false);
   };
 
   const handleResendCode = async () => {

@@ -156,13 +156,18 @@ export async function reconcilePetrockRemediationOrder({
       return { kind: 'suppressed' as const };
     }
     if (order.status === 'submission_unknown') {
-      await state.failBeforeAcceptance({
-        customerMessage:
-          'This unlock submission could not be confirmed, so your wallet was refunded.',
+      await state.reschedule({
+        leaseToken: order.reconcile_lease_token,
+        nextPollAt: new Date(
+          Date.now() + pollDelay(order.reconcile_attempts)
+        ).toISOString(),
         orderId: order.id,
-        reason: 'provider_submission_unresolved',
+        providerStatus: 'provider_submission_unresolved',
       });
-      return { kind: 'failed' as const };
+      return {
+        kind: 'submission_unknown' as const,
+        needsReview: order.reconcile_attempts >= 12,
+      };
     }
     await state.markSubmissionUnknown({
       orderId: order.id,

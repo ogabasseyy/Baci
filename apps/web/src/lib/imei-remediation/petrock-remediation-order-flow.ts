@@ -165,12 +165,13 @@ export async function placePetrockRemediationOrder({
     !quoteCoversProviderCost({ fxRate, order, paymentCurrency, product })
   ) {
     if (order.status === 'paid') {
-      await state.failBeforeAcceptance({
+      const refunded = await state.failBeforeAcceptance({
         customerMessage:
           'This unlock could not be submitted, so your wallet was refunded.',
         orderId: order.id,
         reason: 'provider_preflight_failed',
       });
+      if (!refunded) return { kind: 'already_started' as const };
     } else if (order.status === 'payment_pending') {
       await state.resetPreparedQuote({
         orderId: order.id,
@@ -187,12 +188,13 @@ export async function placePetrockRemediationOrder({
     account.data.balance < product.catalogCostUsd
   ) {
     if (order.status === 'paid') {
-      await state.failBeforeAcceptance({
+      const refunded = await state.failBeforeAcceptance({
         customerMessage:
           'This unlock could not be submitted, so your wallet was refunded.',
         orderId: order.id,
         reason: 'provider_preflight_failed',
       });
+      if (!refunded) return { kind: 'already_started' as const };
     }
     return { kind: 'preflight_failed' as const };
   }
@@ -232,12 +234,14 @@ export async function placePetrockRemediationOrder({
       });
       return { kind: 'submission_unknown' as const };
     }
-    await state.failBeforeAcceptance({
+    const refunded = await state.failBeforeAcceptance({
       customerMessage: 'The carrier could not accept this unlock order.',
       orderId: order.id,
       reason: 'provider_submit_rejected',
     });
-    return { kind: 'failed' as const };
+    return {
+      kind: refunded ? ('failed' as const) : ('already_started' as const),
+    };
   }
 
   try {

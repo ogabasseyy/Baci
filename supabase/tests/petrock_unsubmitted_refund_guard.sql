@@ -6,7 +6,7 @@ DO $$ DECLARE reason text; state text; changed boolean; BEGIN
  OR NOT has_function_privilege('service_role','public.fail_petrock_remediation_before_acceptance(uuid,text,text)','execute') THEN
    RAISE EXCEPTION 'replacement changed the existing execution grants';
  END IF;
- FOREACH reason IN ARRAY ARRAY[NULL::text,'','   ','eligibility_evidence_invalid','provider_preflight_failed','paid_recovery_context_missing','paid_recovery_fx_unavailable','paid_recovery_identifier_unavailable'] LOOP
+ FOREACH reason IN ARRAY ARRAY[NULL::text,'','   ','eligibility_evidence_invalid','provider_preflight_failed','paid_recovery_context_missing','paid_recovery_fx_unavailable','paid_recovery_identifier_unavailable','provider_submission_unresolved','unrecognized_reason'] LOOP
    FOREACH state IN ARRAY ARRAY['paid','submitting','submission_unknown','submitted','in_progress','completed'] LOOP
      DELETE FROM public.petrock_orders;
      INSERT INTO public.petrock_orders(id,status,provider_attempt_started_at,provider_order_id)
@@ -19,8 +19,11 @@ DO $$ DECLARE reason text; state text; changed boolean; BEGIN
  -- Even an inconsistent paid row with a provider receipt but no attempt marker is protected.
  UPDATE public.petrock_orders SET status='paid',provider_attempt_started_at=NULL,provider_order_id='accepted-1';
  IF public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','eligibility_evidence_invalid','Unsafe') THEN RAISE EXCEPTION 'accepted receipt refunded'; END IF;
+ -- A provider receipt wins even against an explicit rejection.
+ UPDATE public.petrock_orders SET status='submitting',provider_attempt_started_at=now(),provider_order_id='accepted-1';
+ IF public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','provider_submit_rejected','Rejected') THEN RAISE EXCEPTION 'provider receipt refunded after rejection race'; END IF;
  -- Never-submitted paid rejection refunds exactly once through the existing path.
- UPDATE public.petrock_orders SET provider_order_id=NULL;
+ UPDATE public.petrock_orders SET status='paid',provider_attempt_started_at=NULL,provider_order_id=NULL;
  IF NOT public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','eligibility_evidence_invalid','Refunded') THEN RAISE EXCEPTION 'unsubmitted invalid paid order not refunded'; END IF;
  IF NOT public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','eligibility_evidence_invalid','Refunded') THEN RAISE EXCEPTION 'refund replay not idempotent'; END IF;
  IF (SELECT count(*) FROM public.test_refund_receipts) <> 1 OR (SELECT count(*) FROM public.petrock_order_events) <> 1 THEN RAISE EXCEPTION 'duplicate refund/event'; END IF;

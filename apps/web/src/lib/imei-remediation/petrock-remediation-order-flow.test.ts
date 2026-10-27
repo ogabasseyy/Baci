@@ -56,6 +56,28 @@ const input = {
 };
 
 describe('placePetrockRemediationOrder', () => {
+  it.each([
+    'catalog',
+    'balance',
+  ])('does not report a failed preflight refund when the guard loses a %s race', async (failure) => {
+    const orderState = state();
+    orderState.failBeforeAcceptance.mockResolvedValue(false);
+    const result = await placePetrockRemediationOrder({
+      ...input,
+      order: { ...input.order, status: 'paid' },
+      product: { ...input.product, active: failure !== 'catalog' },
+      client: {
+        getAccount: vi.fn().mockResolvedValue({
+          ok: true,
+          data: { balance: failure === 'balance' ? 0 : 100, currency: 'USD' },
+        }),
+        submitOrder: vi.fn(),
+      },
+      state: orderState,
+    });
+    expect(result.kind).toBe('already_started');
+  });
+
   it('preflights, captures the wallet, write-aheads, and only then submits', async () => {
     const calls: string[] = [];
     const orderState = state();

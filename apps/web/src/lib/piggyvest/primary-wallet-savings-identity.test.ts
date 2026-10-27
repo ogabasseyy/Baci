@@ -21,11 +21,12 @@ describe('primary savings transfer identity corroboration', () => {
       wallet: fixture.wallet,
       transaction: fixture.transaction,
     });
-    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
     expect(
       input.fetchImplementation.mock.calls.map(([url]) => String(url))
     ).toEqual([
       'https://api.piggyvest.business/api/v1/wallet/source-wallet',
+      'https://api.piggyvest.business/api/v1/transaction/transfer-id?wallet_id=source-wallet',
       'https://api.piggyvest.business/api/v1/transaction?wallet_id=source-wallet&limit=100&collapse_batch=0',
     ]);
   });
@@ -180,7 +181,7 @@ describe('primary savings transfer identity corroboration', () => {
       wallet: fixture.wallet,
       transaction: fixture.transaction,
     });
-    expect(String(input.fetchImplementation.mock.calls[2][0])).toContain(
+    expect(String(input.fetchImplementation.mock.calls[3][0])).toContain(
       'cursor=next-page'
     );
   });
@@ -213,7 +214,7 @@ describe('primary savings transfer identity corroboration', () => {
     ]);
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
-    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(4);
   });
 
   it('requires a complete list and stops after the bounded page limit', async () => {
@@ -226,7 +227,7 @@ describe('primary savings transfer identity corroboration', () => {
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
     expect(input.fetchImplementation).toHaveBeenCalledTimes(
-      limits.maxPages + 1
+      limits.maxPages + 2
     );
   });
 

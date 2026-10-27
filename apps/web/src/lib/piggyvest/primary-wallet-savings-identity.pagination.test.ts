@@ -28,7 +28,7 @@ describe('primary savings early-page production corroboration', () => {
       transaction: fixture.transaction,
     });
     expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
-    expect(String(input.fetchImplementation.mock.calls[2][0])).toBe(
+    expect(String(input.fetchImplementation.mock.calls[1][0])).toBe(
       'https://api.piggyvest.business/api/v1/transaction/transfer-id?wallet_id=source-wallet'
     );
   });
@@ -58,10 +58,10 @@ describe('primary savings early-page production corroboration', () => {
     );
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
-    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
   });
 
-  it('fails closed when the early single-read is missing', async () => {
+  it('fails closed when a received direct read is malformed', async () => {
     const input = requestInput(
       [
         {
@@ -75,6 +75,35 @@ describe('primary savings early-page production corroboration', () => {
     );
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed on a malformed direct response body without list fallback', async () => {
+    const input = requestInput([fixture.page]);
+    const defaultFetch = input.fetchImplementation.getMockImplementation();
+    input.fetchImplementation.mockImplementation((url, init) =>
+      /\/api\/v1\/transaction\/[^/]+\?/.test(String(url))
+        ? Promise.resolve(new Response('{'))
+        : (defaultFetch?.(url, init) ?? Promise.resolve(new Response()))
+    );
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to the bounded complete scan when the direct request is unavailable', async () => {
+    const input = requestInput([fixture.page]);
+    const defaultFetch = input.fetchImplementation.getMockImplementation();
+    input.fetchImplementation.mockImplementation((url, init) => {
+      if (/\/api\/v1\/transaction\/[^/]+\?/.test(String(url)))
+        return Promise.reject(new Error('network unavailable'));
+      return defaultFetch?.(url, init) ?? Promise.resolve(new Response());
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toMatchObject({
+      environment: 'production',
+      transaction: fixture.transaction,
+    });
     expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
   });
 
@@ -88,7 +117,7 @@ describe('primary savings early-page production corroboration', () => {
     ]);
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
-    expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
   });
 
   it('finds and corroborates the exact candidate on page six when more pages remain', async () => {
@@ -110,67 +139,155 @@ describe('primary savings early-page production corroboration', () => {
       transaction: fixture.transaction,
     });
     expect(input.fetchImplementation).toHaveBeenCalledTimes(8);
-    expect(String(input.fetchImplementation.mock.calls[6][0])).toContain(
+    expect(String(input.fetchImplementation.mock.calls[7][0])).toContain(
       'cursor=cursor-5'
     );
-    expect(String(input.fetchImplementation.mock.calls[7][0])).toBe(
+    expect(String(input.fetchImplementation.mock.calls[1][0])).toBe(
       'https://api.piggyvest.business/api/v1/transaction/transfer-id?wallet_id=source-wallet'
     );
   });
 
-  it('shares the 20-second deadline across wallet, list and direct reads', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
-    try {
-      const input = requestInput([
+  it('uses the validated direct timestamp to locate a deep-history list row first', async () => {
+    const input = requestInput([fixture.page], fixture.wallet, 'production', {
+      ...fixture.singleTransaction,
+      created_at: '2024-06-15T12:00:00.000Z',
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toEqual({
+      environment: 'production',
+      wallet: fixture.wallet,
+      transaction: fixture.transaction,
+    });
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
+    const listUrl = new URL(String(input.fetchImplementation.mock.calls[2][0]));
+    expect(listUrl.searchParams.get('start_date')).toBe(
+      '2024-06-14T12:00:00.000Z'
+    );
+    expect(listUrl.searchParams.get('end_date')).toBe(
+      '2024-06-16T12:00:00.000Z'
+    );
+  });
+
+  it.each([
+    undefined,
+    'not-a-timestamp',
+  ])('uses the original wallet scan when direct created_at is unsupported: %j', async (createdAt) => {
+    const input = requestInput([fixture.page], fixture.wallet, 'production', {
+      ...fixture.singleTransaction,
+      created_at: createdAt,
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toMatchObject({
+      environment: 'production',
+      transaction: fixture.transaction,
+    });
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
+    expect(
+      new URL(
+        String(input.fetchImplementation.mock.calls[2][0])
+      ).searchParams.has('start_date')
+    ).toBe(false);
+  });
+
+  it('falls back to the original wallet scan when the date filter is unsupported', async () => {
+    const input = requestInput([fixture.page], fixture.wallet, 'production', {
+      ...fixture.singleTransaction,
+      created_at: '2024-06-15T12:00:00.000Z',
+    });
+    const fetchImplementation =
+      input.fetchImplementation.getMockImplementation();
+    input.fetchImplementation.mockImplementation((url, init) => {
+      if (new URL(String(url)).searchParams.has('start_date'))
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              message: 'Unsupported query parameter: start_date',
+            }),
+            { status: 400 }
+          )
+        );
+      return (
+        fetchImplementation?.(url, init) ?? Promise.resolve(new Response())
+      );
+    });
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toMatchObject({
+      environment: 'production',
+      transaction: fixture.transaction,
+    });
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(4);
+    expect(
+      new URL(
+        String(input.fetchImplementation.mock.calls[3][0])
+      ).searchParams.has('start_date')
+    ).toBe(false);
+  });
+
+  it('still requires the exact list debit in kobo after direct locator validation', async () => {
+    const input = requestInput(
+      [
         {
           ...fixture.page,
-          pageInfo: { hasNextPage: true, endCursor: 'later-page' },
+          edges: [{ ...fixture.transaction, amount: -9999 }],
         },
-      ]);
+      ],
+      fixture.wallet,
+      'production',
+      {
+        ...fixture.singleTransaction,
+        created_at: '2024-06-15T12:00:00.000Z',
+      }
+    );
+
+    expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();
+    expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
+  });
+
+  it('tries the direct locator before a slow first page and never settles on timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    try {
+      const input = requestInput();
       const envelope = (data: unknown) =>
         new Response(JSON.stringify({ status: true, data }));
-      let directSignal: AbortSignal | undefined;
+      let filteredSignal: AbortSignal | undefined;
+      let fallbackSignal: AbortSignal | undefined;
       input.fetchImplementation
         .mockReset()
         .mockImplementationOnce(
           () =>
             new Promise<Response>((resolve) => {
-              setTimeout(() => resolve(envelope(fixture.wallet)), 8_000);
+              setTimeout(() => resolve(envelope(fixture.wallet)), 6_000);
             })
         )
-        .mockImplementationOnce(
-          () =>
-            new Promise<Response>((resolve) => {
-              setTimeout(
-                () =>
-                  resolve(
-                    envelope({
-                      ...fixture.page,
-                      pageInfo: {
-                        hasNextPage: true,
-                        endCursor: 'later-page',
-                      },
-                    })
-                  ),
-                8_000
-              );
-            })
+        .mockResolvedValueOnce(
+          envelope({
+            ...fixture.singleTransaction,
+            created_at: '2024-06-15T12:00:00.000Z',
+          })
         )
         .mockImplementationOnce((_url, init) => {
-          directSignal = init?.signal ?? undefined;
+          filteredSignal = init?.signal ?? undefined;
+          return new Promise<Response>(() => undefined);
+        })
+        .mockImplementationOnce((_url, init) => {
+          fallbackSignal = init?.signal ?? undefined;
           return new Promise<Response>(() => undefined);
         });
 
       const result = resolvePrimaryWalletSavingsIdentity(input);
-      await vi.advanceTimersByTimeAsync(8_000);
-      expect(input.fetchImplementation).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(6_000);
       expect(input.fetchImplementation).toHaveBeenCalledTimes(3);
-      await vi.advanceTimersByTimeAsync(limits.timeBudgetMs - 16_001);
-      expect(directSignal?.aborted).toBe(false);
+      expect(
+        new URL(
+          String(input.fetchImplementation.mock.calls[2][0])
+        ).searchParams.has('start_date')
+      ).toBe(true);
+      await vi.advanceTimersByTimeAsync(limits.timeBudgetMs - 6_001);
+      expect(filteredSignal?.aborted).toBe(true);
+      expect(fallbackSignal?.aborted).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
       expect(await result).toBeNull();
-      expect(directSignal?.aborted).toBe(true);
+      expect(fallbackSignal?.aborted).toBe(true);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();

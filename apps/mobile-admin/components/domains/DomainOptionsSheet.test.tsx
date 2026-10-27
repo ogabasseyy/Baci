@@ -66,6 +66,28 @@ describe('DomainOptionsSheet', () => {
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
   });
 
+  it('dispatches once if the post-close frame is dropped', () => {
+    let frame: FrameRequestCallback | undefined;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frame = callback;
+      return 7;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(true));
+    act(() => vi.advanceTimersByTime(499));
+    expect(onAction).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    act(() => frame?.(0));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
   it('on iOS waits for native modal dismissal after animation completion', () => {
     mocks.platform.OS = 'ios';
     const onAction = vi.fn();

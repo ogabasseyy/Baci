@@ -91,22 +91,31 @@ export default function DomainOptionsSheet({
   // disabled, wait for the render that removes the modal before dispatching.
   useEffect(() => {
     if (!awaitingDismiss || modalVisible || isRuntimePlatform('ios')) return;
+    let settled = false;
+    let frame: number | null = null;
     const afterCommit = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (frame !== null) cancelAnimationFrame(frame);
       setAwaitingDismiss(false);
       if (!isMountedRef.current || visibleRef.current) return;
       const pending = pendingActionRef.current;
       pendingActionRef.current = null;
       if (pending) onActionRef.current(pending.action, pending.domain);
     };
+    const timer = setTimeout(afterCommit, 500);
     if (
       typeof requestAnimationFrame === 'function' &&
       typeof cancelAnimationFrame === 'function'
     ) {
-      const frame = requestAnimationFrame(afterCommit);
-      return () => cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(afterCommit);
     }
-    const timer = setTimeout(afterCommit, 0);
-    return () => clearTimeout(timer);
+    return () => {
+      settled = true;
+      clearTimeout(timer);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
   }, [awaitingDismiss, modalVisible]);
 
   const handleAction = (action: DomainAction) => {

@@ -42,7 +42,7 @@ test('native presentation gate watches both apps source-compilation inputs', () 
 test('scene-aware presenters retain legacy windows only when no scene exists', { skip: process.platform !== 'darwin' }, () => {
   const folder = mkdtempSync(join(tmpdir(), 'baci-window-fallback-'));
   try {
-    const body = helper().replace('#if os(iOS) || os(tvOS)', '#if true');
+    const body = helper().replace('#if os(iOS) || os(tvOS)', '#if true').replace('Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest")', 'TestSceneManifest.value');
     writeFileSync(join(folder, 'main.swift'), `import Foundation
 @MainActor final class UIWindow { var isKeyWindow = false }
 @MainActor final class UIApplication {
@@ -50,6 +50,7 @@ test('scene-aware presenters retain legacy windows only when no scene exists', {
   var connectedScenes: Set<Int> = []
   var windows: [UIWindow] = []
 }
+@MainActor enum TestSceneManifest { static var value: Any? = nil }
 @MainActor enum SceneGeometry {
   static var selected: UIWindow?
   static func keyWindow() -> UIWindow? { selected }
@@ -59,6 +60,9 @@ let legacy = UIWindow()
 legacy.isKeyWindow = true
 UIApplication.shared.windows = [UIWindow(), legacy]
 precondition(Utilities.keyWindow() === legacy, "legacy admin window must remain available")
+TestSceneManifest.value = [:] as [String: String]
+precondition(Utilities.keyWindow() == nil, "scene-configured apps must wait for a scene")
+TestSceneManifest.value = nil
 let scene = UIWindow()
 UIApplication.shared.connectedScenes = [1]
 SceneGeometry.selected = scene

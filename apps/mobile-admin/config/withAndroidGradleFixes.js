@@ -249,6 +249,7 @@ function withAndroidGradleFixes(config) {
 
       if (fs.existsSync(gradleProperties)) {
         let content = fs.readFileSync(gradleProperties, 'utf-8');
+        content = ensureGradleProperty(content, 'org.gradle.workers.max', '2');
         content = ensureGradleProperty(
           content,
           'android.builtInKotlin',

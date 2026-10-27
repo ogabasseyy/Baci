@@ -79,11 +79,15 @@ export function useWarmAdminTabScreens({
 
     return scheduleWarmAdminTabBatch(() => {
       routesToWarm.forEach((route) => {
-        warmedRouteKeysRef.current.add(route.key);
-        router.prefetch({
-          pathname: `/(admin)/(tabs)/${route.name}`,
-          params: route.params,
-        } as Href);
+        try {
+          router.prefetch({
+            pathname: `/(admin)/(tabs)/${route.name}`,
+            params: route.params,
+          } as Href);
+          warmedRouteKeysRef.current.add(route.key);
+        } catch {
+          console.warn('Unable to prefetch admin tab', route.name);
+        }
       });
     });
   }, [activeRouteName, routes]);

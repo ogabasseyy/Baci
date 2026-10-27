@@ -73,4 +73,21 @@ describe('useWarmAdminTabScreens', () => {
     flush();
     expect(mocks.prefetch).not.toHaveBeenCalled();
   });
+  it('retries a synchronous prefetch failure and continues with other tabs', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.prefetch.mockImplementationOnce(() => {
+      throw new Error('unavailable');
+    });
+    const { rerender } = render(<Harness activeRouteName="index" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
+    rerender(<Harness activeRouteName="products" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledWith({
+      pathname: '/(admin)/(tabs)/orders',
+      params: { status: 'open' },
+    });
+    expect(mocks.prefetch).toHaveBeenCalledTimes(4);
+    warn.mockRestore();
+  });
 });

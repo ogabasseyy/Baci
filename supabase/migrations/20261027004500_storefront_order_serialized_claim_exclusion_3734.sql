@@ -49,7 +49,7 @@ BEGIN
   definition := replace(definition, old_marker, new_marker);
   EXECUTE definition;
 END $claim_exclusion_3734$;
-DO $claim_exclusion_reuse_3734$
+DO $claim_exclusion_prepare_3734$
 DECLARE
   function_oid oid;
   definition text;
@@ -61,7 +61,7 @@ DECLARE
     FOR UPDATE
   LOOP$marker$;
   new_loop text := $marker$  FOR v_item IN
-    SELECT oi.id, oi.product_id, oi.variant_id, oi.quantity, oi.offer_line
+    SELECT oi.id, oi.product_id, oi.variant_id, oi.quantity, oi.offer_line, oi.product_offer_id
     FROM public.order_items oi
     WHERE oi.order_id = p_order_id
     ORDER BY oi.product_id, oi.variant_id, oi.id
@@ -74,54 +74,30 @@ DECLARE
         v_item.id
       );
     END IF;$marker$;
-  new_claim text := $marker$    ELSIF v_item.offer_line IS DISTINCT FROM TRUE THEN
+  new_claim text := $marker$    ELSIF v_item.offer_line IS DISTINCT FROM TRUE AND v_item.product_offer_id IS NULL THEN
       PERFORM private.claim_variant_inventory_units_for_order_item_internal(
         p_merchant_id,
         p_order_id,
         v_item.id
       );
     END IF;$marker$;
-BEGIN
-  SELECT p.oid INTO STRICT function_oid
-  FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-  WHERE n.nspname = 'private' AND p.proname = 'prepare_storefront_order_for_checkout' AND p.pronargs = 9;
-  definition := pg_catalog.pg_get_functiondef(function_oid);
-  IF position(new_loop IN definition) > 0 AND position(new_claim IN definition) > 0 THEN RETURN; END IF;
-  IF position(old_loop IN definition) = 0 THEN
-    RAISE EXCEPTION 'reuse claim loop source does not match expected shape';
-  END IF;
-  IF position(old_claim IN definition) = 0 THEN
-    RAISE EXCEPTION 'reuse claim branch source does not match expected shape';
-  END IF;
-  IF (length(definition) - length(replace(definition, old_loop, ''))) <> length(old_loop) THEN
-    RAISE EXCEPTION 'reuse claim loop anchor is not unique';
-  END IF;
-  IF (length(definition) - length(replace(definition, old_claim, ''))) <> length(old_claim) THEN
-    RAISE EXCEPTION 'reuse claim branch anchor is not unique';
-  END IF;
-  definition := replace(definition, old_loop, new_loop);
-  definition := replace(definition, old_claim, new_claim);
-  EXECUTE definition;
-END $claim_exclusion_reuse_3734$;
-DO $claim_exclusion_release_3734$
-DECLARE
-  function_oid oid;
-  definition text;
   old_reserved text := $marker$    IF v_has_reserved THEN
       IF v_is_pod THEN$marker$;
-  new_reserved text := $marker$    IF v_has_reserved AND v_item.offer_line IS TRUE THEN
+  new_reserved text := $marker$    IF v_has_reserved AND (v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL) THEN
       -- Offer lines are fulfilled from offer stock: release units the
-      -- pre-fix loop wrongly reserved instead of refreshing them.
+      -- pre-fix loop wrongly reserved instead of refreshing them. The
+      -- unit's own variant is logged (order lines on simple products
+      -- carry NULL variant_id; the unit sits on the anchor variant).
       DECLARE
-        v_release_id uuid;
+        v_release record;
       BEGIN
-        FOR v_release_id IN
-          SELECT vi.id FROM public.variant_inventory vi
+        FOR v_release IN
+          SELECT vi.id, vi.variant_id FROM public.variant_inventory vi
           WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
           FOR UPDATE
         LOOP
           PERFORM private.record_variant_inventory_event(
-            v_release_id, p_merchant_id, v_item.product_id, v_item.variant_id, 'reservation_released',
+            v_release.id, p_merchant_id, v_item.product_id, v_release.variant_id, 'reservation_released',
             'reserved', 'available', p_order_id, v_item.id, NULL, NULL, NULL,
             jsonb_build_object('reason', 'offer_line_double_reservation_repair')
           );
@@ -132,7 +108,7 @@ DECLARE
               reserved_at = NULL,
               reservation_expires_at = NULL,
               updated_at = now()
-          WHERE id = v_release_id;
+          WHERE id = v_release.id;
         END LOOP;
       END;
     ELSIF v_has_reserved THEN
@@ -142,13 +118,75 @@ BEGIN
   FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'private' AND p.proname = 'prepare_storefront_order_for_checkout' AND p.pronargs = 9;
   definition := pg_catalog.pg_get_functiondef(function_oid);
-  IF position(new_reserved IN definition) > 0 THEN RETURN; END IF;
+  IF position(new_loop IN definition) > 0
+     AND position(new_claim IN definition) > 0
+     AND position(new_reserved IN definition) > 0 THEN RETURN; END IF;
+  IF position(old_loop IN definition) = 0 THEN
+    RAISE EXCEPTION 'reuse claim loop source does not match expected shape';
+  END IF;
+  IF position(old_claim IN definition) = 0 THEN
+    RAISE EXCEPTION 'reuse claim branch source does not match expected shape';
+  END IF;
   IF position(old_reserved IN definition) = 0 THEN
     RAISE EXCEPTION 'reuse reserved branch source does not match expected shape';
+  END IF;
+  IF (length(definition) - length(replace(definition, old_loop, ''))) <> length(old_loop) THEN
+    RAISE EXCEPTION 'reuse claim loop anchor is not unique';
+  END IF;
+  IF (length(definition) - length(replace(definition, old_claim, ''))) <> length(old_claim) THEN
+    RAISE EXCEPTION 'reuse claim branch anchor is not unique';
   END IF;
   IF (length(definition) - length(replace(definition, old_reserved, ''))) <> length(old_reserved) THEN
     RAISE EXCEPTION 'reuse reserved branch anchor is not unique';
   END IF;
+  definition := replace(definition, old_loop, new_loop);
+  definition := replace(definition, old_claim, new_claim);
   definition := replace(definition, old_reserved, new_reserved);
   EXECUTE definition;
-END $claim_exclusion_release_3734$;
+END $claim_exclusion_prepare_3734$;
+DO $claim_exclusion_confirm_3734$
+DECLARE
+  function_oid oid;
+  definition text;
+  old_cselect text := $marker$  FOR v_item IN
+    SELECT oi.id, oi.product_id, oi.variant_id, oi.quantity
+    FROM public.order_items oi
+    WHERE oi.order_id = p_order_id$marker$;
+  new_cselect text := $marker$  FOR v_item IN
+    SELECT oi.id, oi.product_id, oi.variant_id, oi.quantity, oi.offer_line, oi.product_offer_id
+    FROM public.order_items oi
+    WHERE oi.order_id = p_order_id$marker$;
+  old_cbody text := $marker$  LOOP
+    SELECT has_variants, variant_model, inventory_tracking_policy, inventory_anchor_variant_id
+    INTO v_has_variants, v_variant_model, v_prod_policy, v_anchor_id$marker$;
+  new_cbody text := $marker$  LOOP
+    -- Offer lines are fulfilled from offer stock: skip serialized
+    -- inventory confirmation entirely (no reclaim, no late-payment
+    -- reservation error, no fulfillment-data rewrite).
+    IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL THEN
+      CONTINUE;
+    END IF;
+    SELECT has_variants, variant_model, inventory_tracking_policy, inventory_anchor_variant_id
+    INTO v_has_variants, v_variant_model, v_prod_policy, v_anchor_id$marker$;
+BEGIN
+  SELECT p.oid INTO STRICT function_oid
+  FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'private' AND p.proname = 'confirm_order_inventory_reservations' AND p.pronargs = 2;
+  definition := pg_catalog.pg_get_functiondef(function_oid);
+  IF position(new_cselect IN definition) > 0 AND position(new_cbody IN definition) > 0 THEN RETURN; END IF;
+  IF position(old_cselect IN definition) = 0 THEN
+    RAISE EXCEPTION 'confirm loop source does not match expected shape';
+  END IF;
+  IF position(old_cbody IN definition) = 0 THEN
+    RAISE EXCEPTION 'confirm body source does not match expected shape';
+  END IF;
+  IF (length(definition) - length(replace(definition, old_cselect, ''))) <> length(old_cselect) THEN
+    RAISE EXCEPTION 'confirm select anchor is not unique';
+  END IF;
+  IF (length(definition) - length(replace(definition, old_cbody, ''))) <> length(old_cbody) THEN
+    RAISE EXCEPTION 'confirm body anchor is not unique';
+  END IF;
+  definition := replace(definition, old_cselect, new_cselect);
+  definition := replace(definition, old_cbody, new_cbody);
+  EXECUTE definition;
+END $claim_exclusion_confirm_3734$;

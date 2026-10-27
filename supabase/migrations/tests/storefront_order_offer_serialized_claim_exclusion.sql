@@ -104,7 +104,16 @@ BEGIN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line, got %', v_claimed;
   END IF;
 
-  -- The pending-order reuse path must skip it too: run the order through
+  -- Legacy shape: pre-19100000 creators persisted product_offer_id with
+  -- offer_line false (the backfill keyed on offer_id; the trigger now
+  -- derives from both). Simulate it by flipping the marker with the
+  -- identity guard disabled; the product_offer_id stays set.
+  ALTER TABLE public.order_items DISABLE TRIGGER order_items_offer_id_snapshot_guard;
+  UPDATE public.order_items SET offer_line = false WHERE id = v_item_id;
+  ALTER TABLE public.order_items ENABLE TRIGGER order_items_offer_id_snapshot_guard;
+
+  -- The pending-order reuse path must skip it too, keyed on either
+  -- marker: run the order through
   -- prepare_storefront_order_for_checkout (unpaid + pending = reusable)
   -- and assert still zero claimed units.
   BEGIN
@@ -159,6 +168,26 @@ BEGIN
   END IF;
   IF v_legacy_item IS NOT NULL THEN
     RAISE EXCEPTION 'expected legacy unit detached from the offer line, got %', v_legacy_item;
+  END IF;
+
+  -- Payment confirmation path: a paid serialized offer order must not
+  -- reclaim base-product units nor raise late_payment_reservation_lost.
+  UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
+
+  BEGIN
+    PERFORM public.confirm_order_inventory_reservations(
+      p_merchant_id => v_merchant_id,
+      p_order_id => v_order_id
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order confirmation failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  SELECT count(*) INTO v_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_item_id;
+  IF v_claimed <> 0 THEN
+    RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
   END IF;
 END;
 $$;

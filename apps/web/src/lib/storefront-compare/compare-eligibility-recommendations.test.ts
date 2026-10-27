@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
-import { buildProductCompareCandidate } from './compare-eligibility';
+import {
+  buildBrandCompareCandidate,
+  buildProductCompareCandidate,
+} from './compare-eligibility';
 
 describe('buildProductCompareCandidate recommendation arrays', () => {
   it('does not count identical recommendation arrays as compare differentiators', () => {
@@ -73,6 +76,41 @@ describe('buildProductCompareCandidate recommendation arrays', () => {
       })
     ).toMatchObject({
       differentiatingSpecCount: 1,
+      isIndexable: false,
+    });
+  });
+});
+
+describe('buildBrandCompareCandidate recommendation arrays', () => {
+  it('does not count brand spec arrays with the same tags in different orders', () => {
+    const brandProducts = (
+      brand: string,
+      chipset: string,
+      ram: number,
+      recommendedFor: string[]
+    ) =>
+      [1, 2, 3].map((index) => ({
+        slug: `${brand.toLowerCase()}-${index}`,
+        name: `${brand} Camera ${index}`,
+        brand,
+        price: 100_000 * index,
+        product_key_specs: {
+          chipset,
+          ram_gb: ram,
+          recommended_for: recommendedFor,
+        },
+      }));
+
+    expect(
+      buildBrandCompareCandidate({
+        categorySlug: 'cameras',
+        products: [
+          ...brandProducts('Canon', 'Digic X', 8, ['Photography', 'Travel']),
+          ...brandProducts('Nikon', 'Expeed', 16, ['Travel', 'Photography']),
+        ],
+      })
+    ).toMatchObject({
+      differentiatingSpecCount: 2,
       isIndexable: false,
     });
   });

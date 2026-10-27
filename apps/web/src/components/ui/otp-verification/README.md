@@ -58,7 +58,7 @@ Return true only after the provider acknowledges the request, then update `sentA
 from the persisted request record and clear the caller's code. Failed or uncertain
 requests must not reset the window or retry automatically. Request rate limits are
 separate from validity: a five-minute lifetime is not a five-minute resend cooldown.
-The module does not override the server's final verification decision.
+The optional `resendCooldownSeconds` is a separate caller-controlled delay after `sentAt`; its default is zero, preserving existing provider behavior. Customer sign-in opts into 30 seconds. The module does not override the server's final verification decision.
 
 Oxygen approval timing comes from an authenticated, ownership-scoped read of the
 existing command ledger, correlated to the exact booking reference. Request-start

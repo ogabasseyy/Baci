@@ -30,7 +30,7 @@ export function CustomerEmailForm({
         <div className="relative">
           <Mail
             aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-store-background-text/60"
           />
           <Input
             id="email"
@@ -38,7 +38,7 @@ export function CustomerEmailForm({
             placeholder="you@example.com"
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
-            className="pl-10"
+            className="pl-10 border-store-border bg-store-background text-store-background-text placeholder:text-store-background-text/50"
             required
             autoFocus
             disabled={isSending || isGoogleLoading}
@@ -66,10 +66,12 @@ export function CustomerEmailForm({
       {/* Divider */}
       <div className="relative my-4">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t border-store-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-2 text-gray-400">Or continue with</span>
+          <span className="bg-store-background px-2 text-store-background-text/60">
+            Or continue with
+          </span>
         </div>
       </div>
 
@@ -77,7 +79,7 @@ export function CustomerEmailForm({
       <Button
         type="button"
         variant="outline"
-        className="w-full"
+        className="w-full border-store-border bg-store-background text-store-background-text hover:bg-store-secondary hover:text-store-secondary-text"
         disabled={isSending || isGoogleLoading}
         onClick={onGoogleSignIn}
       >
@@ -116,15 +118,15 @@ export function CustomerEmailForm({
         )}
       </Button>
 
-      <p className="text-xs text-center text-gray-400">
+      <p className="text-xs text-center text-store-background-text/60">
         By continuing, you agree to the store's terms of service and privacy
         policy.
       </p>
 
       {/* Account Creation Notice */}
-      <p className="text-center text-gray-500 text-sm">
+      <p className="text-center text-store-background-text/70 text-sm">
         New here?{' '}
-        <span className="text-gray-900 font-medium">
+        <span className="text-store-background-text font-medium">
           Just enter your email above to create an account
         </span>
       </p>

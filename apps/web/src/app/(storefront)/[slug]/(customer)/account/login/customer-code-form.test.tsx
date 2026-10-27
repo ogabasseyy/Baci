@@ -34,3 +34,21 @@ it('passes code changes and actions to the caller and blocks changes during veri
     screen.getByRole('button', { name: 'Use a different email' })
   ).toBeDisabled();
 });
+
+it('disables resending while the customer cooldown is active', () => {
+  const props = {
+    code: ['', '', '', '', '', ''],
+    error: '',
+    isVerifying: false,
+    isSending: false,
+    resendCooldownSeconds: 23,
+    codeInputRefs: { current: [] as (HTMLInputElement | null)[] },
+    handlePaste: vi.fn(),
+    handleCodeChange: vi.fn(),
+    handleKeyDown: vi.fn(),
+    handleResendCode: vi.fn(async () => {}),
+    onDifferentEmail: vi.fn(),
+  };
+  render(<CustomerCodeForm {...props} />);
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeDisabled();
+});

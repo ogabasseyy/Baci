@@ -67,6 +67,7 @@ function DefaultLoginPage() {
     error,
     setError,
     isSending,
+    resendCooldownSeconds,
     isVerifying,
     isGoogleLoading,
     setIsGoogleLoading,
@@ -81,9 +82,9 @@ function DefaultLoginPage() {
 
   if (merchantLoading || authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white">
-        <Loader2 className="size-8 animate-spin text-gray-400" />
-        <p className="text-sm text-gray-500">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-store-background">
+        <Loader2 className="size-8 animate-spin text-store-background-text/60" />
+        <p className="text-sm text-store-background-text/70">
           {merchantLoading
             ? 'Loading store data...'
             : 'Checking authentication...'}
@@ -93,16 +94,16 @@ function DefaultLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-store-background">
       {/* Subtle accent line at top using merchant's primary color */}
       <div className="h-1 w-full bg-store-primary" />
 
       {/* Header */}
-      <header className="border-b border-gray-100 bg-white">
+      <header className="border-b border-store-border bg-store-background">
         <div className="container mx-auto px-4 h-16 flex items-center">
           <Link
             href={asRoute('/')}
-            className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors"
+            className="flex items-center gap-2 text-store-background-text/70 hover:text-store-background-text transition-colors"
           >
             <ArrowLeft className="size-4" />
             <span>Back to store</span>
@@ -112,7 +113,7 @@ function DefaultLoginPage() {
 
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md border-store-border bg-store-background text-store-background-text">
           <CardHeader className="text-center space-y-2">
             {merchant?.logo_url ? (
               <Image
@@ -125,8 +126,8 @@ function DefaultLoginPage() {
                 unoptimized
               />
             ) : (
-              <div className="size-12 mx-auto mb-2 rounded-full bg-primary/10 flex items-center justify-center">
-                <ShieldCheck className="size-6 text-primary" />
+              <div className="size-12 mx-auto mb-2 rounded-full bg-store-primary/10 flex items-center justify-center">
+                <ShieldCheck className="size-6 text-store-primary" />
               </div>
             )}
             <CardTitle className="text-2xl">
@@ -134,7 +135,7 @@ function DefaultLoginPage() {
                 ? 'Enter verification code'
                 : 'Sign in or Create account'}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-store-background-text/70">
               {showCodeStep
                 ? `We sent a 6-digit code to ${otpState?.email}`
                 : 'Enter your email to sign in or sign up instantly'}
@@ -168,6 +169,7 @@ function DefaultLoginPage() {
                 error={error}
                 isVerifying={isVerifying}
                 isSending={isSending}
+                resendCooldownSeconds={resendCooldownSeconds}
                 codeInputRefs={codeInputRefs}
                 handlePaste={handlePaste}
                 handleCodeChange={handleCodeChange}
@@ -181,8 +183,8 @@ function DefaultLoginPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-100 py-4 bg-white">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-400">
+      <footer className="border-t border-store-border py-4 bg-store-background">
+        <div className="container mx-auto px-4 text-center text-sm text-store-background-text/60">
           Secure passwordless login powered by{' '}
           {merchant?.business_name || 'Baci'}
         </div>

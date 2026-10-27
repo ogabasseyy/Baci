@@ -1,6 +1,6 @@
 import { OtpVerificationField } from '@/components/ui/otp-verification';
 import { Button } from '@/components/ui/button';
-import { CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
+import { CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS, CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
 import type { OtpVerificationFormProps } from '../types';
 
 export function OtpVerificationForm({
@@ -29,6 +29,7 @@ export function OtpVerificationForm({
         error={error}
         sentAt={sentAt}
         ttlSeconds={CUSTOMER_OTP_TTL_SECONDS}
+        resendCooldownSeconds={CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS}
         onResend={verified ? undefined : onResend}
         successMessage="Signed in successfully."
       />

@@ -1,8 +1,13 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { useOtpResendCooldown } from '@/components/ui/otp-verification/use-otp-resend-cooldown';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
+import {
+  CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS,
+  CUSTOMER_OTP_TTL_SECONDS,
+} from '@/lib/customer-auth-constants';
 import {
   fetchCustomerLoginEmailPrefillForRedirect,
   sanitizeCustomerLoginEmailPrefill,
@@ -38,6 +43,16 @@ export function useCustomerLoginForm() {
 
   const sendLock = useRef(false);
   const verifyLock = useRef(false);
+  const sentAt =
+    otpState?.expiresAt === undefined
+      ? undefined
+      : otpState.expiresAt - CUSTOMER_OTP_TTL_SECONDS * 1000;
+  const cooldown = useOtpResendCooldown(
+    sentAt,
+    CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS,
+    !!otpState?.codeSent && !editingEmail
+  );
+  const resendCooldownSeconds = cooldown.remainingSeconds;
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Redirect if already authenticated
@@ -170,7 +185,7 @@ export function useCustomerLoginForm() {
   };
 
   const handleResendCode = async () => {
-    if (sendLock.current || verifyLock.current) return;
+    if (sendLock.current || verifyLock.current || !cooldown.canResend()) return;
     sendLock.current = true;
     setError('');
     setIsSending(true);
@@ -206,6 +221,7 @@ export function useCustomerLoginForm() {
     error,
     setError,
     isSending,
+    resendCooldownSeconds,
     isVerifying,
     isGoogleLoading,
     setIsGoogleLoading,

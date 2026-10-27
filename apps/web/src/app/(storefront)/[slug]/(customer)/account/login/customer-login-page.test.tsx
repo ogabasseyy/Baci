@@ -82,6 +82,22 @@ describe('CustomerLoginPage', () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/account'));
   });
 
+  it('uses merchant surface and text tokens for the login page', () => {
+    render(<CustomerLoginPage />);
+    expect(screen.getByRole('main').parentElement).toHaveClass(
+      'bg-store-background'
+    );
+    expect(screen.getByRole('banner')).toHaveClass(
+      'bg-store-background',
+      'border-store-border'
+    );
+    expect(screen.getByRole('contentinfo')).toHaveClass('border-store-border');
+    expect(screen.getByLabelText('Email address')).toHaveClass(
+      'bg-store-background',
+      'text-store-background-text'
+    );
+  });
+
   it('uses the storefront theme for the sign-in button', () => {
     render(<CustomerLoginPage />);
     expect(

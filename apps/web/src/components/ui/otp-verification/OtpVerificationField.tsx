@@ -5,6 +5,7 @@ import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import { InputOTP } from '@/components/ui/input-otp';
 import styles from './OtpVerificationField.module.css';
 import { OTP_CODE_TTL_SECONDS, useOtpExpiry } from './use-otp-expiry';
+import { useOtpResendCooldown } from './use-otp-resend-cooldown';
 
 export interface OtpVerificationFieldProps {
   value: string;
@@ -30,6 +31,8 @@ export interface OtpVerificationFieldProps {
   /** Successful send time in epoch milliseconds. No code or token is stored. */
   sentAt?: number;
   ttlSeconds?: number;
+  /** Optional caller-specific resend delay, independent of OTP expiry. */
+  resendCooldownSeconds?: number;
   onResend?: () => Promise<boolean>;
 }
 
@@ -55,6 +58,7 @@ export function OtpVerificationField({
   onStackComplete,
   sentAt,
   ttlSeconds = OTP_CODE_TTL_SECONDS,
+  resendCooldownSeconds = 0,
   onResend,
 }: OtpVerificationFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +81,12 @@ export function OtpVerificationField({
   const id = suppliedId ?? generatedId;
   const center = (length - 1) / 2;
   const expiry = useOtpExpiry(sentAt, ttlSeconds, !verified);
+  const cooldown = useOtpResendCooldown(
+    sentAt,
+    resendCooldownSeconds,
+    Boolean(onResend) && !verified
+  );
+  const coolingDown = cooldown.remainingSeconds > 0;
   const [resending, setResending] = useState(false);
   const [resendError, setResendError] = useState('');
   const resendLock = useRef(false);
@@ -85,7 +95,14 @@ export function OtpVerificationField({
     expiry.expired ||
     (expiry.expiresAt !== null && Date.now() >= expiry.expiresAt);
   async function resend() {
-    if (!onResend || disabled || pending || verified || resendLock.current)
+    if (
+      !onResend ||
+      disabled ||
+      pending ||
+      verified ||
+      resendLock.current ||
+      !cooldown.canResend()
+    )
       return;
     resendLock.current = true;
     setResending(true);
@@ -261,10 +278,16 @@ export function OtpVerificationField({
             <button
               type="button"
               className="min-h-11 font-semibold underline disabled:opacity-50"
-              disabled={disabled || pending || verified || resending}
+              disabled={
+                disabled || pending || verified || resending || coolingDown
+              }
               onClick={() => void resend()}
             >
-              {resending ? 'Sending…' : 'Resend code'}
+              {resending
+                ? 'Sending…'
+                : coolingDown
+                  ? `Resend code in ${cooldown.remainingSeconds}s`
+                  : 'Resend code'}
             </button>
           )}
         </div>

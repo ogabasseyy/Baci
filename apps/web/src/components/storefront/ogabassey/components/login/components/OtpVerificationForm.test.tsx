@@ -52,6 +52,20 @@ it('uses the configured one-hour login window and waits for explicit resend afte
   expect(handlers.onResend).not.toHaveBeenCalled();
 });
 
+it('limits resends for 30 seconds after a customer code is sent', () => {
+  const handlers = props();
+  render(<OtpVerificationForm {...handlers} />);
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeDisabled();
+  act(() => vi.advanceTimersByTime(30000));
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
+});
+
+it('permits a fresh resend but not verification when timing is invalid', () => {
+  render(<OtpVerificationForm {...props()} sentAt={Number.NaN} />);
+  expect(screen.getByRole('textbox', { name: 'Email verification code' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Resend code' })).toBeEnabled();
+});
+
 it('keeps verification pending until the caller confirms success and blocks email switching', () => {
   const handlers = props();
   const view = render(

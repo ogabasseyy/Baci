@@ -10,6 +10,7 @@ type Props = {
   error: string;
   isVerifying: boolean;
   isSending: boolean;
+  resendCooldownSeconds?: number;
   codeInputRefs: RefObject<(HTMLInputElement | null)[]>;
   handlePaste: (event: ClipboardEvent) => void;
   handleCodeChange: (index: number, value: string) => void;
@@ -25,6 +26,7 @@ export function CustomerCodeForm({
   error,
   isVerifying,
   isSending,
+  resendCooldownSeconds = 0,
   codeInputRefs,
   handlePaste,
   handleCodeChange,
@@ -51,7 +53,7 @@ export function CustomerCodeForm({
                 value={code[index]}
                 onChange={(e) => handleCodeChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
-                className="w-12 h-14 text-center text-2xl font-mono"
+                className="w-12 h-14 text-center text-2xl font-mono border-store-border bg-store-background text-store-background-text"
                 disabled={isSending || isVerifying}
                 autoFocus={index === 0}
                 aria-label={`Digit ${index + 1} of 6`}
@@ -64,14 +66,14 @@ export function CustomerCodeForm({
       {error && <p className="text-sm text-destructive text-center">{error}</p>}
 
       {isVerifying && (
-        <div className="flex items-center justify-center gap-2 text-muted-foreground">
+        <div className="flex items-center justify-center gap-2 text-store-background-text/70">
           <Loader2 className="size-4 animate-spin" />
           <span>Verifying…</span>
         </div>
       )}
 
       <div className="text-center space-y-2">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-store-background-text/70">
           Didn't receive the code?
         </p>
         <Button
@@ -79,16 +81,20 @@ export function CustomerCodeForm({
           variant="ghost"
           size="sm"
           onClick={handleResendCode}
-          disabled={isSending || isVerifying}
+          disabled={isSending || isVerifying || resendCooldownSeconds > 0}
         >
-          {isSending ? 'Sending...' : 'Resend code'}
+          {isSending
+            ? 'Sending...'
+            : resendCooldownSeconds > 0
+              ? `Resend code in ${resendCooldownSeconds}s`
+              : 'Resend code'}
         </Button>
       </div>
 
       <Button
         type="button"
         variant="outline"
-        className="w-full"
+        className="w-full border-store-border bg-store-background text-store-background-text hover:bg-store-secondary hover:text-store-secondary-text"
         onClick={onDifferentEmail}
         disabled={isSending || isVerifying}
       >

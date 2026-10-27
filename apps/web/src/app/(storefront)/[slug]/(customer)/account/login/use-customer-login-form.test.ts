@@ -17,7 +17,11 @@ const mocks = vi.hoisted(() => ({
   auth: {
     isAuthenticated: false,
     isLoading: false,
-    otpState: null as { email: string; codeSent: boolean } | null,
+    otpState: null as {
+      email: string;
+      codeSent: boolean;
+      expiresAt?: number;
+    } | null,
   },
 }));
 
@@ -184,6 +188,28 @@ describe('useCustomerLoginForm', () => {
     );
     expect(result.current.isVerifying).toBe(false);
     expect(result.current.code).toEqual(['', '', '', '', '', '']);
+  });
+
+  it('blocks resends until 30 seconds after the customer challenge was sent', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.auth.otpState = {
+        codeSent: true,
+        email: 'buyer@example.com',
+        expiresAt: Date.now() + 3600000,
+      };
+      mocks.sendOtp.mockResolvedValue({ success: true });
+      const { result } = renderHook(() => useCustomerLoginForm());
+      expect(result.current.resendCooldownSeconds).toBe(30);
+      await act(async () => result.current.handleResendCode());
+      expect(mocks.sendOtp).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTime(30000));
+      expect(result.current.resendCooldownSeconds).toBe(0);
+      await act(async () => result.current.handleResendCode());
+      expect(mocks.sendOtp).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('resends to the challenge address and reports failure', async () => {

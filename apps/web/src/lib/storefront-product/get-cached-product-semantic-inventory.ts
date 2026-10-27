@@ -1,5 +1,6 @@
 import { getPublicSupabaseClient } from '@/lib/cached-data';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
+import { getEffectiveProductStock } from '@/lib/product-stock';
 import type { ProductSemanticCandidate } from '@/lib/storefront-product/product-semantic-types';
 
 /**
@@ -188,7 +189,14 @@ function toProductSemanticCandidate(
     price,
     brand: row.brand,
     condition: row.condition,
-    stock: row.stock_quantity ?? row.stock,
+    // Effective stock (stock_quantity with legacy fallback), matching
+    // the scoped loader and normalizeProduct — a naive
+    // `stock_quantity ?? stock` zeroes rows with quantity 0 but
+    // positive legacy stock (live for ogabassey).
+    stock: getEffectiveProductStock({
+      stock: row.stock,
+      stock_quantity: row.stock_quantity,
+    }),
     category_slug: getJoinedCategorySlug(row) ?? fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
     is_parent: row.is_parent ?? null,

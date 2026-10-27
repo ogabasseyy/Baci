@@ -17,6 +17,7 @@ interface CustomerPaymentAccountRpcRow {
   created_at: string | null;
   assigned_at: string | null;
   expires_at: string | null;
+  id: string;
 }
 
 const MAX_ORDER_IDS_PER_LOOKUP = 100;
@@ -34,6 +35,7 @@ function toCustomerPaymentAccount(
     created_at: row.created_at,
     assigned_at: row.assigned_at,
     expires_at: row.expires_at,
+    id: row.id,
   };
 }
 

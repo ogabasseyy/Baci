@@ -76,4 +76,76 @@ describe('storefront account document payment accounts', () => {
 
     expect(result.order.virtual_account?.account_number).toBe('1111111111');
   });
+
+  it('keeps the expired Paystack alias for fully-covered manual orders', async () => {
+    const { supabase } = createStorefrontDocumentSupabaseMock({
+      orderPatch: {
+        recorded_by_user_id: 'staff-1',
+        import_job_id: null,
+        external_source: null,
+        amount_paid: 100000,
+      },
+      paymentAccounts: [
+        {
+          account_name: 'Expired Paystack',
+          account_number: '1111111111',
+          assigned_at: '2026-07-08T11:00:00.000Z',
+          bank_name: 'Paystack',
+          expires_at: '2026-07-08T12:30:00.000Z',
+          provider: 'paystack',
+        },
+        {
+          account_name: 'Legacy',
+          account_number: '2222222222',
+          bank_name: 'Korapay',
+          provider: 'korapay',
+        },
+      ],
+    });
+    const result = await getStorefrontAccountDocumentData({
+      supabase,
+      userId: 'user-1',
+      merchantSlug: 'ogabassey',
+      orderId: 'order-1',
+    });
+    expect(result.order.virtual_account?.account_number).toBe('1111111111');
+  });
+
+  it('excludes imported fully-covered orders from the historical DVA', async () => {
+    for (const orderPatch of [
+      { import_job_id: 'job-1', external_source: null },
+      { import_job_id: null, external_source: 'csv-import' },
+    ]) {
+      const { supabase } = createStorefrontDocumentSupabaseMock({
+        orderPatch: {
+          recorded_by_user_id: 'staff-1',
+          amount_paid: 100000,
+          ...orderPatch,
+        },
+        paymentAccounts: [
+          {
+            account_name: 'Expired Paystack',
+            account_number: '1111111111',
+            assigned_at: '2026-07-08T11:00:00.000Z',
+            bank_name: 'Paystack',
+            expires_at: '2026-07-08T12:30:00.000Z',
+            provider: 'paystack',
+          },
+          {
+            account_name: 'Legacy',
+            account_number: '2222222222',
+            bank_name: 'Korapay',
+            provider: 'korapay',
+          },
+        ],
+      });
+      const result = await getStorefrontAccountDocumentData({
+        supabase,
+        userId: 'user-1',
+        merchantSlug: 'ogabassey',
+        orderId: 'order-1',
+      });
+      expect(result.order.virtual_account?.account_number).toBe('2222222222');
+    }
+  });
 });

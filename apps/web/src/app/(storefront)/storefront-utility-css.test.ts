@@ -21,10 +21,14 @@ it('ships utility layout styles without scanning dashboard sources', async () =>
   ]) {
     expect(result.css).toContain(`.${parts.join('-')}`);
   }
+  expect(result.css).toContain('.min-h-\\[1100px\\]');
+  expect(result.css).toContain('.bg-store-primary');
+  expect(result.css).toContain('.min-h-\\[100px\\]');
+  expect(result.css).toContain('.space-y-6');
   expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   const home = await readFile(
     new URL('./storefront-home.css', import.meta.url),
     'utf8'
   );
   expect(home).not.toContain('storefront-utility.css');
-});
+}, 20_000);

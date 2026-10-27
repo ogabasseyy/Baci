@@ -17963,6 +17963,10 @@ export type Database = {
         };
       };
       deactivate_push_token: { Args: { p_token: string }; Returns: boolean };
+      dead_letter_corrupt_outbox_row: {
+        Args: { p_outbox_id: string; p_worker_id: string };
+        Returns: boolean;
+      };
       dead_letter_ingress_event_v1: {
         Args: {
           p_domain_event_id: string;
@@ -18605,8 +18609,32 @@ export type Database = {
           gateway: string | null;
           id: string;
           order_id: string;
+          payment_method: string | null;
           status: string | null;
           transaction_type: string | null;
+        }[];
+      };
+      get_manual_order_document_snapshot: {
+        Args: { p_claim_owner: string; p_outbox_id: string };
+        Returns: Json;
+      };
+      mark_manual_document_claim_sent: {
+        Args: {
+          p_claim_id: string;
+          p_merchant_id: string;
+          p_mailed_token_hash: string;
+        };
+        Returns: string;
+      };
+      get_customer_order_tax_subtotals: {
+        Args: { p_order_ids: string[] };
+        Returns: {
+          exemption_reason: string | null;
+          order_id: string;
+          tax_amount: number | null;
+          taxable_amount: number | null;
+          vat_category_code: string | null;
+          vat_rate: number | null;
         }[];
       };
       get_customer_order_payment_accounts: {
@@ -20293,6 +20321,10 @@ export type Database = {
         }[];
       };
       preview_receipt_claim: { Args: { p_token_hash: string }; Returns: Json };
+      preview_receipt_claim_v3: {
+        Args: { p_token_hash: string };
+        Returns: Json;
+      };
       process_due_settlements: {
         Args: never;
         Returns: {

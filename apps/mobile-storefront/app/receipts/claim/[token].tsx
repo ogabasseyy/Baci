@@ -1,5 +1,5 @@
 import { withReceiptClaimedSearchParam } from '@baci/shared/lib';
-import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
+import { sanitizeMaskedCustomerLoginEmailHint } from '@baci/shared/schemas';
 import { useQueryClient } from '@tanstack/react-query';
 import { type Href, Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -17,10 +17,6 @@ import { getSession } from '@/lib/supabase';
 
 function readParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function readEmailHint(value: string | string[] | undefined) {
-  return sanitizeCustomerLoginEmailHint(value) || null;
 }
 
 function appendEmailHintToLoginRedirect(href: string, email: string | null) {
@@ -67,8 +63,9 @@ async function readRedirectPath(response: Response) {
 async function readLoginEmailHint(response: Response) {
   try {
     const body = (await response.json()) as { emailHint?: unknown };
-    return sanitizeCustomerLoginEmailHint(
-      typeof body.emailHint === 'string' ? body.emailHint : undefined
+    // The login-email route returns only the masked hint.
+    return sanitizeMaskedCustomerLoginEmailHint(
+      typeof body.emailHint === 'string' ? body.emailHint : null
     );
   } catch {
     return '';
@@ -79,26 +76,24 @@ export default function ReceiptClaimScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const queryClient = useQueryClient();
+  // Note: the login redirect may carry an `email` param, but this page
+  // never trusts it: a crafted link could steer guidance at an
+  // attacker-chosen inbox. The hint always comes from the token-scoped
+  // login-email route below.
   const params = useLocalSearchParams<{
-    email?: string | string[];
     token?: string | string[];
   }>();
   const token = readParam(params.token);
-  const routeEmailHint = readEmailHint(params.email);
   const { isLoading: isAuthLoading, redirectTo } = useRequireAuth();
   const [attempt, setAttempt] = useState(0);
-  const [loginEmailHint, setLoginEmailHint] = useState<string | null>(
-    routeEmailHint
-  );
-  const [loginEmailHintLoaded, setLoginEmailHintLoaded] = useState(
-    Boolean(routeEmailHint)
-  );
+  const [loginEmailHint, setLoginEmailHint] = useState<string | null>(null);
+  const [loginEmailHintLoaded, setLoginEmailHintLoaded] = useState(false);
   const [message, setMessage] = useState('Checking your sign-in...');
   const [status, setStatus] = useState<ClaimStatus>('loading');
 
   useEffect(() => {
     const claimToken = token;
-    if (!redirectTo || !claimToken || routeEmailHint || loginEmailHintLoaded) {
+    if (!redirectTo || !claimToken || loginEmailHintLoaded) {
       return;
     }
 
@@ -132,7 +127,7 @@ export default function ReceiptClaimScreen() {
     return () => {
       isActive = false;
     };
-  }, [loginEmailHintLoaded, redirectTo, routeEmailHint, token]);
+  }, [loginEmailHintLoaded, redirectTo, token]);
 
   useEffect(() => {
     let isActive = true;

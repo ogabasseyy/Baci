@@ -263,6 +263,16 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
 ]);
 
 /**
+ * Bootstrap's per-instance ceiling while the shared quota store is
+ * degraded. A shopper needs roughly one bootstrap; the healthy budget
+ * exists to absorb shared-address traffic in a single global counter.
+ * Reusing it per instance would multiply the anonymous mint ceiling by
+ * the live instance count during exactly the outage when the shared
+ * store cannot bound abuse, so degraded instances grant far less.
+ */
+export const DEGRADED_BOOTSTRAP_LIMIT = 20;
+
+/**
  * Tenant/principal-scoped cart quotas reusing the Redis window-counter
  * primitive. Complements the proxy per-IP rate limit with budgets that
  * survive carrier-NAT sharing and bind anonymous creation to one
@@ -282,10 +292,14 @@ export async function checkCartQuota(
     input.operation === 'bootstrap' ? bootstrapMemoryCounters : memoryCounters
   );
   const failClosed = counter.degraded && requiresSharedStore;
+  const limit =
+    counter.degraded && input.operation === 'bootstrap'
+      ? Math.min(budget.limit, DEGRADED_BOOTSTRAP_LIMIT)
+      : budget.limit;
   return {
-    allowed: !failClosed && counter.count <= budget.limit,
-    limit: budget.limit,
-    remaining: failClosed ? 0 : Math.max(0, budget.limit - counter.count),
+    allowed: !failClosed && counter.count <= limit,
+    limit,
+    remaining: failClosed ? 0 : Math.max(0, limit - counter.count),
     resetTime: counter.resetTime,
   };
 }

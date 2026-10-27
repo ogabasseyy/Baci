@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
-import { CART_QUOTA_BUDGETS } from '@/lib/cart/request-quota';
+import { DEGRADED_BOOTSTRAP_LIMIT } from '@/lib/cart/request-quota';
 import { getCart } from '@/lib/cart/service';
 import { POST } from './route';
 
@@ -113,15 +113,13 @@ function postBootstrap(init: {
 }
 
 describe('POST /api/storefront/cart/bootstrap quota', () => {
+  // The unit environment has no Redis, so the per-instance degraded
+  // bootstrap ceiling is the bound these route tests observe.
   it('bounds anonymous bootstraps per merchant and client', async () => {
     let response = await postBootstrap({ body: {} });
     expect(response.status).toBe(201);
 
-    for (
-      let attempt = 1;
-      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
-      attempt++
-    ) {
+    for (let attempt = 1; attempt < DEGRADED_BOOTSTRAP_LIMIT; attempt++) {
       response = await postBootstrap({ body: {} });
       expect(response.status).toBe(201);
     }
@@ -131,11 +129,7 @@ describe('POST /api/storefront/cart/bootstrap quota', () => {
   });
 
   it('performs no merchant resolution once the pre-resolution quota is exhausted', async () => {
-    for (
-      let attempt = 0;
-      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
-      attempt++
-    ) {
+    for (let attempt = 0; attempt < DEGRADED_BOOTSTRAP_LIMIT; attempt++) {
       const response = await postBootstrap({ body: {} });
       expect(response.status).toBe(201);
     }

@@ -5,7 +5,11 @@ import {
   checkCartQuota,
   MEMORY_COUNTER_MAX_ENTRIES,
 } from './request-context';
-import { incrementWindowCounter, memoryCounters } from './request-quota';
+import {
+  DEGRADED_BOOTSTRAP_LIMIT,
+  incrementWindowCounter,
+  memoryCounters,
+} from './request-quota';
 
 const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
 
@@ -77,6 +81,31 @@ describe('checkCartQuota degraded store', () => {
         subject: 'ip-degraded',
       })
     ).resolves.toMatchObject({ allowed: false });
+  });
+
+  it('grants a reduced per-instance bootstrap limit while degraded', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    // The degraded ceiling is per instance: granting the full shared
+    // budget on every instance would multiply the anonymous mint
+    // ceiling by the instance count during a Redis outage.
+    const input = {
+      merchantId: MERCHANT_ID,
+      operation: 'bootstrap',
+      subject: 'ip-degraded-limit',
+    } as const;
+    await expect(checkCartQuota(input)).resolves.toMatchObject({
+      allowed: true,
+      limit: DEGRADED_BOOTSTRAP_LIMIT,
+    });
+    for (let i = 1; i < DEGRADED_BOOTSTRAP_LIMIT; i++) {
+      await checkCartQuota(input);
+    }
+    await expect(checkCartQuota(input)).resolves.toMatchObject({
+      allowed: false,
+      limit: DEGRADED_BOOTSTRAP_LIMIT,
+      remaining: 0,
+    });
   });
 
   it('fails revocation closed in production without Redis', async () => {

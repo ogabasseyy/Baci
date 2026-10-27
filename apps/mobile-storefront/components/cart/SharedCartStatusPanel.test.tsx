@@ -5,11 +5,27 @@ import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
 const productId = '33333333-3333-4333-8333-333333333333';
+it('explains quota exhaustion while preserving the cart and retry control', () => {
+  useCartStore.setState({ items: [] });
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'error',
+    code: 'quota_exceeded',
+    snapshot: null,
+    mergeConflicts: [],
+    refresh: jest.fn().mockResolvedValue(undefined),
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(screen.getByText(/Too many cart requests right now/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Retry sync' })).toBeTruthy();
+  expect(useCartStore.getState().items).toEqual([]);
+});
 beforeEach(() => {
   useCartStore.setState({ items: [] });
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'error',
+    code: undefined,
     snapshot: null,
     metadataReady: false,
     mergeConflicts: [],

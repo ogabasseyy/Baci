@@ -1,152 +1,23 @@
 import type { NextRequest } from 'next/server';
 
-// ---------------------------------------------------------------------------
-// IP validation (Edge-compatible, no Node.js 'net' module)
-// ---------------------------------------------------------------------------
-
-const IPV4_REGEX =
-  /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-
-const IPV6_REGEX =
-  /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$|^[0-9a-fA-F]{1,4}::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}$|^(?:[0-9a-fA-F]{1,4}:){1,7}:$|^::$/;
-
-function isValidIP(ip: string): boolean {
-  return IPV4_REGEX.test(ip) || IPV6_REGEX.test(ip);
-}
-
-// Published Cloudflare egress ranges (https://www.cloudflare.com/ips-v4
-// and /ips-v6, fetched 2026-10-26). They authenticate the immediate
-// peer: CF-Connecting-IP is only meaningful when the platform-verified
-// connecting address is itself a Cloudflare egress, because Cloudflare
-// overwrites that header at its edge. A direct-to-origin caller's peer
-// address is their own, so forged CF headers from them are ignored.
-const CLOUDFLARE_IPV4_RANGES = [
-  '173.245.48.0/20',
-  '103.21.244.0/22',
-  '103.22.200.0/22',
-  '103.31.4.0/22',
-  '141.101.64.0/18',
-  '108.162.192.0/18',
-  '190.93.240.0/20',
-  '188.114.96.0/20',
-  '197.234.240.0/22',
-  '198.41.128.0/17',
-  '162.158.0.0/15',
-  '104.16.0.0/13',
-  '104.24.0.0/14',
-  '172.64.0.0/13',
-  '131.0.72.0/22',
-] as const;
-const CLOUDFLARE_IPV6_RANGES = [
-  '2400:cb00::/32',
-  '2606:4700::/32',
-  '2803:f800::/32',
-  '2405:b500::/32',
-  '2405:8100::/32',
-  '2a06:98c0::/29',
-  '2c0f:f248::/32',
-] as const;
-
-function ipv4ToBigInt(ip: string): bigint | null {
-  if (!IPV4_REGEX.test(ip)) return null;
-  return ip
-    .split('.')
-    .reduce((acc, part) => (acc << 8n) | BigInt(Number(part)), 0n);
-}
-
-function ipv6ToBigInt(ip: string): bigint | null {
-  if (!IPV6_REGEX.test(ip)) return null;
-  let value = ip;
-  const lastColon = value.lastIndexOf(':');
-  const tail = value.slice(lastColon + 1);
-  if (IPV4_REGEX.test(tail)) {
-    const v4 = ipv4ToBigInt(tail);
-    if (v4 === null) return null;
-    value =
-      value.slice(0, lastColon + 1) +
-      `${Number((v4 >> 16n) & 0xffffn).toString(16)}:${Number(v4 & 0xffffn).toString(16)}`;
-  }
-  const [head, rest] = value.split('::');
-  const headGroups = head ? head.split(':') : [];
-  const tailGroups = rest ? rest.split(':') : [];
-  if (rest === undefined && headGroups.length !== 8) return null;
-  const missing = 8 - headGroups.length - tailGroups.length;
-  if (missing < 0) return null;
-  const groups = [
-    ...headGroups,
-    ...Array.from({ length: missing }, () => '0'),
-    ...tailGroups,
-  ];
-  if (groups.length !== 8) return null;
-  let result = 0n;
-  for (const group of groups) {
-    const parsed = Number.parseInt(group, 16);
-    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
-      return null;
-    }
-    result = (result << 16n) | BigInt(parsed);
-  }
-  return result;
-}
-
-function ipInCidr(
-  address: bigint,
-  cidr: string,
-  parse: (ip: string) => bigint | null,
-  bits: bigint
-): boolean {
-  const [base, prefixText] = cidr.split('/');
-  const baseValue = base ? parse(base) : null;
-  const prefix = BigInt(Number(prefixText));
-  if (baseValue === null || prefix < 0n || prefix > bits) return false;
-  if (prefix === 0n) return true;
-  const shift = bits - prefix;
-  return address >> shift === baseValue >> shift;
-}
-
-function isCloudflarePeer(ip: string): boolean {
-  const v4 = ipv4ToBigInt(ip);
-  if (v4 !== null) {
-    return CLOUDFLARE_IPV4_RANGES.some((cidr) =>
-      ipInCidr(v4, cidr, ipv4ToBigInt, 32n)
-    );
-  }
-  const v6 = ipv6ToBigInt(ip);
-  if (v6 !== null) {
-    return CLOUDFLARE_IPV6_RANGES.some((cidr) =>
-      ipInCidr(v6, cidr, ipv6ToBigInt, 128n)
-    );
-  }
-  return false;
-}
-
-// ---------------------------------------------------------------------------
-// Client identifier (IP)
-// ---------------------------------------------------------------------------
+import {
+  isValidIP,
+  normalizedClientIp,
+  platformPeerIp,
+  verifiedCloudflareVisitorIp,
+  visitorQuotaIdentity,
+} from './cloudflare-peer';
 
 /**
- * Visitor address from CF-Connecting-IP, but only when the immediate
- * platform-verified peer is itself a Cloudflare egress and a CF-Ray
- * header is present. Cloudflare overwrites CF-Connecting-IP at its
- * edge, so a Cloudflare peer authenticates the header; a
- * direct-to-origin caller forging both headers has a non-Cloudflare
- * peer address and gets null here.
+ * Whether the deployment guarantees the edge overwrites proxy headers:
+ * on Vercel, or where the operator explicitly asserts a trusted proxy
+ * (CART_TRUST_PROXY_HEADERS=true).
  */
-function verifiedCloudflareVisitorIp(
-  request: NextRequest,
-  peerIp: string | null
-): string | null {
-  const cloudflareIp = request.headers.get('cf-connecting-ip');
-  if (
-    peerIp &&
-    isCloudflarePeer(peerIp) &&
-    request.headers.get('cf-ray') &&
-    cloudflareIp &&
-    isValidIP(cloudflareIp)
-  ) {
-    return cloudflareIp;
-  }
-  return null;
+function proxyHeadersGuaranteed(): boolean {
+  return (
+    process.env.VERCEL === '1' ||
+    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true'
+  );
 }
 
 export function getClientIdentifier(request: NextRequest): string {
@@ -158,13 +29,12 @@ export function getClientIdentifier(request: NextRequest): string {
 
   // Behind Cloudflare the platform address is a shared egress, not the
   // visitor: prefer the authenticated visitor address so per-IP rate
-  // limiting also buckets per customer instead of per egress.
-  const peerIp =
-    requestIp && isValidIP(requestIp)
-      ? requestIp
-      : realIp && isValidIP(realIp)
-        ? realIp
-        : null;
+  // limiting also buckets per customer instead of per egress. The peer
+  // evidence must itself be trustworthy: the platform address, or an
+  // x-real-ip only under the same proxy guarantee the trusted
+  // identifier requires. The result is always a real IP address (or
+  // 'unknown'): consumers persist and forward it as one.
+  const peerIp = platformPeerIp(request, proxyHeadersGuaranteed());
   const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
   if (visitorIp) return visitorIp;
 
@@ -206,9 +76,7 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
   // asserts a trusted proxy (CART_TRUST_PROXY_HEADERS=true). On any
   // other deployment the header is client-suppliable, so it collapses
   // into the shared 'unknown' bucket instead of resetting budgets.
-  const proxyGuaranteed =
-    process.env.VERCEL === '1' ||
-    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
+  const proxyGuaranteed = proxyHeadersGuaranteed();
   if (proxyGuaranteed) {
     const realIp = request.headers.get('x-real-ip');
     // Behind Cloudflare, the platform address is a shared Cloudflare
@@ -216,19 +84,24 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     // customers into one bootstrap bucket and mass-produces "cart sync
     // was interrupted" failures. Prefer the authenticated visitor
     // address when the immediate peer proves Cloudflare traversal.
-    const peerIp =
-      requestIp && isValidIP(requestIp)
-        ? requestIp
-        : realIp && isValidIP(realIp)
-          ? realIp
-          : null;
+    const peerIp = platformPeerIp(request, true);
     const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
-    if (visitorIp) return visitorIp;
-    if (realIp && isValidIP(realIp)) return realIp;
+    // /64 bucketing is scoped to the verified-visitor path: it exists
+    // because a verified IPv6 visitor controls their interface
+    // identifier. Fallback platform addresses keep their exact
+    // (normalized) form so unrelated subscribers sharing a /64 —
+    // carrier NAT64, corporate egress — never share anonymous budgets.
+    if (visitorIp) return visitorQuotaIdentity(visitorIp);
+    // Fall back in platformPeerIp's trust order: the platform address
+    // outranks any header, even a guaranteed one.
+    if (requestIp && isValidIP(requestIp)) {
+      return normalizedClientIp(requestIp);
+    }
+    if (realIp && isValidIP(realIp)) return normalizedClientIp(realIp);
   }
 
   if (requestIp && isValidIP(requestIp)) {
-    return requestIp;
+    return normalizedClientIp(requestIp);
   }
   return 'unknown';
 }

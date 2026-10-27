@@ -2,13 +2,17 @@ name: Cloudflare Ranges Freshness
 
 # The cart quota identity trusts CF-Connecting-IP only from peers in
 # Cloudflare's published egress ranges, hardcoded in
-# apps/web/src/lib/rate-limit-client.ts. This weekly check fails when
-# Cloudflare publishes different ranges so the trust anchor cannot go
-# silently stale: update the constants (and fetch date) to fix it.
+# apps/web/src/lib/cloudflare-peer.ts. This check fails when Cloudflare
+# publishes different ranges so the trust anchor cannot go silently
+# stale: update the constants (and fetch date) to fix it.
 
 on:
   schedule:
     - cron: '17 5 * * 1'
+  pull_request:
+    paths:
+      - apps/web/src/lib/cloudflare-peer.ts
+      - .github/workflows/cloudflare-ranges.yml
   workflow_dispatch:
 
 permissions:
@@ -22,9 +26,15 @@ jobs:
       - name: Compare hardcoded ranges with Cloudflare publication
         run: |
           set -euo pipefail
-          file=apps/web/src/lib/rate-limit-client.ts
-          grep -oE "'[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+'" "$file" | tr -d "'" | sort > /tmp/hardcoded-v4.txt
-          grep -oE "'[0-9a-fA-F:]+/[0-9]+'" "$file" | tr -d "'" | grep ':' | sort > /tmp/hardcoded-v6.txt
+          file=apps/web/src/lib/cloudflare-peer.ts
+          # Extract only the two named range arrays, anchored by their
+          # const declarations, so other CIDR-shaped literals elsewhere
+          # in the file can neither pollute nor dodge the check.
+          sed -n '/^const CLOUDFLARE_IPV4_RANGES = \[/,/^] as const;/p' "$file" \
+            | grep -oE "'[^']+'" | tr -d "'" | sort > /tmp/hardcoded-v4.txt
+          sed -n '/^const CLOUDFLARE_IPV6_RANGES = \[/,/^] as const;/p' "$file" \
+            | grep -oE "'[^']+'" | tr -d "'" | sort > /tmp/hardcoded-v6.txt
+          test -s /tmp/hardcoded-v4.txt && test -s /tmp/hardcoded-v6.txt
           curl -fsS https://www.cloudflare.com/ips-v4 | sort > /tmp/live-v4.txt
           curl -fsS https://www.cloudflare.com/ips-v6 | sort > /tmp/live-v6.txt
           diff -u /tmp/live-v4.txt /tmp/hardcoded-v4.txt

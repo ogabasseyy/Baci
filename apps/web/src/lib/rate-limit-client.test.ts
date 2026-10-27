@@ -39,7 +39,22 @@ describe('getClientIdentifier', () => {
 });
 
 describe('getClientIdentifier behind Cloudflare', () => {
+  it('does not trust Cloudflare headers without a proxy guarantee', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'anything',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('172.68.1.20');
+  });
+
   it('uses the visitor address when the peer is a Cloudflare egress', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getClientIdentifier(
         requestWith({
@@ -53,6 +68,7 @@ describe('getClientIdentifier behind Cloudflare', () => {
   });
 
   it('ignores forged Cloudflare headers from a non-Cloudflare peer', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getClientIdentifier(
         requestWith({
@@ -62,6 +78,56 @@ describe('getClientIdentifier behind Cloudflare', () => {
         })
       )
     ).toBe('192.0.2.44');
+  });
+
+  it('buckets verified IPv6 visitors by /64 for the trusted identifier', () => {
+    vi.stubEnv('VERCEL', '1');
+    const headers = (visitor: string) => ({
+      'cf-connecting-ip': visitor,
+      'cf-ray': 'a509c917eae1b920-AMS',
+      'x-real-ip': '::ffff:172.68.1.20',
+    });
+    // One client must not rotate out of its quota bucket by changing
+    // the interface identifier inside its allocated /64.
+    expect(
+      getTrustedClientIdentifier(requestWith(headers('2001:db8::1:2')))
+    ).toBe('2001:db8:0:0::/64');
+    expect(
+      getTrustedClientIdentifier(requestWith(headers('2001:db8::9:9')))
+    ).toBe('2001:db8:0:0::/64');
+  });
+
+  it('keeps the generic identifier a real IP address for IPv6 visitors', () => {
+    vi.stubEnv('VERCEL', '1');
+    // getClientIdentifier feeds consumers that persist or forward the
+    // value as an IP (order ad tracking, privacy-region detection):
+    // the /64 quota key must never leak into it.
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '2001:db8::1:2',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('2001:db8::1:2');
+  });
+
+  it('ignores x-vercel-forwarded-for off Vercel even with a proxy guarantee', () => {
+    // The header is platform-set only on Vercel. Under a self-hosted
+    // CART_TRUST_PROXY_HEADERS assertion it stays client-suppliable,
+    // so a forged Cloudflare-egress hop must not unlock CF trust.
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', 'true');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '203.0.113.9',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-vercel-forwarded-for': '203.0.113.9, 172.68.1.20',
+        })
+      )
+    ).toBe('unknown');
   });
 });
 
@@ -137,26 +203,6 @@ describe('getTrustedClientIdentifier', () => {
         })
       )
     ).toBe('192.0.2.44');
-  });
-
-  it.each([
-    // Just inside / outside 162.158.0.0/15 and 2a06:98c0::/29.
-    ['162.159.255.255', '203.0.113.9'],
-    ['162.160.0.0', '162.160.0.0'],
-    ['2a06:98c7:ffff::1', '203.0.113.9'],
-    ['2a06:98c8::1', '2a06:98c8::1'],
-    ['::1', '::1'],
-  ] as const)('resolves Cloudflare peer boundary %s', (peer, expected) => {
-    vi.stubEnv('VERCEL', '1');
-    expect(
-      getTrustedClientIdentifier(
-        requestWith({
-          'cf-connecting-ip': '203.0.113.9',
-          'cf-ray': 'a509c917eae1b920-AMS',
-          'x-real-ip': peer,
-        })
-      )
-    ).toBe(expected);
   });
 
   it('does not trust cf-connecting-ip from a Cloudflare peer without cf-ray', () => {

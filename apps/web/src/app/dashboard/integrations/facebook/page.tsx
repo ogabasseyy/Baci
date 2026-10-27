@@ -2,6 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { SetupInstructions } from '@/components/analytics/setup-instructions';
 import { TrackingPixelSection } from '@/components/dashboard/integrations/tracking-pixel-section';
 import { Button } from '@/components/ui/button';
@@ -64,6 +65,7 @@ export default function FacebookIntegrationPage() {
         onSave={handleSave}
       >
         <SetupInstructions platform="facebook" />
+        <AdPlatformSetupGuide platform="facebook" />
       </TrackingPixelSection>
     </div>
   );

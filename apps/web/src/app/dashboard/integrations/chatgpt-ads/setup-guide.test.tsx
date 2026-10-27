@@ -3,25 +3,20 @@ import { render, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { ChatgptSetupGuide } from './setup-guide';
 
-it('provides illustrated setup steps and warns merchants to use their own credentials', () => {
+it('provides a safe example screen and warns merchants to use their own credentials', () => {
   render(<ChatgptSetupGuide />);
+  expect(screen.getByText(/generic event setup view/)).toBeInTheDocument();
   expect(
-    screen.getByText(/Use your own account’s ID and key/)
+    screen.getByText(/never copy identifiers from examples/)
   ).toBeInTheDocument();
   expect(
     screen.getByText(/Never share a screenshot of the generated key/)
   ).toBeInTheDocument();
-  for (const title of [
-    '1. Create a website data source',
-    '2. Create the successful payment conversion',
-    '3. Connect the Pixel',
-    '4. Create a server key',
-  ]) {
-    const image = screen.getByAltText(title);
-    const src = image.getAttribute('src');
-    expect(src).toMatch(/^\/guides\/chatgpt-ads\/.+\.png$/);
-    expect(existsSync(`public${src}`)).toBe(true);
-  }
+  expect(screen.getAllByRole('img')).toHaveLength(1);
+  const image = screen.getByAltText('3. Connect the Pixel example screen');
+  const src = image.getAttribute('src');
+  expect(src).toBe('/guides/chatgpt-ads/03-pixel-event.png');
+  expect(existsSync(`public${src}`)).toBe(true);
   expect(
     screen.getByRole('link', {
       name: /Official conversion setup documentation/,
@@ -34,4 +29,12 @@ it('provides illustrated setup steps and warns merchants to use their own creden
     'href',
     'https://ads.openai.com/'
   );
+  expect(
+    screen.getByRole('heading', { name: 'What to verify' })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /Successful payment is sent only after Baci confirms full payment/
+    )
+  ).toBeInTheDocument();
 });

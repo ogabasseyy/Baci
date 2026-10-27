@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMerchant } from '@/hooks/use-merchant-client';
@@ -150,6 +151,7 @@ function ConnectionForm({
         event code belongs to that Pixel. Successful-payment events are sent
         only after Baci confirms the full payment.
       </p>
+      <AdPlatformSetupGuide platform="x" />
       <form
         className="space-y-4"
         onSubmit={(event) => {

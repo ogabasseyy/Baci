@@ -48,13 +48,15 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: Cloudflare egress ranges drifted from cloudflare-peer.ts
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          title='Cloudflare egress ranges drifted from cloudflare-peer.ts'
-          body='The weekly freshness check failed: Cloudflare published egress ranges that differ from the hardcoded lists in `apps/web/src/lib/cloudflare-peer.ts`. Until updated, shoppers arriving via unlisted egress ranges lose verified-visitor quota identity and share the egress bucket. Update `CLOUDFLARE_IPV4_RANGES`/`CLOUDFLARE_IPV6_RANGES` (and the fetch date) from https://www.cloudflare.com/ips-v4 and /ips-v6. Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          body="The weekly freshness check failed: Cloudflare published egress ranges that differ from the hardcoded lists in apps/web/src/lib/cloudflare-peer.ts. Until updated, shoppers arriving via unlisted egress ranges lose verified-visitor quota identity and share the egress bucket. Update CLOUDFLARE_IPV4_RANGES/CLOUDFLARE_IPV6_RANGES (and the fetch date) from https://www.cloudflare.com/ips-v4 and /ips-v6. Failed run: $RUN_URL"
+          search="in:title \"$ISSUE_TITLE\""
+          existing=$(gh issue list --state open --search "$search" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else
-            gh issue create --title "$title" --body "$body"
+            gh issue create --title "$ISSUE_TITLE" --body "$body"
           fi

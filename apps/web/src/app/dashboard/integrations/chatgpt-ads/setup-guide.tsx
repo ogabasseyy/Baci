@@ -32,15 +32,15 @@ const steps = [
     images: [
       {
         src: '03-pixel-event.png',
-        alt: 'Example order_created browser Pixel event call with account source masked',
+        alt: 'Example order_created browser Pixel event call',
         width: 500,
         height: 400,
       },
     ],
   },
   {
-    title: '4. Create a server key',
-    text: 'Open the Conversions API instructions, choose Create conversion key, and give it a recognizable name. Paste the secret into Baci’s Conversions API key field. Never share a screenshot of the generated key.',
+    title: '4. (Optional) Create a server key',
+    text: 'Browser events work with the Pixel ID alone. To send successful-payment server events, open the Conversions API instructions, choose Create conversion key, and give it a recognizable name. Paste the secret into Baci’s Conversions API key field. Never share a screenshot of the generated key.',
     images: [
       {
         src: '04-capi-event.png',
@@ -66,8 +66,9 @@ export function ChatgptSetupGuide() {
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">
           These are genuine provider screens with account-specific values
-          masked. Use the Pixel ID and key from your own Ads Manager account; do
-          not copy another store’s ID, and keep keys private. Never share
+          masked. Use the Pixel ID from your own Ads Manager account; browser
+          events do not require a server key. Successful-payment server events
+          do. Do not copy another store’s ID, and keep keys private. Never share
           screenshots that reveal credentials.
         </p>
         {steps.map((step) => (

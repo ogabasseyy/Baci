@@ -43,9 +43,11 @@ after enabling the Baci integration.
 
 ## 4. Configure server conversions
 
-The **Conversions API** tab shows the server request. The CAPI key belongs on
-the server. Never put it in theme HTML, client JavaScript, a public environment
-variable, a support screenshot, or a chat message.
+Browser events work with the Pixel ID alone. A server key is optional and is
+needed only for successful-payment server events. The **Conversions API** tab
+shows the server request. The CAPI key belongs on the server. Never put it in
+theme HTML, client JavaScript, a public environment variable, a support
+screenshot, or a chat message.
 
 ![Server conversion request with placeholders only](screenshots/04-capi-event.png)
 
@@ -88,3 +90,4 @@ The screenshots represent the captured UI, which can change. For payload and
 SDK behavior, follow the current developer references.
 
 [Local validation and remaining production rollout](validation.md).
+[Screenshot review checklist](../ad-tracking-screenshot-review.md).

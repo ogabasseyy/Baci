@@ -52,13 +52,13 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/tiktok-settings.jpg',
-        alt: 'TikTok Pixel and Access Token settings in Baci with identifiers masked',
-        width: 1123,
-        height: 370,
+        alt: 'TikTok Pixel and Access Token settings in Baci; the Pixel ID is masked and the token value is not shown',
+        width: 1124,
+        height: 367,
       },
     ],
     steps: [
-      'In TikTok Ads Manager, open Assets → Events → Web Events and create a Pixel, or select the website Pixel for this store.',
+      'In TikTok Ads Manager, open Tools → Events → Connect data source → Web to create a Pixel, or select the website Pixel for this store.',
       'Copy the Pixel ID from its details. For server-side events, open Pixel Settings → Generate Access Token to create or retrieve the Events API access token; this is optional for browser-only tracking.',
       'Enter the Pixel ID and, if enabling server-side events, the token in this Baci page and save. Keep the token private and do not install a duplicate pixel script.',
       'Grant Marketing consent on your storefront, then verify browser and server events separately in TikTok Events Manager.',
@@ -90,9 +90,9 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/x-connection-settings.jpg',
-        alt: 'X screenshot of the optional Conversions API access token and OAuth fields in Baci; inputs are blank',
-        width: 1165,
-        height: 535,
+        alt: 'X screenshot of the optional server credential fields in Baci; all input values are blank',
+        width: 700,
+        height: 620,
       },
     ],
     steps: [
@@ -136,13 +136,15 @@ export function AdPlatformSetupGuide({ platform }: { platform: AdPlatform }) {
             <h3 className="font-medium">Baci settings screenshots</h3>
             <p className="text-sm text-muted-foreground">
               These genuine settings screens have account identifiers and
-              credential indicators masked. Enter values from your own provider
-              account; never copy credentials from an image.
+              credential values masked. Enter values from your own provider
+              account; never copy credentials from an image. Generic saved
+              status text may remain visible, but no credential value does.
             </p>
             {platform === 'x' ? (
               <p className="text-sm text-muted-foreground">
-                This screenshot shows the optional server credential fields.
-                Enter Pixel ID and event codes in their separate fields above.
+                This cropped screenshot starts at the optional server credential
+                fields. Enter Pixel ID and event codes in their separate fields
+                above.
               </p>
             ) : null}
             {guide.screenshots.map((screenshot) => (

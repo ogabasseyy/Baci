@@ -22,6 +22,9 @@ vi.mock(
   '@/lib/storefront-compare/load-compare-category-inventory-safely',
   () => ({ loadCompareCategoryInventorySafely: vi.fn(async () => null) })
 );
+vi.mock('./load-price-band-destination-pool-safely', () => ({
+  loadPriceBandDestinationPoolSafely: vi.fn(async () => null),
+}));
 vi.mock(
   '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely',
   () => ({

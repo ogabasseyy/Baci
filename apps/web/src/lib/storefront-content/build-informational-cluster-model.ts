@@ -14,6 +14,7 @@ import type {
 } from './content-cluster-types';
 import { inferContentClusterContext } from './infer-content-cluster-context';
 import { isAvailableProduct } from './is-available-product';
+import { loadPriceBandDestinationPoolSafely } from './load-price-band-destination-pool-safely';
 import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
 
 interface CategoryInventoryProduct {
@@ -210,6 +211,17 @@ export async function buildInformationalClusterModel(
       : (compareInventory?.products ?? []),
   });
 
+  const hasBandLink = commerceLinks.some((link) =>
+    link.href.includes('/best-under/')
+  );
+  const bandDestinationPool =
+    input.categoryDataOverride?.destinationVerified === true || !hasBandLink
+      ? undefined
+      : await loadPriceBandDestinationPoolSafely({
+          merchantId: input.merchantId,
+          merchantSlug: input.merchantSlug,
+          categorySlug,
+        });
   const verifiedCommerceLinks =
     input.categoryDataOverride?.destinationVerified === true
       ? commerceLinks
@@ -217,7 +229,12 @@ export async function buildInformationalClusterModel(
           categorySlug,
           links: commerceLinks,
           compareProducts: compareInventory?.products ?? null,
-          bandProducts: compareInventory ? products : undefined,
+          // Bands verify against the destination's own category-page pool;
+          // a failed load fails closed (empty pool drops band links).
+          bandProducts:
+            bandDestinationPool === undefined
+              ? undefined
+              : (bandDestinationPool ?? []),
           curatedCompareSlugs: compareInventory
             ? buildCuratedCompareSlugSet({
                 storeUrl: input.storeUrl,

@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cartClientCredentialHeaders,
   getCartClientCredential,
 } from './client-credential';
 
 const STORAGE_KEY = 'baci:cart-client-credential';
+const FIXED_UUID = '44444444-4444-4444-8444-444444444444';
+
+beforeEach(() => {
+  vi.spyOn(crypto, 'randomUUID').mockReturnValue(
+    FIXED_UUID as `${string}-${string}-${string}-${string}-${string}`
+  );
+});
 
 afterEach(() => {
   window.localStorage.clear();
@@ -13,19 +20,15 @@ afterEach(() => {
 
 describe('getCartClientCredential', () => {
   it('generates once, persists, and reuses the credential', () => {
-    const first = getCartClientCredential();
-    expect(first).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    );
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(first);
-    expect(getCartClientCredential()).toBe(first);
+    expect(getCartClientCredential()).toBe(FIXED_UUID);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(FIXED_UUID);
+    expect(getCartClientCredential()).toBe(FIXED_UUID);
   });
 
   it('replaces a malformed stored value', () => {
     window.localStorage.setItem(STORAGE_KEY, 'junk');
-    const credential = getCartClientCredential();
-    expect(credential).not.toBe('junk');
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(credential);
+    expect(getCartClientCredential()).toBe(FIXED_UUID);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(FIXED_UUID);
   });
 
   it('falls back to a stable in-memory credential when storage throws', () => {
@@ -35,8 +38,8 @@ describe('getCartClientCredential', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('denied');
     });
-    const first = getCartClientCredential();
-    expect(getCartClientCredential()).toBe(first);
+    expect(getCartClientCredential()).toBe(FIXED_UUID);
+    expect(getCartClientCredential()).toBe(FIXED_UUID);
   });
 
   it('falls back to getRandomValues when randomUUID is unavailable', () => {
@@ -47,10 +50,14 @@ describe('getCartClientCredential', () => {
       configurable: true,
       value: undefined,
     });
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+      const bytes = array as Uint8Array;
+      bytes.fill(0x44);
+      return array;
+    });
     try {
-      const credential = getCartClientCredential();
-      expect(credential).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      expect(getCartClientCredential()).toBe(
+        '44444444-4444-4444-8444-444444444444'
       );
     } finally {
       Object.defineProperty(crypto, 'randomUUID', {
@@ -72,9 +79,8 @@ describe('getCartClientCredential', () => {
   });
 
   it('exposes the credential under the shared header name', () => {
-    const credential = getCartClientCredential();
     expect(cartClientCredentialHeaders()).toEqual({
-      'x-baci-client-credential': credential,
+      'x-baci-client-credential': FIXED_UUID,
     });
   });
 });

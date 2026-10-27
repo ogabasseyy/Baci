@@ -1,6 +1,5 @@
-const randomUUIDMock = jest.fn((): string =>
-  require('node:crypto').randomUUID()
-);
+const FIXED_UUID = '44444444-4444-4444-8444-444444444444';
+const randomUUIDMock = jest.fn((): string => FIXED_UUID);
 const storage = new Map<string, string>();
 const getItemAsync = jest.fn(async (key: string) => storage.get(key) ?? null);
 const setItemAsync = jest.fn(async (key: string, value: string) => {
@@ -22,9 +21,7 @@ beforeEach(() => {
   setItemAsync.mockImplementation(async (key: string, value: string) => {
     storage.set(key, value);
   });
-  randomUUIDMock.mockImplementation((): string =>
-    require('node:crypto').randomUUID()
-  );
+  randomUUIDMock.mockImplementation((): string => FIXED_UUID);
   jest.doMock('expo-secure-store', () => ({ getItemAsync, setItemAsync }));
   jest.doMock('expo-crypto', () => ({
     randomUUID: randomUUIDMock,

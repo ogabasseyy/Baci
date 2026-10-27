@@ -40,6 +40,25 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- Manual claims preview against the CURRENT order recipient: a staff
+  -- correction of orders.customer_email leaves the terminal outbox row (and
+  -- this claim row) untouched by design, so without this check the
+  -- corrected-away recipient keeps reading order details on the old token
+  -- until expiry. Redemption already rejects such tokens (email_mismatch
+  -- in 20260930160100); the anon preview fails closed the same way, and
+  -- the login-email route inherits it through loadReceiptClaimRecord.
+  -- NULL surfaces as 404, like an unknown link.
+  IF v_claim.manual_notification_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.receipt_claim_orders AS rco
+      JOIN public.orders AS o ON o.id = rco.order_id
+      WHERE rco.receipt_claim_id = v_claim.id
+        AND lower(btrim(COALESCE(o.customer_email, '')))
+          IS DISTINCT FROM v_claim.customer_email_normalized
+    ) THEN
+    RETURN NULL;
+  END IF;
+
   -- The RPC is directly invocable via PostgREST, so the loader's 410 check
   -- alone cannot hide an expired claim. Return a non-sensitive sentinel
   -- instead of NULL so the documented expired-link (410) contract survives

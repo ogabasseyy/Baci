@@ -2,6 +2,7 @@ import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
+import { getCartQuotaClientIdentity } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -24,7 +25,6 @@ import {
 } from '@/lib/cart/session-proof';
 import { voucherAttachmentsValid } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
@@ -193,11 +193,13 @@ export async function POST(request: NextRequest) {
     }
     // Bootstrap mints a fresh principal per call, so the per-principal
     // budget alone can be reset by rotating bootstrap proofs; the same
-    // budget also applies per client identity.
+    // budget also applies per quota client identity (client credential
+    // when present, so shared-egress shoppers do not share this bound;
+    // legacy network identity otherwise).
     const clientQuota = await checkCartQuota({
       merchantId: context.merchant.id,
       operation: 'create',
-      subject: getTrustedClientIdentifier(request),
+      subject: getCartQuotaClientIdentity(request),
     });
     if (!clientQuota.allowed) {
       return cartErrorResponse('quota_exceeded');

@@ -128,6 +128,34 @@ describe('POST /api/storefront/cart/bootstrap quota', () => {
     expect((await response.json()).code).toBe('quota_exceeded');
   });
 
+  it('gives distinct client credentials independent budgets behind one network identity', async () => {
+    // Every request here shares the same legacy network identity (no
+    // platform address, so the fallback bucket is common). Distinct
+    // client credentials must still receive independent budgets: this
+    // is the shared-egress failure that took guest carts down.
+    const credentialA = {
+      'x-baci-client-credential': '11111111-1111-4111-8111-111111111111',
+    };
+    const credentialB = {
+      'x-baci-client-credential': '22222222-2222-4222-8222-222222222222',
+    };
+    for (let attempt = 0; attempt < DEGRADED_BOOTSTRAP_LIMIT; attempt++) {
+      const response = await postBootstrap({ body: {}, headers: credentialA });
+      expect(response.status).toBe(201);
+    }
+    const exhausted = await postBootstrap({ body: {}, headers: credentialA });
+    expect(exhausted.status).toBe(429);
+    // The second shopper behind the same egress is unaffected, and so
+    // is a legacy client with no credential.
+    const otherShopper = await postBootstrap({
+      body: {},
+      headers: credentialB,
+    });
+    expect(otherShopper.status).toBe(201);
+    const legacy = await postBootstrap({ body: {} });
+    expect(legacy.status).toBe(201);
+  });
+
   it('performs no merchant resolution once the pre-resolution quota is exhausted', async () => {
     for (let attempt = 0; attempt < DEGRADED_BOOTSTRAP_LIMIT; attempt++) {
       const response = await postBootstrap({ body: {} });

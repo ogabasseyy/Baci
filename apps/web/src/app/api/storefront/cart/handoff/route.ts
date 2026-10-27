@@ -7,6 +7,7 @@ import {
   rpcHandoffMerchantId,
   rpcPreviewHandoff,
 } from '@/lib/cart/handoff';
+import { getCartQuotaClientIdentity } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -21,7 +22,6 @@ import {
 } from '@/lib/cart/scoped-client';
 import { verifyCartSessionProof } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
@@ -154,10 +154,11 @@ export async function GET(request: NextRequest) {
     const preQuota = await checkCartQuota({
       merchantId: 'handoff-preview',
       operation: 'handoff_preview',
-      // Key the pre-merchant budget on the client alone: the handoff
-      // id is attacker-controlled before token validation, so keying
-      // on it would let one caller mint a fresh bucket per rotated id.
-      subject: getTrustedClientIdentifier(request),
+      // Key the pre-merchant budget on the quota client identity
+      // alone: the handoff id is attacker-controlled before token
+      // validation, so keying on it would let one caller mint a fresh
+      // bucket per rotated id.
+      subject: getCartQuotaClientIdentity(request),
     });
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
@@ -193,7 +194,7 @@ export async function GET(request: NextRequest) {
     const quota = await checkCartQuota({
       merchantId,
       operation: 'handoff_preview',
-      subject: getTrustedClientIdentifier(request),
+      subject: getCartQuotaClientIdentity(request),
     });
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');

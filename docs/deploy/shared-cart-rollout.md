@@ -180,6 +180,13 @@ holder of that key from signing a forged issuance time.
 
 ## Telemetry redaction
 
+Anonymous cart calls carry the client quota credential in the
+`x-baci-client-credential` header. It is a quota identity, not an
+authentication secret, but a leaked value lets an attacker burn one
+shopper's quota bucket, so treat it like a session identifier: it is
+on the same proxy/APM redaction denylist below, and in-repo logging
+never records it (quota keys store only its SHA-256 hash).
+
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
 and error-reporting pipelines in front of the cart routes must redact

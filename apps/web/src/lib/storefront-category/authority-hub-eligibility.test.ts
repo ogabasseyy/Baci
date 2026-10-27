@@ -50,6 +50,22 @@ describe('authority hub eligibility contract', () => {
     expect(decision.productCount).toBe(apple.minimumProducts);
   });
 
+  it('documents the caller-scope contract: brand and availability only', () => {
+    // Category/parent/active scoping is owned by callers supplying the
+    // destination pool; this helper must not double-filter child rows.
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      [
+        ...Array.from({ length: apple.minimumProducts }, (_, index) =>
+          row(index)
+        ),
+        { ...row(99), name: 'Out-of-scope extra iPhone', brand: 'Samsung' },
+      ],
+      'smartphones',
+      apple
+    );
+    expect(decision.productCount).toBe(apple.minimumProducts);
+  });
+
   it('rejects malformed rows, wrong brands, and managed unavailable rows', () => {
     const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
       [

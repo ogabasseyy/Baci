@@ -22,7 +22,12 @@ function isStringPricedDbRecord(product: unknown): boolean {
   );
 }
 
-/** Input must be the destination's complete, hydrated, category-scoped pool. */
+/**
+ * Brand-only eligibility within a caller-scoped pool: input must be the
+ * destination's complete, hydrated, category-scoped pool (callers own
+ * category, parent/variant, and active-status scoping, exactly as the
+ * destination loaders supply it). This helper owns availability + brand.
+ */
 function resolveBrandAuthorityEligibility(
   products: readonly unknown[],
   categorySlug: string,

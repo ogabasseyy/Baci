@@ -173,9 +173,9 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-z',
     'Samsung Galaxy Z',
-    /^(?:Samsung )?(?:Galaxy )?Z(?=\s|\d|$)/i,
+    /^(?:Samsung )?(?:Galaxy )?Z\s*(?:Fold|Flip|TriFold)\b/i,
     [
-      /\bGalaxy\s+Z(?=\s|\d|$)/i,
+      /\bGalaxy\s+Z\s*(?:Fold|Flip|TriFold)\b/i,
       /\b(?:Galaxy|Samsung)\s+Z\s*(?:Fold|Flip)[0-9]?\b/i,
     ]
   ),

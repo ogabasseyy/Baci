@@ -13,10 +13,28 @@ import {
 } from './request-quota';
 import { bootstrapMemoryCounters } from './request-quota-counter';
 
-vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
+const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+
+vi.mock('@/lib/redis', () => ({ getRedis: mockGetRedis }));
+
+/** Healthy shared store: per-key counting fake Redis. */
+function useHealthyRedis(): void {
+  const counts = new Map<string, number>();
+  mockGetRedis.mockReturnValue({
+    createScript: () => ({
+      eval: async (keys: string[]) => {
+        const key = keys[0] ?? '';
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return [next, 3_600_000];
+      },
+    }),
+  });
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  mockGetRedis.mockReturnValue(null);
   __resetCartQuotaStoreForTesting();
 });
 
@@ -135,6 +153,9 @@ describe('checkAnonymousCartQuota', () => {
 
   it('keeps per-credential budgets independent below the backstop', async () => {
     vi.stubEnv('VERCEL', '1');
+    // Per-credential fairness applies while the shared store is
+    // healthy; degraded mode falls back to network identity (next test).
+    useHealthyRedis();
     __resetCartQuotaStoreForTesting();
     const limit = CART_QUOTA_BUDGETS.create.limit;
     for (let attempt = 0; attempt < limit; attempt++) {
@@ -188,11 +209,10 @@ describe('checkAnonymousCartQuota', () => {
         bootstrap
       );
     }
-    // One backstop entry plus at most one credential entry per
-    // allowed attempt — never the full rotation count.
-    expect(bootstrapMemoryCounters.size).toBeLessThanOrEqual(
-      degradedBackstop + 1
-    );
+    // While degraded, the credential dimension is skipped entirely:
+    // only the single network backstop entry exists, however many
+    // credentials rotate through it.
+    expect(bootstrapMemoryCounters.size).toBe(1);
     const denied = await checkAnonymousCartQuota(
       requestWith({
         'x-baci-client-credential': randomUUID(),

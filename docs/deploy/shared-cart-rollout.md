@@ -187,6 +187,26 @@ shopper's quota bucket, so treat it like a session identifier: it is
 on the same proxy/APM redaction denylist below, and in-repo logging
 never records it (quota keys store only its SHA-256 hash).
 
+Abuse posture: credential budgets are always paired with a
+non-rotatable network backstop at 25x the primary limit. That
+backstop is a deliberate trade-off, not strict isolation — a hostile
+host sharing an egress with legitimate shoppers can still exhaust
+the shared backstop and deny them until the window resets, exactly
+as any finite per-network ceiling allows. The multiple is sized far
+above legitimate shared-egress volume; alert on sustained backstop
+denials rather than raising it silently. While the Redis quota
+store is degraded, the credential dimension is skipped and network
+identity alone applies, so the bounded per-instance memory store
+cannot be poisoned by credential churn.
+
+Privacy basis: the credential is a persistent random per-profile /
+per-install quota key. It exists solely so anonymous budgets follow
+the shopper instead of their network address. It is never used for
+authentication, advertising, or cross-merchant joins; quota keys
+are merchant-scoped SHA-256 hashes with the budget window as their
+retention, and the raw value is redacted from telemetry (below).
+Deleting site/app data rotates it.
+
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
 and error-reporting pipelines in front of the cart routes must redact

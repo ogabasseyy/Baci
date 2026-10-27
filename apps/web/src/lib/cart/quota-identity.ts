@@ -85,6 +85,16 @@ export async function checkAnonymousCartQuota(
     subject: getTrustedClientIdentifier(request),
   });
   if (!backstopQuota.allowed) return backstopQuota;
+  if (backstopQuota.degraded) {
+    // The shared store is down and counters live in bounded
+    // per-instance memory (4,096 entries). Per-credential counters
+    // would let distinct shoppers — or one rotating host — exhaust
+    // that capacity and deny every new shopper on the instance.
+    // While degraded, the network identity (already counted by the
+    // backstop, at its reduced degraded ceiling for bootstrap) is
+    // the identity; per-credential fairness resumes when Redis does.
+    return backstopQuota;
+  }
   return checkCartQuota({
     ...input,
     subject: `client-credential:${hashSubject(credential.toLowerCase())}`,

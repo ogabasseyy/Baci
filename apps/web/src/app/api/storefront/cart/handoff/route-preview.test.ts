@@ -30,6 +30,25 @@ const mocks = vi.hoisted(() => ({
   previewPayload: null as unknown,
 }));
 
+const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+
+vi.mock('@/lib/redis', () => ({ getRedis: mockGetRedis }));
+
+/** Healthy shared quota store: per-key counting fake Redis. */
+function useHealthyRedis(): void {
+  const counts = new Map<string, number>();
+  mockGetRedis.mockReturnValue({
+    createScript: () => ({
+      eval: async (keys: string[]) => {
+        const key = keys[0] ?? '';
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return [next, 3_600_000];
+      },
+    }),
+  });
+}
+
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({
     from: vi.fn(() => ({
@@ -157,6 +176,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mockGetRedis.mockReturnValue(null);
   __resetCartQuotaStoreForTesting();
   console.error = consoleError;
   if (savedSecret === undefined) {
@@ -333,6 +353,8 @@ describe('GET /api/storefront/cart/handoff', () => {
   });
 
   it('keys preview quotas on the client credential when one is presented', async () => {
+    // Per-credential fairness applies while the shared store is healthy.
+    useHealthyRedis();
     mocks.handoffMerchantId = MERCHANT_ID;
     mocks.previewPayload = {
       code: null,

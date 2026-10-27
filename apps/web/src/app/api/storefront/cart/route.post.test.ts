@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CART_QUOTA_BUDGETS, checkCartQuota } from '@/lib/cart/request-context';
 import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
@@ -21,6 +21,29 @@ import {
   sessionProof,
   TEST_SECRET,
 } from './route.test-support';
+
+const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+
+vi.mock('@/lib/redis', () => ({ getRedis: mockGetRedis }));
+
+/** Healthy shared quota store: per-key counting fake Redis. */
+function useHealthyRedis(): void {
+  const counts = new Map<string, number>();
+  mockGetRedis.mockReturnValue({
+    createScript: () => ({
+      eval: async (keys: string[]) => {
+        const key = keys[0] ?? '';
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return [next, 3_600_000];
+      },
+    }),
+  });
+}
+
+afterEach(() => {
+  mockGetRedis.mockReturnValue(null);
+});
 
 describe('POST /api/storefront/cart', () => {
   it.each([
@@ -276,6 +299,8 @@ describe('POST /api/storefront/cart', () => {
   });
 
   it('gives distinct client credentials independent create budgets', async () => {
+    // Per-credential fairness applies while the shared store is healthy.
+    useHealthyRedis();
     mocks.cartPayload = {
       code: null,
       grantId: GRANT_ID,

@@ -50,6 +50,8 @@ export interface CartQuotaResult {
   limit: number;
   remaining: number;
   resetTime: number;
+  /** True when the count came from the degraded per-instance store. */
+  degraded: boolean;
 }
 
 export const CART_QUOTA_BUDGETS: Record<
@@ -188,6 +190,7 @@ export async function checkCartQuota(
       : budget.limit;
   return {
     allowed: !failClosed && counter.count <= limit,
+    degraded: counter.degraded,
     limit,
     remaining: failClosed ? 0 : Math.max(0, limit - counter.count),
     resetTime: counter.resetTime,

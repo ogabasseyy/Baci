@@ -39,6 +39,38 @@ describe('getCartClientCredential', () => {
     expect(getCartClientCredential()).toBe(first);
   });
 
+  it('falls back to getRandomValues when randomUUID is unavailable', () => {
+    const original = crypto.randomUUID;
+    // Older/insecure-context browsers lack randomUUID; cart calls
+    // must still work (and still get a valid v4 credential).
+    Object.defineProperty(crypto, 'randomUUID', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const credential = getCartClientCredential();
+      expect(credential).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+      );
+    } finally {
+      Object.defineProperty(crypto, 'randomUUID', {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
+
+  it('omits the header instead of throwing when crypto fails entirely', () => {
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw new Error('unavailable');
+    });
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(() => {
+      throw new Error('unavailable');
+    });
+    expect(getCartClientCredential()).toBeNull();
+    expect(cartClientCredentialHeaders()).toEqual({});
+  });
+
   it('exposes the credential under the shared header name', () => {
     const credential = getCartClientCredential();
     expect(cartClientCredentialHeaders()).toEqual({

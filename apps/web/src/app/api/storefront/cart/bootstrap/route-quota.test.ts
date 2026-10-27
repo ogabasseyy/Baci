@@ -1,9 +1,31 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
-import { DEGRADED_BOOTSTRAP_LIMIT } from '@/lib/cart/request-quota';
+import {
+  CART_QUOTA_BUDGETS,
+  DEGRADED_BOOTSTRAP_LIMIT,
+} from '@/lib/cart/request-quota';
 import { getCart } from '@/lib/cart/service';
 import { POST } from './route';
+
+const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+
+vi.mock('@/lib/redis', () => ({ getRedis: mockGetRedis }));
+
+/** Healthy shared store: per-key counting fake Redis. */
+function useHealthyRedis(): void {
+  const counts = new Map<string, number>();
+  mockGetRedis.mockReturnValue({
+    createScript: () => ({
+      eval: async (keys: string[]) => {
+        const key = keys[0] ?? '';
+        const next = (counts.get(key) ?? 0) + 1;
+        counts.set(key, next);
+        return [next, 3_600_000];
+      },
+    }),
+  });
+}
 
 vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: vi.fn(() => ({})),
@@ -74,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mockGetRedis.mockReturnValue(null);
   __resetCartQuotaStoreForTesting();
   if (savedSecret === undefined) {
     delete process.env.CART_SESSION_SECRET;
@@ -129,17 +152,24 @@ describe('POST /api/storefront/cart/bootstrap quota', () => {
   });
 
   it('gives distinct client credentials independent budgets behind one network identity', async () => {
-    // Every request here shares the same legacy network identity (no
-    // platform address, so the fallback bucket is common). Distinct
-    // client credentials must still receive independent budgets: this
-    // is the shared-egress failure that took guest carts down.
+    // Per-credential fairness applies while the shared store is
+    // healthy. Every request here shares the same legacy network
+    // identity (no platform address, so the fallback bucket is
+    // common). Distinct client credentials must still receive
+    // independent budgets: this is the shared-egress failure that
+    // took guest carts down.
+    useHealthyRedis();
     const credentialA = {
       'x-baci-client-credential': '11111111-1111-4111-8111-111111111111',
     };
     const credentialB = {
       'x-baci-client-credential': '22222222-2222-4222-8222-222222222222',
     };
-    for (let attempt = 0; attempt < DEGRADED_BOOTSTRAP_LIMIT; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < CART_QUOTA_BUDGETS.bootstrap.limit;
+      attempt++
+    ) {
       const response = await postBootstrap({ body: {}, headers: credentialA });
       expect(response.status).toBe(201);
     }

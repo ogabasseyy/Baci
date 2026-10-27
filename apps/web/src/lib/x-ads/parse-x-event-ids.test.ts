@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { xEventIdsSchema } from '@/schemas/x-ads-settings';
-import { parseXEventIds } from './parse-x-event-ids';
+import { parseXEventIds, X_EVENT_ID_KEYS } from './parse-x-event-ids';
 
 const CODE = 'tw-abc123-xyz789';
 
@@ -45,5 +45,15 @@ describe('parseXEventIds', () => {
     expect(parseXEventIds(input)).toEqual(
       expected.success ? expected.data : null
     );
+  });
+
+  it('mirrors xEventIdsSchema keys exactly via schema introspection', () => {
+    const schemaKeys = Object.keys(xEventIdsSchema.shape).sort();
+    expect([...X_EVENT_ID_KEYS].sort()).toEqual(schemaKeys);
+
+    for (const key of Object.keys(xEventIdsSchema.shape)) {
+      const payload = { [key]: CODE };
+      expect(parseXEventIds(payload)).toEqual(xEventIdsSchema.parse(payload));
+    }
   });
 });

@@ -139,6 +139,8 @@ const FIRST_PAINT_STOREFRONT_CLIENT_ENTRIES = [
   'components/storefront/ogabassey/providers/v2-comparison-scope.tsx',
   'app/(storefront)/[slug]/(catalog)/(listing)/search/search-compare-button.tsx',
   'app/(storefront)/[slug]/(catalog)/(listing)/search/search-comparison.tsx',
+  'app/(storefront)/[slug]/(catalog)/(listing)/search/search-page-form.tsx',
+  'components/storefront/search-refinements/assisted-search-suggestions.tsx',
 ];
 
 describe('first-paint storefront client static import graph', () => {

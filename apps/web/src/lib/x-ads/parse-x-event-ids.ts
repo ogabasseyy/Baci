@@ -8,7 +8,7 @@ import type { XEventIds } from '@/schemas/x-ads-settings';
  * JS, which Lighthouse charges to simulated LCP. Server/API code keeps using
  * the zod schema; `parse-x-event-ids.test.ts` asserts both stay equivalent.
  */
-const X_EVENT_ID_KEYS = [
+export const X_EVENT_ID_KEYS = [
   'pageView',
   'viewContent',
   'addToCart',

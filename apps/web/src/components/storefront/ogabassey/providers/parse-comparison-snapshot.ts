@@ -1,9 +1,15 @@
-const SNAPSHOT_CONDITIONS = [
+export const SNAPSHOT_CONDITIONS = [
   'New', 'Used', 'Open Box', 'New & Used', 'New & Open Box',
   'Used & Open Box', 'Multiple Conditions', 'new', 'used', 'open_box', 'refurbished',
 ] as const;
 export type SnapshotCondition = (typeof SNAPSHOT_CONDITIONS)[number];
 const SNAPSHOT_CONDITIONS_SET = new Set<string>(SNAPSHOT_CONDITIONS);
+
+export const COMPARISON_SNAPSHOT_KEYS = [
+  'id', 'name', 'price', 'image', 'description', 'brand', 'condition', 'slug',
+  'merchantId', 'rawPrice', 'category', 'categorySlug', 'categories',
+  'matchVariantId', 'matchOfferId', 'matchCondition',
+] as const satisfies readonly (keyof ComparisonSnapshot)[];
 
 const UUID_PATTERN =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { comparisonSnapshotSchema } from '@/schemas/comparison-snapshot';
-import { parseComparisonSnapshot } from './parse-comparison-snapshot';
+import {
+  COMPARISON_SNAPSHOT_KEYS,
+  SNAPSHOT_CONDITIONS,
+  parseComparisonSnapshot,
+} from './parse-comparison-snapshot';
 
 const snapshot = {
   id: 'p1',
@@ -39,12 +43,7 @@ const VALID_CASES = [
 ];
 
 const INVALID_CASES = [
-  null,
-  undefined,
-  'string',
-  123,
-  [],
-  {},
+  null, undefined, 'string', 123, [], {},
   { id: 'p1' },
   { ...snapshot, name: undefined },
   { ...snapshot, name: 42 },
@@ -68,6 +67,18 @@ const INVALID_CASES = [
   { ...snapshot, categories: [] },
 ];
 
+function getConditionEnumOptions(): readonly string[] {
+  let current: { _def?: { innerType?: unknown }; options?: readonly string[] } =
+    comparisonSnapshotSchema.shape.condition;
+  while (current._def?.innerType) {
+    current = current._def.innerType as {
+      _def?: { innerType?: unknown };
+      options?: readonly string[];
+    };
+  }
+  return current.options ?? [];
+}
+
 describe('parseComparisonSnapshot parity with comparisonSnapshotSchema', () => {
   it.each(VALID_CASES)('matches zod for valid input %#', (input) => {
     const zod = comparisonSnapshotSchema.safeParse(input);
@@ -81,19 +92,35 @@ describe('parseComparisonSnapshot parity with comparisonSnapshotSchema', () => {
     expect(parseComparisonSnapshot(input)).toBeNull();
   });
 
+  it('mirrors comparisonSnapshotSchema keys and conditions via introspection', () => {
+    expect([...COMPARISON_SNAPSHOT_KEYS].sort()).toEqual(
+      Object.keys(comparisonSnapshotSchema.shape).sort()
+    );
+    const schemaConditions = getConditionEnumOptions();
+    expect(schemaConditions.length).toBeGreaterThan(0);
+    expect([...SNAPSHOT_CONDITIONS].sort()).toEqual(
+      [...schemaConditions].sort()
+    );
+    for (const cond of schemaConditions) {
+      expect(parseComparisonSnapshot({ ...snapshot, condition: cond })).toEqual(
+        comparisonSnapshotSchema.parse({ ...snapshot, condition: cond })
+      );
+      expect(parseComparisonSnapshot({ ...snapshot, matchCondition: cond })).toEqual(
+        comparisonSnapshotSchema.parse({ ...snapshot, matchCondition: cond })
+      );
+    }
+  });
+
   it('preserves parity with the schema test cases', () => {
     expect(
       parseComparisonSnapshot({ ...snapshot, slug: 'phone', variants: [{}] })
     ).toEqual({ ...snapshot, slug: 'phone' });
-
     expect(
       parseComparisonSnapshot({ ...snapshot, brand: 'Acme', condition: 'used' })
     ).toEqual({ ...snapshot, brand: 'Acme', condition: 'used' });
-
     expect(
       parseComparisonSnapshot({ ...snapshot, condition: 'bogus' })
     ).toEqual({ ...snapshot, condition: undefined });
-
     expect(
       parseComparisonSnapshot({
         ...snapshot,
@@ -107,7 +134,6 @@ describe('parseComparisonSnapshot parity with comparisonSnapshotSchema', () => {
       matchOfferId: '22222222-2222-4222-8222-222222222222',
       matchCondition: 'open_box',
     });
-
     expect(
       parseComparisonSnapshot({
         ...snapshot,

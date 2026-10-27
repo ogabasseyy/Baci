@@ -43,6 +43,11 @@ test('builds offline executable plan and hardened readiness-gated timer without 
     const manifest = JSON.parse(
       await readFile(path.join(directory, 'manifest.json'), 'utf8')
     );
+    assert.deepEqual(Object.keys(manifest.artifacts).sort(), [
+      'baci-primary-paid-interest.service',
+      'baci-primary-paid-interest.timer',
+      'interest-inbox.cjs',
+    ]);
     assert.equal(Object.keys(manifest.migrations).length, 7);
     assert.ok(
       Object.keys(manifest.sources).some((filename) =>

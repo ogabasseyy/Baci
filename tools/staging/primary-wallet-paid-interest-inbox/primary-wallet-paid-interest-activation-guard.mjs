@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -8,6 +8,7 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 export async function verifyPrimaryInterestPreparation(directory, input = {}) {
   const root = path.resolve(directory);
   const now = (input.now ?? Date.now)();
+  const directoryEntries = await readdir(root);
   const sealStat = await lstat(path.join(root, 'SHA256SUMS'));
   if (!sealStat.isFile() || sealStat.isSymbolicLink())
     throw new Error('Invalid preparation seal');
@@ -32,6 +33,7 @@ export async function verifyPrimaryInterestPreparation(directory, input = {}) {
   }
   for (const required of [
     'preparation.json',
+    'monitoring-plan.review.json',
     'interest-inbox.cjs',
     'manifest.json',
     'activation-guard.mjs',
@@ -39,6 +41,9 @@ export async function verifyPrimaryInterestPreparation(directory, input = {}) {
   ])
     if (!checked.has(required))
       throw new Error('Required sealed artifact missing');
+  const allowedEntries = new Set([...checked, 'SHA256SUMS', 'owner-approval.json']);
+  if (directoryEntries.some((filename) => !allowedEntries.has(filename)))
+    throw new Error('Unexpected preparation artifact');
   const preparation = JSON.parse(
     await readFile(path.join(root, 'preparation.json'), 'utf8')
   );

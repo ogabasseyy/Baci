@@ -126,9 +126,6 @@ describe('ChatWidget route visibility', () => {
     '/wallet/savings/plan-1',
     '/(tabs)/wallet/savings/start',
     '/savings/funding',
-    '/notifications',
-    '/settings',
-    '/settings/notifications',
   ])('hides floating chat on wallet, setup and plan route %s', (pathname) => {
     mockUsePathname.mockReturnValue(pathname);
 
@@ -146,6 +143,10 @@ describe('ChatWidget route visibility', () => {
     '/wallet-offers',
     '/(tabs)/wallet-offers',
     '/savings-guide',
+    '/notifications',
+    '/settings',
+    '/settings/notifications',
+    '/settings/privacy',
   ])('keeps global chat available on non-wallet route %s', (pathname) => {
     mockUsePathname.mockReturnValue(pathname);
 

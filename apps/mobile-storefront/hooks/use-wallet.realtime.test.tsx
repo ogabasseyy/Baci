@@ -1,6 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
+import { useAuthStore } from '@/stores/auth-store';
 import { useWallet } from './use-wallet';
 import { type WalletQueryData, walletKeys } from './wallet-query';
 
@@ -84,6 +89,8 @@ const credit = {
   source_type: 'wallet_topup',
 };
 beforeEach(() => {
+  useAuthStore.setState({ merchantId: 'merchant-1' });
+  onlineManager.setOnline(true);
   jest.useFakeTimers();
   jest.clearAllMocks();
   for (const table of Object.keys(handlers)) delete handlers[table];
@@ -101,6 +108,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.useRealTimers();
+  onlineManager.setOnline(true);
 });
 function setup(cached = true) {
   const client = new QueryClient({
@@ -152,6 +160,64 @@ it('coalesces a bank-credit burst and updates money and history without fetching
   expect(result.current.data?.wallet.funding_account).toEqual(
     saved.wallet.funding_account
   );
+  cleanup();
+});
+it('refreshes balances and history on foreground reconnect without a full wallet read', async () => {
+  const { result, cleanup } = setup();
+  act(() => onlineManager.setOnline(false));
+  act(() => onlineManager.setOnline(true));
+
+  await waitFor(() =>
+    expect(result.current.data?.wallet.total_balance).toBe(300)
+  );
+  expect(result.current.data?.transactions).toEqual([credit]);
+  expect(mockNumbers).toHaveBeenCalledTimes(1);
+  expect(mockHistory).toHaveBeenCalledTimes(1);
+  expect(mockFull).not.toHaveBeenCalled();
+  cleanup();
+});
+it('drops an in-flight reconnect read when wallet ownership scope changes', async () => {
+  let completeNumbers!: (value: {
+    wallet: {
+      balance: number;
+      total_balance: number;
+      savings_balance: number;
+      loyalty_points: number;
+    };
+    goals: [];
+  }) => void;
+  mockNumbers.mockReturnValueOnce(
+    new Promise((resolve) => {
+      completeNumbers = resolve;
+    })
+  );
+  const { client, cleanup } = setup();
+  const nextKey = walletKeys.data({
+    merchantId: 'merchant-2',
+    ownerId: 'customer-1',
+    userId: 'user-1',
+  });
+  client.setQueryData(nextKey, saved);
+
+  act(() => onlineManager.setOnline(false));
+  act(() => onlineManager.setOnline(true));
+  await waitFor(() => expect(mockNumbers).toHaveBeenCalledTimes(1));
+  act(() => useAuthStore.setState({ merchantId: 'merchant-2' }));
+  await act(async () =>
+    completeNumbers({
+      wallet: {
+        balance: 999,
+        total_balance: 999,
+        savings_balance: 0,
+        loyalty_points: 0,
+      },
+      goals: [],
+    })
+  );
+
+  expect(client.getQueryData(key)).toEqual(saved);
+  expect(client.getQueryData(nextKey)).toEqual(saved);
+  expect(mockFull).not.toHaveBeenCalled();
   cleanup();
 });
 it('ignores an event from another merchant and drops a queued read after unmount', async () => {

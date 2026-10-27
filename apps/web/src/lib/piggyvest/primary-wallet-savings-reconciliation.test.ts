@@ -86,6 +86,35 @@ describe('primary savings reconciliation', () => {
     ).toEqual({ status: 'pending' });
     expect(dependencies.settle).not.toHaveBeenCalled();
   });
+  it('keeps a rich business-scoped transfer pending when wallet identity corroboration is incomplete', async () => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'successful',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'our-reference',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'business',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    const resolveIdentity = vi.fn().mockResolvedValue(null);
+
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, {
+        ...dependencies,
+        resolveIdentity,
+      })
+    ).toEqual({ status: 'pending' });
+    expect(resolveIdentity).toHaveBeenCalledTimes(1);
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
   it('does not claim confirmation when the atomic settlement is unconfirmed', async () => {
     const dependencies = ports();
     dependencies.settle.mockRejectedValue(new Error('private database error'));

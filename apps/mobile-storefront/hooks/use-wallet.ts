@@ -1,5 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import {
+  onlineManager,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
 import {
@@ -11,10 +16,15 @@ import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
 import { piggyvestWalletSetupQuery } from './piggyvest-wallet-setup-query';
 import { readPrimaryFundingAccount } from './resolve-wallet-funding-account';
+import { useWalletNumberRefresh } from './use-wallet-number-refresh';
 import { useWalletRealtime } from './use-wallet-realtime';
 import { fetchWalletDataUnbounded } from './wallet-data';
 import { runWithWalletLoadDeadline } from './wallet-load-deadline';
-import { type WalletData, walletKeys } from './wallet-query';
+import {
+  type WalletData,
+  type WalletQueryKey,
+  walletKeys,
+} from './wallet-query';
 
 export { useRedeemPoints } from './use-redeem-points';
 export type { WalletQueryData } from './wallet-query';
@@ -123,6 +133,52 @@ export function useWallet(options: UseWalletOptions = {}) {
     walletId: data?.walletId,
     updatedAt: dataUpdatedAt,
   });
+  const numberRefresh = useWalletNumberRefresh();
+  const { mutateAsync: refreshNumbers } = numberRefresh;
+  useEffect(() => {
+    if (!numbersOnly || !enabled || !user?.id || !activeMerchantId) return;
+    let wasOnline = onlineManager.isOnline() !== false;
+    let active = true;
+    const unsubscribe = onlineManager.subscribe((online) => {
+      if (!online) {
+        wasOnline = false;
+        return;
+      }
+      if (wasOnline) return;
+      wasOnline = true;
+      const queryKey = JSON.parse(scopeId) as WalletQueryKey;
+      const refetchFull = async () => {
+        if (queryClient.getQueryState(queryKey)?.fetchStatus === 'fetching')
+          await queryClient.refetchQueries(
+            { queryKey, exact: true },
+            { cancelRefetch: false, throwOnError: true }
+          );
+        if (active)
+          await queryClient.invalidateQueries({ queryKey, exact: false });
+      };
+      void refreshNumbers({
+        customerId: customer?.id ?? null,
+        merchantId: activeMerchantId,
+        userId: user.id,
+        isCurrent: () => active,
+        refetchFull,
+        includeTransactions: true,
+      }).catch(() => undefined);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [
+    activeMerchantId,
+    customer?.id,
+    enabled,
+    numbersOnly,
+    queryClient,
+    refreshNumbers,
+    scopeId,
+    user?.id,
+  ]);
   const liveWalletQuery = createLiveWalletQuery(queryClient);
 
   return {

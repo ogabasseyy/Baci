@@ -1,8 +1,5 @@
 'use client';
-import {
-  readAssistanceStream,
-  type SearchAssistanceProposal,
-} from '@baci/shared/lib';
+import type { SearchAssistanceProposal } from '@baci/shared/lib';
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 
@@ -38,6 +35,7 @@ export function useSearchAssistance(query: string, enabled: boolean) {
         body: JSON.stringify({ query, requestId }),
         signal: request.signal,
       });
+      const { readAssistanceStream } = await import('@baci/shared/lib');
       await readAssistanceStream(
         response,
         requestId,

@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -11,51 +11,162 @@ import { describe, expect, it } from 'vitest';
  */
 const SRC = path.resolve(process.cwd(), 'src');
 const ENTRY = path.join(SRC, 'hooks/cart/storefront-cart-provider.tsx');
-const FORBIDDEN_PACKAGES = [/^@supabase\//, /^zod$/];
+const FORBIDDEN_PACKAGES = [/^@supabase\//, /^zod(?:\/|$)/];
 const FORBIDDEN_MODULES = ['env.ts', 'lib/supabase/client.ts'].map((file) =>
   path.join(SRC, file)
 );
 const EXTENSIONS = ['', '.ts', '.tsx', '/index.ts', '/index.tsx'];
 
+function getSharedRoot(): string {
+  const c1 = path.resolve(SRC, '../../../packages/shared');
+  return existsSync(c1) ? c1 : path.resolve(SRC, '../../packages/shared');
+}
+
+const SHARED_ROOT = getSharedRoot();
+const SHARED_PKG_PATH = path.join(SHARED_ROOT, 'package.json');
+const SHARED_PKG = JSON.parse(readFileSync(SHARED_PKG_PATH, 'utf8'));
+
+function isForbiddenPackageSpecifier(specifier: string): boolean {
+  return FORBIDDEN_PACKAGES.some((pattern) => pattern.test(specifier));
+}
+
 function resolveLocal(fromFile: string, specifier: string): string | null {
   let base: string;
-  if (specifier.startsWith('@/')) base = path.join(SRC, specifier.slice(2));
-  else if (specifier.startsWith('.'))
+  if (specifier === '@baci/shared') {
+    base = path.resolve(
+      SHARED_ROOT,
+      SHARED_PKG.exports?.['.'] ?? './src/index.ts'
+    );
+  } else if (specifier.startsWith('@baci/shared/')) {
+    const sub = `.${specifier.slice('@baci/shared'.length)}`;
+    base = path.resolve(
+      SHARED_ROOT,
+      SHARED_PKG.exports?.[sub] ?? path.join('./src', specifier.slice(13))
+    );
+  } else if (specifier.startsWith('@/')) {
+    base = path.join(SRC, specifier.slice(2));
+  } else if (specifier.startsWith('.')) {
     base = path.resolve(path.dirname(fromFile), specifier);
-  else return null;
-  for (const extension of EXTENSIONS) {
-    const candidate = base + extension;
+  } else {
+    return null;
+  }
+  for (const ext of EXTENSIONS) {
     try {
-      if (statSync(candidate).isFile()) return candidate;
-    } catch {
-      // try the next extension
+      if (statSync(base + ext).isFile()) return base + ext;
+    } catch {}
+  }
+  return null;
+}
+
+function isPureBarrel(file: string): boolean {
+  if (!file.startsWith(SHARED_ROOT) || SHARED_PKG.sideEffects !== false)
+    return false;
+  return (
+    readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
+      .replace(
+        /^\s*export\s+(?:type\s+)?(?:\*|\{[^}]*\})\s+from\s*['"][^'"]+['"]\s*;?/gm,
+        ''
+      )
+      .replace(/^\s*export\s+(?:type|interface)\s+[\s\S]*?(?:;|\})/gm, '')
+      .trim() === ''
+  );
+}
+
+function parseExports(file: string) {
+  const source = readFileSync(file, 'utf8');
+  const named = new Map<string, { specifier: string; originName: string }>();
+  for (const match of source.matchAll(
+    /^\s*export\s+\{([^}]+)\}\s+from\s*['"]([^'"]+)['"]/gm
+  )) {
+    for (const part of match[1].split(',')) {
+      const t = part.trim();
+      if (!t || /^type\s/.test(t)) continue;
+      const [orig, exp] = t.split(/\s+as\s+/).map((s) => s.trim());
+      named.set(exp ?? orig, { specifier: match[2], originName: orig });
+    }
+  }
+  const stars = Array.from(
+    source.matchAll(/^\s*export\s+\*\s+from\s*['"]([^'"]+)['"]/gm),
+    (m) => m[1]
+  );
+  return { named, stars };
+}
+
+function moduleExportsSymbol(file: string, symbol: string): boolean {
+  const source = readFileSync(file, 'utf8');
+  return (
+    new RegExp(
+      `^\\s*export\\s+(?:declare\\s+)?(?:const|function\\*?|class|let|var|enum)\\s+${symbol}\\b`,
+      'm'
+    ).test(source) ||
+    new RegExp(`^\\s*export\\s*\\{[^}]*\\b(?:as\\s+)?${symbol}\\b`, 'm').test(
+      source
+    )
+  );
+}
+
+function resolveSymbolThroughBarrel(
+  barrel: string,
+  sym: string,
+  visited = new Set<string>()
+): string | null {
+  if (visited.has(barrel)) return null;
+  visited.add(barrel);
+  const { named, stars } = parseExports(barrel);
+  if (named.has(sym)) {
+    const item = named.get(sym);
+    if (!item) return null;
+    const target = resolveLocal(barrel, item.specifier);
+    if (!target) return null;
+    return isPureBarrel(target)
+      ? resolveSymbolThroughBarrel(target, item.originName, visited)
+      : target;
+  }
+  for (const star of stars) {
+    const target = resolveLocal(barrel, star);
+    if (!target) continue;
+    if (isPureBarrel(target)) {
+      const res = resolveSymbolThroughBarrel(target, sym, visited);
+      if (res) return res;
+    } else if (moduleExportsSymbol(target, sym)) {
+      return target;
     }
   }
   return null;
 }
 
-/** Static value imports/re-exports only; `import type` and `import()` are skipped. */
-function staticValueSpecifiers(file: string): string[] {
+function staticImports(file: string) {
   const source = readFileSync(file, 'utf8');
-  const specifiers: string[] = [];
+  const imports: Array<{
+    specifier: string;
+    isAll: boolean;
+    symbols: string[];
+  }> = [];
   const pattern =
     /^\s*(?:import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm;
   for (const match of source.matchAll(pattern)) {
     if (match[4]) {
-      specifiers.push(match[4]);
-      continue;
+      imports.push({ specifier: match[4], isAll: true, symbols: [] });
+    } else if (!match[1]) {
+      const clause = match[2].trim();
+      if (/^\*\s+as\s+/.test(clause)) {
+        imports.push({ specifier: match[3], isAll: true, symbols: [] });
+      } else if (/^\{[^}]*\}$/.test(clause)) {
+        const symbols = clause
+          .slice(1, -1)
+          .split(',')
+          .map((p) => p.trim())
+          .filter((t) => t && !/^type\s/.test(t))
+          .map((t) => t.split(/\s+as\s+/)[0].trim());
+        if (symbols.length > 0)
+          imports.push({ specifier: match[3], isAll: false, symbols });
+      } else {
+        imports.push({ specifier: match[3], isAll: true, symbols: [] });
+      }
     }
-    if (match[1]) continue;
-    const clause = match[2].trim();
-    const typeOnlyNamed =
-      /^\{[^}]*\}$/.test(clause) &&
-      clause
-        .slice(1, -1)
-        .split(',')
-        .every((part) => !part.trim() || /^type\s/.test(part.trim()));
-    if (!typeOnlyNamed) specifiers.push(match[3]);
   }
-  return specifiers;
+  return imports;
 }
 
 function findForbiddenChains(entry: string): string[] {
@@ -68,19 +179,28 @@ function findForbiddenChains(entry: string): string[] {
     const file = chain[chain.length - 1];
     if (visited.has(file)) continue;
     visited.add(file);
-    for (const specifier of staticValueSpecifiers(file)) {
+    for (const imp of staticImports(file)) {
       const label = chain.map((f) => path.relative(SRC, f)).join(' -> ');
-      if (FORBIDDEN_PACKAGES.some((pattern) => pattern.test(specifier))) {
-        violations.push(`${label} -> ${specifier}`);
+      if (isForbiddenPackageSpecifier(imp.specifier)) {
+        violations.push(`${label} -> ${imp.specifier}`);
         continue;
       }
-      const resolved = resolveLocal(file, specifier);
+      const resolved = resolveLocal(file, imp.specifier);
       if (!resolved) continue;
       if (FORBIDDEN_MODULES.includes(resolved)) {
         violations.push(`${label} -> ${path.relative(SRC, resolved)}`);
         continue;
       }
-      queue.push([...chain, resolved]);
+      if (isPureBarrel(resolved) && !imp.isAll) {
+        for (const sym of imp.symbols) {
+          const backing = resolveSymbolThroughBarrel(resolved, sym);
+          queue.push(
+            backing ? [...chain, resolved, backing] : [...chain, resolved]
+          );
+        }
+      } else {
+        queue.push([...chain, resolved]);
+      }
     }
   }
   return violations;
@@ -92,22 +212,17 @@ describe('storefront cart provider static import graph', () => {
   });
 
   it('keeps the related-blog browser database client out of the PDP static graph', () => {
-    expect(
-      findForbiddenChains(
-        path.join(
-          SRC,
-          'components/storefront/ogabassey/components/BlogSnippet.tsx'
-        )
-      )
-    ).toEqual([]);
+    const file = path.join(
+      SRC,
+      'components/storefront/ogabassey/components/BlogSnippet.tsx'
+    );
+    expect(findForbiddenChains(file)).toEqual([]);
   });
 });
 
 /**
  * Client providers/chrome mounted on every storefront page. Anything they
- * statically import ships in every page's initial `<head>` JS. Regression:
- * #3807 added `xEventIdsSchema` (zod) to the analytics provider and put a
- * ~76 KB zod chunk back on every storefront page.
+ * statically import ships in every page's initial `<head>` JS.
  */
 const ALWAYS_MOUNTED_STOREFRONT_CLIENT_ENTRIES = [
   'components/analytics/analytics-provider.tsx',
@@ -148,5 +263,31 @@ describe('first-paint storefront client static import graph', () => {
     FIRST_PAINT_STOREFRONT_CLIENT_ENTRIES
   )('%s keeps zod, supabase, and @/env out of its static graph', (entry) => {
     expect(findForbiddenChains(path.join(SRC, entry))).toEqual([]);
+  });
+});
+
+describe('forbidden package and barrel-mediated zod detection', () => {
+  it('verifies packages/shared declares sideEffects: false', () => {
+    expect(SHARED_PKG.sideEffects).toBe(false);
+  });
+
+  it('catches zod subpath specifiers and barrel-mediated zod chains', () => {
+    expect(isForbiddenPackageSpecifier('zod')).toBe(true);
+    expect(isForbiddenPackageSpecifier('zod/v4')).toBe(true);
+    expect(isForbiddenPackageSpecifier('zod/mini')).toBe(true);
+    expect(isForbiddenPackageSpecifier('zod-to-json-schema')).toBe(false);
+
+    const chains = findForbiddenChains(
+      path.join(SRC, 'schemas/search-assistance.ts')
+    );
+    expect(chains.some((c) => c.endsWith(' -> zod'))).toBe(true);
+    expect(
+      chains.some(
+        (c) =>
+          c.includes(
+            'packages/shared/src/lib/search-assistance-query-schema.ts'
+          ) && c.endsWith(' -> zod')
+      )
+    ).toBe(true);
   });
 });

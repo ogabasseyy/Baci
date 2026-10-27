@@ -1,9 +1,9 @@
 'use client';
 import {
   buildRefinedSearchHref,
-  mergeAssistedRefinements,
   type SearchRefinements,
 } from '@baci/shared/lib';
+import { mergeAssistedRefinementsClient as mergeAssistedRefinements } from '@/components/storefront/search-refinements/merge-assisted-refinements-client';
 import { useSearchAssistance } from '@/hooks/use-search-assistance';
 import { isValidSearchAssistanceQuery } from './is-valid-search-assistance-query';
 

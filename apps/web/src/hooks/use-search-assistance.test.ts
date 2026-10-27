@@ -13,6 +13,7 @@ vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: fetchMock,
 }));
 
+import '@baci/shared/lib';
 import { useSearchAssistance } from './use-search-assistance';
 
 beforeEach(() => {

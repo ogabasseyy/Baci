@@ -9,6 +9,7 @@ export interface ImeiDeviceProfile {
 }
 
 const COLORS = [
+  'Phantom Black',
   'Natural Titanium',
   'Black Titanium',
   'White Titanium',

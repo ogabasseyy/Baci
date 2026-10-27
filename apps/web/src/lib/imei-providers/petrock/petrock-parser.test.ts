@@ -89,6 +89,17 @@ describe('parsePetrockReplay', () => {
     });
   });
 
+  it.each([
+    'Not found',
+    'Unavailable',
+  ])('never calls an unverified blacklist %s safe', (status) => {
+    const result = parsePetrockReplay(
+      `Model: iPhone 17 Pro Max<br>Blacklist Status: ${status}`
+    );
+    expect(result.status).toBe('Unknown');
+    expect(result.verdictType).not.toBe('safe');
+  });
+
   it('does not call an unrecognized replay clean', () => {
     const result = parsePetrockReplay('Unrecognized Vendor Field: Value');
 

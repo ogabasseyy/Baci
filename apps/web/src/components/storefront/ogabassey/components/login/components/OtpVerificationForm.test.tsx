@@ -33,15 +33,19 @@ const props = () => ({
   sentAt: Date.now(),
 });
 
-it('uses the existing ten-minute login window and waits for explicit resend after expiry', () => {
+it('uses the configured one-hour login window and waits for explicit resend after expiry', () => {
   const handlers = props();
   render(<OtpVerificationForm {...handlers} />);
   expect(
     screen.getByRole('textbox', { name: 'Email verification code' })
   ).toHaveAttribute('autocomplete', 'one-time-code');
-  expect(screen.getByRole('timer')).toHaveTextContent('10:00');
+  expect(screen.getByRole('timer')).toHaveTextContent('60:00');
   act(() => {
     vi.advanceTimersByTime(600000);
+  });
+  expect(screen.getByRole('textbox')).toBeEnabled();
+  act(() => {
+    vi.advanceTimersByTime(3000000);
   });
   expect(screen.getByRole('textbox')).toBeDisabled();
   expect(screen.getByRole('status')).toHaveTextContent('expired');

@@ -17,6 +17,7 @@ function builder(data: unknown, error: unknown = null) {
     eq: vi.fn(),
     ilike: vi.fn(),
     order: vi.fn(),
+    range: vi.fn().mockResolvedValue({ data: [], error: null }),
     limit: vi.fn(),
   };
   for (const name of ['abortSignal', 'select', 'eq', 'ilike', 'order'] as const)
@@ -182,8 +183,46 @@ it.each([
     },
   });
   expect(query.limit).toHaveBeenCalledWith(21);
-  expect(variantQuery.limit).toHaveBeenCalledWith(201);
-  expect(rpc).toHaveBeenCalledWith('get_storefront_product_variants', {
-    p_product_ids: products.map((product) => product.id),
+  if (expectedMatch === 'color') {
+    expect(variantQuery.limit).toHaveBeenCalledWith(201);
+    expect(rpc).toHaveBeenCalledWith('get_storefront_product_variants', {
+      p_product_ids: ['target'],
+    });
+  } else {
+    expect(rpc).not.toHaveBeenCalled();
+  }
+});
+
+it('finds the exact device on a later bounded page after accessories', async () => {
+  const products = Array.from({ length: 21 }, (_, index) => ({
+    id: `case-${index}`,
+    name: 'iPhone 17 Pro Max Case',
+    brand: 'Apple',
+    images: ['https://cdn.example.com/case.jpg'],
+  }));
+  const query = builder(products);
+  query.range.mockResolvedValueOnce({
+    data: [
+      { id: 'target', name: 'iPhone 17 Pro Max', brand: 'Apple', images: [] },
+    ],
+    error: null,
   });
+  const rpc = vi.fn().mockImplementation((_name, { p_product_ids }) =>
+    builder(
+      p_product_ids.includes('target')
+        ? [
+            {
+              product_id: 'target',
+              attributes: { color: 'Silver' },
+              images: ['https://cdn.example.com/silver.jpg'],
+              primary_image: null,
+            },
+          ]
+        : []
+    )
+  );
+  mocks.client.mockReturnValue({ from: () => query, rpc });
+  const enriched = await enrichImeiDeviceResult('merchant-1', result);
+  expect(enriched.deviceImage).toBe('https://cdn.example.com/silver.jpg');
+  expect(query.range).toHaveBeenCalledWith(21, 41);
 });

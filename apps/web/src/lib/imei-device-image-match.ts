@@ -45,23 +45,30 @@ function catalogModelKey(
   return imeiModelKey(name);
 }
 
+export function isImeiCatalogModelMatch(
+  profile: ImeiDeviceProfile,
+  product: ImeiCatalogProduct
+): boolean {
+  if (!profile.model || !profile.brand) return false;
+  const candidate = getImeiDeviceProfile({
+    device: product.name,
+    brand: product.brand ?? undefined,
+  });
+  return (
+    candidate.brand?.toLowerCase() === profile.brand.toLowerCase() &&
+    !!candidate.model &&
+    imeiModelKey(candidate.model) === imeiModelKey(profile.model) &&
+    catalogModelKey(product, candidate) === imeiModelKey(profile.model)
+  );
+}
+
 export function matchImeiCatalogImage(
   profile: ImeiDeviceProfile,
   products: readonly ImeiCatalogProduct[]
 ) {
   if (!profile.model || !profile.brand) return null;
   for (const product of products) {
-    const candidate = getImeiDeviceProfile({
-      device: product.name,
-      brand: product.brand ?? undefined,
-    });
-    if (
-      candidate.brand?.toLowerCase() !== profile.brand.toLowerCase() ||
-      !candidate.model ||
-      imeiModelKey(candidate.model) !== imeiModelKey(profile.model) ||
-      catalogModelKey(product, candidate) !== imeiModelKey(profile.model)
-    )
-      continue;
+    if (!isImeiCatalogModelMatch(profile, product)) continue;
     if (profile.color) {
       const variants = product.variants.filter(
         (variant) =>

@@ -117,7 +117,7 @@ function DefaultLoginPage() {
             {merchant?.logo_url ? (
               <Image
                 src={merchant.logo_url}
-                alt={merchant.business_name}
+                alt={merchant.business_name || 'Store logo'}
                 width={48}
                 height={48}
                 sizes="48px"

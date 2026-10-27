@@ -105,6 +105,19 @@ describe('CustomerLoginPage', () => {
     );
   });
 
+  it('supplies an accessible logo name when the merchant name is missing', () => {
+    mockUseMerchant.mockReturnValue({
+      loading: false,
+      merchant: {
+        logo_url: 'https://example.com/logo.png',
+        business_name: null,
+        template_id: 'default',
+      },
+    });
+    render(<CustomerLoginPage />);
+    expect(screen.getByRole('img', { name: 'Store logo' })).toBeVisible();
+  });
+
   it('prefills a valid email query parameter', () => {
     mockSearchParams.set('email', '  BasseyBJohn@Yahoo.CO.UK  ');
 

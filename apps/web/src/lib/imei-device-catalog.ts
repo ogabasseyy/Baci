@@ -5,7 +5,10 @@ import {
   imeiCatalogProductsSchema,
   imeiCatalogVariantsSchema,
 } from '@/schemas/imei-device-catalog';
-import { matchImeiCatalogImage } from './imei-device-image-match';
+import {
+  isImeiCatalogModelMatch,
+  matchImeiCatalogImage,
+} from './imei-device-image-match';
 import { getPublicSupabaseClient } from './public-supabase-client';
 
 /** Optional public enrichment must never turn a paid success into a failed lookup. */
@@ -42,57 +45,72 @@ export async function enrichImeiDeviceResult(
   const enrich = async (): Promise<ImeiCheckResult> => {
     try {
       const client = getPublicSupabaseClient({ timeoutMs: 1500 });
-      const { data, error } = await client
-        .from('products')
-        .select('id,name,brand,images')
-        .eq('merchant_id', merchantId)
-        .eq('status', 'active')
-        .ilike('name', `%${words.join('%')}%`)
-        .order('id')
-        .abortSignal(controller.signal)
-        .limit(21);
-      if (error || !data) return fallback;
-      const products = imeiCatalogProductsSchema.safeParse(data);
-      if (!products.success || !products.data.length) return fallback;
-      // Raw variant rows are private. Use the existing storefront-safe projection.
-      let variants: ReturnType<typeof imeiCatalogVariantsSchema.parse> = [];
-      if (profile.color) {
-        const response = await client
-          .rpc('get_storefront_product_variants', {
-            p_product_ids: products.data.map((product) => product.id),
-          })
-          .select('product_id,attributes,images,primary_image')
-          .abortSignal(controller.signal)
-          .limit(201);
-        if (response.error) return fallback;
-        const parsed = imeiCatalogVariantsSchema.safeParse(response.data);
-        if (!parsed.success || parsed.data.length > 200) return fallback;
-        variants = parsed.data;
+      for (let page = 0; page < 5; page++) {
+        const query = client
+          .from('products')
+          .select('id,name,brand,images')
+          .eq('merchant_id', merchantId)
+          .eq('status', 'active')
+          .ilike('name', `%${words.join('%')}%`)
+          .order('id')
+          .abortSignal(controller.signal);
+        const { data, error } = await (page === 0
+          ? query.limit(21)
+          : query.range(page * 21, page * 21 + 20));
+        if (error || !data) return fallback;
+        const products = imeiCatalogProductsSchema.safeParse(data);
+        if (!products.success || !products.data.length) return fallback;
+        const candidates = products.data.filter((product) =>
+          isImeiCatalogModelMatch(profile, { ...product, variants: [] })
+        );
+        if (!candidates.length) {
+          if (products.data.length < 21) return fallback;
+          continue;
+        }
+        // Raw variant rows are private. Use the existing storefront-safe projection.
+        let variants: ReturnType<typeof imeiCatalogVariantsSchema.parse> = [];
+        if (profile.color) {
+          const response = await client
+            .rpc('get_storefront_product_variants', {
+              p_product_ids: candidates.map((product) => product.id),
+            })
+            .select('product_id,attributes,images,primary_image')
+            .abortSignal(controller.signal)
+            .limit(201);
+          if (response.error) return fallback;
+          const parsed = imeiCatalogVariantsSchema.safeParse(response.data);
+          if (!parsed.success || parsed.data.length > 200) return fallback;
+          variants = parsed.data;
+        }
+        const match = matchImeiCatalogImage(
+          profile,
+          candidates.map((product) => ({
+            ...product,
+            variants: variants
+              .filter((variant) => variant.product_id === product.id)
+              .map((variant) => ({
+                attributes: variant.attributes,
+                images: variant.primary_image
+                  ? [variant.primary_image, ...variant.images]
+                  : variant.images,
+              })),
+          }))
+        );
+        if (!match) {
+          if (products.data.length < 21) return fallback;
+          continue;
+        }
+        return {
+          ...result,
+          deviceImage: match.imageUrl,
+          deviceProfile: {
+            ...profile,
+            catalogProductId: match.productId,
+            imageMatch: match.match,
+          },
+        };
       }
-      const match = matchImeiCatalogImage(
-        profile,
-        products.data.map((product) => ({
-          ...product,
-          variants: variants
-            .filter((variant) => variant.product_id === product.id)
-            .map((variant) => ({
-              attributes: variant.attributes,
-              images: variant.primary_image
-                ? [variant.primary_image, ...variant.images]
-                : variant.images,
-            })),
-        }))
-      );
-      if (!match) return fallback;
-      return {
-        ...result,
-        deviceImage: match.imageUrl,
-        deviceProfile: {
-          ...profile,
-          catalogProductId: match.productId,
-          imageMatch: match.match,
-        },
-      };
+      return fallback;
     } catch {
       return fallback;
     }

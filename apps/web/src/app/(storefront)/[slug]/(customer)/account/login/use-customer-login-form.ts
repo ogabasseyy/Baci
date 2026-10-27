@@ -7,26 +7,8 @@ import {
   fetchCustomerLoginEmailPrefillForRedirect,
   sanitizeCustomerLoginEmailPrefill,
 } from '@/lib/customer-login-prefill';
+import { sanitizeRedirect } from '@/lib/customer-login-redirect';
 import { asRoute } from '@/lib/routes';
-
-// Validate redirect URL to prevent open redirect vulnerabilities
-function sanitizeRedirect(redirect: string | null): string {
-  const defaultRedirect = '/account';
-  if (!redirect) return defaultRedirect;
-
-  // Only allow relative paths starting with /
-  // Reject absolute URLs, protocol-relative URLs, and javascript: URLs
-  if (
-    !redirect.startsWith('/') ||
-    redirect.startsWith('//') ||
-    /[\\\t\n\r]/.test(redirect) ||
-    redirect.includes(':')
-  ) {
-    return defaultRedirect;
-  }
-
-  return redirect;
-}
 
 export function useCustomerLoginForm() {
   const router = useRouter();

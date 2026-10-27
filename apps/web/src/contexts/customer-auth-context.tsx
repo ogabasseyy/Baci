@@ -173,7 +173,7 @@ export function CustomerAuthProvider({
         return { success: false, error: data.error || 'Failed to send code' };
       }
 
-      // Set OTP state with 10 minute expiry
+      // Track the configured customer-auth challenge lifetime.
       setOtpState({
         email,
         codeSent: true,

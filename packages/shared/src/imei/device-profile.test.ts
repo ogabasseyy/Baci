@@ -24,6 +24,12 @@ describe('IMEI device identity', () => {
     ).toMatchObject({ model: 'Galaxy S24 Ultra', color: 'Titanium Gray' });
   });
 
+  it('recognizes Phantom Black without retaining a partial colour in the model', () => {
+    expect(
+      getImeiDeviceProfile({ device: 'Samsung Galaxy S23 Ultra Phantom Black' })
+    ).toMatchObject({ model: 'Galaxy S23 Ultra', color: 'Phantom Black' });
+  });
+
   it('does not copy an identifier into model analytics', () => {
     expect(
       getImeiDeviceProfile({ device: 'Unknown device 490154203237518' }).model

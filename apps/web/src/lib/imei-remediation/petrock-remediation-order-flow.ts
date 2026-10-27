@@ -151,6 +151,13 @@ export async function placePetrockRemediationOrder({
         kind: refunded ? ('failed' as const) : ('already_started' as const),
       };
     }
+    if (order.status === 'payment_pending') {
+      const reset = await state.resetPreparedQuote({
+        orderId: order.id,
+        reason: 'eligibility_evidence_invalid',
+      });
+      if (!reset) return { kind: 'already_started' as const };
+    }
     return { kind: 'eligibility_failed' as const };
   }
   const catalogAge = Date.now() - Date.parse(product.catalogSyncedAt);

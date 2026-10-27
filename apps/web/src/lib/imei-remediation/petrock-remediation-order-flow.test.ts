@@ -320,6 +320,11 @@ it.each([
   expect(client.submitOrder).not.toHaveBeenCalled();
   expect(orderState.redeem).not.toHaveBeenCalled();
   expect(orderState.begin).not.toHaveBeenCalled();
+  if (status === 'payment_pending')
+    expect(orderState.resetPreparedQuote).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      reason: 'eligibility_evidence_invalid',
+    });
   expect(orderState.failBeforeAcceptance).toHaveBeenCalledTimes(
     status === 'paid' ? 1 : 0
   );
@@ -359,4 +364,24 @@ it('does not claim a refund when the atomic eligibility rejection loses a race',
   });
   expect(result.kind).toBe('already_started');
   expect(client.submitOrder).not.toHaveBeenCalled();
+});
+
+it('keeps the concurrent order state when the invalid quote reset loses a race', async () => {
+  const orderState = state();
+  orderState.resetPreparedQuote.mockResolvedValue(false);
+  const result = await placePetrockRemediationOrder({
+    ...input,
+    order: {
+      ...input.order,
+      status: 'payment_pending',
+      eligibilityEvidence: {
+        ...input.order.eligibilityEvidence,
+        financeStatus: 'Not Eligible',
+      },
+    },
+    client: { getAccount: vi.fn(), submitOrder: vi.fn() },
+    state: orderState,
+  });
+  expect(result.kind).toBe('already_started');
+  expect(orderState.redeem).not.toHaveBeenCalled();
 });

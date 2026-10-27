@@ -1,3 +1,4 @@
+import { getImeiBlacklistState } from '@baci/shared/imei';
 import { parseProviderLabelMap } from '@/app/api/storefront/imei-check/label-map-parser';
 import { parseSickwResponse } from '@/app/api/storefront/imei-check/sickw-parser';
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
@@ -17,11 +18,17 @@ export function parsePetrockReplay(replay: string): Partial<ImeiCheckResult> {
   const result = parseSickwResponse(
     parseProviderLabelMap(replay, PETROCK_LABEL_ALIASES)
   );
-  // Model/FMI-only services do not establish blacklist status.
-  if (
-    result.status === 'Clean' &&
-    (!result.blacklistStatus || result.blacklistStatus === 'Unknown')
-  ) {
+  // A clean aggregate is never evidence of a clean blacklist.
+  const blacklist = getImeiBlacklistState(result.blacklistStatus);
+  if (result.status === 'Clean' && blacklist === 'risk') {
+    return {
+      ...result,
+      status: 'Blacklisted',
+      verdictType: 'danger',
+      verdict: 'Blacklist risk detected. Do not buy this device.',
+    };
+  }
+  if (result.status === 'Clean' && blacklist === 'unknown') {
     return {
       ...result,
       status: 'Unknown',

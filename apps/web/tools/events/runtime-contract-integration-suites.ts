@@ -1,13 +1,13 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.tsx':
-    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.test.tsx',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-email-form.tsx':
-    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-email-form.test.tsx',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-code-form.tsx':
-    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-code-form.test.tsx',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/use-customer-login-form.ts':
-    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/page.test.tsx',
+    'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/use-customer-login-form.test.ts',
   'apps/web/src/components/ui/otp-verification/use-otp-expiry.ts':
     'apps/web/src/components/ui/otp-verification/otp-expiry.test.tsx',
   'apps/web/src/lib/imei-providers/petrock/check-catalog-data/part-1.ts':

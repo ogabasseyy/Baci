@@ -28,7 +28,10 @@ export function CustomerEmailForm({
       <div className="space-y-2">
         <Label htmlFor="email">Email address</Label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+          <Mail
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400"
+          />
           <Input
             id="email"
             type="email"

@@ -20,7 +20,9 @@ export function SavingsPlansScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const auth = useRequireAuth();
   const query = useWallet({ cachePolicy: 'display' });
-  const [filter, setFilter] = useState<'All' | 'Active' | 'Completed'>('All');
+  const [filter, setFilter] = useState<
+    'All' | 'Active' | 'Paused' | 'Completed'
+  >('All');
   const goals = query.data?.wallet.savings_goals ?? [];
   const visibleGoals = goals.filter(
     (goal) => filter === 'All' || goal.status === filter.toLowerCase()
@@ -111,7 +113,7 @@ export function SavingsPlansScreen() {
         </View>
       ) : null}
       <View style={styles.filters}>
-        {(['All', 'Active', 'Completed'] as const).map((option) => (
+        {(['All', 'Active', 'Paused', 'Completed'] as const).map((option) => (
           <Pressable
             key={option}
             accessibilityRole="button"
@@ -191,9 +193,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   newPlanText: { fontSize: 16, fontWeight: '700' },
-  filters: { flexDirection: 'row', gap: 8 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   filter: {
     minHeight: 44,
+    minWidth: 80,
     flex: 1,
     borderRadius: 14,
     borderWidth: 1,

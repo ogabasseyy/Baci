@@ -58,7 +58,12 @@ function shouldCaptureBeforeSchema(
   return false;
 }
 
+function warnCaptureUnavailable() {
+  console.warn('[PiggyVest Webhook] PIGGYVEST_INTEREST_RECONCILIATION_PENDING');
+}
+
 function retryableCaptureFailure(): Response {
+  warnCaptureUnavailable();
   return NextResponse.json(
     {
       received: false,
@@ -84,10 +89,18 @@ export async function captureInterestRawDelivery(input: {
   }
   if (!shouldCaptureBeforeSchema(classification, input.families)) return null;
 
-  const outcome = await dispatchPrimaryWalletPaidInterestInbox({
-    rawBody: input.rawBody,
-    signature: input.signature,
-  });
+  let outcome: Awaited<
+    ReturnType<typeof dispatchPrimaryWalletPaidInterestInbox>
+  >;
+  try {
+    outcome = await dispatchPrimaryWalletPaidInterestInbox({
+      rawBody: input.rawBody,
+      signature: input.signature,
+    });
+  } catch (error) {
+    warnCaptureUnavailable();
+    throw error;
+  }
   if (outcome === 'accepted' || outcome === 'duplicate') {
     return NextResponse.json(
       {

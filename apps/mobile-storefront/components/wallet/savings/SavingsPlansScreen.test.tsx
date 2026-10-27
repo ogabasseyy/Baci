@@ -97,6 +97,19 @@ it('shows the combined saved amount without changing it when filtering plans', (
   fireEvent.press(screen.getByRole('button', { name: 'All plans' }));
   expect(screen.getByRole('button', { name: 'Open Laptop' })).toBeTruthy();
 });
+it('filters paused plans and exposes the selected filter accessibly', () => {
+  render(<SavingsPlansScreen />);
+
+  const pausedFilter = screen.getByRole('button', { name: 'Paused plans' });
+  expect(pausedFilter).toHaveAccessibilityState({ selected: false });
+
+  fireEvent.press(pausedFilter);
+
+  expect(pausedFilter).toHaveAccessibilityState({ selected: true });
+  expect(screen.getByRole('button', { name: 'Open Laptop' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Open Phone' })).toBeNull();
+  expect(screen.getByText('CHOOSE A PLAN · 1')).toBeTruthy();
+});
 it('keeps new plan creation available when a filter has no matches', () => {
   render(<SavingsPlansScreen />);
   fireEvent.press(screen.getByRole('button', { name: 'Completed plans' }));

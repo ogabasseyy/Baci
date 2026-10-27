@@ -140,3 +140,40 @@ it('fails closed on explicit interest without interest-family authority', async 
   });
   expect(mocks.inbox).not.toHaveBeenCalled();
 });
+
+it('emits only a redacted warning when an authenticated interest delivery cannot be saved', async () => {
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const body =
+      '{"eventType":"interest-payout.success","secret":"private-body"}';
+    const response = await captureInterestRawDelivery(input(body, ['legacy']));
+    expect(response?.status).toBe(503);
+    expect(warning).toHaveBeenCalledWith(
+      '[PiggyVest Webhook] PIGGYVEST_INTEREST_RECONCILIATION_PENDING'
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('private-body');
+    expect(JSON.stringify(warning.mock.calls)).not.toContain('synthetic-hmac');
+  } finally {
+    warning.mockRestore();
+  }
+});
+
+it('warns without logging an intake error before letting the route return 503', async () => {
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  mocks.inbox.mockRejectedValue(new Error('sensitive database detail'));
+  try {
+    await expect(
+      captureInterestRawDelivery(
+        input('{"eventType":"interest-payout.success"}', ['interest'])
+      )
+    ).rejects.toThrow('sensitive database detail');
+    expect(warning).toHaveBeenCalledWith(
+      '[PiggyVest Webhook] PIGGYVEST_INTEREST_RECONCILIATION_PENDING'
+    );
+    expect(JSON.stringify(warning.mock.calls)).not.toContain(
+      'sensitive database detail'
+    );
+  } finally {
+    warning.mockRestore();
+  }
+});

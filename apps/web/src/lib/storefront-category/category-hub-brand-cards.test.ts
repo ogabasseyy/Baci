@@ -14,6 +14,10 @@ function buildProduct(
     name: `${brand} ${slug}`,
     price,
     category_slug: 'smartphones',
+    product_key_specs:
+      brand === 'Apple'
+        ? { chipset: 'A19 Pro', ram_gb: 8, storage_gb: 256 }
+        : { chipset: 'Snapdragon 8 Elite', ram_gb: 12, storage_gb: 512 },
   };
 }
 
@@ -33,7 +37,7 @@ describe('buildCategoryHubBrandCards', () => {
     });
 
     // Assert
-    expect(cards).toHaveLength(8);
+    expect(cards).toHaveLength(9);
     expect(cards.map((card) => card.href)).toEqual(
       expect.arrayContaining([
         'https://ogabassey.com/smartphones/brands/apple',
@@ -65,7 +69,7 @@ describe('buildCategoryHubBrandCards', () => {
     });
 
     // Assert
-    expect(cards).toHaveLength(8);
+    expect(cards).toHaveLength(9);
     expect(cards.map((card) => card.href)).toEqual(
       expect.arrayContaining([
         'https://ogabassey.com/smartphones/brands/apple',

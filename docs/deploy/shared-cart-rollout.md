@@ -106,14 +106,21 @@ and enrollment gates in the release sequence below.
    `CART_PROOF_ENVIRONMENT` shared by all its instances: proof issuance
    and verification fail closed without it, and distinct deployments
    must never share a value (or the master secret).
-3. Deploy compatible server adapters with enrollment still disabled.
-4. Activate terminal-cart retention explicitly (only with the release
+3. Before deploying the Cloudflare visitor-quota trust: verify the
+   origin is restricted to the proxied Cloudflare zone
+   (Authenticated Origin Pulls or equivalent) and confirm a
+   direct-to-origin request with forged `CF-Connecting-IP`/`CF-Ray`
+   headers is rejected or ignored; record the evidence. This is a
+   hard gate for that change, not a follow-up. Also wire an operator
+   alert on the `Cart quota store degraded` warning before rollout.
+4. Deploy compatible server adapters with enrollment still disabled.
+5. Activate terminal-cart retention explicitly (only with the release
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
-5. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
+6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
-6. Expand only after convergence, checkout-binding and isolation
+7. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
 ## Signing keys

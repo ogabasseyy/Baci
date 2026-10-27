@@ -209,10 +209,43 @@ describe('LoginScreen', () => {
     );
   });
 
-  it('prefills receipt claim login email from the return path token', async () => {
+  it('shows the masked receipt claim hint from the return path token without prefilling the email input', async () => {
+    // The login-email route returns only the masked hint; a masked value is
+    // not a sendable address, so it is shown as guidance text while the OTP
+    // email input stays empty.
     const originalFetch = global.fetch;
     const fetchMock = jest.fn(async () => ({
-      json: async () => ({ emailHint: '  Shopper@Example.COM  ' }),
+      json: async () => ({ emailHint: 's***@example.com' }),
+      ok: true,
+    })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+    mockUseLocalSearchParams.mockReturnValue({
+      returnTo: '/receipts/claim/token_123',
+    });
+
+    try {
+      render(<LoginScreen />);
+
+      expect(
+        await screen.findByText(/This receipt was sent to/)
+      ).toHaveTextContent(/s\*\*\*@example\.com/);
+      expect(screen.getByPlaceholderText('john@example.com')).toHaveProp(
+        'value',
+        ''
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://usebaci.com/api/storefront/receipts/claims/token_123/login-email',
+        { headers: { accept: 'application/json' } }
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it('ignores a full email address from the claim login-email route', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn(async () => ({
+      json: async () => ({ emailHint: 'Shopper@Example.COM' }),
       ok: true,
     })) as unknown as typeof fetch;
     global.fetch = fetchMock;
@@ -224,14 +257,17 @@ describe('LoginScreen', () => {
       render(<LoginScreen />);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('john@example.com')).toHaveProp(
-          'value',
-          'shopper@example.com'
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://usebaci.com/api/storefront/receipts/claims/token_123/login-email',
+          { headers: { accept: 'application/json' } }
         );
       });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://usebaci.com/api/storefront/receipts/claims/token_123/login-email',
-        { headers: { accept: 'application/json' } }
+      expect(
+        screen.queryByText(/This receipt was sent to/)
+      ).not.toBeOnTheScreen();
+      expect(screen.getByPlaceholderText('john@example.com')).toHaveProp(
+        'value',
+        ''
       );
     } finally {
       global.fetch = originalFetch;

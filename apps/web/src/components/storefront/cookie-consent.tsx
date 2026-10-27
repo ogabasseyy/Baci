@@ -45,7 +45,9 @@ export function CookieConsent() {
         left: 'max(1rem, calc((100% - 64rem) / 2))',
         right: 'max(1rem, calc((100% - 64rem) / 2))',
         width: 'auto',
-        zIndex: 100,
+        // Below the cart drawer (z-60), above the mobile footer (z-40):
+        // an open drawer must not be covered by the consent prompt.
+        zIndex: 50,
         contain: 'layout style paint',
       }}
       role="dialog"
@@ -53,9 +55,9 @@ export function CookieConsent() {
     >
       <div
         style={{
-          background: 'var(--store-background, #ffffff)',
-          color: 'var(--store-background-text, #111827)',
-          border: '1px solid var(--store-border, #e5e7eb)',
+          background: 'var(--store-background, var(--background, #ffffff))',
+          color: 'var(--store-background-text, var(--foreground, #111827))',
+          border: '1px solid var(--store-border, var(--border, #e5e7eb))',
           borderRadius: '1rem',
           padding: '1rem',
         }}

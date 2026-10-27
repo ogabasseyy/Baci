@@ -69,7 +69,7 @@ describe('CookieConsent', () => {
       position: 'fixed',
       bottom: '1rem',
       width: 'auto',
-      zIndex: 100,
+      zIndex: 50,
     });
   });
 });

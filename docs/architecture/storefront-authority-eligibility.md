@@ -71,7 +71,7 @@ The adapter delegates normalization and brand eligibility to
 `authorityHubEligibility`; provisional link builders now delegate brand and family
 threshold decisions to that same contract. The existing category membership,
 parent/standalone SQL scope, hydration and stock filter remain in the inventory
-reader. Bounded reads select only eligibility fields and category evidence.
+reader. Bounded reads select eligibility fields, category evidence, update timestamps and semantic specifications, while omitting images/descriptions. PDP projections retain parent/variant and managed-stock parity metadata for the existing downstream guard.
 
 Audit boundary and remaining findings:
 

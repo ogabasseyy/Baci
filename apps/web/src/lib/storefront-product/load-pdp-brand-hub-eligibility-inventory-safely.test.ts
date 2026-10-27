@@ -83,6 +83,17 @@ describe('PDP hub eligibility adapter', () => {
     });
     expect(await load(input)).toEqual([]);
   });
+  it('keeps specification metadata for hub candidates', async () => {
+    read.mockResolvedValueOnce({
+      products: rows.map((row) => ({
+        ...row,
+        product_key_specs: { chipset: 'A18' },
+      })),
+    });
+    expect((await load(input))[0].product_key_specs).toMatchObject({
+      chipset: 'A18',
+    });
+  });
   it('fails closed when taxonomy resolution throws', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const spy = vi

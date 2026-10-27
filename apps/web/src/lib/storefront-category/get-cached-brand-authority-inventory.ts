@@ -43,10 +43,12 @@ export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   )
 `;
 
-// Same scope and hydration as destination cards, without display-only payloads.
+// Same scope, hydration and semantic metadata as destination cards, without images/descriptions.
 const BRAND_AUTHORITY_ELIGIBILITY_SELECT = `
   id, name, slug, brand, price, stock, stock_quantity, manage_stock,
-  is_parent, parent_product_id, category,
+  is_parent, parent_product_id, category, updated_at,
+  compare_at_price, condition, has_condition_offers,
+  ${PRODUCT_KEY_SPECS_RELATION_SELECT},
   categories:category_id(id, slug),
   product_categories(categories(id, slug))
 `;

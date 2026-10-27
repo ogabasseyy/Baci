@@ -67,13 +67,27 @@ describe('shared brand inventory work budget', () => {
       count: 'exact',
     });
     const select = query.select.mock.calls[0][0] as string;
-    expect(select).not.toMatch(/description|images|key_specs/);
+    expect(select).not.toMatch(/description|images/);
     expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(query.eq).toHaveBeenCalledWith('status', 'active');
     expect(query.or).toHaveBeenCalledWith(
       'and(is_parent.eq.true,brand.ilike.Apple),and(parent_product_id.is.null,brand.ilike.Apple),and(is_parent.eq.true,brand.ilike.iPhone),and(parent_product_id.is.null,brand.ilike.iPhone)'
     );
     expect(signal).toBeInstanceOf(AbortSignal);
+  });
+  it('retains specs and update metadata promised by the shared inventory result', async () => {
+    const row = {
+      ...rows[0],
+      updated_at: '2026-10-27T12:00:00Z',
+      product_key_specs: { chipset: 'A18' },
+    };
+    query.range.mockResolvedValueOnce({ data: [row], count: 1, error: null });
+    const result = await load();
+    expect(result.latestUpdatedAt).toBe(row.updated_at);
+    expect(result.products[0].product_key_specs).toEqual(row.product_key_specs);
+    const select = query.select.mock.calls[0][0] as string;
+    expect(select).toContain('updated_at');
+    expect(select).toContain('product_key_specs (');
   });
   it.each([
     null,

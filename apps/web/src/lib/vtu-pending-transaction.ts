@@ -22,6 +22,7 @@ export { resolveVtuCustomer };
 
 import { calculateCommerce } from '@/lib/supabase/client';
 import {
+  EMPTY_VTU_CHECKOUT_SETTINGS,
   getVtuCheckoutSettings,
   linkCheckoutCustomerByEmail,
   type VtuCheckoutSettings,
@@ -531,8 +532,9 @@ export async function preparePendingVtuTransaction({
       strictLookups,
     });
     // Non-strict parity: today's ignored error falls through to the
-    // disabled check via {} — never to customer resolution.
-    settings = {} as VtuCheckoutSettings;
+    // disabled check via the all-null settings — never to customer
+    // resolution.
+    settings = EMPTY_VTU_CHECKOUT_SETTINGS;
   }
 
   const resolveCustomerForPrepare = (): Promise<CustomerRecord | null> =>

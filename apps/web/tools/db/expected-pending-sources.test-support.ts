@@ -346,12 +346,12 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261020090100_vtu_replay_binding_rpc.sql',
-    sha256: 'f4c1b7a24a881e6ab5fe0a1498f90b3a2f0c9b8cb16a04781960f4162dce9155',
+    sha256: 'b7be8ecfc12180cdad952d5e1a26402dd300c0413688868c7963da9d076658be',
   },
   {
     repositoryPath:
       'supabase/migrations/20261020090101_vtu_checkout_customer_rpcs.sql',
-    sha256: '1404c72f2c5eac3602eaaad4654d35570bce6ef608e82cfd4f77eb980bf32be1',
+    sha256: '3f5e07a26a15a2081d441ef96317df8cd7221c7bfc9aaead295c40899709a39a',
   },
   {
     repositoryPath:
@@ -366,12 +366,12 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261020090104_vtu_idempotency_lookup_rpc.sql',
-    sha256: '3f51401672bbe2ed2b3f6d7e26eaace7467f01565d903cff6df5a41878534dcb',
+    sha256: '80dc1264a75bbaf927b527091d26f6911605885ec1d6f71f4506244781d15166',
   },
   {
     repositoryPath:
       'supabase/migrations/20261020090105_harden_claim_vtu_intent.sql',
-    sha256: '8466802d23e567e0b6afe4dd9dec99847a7250122dbeed6cb043739ff4ebe6f6',
+    sha256: '8a71cdb875811ff9421b9e14ae45a4907d7c9890242c3d53f34fcda66e78557c',
   },
   {
     repositoryPath:

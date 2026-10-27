@@ -18314,7 +18314,7 @@ export type Database = {
       };
       find_vtu_customer_for_checkout: {
         Args: { p_merchant_id: string; p_user_id: string };
-        Returns: string;
+        Returns: string | null;
       };
       finish_cache_invalidation: {
         Args: {
@@ -19891,12 +19891,12 @@ export type Database = {
       link_vtu_customer_by_email: {
         Args: { p_merchant_id: string; p_user_id: string };
         Returns: {
-          email: string;
-          first_name: string;
+          email: string | null;
+          first_name: string | null;
           id: string;
-          last_name: string;
-          phone: string;
-          user_id: string;
+          last_name: string | null;
+          phone: string | null;
+          user_id: string | null;
         }[];
       };
       list_variant_inventory_units: {
@@ -19916,12 +19916,12 @@ export type Database = {
       lookup_vtu_idempotency_row: {
         Args: { p_key: string; p_user_id: string };
         Returns: {
-          customer_id: string;
+          customer_id: string | null;
           key: string;
-          merchant_id: string;
-          request_fingerprint: string;
+          merchant_id: string | null;
+          request_fingerprint: string | null;
           verdict: string;
-          vtu_transaction_id: string;
+          vtu_transaction_id: string | null;
         }[];
       };
       mark_abandoned_orders: {

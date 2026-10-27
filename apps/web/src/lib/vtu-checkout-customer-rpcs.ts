@@ -51,6 +51,22 @@ export async function linkCheckoutCustomerByEmail(
   };
 }
 
+/** All-null settings: the non-strict lookup-failure fallback. Every
+ * flag reads as unset, so callers land on the VTU-disabled check. */
+export const EMPTY_VTU_CHECKOUT_SETTINGS: VtuCheckoutSettings = {
+  vtu_enabled: null,
+  vtu_airtime_enabled: null,
+  vtu_data_enabled: null,
+  vtu_electricity_enabled: null,
+  vtu_tv_enabled: null,
+  vtu_betting_enabled: null,
+  vtu_merchant_commission_rate: null,
+  vtu_customer_cashback_enabled: null,
+  vtu_customer_cashback_rate: null,
+  paystack_enabled: null,
+  korapay_enabled: null,
+};
+
 export interface VtuCheckoutSettings {
   vtu_enabled: boolean | null;
   vtu_airtime_enabled: boolean | null;

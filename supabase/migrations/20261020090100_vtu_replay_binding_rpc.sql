@@ -30,7 +30,10 @@ AS $$
   FROM public.vtu_transactions AS t
   WHERE t.id = p_transaction_id
     AND (
-      (SELECT auth.uid()) IS NULL
+      -- Unscoped reads are service_role-only (Codex P2): a
+      -- claimless authenticated invocation (NULL uid) must not
+      -- read arbitrary bindings by UUID.
+      (SELECT auth.role()) IS NOT DISTINCT FROM 'service_role'
       OR EXISTS (
         SELECT 1
         FROM public.customers AS c

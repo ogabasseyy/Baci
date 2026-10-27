@@ -47,6 +47,10 @@ DECLARE
   v_caller_role text;
   v_caller_uid uuid;
   v_owner uuid;
+  v_txn_source text;
+  v_txn_amount numeric;
+  v_txn_metadata jsonb;
+  v_split jsonb;
 BEGIN
   -- Ownership gate (Phase 2): authenticated callers prove scope
   -- ownership from the JWT; service_role stays trusted.
@@ -76,13 +80,33 @@ BEGIN
   END IF;
 
   -- Transaction scope (Codex P1): fail fast before taking the lock.
-  PERFORM 1
+  SELECT t.source, t.amount, t.metadata
+    INTO v_txn_source, v_txn_amount, v_txn_metadata
   FROM public.vtu_transactions AS t
   WHERE t.id = p_transaction_id
     AND t.merchant_id = p_merchant_id
     AND t.customer_id = p_customer_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'claim_scope_mismatch: claimed transaction is outside the customer scope';
+  END IF;
+
+  -- Funding gate (Codex P1): a replay mapping may only be granted
+  -- for a fully wallet-funded checkout row — the exact shape the
+  -- wallet-only prepare records (paymentSplit card = 0, wallet
+  -- covering the full amount). A legacy card/hybrid row (no split,
+  -- or an unpaid card portion) claimed directly and replayed
+  -- through the wallet-only route would vend without its card leg
+  -- ever passing gateway verification.
+  v_split := v_txn_metadata -> 'paymentSplit';
+  IF v_txn_source IS DISTINCT FROM 'checkout'
+    OR v_split IS NULL
+    OR jsonb_typeof(v_split) <> 'object'
+    OR jsonb_typeof(v_split -> 'wallet') <> 'number'
+    OR jsonb_typeof(v_split -> 'card') <> 'number'
+    OR (v_split ->> 'card')::numeric <> 0
+    OR (v_split ->> 'wallet')::numeric < v_txn_amount
+  THEN
+    RAISE EXCEPTION 'claim_funding_mismatch: claimed transaction is not fully wallet-funded';
   END IF;
 
   PERFORM pg_catalog.pg_advisory_xact_lock(

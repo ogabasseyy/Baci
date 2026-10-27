@@ -45,9 +45,11 @@ BEGIN
   v_caller_role := (SELECT auth.role());
   v_caller_uid := (SELECT auth.uid());
 
-  -- Caller binding (same <> form as the customer RPCs: JWT-less
-  -- direct connections skip; PostgREST always sets the claim).
-  IF v_caller_role <> 'service_role'
+  -- Caller binding, fail closed (Codex P2): IS DISTINCT FROM
+  -- treats a JWT-less invocation (NULL role) as untrusted; a
+  -- claimless caller cannot prove uid ownership and is rejected.
+  -- PostgREST always sets the claims for real API callers.
+  IF v_caller_role IS DISTINCT FROM 'service_role'
      AND (v_caller_uid IS NULL OR v_caller_uid IS DISTINCT FROM p_user_id) THEN
     RAISE EXCEPTION 'not authorized: caller mismatch';
   END IF;

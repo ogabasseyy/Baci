@@ -63,17 +63,31 @@ BEGIN
     (v_c2, v_m1, 'wrpc-u2@example.com', v_u2),
     (v_c3, v_m2, 'wrpc-u3@example.com', v_u3);
 
+  -- Claimed rows carry the fully wallet-funded prepare shape
+  -- (paymentSplit card=0, wallet=amount): claim_vtu_intent's
+  -- funding gate refuses anything else.
   INSERT INTO public.vtu_transactions (
     id, merchant_id, customer_id, type, network_provider,
-    phone_number, amount, request_reference, status
+    phone_number, amount, request_reference, status, source, metadata
   )
   VALUES
     ('d4d4d4d4-0000-4000-8000-000000000001', v_m1, v_c1, 'airtime', 'mtn',
-     '08030000011', 500, 'WRPC-001', 'pending'),
+     '08030000011', 500, 'WRPC-001', 'pending', 'checkout',
+     '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
     ('d4d4d4d4-0000-4000-8000-000000000002', v_m1, v_c2, 'airtime', 'mtn',
-     '08030000012', 500, 'WRPC-002', 'pending'),
+     '08030000012', 500, 'WRPC-002', 'pending', 'checkout',
+     '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
     ('d4d4d4d4-0000-4000-8000-000000000003', v_m1, v_c1, 'airtime', 'mtn',
-     '08030000013', 500, 'WRPC-003', 'processing');
+     '08030000013', 500, 'WRPC-003', 'processing', 'checkout',
+     '{"paymentSplit":{"wallet":500,"card":0}}'::jsonb),
+    -- Legacy card/no-split shapes for the C7 funding-gate refusals:
+    -- an unpaid card portion must never become a replay mapping.
+    ('d4d4d4d4-0000-4000-8000-000000000004', v_m1, v_c1, 'airtime', 'mtn',
+     '08030000014', 500, 'WRPC-004', 'pending', 'checkout',
+     '{"paymentSplit":{"wallet":0,"card":500}}'::jsonb),
+    ('d4d4d4d4-0000-4000-8000-000000000005', v_m1, v_c1, 'airtime', 'mtn',
+     '08030000015', 500, 'WRPC-005', 'pending', 'checkout',
+     '{}'::jsonb);
 
   INSERT INTO public.vtu_idempotency_keys (
     key, vtu_transaction_id, customer_id, merchant_id, request_fingerprint
@@ -440,6 +454,53 @@ BEGIN
   END IF;
 END;
 $c4$;
+
+-- --- C7: claim refuses rows that are not fully wallet-funded ----------
+-- Codex P1: a legacy card/hybrid row (unpaid card portion, or no
+-- payment split at all) claimed directly must not become a wallet
+-- replay mapping.
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true
+);
+
+DO $c7$
+BEGIN
+  BEGIN
+    PERFORM public.claim_vtu_intent(
+      'e5e5e5e5-0000-4000-8000-000000000017',
+      'wrpc-fp-claim-7',
+      'd4d4d4d4-0000-4000-8000-000000000004',
+      'e2e2e2e2-0000-4000-8000-000000000001',
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      now(),
+      '{}'
+    );
+    RAISE EXCEPTION 'C7: card-funded claim unexpectedly allowed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'claim_funding_mismatch%' THEN
+      RAISE EXCEPTION 'C7: wrong raise for card row: %', SQLERRM;
+    END IF;
+  END;
+  BEGIN
+    PERFORM public.claim_vtu_intent(
+      'e5e5e5e5-0000-4000-8000-000000000018',
+      'wrpc-fp-claim-7b',
+      'd4d4d4d4-0000-4000-8000-000000000005',
+      'e2e2e2e2-0000-4000-8000-000000000001',
+      'f3f3f3f3-0000-4000-8000-000000000001',
+      now(),
+      '{}'
+    );
+    RAISE EXCEPTION 'C7: split-less claim unexpectedly allowed';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'claim_funding_mismatch%' THEN
+      RAISE EXCEPTION 'C7: wrong raise for split-less row: %', SQLERRM;
+    END IF;
+  END;
+END;
+$c7$;
 
 -- --- C5: anon claim is forbidden --------------------------------------
 -- Asserted via the $grants$ catalog pins at the end of this file

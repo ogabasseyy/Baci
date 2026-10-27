@@ -52,12 +52,12 @@ BEGIN
   v_caller_role := (SELECT auth.role());
   v_caller_uid := (SELECT auth.uid());
 
-  -- Caller binding. NOTE the <> (not IS DISTINCT FROM): a JWT-less
-  -- direct connection (NULL role) skips this check — same as
-  -- claim_customer_on_phone_auth. PostgREST always sets the claim,
-  -- so this only affects direct superuser connections, which bypass
-  -- every application check anyway.
-  IF v_caller_role <> 'service_role'
+  -- Caller binding, fail closed (Codex P1): IS DISTINCT FROM means
+  -- a JWT-less invocation (NULL role) is treated as untrusted and
+  -- must still prove uid ownership — which a claimless caller
+  -- cannot, so it is rejected. PostgREST always sets the claims
+  -- for real API callers.
+  IF v_caller_role IS DISTINCT FROM 'service_role'
      AND (v_caller_uid IS NULL OR v_caller_uid IS DISTINCT FROM p_user_id) THEN
     RAISE EXCEPTION 'not authorized: caller mismatch';
   END IF;

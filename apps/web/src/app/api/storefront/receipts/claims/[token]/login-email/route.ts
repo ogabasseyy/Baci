@@ -41,8 +41,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // The hint is unauthenticated bearer-token surface (documented accepted
+  // risk). Per-IP polling is bounded by the proxy security stage, which
+  // counts this pathname once against the /api/storefront bucket
+  // (100/min): no in-route check here, or one request would burn two
+  // tokens. The GET+source=app activity write stays because the native
+  // claim screen cannot do cookie-CSRF POST.
   try {
     const supabase = await createClient();
+    // The branded service client is constructed inside the loader only
+    // after the anon preview has validated the token.
     const hint = await loadReceiptClaimLoginEmailHint({ supabase, token });
 
     if (!hint.ok) {

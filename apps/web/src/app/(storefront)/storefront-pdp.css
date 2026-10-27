@@ -2,6 +2,10 @@
 
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
+
 @source "./[slug]/layout.tsx";
 @source "./[slug]/(catalog)/(pdp)/layout.tsx";
 @source "./[slug]/(catalog)/(pdp)/product/[productSlug]/page.tsx";
@@ -14,6 +18,8 @@
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-detail-client.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/ogabassey-pdp-semantic-sections.tsx";
+@source "./[slug]/storefront-loading-ui.tsx";
+@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
 @source "../../components/storefront/deferred-page-view-tracker.tsx";
 @source "../../components/storefront/storefront-theme-provider.tsx";
 @source "../../components/storefront/ogabassey/storefront-layout.tsx";

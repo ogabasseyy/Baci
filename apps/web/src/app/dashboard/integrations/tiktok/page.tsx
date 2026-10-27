@@ -2,6 +2,7 @@
 
 import { AlertCircle, ArrowLeft, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { FeedUrlSection } from '@/components/dashboard/integrations/feed-url-section';
 import { TrackingPixelSection } from '@/components/dashboard/integrations/tracking-pixel-section';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -165,7 +166,9 @@ export default function TikTokIntegrationPage() {
         pixelLabel="Pixel ID"
         tokenLabel="Access Token"
         onSave={handleSave}
-      />
+      >
+        <AdPlatformSetupGuide platform="tiktok" />
+      </TrackingPixelSection>
     </div>
   );
 }

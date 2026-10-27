@@ -11,6 +11,8 @@ import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub
 
 export { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 export const BRAND_AUTHORITY_MAX_QUERY_PAGES = 20;
+/** Complete-pool ceiling shared by optional PDP and article enrichment. */
+export const OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS = 100;
 export const BRAND_AUTHORITY_QUERY_PAGE_SIZE = 100;
 export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   id,

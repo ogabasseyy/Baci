@@ -1,6 +1,9 @@
 import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
-import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
+import {
+  getCachedBrandAuthorityInventory,
+  OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS,
+} from '@/lib/storefront-category/get-cached-brand-authority-inventory';
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
 
 export interface LoadPdpBrandHubEligibilityInventorySafelyInput {
@@ -11,7 +14,6 @@ export interface LoadPdpBrandHubEligibilityInventorySafelyInput {
 }
 
 export const PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS = 1_000;
-const PDP_BRAND_HUB_MAX_PRODUCTS = 100;
 
 /** Reuse the destination's scope, hydration and eligibility; never warm a scan after timeout. */
 export async function loadPdpBrandHubEligibilityInventorySafely(
@@ -31,7 +33,7 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
       input.categorySlug,
       entry,
       {
-        maxProducts: PDP_BRAND_HUB_MAX_PRODUCTS,
+        maxProducts: OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS,
         timeoutMs:
           input.timeoutMs ?? PDP_BRAND_HUB_ELIGIBILITY_BELOW_FOLD_TIMEOUT_MS,
       }

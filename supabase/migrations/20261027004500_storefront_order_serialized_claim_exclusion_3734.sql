@@ -126,14 +126,13 @@ BEGIN
     WHERE id = v_release_id;
     v_released_count := v_released_count + 1;
   END LOOP;
+  -- Freed lines return to the clean offer-line state (NULL, same as
+  -- untouched offer lines): any unit references they carried were
+  -- definitionally stale, and serialized fields are inapplicable to
+  -- offer-fulfilled lines.
   IF v_released_count > 0 THEN
     UPDATE public.order_items AS oi
-    SET fulfillment_data = jsonb_build_object(
-      'source', 'merchant_stock',
-      'reservationExpiresAt', NULL,
-      'inventoryUnits', '[]'::jsonb,
-      'missingUnitCount', p_item_quantity
-    )
+    SET fulfillment_data = NULL
     WHERE oi.id = p_item_id;
   END IF;
 END $release_helper$;

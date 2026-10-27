@@ -301,11 +301,8 @@ BEGIN
     RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit after legacy release, got %', v_plain_claimed;
   END IF;
 
-  IF (SELECT fulfillment_data->'inventoryUnits' FROM public.order_items WHERE id = v_item_id) <> '[]'::jsonb THEN
-    RAISE EXCEPTION 'expected released offer line fulfillment to list no units';
-  END IF;
-  IF (SELECT (fulfillment_data->>'missingUnitCount')::integer FROM public.order_items WHERE id = v_item_id) <> 1 THEN
-    RAISE EXCEPTION 'expected released offer line fulfillment to report line quantity as missing';
+  IF (SELECT fulfillment_data FROM public.order_items WHERE id = v_item_id) IS NOT NULL THEN
+    RAISE EXCEPTION 'expected released offer line to return to NULL fulfillment_data';
   END IF;
 
   -- The release must be audited against the unit's own variant with

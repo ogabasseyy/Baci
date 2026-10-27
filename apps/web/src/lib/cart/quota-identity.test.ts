@@ -9,7 +9,6 @@ import {
   __resetCartQuotaStoreForTesting,
   CART_QUOTA_BUDGETS,
   DEGRADED_BOOTSTRAP_LIMIT,
-  NETWORK_BACKSTOP_MULTIPLIER,
 } from './request-quota';
 import { bootstrapMemoryCounters } from './request-quota-counter';
 
@@ -126,6 +125,9 @@ describe('checkAnonymousCartQuota', () => {
 
   it('bounds credential rotation with the non-rotatable network backstop', async () => {
     vi.stubEnv('VERCEL', '1');
+    // Healthy store: the full 25x backstop applies (degraded mode
+    // caps it at the primary ceiling — covered separately below).
+    useHealthyRedis();
     __resetCartQuotaStoreForTesting();
     const backstopLimit = CART_QUOTA_BUDGETS.create_network_backstop.limit;
     // Every call rotates to a fresh credential from one network
@@ -192,23 +194,28 @@ describe('checkAnonymousCartQuota', () => {
     // No Redis in this suite: bootstrap runs on the bounded
     // per-instance memory store. Rotating credentials from one
     // network must stop creating store entries once the degraded
-    // backstop (20 x 25) trips, or one host could exhaust the
-    // instance's fallback capacity for every shopper.
-    const degradedBackstop =
-      DEGRADED_BOOTSTRAP_LIMIT * NETWORK_BACKSTOP_MULTIPLIER;
+    // ceiling trips, or one host could exhaust the instance's
+    // fallback capacity for every shopper. The degraded ceiling is
+    // the same with or without a credential header.
+    const degradedBackstop = DEGRADED_BOOTSTRAP_LIMIT;
     const bootstrap = {
       merchantId: MERCHANT_ID,
       operation: 'bootstrap',
     } as const;
+    let allowed = 0;
     for (let attempt = 0; attempt < degradedBackstop + 100; attempt++) {
-      await checkAnonymousCartQuota(
+      const result = await checkAnonymousCartQuota(
         requestWith({
           'x-baci-client-credential': randomUUID(),
           'x-real-ip': '192.0.2.44',
         }),
         bootstrap
       );
+      if (result.allowed) allowed += 1;
     }
+    // A credential header never raises the degraded ceiling above
+    // the legacy caller's: exactly the degraded limit got through.
+    expect(allowed).toBe(DEGRADED_BOOTSTRAP_LIMIT);
     // While degraded, the credential dimension is skipped entirely:
     // only the single network backstop entry exists, however many
     // credentials rotate through it.

@@ -97,6 +97,8 @@ export async function checkAnonymousCartQuota(
   }
   return checkCartQuota({
     ...input,
-    subject: `client-credential:${hashSubject(credential.toLowerCase())}`,
+    // Single derivation: the enforced subject is exactly the tested
+    // identity (prefix, lowercasing, hashing live in one place).
+    subject: getCartQuotaClientIdentity(request),
   });
 }

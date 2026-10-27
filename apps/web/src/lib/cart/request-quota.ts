@@ -155,10 +155,18 @@ export const DEGRADED_BOOTSTRAP_LIMIT = 20;
 /** Ratio between a credential budget and its network backstop. */
 export const NETWORK_BACKSTOP_MULTIPLIER = 25;
 
+/**
+ * While degraded, a backstop IS the effective identity (the
+ * credential dimension is skipped), so its ceiling must match the
+ * primary operation's degraded ceiling — not the healthy multiple.
+ * Presenting a credential header must never raise a degraded
+ * caller's ceiling above a legacy caller's.
+ */
 const DEGRADED_LIMITS: Partial<Record<CartQuotaOperation, number>> = {
   bootstrap: DEGRADED_BOOTSTRAP_LIMIT,
-  bootstrap_network_backstop:
-    DEGRADED_BOOTSTRAP_LIMIT * NETWORK_BACKSTOP_MULTIPLIER,
+  bootstrap_network_backstop: DEGRADED_BOOTSTRAP_LIMIT,
+  create_network_backstop: CART_QUOTA_BUDGETS.create.limit,
+  handoff_preview_network_backstop: CART_QUOTA_BUDGETS.handoff_preview.limit,
 };
 
 /**

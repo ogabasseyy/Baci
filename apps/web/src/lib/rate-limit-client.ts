@@ -156,6 +156,55 @@ function isCloudflarePeer(ip: string): boolean {
  * direct-to-origin caller forging both headers has a non-Cloudflare
  * peer address and gets null here.
  */
+/**
+ * Quota identity for a verified visitor address. IPv6 visitors are
+ * bucketed by their /64 network so rotating the interface identifier
+ * cannot mint a fresh budget; IPv4-mapped addresses use the embedded
+ * IPv4 form so one client cannot split across spellings.
+ */
+function visitorQuotaIdentity(ip: string): string {
+  if (IPV4_REGEX.test(ip)) return ip;
+  const value = ipv6ToBigInt(ip);
+  if (value === null) return ip;
+  if (value >> 32n === 0xffffn) {
+    const embedded = value & 0xffffffffn;
+    return [24n, 16n, 8n, 0n]
+      .map((shift) => Number((embedded >> shift) & 0xffn))
+      .join('.');
+  }
+  const groups = [48n, 32n, 16n, 0n].map((shift) =>
+    Number((value >> (64n + shift)) & 0xffffn).toString(16)
+  );
+  return `${groups.join(':')}::/64`;
+}
+
+/**
+ * Platform-verified immediate peer candidates, in trust order: the
+ * platform address, x-real-ip (only when the deployment guarantees the
+ * edge overwrites it), and the last x-vercel-forwarded-for hop
+ * (platform-set on Vercel; likewise gated on the proxy guarantee).
+ */
+function platformPeerIp(
+  request: NextRequest,
+  allowProxyHeaders: boolean
+): string | null {
+  const requestWithIp = request as NextRequest & { ip?: string };
+  if (requestWithIp.ip && isValidIP(requestWithIp.ip)) return requestWithIp.ip;
+  if (!allowProxyHeaders) return null;
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp && isValidIP(realIp)) return realIp;
+  const vercelForwarded = request.headers.get('x-vercel-forwarded-for');
+  if (vercelForwarded) {
+    const hops = vercelForwarded
+      .split(',')
+      .map((hop) => hop.trim())
+      .filter((hop) => isValidIP(hop));
+    const last = hops[hops.length - 1];
+    if (last) return last;
+  }
+  return null;
+}
+
 function verifiedCloudflareVisitorIp(
   request: NextRequest,
   peerIp: string | null
@@ -168,7 +217,7 @@ function verifiedCloudflareVisitorIp(
     cloudflareIp &&
     isValidIP(cloudflareIp)
   ) {
-    return cloudflareIp;
+    return visitorQuotaIdentity(cloudflareIp);
   }
   return null;
 }
@@ -186,12 +235,7 @@ export function getClientIdentifier(request: NextRequest): string {
   // evidence must itself be trustworthy: the platform address, or an
   // x-real-ip only under the same proxy guarantee the trusted
   // identifier requires.
-  const peerIp =
-    requestIp && isValidIP(requestIp)
-      ? requestIp
-      : proxyHeadersGuaranteed() && realIp && isValidIP(realIp)
-        ? realIp
-        : null;
+  const peerIp = platformPeerIp(request, proxyHeadersGuaranteed());
   const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
   if (visitorIp) return visitorIp;
 
@@ -241,12 +285,7 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     // customers into one bootstrap bucket and mass-produces "cart sync
     // was interrupted" failures. Prefer the authenticated visitor
     // address when the immediate peer proves Cloudflare traversal.
-    const peerIp =
-      requestIp && isValidIP(requestIp)
-        ? requestIp
-        : realIp && isValidIP(realIp)
-          ? realIp
-          : null;
+    const peerIp = platformPeerIp(request, true);
     const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
     if (visitorIp) return visitorIp;
     if (realIp && isValidIP(realIp)) return realIp;

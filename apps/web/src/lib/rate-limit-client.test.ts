@@ -80,17 +80,39 @@ describe('getClientIdentifier behind Cloudflare', () => {
     ).toBe('192.0.2.44');
   });
 
-  it('accepts IPv4-mapped IPv6 peers and compressed IPv6 visitors', () => {
+  it('accepts IPv4-mapped IPv6 peers and buckets IPv6 visitors by /64', () => {
+    vi.stubEnv('VERCEL', '1');
+    const first = getTrustedClientIdentifier(
+      requestWith({
+        'cf-connecting-ip': '2001:db8::1:2',
+        'cf-ray': 'a509c917eae1b920-AMS',
+        'x-real-ip': '::ffff:172.68.1.20',
+      })
+    );
+    const rotated = getTrustedClientIdentifier(
+      requestWith({
+        'cf-connecting-ip': '2001:db8::9:9',
+        'cf-ray': 'a509c917eae1b920-AMS',
+        'x-real-ip': '::ffff:172.68.1.20',
+      })
+    );
+    // One client must not rotate out of its quota bucket by changing
+    // the interface identifier inside its allocated /64.
+    expect(first).toBe('2001:db8:0:0::/64');
+    expect(rotated).toBe(first);
+  });
+
+  it('uses x-vercel-forwarded-for last hop as peer evidence', () => {
     vi.stubEnv('VERCEL', '1');
     expect(
       getTrustedClientIdentifier(
         requestWith({
-          'cf-connecting-ip': '2001:db8::1:2',
+          'cf-connecting-ip': '203.0.113.9',
           'cf-ray': 'a509c917eae1b920-AMS',
-          'x-real-ip': '::ffff:172.68.1.20',
+          'x-vercel-forwarded-for': '203.0.113.9, 172.68.1.20',
         })
       )
-    ).toBe('2001:db8::1:2');
+    ).toBe('203.0.113.9');
   });
 });
 

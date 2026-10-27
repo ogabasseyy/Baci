@@ -56,6 +56,17 @@ export function mergeAssistedRefinementsClient(
     current
   );
   const next = { ...base, ...proposal.filters };
+  // Sort validates before brands, matching shared parseSearchRefinements
+  // error precedence when several fields are invalid at once.
+  if (Array.isArray(next.sort)) throw new Error('Choose one sort order');
+  if (
+    next.sort != null &&
+    !SEARCH_SORT_OPTIONS.some((o) => o.value === next.sort)
+  ) {
+    throw new Error('Choose a valid sort order');
+  }
+  const sort = next.sort ?? 'relevance';
+
   const rawBrands = Array.isArray(next.brands)
     ? next.brands
     : next.brands != null
@@ -67,15 +78,6 @@ export function mergeAssistedRefinementsClient(
   }
   const brands = [...new Set(rawBrands)].sort();
   if (brands.length > 50) throw new Error(ERR);
-
-  if (Array.isArray(next.sort)) throw new Error('Choose one sort order');
-  if (
-    next.sort != null &&
-    !SEARCH_SORT_OPTIONS.some((o) => o.value === next.sort)
-  ) {
-    throw new Error('Choose a valid sort order');
-  }
-  const sort = next.sort ?? 'relevance';
 
   const categoryId = parseUuid(next.categoryId);
   const condition = parseCondition(next.condition);

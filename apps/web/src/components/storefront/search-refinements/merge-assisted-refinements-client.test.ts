@@ -188,6 +188,19 @@ const INVALID_CASES: Array<{
     proposal: { query: 'phone', explanation: 'Bad price type', filters: {} },
     committedQuery: 'phone',
   },
+  {
+    name: 'invalid sort and invalid brand (sort error wins)',
+    current: {
+      brands: [],
+      sort: 'bogus' as unknown as SearchRefinements['sort'],
+    },
+    proposal: {
+      query: 'phone',
+      explanation: 'Both invalid',
+      filters: { brands: ['   '] },
+    },
+    committedQuery: 'phone',
+  },
 ];
 
 describe('mergeAssistedRefinementsClient parity with mergeAssistedRefinements', () => {

@@ -27,6 +27,16 @@ const VALID_CASES = [
   },
   {
     ...snapshot,
+    matchVariantId: '11111111-1111-7111-8111-111111111111',
+    matchOfferId: '00000000-0000-0000-0000-000000000000',
+  },
+  {
+    ...snapshot,
+    matchVariantId: '11111111-1111-4111-c111-111111111111',
+    matchOfferId: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  },
+  {
+    ...snapshot,
     matchVariantId: 'not-a-uuid',
     matchOfferId: '22222222-2222-4222-8222-222222222222',
     matchCondition: 'hand-edited',

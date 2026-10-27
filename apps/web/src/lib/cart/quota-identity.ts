@@ -27,7 +27,9 @@ import {
 export function getCartQuotaClientIdentity(request: NextRequest): string {
   const credential = request.headers.get(CART_CLIENT_CREDENTIAL_HEADER);
   if (isValidCartClientCredential(credential)) {
-    return `client-credential:${hashSubject(credential)}`;
+    // Lowercase before hashing: UUID hex case is not identity, and
+    // case rotation must not multiply buckets.
+    return `client-credential:${hashSubject(credential.toLowerCase())}`;
   }
   return getTrustedClientIdentifier(request);
 }
@@ -71,14 +73,20 @@ export async function checkAnonymousCartQuota(
       subject: getTrustedClientIdentifier(request),
     });
   }
-  const credentialQuota = await checkCartQuota({
-    ...input,
-    subject: `client-credential:${hashSubject(credential)}`,
-  });
-  if (!credentialQuota.allowed) return credentialQuota;
-  return checkCartQuota({
+  // Backstop first: a denied network must not consume credential
+  // budget, and — critically while the quota store is degraded to
+  // the bounded per-instance memory store — rotation from one
+  // network stops creating new credential entries once its backstop
+  // trips, so one host cannot poison the fallback capacity that
+  // legitimate shoppers on the instance need.
+  const backstopQuota = await checkCartQuota({
     merchantId: input.merchantId,
     operation: NETWORK_BACKSTOP_OPERATION[input.operation],
     subject: getTrustedClientIdentifier(request),
+  });
+  if (!backstopQuota.allowed) return backstopQuota;
+  return checkCartQuota({
+    ...input,
+    subject: `client-credential:${hashSubject(credential.toLowerCase())}`,
   });
 }

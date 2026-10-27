@@ -8,7 +8,10 @@ import {
 import {
   __resetCartQuotaStoreForTesting,
   CART_QUOTA_BUDGETS,
+  DEGRADED_BOOTSTRAP_LIMIT,
+  NETWORK_BACKSTOP_MULTIPLIER,
 } from './request-quota';
+import { bootstrapMemoryCounters } from './request-quota-counter';
 
 vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
 
@@ -65,6 +68,19 @@ describe('getCartQuotaClientIdentity', () => {
       })
     );
     expect(onCarrierNat).toBe(atHome);
+  });
+
+  it('treats UUID case variants as one identity', () => {
+    vi.stubEnv('VERCEL', '1');
+    const lower = getCartQuotaClientIdentity(
+      requestWith({ 'x-baci-client-credential': CREDENTIAL_A })
+    );
+    const upper = getCartQuotaClientIdentity(
+      requestWith({
+        'x-baci-client-credential': CREDENTIAL_A.toUpperCase(),
+      })
+    );
+    expect(upper).toBe(lower);
   });
 
   it('falls back to the legacy trusted network identity without a credential', () => {
@@ -147,6 +163,44 @@ describe('checkAnonymousCartQuota', () => {
       create
     );
     expect(otherShopper.allowed).toBe(true);
+  });
+
+  it('stops minting degraded-store entries once one network hits its backstop', async () => {
+    vi.stubEnv('VERCEL', '1');
+    __resetCartQuotaStoreForTesting();
+    // No Redis in this suite: bootstrap runs on the bounded
+    // per-instance memory store. Rotating credentials from one
+    // network must stop creating store entries once the degraded
+    // backstop (20 x 25) trips, or one host could exhaust the
+    // instance's fallback capacity for every shopper.
+    const degradedBackstop =
+      DEGRADED_BOOTSTRAP_LIMIT * NETWORK_BACKSTOP_MULTIPLIER;
+    const bootstrap = {
+      merchantId: MERCHANT_ID,
+      operation: 'bootstrap',
+    } as const;
+    for (let attempt = 0; attempt < degradedBackstop + 100; attempt++) {
+      await checkAnonymousCartQuota(
+        requestWith({
+          'x-baci-client-credential': randomUUID(),
+          'x-real-ip': '192.0.2.44',
+        }),
+        bootstrap
+      );
+    }
+    // One backstop entry plus at most one credential entry per
+    // allowed attempt — never the full rotation count.
+    expect(bootstrapMemoryCounters.size).toBeLessThanOrEqual(
+      degradedBackstop + 1
+    );
+    const denied = await checkAnonymousCartQuota(
+      requestWith({
+        'x-baci-client-credential': randomUUID(),
+        'x-real-ip': '192.0.2.44',
+      }),
+      bootstrap
+    );
+    expect(denied.allowed).toBe(false);
   });
 
   it('is a single legacy network check without a credential', async () => {

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildCategoryPriceBandCandidates,
-  buildProductSupportLinks,
-} from './build-commercial-support-links';
+import { buildCategoryPriceBandCandidates } from './build-category-price-band-candidates';
+import { buildProductSupportLinks } from './build-commercial-support-links';
 
 describe('buildProductSupportLinks', () => {
   it('omits product comparisons when the approved set is empty', () => {

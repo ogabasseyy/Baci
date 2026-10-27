@@ -243,6 +243,7 @@ export async function buildInformationalClusterModel(
                 products: compareInventory.products,
               })
             : undefined,
+          inferredBrands: inferred.brands,
         });
 
   // Reserve slots for verified commerce links before hub links fill

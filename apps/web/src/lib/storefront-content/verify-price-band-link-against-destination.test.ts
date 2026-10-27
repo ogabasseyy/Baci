@@ -28,6 +28,40 @@ function product(id: string, brand: string, price: number) {
 }
 
 describe('verifyPriceBandLinkAgainstDestination', () => {
+  it('drops the band link when the inferred brand is absent from the destination pool', () => {
+    const destinationPool = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`samsung-${i}`, 'Samsung', 320_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`tecno-${i}`, 'Tecno', 340_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`xiaomi-${i}`, 'Xiaomi', 360_000)
+      ),
+    ];
+    // Band is indexable on brand diversity alone, but carries no Apple
+    // products, so an Apple article must not keep the link.
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: destinationPool,
+        bandProducts: destinationPool,
+        inferredBrands: ['Apple'],
+      })
+    ).toEqual([]);
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: destinationPool,
+        bandProducts: destinationPool,
+        inferredBrands: ['Samsung'],
+      })
+    ).toEqual([links[1]]);
+  });
+
   it('derives band indexability from the normalized band pool when supplied', () => {
     const comparePool = [
       ...Array.from({ length: 3 }, (_, i) =>

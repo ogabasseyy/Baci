@@ -1,13 +1,15 @@
 import {
+  buildCategoryPriceBandCandidates,
+  type PriceBandCandidate,
+} from './build-category-price-band-candidates';
+import {
   buildBrandCompareCandidate,
-  buildPriceBandCandidate,
   buildProductCompareCandidate,
 } from './compare-eligibility';
 import { buildCanonicalProductCompareSlug } from './compare-slugs';
 import { filterProductsByBrandSlugs } from './filter-products-by-brand-slugs';
 import { findFirstEligibleProductCompare } from './find-first-eligible-product-compare';
 import { normalizeInferredBrands } from './normalize-inferred-brands';
-import { getCuratedPriceBands } from './price-band-taxonomy';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 export interface CommercialSupportLink {
@@ -22,24 +24,6 @@ export interface CommercialSupportProduct {
   price: number;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
-}
-
-/**
- * The curated price-band candidate list for a category. It is INVARIANT of the
- * current product (depends only on categorySlug + products), so callers that
- * fan buildProductSupportLinks across many products should build it ONCE and
- * pass it back in via `priceBandCandidates` rather than rebuilding it per
- * product (the discovery fan-out did this up to 150x).
- */
-export type PriceBandCandidate = ReturnType<typeof buildPriceBandCandidate>;
-
-export function buildCategoryPriceBandCandidates(
-  categorySlug: string,
-  products: CommercialSupportProduct[]
-): PriceBandCandidate[] {
-  return getCuratedPriceBands(categorySlug).map((band) =>
-    buildPriceBandCandidate({ categorySlug, band, products })
-  );
 }
 
 export function buildCategorySupportLinks(input: {

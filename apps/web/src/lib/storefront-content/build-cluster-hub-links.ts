@@ -31,9 +31,19 @@ function postMatchesModelFamily(
     post.slug.replace(/[-_]/g, ' '),
     post.excerpt ?? '',
   ].join(' ');
-  return modelFamilyAuthorityTaxonomy.matchesContent(
-    familyEntry,
-    combinedContext
+  const titleFirstContext = [
+    post.title,
+    post.slug.replace(/[-_]/g, ' '),
+    post.excerpt ?? '',
+    ...(post.tags ?? []),
+    ...(post.keywords ?? []),
+  ].join(' ');
+  // Try both orders: matchesContent bounds its scan to 1000 chars, so a
+  // long tag/keyword list must not push the title mention out of range,
+  // and a bare title token must see the brand context from tags/keywords.
+  return (
+    modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, combinedContext) ||
+    modelFamilyAuthorityTaxonomy.matchesContent(familyEntry, titleFirstContext)
   );
 }
 

@@ -1,10 +1,12 @@
-import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-commercial-support-links';
+import { buildCategoryPriceBandCandidates } from '@/lib/storefront-compare/build-category-price-band-candidates';
 import {
   buildBrandCompareCandidate,
   buildProductCompareCandidate,
 } from '@/lib/storefront-compare/compare-eligibility';
 import { isCuratedCompareSlug } from '@/lib/storefront-compare/compare-indexability-policy';
 import { parseCompareSlug } from '@/lib/storefront-compare/compare-slugs';
+import { filterProductsByBrandSlugs } from '@/lib/storefront-compare/filter-products-by-brand-slugs';
+import { normalizeInferredBrands } from '@/lib/storefront-compare/normalize-inferred-brands';
 
 export interface PriceBandLinkLike {
   href: string;
@@ -41,6 +43,8 @@ export function verifyPriceBandLinkAgainstDestination(args: {
   /** Normalized scoped pool the destination price-band page derives from. */
   bandProducts?: PriceBandProductLike[] | null;
   curatedCompareSlugs?: ReadonlySet<string>;
+  /** Article brands: a kept band must contain these brands in the destination pool, mirroring emission-side relevance. */
+  inferredBrands?: string[];
 }): PriceBandLinkLike[] {
   const brandCandidate = args.compareProducts
     ? buildBrandCompareCandidate({
@@ -49,10 +53,27 @@ export function verifyPriceBandLinkAgainstDestination(args: {
       })
     : null;
   const bandPool = args.bandProducts ?? args.compareProducts;
+  const normalizedInferred = normalizeInferredBrands(
+    args.categorySlug,
+    args.inferredBrands
+  );
   const indexableBandSlugs = new Set(
     bandPool
       ? buildCategoryPriceBandCandidates(args.categorySlug, bandPool)
-          .filter((candidate) => candidate.isIndexable)
+          .filter((candidate) => {
+            if (!candidate.isIndexable) return false;
+            // Emission required the chosen band to contain inferred-brand
+            // products; re-check that against the destination pool so a
+            // band kept indexable only by other brands is dropped.
+            if (normalizedInferred.length === 0) return true;
+            return (
+              filterProductsByBrandSlugs(
+                args.categorySlug,
+                candidate.products,
+                normalizedInferred
+              ).length > 0
+            );
+          })
           .map((candidate) => candidate.band.slug)
       : []
   );

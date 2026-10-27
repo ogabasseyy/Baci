@@ -39,8 +39,8 @@ const guides: Record<AdPlatform, Guide> = {
       },
     ],
     steps: [
-      'In Meta Events Manager, select the website Pixel already connected to your product catalog, if you have one.',
-      'Copy the Pixel ID. For server-side events, create or retrieve its Conversions API access token; this token is optional for browser-only tracking.',
+      'In Meta Events Manager, open Connect Data Sources → Web → Meta Pixel to create a Pixel, or select the website Pixel already connected to your product catalog, if you have one.',
+      'Copy the Pixel ID from its overview. For server-side events, open Pixel Settings → Generate Access Token to create or retrieve its Conversions API access token; this is optional for browser-only tracking.',
       'Enter the Pixel ID and, if enabling server-side events, the token in this Baci page, then save. Baci manages the storefront event wiring; do not add a second pixel script.',
       'Grant Analytics consent to load the Meta Pixel and check Test Events for browser activity. Meta Limited Data Use is a separate setting from storefront consent. Check server delivery separately; a saved setting is not a delivery receipt.',
     ],
@@ -58,8 +58,8 @@ const guides: Record<AdPlatform, Guide> = {
       },
     ],
     steps: [
-      'In TikTok Ads Manager, open Events and select the website Pixel for this store.',
-      'Copy the Pixel ID. The Events API access token is optional and is only needed for server-side events.',
+      'In TikTok Ads Manager, open Assets → Events → Web Events and create a Pixel, or select the website Pixel for this store.',
+      'Copy the Pixel ID from its details. For server-side events, open Pixel Settings → Generate Access Token to create or retrieve the Events API access token; this is optional for browser-only tracking.',
       'Enter the Pixel ID and, if enabling server-side events, the token in this Baci page and save. Keep the token private and do not install a duplicate pixel script.',
       'Grant Marketing consent on your storefront, then verify browser and server events separately in TikTok Events Manager.',
     ],
@@ -77,8 +77,8 @@ const guides: Record<AdPlatform, Guide> = {
       },
     ],
     steps: [
-      'In Snapchat Ads Manager, open Events Manager and select the existing business Pixel for this store.',
-      'Copy its Pixel ID. The Conversions API token is optional and only needed for server-side events.',
+      'In Snapchat Ads Manager, open Events Manager and create a Snap Pixel, or select the existing business Pixel for this store.',
+      'Copy its Pixel ID. For server-side events, generate or retrieve a token in the Pixel Settings under Conversions API; this token is optional for browser-only tracking.',
       'Enter the Pixel ID and, if enabling server-side events, the token in this Baci page, then save. Keep the token private; Baci manages event wiring.',
       'Grant Marketing consent on your storefront and check the provider event view. Confirm browser activity and server delivery as separate results.',
     ],
@@ -96,7 +96,7 @@ const guides: Record<AdPlatform, Guide> = {
       },
     ],
     steps: [
-      'In X Ads Events Manager, select the existing website Pixel for this store.',
+      'In X Ads Events Manager, create a website Pixel for this store, or select its existing Pixel.',
       'Copy its Pixel ID and the event codes for the events you plan to send. Each event code must belong to the selected Pixel.',
       'Enter the Pixel ID and event codes in this Baci page. Server credentials are optional for browser-only tracking; to enable server events, configure one method: a Pixel access token or all four OAuth credentials.',
       'Grant Marketing consent on your storefront, then verify browser and server events in X Events Manager separately. Use Successful payment only for a fully paid order confirmed by Baci.',

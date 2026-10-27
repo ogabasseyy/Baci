@@ -29,14 +29,14 @@ describe('AdPlatformSetupGuide', () => {
       'tiktok',
       'TikTok setup guide',
       'Grant Marketing consent',
-      'optional and is only needed for server-side events',
+      'optional for browser-only tracking',
       'https://ads.tiktok.com/',
     ],
     [
       'snapchat',
       'Snapchat setup guide',
       'Grant Marketing consent',
-      'optional and only needed for server-side events',
+      'optional for browser-only tracking',
       'https://ads.snapchat.com/',
     ],
     [
@@ -108,10 +108,11 @@ describe('AdPlatformSetupGuide', () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByRole('list').querySelectorAll('li')).toHaveLength(4);
+    expect(screen.getByText(/create.*Pixel.*or select/i)).toBeInTheDocument();
     const distinguishingSteps: Record<typeof platform, RegExp> = {
-      facebook: /check Test Events for browser activity/,
-      tiktok: /Events API access token/,
-      snapchat: /Snapchat Ads Manager, open Events Manager/,
+      facebook: /Pixel Settings → Generate Access Token/,
+      tiktok: /Pixel Settings → Generate Access Token/,
+      snapchat: /Pixel Settings under Conversions API/,
       x: /all four OAuth credentials/,
     };
     expect(screen.getByText(distinguishingSteps[platform])).toBeInTheDocument();

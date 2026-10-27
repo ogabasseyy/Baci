@@ -175,12 +175,15 @@ function removeKotlinGradlePlugin(content, description) {
   if (!content.includes('org.jetbrains.kotlin:kotlin-gradle-plugin')) {
     return content;
   }
-  return assertReplaceOrThrow(
+  const result = assertReplaceOrThrow(
     content,
     /\s*classpath\((?:['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]|kotlinVersion\s*\?\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:\$kotlinVersion['"]\s*:\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"])\)\s*\n?/g,
     '\n',
     description
   );
+  const declaration = /^[ \t]*def kotlinVersion = findProperty\(['"]android\.kotlinVersion['"]\)[ \t]*\r?\n/m;
+  const withoutDeclaration = result.replace(declaration, '');
+  return /\bkotlinVersion\b/.test(withoutDeclaration) ? result : withoutDeclaration;
 }
 
 function addAsyncStorageRepo(content, asyncStorageRepo, description) {

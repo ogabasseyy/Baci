@@ -6,7 +6,7 @@ Both mobile apps move together from Expo 57 / React Native 0.86.2 / React 19.2.3
 
 - Expo module versions follow the SDK 58 bundled dependency matrix. Reanimated 4.7.1 and Worklets 0.13.0 remain aligned, and automatically installed React Native peers use 0.88.0.
 - Native refs use the public instance types. Removed InteractionManager calls use cancellable idle callbacks. Sign-out teardown, retry and unmount behavior have focused tests.
-- Floating tab bars use SDK 58 emitter and navigateToTab props. Admin tab warming uses the supported router prefetch API; storefront tabs retain their existing no-preload policy.
+- Floating tab bars use SDK 58 emitter and navigateToTab props. Admin requests route prefetch through the SDK 58 router; inactive-screen mounting and first-tap performance have not been verified on a device. Storefront tabs retain their existing no-preload policy.
 - OAuth callback parsing uses public URL APIs instead of an unexported Expo Auth Session internal module. Query/fragment precedence, missing codes and malformed URLs are tested.
 - Metro resolves React and React DOM from each app so hoisted dependencies share its React instance. Vitest uses published ESM entries for Testing Library and React Native Web to honor the app-specific aliases; the web app retains React 19.2.3.
 - Android uses compile SDK/build tools 37, target SDK 36 and Gradle 9.4.1. iOS uses the SDK 58 scene lifecycle. Existing tracking-consent defaults, Facebook credential injection and Sentry/PostHog build wrappers are preserved in checked-in native projects.

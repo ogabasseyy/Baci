@@ -188,7 +188,21 @@ test('removeKotlinGradlePlugin: handles the SDK 58 conditional classpath and is 
   }`;
   const result = removeKotlinGradlePlugin(input, 'SDK 58 Kotlin classpath');
   assert.doesNotMatch(result, /org\.jetbrains\.kotlin:kotlin-gradle-plugin/);
+  assert.doesNotMatch(result, /def kotlinVersion/);
   assert.match(result, /com\.android\.tools\.build:gradle/);
   assert.match(result, /com\.facebook\.react:react-native-gradle-plugin/);
   assert.equal(removeKotlinGradlePlugin(result, 'SDK 58 Kotlin classpath'), result);
+});
+
+test('Kotlin classpath cleanup retains a version declaration used elsewhere', () => {
+  const { removeKotlinGradlePlugin } = require('./expoAndroidGradleFixes.js');
+  const input = `dependencies {
+    def kotlinVersion = findProperty('android.kotlinVersion')
+    classpath(kotlinVersion ? "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion" : 'org.jetbrains.kotlin:kotlin-gradle-plugin')
+    println kotlinVersion
+  }`;
+  const result = removeKotlinGradlePlugin(input, 'Kotlin cleanup');
+  assert.match(result, /def kotlinVersion/);
+  assert.match(result, /println kotlinVersion/);
+  assert.doesNotMatch(result, /kotlin-gradle-plugin/);
 });

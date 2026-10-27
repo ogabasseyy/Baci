@@ -26,7 +26,10 @@ it('passes code changes and actions to the caller and blocks changes during veri
     screen.getByRole('button', { name: 'Use a different email' })
   );
   expect(onDifferentEmail).toHaveBeenCalledOnce();
+  rerender(<CustomerCodeForm {...props} isSending />);
+  expect(screen.getByLabelText('Digit 1 of 6')).toBeDisabled();
   rerender(<CustomerCodeForm {...props} isVerifying />);
+  expect(screen.getByRole('button', { name: 'Resend code' })).toBeDisabled();
   expect(
     screen.getByRole('button', { name: 'Use a different email' })
   ).toBeDisabled();

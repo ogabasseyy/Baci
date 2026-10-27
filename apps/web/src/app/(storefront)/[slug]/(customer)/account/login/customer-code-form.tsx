@@ -52,7 +52,7 @@ export function CustomerCodeForm({
                 onChange={(e) => handleCodeChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 className="w-12 h-14 text-center text-2xl font-mono"
-                disabled={isVerifying}
+                disabled={isSending || isVerifying}
                 autoFocus={index === 0}
                 aria-label={`Digit ${index + 1} of 6`}
               />
@@ -79,7 +79,7 @@ export function CustomerCodeForm({
           variant="ghost"
           size="sm"
           onClick={handleResendCode}
-          disabled={isSending}
+          disabled={isSending || isVerifying}
         >
           {isSending ? 'Sending...' : 'Resend code'}
         </Button>

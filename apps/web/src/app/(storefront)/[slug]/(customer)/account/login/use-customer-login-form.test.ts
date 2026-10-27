@@ -70,6 +70,79 @@ describe('useCustomerLoginForm', () => {
     expect(result.current.isSending).toBe(false);
   });
 
+  it('prevents overlapping send and resend requests and unlocks after completion', async () => {
+    mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+    const pending = Promise.withResolvers<{ success: boolean }>();
+    mocks.sendOtp
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useCustomerLoginForm());
+    act(() => result.current.setEmail('buyer@example.com'));
+    const form = render(
+      createElement('form', {
+        onSubmit: result.current.handleSendCode,
+        'aria-label': 'Send code',
+      })
+    );
+    act(() => {
+      fireEvent.submit(form.getByRole('form', { name: 'Send code' }));
+      fireEvent.submit(form.getByRole('form', { name: 'Send code' }));
+      void result.current.handleResendCode();
+    });
+    expect(mocks.sendOtp).toHaveBeenCalledTimes(1);
+    await act(async () => pending.resolve({ success: true }));
+    await act(async () => result.current.handleResendCode());
+    expect(mocks.sendOtp).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows another send after an unexpected send error', async () => {
+    mocks.sendOtp
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ success: true });
+    const { result } = renderHook(() => useCustomerLoginForm());
+    act(() => result.current.setEmail('buyer@example.com'));
+    const form = render(
+      createElement('form', {
+        onSubmit: result.current.handleSendCode,
+        'aria-label': 'Send code',
+      })
+    );
+    fireEvent.submit(form.getByRole('form', { name: 'Send code' }));
+    await waitFor(() =>
+      expect(result.current.error).toBe('Failed to send code')
+    );
+    expect(result.current.isSending).toBe(false);
+    fireEvent.submit(form.getByRole('form', { name: 'Send code' }));
+    await waitFor(() => expect(mocks.sendOtp).toHaveBeenCalledTimes(2));
+  });
+
+  it('ignores code entry during a pending resend and verifies after it finishes', async () => {
+    mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+    const pending = Promise.withResolvers<{ success: boolean }>();
+    mocks.sendOtp.mockReturnValueOnce(pending.promise);
+    mocks.verifyOtp.mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useCustomerLoginForm());
+    const input = render(
+      createElement('input', {
+        onPaste: result.current.handlePaste,
+        'aria-label': 'Code',
+      })
+    );
+    act(() => {
+      void result.current.handleResendCode();
+    });
+    fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+      clipboardData: { getData: () => '123456' },
+    });
+    expect(mocks.verifyOtp).not.toHaveBeenCalled();
+    expect(result.current.code).toEqual(['', '', '', '', '', '']);
+    await act(async () => pending.resolve({ success: true }));
+    fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+      clipboardData: { getData: () => '123456' },
+    });
+    await waitFor(() => expect(mocks.verifyOtp).toHaveBeenCalledWith('123456'));
+  });
+
   it('reports verification failures and clears the code', async () => {
     mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
     mocks.verifyOtp.mockResolvedValue({

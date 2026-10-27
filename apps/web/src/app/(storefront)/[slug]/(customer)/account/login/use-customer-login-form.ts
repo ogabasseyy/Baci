@@ -36,6 +36,7 @@ export function useCustomerLoginForm() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  const sendLock = useRef(false);
   const verifyLock = useRef(false);
   const codeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -70,21 +71,27 @@ export function useCustomerLoginForm() {
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sendLock.current || verifyLock.current) return;
+    sendLock.current = true;
     setError('');
     setIsSending(true);
-
-    const result = await sendOtp(email);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to send code');
-    } else {
-      setEditingEmail(false);
+    try {
+      const result = await sendOtp(email);
+      if (!result.success) {
+        setError(result.error || 'Failed to send code');
+      } else {
+        setEditingEmail(false);
+      }
+    } catch {
+      setError('Failed to send code');
+    } finally {
+      sendLock.current = false;
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
   const handleCodeChange = (index: number, value: string) => {
+    if (sendLock.current || verifyLock.current) return;
     // Native OTP autofill can deliver the entire code in the first field.
     if (index === 0 && /^\d{6}$/.test(value)) {
       setCode(value.split(''));
@@ -120,6 +127,7 @@ export function useCustomerLoginForm() {
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
+    if (sendLock.current || verifyLock.current) return;
     const pastedData = e.clipboardData.getData('text').slice(0, 6);
     if (!/^\d+$/.test(pastedData)) return;
 
@@ -136,7 +144,7 @@ export function useCustomerLoginForm() {
   };
 
   const handleVerifyCode = async (codeString: string) => {
-    if (verifyLock.current) return;
+    if (verifyLock.current || sendLock.current) return;
     verifyLock.current = true;
     setError('');
     setIsVerifying(true);
@@ -162,17 +170,22 @@ export function useCustomerLoginForm() {
   };
 
   const handleResendCode = async () => {
+    if (sendLock.current || verifyLock.current) return;
+    sendLock.current = true;
     setError('');
     setIsSending(true);
     setCode(['', '', '', '', '', '']);
-
-    const result = await sendOtp(otpState?.email || email);
-
-    if (!result.success) {
-      setError(result.error || 'Failed to resend code');
+    try {
+      const result = await sendOtp(otpState?.email || email);
+      if (!result.success) {
+        setError(result.error || 'Failed to resend code');
+      }
+    } catch {
+      setError('Failed to resend code');
+    } finally {
+      sendLock.current = false;
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
   return {

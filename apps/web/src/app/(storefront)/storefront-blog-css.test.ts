@@ -72,6 +72,9 @@ describe('blog sheets compiled in layout order', () => {
       '.bg-card',
       '.text-card-foreground',
       '.ring-offset-background',
+      // Renderer-only utilities from the delta sheet (blog-code-block).
+      '.bg-slate-950',
+      '.text-slate-50',
     ]) {
       let count = 0;
       combined.walkRules((rule) => {

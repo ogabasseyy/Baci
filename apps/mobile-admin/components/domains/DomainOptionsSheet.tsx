@@ -50,18 +50,25 @@ export default function DomainOptionsSheet({
   useEffect(() => {
     if (visible || !pendingActionRef.current) return;
 
-    const idleHandle = requestIdleCallback(() => {
+    const runAction = () => {
       if (!isMountedRef.current) return;
 
       const pendingAction = pendingActionRef.current;
       if (!pendingAction) return;
       pendingActionRef.current = null;
       onAction(pendingAction.action, pendingAction.domain);
-    });
-
-    return () => {
-      cancelIdleCallback(idleHandle);
     };
+
+    if (
+      typeof requestIdleCallback === 'function' &&
+      typeof cancelIdleCallback === 'function'
+    ) {
+      const idleHandle = requestIdleCallback(runAction, { timeout: 500 });
+      return () => cancelIdleCallback(idleHandle);
+    }
+
+    const timer = setTimeout(runAction, 0);
+    return () => clearTimeout(timer);
   }, [onAction, visible]);
 
   const handleAction = (action: DomainAction) => {

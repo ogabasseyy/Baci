@@ -102,7 +102,7 @@ vi.mock('@/hooks/useTheme', () => ({
   }),
 }));
 
-import TabLayout from '@/app/(admin)/(tabs)/_layout';
+import TabLayout, { unstable_settings } from '@/app/(admin)/(tabs)/_layout';
 
 type TabBarRenderer = (props: BottomTabBarProps) => React.ReactNode;
 
@@ -128,6 +128,7 @@ describe('TabLayout', () => {
 
     expect(mocks.tabsProps?.detachInactiveScreens).toBe(false);
     expect(mocks.tabsProps?.initialRouteName).toBeUndefined();
+    expect(unstable_settings.initialRouteName).toBe('index');
     expect(typeof mocks.tabsProps?.tabBar).toBe('function');
     const tabBar = mocks.tabsProps?.tabBar as TabBarRenderer;
     render(

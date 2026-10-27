@@ -1,4 +1,4 @@
-const resolveMobileReact = require('../resolve-mobile-react');
+const resolveMobileReact = require('@baci/shared/resolve-mobile-react');
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');

@@ -1,12 +1,12 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const test = require('node:test');
-const resolveMobileReact = require('./resolve-mobile-react');
+const resolveMobileReact = require('./resolve-mobile-react.cjs');
 
 for (const app of ['mobile-admin', 'mobile-storefront']) {
   for (const platform of ['ios', 'android', 'web']) {
     test(`${app} resolves React and its JSX runtime from the app on ${platform}`, () => {
-      const projectRoot = path.resolve(__dirname, app);
+      const projectRoot = path.resolve(__dirname, '../../apps', app);
       const context = {
         originModulePath: require.resolve('react-native'),
         unstable_conditionNames: ['react-native'],

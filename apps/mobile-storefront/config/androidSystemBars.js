@@ -77,6 +77,11 @@ function applyAndroidSystemBarStyles(androidStyles) {
     parent: 'Theme.AppCompat.DayNight.NoActionBar',
   };
 
+  // Let the DayNight theme choose contrasting navigation icons.
+  appTheme.item = (appTheme.item ?? []).filter(
+    (item) => item.$?.name !== 'android:windowLightNavigationBar'
+  );
+
   for (const item of SYSTEM_BAR_ITEMS) {
     upsertStyleItem(appTheme, item);
   }

@@ -1,4 +1,4 @@
-const resolveMobileReact = require('../resolve-mobile-react');
+const resolveMobileReact = require('@baci/shared/resolve-mobile-react');
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { getPostHogExpoConfig } = require('posthog-react-native/metro');

@@ -7,6 +7,7 @@ import type { Domain } from './domain-types';
 
 const mocks = vi.hoisted(() => ({
   interactionCallback: null as null | (() => void),
+  idleOptions: null as null | { timeout: number },
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
@@ -112,10 +113,14 @@ const baseDomain: Domain = {
 
 describe('DomainOptionsSheet', () => {
   beforeEach(() => {
-    vi.stubGlobal('requestIdleCallback', (callback: () => void) => {
-      mocks.interactionCallback = callback;
-      return 1;
-    });
+    vi.stubGlobal(
+      'requestIdleCallback',
+      (callback: () => void, options: { timeout: number }) => {
+        mocks.idleOptions = options;
+        mocks.interactionCallback = callback;
+        return 1;
+      }
+    );
     vi.stubGlobal('cancelIdleCallback', () => {
       mocks.interactionCallback = null;
     });
@@ -123,7 +128,37 @@ describe('DomainOptionsSheet', () => {
   afterEach(() => {
     cleanup();
     mocks.interactionCallback = null;
+    mocks.idleOptions = null;
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('uses a timer when idle callbacks are unavailable', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestIdleCallback', undefined);
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <DomainOptionsSheet
+        visible
+        domain={baseDomain}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(
+      <DomainOptionsSheet
+        visible={false}
+        domain={baseDomain}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    );
+    expect(onAction).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+    vi.useRealTimers();
   });
 
   it('runs selected action only after close and an idle callback', () => {
@@ -153,6 +188,7 @@ describe('DomainOptionsSheet', () => {
     );
 
     expect(mocks.interactionCallback).not.toBeNull();
+    expect(mocks.idleOptions).toEqual({ timeout: 500 });
     mocks.interactionCallback?.();
 
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);

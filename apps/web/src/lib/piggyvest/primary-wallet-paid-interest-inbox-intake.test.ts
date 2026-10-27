@@ -29,6 +29,19 @@ it('persists exact signed whitespace-preserving bytes before acknowledging', asy
     signature,
   });
 });
+it('accepts uppercase signature hex and persists its lowercase form with exact raw bytes', async () => {
+  const uppercaseSignature = signature.toUpperCase();
+  expect(
+    await dispatchPrimaryWalletPaidInterestInbox({
+      rawBody,
+      signature: uppercaseSignature,
+    })
+  ).toBe('accepted');
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: rawBody.toString('hex'),
+    signature,
+  });
+});
 it('does not acknowledge when durable persistence fails', async () => {
   mocks.enqueue.mockRejectedValue(
     new Error('Primary interest inbox database unavailable')
@@ -57,6 +70,18 @@ it('does not persist invalid HMAC, reserialized bytes or oversize input', async 
   expect(
     await dispatchPrimaryWalletPaidInterestInbox({ rawBody, signature: null })
   ).toBe('invalid_signature');
+  for (const malformed of [
+    'g'.repeat(128),
+    `${signature.slice(0, -1)} `,
+    signature.slice(1),
+  ]) {
+    expect(
+      await dispatchPrimaryWalletPaidInterestInbox({
+        rawBody,
+        signature: malformed,
+      })
+    ).toBe('invalid_signature');
+  }
   expect(mocks.enqueue).not.toHaveBeenCalled();
 });
 it.each([

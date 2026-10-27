@@ -12,7 +12,7 @@ const knownEventTypes = new Set<string>(
 
 type RawWebhookClassification =
   | { kind: 'explicit-interest' }
-  | { kind: 'known-other'; eventType: string }
+  | { kind: 'known-other' }
   | { kind: 'unknown' };
 
 function classifyRawWebhook(rawBody: Uint8Array): RawWebhookClassification {
@@ -31,31 +31,17 @@ function classifyRawWebhook(rawBody: Uint8Array): RawWebhookClassification {
   if (eventType === 'interest-payout.success')
     return { kind: 'explicit-interest' };
   if (typeof eventType === 'string' && knownEventTypes.has(eventType))
-    return { kind: 'known-other', eventType };
+    return { kind: 'known-other' };
   return { kind: 'unknown' };
 }
 
 function shouldCaptureBeforeSchema(
-  classification: RawWebhookClassification,
-  families: readonly PiggyvestWebhookKeyFamily[]
+  classification: RawWebhookClassification
 ): boolean {
-  if (classification.kind === 'explicit-interest') return true;
-  if (classification.kind === 'unknown') return true;
-  if (classification.kind === 'known-other') {
-    if (families.includes('legacy')) return false;
-    if (
-      classification.eventType === 'bank-transfer.inflow.success' &&
-      families.includes('bank')
-    )
-      return false;
-    if (
-      classification.eventType === 'wallet-transfer.outflow.success' &&
-      families.includes('custody')
-    )
-      return false;
-    return true;
-  }
-  return false;
+  // Explicit interest deliveries and unrecognized envelopes need raw capture
+  // before strict schema parsing. Known non-interest events go through the
+  // normal family dispatcher and its quarantine path.
+  return classification.kind !== 'known-other';
 }
 
 function warnCaptureUnavailable() {
@@ -87,7 +73,7 @@ export async function captureInterestRawDelivery(input: {
       ? retryableCaptureFailure()
       : null;
   }
-  if (!shouldCaptureBeforeSchema(classification, input.families)) return null;
+  if (!shouldCaptureBeforeSchema(classification)) return null;
 
   let outcome: Awaited<
     ReturnType<typeof dispatchPrimaryWalletPaidInterestInbox>

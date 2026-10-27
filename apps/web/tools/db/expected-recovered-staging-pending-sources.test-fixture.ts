@@ -39,4 +39,9 @@ export const EXPECTED_RECOVERED_STAGING_PENDING_SOURCES = [
       'supabase/migrations/20261022090000_storefront_wallet_own_names.sql',
     sha256: '479245d150df3de1e49bfbc7f96e74566bf0aa0ed60948f83f1b35fcbdacffbe',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261027061553_restrict_primary_onboarding_presence_execute.sql',
+    sha256: '12821754992a278352e62b19d24be4c9efd8a7683df78af44a1af01514aa46a0',
+  },
 ];

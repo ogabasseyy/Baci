@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   interestInbox: vi.fn(),
+  recordQuarantineEvent: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   families: ['interest'] as string[],
 }));
@@ -27,6 +28,11 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
     mocks.processPiggyvestEvent(...args),
+}));
+vi.mock('@/lib/piggyvest/event-quarantine', () => ({
+  digestRawBody: () => 'a'.repeat(64),
+  recordQuarantineEvent: (...args: unknown[]) =>
+    mocks.recordQuarantineEvent(...args),
 }));
 
 import { POST } from './route';
@@ -71,12 +77,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.families = ['interest'];
   mocks.interestInbox.mockResolvedValue('quarantined');
+  mocks.recordQuarantineEvent.mockResolvedValue('recorded');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
 });
 
-it('durably quarantines a known non-interest event signed only by the interest family', async () => {
+it('durably key-family quarantines a known non-interest event signed only by the interest family', async () => {
   const rawBody = JSON.stringify(restrictionEvent);
-  const signature = '0'.repeat(128);
   const response = await POST(createRequest(rawBody));
 
   expect(response.status).toBe(200);
@@ -84,12 +90,16 @@ it('durably quarantines a known non-interest event signed only by the interest f
     received: true,
     quarantined: true,
   });
-  expect(mocks.interestInbox).toHaveBeenCalledWith({
-    rawBody: Buffer.from(rawBody),
-    signature,
+  expect(mocks.recordQuarantineEvent).toHaveBeenCalledWith(undefined, {
+    bodyDigest: 'a'.repeat(64),
+    reason: 'key-family',
+    eventId: restrictionEvent.eventId,
+    eventType: restrictionEvent.eventType,
+    detail: expect.any(Object),
   });
-  expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  expect(mocks.interestInbox).not.toHaveBeenCalled();
   expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
+  expect(mocks.createServiceClient).toHaveBeenCalled();
 });
 
 it('legacy-processes the same event when the legacy family matches', async () => {

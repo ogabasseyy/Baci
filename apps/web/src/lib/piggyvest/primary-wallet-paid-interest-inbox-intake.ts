@@ -11,6 +11,9 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   const config = readPrimaryWalletPaidInterestInboxRuntime('intake', input.env);
   if (!config) return 'disabled' as const;
   const rawBody = Uint8Array.from(input.rawBody);
+  // HMAC hex is case-insensitive. Canonicalize its textual representation at
+  // the durable intake boundary; rawBody remains the exact signed byte stream.
+  const signature = input.signature?.toLowerCase() ?? null;
   if (
     !rawBody.byteLength ||
     rawBody.byteLength > 65536 ||
@@ -18,7 +21,7 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
       (secret) =>
         verifyPiggyvestPayloadSignature({
           payload: rawBody,
-          signature: input.signature,
+          signature,
           secret,
         })
     )
@@ -26,6 +29,6 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
     return 'invalid_signature' as const;
   return await createPrimaryWalletPaidInterestInboxStore(config).enqueue({
     rawHex: Buffer.from(rawBody).toString('hex'),
-    signature: input.signature ?? '',
+    signature: signature ?? '',
   });
 }

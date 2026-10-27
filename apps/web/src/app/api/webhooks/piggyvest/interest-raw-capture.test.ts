@@ -28,21 +28,6 @@ it.each<[string, string, readonly PiggyvestWebhookKeyFamily[]]>([
     ['interest', 'legacy'],
   ],
   ['shared-family malformed bytes', '{ invalid', ['interest', 'legacy']],
-  [
-    'dedicated-family known bank type',
-    '{"eventType":"bank-transfer.inflow.success"}',
-    ['interest'],
-  ],
-  [
-    'dedicated-family known custody type',
-    '{"eventType":"wallet-transfer.outflow.success"}',
-    ['interest'],
-  ],
-  [
-    'dedicated-family known legacy type',
-    '{"eventType":"create-wallet.success"}',
-    ['interest'],
-  ],
 ])('durably captures %s for quarantine without financial dispatch', async (_label, body, families) => {
   mocks.inbox.mockResolvedValue('quarantined');
   const response = await captureInterestRawDelivery(input(body, families));
@@ -76,6 +61,21 @@ it.each<[string, string, readonly PiggyvestWebhookKeyFamily[]]>([
     '{"eventType":"create-wallet.success"}',
     ['interest', 'legacy'],
   ],
+  [
+    'known bank event with interest authority only',
+    '{"eventType":"bank-transfer.inflow.success"}',
+    ['interest'],
+  ],
+  [
+    'known custody event with interest authority only',
+    '{"eventType":"wallet-transfer.outflow.success"}',
+    ['interest'],
+  ],
+  [
+    'known legacy event with interest authority only',
+    '{"eventType":"create-wallet.success"}',
+    ['interest'],
+  ],
 ])('leaves %s on its existing family route', async (_label, body, families) => {
   expect(await captureInterestRawDelivery(input(body, families))).toBeNull();
   expect(mocks.inbox).not.toHaveBeenCalled();
@@ -106,10 +106,6 @@ it.each([
     '{"eventType":"future-interest-event"}',
   ],
   ['malformed interest-family bytes', '{ malformed'],
-  [
-    'other envelope signed only by the interest key',
-    '{"eventType":"bank-transfer.inflow.success"}',
-  ],
 ])('returns redacted retryable failure for %s when durable capture is unavailable', async (_label, body) => {
   mocks.inbox.mockResolvedValue('disabled');
   const response = await captureInterestRawDelivery(input(body, ['interest']));

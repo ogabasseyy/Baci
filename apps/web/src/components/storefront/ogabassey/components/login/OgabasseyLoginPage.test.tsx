@@ -294,6 +294,43 @@ describe('OgabasseyLoginPage', () => {
       );
     });
 
+    it('clears a stale masked hint when navigating between claim redirects', async () => {
+      // Regression: the previous inline effect kept showing the first
+      // claim's masked address after navigating to a claim with no hint.
+      const fetchMock = vi.fn(async (url: unknown) =>
+        String(url).includes('token_123')
+          ? new Response(JSON.stringify({ emailHint: 'b***@yahoo.co.uk' }), {
+              status: 200,
+            })
+          : new Response(JSON.stringify({}), { status: 200 })
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      mockSearchParams.get = vi.fn((key) =>
+        key === 'redirect' ? '/receipts/claim/token_123' : null
+      );
+
+      const { rerender } = render(<OgabasseyLoginPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'This receipt was sent to b***@yahoo.co.uk — sign in with that address.'
+          )
+        ).toBeInTheDocument();
+      });
+
+      mockSearchParams.get = vi.fn((key) =>
+        key === 'redirect' ? '/receipts/claim/token_456' : null
+      );
+      rerender(<OgabasseyLoginPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/This receipt was sent to/)
+        ).not.toBeInTheDocument();
+      });
+    });
+
     it('renders EmailForm when isCodeSent is false', () => {
       // Arrange
       mockUseMerchant.mockReturnValue({ loading: false });

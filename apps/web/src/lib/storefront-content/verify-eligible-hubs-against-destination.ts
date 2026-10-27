@@ -1,7 +1,4 @@
-import {
-  resolveBrandAuthorityEligibility,
-  resolveFamilyAuthorityEligibility,
-} from '@/lib/storefront-category/authority-hub-eligibility';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { loadBrandAuthorityInventorySafely } from '@/lib/storefront-category/load-brand-authority-inventory-safely';
@@ -54,11 +51,12 @@ export async function verifyEligibleHubsAgainstDestination(args: {
         entry,
       });
       if (!inventory) return null;
-      const eligibility = resolveBrandAuthorityEligibility(
-        inventory.products,
-        args.categorySlug,
-        entry
-      );
+      const eligibility =
+        authorityHubEligibility.resolveBrandAuthorityEligibility(
+          inventory.products,
+          args.categorySlug,
+          entry
+        );
       if (!eligibility.eligible) return null;
       return {
         hub: { ...hub, product_count: eligibility.productCount },
@@ -89,10 +87,11 @@ export async function verifyEligibleHubsAgainstDestination(args: {
       hub.family_key
     );
     if (!familyEntry) continue;
-    const eligibility = resolveFamilyAuthorityEligibility(
-      products,
-      familyEntry
-    );
+    const eligibility =
+      authorityHubEligibility.resolveFamilyAuthorityEligibility(
+        products,
+        familyEntry
+      );
     if (eligibility.eligible) {
       familyHubs.push({ ...hub, product_count: eligibility.productCount });
     }

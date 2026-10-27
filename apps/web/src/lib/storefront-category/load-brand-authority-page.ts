@@ -2,10 +2,7 @@ import { headers } from 'next/headers';
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import type { ProductKeySpecsRecord } from '@/lib/normalize-product';
 import { buildStoreUrl } from '@/lib/store-url';
-import {
-  resolveBrandAuthorityEligibility,
-  resolveFamilyAuthorityEligibility,
-} from '@/lib/storefront-category/authority-hub-eligibility';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
@@ -97,7 +94,7 @@ async function loadBrandAuthorityPage(
     { limit: null }
   );
 
-  const eligibility = resolveBrandAuthorityEligibility(
+  const eligibility = authorityHubEligibility.resolveBrandAuthorityEligibility(
     brandProducts,
     args.categorySlug,
     authorityEntry
@@ -160,10 +157,11 @@ async function loadBrandAuthorityPage(
   const familyLinks = modelFamilyAuthorityTaxonomy
     .getEntries(args.categorySlug, authorityEntry.brandKey)
     .flatMap((entry) => {
-      const { productCount, eligible } = resolveFamilyAuthorityEligibility(
-        allInStockProducts,
-        entry
-      );
+      const { productCount, eligible } =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          allInStockProducts,
+          entry
+        );
       return eligible
         ? [
             {

@@ -1,8 +1,5 @@
 import type { MetadataRoute } from 'next';
-import {
-  resolveBrandAuthorityEligibility,
-  resolveFamilyAuthorityEligibility,
-} from '@/lib/storefront-category/authority-hub-eligibility';
+import { authorityHubEligibility } from '@/lib/storefront-category/authority-hub-eligibility';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
@@ -49,11 +46,12 @@ export async function getBrandAuthoritySitemapEntries({
                 categorySlug,
                 entry
               );
-              const eligibility = resolveBrandAuthorityEligibility(
-                inventory.products ?? [],
-                categorySlug,
-                entry
-              );
+              const eligibility =
+                authorityHubEligibility.resolveBrandAuthorityEligibility(
+                  inventory.products ?? [],
+                  categorySlug,
+                  entry
+                );
               if (!eligibility.eligible) {
                 return [];
               }
@@ -68,10 +66,11 @@ export async function getBrandAuthoritySitemapEntries({
               const familyEntries = modelFamilyAuthorityTaxonomy
                 .getEntries(categorySlug, entry.brandKey)
                 .flatMap((family) => {
-                  const familyEligibility = resolveFamilyAuthorityEligibility(
-                    eligibility.products,
-                    family
-                  );
+                  const familyEligibility =
+                    authorityHubEligibility.resolveFamilyAuthorityEligibility(
+                      eligibility.products,
+                      family
+                    );
                   if (!familyEligibility.eligible) {
                     return [];
                   }

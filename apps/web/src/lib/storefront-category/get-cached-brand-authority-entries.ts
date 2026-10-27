@@ -1,7 +1,7 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityInventory } from '@/lib/storefront-category/get-cached-brand-authority-inventory';
-import { resolveBrandAuthorityEligibility } from './authority-hub-eligibility';
+import { authorityHubEligibility } from './authority-hub-eligibility';
 
 async function getCachedBrandAuthorityEntriesRead(
   merchantId: string,
@@ -23,11 +23,12 @@ async function getCachedBrandAuthorityEntriesRead(
         categorySlug,
         entry
       );
-      const eligibility = resolveBrandAuthorityEligibility(
-        inventory.products,
-        categorySlug,
-        entry
-      );
+      const eligibility =
+        authorityHubEligibility.resolveBrandAuthorityEligibility(
+          inventory.products,
+          categorySlug,
+          entry
+        );
       return {
         entry,
         eligible: eligibility.eligible,

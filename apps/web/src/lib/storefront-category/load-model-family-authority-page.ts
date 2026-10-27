@@ -9,7 +9,7 @@ import type { SupportedClusterCategory } from '@/lib/storefront-content/content-
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
-import { resolveFamilyAuthorityEligibility } from './authority-hub-eligibility';
+import { authorityHubEligibility } from './authority-hub-eligibility';
 
 async function loadModelFamilyAuthorityPage(args: {
   merchantSlug: string;
@@ -37,7 +37,7 @@ async function loadModelFamilyAuthorityPage(args: {
   const brandInventory = brandPage.brandInventory ?? {
     products: brandPage.products,
   };
-  const eligibility = resolveFamilyAuthorityEligibility(
+  const eligibility = authorityHubEligibility.resolveFamilyAuthorityEligibility(
     brandInventory.products,
     family
   );
@@ -58,10 +58,11 @@ async function loadModelFamilyAuthorityPage(args: {
     .getEntries(args.categorySlug, brandPage.brand.brandKey)
     .filter((entry) => entry.familyKey !== family.familyKey)
     .flatMap((entry) => {
-      const { productCount, eligible } = resolveFamilyAuthorityEligibility(
-        brandInventory.products,
-        entry
-      );
+      const { productCount, eligible } =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          brandInventory.products,
+          entry
+        );
       return eligible
         ? [
             {

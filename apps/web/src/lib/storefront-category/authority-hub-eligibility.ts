@@ -10,7 +10,7 @@ import type {
 import { modelFamilyAuthorityTaxonomy } from './model-family-authority-taxonomy';
 
 /** Input must be the destination's complete, hydrated, category-scoped pool. */
-export function resolveBrandAuthorityEligibility(
+function resolveBrandAuthorityEligibility(
   products: readonly unknown[],
   categorySlug: string,
   entry: BrandAuthorityEntry
@@ -33,7 +33,7 @@ export function resolveBrandAuthorityEligibility(
 }
 
 /** A family always inherits an eligible parent's complete available pool. */
-export function resolveFamilyAuthorityEligibility<T extends { name: string }>(
+function resolveFamilyAuthorityEligibility<T extends { name: string }>(
   products: readonly T[],
   entry: ModelFamilyAuthorityEntry
 ) {
@@ -46,3 +46,8 @@ export function resolveFamilyAuthorityEligibility<T extends { name: string }>(
     eligible: matched.length >= entry.minimumProducts,
   };
 }
+
+export const authorityHubEligibility = {
+  resolveBrandAuthorityEligibility,
+  resolveFamilyAuthorityEligibility,
+};

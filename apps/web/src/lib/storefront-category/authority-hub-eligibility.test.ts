@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  resolveBrandAuthorityEligibility,
-  resolveFamilyAuthorityEligibility,
-} from './authority-hub-eligibility';
+import { authorityHubEligibility } from './authority-hub-eligibility';
 import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
 import { modelFamilyAuthorityTaxonomy } from './model-family-authority-taxonomy';
 
@@ -25,7 +22,7 @@ const row = (index: number) => ({
 
 describe('authority hub eligibility contract', () => {
   it('normalizes unmanaged zero-stock products exactly as destination pages do', () => {
-    const decision = resolveBrandAuthorityEligibility(
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
       Array.from({ length: apple.minimumProducts }, (_, index) => row(index)),
       'smartphones',
       apple
@@ -33,12 +30,15 @@ describe('authority hub eligibility contract', () => {
     expect(decision.eligible).toBe(true);
     expect(decision.productCount).toBe(apple.minimumProducts);
     expect(
-      resolveFamilyAuthorityEligibility(decision.products, iphone).eligible
+      authorityHubEligibility.resolveFamilyAuthorityEligibility(
+        decision.products,
+        iphone
+      ).eligible
     ).toBe(true);
   });
 
   it('rejects malformed rows, wrong brands, and managed unavailable rows', () => {
-    const decision = resolveBrandAuthorityEligibility(
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
       [
         ...Array.from({ length: apple.minimumProducts - 1 }, (_, index) =>
           row(index)
@@ -60,11 +60,17 @@ describe('authority hub eligibility contract', () => {
       { length: iphone.minimumProducts },
       (_, index) => row(index)
     );
-    expect(resolveFamilyAuthorityEligibility(products, iphone).eligible).toBe(
-      true
-    );
     expect(
-      resolveFamilyAuthorityEligibility(products.slice(1), iphone).eligible
+      authorityHubEligibility.resolveFamilyAuthorityEligibility(
+        products,
+        iphone
+      ).eligible
+    ).toBe(true);
+    expect(
+      authorityHubEligibility.resolveFamilyAuthorityEligibility(
+        products.slice(1),
+        iphone
+      ).eligible
     ).toBe(false);
   });
 });

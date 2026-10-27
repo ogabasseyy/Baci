@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readStorefrontFile } from './storefront-css-partition-read';
 import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
@@ -55,6 +58,15 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(categoryPdpLoading).not.toMatch(
       /storefront-ogabassey-pdp-loading\.css/
     );
+    // The deduplicated loading sheet must stay deleted, not just unimported.
+    expect(
+      existsSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          'storefront-ogabassey-pdp-loading.css'
+        )
+      )
+    ).toBe(false);
     expect(defaultRenderer).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
     );

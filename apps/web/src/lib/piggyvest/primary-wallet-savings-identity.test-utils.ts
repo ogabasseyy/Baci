@@ -1,0 +1,31 @@
+import { vi } from 'vitest';
+import { savingsIdentityFixture as fixture } from './primary-wallet-savings-identity.test-fixture';
+
+export function requestInput(
+  pages: unknown[] = [fixture.page],
+  wallet: unknown = fixture.wallet,
+  environment: 'staging' | 'production' = 'production',
+  singleTransaction: unknown = fixture.singleTransaction
+) {
+  const remainingPages = [...pages];
+  const fetchImplementation = vi
+    .fn<typeof fetch>()
+    .mockImplementation((input) => {
+      const url = new URL(String(input));
+      const data = url.pathname.startsWith('/api/v1/wallet/')
+        ? wallet
+        : /^\/api\/v1\/transaction\/[^/]+$/.test(url.pathname)
+          ? singleTransaction
+          : remainingPages.shift();
+      return Promise.resolve(
+        new Response(JSON.stringify({ status: true, data }))
+      );
+    });
+  return {
+    reservation: fixture.reservation,
+    providerResponse: fixture.providerResponse,
+    environment,
+    token: 'unit-test-token',
+    fetchImplementation,
+  };
+}

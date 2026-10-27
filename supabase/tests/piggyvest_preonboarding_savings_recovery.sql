@@ -1,12 +1,24 @@
 -- Synthetic transaction-local fixture. It preserves the no-intent, incomplete
 -- intent, cross-customer, and pending-operation recovery contracts.
 BEGIN;
+-- Model the separately provisioned LOGIN and its sole restricted capability
+-- group inside this disposable transaction; the production migration creates
+-- only the NOLOGIN group role.
+CREATE ROLE baci_piggyvest_primary_authorizer LOGIN INHERIT NOSUPERUSER
+  NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT piggyvest_primary_authorizer TO baci_piggyvest_primary_authorizer;
 INSERT INTO auth.users (id, email) VALUES
   ('f3810000-0000-4000-8000-000000000001', 'piggyvest-recovery@example.test'),
   ('f3810000-0000-4000-8000-000000000011', 'piggyvest-recovery-other@example.test');
+-- Merchant insert audit triggers require an attributable actor even though the
+-- fixture is created by the replay administrator. Bind only this insert to the
+-- synthetic owner, then clear the request claims before worker RPCs.
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', 'f3810000-0000-4000-8000-000000000001', 'role', 'authenticated')::text, true);
 INSERT INTO public.merchants (id, user_id, email, business_name, slug) VALUES
   ('f3810000-0000-4000-8000-000000000002', 'f3810000-0000-4000-8000-000000000001',
    'piggyvest-recovery@example.test', 'PiggyVest Recovery Fixture', 'piggyvest-recovery-fixture');
+SELECT set_config('request.jwt.claims', '{}', true);
 INSERT INTO public.customers (id, merchant_id, user_id, email) VALUES
   ('f3810000-0000-4000-8000-000000000003', 'f3810000-0000-4000-8000-000000000002',
    'f3810000-0000-4000-8000-000000000001', 'piggyvest-recovery-customer@example.test'),

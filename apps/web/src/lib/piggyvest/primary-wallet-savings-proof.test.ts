@@ -92,47 +92,48 @@ describe('primary wallet savings settlement proof', () => {
       });
   });
 
-  it('preserves the production TSQ success fallback', () => {
+  it.each([
+    'success',
+    'failed',
+  ])('does not settle or release on production TSQ-only %s without transaction identity', (status) => {
     expect(
       verifyPrimaryWalletSavingsProof(reservation, {
         status: true,
         data: {
-          status: 'success',
+          status,
           reference: reservation.reference,
           amount: 10000,
         },
       })
-    ).toEqual({
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('retains exact rich production success proof', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, response)
+    ).toMatchObject({
       status: 'verified',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
+      providerTransactionId: 'provider-transaction',
       reference: reservation.reference,
       amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
     });
   });
 
-  it('preserves the production TSQ failure fallback', () => {
+  it('retains exact rich production failure proof for hold release', () => {
     expect(
       verifyPrimaryWalletSavingsProof(reservation, {
-        status: true,
-        data: {
-          status: 'failed',
-          reference: reservation.reference,
-          amount: 10000,
-        },
+        ...response,
+        data: { ...response.data, status: 'failed' },
       })
-    ).toEqual({
+    ).toMatchObject({
       status: 'failed',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
+      providerTransactionId: 'provider-transaction',
       reference: reservation.reference,
       amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
     });
   });
 

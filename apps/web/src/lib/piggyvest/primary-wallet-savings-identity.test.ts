@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { savingsIdentityFixture as fixture } from './primary-wallet-savings-identity.test-fixture';
+import { requestInput } from './primary-wallet-savings-identity.test-utils';
 
 // Sanitized user-provided read-only QA observation, 2026-10-27: three existing
 // staging transfers each returned successful /verify amount +10000; their
@@ -10,31 +11,6 @@ import { savingsIdentityFixture as fixture } from './primary-wallet-savings-iden
 // amount -10000 kobo, fee 0, with the same merchant reference. These three
 // staging samples do not establish production behavior or a general provider
 // contract. No wallet/customer identifiers or raw response bodies are stored.
-function requestInput(
-  pages: unknown[] = [fixture.page],
-  wallet: unknown = fixture.wallet,
-  environment: 'staging' | 'production' = 'production',
-  singleTransaction: unknown = fixture.singleTransaction
-) {
-  const fetchImplementation = vi.fn<typeof fetch>();
-  const responses = [
-    wallet,
-    ...(environment === 'staging' ? [singleTransaction] : pages),
-  ];
-  for (const data of responses) {
-    fetchImplementation.mockResolvedValueOnce(
-      new Response(JSON.stringify({ status: true, data }))
-    );
-  }
-  return {
-    reservation: fixture.reservation,
-    providerResponse: fixture.providerResponse,
-    environment,
-    token: 'unit-test-token',
-    fetchImplementation,
-  };
-}
-
 describe('primary savings transfer identity corroboration', () => {
   it('binds a business-scoped response to the customer wallet and its debit', async () => {
     const input = requestInput();
@@ -211,10 +187,13 @@ describe('primary savings transfer identity corroboration', () => {
   it('rejects duplicate transaction identifiers across pages', async () => {
     const input = requestInput([
       {
-        edges: [fixture.transaction],
+        edges: [{ id: 'duplicate' }],
         pageInfo: { hasNextPage: true, endCursor: 'next-page' },
       },
-      fixture.page,
+      {
+        edges: [{ id: 'duplicate' }, fixture.transaction],
+        pageInfo: { hasNextPage: true, endCursor: 'final-page' },
+      },
     ]);
 
     expect(await resolvePrimaryWalletSavingsIdentity(input)).toBeNull();

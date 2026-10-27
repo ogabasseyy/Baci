@@ -104,6 +104,30 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       });
     }
 
+    async function corroborateProductionCandidate(
+      candidate: z.infer<typeof schemas.transaction>
+    ): Promise<boolean> {
+      const direct = schemas.singleTransaction.parse(
+        await getData(
+          `/api/v1/transaction/${encodeURIComponent(candidate.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
+          65536
+        )
+      );
+      return (
+        direct.id === candidate.id &&
+        direct.status === 'successful' &&
+        direct.customer_id === actual.customer_id &&
+        direct.source_wallet === expected.sourceWalletId &&
+        direct.destination_wallet === expected.destinationWalletId &&
+        direct.amount === actual.amount &&
+        direct.reference === actual.reference &&
+        direct.third_party_reference === expected.reference &&
+        direct.fee === 0 &&
+        (direct.internal_reference == null ||
+          direct.internal_reference === candidate.id)
+      );
+    }
+
     let transaction: z.infer<typeof schemas.transaction> | null = null;
     let cursor: string | null = null;
     const cursors = new Set<string>();
@@ -123,19 +147,20 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
         (page.pageInfo.hasNextPage || pageNumber > 0)
       )
         return null;
+      let matchedCandidate: z.infer<typeof schemas.transaction> | null = null;
       for (const candidate of page.edges) {
         if (identifiers.has(candidate.id)) return null;
         identifiers.add(candidate.id);
         if (candidate.id !== actual.id) continue;
-        if (transaction !== null) return null;
-        transaction = schemas.transaction.parse(candidate);
+        if (transaction !== null || matchedCandidate !== null) return null;
+        matchedCandidate = schemas.transaction.parse(candidate);
         if (
-          transaction.business_id !== expected.businessId ||
-          transaction.wallet_id !== wallet.id ||
-          transaction.api_customer_id !== expected.providerCustomerId ||
-          transaction.amount !== -expected.amountKobo ||
-          transaction.third_party_reference !== expected.reference ||
-          transaction.provider_reference !== actual.reference
+          matchedCandidate.business_id !== expected.businessId ||
+          matchedCandidate.wallet_id !== wallet.id ||
+          matchedCandidate.api_customer_id !== expected.providerCustomerId ||
+          matchedCandidate.amount !== -expected.amountKobo ||
+          matchedCandidate.third_party_reference !== expected.reference ||
+          matchedCandidate.provider_reference !== actual.reference
         )
           return null;
       }
@@ -143,6 +168,18 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       if (cursor !== null) {
         if (cursors.has(cursor)) return null;
         cursors.add(cursor);
+      }
+      if (matchedCandidate !== null) {
+        if (page.pageInfo.hasNextPage) {
+          if (!(await corroborateProductionCandidate(matchedCandidate)))
+            return null;
+          return schemas.evidence.parse({
+            environment: 'production',
+            wallet,
+            transaction: matchedCandidate,
+          });
+        }
+        transaction = matchedCandidate;
       }
       if (!page.pageInfo.hasNextPage)
         return transaction === null

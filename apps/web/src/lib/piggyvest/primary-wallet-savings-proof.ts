@@ -1,6 +1,5 @@
 import 'server-only';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
-import { prefundedCardProviderEvidenceSchemas } from '@/schemas/prefunded-card-provider-evidence';
 import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
 import { primaryWalletSavingsIdentitySchemas } from '@/schemas/primary-wallet-savings-identity';
 
@@ -25,35 +24,8 @@ export function verifyPrimaryWalletSavingsProof(
     : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
         providerResponse
       );
-  if (!success.success && !failure?.success) {
-    // Preserve the established production TSQ contract. Staging TSQ remains
-    // pending because it lacks transaction/wallet identity and documented
-    // amount units; only staging's rich response can use direct corroboration.
-    if (trustedEnvironment !== 'production')
-      return { status: 'unverified' as const };
-    const tsq =
-      prefundedCardProviderEvidenceSchemas.tsq.safeParse(providerResponse);
-    if (!tsq.success) return { status: 'unverified' as const };
-    const observation = tsq.data.data;
-    if (
-      observation.reference !== expected.reference ||
-      observation.amount !== expected.amountKobo ||
-      observation.status === 'pending'
-    )
-      return { status: 'unverified' as const };
-    const bindings = {
-      providerTransactionId: expected.reference,
-      operationId: expected.operationId,
-      reference: expected.reference,
-      amountKobo: expected.amountKobo,
-      sourceWalletId: expected.sourceWalletId,
-      destinationWalletId: expected.destinationWalletId,
-      businessId: expected.businessId,
-    };
-    if (observation.status === 'success')
-      return { status: 'verified' as const, ...bindings };
-    return { status: 'failed' as const, ...bindings };
-  }
+  if (!success.success && !failure?.success)
+    return { status: 'unverified' as const };
   const actual = (success.success ? success.data : failure?.data)?.data;
   if (!actual) return { status: 'unverified' as const };
   if (trustedEnvironment === 'staging' && !success.success)

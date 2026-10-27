@@ -88,6 +88,27 @@ describe('primary savings reconciliation', () => {
     ).toEqual({ status: 'pending' });
     expect(dependencies.settle).not.toHaveBeenCalled();
   });
+  it.each([
+    'success',
+    'failed',
+  ] as const)('keeps production TSQ-only %s pending without settling or releasing', async (status) => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status,
+        reference: reservation.reference,
+        amount: reservation.amountKobo,
+      },
+    });
+
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'pending' });
+    expect(dependencies.resolveIdentity).toHaveBeenCalledTimes(1);
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
   it('keeps a rich business-scoped transfer pending when wallet identity corroboration is incomplete', async () => {
     const dependencies = ports();
     dependencies.queryProvider.mockResolvedValue({

@@ -1,16 +1,16 @@
 import { type RefObject, useEffect, useRef } from 'react';
-import { InteractionManager, type ScrollView } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 
 /**
- * Schedules a next-step scroll after current interactions settle.
+ * Schedules a next-step scroll when the JS thread becomes idle.
  *
  * Calls made while a scroll is already scheduled use last-write-wins semantics:
  * the pending scroll target is overwritten, but only one animation frame and
- * InteractionManager task are queued.
+ * idle callback are queued.
  */
 export function useNextStepScroll(
-  scrollViewRef: RefObject<ScrollView | null>,
+  scrollViewRef: RefObject<ScrollViewInstance | null>,
   onScrollInitiated: () => void
 ) {
   const pendingScrollYRef = useRef<number | null>(null);
@@ -18,21 +18,23 @@ export function useNextStepScroll(
   const isMountedRef = useRef(true);
   const onScrollInitiatedRef = useRef(onScrollInitiated);
   const scrollFrameRef = useRef<number | null>(null);
-  const interactionRef = useRef<{ cancel?: () => void } | null>(null);
+  const idleHandleRef = useRef<number | null>(null);
 
   useEffect(() => {
     onScrollInitiatedRef.current = onScrollInitiated;
   }, [onScrollInitiated]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (scrollFrameRef.current !== null) {
         cancelAnimationFrame(scrollFrameRef.current);
         scrollFrameRef.current = null;
       }
-      interactionRef.current?.cancel?.();
-      interactionRef.current = null;
+      if (idleHandleRef.current !== null)
+        cancelIdleCallback(idleHandleRef.current);
+      idleHandleRef.current = null;
       pendingScrollYRef.current = null;
       isScrollScheduledRef.current = false;
     };
@@ -46,8 +48,8 @@ export function useNextStepScroll(
     isScrollScheduledRef.current = true;
     scrollFrameRef.current = requestAnimationFrame(() => {
       scrollFrameRef.current = null;
-      interactionRef.current = InteractionManager.runAfterInteractions(() => {
-        interactionRef.current = null;
+      idleHandleRef.current = requestIdleCallback(() => {
+        idleHandleRef.current = null;
         const scrollY = pendingScrollYRef.current;
         pendingScrollYRef.current = null;
         isScrollScheduledRef.current = false;

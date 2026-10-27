@@ -91,6 +91,7 @@ packages:
   - "apps/web/builder-mcp-server/widgets"
 # pnpm v11 allowBuilds (replaces onlyBuiltDependencies): package matcher -> boolean
 allowBuilds:
+  "@parcel/watcher": true
   "@firebase/util": true
   "@posthog/cli": true
   "@scarf/scarf": true
@@ -106,16 +107,21 @@ allowBuilds:
   workerd: true
 
 overrides:
+  # jest-expo 58 supports Jest 29; keep its watch plugin on the matching major.
+  "jest-expo>jest-watch-typeahead": "2.2.1"
+  # Both native consumers and automatically installed peers use the same ABI.
+  react-native: "0.88.0"
+  "@react-native/assets-registry": "0.88.0"
   # Pin patched native deps to the exact package.json pnpm patch versions.
   react-native-purchases: "10.4.2"
   "@react-native-google-signin/google-signin": "16.1.2"
-  lottie-react-native: "7.3.8"
+  lottie-react-native: "7.5.0"
   novel: "1.0.2"
   react-native-mmkv: "4.3.1"
   react-native-nitro-modules: "0.35.9"
   react-native-phone-number-input: "2.1.0"
-  react-native-safe-area-context: "5.8.0"
-  react-native-webview: "13.16.1"
+  react-native-safe-area-context: "5.10.1"
+  react-native-webview: "14.0.1"
   # --- Security / dedupe overrides ---
   # Pin to 6.1.6 to mitigate GHSA-737v-mqg7-c878 / CVE-2026-35209: replace the vulnerable transitive deep-merge helper.
   defu: "6.1.6"
@@ -124,7 +130,7 @@ overrides:
   "@xmldom/xmldom": "0.8.15"
   follow-redirects: "^1.16.0"
   # Dedupe @types/react to avoid TS2769 dual-type errors under hoisted RN consumers.
-  "@types/react": "19.2.17"
+  "@types/react": "19.3.0"
   # Dedupe @firebase/util (hoisted ENOENT race with dual database-compat consumers).
   "@firebase/util": "1.14.0"
   # Dedupe with @firebase/util — same reason.
@@ -151,8 +157,8 @@ overrides:
   markdown-it: "14.3.1"
   # Pin to ^1.31.0 for GHSA-6qxp-vccf-f47h (OAuth client credential leak).
   "@modelcontextprotocol/sdk": "^1.31.0"
-  # SDK 57 worklets 0.10.1; keep lockstep with react-native-reanimated (#2960).
-  react-native-worklets: "0.10.1"
+  # SDK 58 worklets 0.13.0; keep lockstep with react-native-reanimated (#2960).
+  react-native-worklets: "0.13.0"
   # Pin to 4.13.7 for the parseBody nesting, fragment query-parser, toSSG
   # traversal, and boundary-component unescaped-string XSS advisories while
   # preserving Hono 4 compatibility.
@@ -233,9 +239,9 @@ overrides:
   lodash: "4.18.1"
   lodash-es: "4.18.1"
   diff: "^8.0.3"
-  # SDK 57 alignment — keep in lockstep with react-native-worklets above.
-  react-native-reanimated: "4.5.1"
-  react-native-svg: "15.15.5"
+  # SDK 58 alignment — keep in lockstep with react-native-worklets above.
+  react-native-reanimated: "4.7.1"
+  react-native-svg: "15.16.0"
   express-rate-limit: "8.2.2"
   # TipTap 3.x single instance for Novel/Puck + web editor (avoid mixed minors under hoist).
   # 3.30.5 closes the Markdown attribute ReDoS and mergeAttributes __proto__ advisories.
@@ -379,38 +385,28 @@ overrides:
   # event-loop DoS, @tailwindcss/node transitive).
   source-map-js: "1.2.2"
 patchedDependencies:
+  "@gorhom/bottom-sheet@5.2.14": "patches/@gorhom/bottom-sheet@5.2.14.patch"
   # Backport the upstream 0.5.0 linear-time fallback decoder to CJS 0.2.2: fixes the
   # exponential-decoding DoS while keeping query-string@7 (expo-router) compatible.
   # Upstream 0.5.0 is ESM-only and breaks query-string's require() call.
   decode-uri-component@0.2.2: patches/decode-uri-component@0.2.2.patch
-  "@react-native-community/datetimepicker@9.1.0": "patches/@react-native-community/datetimepicker@9.1.0.patch"
+  "@react-native-community/datetimepicker@9.2.1": "patches/@react-native-community/datetimepicker@9.2.1.patch"
   "@react-native-google-signin/google-signin@16.1.2": "patches/@react-native-google-signin/google-signin@16.1.2.patch"
-  "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch"
-  "metro-runtime@0.84.4": "patches/metro-runtime@0.84.4.patch"
-  "metro@0.84.4": "patches/metro@0.84.4.patch"
+  "lottie-react-native@7.5.0": "patches/lottie-react-native@7.5.0.patch"
   "novel@1.0.2": "patches/novel@1.0.2.patch"
   "react-native-mmkv@4.3.1": "patches/react-native-mmkv@4.3.1.patch"
   "react-native-nitro-modules@0.35.9": "patches/react-native-nitro-modules@0.35.9.patch"
   "react-native-phone-number-input@2.1.0": "patches/react-native-phone-number-input@2.1.0.patch"
   "react-native-purchases@10.4.2": "patches/react-native-purchases@10.4.2.patch"
-  "react-native-safe-area-context@5.8.0": "patches/react-native-safe-area-context@5.8.0.patch"
-  "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
-  react-native@0.86.2: patches/react-native@0.86.2.patch
+  "react-native-safe-area-context@5.10.1": "patches/react-native-safe-area-context@5.10.1.patch"
+  "react-native-webview@14.0.1": "patches/react-native-webview@14.0.1.patch"
+  react-native@0.88.0: patches/react-native@0.88.0.patch
   "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
-  # expo-modules-core@57.0.21: backport upstream SDK 58 NonisolatedUnsafeWeakVar
-  # fix for the EventEmitter.swift data-race error under Xcode 26 complete
-  # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
-  "expo-modules-core@57.0.21": "patches/expo-modules-core@57.0.21.patch"
-  # SDK 57 scene-aware native presentation backports (Expo #48319, #50368).
-  'expo-web-browser@57.0.2': patches/expo-web-browser@57.0.2.patch
-  'expo-apple-authentication@57.0.1': patches/expo-apple-authentication@57.0.1.patch
-  'expo-print@57.0.1': patches/expo-print@57.0.1.patch
-  image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.8": "patches/next@16.3.8.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   node-forge@1.4.0: patches/node-forge@1.4.0.patch
   # Pause RecyclerView recycling while retaining exit content (screens PR 4755).
-  react-native-screens@4.26.2: patches/react-native-screens@4.26.2.patch
+  react-native-screens@4.30.0: patches/react-native-screens@4.30.0.patch
   # Backport the upstream 7.1.6 Set-based membership tests to 6.0.10: fixes
   # the flat-selector quadratic CPU-exhaustion DoS (GHSA-rj75-hqrm-r3gf) while
   # keeping @tailwindcss/typography's exact 6.0.10 dependency.
@@ -425,4 +421,4 @@ patchedDependencies:
   # @copilotkit/react-core's ^0.16.22 range.
   katex@0.16.47: patches/katex@0.16.47.patch
   # Use native Core Animation composition for the iOS gradient hang hot path.
-  expo-linear-gradient@57.0.1: patches/expo-linear-gradient@57.0.1.patch
+  expo-linear-gradient@58.0.3: patches/expo-linear-gradient@58.0.3.patch

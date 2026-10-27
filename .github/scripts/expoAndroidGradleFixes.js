@@ -1,6 +1,6 @@
-const GRADLE_DISTRIBUTION = 'gradle-9.3.1-bin.zip';
+const GRADLE_DISTRIBUTION = 'gradle-9.4.1-bin.zip';
 const GRADLE_SHA256 =
-  'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06';
+  '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb';
 const GOOGLE_CODE_SCANNER_ACTIVITY =
   'com.google.mlkit.vision.codescanner.internal.GmsBarcodeScanningDelegateActivity';
 
@@ -177,7 +177,7 @@ function removeKotlinGradlePlugin(content, description) {
   }
   return assertReplaceOrThrow(
     content,
-    /\s*classpath\(['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]\)\s*\n?/g,
+    /\s*classpath\((?:['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]|kotlinVersion\s*\?\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:\$kotlinVersion['"]\s*:\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"])\)\s*\n?/g,
     '\n',
     description
   );

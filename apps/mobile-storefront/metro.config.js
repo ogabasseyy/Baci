@@ -1,3 +1,4 @@
+const resolveMobileReact = require('../resolve-mobile-react');
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
@@ -91,6 +92,14 @@ config.resolver = {
   // same way in Metro as they do in the rest of the monorepo.
   unstable_enablePackageExports: true,
   resolveRequest: (context, moduleName, platform) => {
+    const reactResolution = resolveMobileReact(
+      context,
+      moduleName,
+      platform,
+      projectRoot
+    );
+    if (reactResolution) return reactResolution;
+
     // Expo web serves a classic script, while Zustand's ESM middleware contains import.meta.
     if (platform === 'web' && moduleName === 'zustand/middleware') {
       return {

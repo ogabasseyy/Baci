@@ -1,3 +1,4 @@
+import { type Href, router } from 'expo-router';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useEffect, useRef } from 'react';
 
@@ -5,16 +6,8 @@ type TabRoute = BottomTabBarProps['state']['routes'][number];
 
 type WarmAdminTabScreensOptions = {
   activeRouteName: string;
-  navigation: BottomTabBarProps['navigation'];
   routes: TabRoute[];
 };
-
-function createPreloadTabAction(name: string, params: TabRoute['params']) {
-  return {
-    payload: { name, params },
-    type: 'PRELOAD',
-  };
-}
 
 function scheduleWarmAdminTabBatch(callback: () => void) {
   const frameIds: number[] = [];
@@ -67,7 +60,6 @@ function shouldWarmAdminTabRoute(
 
 export function useWarmAdminTabScreens({
   activeRouteName,
-  navigation,
   routes,
 }: WarmAdminTabScreensOptions) {
   const warmedRouteKeysRef = useRef<Set<string>>(new Set());
@@ -88,8 +80,11 @@ export function useWarmAdminTabScreens({
     return scheduleWarmAdminTabBatch(() => {
       routesToWarm.forEach((route) => {
         warmedRouteKeysRef.current.add(route.key);
-        navigation.dispatch(createPreloadTabAction(route.name, route.params));
+        router.prefetch({
+          pathname: `/(admin)/(tabs)/${route.name}`,
+          params: route.params,
+        } as Href);
       });
     });
-  }, [activeRouteName, navigation, routes]);
+  }, [activeRouteName, routes]);
 }

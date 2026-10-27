@@ -177,3 +177,18 @@ test('fixProguardOptimize: no-op if optimize already present', () => {
   const result = fixProguardOptimize(content, 'test');
   assert.equal(result, content);
 });
+
+test('removeKotlinGradlePlugin: handles the SDK 58 conditional classpath and is idempotent', () => {
+  const { removeKotlinGradlePlugin } = require('./expoAndroidGradleFixes.js');
+  const input = `dependencies {
+    classpath('com.android.tools.build:gradle')
+    def kotlinVersion = findProperty('android.kotlinVersion')
+    classpath(kotlinVersion ? "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion" : 'org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+  }`;
+  const result = removeKotlinGradlePlugin(input, 'SDK 58 Kotlin classpath');
+  assert.doesNotMatch(result, /org\.jetbrains\.kotlin:kotlin-gradle-plugin/);
+  assert.match(result, /com\.android\.tools\.build:gradle/);
+  assert.match(result, /com\.facebook\.react:react-native-gradle-plugin/);
+  assert.equal(removeKotlinGradlePlugin(result, 'SDK 58 Kotlin classpath'), result);
+});

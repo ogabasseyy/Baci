@@ -127,23 +127,18 @@ describe('TabLayout', () => {
     expect(screenOptions).toBeDefined();
 
     expect(mocks.tabsProps?.detachInactiveScreens).toBe(false);
-    expect(mocks.tabsProps?.initialRouteName).toBe('index');
+    expect(mocks.tabsProps?.initialRouteName).toBeUndefined();
     expect(typeof mocks.tabsProps?.tabBar).toBe('function');
     const tabBar = mocks.tabsProps?.tabBar as TabBarRenderer;
     render(
       tabBar({
         descriptors: {},
         insets: { bottom: 0, left: 0, right: 0, top: 0 },
-        navigation: {} as BottomTabBarProps['navigation'],
+        emitter: {} as BottomTabBarProps['emitter'],
+        navigateToTab: vi.fn(),
         state: {
-          history: [],
           index: 0,
-          key: 'tabs-key',
-          preloadedRouteKeys: [],
-          routeNames: [],
           routes: [],
-          stale: false,
-          type: 'tab',
         },
       })
     );

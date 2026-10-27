@@ -1,0 +1,143 @@
+diff --git a/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm b/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
+--- a/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
++++ b/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
+@@ -163,13 +163,9 @@
+ 
+ - (void)updateClippedSubviewsWithClipRect:(CGRect)clipRect relativeToView:(UIView *)clipView
+ {
+-  clipRect = [clipView convertRect:clipRect toView:self];
+-
+-  // Normal views don't support unmounting, so all
+-  // this does is forward message to our subviews,
+-  // in case any of those do support it
++  // Keep the original coordinate space until an actual clipping view needs it.
+   for (UIView *subview in self.subviews) {
+-    [subview updateClippedSubviewsWithClipRect:clipRect relativeToView:self];
++    [subview updateClippedSubviewsWithClipRect:clipRect relativeToView:clipView];
+   }
+ }
+ 
+diff --git a/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt b/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+--- a/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
++++ b/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
+@@ -8,7 +8,6 @@
+ package com.facebook.react.views.view
+ 
+ import android.app.Activity
+-import android.graphics.Color
+ import android.os.Build
+ import android.view.View
+ import android.view.Window
+@@ -21,15 +20,6 @@
+ import androidx.core.view.WindowInsetsControllerCompat
+ import com.facebook.react.util.AndroidVersion
+ import com.facebook.react.views.common.UiModeUtils
+-
+-// The light scrim color used in the platform API 29+
+-// https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/java/com/android/internal/policy/DecorView.java;drc=6ef0f022c333385dba2c294e35b8de544455bf19;l=142
+-internal val LightNavigationBarColor = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+-
+-// The dark scrim color used in the platform.
+-// https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/res/res/color/system_bar_background_semi_transparent.xml
+-// https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/res/remote_color_resources_res/values/colors.xml;l=67
+-internal val DarkNavigationBarColor = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+ 
+ /**
+  * This does not enable or apply edge-to-edge behavior, it simply tracks whether it has been flagged
+@@ -123,57 +113,29 @@
+   }
+ }
+ 
+-@Suppress("DEPRECATION")
+ private fun Window.statusBarHide() {
+   if (!decorView.isAttachedToWindow) return
+-  if (isEdgeToEdgeFeatureFlagOn) {
+-    WindowInsetsControllerCompat(this, decorView).run {
+-      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+-      hide(WindowInsetsCompat.Type.statusBars())
+-    }
+-  } else {
+-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-      // Ensure the content extends into the cutout area
+-      attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+-      setDecorFitsSystemWindows(false)
+-    }
+-    addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+-    clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
++  WindowInsetsControllerCompat(this, decorView).run {
++    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
++    hide(WindowInsetsCompat.Type.statusBars())
+   }
+ }
+ 
+-@Suppress("DEPRECATION")
+ private fun Window.statusBarShow() {
+   if (!decorView.isAttachedToWindow) return
+-  if (isEdgeToEdgeFeatureFlagOn) {
+-    WindowInsetsControllerCompat(this, decorView).run {
+-      systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+-      show(WindowInsetsCompat.Type.statusBars())
+-    }
+-  } else {
+-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+-      attributes.layoutInDisplayCutoutMode =
+-          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+-      setDecorFitsSystemWindows(true)
+-    }
+-    addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
+-    clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
++  WindowInsetsControllerCompat(this, decorView).run {
++    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
++    show(WindowInsetsCompat.Type.statusBars())
+   }
+ }
+ 
+-@Suppress("DEPRECATION")
+ internal fun Window.enableEdgeToEdge() {
+   WindowCompat.setDecorFitsSystemWindows(this, false)
+ 
+   val insetsController = WindowInsetsControllerCompat(this, decorView)
+   val isDarkMode = UiModeUtils.isDarkMode(context)
+ 
+-  statusBarColor = Color.TRANSPARENT
+-
+   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+-    navigationBarColor = Color.TRANSPARENT
+-
+     val attributes = intArrayOf(android.R.attr.enforceNavigationBarContrast)
+     val typedArray = context.theme.obtainStyledAttributes(attributes)
+ 
+@@ -194,18 +156,12 @@
+     val isAppearanceLightNavigationBars =
+         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isDarkMode
+ 
+-    navigationBarColor =
+-        if (isAppearanceLightNavigationBars) LightNavigationBarColor else DarkNavigationBarColor
+     insetsController.isAppearanceLightNavigationBars = isAppearanceLightNavigationBars
+   }
+ 
+-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
++  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+     attributes.layoutInDisplayCutoutMode =
+-        when {
+-          Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+-              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+-          else -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+-        }
++        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+   }
+ }
+ 
+diff --git a/ReactAndroid/build.gradle.kts b/ReactAndroid/build.gradle.kts
+--- a/ReactAndroid/build.gradle.kts
++++ b/ReactAndroid/build.gradle.kts
+@@ -738,7 +738,7 @@
+ 
+   // It's up to the consumer to decide if hermes or other engines should be included or not.
+   // Therefore hermes-engine is a compileOnly dependencies.
+-  compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))
++  compileOnly("com.facebook.hermes:hermes-android:260318099.0.4")
+ 
+   implementation(libs.androidx.collection)
+ 

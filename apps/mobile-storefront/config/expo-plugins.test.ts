@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { TikTokBusinessPlugin } from '@baci/tiktok-business';
 import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
@@ -16,18 +18,19 @@ describe('createExpoPlugins', () => {
       }),
     ]);
   });
-  it('opts into the UIKit scene lifecycle required by iOS 27 builds', () => {
-    const plugins = createExpoPlugins({
-      facebookSdkPlugin: null,
-      sentryPlugin: null,
-      tiktokBusinessPlugin: null,
-    });
-    expect(plugins).toContainEqual([
-      'expo-build-properties',
-      expect.objectContaining({
-        ios: expect.objectContaining({ enableSceneSupport: true }),
-      }),
-    ]);
+  it('registers the SDK 58 UIKit scene delegate in the native app', () => {
+    const plist = readFileSync(
+      resolve(__dirname, '../ios/Ogabassey/Info.plist'),
+      'utf8'
+    );
+    expect(plist).toContain('<key>UIApplicationSceneManifest</key>');
+    expect(plist).toContain('<key>UISceneDelegateClassName</key>');
+    expect(plist).toContain('$(PRODUCT_MODULE_NAME).SceneDelegate');
+    const project = readFileSync(
+      resolve(__dirname, '../ios/Ogabassey.xcodeproj/project.pbxproj'),
+      'utf8'
+    );
+    expect(project).toContain('SceneDelegate.swift in Sources');
   });
 
   it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {

@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DomainOptionsSheet from './DomainOptionsSheet';
 import type { Domain } from './domain-types';
 
@@ -61,16 +61,6 @@ vi.mock('react-native-reanimated', () => {
 });
 
 vi.mock('react-native', () => ({
-  InteractionManager: {
-    runAfterInteractions: (callback: () => void) => {
-      mocks.interactionCallback = callback;
-      return {
-        cancel: () => {
-          mocks.interactionCallback = null;
-        },
-      };
-    },
-  },
   Modal: ({
     children,
     visible,
@@ -121,11 +111,22 @@ const baseDomain: Domain = {
 };
 
 describe('DomainOptionsSheet', () => {
+  beforeEach(() => {
+    vi.stubGlobal('requestIdleCallback', (callback: () => void) => {
+      mocks.interactionCallback = callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelIdleCallback', () => {
+      mocks.interactionCallback = null;
+    });
+  });
   afterEach(() => {
+    cleanup();
     mocks.interactionCallback = null;
+    vi.unstubAllGlobals();
   });
 
-  it('runs selected action only after close interactions complete', () => {
+  it('runs selected action only after close and an idle callback', () => {
     const onAction = vi.fn();
     const onClose = vi.fn();
 
@@ -155,6 +156,34 @@ describe('DomainOptionsSheet', () => {
     mocks.interactionCallback?.();
 
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+  });
+
+  it('ignores a pending action after unmount even if its callback runs late', () => {
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender, unmount } = render(
+      <DomainOptionsSheet
+        visible
+        domain={baseDomain}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(
+      <DomainOptionsSheet
+        visible={false}
+        domain={baseDomain}
+        onClose={onClose}
+        onAction={onAction}
+      />
+    );
+    const lateCallback = mocks.interactionCallback;
+    expect(lateCallback).not.toBeNull();
+    unmount();
+    expect(mocks.interactionCallback).toBeNull();
+    lateCallback?.();
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('keeps only the last selected action when multiple actions are tapped before close applies', () => {

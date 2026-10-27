@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { InteractionManager, Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -50,7 +50,7 @@ export default function DomainOptionsSheet({
   useEffect(() => {
     if (visible || !pendingActionRef.current) return;
 
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+    const idleHandle = requestIdleCallback(() => {
       if (!isMountedRef.current) return;
 
       const pendingAction = pendingActionRef.current;
@@ -60,7 +60,7 @@ export default function DomainOptionsSheet({
     });
 
     return () => {
-      interactionHandle.cancel();
+      cancelIdleCallback(idleHandle);
     };
   }, [onAction, visible]);
 

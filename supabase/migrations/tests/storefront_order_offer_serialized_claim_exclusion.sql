@@ -225,7 +225,14 @@ BEGIN
   -- The pending-order reuse path must skip it too, keyed on either
   -- marker: run the order through
   -- prepare_storefront_order_for_checkout (unpaid + pending = reusable)
-  -- and assert still zero claimed units.
+  -- and assert still zero claimed units. Seed a refund-like shape (no
+  -- inventoryUnits claim) on one untouched line to prove the helper
+  -- preserves non-unit fields it must not touch.
+  UPDATE public.order_items SET fulfillment_data = jsonb_build_object(
+    'source', 'merchant_stock',
+    'fulfillmentQuantity', 1
+  ) WHERE id = v_item_d;
+
   BEGIN
     PERFORM private.prepare_storefront_order_for_checkout(
       p_order_id => v_order_id,
@@ -251,10 +258,15 @@ BEGIN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
   END IF;
 
-  -- Untouched offer lines keep their prior value: the rewrite runs
-  -- only when a release actually freed a unit.
+  -- The refund-like shape must survive reuse untouched (no
+  -- inventoryUnits claim, so the helper must not touch it).
+  IF (SELECT fulfillment_data FROM public.order_items WHERE id = v_item_d)
+     IS DISTINCT FROM jsonb_build_object('source', 'merchant_stock', 'fulfillmentQuantity', 1) THEN
+    RAISE EXCEPTION 'expected refund-like fulfillment on the untouched offer line to survive reuse';
+  END IF;
+
   IF (SELECT count(*) FROM public.order_items
-      WHERE id IN (v_item_id, v_item_b, v_item_d)
+      WHERE id IN (v_item_id, v_item_b)
       AND fulfillment_data IS NOT NULL) <> 0 THEN
     RAISE EXCEPTION 'expected untouched offer lines to keep NULL fulfillment_data after reuse';
   END IF;
@@ -453,6 +465,10 @@ BEGIN
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
+  END IF;
+  IF (SELECT fulfillment_data FROM public.order_items WHERE id = v_item_d)
+     IS DISTINCT FROM jsonb_build_object('source', 'merchant_stock', 'fulfillmentQuantity', 1) THEN
+    RAISE EXCEPTION 'expected refund-like fulfillment on the untouched offer line to survive confirm';
   END IF;
 
   SELECT status, order_item_id INTO v_legacy_status, v_legacy_item

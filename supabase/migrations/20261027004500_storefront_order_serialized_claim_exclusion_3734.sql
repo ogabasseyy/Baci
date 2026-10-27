@@ -97,6 +97,7 @@ DECLARE
   v_release_from_status text;
   v_released_count integer := 0;
   v_current_fulfillment jsonb;
+  v_stripped_fulfillment jsonb;
 BEGIN
   -- Durable holds are status 'reserved' with reservation_expires_at
   -- NULL (no separate status exists), so status = 'reserved' covers
@@ -135,12 +136,13 @@ BEGIN
     WHERE id = v_release_id;
     v_released_count := v_released_count + 1;
   END LOOP;
-  -- Freed lines return to the clean offer-line state (NULL, same as
-  -- untouched offer lines). The clear also fires when this call freed
-  -- nothing but the snapshot still claims units while the line holds
-  -- none (detached elsewhere): such references are definitionally
-  -- stale for offer-fulfilled lines. Snapshots without an
-  -- inventoryUnits claim (e.g. refund-only shapes) are preserved.
+  -- Reconcile the line snapshot with actually-attached units. Freed
+  -- lines return to the clean offer-line state; a snapshot that still
+  -- claims units while the line holds none (detached elsewhere) is
+  -- definitionally stale for offer-fulfilled lines. Only unit-derived
+  -- keys are stripped so refund/shipment fields survive; a remainder
+  -- of nothing (or just the ledger source marker) collapses to NULL
+  -- like untouched offer lines.
   SELECT fulfillment_data INTO v_current_fulfillment
   FROM public.order_items WHERE id = p_item_id;
   IF v_current_fulfillment IS NOT NULL AND (
@@ -153,9 +155,18 @@ BEGIN
          )
        )
      ) THEN
-    UPDATE public.order_items AS oi
-    SET fulfillment_data = NULL
-    WHERE oi.id = p_item_id;
+    v_stripped_fulfillment := v_current_fulfillment
+      - ARRAY['inventoryUnits', 'missingUnitCount', 'reservationExpiresAt'];
+    IF v_stripped_fulfillment = '{}'::jsonb
+       OR v_stripped_fulfillment = '{"source": "merchant_stock"}'::jsonb THEN
+      UPDATE public.order_items AS oi
+      SET fulfillment_data = NULL
+      WHERE oi.id = p_item_id;
+    ELSE
+      UPDATE public.order_items AS oi
+      SET fulfillment_data = v_stripped_fulfillment
+      WHERE oi.id = p_item_id;
+    END IF;
   END IF;
 END $release_helper$;
 

@@ -1,6 +1,7 @@
 import {
   isRawDbProductRecord,
   normalizeProduct,
+  type RawDbProduct,
 } from '@/lib/normalize-product';
 import { brandAuthorityTaxonomy } from './brand-authority-taxonomy';
 import type {
@@ -9,6 +10,18 @@ import type {
 } from './category-hub-types';
 import { modelFamilyAuthorityTaxonomy } from './model-family-authority-taxonomy';
 
+function isStringPricedDbRecord(product: unknown): boolean {
+  if (!product || typeof product !== 'object') return false;
+  const candidate = product as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.price === 'string' &&
+    candidate.price.trim() !== '' &&
+    Number.isFinite(Number(candidate.price))
+  );
+}
+
 /** Input must be the destination's complete, hydrated, category-scoped pool. */
 function resolveBrandAuthorityEligibility(
   products: readonly unknown[],
@@ -16,10 +29,21 @@ function resolveBrandAuthorityEligibility(
   entry: BrandAuthorityEntry
 ) {
   const availableProducts = products
-    .filter(isRawDbProductRecord)
-    .map((product) =>
-      normalizeProduct(product, { preferredCategorySlug: categorySlug })
+    .filter(
+      (product) =>
+        isRawDbProductRecord(product) || isStringPricedDbRecord(product)
     )
+    .map((product) => {
+      const record = product as RawDbProduct;
+      return normalizeProduct(
+        // PostgREST can return numeric columns as strings; sibling
+        // loaders coerce instead of dropping those rows.
+        typeof record.price === 'string'
+          ? { ...record, price: Number(record.price) }
+          : record,
+        { preferredCategorySlug: categorySlug }
+      );
+    })
     .filter(
       (product) =>
         product.availability === 'InStock' &&

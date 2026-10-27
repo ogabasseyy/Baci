@@ -37,6 +37,19 @@ describe('authority hub eligibility contract', () => {
     ).toBe(true);
   });
 
+  it('accepts rows whose price is a numeric string', () => {
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      Array.from({ length: apple.minimumProducts }, (_, index) => ({
+        ...row(index),
+        price: '100000' as never,
+      })),
+      'smartphones',
+      apple
+    );
+    expect(decision.eligible).toBe(true);
+    expect(decision.productCount).toBe(apple.minimumProducts);
+  });
+
   it('rejects malformed rows, wrong brands, and managed unavailable rows', () => {
     const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
       [

@@ -5,7 +5,11 @@ import { ChatgptSetupGuide } from './setup-guide';
 
 it('provides a safe example screen and warns merchants to use their own credentials', () => {
   render(<ChatgptSetupGuide />);
-  expect(screen.getByText(/generic event setup view/)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /genuine provider screens with account-specific values masked/
+    )
+  ).toBeInTheDocument();
   expect(
     screen.getByText(/do not copy another store’s ID/)
   ).toBeInTheDocument();
@@ -17,11 +21,20 @@ it('provides a safe example screen and warns merchants to use their own credenti
       /Browser events appear after a visitor grants Analytics consent/
     )
   ).toBeInTheDocument();
-  expect(screen.getAllByRole('img')).toHaveLength(1);
-  const image = screen.getByAltText('3. Connect the Pixel example screen');
-  const src = image.getAttribute('src');
-  expect(src).toBe('/guides/chatgpt-ads/03-pixel-event.png');
-  expect(existsSync(`public${src}`)).toBe(true);
+  const imagePaths = screen
+    .getAllByRole('img')
+    .map((image) => image.getAttribute('src'));
+  expect(imagePaths).toEqual([
+    '/guides/chatgpt-ads/01-pixel-setup.png',
+    '/guides/chatgpt-ads/02-successful-payment.png',
+    '/guides/chatgpt-ads/03-pixel-event.png',
+    '/guides/chatgpt-ads/04-capi-event.png',
+    '/guides/chatgpt-ads/05-create-capi-key.png',
+  ]);
+  for (const src of imagePaths) {
+    expect(src).toBeTruthy();
+    expect(existsSync(`public${src}`)).toBe(true);
+  }
   expect(
     screen.getByRole('link', {
       name: /Official conversion setup documentation/,

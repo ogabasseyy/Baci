@@ -5,19 +5,22 @@ const steps = [
   {
     title: '1. Create a website data source',
     text: 'In Ads Manager, open Conversions → Data Source → Create data source. Review the Conversion Terms and copy your new Pixel ID.',
+    images: ['01-pixel-setup.png'],
   },
   {
     title: '2. Create the successful payment conversion',
     text: 'Choose your data source, select Order created, and name it Successful payment. Baci sends this event after full payment confirmation.',
+    images: ['02-successful-payment.png'],
   },
   {
     title: '3. Connect the Pixel',
-    text: 'Paste the Pixel ID into the Baci form above. Baci loads the SDK after measurement consent; you do not need a second theme snippet.',
-    image: '03-pixel-event.png',
+    text: 'Paste the Pixel ID into the Baci form above. Baci loads the SDK after Analytics consent; you do not need a second theme snippet.',
+    images: ['03-pixel-event.png'],
   },
   {
     title: '4. Create a server key',
     text: 'Open the Conversions API instructions, choose Create conversion key, and give it a recognizable name. Paste the secret into Baci’s Conversions API key field. Never share a screenshot of the generated key.',
+    images: ['04-capi-event.png', '05-create-capi-key.png'],
   },
 ];
 export function ChatgptSetupGuide() {
@@ -28,10 +31,10 @@ export function ChatgptSetupGuide() {
       </CardHeader>
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">
-          The example screen below shows a generic event setup view. It does not
-          contain merchant-specific values. Use the Pixel ID and key from your
-          own Ads Manager account; do not copy another store’s ID, and keep keys
-          private. Never share screenshots that reveal credentials.
+          These are genuine provider screens with account-specific values
+          masked. Use the Pixel ID and key from your own Ads Manager account; do
+          not copy another store’s ID, and keep keys private. Never share
+          screenshots that reveal credentials.
         </p>
         {steps.map((step) => (
           <details key={step.title} className="rounded-lg border p-4">
@@ -39,15 +42,16 @@ export function ChatgptSetupGuide() {
               {step.title}
             </summary>
             <p className="my-3 text-sm">{step.text}</p>
-            {step.image ? (
+            {step.images?.map((image) => (
               <Image
-                src={`/guides/chatgpt-ads/${step.image}`}
+                key={image}
+                src={`/guides/chatgpt-ads/${image}`}
                 alt={`${step.title} example screen`}
                 width={717}
                 height={988}
                 className="h-auto w-full max-w-xl rounded-lg"
               />
-            ) : null}
+            ))}
           </details>
         ))}
         <p className="text-sm">

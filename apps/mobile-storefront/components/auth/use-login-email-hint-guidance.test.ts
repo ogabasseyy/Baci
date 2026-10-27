@@ -1,7 +1,9 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { useLoginEmailHintGuidance } from './use-login-email-hint-guidance';
 
-function setup(overrides: Partial<Parameters<typeof useLoginEmailHintGuidance>[0]> = {}) {
+function setup(
+  overrides: Partial<Parameters<typeof useLoginEmailHintGuidance>[0]> = {}
+) {
   return renderHook(
     (props: Parameters<typeof useLoginEmailHintGuidance>[0]) =>
       useLoginEmailHintGuidance(props),
@@ -54,14 +56,15 @@ describe('useLoginEmailHintGuidance', () => {
   });
 
   it('ignores late fetch results after unmount', async () => {
-    let resolveFetch!: (value: { json: () => Promise<unknown>; ok: boolean }) => void;
-    const fetchImpl = jest
-      .fn()
-      .mockReturnValue(
-        new Promise((resolve) => {
-          resolveFetch = resolve;
-        })
-      );
+    let resolveFetch!: (value: {
+      json: () => Promise<unknown>;
+      ok: boolean;
+    }) => void;
+    const fetchImpl = jest.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
     const onError = jest.fn();
     const { result, unmount } = setup({
       fetchImpl: fetchImpl as unknown as typeof fetch,

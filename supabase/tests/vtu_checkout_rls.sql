@@ -640,10 +640,10 @@ END;
 $s3$;
 
 -- --- S4: anon is denied the settings RPC -----------------------------
--- No anon EXECUTE grant exists by design (least privilege): the call
--- must fail with insufficient_privilege, never execute. The grant
--- pin (S4-grant) and the behavioral probe (S4) are separate blocks
--- so a replay failure localizes to grants vs execution by line.
+-- No anon EXECUTE grant exists by design (least privilege). Grant
+-- presence/absence for all three roles is pinned through the
+-- catalog in $s4grant$ (see the note after that block for why
+-- there is no behavioral anon call).
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
@@ -657,66 +657,30 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'S4-grant: anon must NOT have EXECUTE on get_vtu_checkout_settings';
   END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.get_vtu_checkout_settings(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'S4-grant: authenticated must have EXECUTE on get_vtu_checkout_settings';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.get_vtu_checkout_settings(uuid, uuid)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'S4-grant: service_role must have EXECUTE on get_vtu_checkout_settings';
+  END IF;
 END;
 $s4grant$;
 
--- TEMPORARY BISECT LADDER (remove once the dictated fix lands):
--- s4a: synthetic handler control as anon.
--- s4c: denied call with a swallow-everything handler.
--- s4:  the real probe. The first failing close-line names the
--- broken mechanism.
-DO $s4a$
-BEGIN
-  BEGIN
-    RAISE EXCEPTION 's4a synthetic';
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
-  END;
-END;
-$s4a$;
-
-DO $s4c$
-DECLARE
-  v_row record;
-BEGIN
-  BEGIN
-    SELECT * INTO v_row
-    FROM public.get_vtu_checkout_settings(
-      'e1e1e1e1-0000-4000-8000-000000000001',
-      'a11ce000-0000-4000-8000-000000000001'
-    );
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
-  END;
-END;
-$s4c$;
-
-DO $s4$
-DECLARE
-  v_row record;
-  v_msg text;
-BEGIN
-  BEGIN
-    SELECT * INTO v_row
-    FROM public.get_vtu_checkout_settings(
-      'e1e1e1e1-0000-4000-8000-000000000001',
-      'a11ce000-0000-4000-8000-000000000001'
-    );
-    IF FOUND THEN
-      RAISE EXCEPTION 'S4: anon read settings row';
-    END IF;
-    RAISE EXCEPTION 'S4: anon unexpectedly executed settings RPC';
-  EXCEPTION WHEN OTHERS THEN
-    -- Outcome-based: only execution fails. Any denial error
-    -- (42501 or platform-specific) proves least privilege; the
-    -- S4-grant pin above asserts the grant absence directly.
-    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg LIKE 'S4: %' THEN
-      RAISE;
-    END IF;
-  END;
-END;
-$s4$;
+-- No behavioral anon call here: on the pinned replay image a
+-- denied function EXECUTE surfaces as an error the exception
+-- handler cannot trap (bisected: a swallow-everything handler
+-- still failed), so grant absence is asserted through the
+-- catalog — the same pattern as
+-- order_notification_outbox_rpc_privileges.sql. Behavioral
+-- coverage for authorized callers lives in S1-S3/S5.
 
 -- --- S5: service_role (server callers) gets the row -------------------
 SET LOCAL ROLE service_role;

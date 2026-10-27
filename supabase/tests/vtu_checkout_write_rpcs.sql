@@ -186,43 +186,11 @@ $i1b$;
 -- --- I2: authenticated EXECUTE is permission-denied -------------------
 -- The settlement payload is server-computed; buyers must not invoke
 -- this RPC at all (Codex P1 forge: gift source / inflated money).
-SET LOCAL ROLE authenticated;
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT pg_catalog.set_config(
-  'request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true
-);
-
--- SELECT-INTO form: a PERFORM call inside an exception handler
--- proved unreliable on the pinned replay image, while SELECT
--- reads behave normally. The contract is unchanged: any
--- successful execution fails, any error passes.
-DO $i2$
-DECLARE
-  v_id uuid;
-  v_msg text;
-BEGIN
-  BEGIN
-    SELECT id INTO v_id
-    FROM public.insert_prepared_vtu_transaction(
-      'e2e2e2e2-0000-4000-8000-000000000001',
-      'f3f3f3f3-0000-4000-8000-000000000001',
-      'b22df000-0000-4000-8000-000000000001',
-      NULL, 'airtime', 'mtn', '08030000015', 500, 'WRPC-INSERT-002',
-      'gift', 2500, 5000, 500,
-      NULL, NULL, NULL, NULL, '{}'::jsonb
-    );
-    RAISE EXCEPTION 'I2: authenticated prepare-insert unexpectedly allowed';
-  EXCEPTION WHEN OTHERS THEN
-    -- Outcome-based: only execution fails. Any denial error
-    -- proves the service_role-only grant; the grants pin below
-    -- asserts the grant absence directly.
-    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg LIKE 'I2: %' THEN
-      RAISE;
-    END IF;
-  END;
-END;
-$i2$;
+-- Asserted via the $grants$ catalog pins at the end of this file:
+-- on the pinned replay image a denied function EXECUTE surfaces
+-- as an error the exception handler cannot trap, so no behavioral
+-- call is made here (same pattern as
+-- order_notification_outbox_rpc_privileges.sql).
 
 -- --- I3: service_role (server callers, no JWT) still inserts ---------
 SET LOCAL ROLE service_role;
@@ -320,36 +288,11 @@ END;
 $k3$;
 
 -- --- K4: anon is refused ----------------------------------------------
-SET LOCAL ROLE anon;
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
-SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
-
--- SELECT-INTO form: a PERFORM call inside an exception handler
--- proved unreliable on the pinned replay image, while SELECT
--- reads behave normally.
-DO $k4$
-DECLARE
-  v_row record;
-  v_msg text;
-BEGIN
-  BEGIN
-    SELECT * INTO v_row
-    FROM public.lookup_vtu_idempotency_row(
-      'e5e5e5e5-0000-4000-8000-000000000001',
-      'b22df000-0000-4000-8000-000000000001'
-    );
-    RAISE EXCEPTION 'K4: anon unexpectedly executed lookup RPC';
-  EXCEPTION WHEN OTHERS THEN
-    -- Outcome-based: only execution fails. Any denial error
-    -- proves least privilege; the grants pin below asserts the
-    -- grant absence directly.
-    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg LIKE 'K4: %' THEN
-      RAISE;
-    END IF;
-  END;
-END;
-$k4$;
+-- Asserted via the $grants$ catalog pins at the end of this file:
+-- on the pinned replay image a denied function EXECUTE surfaces
+-- as an error the exception handler cannot trap, so no behavioral
+-- call is made here (same pattern as
+-- order_notification_outbox_rpc_privileges.sql).
 
 -- --- K5: service_role reads any key -----------------------------------
 SET LOCAL ROLE service_role;
@@ -691,36 +634,11 @@ END;
 $d4$;
 
 -- --- D5: anon is refused ----------------------------------------------
-SET LOCAL ROLE anon;
-SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
-SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
-
--- SELECT-INTO form: a PERFORM call inside an exception handler
--- proved unreliable on the pinned replay image, while SELECT
--- reads behave normally.
-DO $d5$
-DECLARE
-  v_status text;
-  v_msg text;
-BEGIN
-  BEGIN
-    SELECT public.fail_orphan_vtu_transaction(
-      'd4d4d4d4-0000-4000-8000-000000000003',
-      'e2e2e2e2-0000-4000-8000-000000000001',
-      'b22df000-0000-4000-8000-000000000001'
-    ) INTO v_status;
-    RAISE EXCEPTION 'D5: anon unexpectedly executed fail-orphan RPC';
-  EXCEPTION WHEN OTHERS THEN
-    -- Outcome-based: only execution fails. Any denial error
-    -- proves least privilege; the grants pin below asserts the
-    -- grant absence directly.
-    GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg LIKE 'D5: %' THEN
-      RAISE;
-    END IF;
-  END;
-END;
-$d5$;
+-- Asserted via the $grants$ catalog pins at the end of this file:
+-- on the pinned replay image a denied function EXECUTE surfaces
+-- as an error the exception handler cannot trap, so no behavioral
+-- call is made here (same pattern as
+-- order_notification_outbox_rpc_privileges.sql).
 
 -- --- D6: service_role (server callers) works --------------------------
 -- ...002 is mapped (C4), so D6 prepares a fresh c2 row through the

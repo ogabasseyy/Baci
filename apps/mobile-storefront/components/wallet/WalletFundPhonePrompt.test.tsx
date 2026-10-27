@@ -6,6 +6,21 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+
+jest.mock('@gorhom/bottom-sheet', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { TextInput } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    BottomSheetTextInput: (props: React.ComponentProps<typeof TextInput>) =>
+      React.createElement(TextInput, {
+        ...props,
+        testID: 'bottom-sheet-text-input',
+      }),
+  };
+});
+
 import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
@@ -30,6 +45,7 @@ describe('WalletFundPhonePrompt', () => {
 
     expect(screen.getByText('Set up bank transfer')).toBeOnTheScreen();
     expect(screen.getByText('PHONE NUMBER')).toBeOnTheScreen();
+    expect(screen.getByTestId('bottom-sheet-text-input')).toBeOnTheScreen();
     expect(
       screen.getByRole('button', { name: 'Save phone number' })
     ).toHaveStyle({

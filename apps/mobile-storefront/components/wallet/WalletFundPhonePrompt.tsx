@@ -1,3 +1,4 @@
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import {
@@ -5,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
@@ -75,7 +75,7 @@ export function WalletFundPhonePrompt({
       <Text style={[styles.label, { color: colors.textSecondary }]}>
         PHONE NUMBER
       </Text>
-      <TextInput
+      <BottomSheetTextInput
         accessibilityLabel="Phone number"
         style={[
           styles.input,

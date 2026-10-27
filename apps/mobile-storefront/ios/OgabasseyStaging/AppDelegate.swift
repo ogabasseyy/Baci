@@ -65,10 +65,24 @@ class StagingSceneDelegate: UIResponder, UIWindowSceneDelegate {
         launchOptions[.sourceApplication] = sourceApplication
       }
     }
+    if let browsingWebActivity = connectionOptions.userActivities.first(where: {
+      $0.activityType == NSUserActivityTypeBrowsingWeb
+    }) {
+      let activityDictionaryKey = UIApplication.LaunchOptionsKey(
+        rawValue: "UIApplicationLaunchOptionsUserActivityDictionaryKey"
+      )
+      launchOptions[activityDictionaryKey] = [
+        "UIApplicationLaunchOptionsUserActivityTypeKey": browsingWebActivity.activityType,
+        "UIApplicationLaunchOptionsUserActivityKey": browsingWebActivity,
+      ]
+    }
     if let response = connectionOptions.notificationResponse {
       launchOptions[.remoteNotification] = response.notification.request.content.userInfo
     }
     factory.startReactNative(withModuleName: "main", in: sceneWindow, launchOptions: launchOptions)
+    for context in connectionOptions.urlContexts {
+      forward(context, to: appDelegate)
+    }
     for userActivity in connectionOptions.userActivities {
       _ = appDelegate.application(UIApplication.shared, continue: userActivity, restorationHandler: { _ in })
     }
@@ -77,13 +91,17 @@ class StagingSceneDelegate: UIResponder, UIWindowSceneDelegate {
   func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
     guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
     for context in contexts {
-      var options: [UIApplication.OpenURLOptionsKey: Any] = [.openInPlace: context.options.openInPlace]
-      if let sourceApplication = context.options.sourceApplication {
-        options[.sourceApplication] = sourceApplication
-      }
-      if let annotation = context.options.annotation { options[.annotation] = annotation }
-      _ = appDelegate.application(UIApplication.shared, open: context.url, options: options)
+      forward(context, to: appDelegate)
     }
+  }
+
+  private func forward(_ context: UIOpenURLContext, to appDelegate: AppDelegate) {
+    var options: [UIApplication.OpenURLOptionsKey: Any] = [.openInPlace: context.options.openInPlace]
+    if let sourceApplication = context.options.sourceApplication {
+      options[.sourceApplication] = sourceApplication
+    }
+    if let annotation = context.options.annotation { options[.annotation] = annotation }
+    _ = appDelegate.application(UIApplication.shared, open: context.url, options: options)
   }
 
   func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {

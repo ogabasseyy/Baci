@@ -156,7 +156,9 @@ describe('DomainOptionsSheet', () => {
       />
     );
     expect(onAction).not.toHaveBeenCalled();
-    vi.runAllTimers();
+    vi.advanceTimersByTime(299);
+    expect(onAction).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
     vi.useRealTimers();
   });

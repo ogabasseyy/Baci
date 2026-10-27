@@ -67,7 +67,8 @@ export default function DomainOptionsSheet({
       return () => cancelIdleCallback(idleHandle);
     }
 
-    const timer = setTimeout(runAction, 0);
+    // Reanimated exit defaults to 300 ms; wait for the sheet to close.
+    const timer = setTimeout(runAction, 300);
     return () => clearTimeout(timer);
   }, [onAction, visible]);
 

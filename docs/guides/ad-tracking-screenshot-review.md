@@ -8,13 +8,13 @@ checklist aligned with the images used by the merchant guides.
 ## Baci provider settings
 
 - [ ] `meta-settings.jpg`: the complete Pixel ID and Conversions API token
-      fields are visible; values are blank or masked, and no store domain is
-      shown. The crop ends before helper text below the token field.
-- [ ] `tiktok-settings.jpg`: Pixel ID and saved-token status are masked; the
-      crop contains only the complete Pixel ID and Access Token fields, with no
-      save/disconnect controls or saved-connection state.
-- [ ] `snapchat-pixel-settings.jpg`: Pixel ID is masked and the optional token
-      field is empty; no store domain is shown.
+      fields are visible and blank; no store domain is shown. The crop ends
+      before helper text below the token field.
+- [ ] `tiktok-settings.jpg`: Pixel ID and Access Token fields are blank; the
+      crop contains only those complete fields, with no save/disconnect controls
+      or saved-connection state.
+- [ ] `snapchat-pixel-settings.jpg`: Pixel ID is blank and the optional token
+      input shows only its placeholder; no store domain is shown.
 - [ ] `x-connection-settings.jpg`: no account identity or Pixel ID is shown;
       credential fields are blank and the crop ends after the complete fields,
       before any saved-connection state or buttons.
@@ -31,6 +31,8 @@ checklist aligned with the images used by the merchant guides.
       masked; no generated key is visible.
 - [ ] `06-conversion-created.png`: account-specific fields are masked.
 
-For every image, check that masking covers only the identifying or credential
-value, leaves its field label legible, and does not hide unrelated instructions
-or controls. Never update a digest solely to make a changed image pass tests.
+For every image, check that no private value is visible. When a value is masked,
+confirm that the mask covers only the identifying or credential value, leaves
+its field label legible, and does not hide unrelated instructions or controls.
+Never describe an empty field as masked, and never update a digest solely to
+make a changed image pass tests.

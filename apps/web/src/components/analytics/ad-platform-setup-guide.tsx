@@ -33,7 +33,7 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/meta-settings.jpg',
-        alt: 'Meta Pixel and Conversions API settings in Baci with identifiers masked',
+        alt: 'Meta Pixel and Conversions API settings in Baci; Pixel ID and token fields are blank',
         width: 1165,
         height: 353,
       },
@@ -52,7 +52,7 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/tiktok-settings.jpg',
-        alt: 'TikTok Pixel ID and Access Token fields in Baci; the Pixel ID and saved-token status are masked',
+        alt: 'TikTok Tracking settings in Baci; Pixel ID and Access Token fields are blank',
         width: 1124,
         height: 250,
       },
@@ -71,14 +71,14 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/snapchat-pixel-settings.jpg',
-        alt: 'Snapchat Pixel and optional Conversions API token fields in Baci; the Pixel ID is masked and the token field is empty',
+        alt: 'Snapchat Tracking settings in Baci; Snap Pixel ID is blank and the token input shows only its placeholder',
         width: 1165,
         height: 350,
       },
     ],
     steps: [
       'In Snapchat Ads Manager, open Events Manager and create a Snap Pixel, or select the existing business Pixel for this store.',
-      'Copy its Pixel ID. For server-side events, generate or retrieve a token in the Pixel Settings under Conversions API; this token is optional for browser-only tracking.',
+      'Copy its Pixel ID. For server-side events, in Ads Manager open the menu → Business Details → OAuth Apps → Conversions API Tokens and generate a token; you must be an Organization Admin to access this section. This token is optional for browser-only tracking.',
       'Enter the Pixel ID and, if enabling server-side events, the token in this Baci page, then save. Keep the token private; Baci manages event wiring.',
       'Grant Marketing consent on your storefront and check the provider event view. Confirm browser activity and server delivery as separate results.',
     ],
@@ -135,10 +135,9 @@ export function AdPlatformSetupGuide({ platform }: { platform: AdPlatform }) {
           <div className="mt-6 space-y-3">
             <h3 className="font-medium">Baci settings screenshots</h3>
             <p className="text-sm text-muted-foreground">
-              These genuine settings screens have account identifiers and
-              credential values masked. Enter values from your own provider
-              account; never copy credentials from an image. Saved-credential
-              indicators are omitted from these screenshots.
+              These genuine settings screens show blank or masked values and
+              omit saved-credential indicators. Enter values from your own
+              provider account; never copy credentials from an image.
             </p>
             {platform === 'x' ? (
               <p className="text-sm text-muted-foreground">

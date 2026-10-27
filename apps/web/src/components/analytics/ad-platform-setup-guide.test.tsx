@@ -71,13 +71,13 @@ describe('AdPlatformSetupGuide', () => {
     ).toHaveAttribute('href', consoleUrl);
     const screenshotAlts: Record<typeof platform, string[]> = {
       facebook: [
-        'Meta Pixel and Conversions API settings in Baci with identifiers masked',
+        'Meta Pixel and Conversions API settings in Baci; Pixel ID and token fields are blank',
       ],
       tiktok: [
-        'TikTok Pixel ID and Access Token fields in Baci; the Pixel ID and saved-token status are masked',
+        'TikTok Tracking settings in Baci; Pixel ID and Access Token fields are blank',
       ],
       snapchat: [
-        'Snapchat Pixel and optional Conversions API token fields in Baci; the Pixel ID is masked and the token field is empty',
+        'Snapchat Tracking settings in Baci; Snap Pixel ID is blank and the token input shows only its placeholder',
       ],
       x: [
         'X screenshot of the optional server credential fields in Baci; all input values are blank',
@@ -87,6 +87,11 @@ describe('AdPlatformSetupGuide', () => {
     expect(screenshots.map((image) => image.getAttribute('alt'))).toEqual(
       screenshotAlts[platform]
     );
+    expect(
+      screen.getByText(
+        /show blank or masked values and omit saved-credential indicators/i
+      )
+    ).toBeInTheDocument();
     for (const screenshot of screenshots) {
       const src = screenshot.getAttribute('src');
       expect(src).toBeTruthy();
@@ -118,7 +123,7 @@ describe('AdPlatformSetupGuide', () => {
     const distinguishingSteps: Record<typeof platform, RegExp> = {
       facebook: /Pixel Settings → Generate Access Token/,
       tiktok: /Tools → Events → Connect data source → Web/,
-      snapchat: /Pixel Settings under Conversions API/,
+      snapchat: /Business Details → OAuth Apps → Conversions API Tokens/,
       x: /all four OAuth credentials/,
     };
     expect(screen.getByText(distinguishingSteps[platform])).toBeInTheDocument();
@@ -135,7 +140,14 @@ describe('AdPlatformSetupGuide', () => {
       /meta-settings\.jpg.*complete Pixel ID and Conversions API token/is
     );
     expect(checklist).toMatch(
-      /no\s+save\/disconnect controls or saved-connection state/
+      /tiktok-settings\.jpg.*Pixel ID and Access Token fields are blank/is
+    );
+    expect(checklist).toMatch(
+      /snapchat-pixel-settings\.jpg.*Pixel ID is blank and the optional token\s+input shows only its placeholder/is
+    );
+    expect(checklist).toMatch(/Never describe an empty field as masked/i);
+    expect(checklist).toMatch(
+      /no save\/disconnect controls\s+or saved-connection state/
     );
     for (const imagePath of Object.keys(pinnedAssetDigests)) {
       expect(checklist).toContain(imagePath.split('/').at(-1));

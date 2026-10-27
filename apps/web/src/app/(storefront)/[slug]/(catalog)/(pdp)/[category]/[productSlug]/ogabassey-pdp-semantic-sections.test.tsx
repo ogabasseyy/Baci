@@ -80,6 +80,7 @@ describe('OgabasseyPdpSemanticSections', () => {
       categorySlug: 'laptops',
       merchantId: 'merchant-1',
       productBrand: 'Lenovo',
+      timeoutMs: 1_000,
     });
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({

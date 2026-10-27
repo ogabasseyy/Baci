@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-26T05:47:06.000000+00:00",
-  "source_revision": "f8fa3bb0797e6297d049e550b906de3202829f23",
-  "evidence_digest": "f8546b1bc70506e8601032769875de38ae45621c8ed1c4622a498e3113c15511",
-  "claims_digest": "8e0349a127d17699dcfb6f2c5d3f3e0a2617a5599673af61c4141d69b3f13ba9",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-27T20:04:10.694510+00:00",
+  "source_revision": "aee0f5d52a51fcab644c50007325bf0025ba6d9e",
+  "evidence_digest": "c1a21102cfe8d0611b4c83c7aec5c8a4eafc9417cec2383aa8c83c5b864a4d25",
+  "claims_digest": "fc68b8a4b417c978226e973e87e17ab40e701e1289fe257d7ecbf9ef7f3f9641",
+  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged. The mobile admin inventory sheet empty footer uses undefined; the inventory capability remains unchanged.",
   "capabilities": [
     {
       "id": "payments",

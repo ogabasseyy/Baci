@@ -18,6 +18,7 @@ interface LoginScreenContentProps {
   dismissAndNavigate: () => void;
   email: string;
   emailError: string | null;
+  emailHintGuidance: string;
   handleAppleSignIn: () => Promise<void>;
   handleContinue: () => void;
   handleGoogleSignIn: () => Promise<void>;
@@ -59,6 +60,7 @@ export function LoginScreenContent({
   colors,
   dismissAndNavigate,
   email,
+  emailHintGuidance,
   emailError,
   handleAppleSignIn,
   handleContinue,
@@ -105,6 +107,7 @@ export function LoginScreenContent({
           colors={colors}
           email={email}
           emailError={emailError}
+          emailHintGuidance={emailHintGuidance}
           isAppleLoading={isAppleLoading}
           isGoogleLoading={isGoogleLoading}
           isLoading={isLoading}

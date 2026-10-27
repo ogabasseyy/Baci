@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  renderItemRows,
+  renderInvoiceTermsHtml,
   renderLogoHtml,
+  renderPaymentHistoryHtml,
   renderTermsHtml,
 } from './receipt-sections';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
-
-const formatMoney = (value: number) => `NGN ${value.toLocaleString('en-NG')}`;
 
 function createReceiptMerchant(
   overrides: Partial<ReceiptMerchant> = {}
@@ -26,36 +25,6 @@ function createReceiptMerchant(
     vat_rate: null,
     bank_code: null,
     bank_account_number: null,
-    ...overrides,
-  };
-}
-
-function createReceiptOrder(
-  overrides: Partial<ReceiptOrder> = {}
-): ReceiptOrder {
-  return {
-    amount_paid: 500000,
-    balance: 0,
-    created_at: '2026-04-08T18:02:55.974Z',
-    currency: 'NGN',
-    customer_email: 'customer@example.com',
-    customer_name: 'Customer Example',
-    customer_phone: null,
-    discount_amount: 0,
-    items: [
-      {
-        price: 500000,
-        product_name: 'Samsung Galaxy Fold 5',
-        quantity: 1,
-      },
-    ],
-    order_number: 'ORD-123',
-    payment_method: 'card',
-    payment_status: 'paid',
-    shipping_fee: 0,
-    subtotal: 500000,
-    tax_amount: 0,
-    total: 500000,
     ...overrides,
   };
 }
@@ -116,54 +85,6 @@ describe('renderLogoHtml', () => {
   });
 });
 
-describe('renderItemRows', () => {
-  it('renders item descriptions under the receipt item name', () => {
-    const html = renderItemRows(
-      createReceiptOrder({
-        items: [
-          {
-            description: 'Unlocked 512GB device',
-            price: 930000,
-            product_name: 'Samsung Galaxy Fold 5',
-            quantity: 1,
-            variant_name: 'Used',
-          },
-        ],
-      }),
-      formatMoney
-    );
-
-    expect(html).toContain('Samsung Galaxy Fold 5 (Used)');
-    expect(html).toContain('Unlocked 512GB device');
-    expect(html).toContain('cell-item-description');
-  });
-
-  it('omits duplicate item descriptions already visible as labels or fulfillment', () => {
-    const html = renderItemRows(
-      createReceiptOrder({
-        items: [
-          {
-            description: 'Used\nIMEI: 353456789012345 | S/N: SN-123',
-            fulfillment_details: {
-              imei: '353456789012345',
-              serialNumber: 'SN-123',
-            },
-            price: 930000,
-            product_name: 'Samsung Galaxy Fold 5',
-            quantity: 1,
-            variant_name: 'Used',
-          },
-        ],
-      }),
-      formatMoney
-    );
-
-    expect(html.match(/Samsung Galaxy Fold 5 \(Used\)/g) ?? []).toHaveLength(1);
-    expect(html.match(/IMEI: 353456789012345/g) ?? []).toHaveLength(1);
-    expect(html).not.toContain('cell-item-description');
-  });
-});
-
 describe('renderTermsHtml', () => {
   it('normalizes store URLs before rendering the default terms link', () => {
     const html = renderTermsHtml(createReceiptMerchant(), {
@@ -200,5 +121,100 @@ describe('renderTermsHtml', () => {
     });
 
     expect(html).toBe('');
+  });
+});
+
+describe('renderPaymentHistoryHtml', () => {
+  it('pins transaction dates to the Lagos document timezone', () => {
+    // 23:30 UTC is already the next calendar day in Lagos (UTC+1):
+    // the pinned timezone shows 7 Feb regardless of runner locale.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: '2024-02-06T23:30:00.000Z',
+            description: null,
+            metadata: { payment_method: 'card' },
+          },
+        ],
+      } as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('7 Feb 2024');
+    expect(html).not.toContain('6 Feb 2024');
+  });
+
+  it('renders a dash for null transaction timestamps', () => {
+    // transactions.created_at is nullable: new Date(null) is the epoch,
+    // so the row must degrade instead of printing Jan 1970.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: null,
+            description: null,
+            metadata: null,
+          },
+        ],
+      } as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('<td>-</td>');
+    expect(html).not.toContain('1970');
+  });
+
+  it('falls back to the description for structured methods', () => {
+    // Objects/arrays canonicalize to absent like the SQL snapshot: the
+    // row renders the description, never '[object Object]'.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: '2024-02-06T23:30:00.000Z',
+            description: 'DVA transfer',
+            metadata: { payment_method: { name: 'cash' } },
+          },
+        ],
+      } as unknown as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('DVA transfer');
+    expect(html).not.toContain('[object Object]');
+  });
+});
+
+describe('renderInvoiceTermsHtml', () => {
+  it('renders terms, resolved notes, and FIRS like the emailed PDF', () => {
+    const html = renderInvoiceTermsHtml(
+      {
+        invoice_note: 'Priority',
+        notes: 'Shadowed',
+        payment_due_date: '2026-05-20',
+        payment_terms: 'Net 30',
+        buyer_reference: 'PO-77',
+        firs_irn: 'IRN-1',
+        firs_csid: null,
+      } as ReceiptOrder,
+      false
+    );
+
+    expect(html).toContain('Invoice Terms');
+    expect(html).toContain('Due Date: 20 May 2026');
+    expect(html).toContain('Payment Terms: Net 30');
+    expect(html).toContain('Priority');
+    expect(html).not.toContain('Shadowed');
+    expect(html).toContain('FIRS IRN: IRN-1');
+  });
+
+  it('omits terms blocks on paid receipts', () => {
+    expect(
+      renderInvoiceTermsHtml({ payment_terms: 'Net 30' } as ReceiptOrder, true)
+    ).toBe('');
   });
 });

@@ -15,6 +15,7 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
+import { MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-manual-document-pending-sources';
 import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
@@ -124,6 +125,7 @@ const PENDING_SOURCES = [
   VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS,
   CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
@@ -182,9 +184,5 @@ const PENDING_SOURCES = [
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })
   .join('\n'); // biome-ignore format: keep the manifest at the 300-line modularity limit
 // One primary export (repo one-export-per-file rule): manifest module/tests destructure the collection.
-export const REPLAY_SOURCE_DATA = {
-  PIPELINE_SOURCES,
-  POST_REPLAY_SOURCES,
-  PENDING_SOURCES,
-  PRODUCTION_MAPPINGS,
-} as const;
+// biome-ignore format: keep the manifest at the 300-line modularity limit
+export const REPLAY_SOURCE_DATA = { PIPELINE_SOURCES, POST_REPLAY_SOURCES, PENDING_SOURCES, PRODUCTION_MAPPINGS } as const;

@@ -168,3 +168,10 @@ describe('sumLineExtensionAmounts', () => {
     ).toBe(4100);
   });
 });
+
+describe('ASSURANCE_LINE_NAME', () => {
+  it('matches the shared canonical name so web and mobile itemize identically', async () => {
+    const shared = await import('@baci/shared/receipt');
+    expect(ASSURANCE_LINE_NAME).toBe(shared.ASSURANCE_LINE_NAME);
+  });
+});

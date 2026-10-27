@@ -59,10 +59,11 @@ function DefaultLoginPage() {
     merchantLoading,
     authLoading,
     otpState,
+    showCodeStep,
+    handleDifferentEmail,
     email,
     setEmail,
     code,
-    setCode,
     error,
     setError,
     isSending,
@@ -132,19 +133,19 @@ function DefaultLoginPage() {
               </div>
             )}
             <CardTitle className="text-2xl">
-              {otpState?.codeSent
+              {showCodeStep
                 ? 'Enter verification code'
                 : 'Sign in or Create account'}
             </CardTitle>
             <CardDescription>
-              {otpState?.codeSent
-                ? `We sent a 6-digit code to ${otpState.email}`
+              {showCodeStep
+                ? `We sent a 6-digit code to ${otpState?.email}`
                 : 'Enter your email to sign in or sign up instantly'}
             </CardDescription>
           </CardHeader>
 
           <CardContent>
-            {!otpState?.codeSent ? (
+            {!showCodeStep ? (
               // Email input form
               <CustomerEmailForm
                 email={email}
@@ -176,10 +177,7 @@ function DefaultLoginPage() {
                 handleCodeChange={handleCodeChange}
                 handleKeyDown={handleKeyDown}
                 handleResendCode={handleResendCode}
-                onDifferentEmail={() => {
-                  setCode(['', '', '', '', '', '']);
-                  setError('');
-                }}
+                onDifferentEmail={handleDifferentEmail}
               />
             )}
           </CardContent>

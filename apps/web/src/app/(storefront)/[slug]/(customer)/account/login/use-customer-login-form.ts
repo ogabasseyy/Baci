@@ -47,6 +47,7 @@ export function useCustomerLoginForm() {
   } = useCustomerAuth();
 
   const [email, setEmail] = useState(prefillEmail);
+  const [editingEmail, setEditingEmail] = useState(false);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -93,6 +94,8 @@ export function useCustomerLoginForm() {
 
     if (!result.success) {
       setError(result.error || 'Failed to send code');
+    } else {
+      setEditingEmail(false);
     }
 
     setIsSending(false);
@@ -179,6 +182,12 @@ export function useCustomerLoginForm() {
     merchantLoading,
     authLoading,
     otpState,
+    showCodeStep: !!otpState?.codeSent && !editingEmail,
+    handleDifferentEmail: () => {
+      setEditingEmail(true);
+      setCode(['', '', '', '', '', '']);
+      setError('');
+    },
     email,
     setEmail,
     code,

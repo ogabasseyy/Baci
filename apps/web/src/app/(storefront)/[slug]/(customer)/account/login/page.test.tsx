@@ -166,6 +166,35 @@ describe('CustomerLoginPage', () => {
     expect(screen.getByLabelText('Digit 1 of 6')).toHaveFocus();
   });
 
+  it('returns to the email form when choosing a different email', async () => {
+    renderCodeStep();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use a different email' })
+    );
+    expect(screen.getByLabelText('Email address')).toBeVisible();
+    expect(screen.queryByLabelText('Digit 1 of 6')).not.toBeInTheDocument();
+  });
+
+  it('keeps email entry open when sending to the replacement address fails', async () => {
+    const { sendOtp } = renderCodeStep();
+    sendOtp.mockResolvedValueOnce({
+      success: false,
+      error: 'Could not send code',
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use a different email' })
+    );
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'new@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send sign-in code' }));
+    await waitFor(() =>
+      expect(screen.getByText('Could not send code')).toBeVisible()
+    );
+    expect(sendOtp).toHaveBeenCalledWith('new@example.com');
+    expect(screen.getByLabelText('Email address')).toBeVisible();
+  });
+
   it('resends to the challenge email and clears partial digits', async () => {
     const { sendOtp } = renderCodeStep();
     fireEvent.change(screen.getByLabelText('Digit 1 of 6'), {

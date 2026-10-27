@@ -89,6 +89,7 @@ export function CustomerCodeForm({
         variant="outline"
         className="w-full"
         onClick={onDifferentEmail}
+        disabled={isSending || isVerifying}
       >
         Use a different email
       </Button>

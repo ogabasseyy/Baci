@@ -40,6 +40,14 @@ it('rejects non-integer stock quantities in checkout lines', () => {
   };
 
   expect(parseSnapshot(snapshot)?.lines[0]?.stockQty).toBe(10);
+  expect(parseSnapshot(snapshot)?.lines[0]?.offerId).toBeNull();
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  expect(
+    parseSnapshot({
+      ...snapshot,
+      lines: [{ ...line, offerId }],
+    })?.lines[0]?.offerId
+  ).toBe(offerId);
   expect(
     parseSnapshot({ ...snapshot, lines: [{ ...line, stockQty: 1.5 }] })
   ).toBeNull();

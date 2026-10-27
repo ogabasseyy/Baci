@@ -139,6 +139,28 @@ describe('validateCartCommand', () => {
     expect(issue?.code).toBe('invalid_item');
   });
 
+  it('rejects a blank offer id on an otherwise valid add', () => {
+    const blank = validateCartCommand({
+      item: {
+        offerId: '   ',
+        productId: '11111111-1111-4111-8111-111111111111',
+      },
+      quantity: 1,
+      type: 'add',
+    });
+    expect(blank?.code).toBe('invalid_item');
+    expect(
+      validateCartCommand({
+        item: {
+          offerId: '44444444-4444-4444-8444-444444444444',
+          productId: '11111111-1111-4111-8111-111111111111',
+        },
+        quantity: 1,
+        type: 'add',
+      })
+    ).toBeNull();
+  });
+
   it('rejects blank vouchers and non-positive negotiated prices', () => {
     const blank = validateCartCommand({
       item: { productId: '11111111-1111-4111-8111-111111111111' },

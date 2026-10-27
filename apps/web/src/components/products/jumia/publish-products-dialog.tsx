@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2, Package, Search } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { ThemedButton } from '@/components/themed/themed-button';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,6 +19,7 @@ import { JumiaBrandSelector } from './brand-selector';
 import { JumiaCategorySelector } from './category-selector';
 import { GamingSelectionPreview } from './gaming-selection-preview';
 import { JumiaMappingDraftPanel } from './jumia-mapping-draft-panel';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { usePublishProductsDialog } from './use-publish-products-dialog';
 
 interface PublishProductsDialogProps {
@@ -35,6 +37,19 @@ export function PublishProductsDialog({
   open,
   onOpenChange,
 }: PublishProductsDialogProps) {
+  const [mappingDraft, setMappingDraft] = useState<JumiaMappingDraft | null>(
+    null
+  );
+  const destinationKey = JSON.stringify([merchantId, integrationId]);
+  const previousDestinationKey = useRef(destinationKey);
+  useEffect(() => {
+    if (previousDestinationKey.current !== destinationKey)
+      setMappingDraft(null);
+    previousDestinationKey.current = destinationKey;
+  }, [destinationKey]);
+  useEffect(() => {
+    if (!open) setMappingDraft(null);
+  }, [open]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[680px]">
@@ -46,11 +61,16 @@ export function PublishProductsDialog({
             active.
           </DialogDescription>
         </DialogHeader>
-        <GamingSelectionPreview merchantId={merchantId} />
+        <GamingSelectionPreview
+          merchantId={merchantId}
+          integrationId={integrationId}
+          mapping={mappingDraft}
+        />
         {open && (
           <JumiaMappingDraftPanel
             merchantId={merchantId}
             integrationId={integrationId}
+            onDraftChange={setMappingDraft}
           />
         )}
         <LegacyPublisher

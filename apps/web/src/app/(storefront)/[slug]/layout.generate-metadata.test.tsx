@@ -104,7 +104,7 @@ describe('storefront layout metadata', () => {
       params: Promise.resolve({ slug: 'ogabassey' }),
     });
 
-    expect(metadata.alternates).toBeUndefined();
+    expect(metadata.alternates).toBeNull();
   });
 
   it('reads google verification from published_config when feature settings omit it', async () => {

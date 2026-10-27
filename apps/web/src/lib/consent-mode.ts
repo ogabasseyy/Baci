@@ -1,5 +1,7 @@
 'use client';
 
+import { parseCookiePreferences } from '@/components/storefront/parse-cookie-preferences';
+
 /**
  * Google Consent Mode v2 Implementation
  *
@@ -148,7 +150,7 @@ export function getStoredConsent(): {
   try {
     const saved = localStorage.getItem('baci-cookie-consent');
     if (!saved) return null;
-    return JSON.parse(saved);
+    return parseCookiePreferences(JSON.parse(saved));
   } catch {
     return null;
   }

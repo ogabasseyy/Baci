@@ -9,9 +9,15 @@ import { expect, it, vi } from 'vitest';
 import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { CustomerAuthProvider, useCustomerAuth } from './customer-auth-context';
 
-vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
-  revokeCartDeviceSession: vi.fn(),
-}));
+vi.mock(
+  '@/hooks/cart/shared-cart-session-revoke-client',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/hooks/cart/shared-cart-session-revoke-client')
+    >()),
+    revokeCartDeviceSession: vi.fn(),
+  })
+);
 vi.mock('@/hooks/use-cart', () => ({ clearCartStorage: vi.fn() }));
 function Probe() {
   const auth = useCustomerAuth();

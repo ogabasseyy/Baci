@@ -63,6 +63,20 @@ describe('mapMcpLinesToInput', () => {
       },
     ]);
   });
+
+  it('keeps an exact offer id and rejects a non-uuid offer', () => {
+    const offerId = '55555555-5555-4555-8555-555555555555';
+    expect(
+      mapMcpLinesToInput([
+        { offer_id: offerId, product_id: PRODUCT_ID, quantity: 1 },
+      ])
+    ).toEqual([{ item: { offerId, productId: PRODUCT_ID }, quantity: 1 }]);
+    expect(() =>
+      mapMcpLinesToInput([
+        { offer_id: 'offer', product_id: PRODUCT_ID, quantity: 1 },
+      ])
+    ).toThrowError(/offer/i);
+  });
 });
 
 describe('mapUcpLinesToInput', () => {

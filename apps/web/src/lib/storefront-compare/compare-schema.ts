@@ -1,5 +1,9 @@
 import { sanitizeText } from '@/lib/sanitize-core';
-import { generateBreadcrumbSchema, getProductUrl } from '@/lib/seo-utils';
+import {
+  generateBreadcrumbSchema,
+  generateMetaDescription,
+  getProductUrl,
+} from '@/lib/seo-utils';
 import type { ProductComparisonMatrix } from '@/lib/storefront-specs/spec-matrix';
 
 interface BreadcrumbItem {
@@ -147,8 +151,13 @@ export function buildPriceBandPageSchemas(input: {
       '@type': 'ItemList',
       name: input.pageName,
       url: pageUrl,
-      itemListElement: input.products.map((product, index) => {
-        const sanitizedDescription = sanitizeText(product.description || '');
+      itemListElement: input.products.slice(0, 20).map((product, index) => {
+        const sanitizedDescription = product.description
+          ? generateMetaDescription(
+              sanitizeText(product.description || ''),
+              120
+            )
+          : '';
         const availability =
           product.availability === 'OutOfStock'
             ? 'https://schema.org/OutOfStock'

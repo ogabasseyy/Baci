@@ -7,6 +7,19 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       /\[data-imei-lcp-hero\] \[data-cwv-lcp-fold\]\s*\{\s*min-height: 0;/
     );
   });
+  it('keeps the repair booking form directly beneath its LCP intro', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-repair-booking-lcp-fold\]\s*\{\s*min-height: 0;/
+    );
+  });
+  it('keeps the repair LCP heading aligned and sized like its hero', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="repair"\]\s*\{[^}]*font-size: 1\.875rem !important;[^}]*letter-spacing: -0\.025em !important;[^}]*margin: 0 !important;[^}]*text-align: left !important;/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /@media \(min-width: 640px\)\s*\{\s*\[data-cwv-lcp-copy="repair"\]\s*\{\s*font-size: 2\.25rem !important;\s*line-height: 2\.5rem !important;/
+    );
+  });
   it('locks fallback fonts and first-paint sr-only clipping', () => {
     expect(STOREFRONT_LCP_COPY_CSS).toContain('Inter Fallback');
     expect(STOREFRONT_LCP_COPY_CSS).toContain('h1.sr-only');
@@ -69,7 +82,9 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
     );
     expect(STOREFRONT_LCP_COPY_CSS).toContain('[data-cwv-lcp-copy="imei"]');
-    expect(STOREFRONT_LCP_COPY_CSS).not.toContain('letter-spacing: -0.025em');
+    expect(STOREFRONT_LCP_COPY_CSS).not.toMatch(
+      /\[data-cwv-lcp-copy="imei"\][^{]*\{[^}]*letter-spacing: -0\.025em/
+    );
     expect(STOREFRONT_LCP_COPY_CSS).toContain(
       'var(--store-background-text, #111827)'
     );

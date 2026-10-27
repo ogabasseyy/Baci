@@ -1,4 +1,5 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
+import { EXPECTED_ADS_PENDING_SOURCES } from './expected-ads-pending-sources.test-support';
 import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
 import { EXPECTED_BUILDER_PENDING_SOURCES } from './expected-builder-pending-sources.test-support';
 import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.test-support';
@@ -12,6 +13,7 @@ import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-w
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
+import { EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './expected-merchant-classification-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -37,6 +39,7 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_ADS_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20261023131010_merchant_onboarding_delivery_pause.sql',
@@ -56,6 +59,7 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BUILDER_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
+  ...EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES,
   ...EXPECTED_PENDING_ORDER_REFUND_SOURCES,
   ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {
@@ -338,6 +342,41 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261020090000_storefront_order_entrypoint_body_squash.sql',
     sha256: '491280c5ab0d9bf01b60052893ed3909c4963384169b5965031c50fad871ed75',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090100_vtu_replay_binding_rpc.sql',
+    sha256: 'b7be8ecfc12180cdad952d5e1a26402dd300c0413688868c7963da9d076658be',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090101_vtu_checkout_customer_rpcs.sql',
+    sha256: '3f5e07a26a15a2081d441ef96317df8cd7221c7bfc9aaead295c40899709a39a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090102_vtu_checkout_settings_projection.sql',
+    sha256: '55e0915d0b9772fe92f72b13ee600ec50f4c8cdf631301e646f340f3b36c3bf5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090103_vtu_prepare_insert_rpc.sql',
+    sha256: '24af17520e938ed72c3c61948a2940d587a99e479600c4ef19714774d6c7e2d0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090104_vtu_idempotency_lookup_rpc.sql',
+    sha256: '80dc1264a75bbaf927b527091d26f6911605885ec1d6f71f4506244781d15166',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090105_harden_claim_vtu_intent.sql',
+    sha256: '54bbd0fd70c94a2f747ddc91e7d289b23f5b72e8f46bb2e335399d02b48ee805',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261020090106_vtu_orphan_fail_rpc.sql',
+    sha256: '215ed9498eeec2c74937ab88ea9fad3c44954efe9dc385a15e18b2b90f06f9ec',
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,

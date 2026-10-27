@@ -24,6 +24,47 @@ const merchantWithBrandColors: MerchantData = {
 };
 
 describe('AppBody', () => {
+  it('renders a partial merchant theme without requiring merchant account fields', () => {
+    const { container } = render(
+      <AppBody merchant={{ brand_colors: { primary: '#1D4ED8' } }}>
+        <main>Content with partial branding</main>
+      </AppBody>
+    );
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(screen.getByRole('main')).toHaveTextContent(
+      'Content with partial branding'
+    );
+    expect(wrapper.style.getPropertyValue('--store-primary')).toBe('#1D4ED8');
+    expect(wrapper.style.getPropertyValue('--store-primary-text')).toBe(
+      '#FFFFFF'
+    );
+    expect(wrapper.style.getPropertyValue('--background')).toBe('');
+    expect(wrapper.style.getPropertyValue('--card')).toBe('');
+    expect(wrapper.style.getPropertyValue('--accent')).toBe('');
+    expect(wrapper.style.getPropertyValue('--store-background-text')).toBe('');
+    expect(wrapper.style.getPropertyValue('--store-accent-text')).toBe('');
+  });
+
+  it.each([
+    { background: '#F8FAFC' },
+    { accent: '#F59E0B' },
+    {},
+  ])('emits tokens only for supplied color channels %s', (brandColors) => {
+    const { container } = render(
+      <AppBody merchant={{ brand_colors: brandColors }}>Partial theme</AppBody>
+    );
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.style.getPropertyValue('--primary')).toBe('');
+    expect(wrapper.style.getPropertyValue('--ring')).toBe('');
+    expect(wrapper.style.getPropertyValue('--store-primary-text')).toBe('');
+    expect(Boolean(wrapper.style.getPropertyValue('--background'))).toBe(
+      'background' in brandColors
+    );
+    expect(Boolean(wrapper.style.getPropertyValue('--accent'))).toBe(
+      'accent' in brandColors
+    );
+  });
+
   it('applies core theme variables when merchant core theme override is enabled', () => {
     const { container } = render(
       <AppBody merchant={merchantWithBrandColors}>

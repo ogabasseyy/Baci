@@ -79,7 +79,10 @@ describe('production cache-invalidation drain rollout gate', () => {
   it('smokes the live GIGL capability only after migrations apply', () => {
     const capability = jobBlock('gigl-worker-capability', 'deploy-production');
 
-    assert.match(capability, /needs: \[changes, db-migrations\]/);
+    assert.match(
+      capability,
+      /needs: \[changes, db-migrations, vps-drain-readiness\]/
+    );
     assert.match(capability, /needs\.db-migrations\.result == 'success'/);
     assert.match(
       capability,
@@ -92,38 +95,22 @@ describe('production cache-invalidation drain rollout gate', () => {
       capability,
       /github\.event_name != 'workflow_dispatch'/
     );
-    // `tracking` only: the broad `migrations` output must never gate
-    // the smoke, or unrelated migrations freeze on worker drift.
+    // Tracking changes retain exact-SHA smoke. Unrelated changes may recover
+    // an unusable latch only when the installed worker contents are equivalent.
+    // The broad migrations output must not select the recovery path.
     assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
+    assert.match(capability, /outputs\.installed_tracking_stale == 'false'/);
+    assert.match(capability, /outputs\.manifest_drift == 'false'/);
     assert.doesNotMatch(capability, /outputs\.migrations/);
-    // A mid-flight deploy.sh must not let the smoke/latch verify a
-    // different revision than readiness checked: recheck install identity
-    // in this job immediately before smoking.
-    assert.match(capability, /Recheck installed SHA before smoke/);
+    // One helper holds the worker locks across verification, smoke and proof
+    // persistence; separate workflow steps could race with a worker promotion.
     assert.match(
       capability,
-      /run: vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke/
+      /run: bash \.github\/scripts\/refresh-gigl-cutover-latch\.sh/
     );
-    assert.match(
+    assert.doesNotMatch(
       capability,
-      /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
-    );
-    // The latch persists only after the smoke succeeds (same job, later
-    // step): it proves live token+hook function for the gate's bypass.
-    assert.match(capability, /Persist GIGL cutover latch/);
-    assert.match(capability, /\.gigl-capability-smoke-ok/);
-    // The latch must bind the token actually smoked: capture the
-    // identity before the smoke and refuse to persist on any drift,
-    // so a mid-job .env edit cannot latch an unsmoked token.
-    assert.match(capability, /Capture pre-smoke latch identity/);
-    assert.ok(
-      capability.indexOf('Capture pre-smoke latch identity') <
-        capability.indexOf('smoke-gigl-worker-capability.sh')
-    );
-    assert.match(capability, /GIGL_PRE_SMOKE_IDENTITY/);
-    assert.match(
-      capability,
-      /\[ "\$identity" != "\$\{GIGL_PRE_SMOKE_IDENTITY:-\}" \]/
+      /> "\$VPS_WORKER_REMOTE_DIR\/\.gigl-capability-smoke-ok"/
     );
     // Production smoke/identity is file-authoritative at the job level,
     // so a runner export can never certify one token while cron runs
@@ -172,7 +159,19 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment.indexOf('refuse-publish-on-promote-overlap.sh') <
         deployment.indexOf('Deploy to Vercel (with retry)')
     );
-    assert.match(deployment, /deploy --prebuilt --prod/);
+    const publishCommand = deployment
+      .split('\n')
+      .find((line) =>
+        line
+          .trimStart()
+          .startsWith('run: .github/scripts/deploy-with-retry.sh ')
+      );
+    assert.ok(publishCommand, 'missing prebuilt publication command');
+    const publishArgs = publishCommand.trim().split(/\s+/);
+    assert.ok(publishArgs.includes('deploy'));
+    assert.ok(publishArgs.includes('--prebuilt'));
+    assert.ok(publishArgs.includes('--prod'));
+    assert.ok(publishArgs.includes('--skip-domain'));
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(
       deployment,

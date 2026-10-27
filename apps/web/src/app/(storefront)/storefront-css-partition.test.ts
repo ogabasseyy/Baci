@@ -136,6 +136,12 @@ describe('storefront CSS partitioning', () => {
     expect(darkModeCss).toContain('@media (prefers-color-scheme: dark)');
     expect(darkModeCss).toContain('color-scheme: dark');
     expect(darkModeCss).toContain('caret-color: var(--store-accent');
+    expect(normalizedDarkModeCss).toContain(
+      'body:has(.storefront-variant-ogabassey.storefront-mode-system)'
+    );
+    expect(normalizedDarkModeCss).toContain(
+      '.storefront-ppr-static-shell:has( .storefront-variant-ogabassey.storefront-mode-system )'
+    );
     expect(normalizedDarkModeCss).not.toContain('storefront-mode-dark');
     expect(normalizedDarkModeCss).toContain(
       '.storefront-variant-ogabassey.storefront-mode-system, .storefront-variant-ogabassey.storefront-mode-system .ogabassey-storefront-shell'

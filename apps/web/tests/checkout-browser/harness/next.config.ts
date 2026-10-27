@@ -12,7 +12,14 @@ Object.assign(process.env, {
 // This app is test-only. No production routes, secrets or configuration switches.
 const config: NextConfig = {
   reactCompiler: true,
-  turbopack: { root: path.resolve(__dirname, '../../../../..') },
+  turbopack: {
+    root: path.resolve(__dirname, '../../../../..'),
+    resolveAlias: {
+      '@/app/actions/repair': './app/repair-action-fixture.ts',
+      '@/app/actions/repair-pickup-payment':
+        './app/repair-pickup-payment-fixture.ts',
+    },
+  },
   distDir: process.env.CHECKOUT_BROWSER_DIST_DIR || '.next',
   env: {
     NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54329',

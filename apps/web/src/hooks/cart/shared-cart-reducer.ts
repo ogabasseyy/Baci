@@ -8,6 +8,7 @@ import {
   adoptSnapshot,
   dropEntriesAndCascade,
   resolveTempDependents,
+  retryAdoption,
   targetTempId,
   withDisplay,
 } from './shared-cart-queue';
@@ -86,6 +87,8 @@ export function sharedCartReducer(
   if (action.generation !== state.generation) return state;
 
   switch (action.type) {
+    case 'link/retry':
+      return retryAdoption(state);
     case 'link/snapshot':
     case 'snapshot/polled': {
       return withDisplay(adoptSnapshot(state, action.snapshot));

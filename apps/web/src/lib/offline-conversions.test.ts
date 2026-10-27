@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   facebookPurchase: vi.fn(),
+  ga4Purchase: vi.fn(),
   snapchatPurchase: vi.fn(),
   tiktokPurchase: vi.fn(),
 }));
@@ -12,7 +13,9 @@ vi.mock('./facebook-capi', () => ({
   },
 }));
 vi.mock('./ga4-measurement-protocol', () => ({
-  ga4MeasurementProtocol: {},
+  ga4MeasurementProtocol: {
+    purchase: (...args: unknown[]) => mocks.ga4Purchase(...args),
+  },
   generateClientId: vi.fn(),
 }));
 vi.mock('./snapchat-capi', () => ({
@@ -31,6 +34,7 @@ import { sendPurchaseConversion } from './offline-conversions';
 describe('sendPurchaseConversion', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.ga4Purchase.mockResolvedValue({ success: true });
     mocks.facebookPurchase.mockResolvedValue({ success: true });
     mocks.snapchatPurchase.mockResolvedValue({ success: true });
     mocks.tiktokPurchase.mockResolvedValue({ success: true });
@@ -44,6 +48,8 @@ describe('sendPurchaseConversion', () => {
     await sendPurchaseConversion(
       { facebook_capi_token: 'token', facebook_pixel_id: 'pixel' },
       {
+        analyticsConsent: true,
+        marketingConsent: true,
         currency: 'NGN',
         fbc: 'fb.1.123.click',
         items: [{ id: 'sku-1', name: 'Phone', price: 100, quantity: 1 }],
@@ -72,6 +78,8 @@ describe('sendPurchaseConversion', () => {
     const results = await sendPurchaseConversion(
       { facebook_pixel_id: 'pixel' },
       {
+        analyticsConsent: true,
+        marketingConsent: true,
         currency: 'NGN',
         items: [{ id: 'sku-1', name: 'Phone', price: 100, quantity: 1 }],
         orderId: 'order-1',
@@ -91,6 +99,8 @@ describe('sendPurchaseConversion', () => {
     await sendPurchaseConversion(
       { facebook_capi_token: 'token', facebook_pixel_id: 'pixel' },
       {
+        analyticsConsent: true,
+        marketingConsent: true,
         currency: 'NGN',
         fbc: '   ',
         fbclid: 'click-1',
@@ -126,6 +136,8 @@ describe('sendPurchaseConversion', () => {
         tiktok_pixel_id: 'tiktok-pixel',
       },
       {
+        analyticsConsent: true,
+        marketingConsent: true,
         currency: 'NGN',
         eventId: 'purchase_order-1',
         items: [{ id: 'sku-1', name: 'Phone', price: 100, quantity: 1 }],
@@ -156,4 +168,29 @@ describe('sendPurchaseConversion', () => {
       'purchase_order-1'
     );
   });
+});
+
+it.each([
+  undefined,
+  false,
+])('fails closed for legacy paid conversion consent %s', async (consent) => {
+  vi.clearAllMocks();
+  await sendPurchaseConversion(
+    {
+      facebook_pixel_id: 'pixel',
+      facebook_capi_token: 'token',
+      google_analytics_id: 'G-X',
+      ga4_api_secret: 'secret',
+    },
+    {
+      orderId: 'order',
+      orderNumber: 'order',
+      total: 1,
+      currency: 'NGN',
+      items: [],
+      analyticsConsent: consent,
+    }
+  );
+  expect(mocks.facebookPurchase).not.toHaveBeenCalled();
+  expect(mocks.ga4Purchase).not.toHaveBeenCalled();
 });

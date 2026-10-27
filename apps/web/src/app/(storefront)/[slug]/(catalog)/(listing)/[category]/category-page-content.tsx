@@ -27,6 +27,7 @@ import {
   isCategoryPageProductSlot,
   normalizeCategoryPageProducts,
   resolveCategoryPageName,
+  toClientCategoryPageProducts,
   toCollectionSchemaProduct,
 } from './category-page-content-helpers';
 import { buildCategoryPageContentSchemas } from './category-page-content-schema';
@@ -262,7 +263,7 @@ export async function CategoryPageContent({
             !data.isCollection ? data.category?.image_url : undefined
           }
           itemsPerPage={STOREFRONT_PRODUCTS_PER_PAGE}
-          products={categoryPageProducts}
+          products={toClientCategoryPageProducts(categoryPageProducts)}
           graphicsOptions={graphicsOptions}
           selectedGraphics={selectedGraphics}
           titleHeading={titleHeading}

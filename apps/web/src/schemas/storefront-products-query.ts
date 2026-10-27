@@ -27,6 +27,7 @@ export const storefrontProductsQuerySchema = z.object({
   min_price: z.coerce.number().nonnegative().optional(),
   max_price: z.coerce.number().nonnegative().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
+  offset: z.coerce.number().int().nonnegative().max(100_000).optional(),
   compact: storefrontBooleanQuerySchema.optional(),
   sort: z.enum(['newest', 'price-asc', 'price-desc']).default('newest'),
   q: z.string().max(100).optional(),

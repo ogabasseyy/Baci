@@ -40,6 +40,7 @@ describe('brand authority taxonomy', () => {
   it('exposes supported categories and their database query values', () => {
     expect(brandAuthorityTaxonomy.getSupportedCategories()).toEqual([
       'smartphones',
+      'laptops',
     ]);
     expect(brandAuthorityTaxonomy.getEntries('smartphones')).toEqual(
       expect.arrayContaining([
@@ -90,5 +91,85 @@ describe('brand authority taxonomy', () => {
       displayName: 'Oppo',
     });
     expect(redmiEntry).toBeNull();
+  });
+
+  it('resolves Apple iPhone authority hub and matches Apple and iPhone products', () => {
+    // Act
+    const appleEntry = brandAuthorityTaxonomy.getEntry('smartphones', 'apple');
+    const appleEntryByAlias = brandAuthorityTaxonomy.getEntry(
+      'smartphones',
+      'Apple'
+    );
+
+    // Assert
+    expect(appleEntry).toMatchObject({
+      brandAliases: ['iPhone'],
+      brandKey: 'apple',
+      brandQueryValue: 'Apple',
+      brandSlug: 'apple',
+      categorySlug: 'smartphones',
+      displayName: 'Apple iPhone',
+      minimumProducts: 5,
+    });
+    expect(appleEntryByAlias).toEqual(appleEntry);
+
+    if (!appleEntry) {
+      throw new Error('Expected Apple taxonomy entry');
+    }
+
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'Apple')).toBe(true);
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'iPhone')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'apple')).toBe(true);
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'iphone')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(appleEntry, 'Samsung')).toBe(
+      false
+    );
+  });
+
+  it('resolves Honor smartphone authority hub', () => {
+    const honorEntry = brandAuthorityTaxonomy.getEntry('smartphones', 'honor');
+    expect(honorEntry).toMatchObject({
+      brandKey: 'honor',
+      brandQueryValue: 'Honor',
+      categorySlug: 'smartphones',
+      displayName: 'Honor',
+      minimumProducts: 5,
+    });
+  });
+
+  it('resolves Apple MacBook laptop authority hub and matches aliases', () => {
+    const macbookEntry = brandAuthorityTaxonomy.getEntry('laptops', 'apple');
+    expect(macbookEntry).toMatchObject({
+      brandAliases: ['MacBook'],
+      brandKey: 'apple',
+      brandQueryValue: 'Apple',
+      brandSlug: 'apple',
+      categorySlug: 'laptops',
+      displayName: 'Apple MacBook',
+      intro:
+        'Compare Apple MacBook Air and MacBook Pro laptops at {merchantName} across M-series and Intel configurations.',
+      minimumProducts: 5,
+    });
+
+    if (!macbookEntry) {
+      throw new Error('Expected Apple MacBook entry');
+    }
+
+    expect(brandAuthorityTaxonomy.matchesBrand(macbookEntry, 'Apple')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(macbookEntry, 'MacBook')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(macbookEntry, 'apple')).toBe(
+      true
+    );
+    expect(brandAuthorityTaxonomy.matchesBrand(macbookEntry, 'Dell')).toBe(
+      false
+    );
   });
 });

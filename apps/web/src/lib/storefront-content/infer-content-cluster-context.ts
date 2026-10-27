@@ -16,7 +16,10 @@ interface InferContentClusterContextInput
   extends Pick<
     PublishedClusterPost,
     'title' | 'excerpt' | 'category' | 'tags' | 'keywords'
-  > {}
+  > {
+  merchant_intent?: unknown;
+  merchant_intent_source?: unknown;
+}
 
 function normalizeText(value: string | null | undefined) {
   return normalizeContentCurrencyTokens(
@@ -117,6 +120,38 @@ function inferKind(haystack: string): ContentClusterKind | null {
   return bestScore > 0 ? bestKind : null;
 }
 
+function resolveKind(
+  input: InferContentClusterContextInput,
+  inferredKind: ContentClusterKind | null,
+  haystack: string
+): ContentClusterKind | null {
+  // The public RPC excludes stale classifications. Reject malformed metadata
+  // here too so older adapters and unclassified rows retain the heuristic path.
+  if (
+    input.merchant_intent_source !== 'merchant_declared' &&
+    input.merchant_intent_source !== 'verified_receipt' &&
+    input.merchant_intent_source !== 'reviewed'
+  ) {
+    return inferredKind;
+  }
+  switch (input.merchant_intent) {
+    case 'buying-guide':
+      return inferredKind === 'best-in-nigeria' &&
+        hasPhrase(haystack, 'nigeria') &&
+        (hasPhrase(haystack, 'best') || hasPhrase(haystack, 'top'))
+        ? inferredKind
+        : 'buyer-guide';
+    case 'comparison':
+      return 'decision-support';
+    case 'repair-guide':
+      return 'troubleshooting';
+    case 'news':
+      return null;
+    default:
+      return inferredKind;
+  }
+}
+
 function inferBrands(
   categorySlug: SupportedClusterCategory | null,
   haystack: string
@@ -184,7 +219,7 @@ export function inferContentClusterContext(
 
   return {
     categorySlug,
-    kind: inferKind(haystack),
+    kind: resolveKind(input, inferKind(haystack), haystack),
     brands: inferBrands(categorySlug, haystack),
     matchedPriceBands: inferPriceBands(categorySlug, haystack),
     tokens,

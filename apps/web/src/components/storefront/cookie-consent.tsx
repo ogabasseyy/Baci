@@ -2,103 +2,31 @@
 
 import { Cookie, Settings2, Shield, X } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { updateConsentMode } from '@/lib/consent-mode';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
+import { useCookieConsentController } from './use-cookie-consent-controller';
 
-const COOKIE_CONSENT_KEY = 'baci-cookie-consent';
-
-interface CookiePreferences {
-  necessary: boolean; // Always true, required for site functionality
-  analytics: boolean; // Google Analytics, etc.
-  marketing: boolean; // Ad tracking, retargeting
-  functional: boolean; // Preferences, language settings
-}
-
-const defaultPreferences: CookiePreferences = {
-  necessary: true,
-  analytics: false,
-  marketing: false,
-  functional: true,
-};
+export { isCookieAllowed } from './is-cookie-allowed';
+export { useCookieConsent } from './use-cookie-consent';
 
 export function CookieConsent() {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
-  const [preferences, setPreferences] =
-    useState<CookiePreferences>(defaultPreferences);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const {
+    isVisible,
+    isClosing,
+    showDetails,
+    setShowDetails,
+    hasStorageError,
+    preferences,
+    setPreferences,
+    acceptAll,
+    acceptNecessary,
+    savePreferences,
+  } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
-
-  useEffect(() => {
-    // Check if consent has already been given
-    const savedConsent = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!savedConsent) {
-      // Small delay to prevent flash on page load
-      const timer = setTimeout(() => setIsVisible(true), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  // Clean up exit animation timer on unmount
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
-  }, []);
-
-  const saveConsent = (prefs: CookiePreferences) => {
-    localStorage.setItem(
-      COOKIE_CONSENT_KEY,
-      JSON.stringify({
-        ...prefs,
-        timestamp: new Date().toISOString(),
-      })
-    );
-
-    // Trigger exit animation, then unmount after it completes
-    setIsClosing(true);
-    closeTimerRef.current = setTimeout(() => setIsVisible(false), 200);
-
-    // Update Google Consent Mode v2
-    updateConsentMode({
-      analytics: prefs.analytics,
-      marketing: prefs.marketing,
-      functional: prefs.functional,
-    });
-
-    // Dispatch event for analytics to pick up
-    window.dispatchEvent(
-      new CustomEvent('cookie-consent-updated', {
-        detail: prefs,
-      })
-    );
-  };
-
-  const acceptAll = () => {
-    const allAccepted: CookiePreferences = {
-      necessary: true,
-      analytics: true,
-      marketing: true,
-      functional: true,
-    };
-    setPreferences(allAccepted);
-    saveConsent(allAccepted);
-  };
-
-  const acceptNecessary = () => {
-    saveConsent(defaultPreferences);
-  };
-
-  const savePreferences = () => {
-    saveConsent(preferences);
-  };
 
   if (!isVisible) return null;
 
@@ -123,6 +51,12 @@ export function CookieConsent() {
           'transition-all duration-300 ease-in-out'
         )}
       >
+        {hasStorageError && (
+          <p role="alert" className="mb-3 text-sm text-destructive">
+            Unable to save your cookie preferences. Please try again. Optional
+            tracking remains disabled.
+          </p>
+        )}
         {!showDetails ? (
           // Simple View - Horizontal Floating Bar
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
@@ -320,55 +254,4 @@ export function CookieConsent() {
       </div>
     </div>
   );
-}
-
-// Listen for consent updates (saveConsent writes localStorage before
-// dispatching, so re-reading the snapshot always observes the new value)
-function subscribeToConsentUpdates(callback: () => void) {
-  window.addEventListener('cookie-consent-updated', callback);
-  return () => window.removeEventListener('cookie-consent-updated', callback);
-}
-
-function getConsentSnapshot(): string | null {
-  return localStorage.getItem(COOKIE_CONSENT_KEY);
-}
-
-function getConsentServerSnapshot(): string | null {
-  return null;
-}
-
-/**
- * Hook to check cookie consent status
- */
-export function useCookieConsent(): CookiePreferences | null {
-  const savedConsent = useSyncExternalStore(
-    subscribeToConsentUpdates,
-    getConsentSnapshot,
-    getConsentServerSnapshot
-  );
-
-  if (!savedConsent) return null;
-
-  try {
-    return JSON.parse(savedConsent) as CookiePreferences;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if a specific cookie category is allowed
- */
-export function isCookieAllowed(category: keyof CookiePreferences): boolean {
-  if (typeof window === 'undefined') return false;
-
-  const saved = localStorage.getItem(COOKIE_CONSENT_KEY);
-  if (!saved) return false;
-
-  try {
-    const consent = JSON.parse(saved) as CookiePreferences;
-    return consent[category] ?? false;
-  } catch {
-    return false;
-  }
 }

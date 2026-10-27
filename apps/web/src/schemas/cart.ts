@@ -42,6 +42,7 @@ export const cartValidateSchema = z.object({
 
 export const cartItemIdentitySchema = z.strictObject({
   condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
+  offerId: offerIdSchema.optional(),
   options: z.record(z.string().min(1), z.string()).optional(),
   productId: z.uuid(),
   variantId: z.uuid().optional(),

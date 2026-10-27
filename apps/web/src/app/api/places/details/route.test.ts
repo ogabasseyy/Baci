@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { reserveGooglePlacesRequest } from '../provider-budget';
 
 vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
 vi.mock('../provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => true),
+  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
 }));
 
 const mockFetch = vi.fn();
@@ -180,6 +181,23 @@ describe('GET /api/places/details', () => {
       error: 'Failed to fetch place details',
       code: 'PLACES_DETAILS_HTTP_ERROR',
     });
+  });
+
+  it('reports a Baci budget-store outage separately from a Google HTTP failure', async () => {
+    vi.mocked(reserveGooglePlacesRequest).mockResolvedValueOnce({
+      reserved: false,
+      reason: 'unavailable',
+    });
+
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    const data = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(data).toEqual({
+      error: 'Address suggestions are temporarily unavailable',
+      code: 'PLACES_DETAILS_BUDGET_UNAVAILABLE',
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('retries a transient UNKNOWN_ERROR response and succeeds', async () => {

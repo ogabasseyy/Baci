@@ -21,6 +21,7 @@ export function reviewedCheckoutItems(
       ...item,
       product_id: line.productId,
       variant_id: line.variantId ?? undefined,
+      offer_id: line.offerId ?? undefined,
       condition: line.condition ?? undefined,
       variant_attributes: line.options,
       color: line.options.color,

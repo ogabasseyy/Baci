@@ -55,17 +55,17 @@ describe('dashboard social platforms page', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('shows configured states from merchant feature settings', async () => {
+  it('shows configured states using write-only secret indicators', async () => {
     vi.mocked(getMerchantForUser).mockResolvedValue({
       merchant: {
         id: 'merchant-1',
         feature_settings: {
           facebook_pixel_id: '1234567890',
-          facebook_capi_token: 'fb-token',
+          facebook_capi_token_configured: true,
           tiktok_pixel_id: 'CT123',
-          tiktok_access_token: null,
+          tiktok_access_token_configured: false,
           google_analytics_id: 'G-1234567890',
-          ga4_api_secret: 'ga-secret',
+          ga4_api_secret_configured: true,
           twitter_pixel_id: 'tw-pixel',
         },
       },

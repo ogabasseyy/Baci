@@ -32,6 +32,17 @@ export type ContentClusterKind =
   | 'troubleshooting'
   | 'decision-support';
 
+export type MerchantBlogIntent =
+  | 'news'
+  | 'comparison'
+  | 'repair-guide'
+  | 'buying-guide';
+
+export type MerchantBlogIntentSource =
+  | 'merchant_declared'
+  | 'verified_receipt'
+  | 'reviewed';
+
 export interface PublishedClusterPost {
   slug: string;
   title: string;
@@ -42,6 +53,9 @@ export interface PublishedClusterPost {
   featured_image_url: string | null;
   published_at: string | null;
   reading_time_minutes: number | null;
+  /** Only supplied by the current, publication-gated classification read. */
+  merchant_intent?: MerchantBlogIntent | null;
+  merchant_intent_source?: MerchantBlogIntentSource | null;
 }
 
 export interface InferredContentClusterContext {
@@ -90,6 +104,8 @@ export interface InformationalClusterModel {
 }
 
 export interface InformationalClusterCategoryData {
+  /** Only set by a loader that already applied destination eligibility; test seams set this explicitly. Production callers must omit it so hub/compare gating runs. */
+  destinationVerified?: boolean;
   merchant?: { id: string; business_name: string; slug: string };
   category?: { slug?: string | null; name?: string | null };
   products?: Array<{
@@ -98,9 +114,13 @@ export interface InformationalClusterCategoryData {
     brand?: string | null;
     price: number;
     category_slug?: string | null;
+    category_slugs?: string[] | null;
     product_key_specs?: Record<string, unknown> | null;
     condition?: string | null;
     stock?: number | null;
+    is_parent?: boolean | null;
+    parent_product_id?: string | null;
+    manage_stock?: boolean | null;
   }>;
   fallbackName?: string | null;
   isCollection?: boolean;
@@ -111,6 +131,7 @@ export interface BuildInformationalClusterModelInput {
   merchantSlug: string;
   storeUrl: string;
   post: PublishedClusterPost;
+  /** Test seam only: override pools skip destination verification. Hub links still exact-filter the pool to the override category (the destination counts only exact category membership, never child categories); compare and price-band links trust the caller's destination-verified pool as supplied. Production callers omit this. Without destinationVerified, compare and price-band links are fail-closed (dropped) while hub links still verify live. */
   categoryDataOverride?: InformationalClusterCategoryData | null;
   countryCode?: string | null;
 }

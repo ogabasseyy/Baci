@@ -11,11 +11,13 @@ import { asRoute } from '@/lib/routes';
 interface SnapchatSettings {
   snapchat_pixel_id: string | null;
   snapchat_capi_token: string | null;
+  snapchat_capi_token_configured: boolean;
 }
 
 const SETTINGS_KEYS: (keyof SnapchatSettings)[] = [
   'snapchat_pixel_id',
   'snapchat_capi_token',
+  'snapchat_capi_token_configured',
 ];
 
 export default function SnapchatIntegrationPage() {
@@ -28,7 +30,7 @@ export default function SnapchatIntegrationPage() {
   const handleSave = async (pixelId: string, token: string) => {
     await saveSettings({
       snapchat_pixel_id: pixelId || null,
-      snapchat_capi_token: token || null,
+      ...(token.trim() ? { snapchat_capi_token: token.trim() } : {}),
     });
   };
 
@@ -55,7 +57,8 @@ export default function SnapchatIntegrationPage() {
       <TrackingPixelSection
         platform="Snapchat"
         pixelId={settings?.snapchat_pixel_id || ''}
-        accessToken={settings?.snapchat_capi_token || ''}
+        tokenConfigured={settings?.snapchat_capi_token_configured === true}
+        onDisconnect={() => saveSettings({ snapchat_capi_token: null })}
         pixelLabel="Snap Pixel ID"
         tokenLabel="Conversion API Token (Optional)"
         onSave={handleSave}

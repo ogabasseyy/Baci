@@ -12,6 +12,7 @@ export interface RawCartLine {
   productId: string;
   variantId: string | null;
   condition: string | null;
+  offerId?: string | null;
   options: Record<string, string>;
   quantity: number;
   negotiatedUnitPriceMinor: number | null;
@@ -141,6 +142,7 @@ export function parseLine(value: unknown): RawCartLine | null {
     available: value.available,
     condition: typeof value.condition === 'string' ? value.condition : null,
     hasAssurance: value.hasAssurance === true,
+    offerId: typeof value.offerId === 'string' ? value.offerId : null,
     id: value.id,
     manageStock: value.manageStock !== false,
     negotiatedUnitPriceMinor:

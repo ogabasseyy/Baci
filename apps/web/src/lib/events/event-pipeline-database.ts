@@ -17,6 +17,7 @@ import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeli
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
+import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
 import {
   eventPipelineAdminAdjacentFunctions,
   eventPipelineExpenseCleanupAdjacentFunctions,
@@ -202,6 +203,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
     vpsCleanup: ['cleanup_domain_event_pipeline_v1'],
   },
   operations: {
+    merchant_chatgpt_ads_credentials: ['select'],
+    merchant_x_ads_credentials: ['select'],
     analytics_events: ['insert', 'upsert'],
     domains: ['select'],
     merchant_feature_settings: ['select'],
@@ -213,6 +216,10 @@ export const EVENT_PIPELINE_BOUNDARY = {
     platform_settings: ['select'],
   },
   projectionAuthorities: {
+    'apps/web/src/lib/events/x-destination-adapter.ts': ['xDelivery'],
+    'apps/web/src/lib/events/chatgpt-destination-adapter.ts': [
+      'chatgptDelivery',
+    ],
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
@@ -231,6 +238,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'apps/web/src/lib/platform-admin-auth.ts': ['operatorAuth'],
   },
   projections: {
+    ...socialDeliveryProjections,
     conversion: { merchants: columns('country payout_currency') },
     identity: {
       domains: ['merchant_id'],

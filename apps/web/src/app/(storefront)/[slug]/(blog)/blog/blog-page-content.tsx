@@ -10,19 +10,17 @@ import { filterPublicBlogCategories } from '@/lib/public-blog-content-quality';
 import { asRoute } from '@/lib/routes';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildBlogClusterCollections } from '@/lib/storefront-content/build-blog-cluster-collections';
+import { loadClassifiedClusterPosts } from '@/lib/storefront-content/load-classified-cluster-posts';
 import {
   clampBlogSearchQuery,
   evaluateStorefrontSlugSafety,
 } from '@/lib/storefront-slug-safety';
 import { BlogCategoryGuide } from './blog-category-guide';
-import {
-  buildBlogCategoryHref,
-  isOgabasseyBlogStaticTenant,
-} from './blog-category-routing';
+import { isOgabasseyBlogStaticTenant } from './blog-category-routing';
 import { BlogDiscoverySection } from './blog-discovery-section';
 import {
   appendPreservedBlogCategoryRedirectParams,
-  findPublicCategoryLabel,
+  buildBlogListingCategoryRedirectHref,
 } from './blog-listing-category-redirect';
 import { preloadOgabasseyRootBlogListingHeroImage } from './blog-listing-hero-image-preload';
 import { parseBlogListingPage } from './blog-listing-page-params';
@@ -117,23 +115,22 @@ export async function BlogPageContent({
   const authorLinks = getBlogAuthorPageLinks(slug);
 
   if (!isCleanCategoryRoute && category && !search && currentPage === 1) {
-    const categoryLabel = findPublicCategoryLabel(publicCategories, category);
-    if (categoryLabel) {
-      const categoryHref = buildBlogCategoryHref(
-        basePath,
-        categoryLabel,
-        publicCategories
-      );
-      if (!categoryHref.includes('?')) {
-        permanentRedirect(
-          asRoute(
-            appendPreservedBlogCategoryRedirectParams(
-              categoryHref,
-              searchParamValues
-            )
+    const categoryHref = buildBlogListingCategoryRedirectHref({
+      basePath,
+      category,
+      page: currentPage,
+      publicCategories,
+      identifier: slug,
+    });
+    if (categoryHref) {
+      permanentRedirect(
+        asRoute(
+          appendPreservedBlogCategoryRedirectParams(
+            categoryHref,
+            searchParamValues
           )
-        );
-      }
+        )
+      );
     }
   }
 
@@ -175,17 +172,7 @@ export async function BlogPageContent({
   );
   const guideCollections = buildBlogClusterCollections({
     storeUrl: baseUrl,
-    posts: posts.map((post) => ({
-      slug: post.slug,
-      title: post.title,
-      excerpt: post.excerpt,
-      category: post.category,
-      tags: post.tags ?? null,
-      keywords: null,
-      featured_image_url: post.featured_image_url,
-      published_at: post.published_at,
-      reading_time_minutes: post.reading_time_minutes,
-    })),
+    posts: await loadClassifiedClusterPosts(merchant.id, posts),
   });
   if (!hideLiveFeatured) {
     preloadOgabasseyRootBlogListingHeroImage({

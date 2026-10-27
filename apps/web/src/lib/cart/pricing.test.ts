@@ -8,6 +8,7 @@ function line(overrides: Partial<RawCartLine> = {}): RawCartLine {
     available: true,
     condition: null,
     hasAssurance: false,
+    offerId: null,
     id: 'line-1',
     manageStock: true,
     negotiatedUnitPriceMinor: null,
@@ -40,6 +41,15 @@ function raw(lines: RawCartLine[] = [line()]): RawCartState {
 }
 
 describe('buildCartSnapshot', () => {
+  it('keeps an exact offer id on the priced line', () => {
+    const offerId = '55555555-5555-4555-8555-555555555555';
+    const { snapshot } = buildCartSnapshot(raw([line({ offerId })]));
+    expect(snapshot.lines[0]?.item.offerId).toBe(offerId);
+    expect(buildCartSnapshot(raw()).snapshot.lines[0]?.item.offerId).toBe(
+      undefined
+    );
+  });
+
   it('computes integer minor-unit totals from committed lines', () => {
     const { snapshot, warnings } = buildCartSnapshot(
       raw([line({ quantity: 2, unitPriceMinor: 2500 })])

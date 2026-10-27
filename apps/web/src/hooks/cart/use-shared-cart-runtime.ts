@@ -2,6 +2,7 @@
 
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { getCartCookieEpoch } from './cart-cross-tab-lock';
 import type { createSharedCart } from './shared-cart-client';
 import type {
   AdoptOutcome,
@@ -35,13 +36,26 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   const stateRef = useRef(state);
 
   const generationRef = useRef(sessionGeneration);
+  const enabledRef = useRef(enabled);
+  const cookieEpochRef = useRef<{ value: string | null | undefined } | null>(
+    null
+  );
 
   // Publish refs only after commit: an abandoned render must not let
   // hydration, polling, or send operations observe an uncommitted
   // generation/state and discard their completions as stale.
   useEffect(() => {
+    if (
+      !cookieEpochRef.current ||
+      generationRef.current !== sessionGeneration ||
+      optionsRef.current.merchantId !== merchantId ||
+      (!enabledRef.current && enabled)
+    ) {
+      cookieEpochRef.current = { value: getCartCookieEpoch(merchantSlug) };
+    }
     stateRef.current = state;
     generationRef.current = sessionGeneration;
+    enabledRef.current = enabled;
     optionsRef.current = { merchantId, merchantSlug };
   });
 
@@ -53,6 +67,18 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   const createRequestRef = useRef<
     Parameters<typeof createSharedCart>[0] | null
   >(null);
+
+  // Device line IDs the in-flight create consumes, recorded on the
+  // import receipt so terminal recovery can identify them exactly.
+  const createSourceIdsRef = useRef<
+    Array<{ cartItemId: string; quantity: number }>
+  >([]);
+
+  // Device line IDs a merge import reconciles, recorded on the receipt
+  // when its operations finish (same purpose as the create list).
+  const importSourceIdsRef = useRef<
+    Array<{ cartItemId: string; quantity: number }>
+  >([]);
 
   const createAttemptedRef = useRef(false);
   const retiredCartIdRef = useRef<string | null>(null);
@@ -70,6 +96,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   // Invalidates in-flight hydration when the link restarts (merchant,
   // slug, or generation change) or unmounts.
   const linkRunRef = useRef(0);
+  const retryLinkRef = useRef<(() => void) | null>(null);
 
   const tempCounterRef = useRef(0);
 
@@ -90,10 +117,14 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     setLinkPhase,
     stateRef,
     generationRef,
+    enabledRef,
+    cookieEpochRef,
     adoptOutcomeRef,
     importOpIdsRef,
     createOpRef,
     createRequestRef,
+    createSourceIdsRef,
+    importSourceIdsRef,
     createAttemptedRef,
     retiredCartIdRef,
     bootstrappingRef,
@@ -102,6 +133,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     pendingHydrationRef,
     latestSnapshotRef,
     linkRunRef,
+    retryLinkRef,
     tempCounterRef,
     optionsRef,
   };

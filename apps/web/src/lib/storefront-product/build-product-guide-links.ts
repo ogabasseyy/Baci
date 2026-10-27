@@ -46,7 +46,15 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
     return [];
   }
 
-  const guidePosts = input.guidePosts ?? [];
+  const guidePosts = (input.guidePosts ?? []).filter(
+    (post) =>
+      !(
+        post.merchant_intent === 'news' &&
+        (post.merchant_intent_source === 'merchant_declared' ||
+          post.merchant_intent_source === 'verified_receipt' ||
+          post.merchant_intent_source === 'reviewed')
+      )
+  );
   const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
   const priorityGuidePosts = guidePosts.filter((post) =>
     priorityGuidePostSlugs.has(post.slug)

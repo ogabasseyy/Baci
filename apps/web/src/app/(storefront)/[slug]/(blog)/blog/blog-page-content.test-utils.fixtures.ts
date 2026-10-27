@@ -32,6 +32,8 @@ export const postsPayload = [
     tags: ['launch'],
     author_name: 'Ogabassey',
     published_at: '2026-03-28T10:00:00.000Z',
+    updated_at: '2026-03-28T10:00:00.000Z',
+    classification_revision: '11111111-1111-4111-8111-111111111111',
     reading_time_minutes: 4,
     view_count: 10,
   },

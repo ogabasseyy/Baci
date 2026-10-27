@@ -72,6 +72,19 @@ it('uses the reviewed remaining lines, quantity and price while discarding inval
     }),
   ]);
 });
+it('replaces a stale cached offer with the reviewed offer id', () => {
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  const stale = reviewedCheckoutItems(
+    [{ ...cached[0], offer_id: '44444444-4444-4444-8444-444444444444' }],
+    review
+  );
+  expect(stale[0]?.offer_id).toBeUndefined();
+  const exact = reviewedCheckoutItems(cached, {
+    ...review,
+    lines: [{ ...review.lines[0], offerId }],
+  });
+  expect(exact[0]?.offer_id).toBe(offerId);
+});
 it('refuses to substitute a stale or foreign product shell for a canonical line', () => {
   expect(() =>
     reviewedCheckoutItems([{ ...cached[0], product_id: 'wrong' }], review)

@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { getRootDomain } from '@/env';
 import type {
   StorefrontShellSnapshot,
@@ -76,6 +77,8 @@ export async function getStorefrontShellSnapshotBase(
   const merchantData = toTemplateMerchantData(merchant);
 
   return {
+    chatgptPixelId:
+      buildMerchantAnalyticsSettings(merchant)?.chatgpt_pixel_id ?? null,
     merchant: merchantData,
     routingMode,
     basePath: routingMode === 'domain' ? '' : `/${merchant.slug}`,

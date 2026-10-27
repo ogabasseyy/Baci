@@ -13,7 +13,15 @@ describe('blog listing metadata builder', () => {
     resetBlogPageContentMocks();
   });
 
-  it('keeps the base blog listing indexable and canonical', async () => {
+  it('keeps the base blog listing indexable and canonical with an expanded description', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce({
+      ...buildListingResult({
+        merchant: {
+          ...merchant,
+          business_name: 'Ogabassey Electronics Store',
+        },
+      }),
+    });
     const metadata = await buildBlogListingMetadata({
       slug: 'ogabassey.com',
       searchParams: {},
@@ -23,6 +31,31 @@ describe('blog listing metadata builder', () => {
     expect(metadata.alternates?.canonical).toBe(
       'https://test-store.usebaci.com/blog'
     );
+    expect(metadata.description?.length).toBeGreaterThanOrEqual(110);
+    expect(metadata.description).toContain(
+      'Read the latest tech news, smartphone and laptop reviews'
+    );
+  });
+
+  it('uses neutral default description copy for non-Ogabassey storefronts', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce({
+      ...buildListingResult({
+        merchant: {
+          ...merchant,
+          business_name: 'Bella Fashion House',
+        },
+      }),
+    });
+    const metadata = await buildBlogListingMetadata({
+      slug: 'bella-fashion',
+      searchParams: {},
+    });
+
+    expect(metadata.description).toContain(
+      'Read the latest articles, guides, and updates from Bella Fashion House.'
+    );
+    expect(metadata.description).not.toContain('tech news');
+    expect(metadata.description).not.toContain('maintenance guides');
   });
 
   it('keeps known query category filters noindex and canonicalizes to the clean hub', async () => {
@@ -50,6 +83,62 @@ describe('blog listing metadata builder', () => {
     );
     expect(metadata.openGraph?.url).toBe(
       'https://ogabassey.com/blog/category/smartphones'
+    );
+  });
+
+  it('canonicalizes ?category=News to /blog/category/tech-news for Ogabassey', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce({
+      ...buildListingResult({
+        merchant: {
+          ...merchant,
+          custom_domain: 'ogabassey.com',
+        },
+      }),
+      categories: ['Tech News', 'Laptops'],
+    });
+
+    const metadata = await buildBlogListingMetadata({
+      slug: 'ogabassey.com',
+      searchParams: { category: 'News' },
+    });
+
+    expect(metadata.title).toEqual({
+      absolute: 'Tech News Articles | Ogabassey',
+    });
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+    expect(metadata.alternates?.canonical).toBe(
+      'https://ogabassey.com/blog/category/tech-news'
+    );
+    expect(metadata.openGraph?.url).toBe(
+      'https://ogabassey.com/blog/category/tech-news'
+    );
+  });
+
+  it('canonicalizes ?category=Review to /blog/category/reviews for Ogabassey', async () => {
+    mockGetCachedBlogListing.mockResolvedValueOnce({
+      ...buildListingResult({
+        merchant: {
+          ...merchant,
+          custom_domain: 'ogabassey.com',
+        },
+      }),
+      categories: ['Reviews', 'Laptops'],
+    });
+
+    const metadata = await buildBlogListingMetadata({
+      slug: 'ogabassey.com',
+      searchParams: { category: 'Review' },
+    });
+
+    expect(metadata.title).toEqual({
+      absolute: 'Reviews Articles | Ogabassey',
+    });
+    expect(metadata.robots).toMatchObject({ index: false, follow: true });
+    expect(metadata.alternates?.canonical).toBe(
+      'https://ogabassey.com/blog/category/reviews'
+    );
+    expect(metadata.openGraph?.url).toBe(
+      'https://ogabassey.com/blog/category/reviews'
     );
   });
 

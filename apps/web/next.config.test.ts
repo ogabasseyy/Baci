@@ -42,6 +42,10 @@ describe('next.config core options', () => {
     expect(nextConfig.skipTrailingSlashRedirect).toBe(true);
   });
 
+  it('allows the IPv4 loopback host used by the local storefront browser', () => {
+    expect(nextConfig.allowedDevOrigins).toContain('127.0.0.1');
+  });
+
   it('bounds static generation pressure and retries transient page failures', () => {
     expect(nextConfig.experimental).toEqual(
       expect.objectContaining({

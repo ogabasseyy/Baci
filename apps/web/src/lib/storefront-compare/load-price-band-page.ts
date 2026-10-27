@@ -19,6 +19,7 @@ import {
   getStorefrontLocale,
 } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { buildPriceBandCandidate } from './compare-eligibility';
@@ -69,7 +70,7 @@ export async function getPriceBandStorefrontPathPrefix(
     headersList.has('x-merchant-slug') ||
     isDomainIdentifier(routeIdentifier)
     ? ''
-    : `/${merchantSlug}`;
+    : getStorefrontPathPrefix(headersList, merchantSlug);
 }
 
 function getSupportedClusterCategory(
@@ -129,6 +130,14 @@ export async function loadPriceBandPage(
     return null;
   }
 
+  const band = getCuratedPriceBands(args.categorySlug).find(
+    (candidate) => candidate.slug === args.priceBandSlug
+  );
+
+  if (!band) {
+    return null;
+  }
+
   const categoryData = await getCachedCategoryPageData(
     merchant.id,
     args.categorySlug,
@@ -139,12 +148,12 @@ export async function loadPriceBandPage(
     return null;
   }
 
-  const band = getCuratedPriceBands(args.categorySlug).find(
-    (candidate) => candidate.slug === args.priceBandSlug
-  );
-
-  if (!band) {
-    return null;
+  if (
+    categoryData.categoryQueryFailed ||
+    categoryData.productsQueryFailed ||
+    categoryData.productIdsQueryFailed
+  ) {
+    throw new Error('Price band inventory is temporarily unavailable');
   }
 
   const rawProducts = ((categoryData.products ?? []) as unknown[]).filter(

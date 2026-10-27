@@ -15,7 +15,7 @@ export async function sendServerConversion(
   eventId: string,
   data: ConversionData
 ): Promise<void> {
-  if (!getIsTrackingAllowed()) return;
+  if (getIsTrackingAllowed() !== true) return;
 
   const controller = new AbortController();
   const timeout = setTimeout(
@@ -35,6 +35,11 @@ export async function sendServerConversion(
         event_time: Math.floor(Date.now() / 1000),
         event_source: 'mobile_app',
         platform: AD_TRACKING_PLATFORM,
+        // ATT is a prerequisite, not an analytics or marketing purpose grant.
+        // Until native purpose preferences exist, retain observations internally
+        // and explicitly exclude every external advertising destination.
+        analytics_consent: false,
+        marketing_consent: false,
         ...(getCachedMerchantId() && { merchant_id: getCachedMerchantId() }),
         user_data: {
           em: data.email || userData.email,
@@ -54,7 +59,7 @@ export async function sendServerConversion(
           search_string: data.searchString,
           url: data.url,
         },
-        targets: ['facebook', 'tiktok', 'snapchat', 'google'],
+        targets: [],
       }),
     });
 

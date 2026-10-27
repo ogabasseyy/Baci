@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { omitBlankIntegrationSecrets } from '@/lib/integration-secret-settings';
 import {
   getMerchantFeatureAccess,
   merchantFeatureUpgradeResponse,
@@ -78,7 +79,7 @@ export function createPatchFeatureSettings(
           { status: 400 }
         );
       }
-      const sanitizedUpdates = parsedUpdates.data;
+      const sanitizedUpdates = omitBlankIntegrationSecrets(parsedUpdates.data);
       if ('loyalty_enabled' in sanitizedUpdates) {
         sanitizedUpdates.rewards_page_enabled =
           sanitizedUpdates.loyalty_enabled;

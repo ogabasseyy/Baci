@@ -192,7 +192,7 @@ describe('reviewedCheckoutItems', () => {
     subtotalMinor: 24000,
     unavailableCount: 0,
   };
-  const shell = {
+  const shellFields = {
     cartItemId: 'line-1',
     id: '44444444-4444-4444-8444-444444444444',
     name: 'Phone',
@@ -200,7 +200,8 @@ describe('reviewedCheckoutItems', () => {
     product_id: '44444444-4444-4444-8444-444444444444',
     quantity: 1,
     serverLineId: 'line-1',
-  } as never;
+  };
+  const shell = shellFields as never;
 
   it('uses reviewed quantity and effective prices over display values', () => {
     const items = reviewedCheckoutItems([shell], review);
@@ -214,6 +215,26 @@ describe('reviewedCheckoutItems', () => {
       price: 120,
       value: 240,
     });
+  });
+
+  it('replaces a stale shell offer with the reviewed offer id', () => {
+    const offerId = '66666666-6666-4666-8666-666666666666';
+    const stale = reviewedCheckoutItems(
+      [
+        {
+          ...shellFields,
+          offerId: '55555555-5555-4555-8555-555555555555',
+        } as never,
+      ],
+      review
+    );
+    expect(stale?.[0]?.offerId).toBeUndefined();
+    const exact = reviewedCheckoutItems([shell], {
+      ...review,
+      lines: [{ ...line, offerId }],
+    });
+    expect(exact?.[0]?.offerId).toBe(offerId);
+    expect(buildCheckoutOrderItems(exact ?? [])[0]?.offer_id).toBe(offerId);
   });
 
   it.each([
@@ -278,5 +299,37 @@ describe('reviewedCheckoutItems', () => {
     });
     expect(partialPair?.[0].quizAwardId).toBeUndefined();
     expect(partialPair?.[0].quizVoucherToken).toBeUndefined();
+  });
+});
+
+describe('shared-cart-client checkout cart pin', () => {
+  it('rejects a review for a different cart than submitted', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({
+        replayed: false,
+        sessionReused: false,
+        snapshot: {
+          cartId: '99999999-9999-4999-8999-999999999999',
+          cartVersion: 3,
+          checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+          estimates: {
+            currency: 'NGN',
+            lineCount: 1,
+            subtotalMinor: 25000,
+            unavailableCount: 0,
+          },
+          generation: 1,
+          lines: [],
+          merchantId: '11111111-1111-4111-8111-111111111111',
+        },
+      })
+    );
+    const result = await prepareSharedCartCheckout({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 3,
+      operationId: 'prep-op-mismatch',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('refresh_required');
   });
 });

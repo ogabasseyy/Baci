@@ -2,14 +2,16 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
+import { generateSlug } from '@/lib/seo-utils';
 import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { isBrandAuthorityProductInStock } from '@/lib/storefront-category/brand-authority-stock-filter';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import type { BrandAuthorityEntry } from '@/lib/storefront-category/category-hub-types';
 
-const BRAND_AUTHORITY_PRODUCT_LIMIT = 48;
-const BRAND_AUTHORITY_QUERY_PAGE_SIZE = 100;
-const BRAND_AUTHORITY_PRODUCTS_SELECT = `
+export { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
+export const BRAND_AUTHORITY_MAX_QUERY_PAGES = 20;
+export const BRAND_AUTHORITY_QUERY_PAGE_SIZE = 100;
+export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   id,
   name,
   slug,
@@ -27,14 +29,61 @@ const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   has_condition_offers,
   updated_at,
   categories:category_id(id, name, slug),
-  product_categories!inner(
-    categories!inner(
+  product_categories(
+    categories(
       id,
       name,
       slug
     )
   )
 `;
+
+export function matchesBrandAuthorityCategory(
+  product: RawDbProduct,
+  categorySlug: string
+): boolean {
+  const targetSlug = generateSlug(categorySlug);
+
+  if (
+    Array.isArray(product.product_categories) &&
+    product.product_categories.some((entry) => {
+      const slug = entry?.categories?.slug;
+      return (
+        slug === categorySlug ||
+        (slug ? generateSlug(slug) === targetSlug : false)
+      );
+    })
+  ) {
+    return true;
+  }
+
+  const directCategories = Array.isArray(product.categories)
+    ? product.categories
+    : product.categories
+      ? [product.categories]
+      : [];
+  if (
+    directCategories.some((cat) => {
+      const slug = cat?.slug;
+      return (
+        slug === categorySlug ||
+        (slug ? generateSlug(slug) === targetSlug : false)
+      );
+    })
+  ) {
+    return true;
+  }
+
+  if (
+    typeof product.category === 'string' &&
+    product.category.trim().length > 0 &&
+    generateSlug(product.category) === targetSlug
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 async function readCachedBrandAuthorityInventory(
   merchantId: string,
@@ -52,20 +101,14 @@ async function readCachedBrandAuthorityInventory(
 
   const supabase = brandAuthorityPublicData.createClient();
   const inStockProducts: RawDbProduct[] = [];
-  const requiredProductCount = Math.max(
-    BRAND_AUTHORITY_PRODUCT_LIMIT,
-    entry.minimumProducts
-  );
-  let productCountIsLowerBound = false;
   let from = 0;
 
-  while (true) {
+  for (let page = 0; page < BRAND_AUTHORITY_MAX_QUERY_PAGES; page++) {
     const brandQueryValues = brandAuthorityTaxonomy.getBrandQueryValues(entry);
     const baseQuery = supabase
       .from('products')
       .select(BRAND_AUTHORITY_PRODUCTS_SELECT)
       .eq('merchant_id', merchantId)
-      .eq('product_categories.categories.slug', categorySlug)
       .eq('status', 'active');
     const brandQuery =
       brandQueryValues.length === 1
@@ -90,22 +133,32 @@ async function readCachedBrandAuthorityInventory(
     }
 
     const rawProducts = (data ?? []) as unknown as RawDbProduct[];
-    const hydratedProducts = await hydrateAndSanitizePublicProducts(
-      supabase,
-      merchantId,
-      rawProducts
-    );
-    inStockProducts.push(
-      ...hydratedProducts.filter(isBrandAuthorityProductInStock)
-    );
 
     if (
-      rawProducts.length < BRAND_AUTHORITY_QUERY_PAGE_SIZE ||
-      inStockProducts.length >= requiredProductCount
+      page + 1 >= BRAND_AUTHORITY_MAX_QUERY_PAGES &&
+      rawProducts.length === BRAND_AUTHORITY_QUERY_PAGE_SIZE
     ) {
-      productCountIsLowerBound =
-        rawProducts.length === BRAND_AUTHORITY_QUERY_PAGE_SIZE &&
-        inStockProducts.length >= requiredProductCount;
+      throw new Error(
+        'Brand authority inventory scan exceeded maximum page ceiling'
+      );
+    }
+
+    const matchingProducts = rawProducts.filter((product) =>
+      matchesBrandAuthorityCategory(product, categorySlug)
+    );
+
+    if (matchingProducts.length > 0) {
+      const hydratedProducts = await hydrateAndSanitizePublicProducts(
+        supabase,
+        merchantId,
+        matchingProducts
+      );
+      inStockProducts.push(
+        ...hydratedProducts.filter(isBrandAuthorityProductInStock)
+      );
+    }
+
+    if (rawProducts.length < BRAND_AUTHORITY_QUERY_PAGE_SIZE) {
       break;
     }
     from += BRAND_AUTHORITY_QUERY_PAGE_SIZE;
@@ -116,7 +169,7 @@ async function readCachedBrandAuthorityInventory(
     latestUpdatedAt:
       typeof latestUpdatedAt === 'string' ? latestUpdatedAt : null,
     productCount: inStockProducts.length,
-    productCountIsLowerBound,
+    productCountIsLowerBound: false,
     products: inStockProducts,
   };
 }

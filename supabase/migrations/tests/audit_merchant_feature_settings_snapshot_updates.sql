@@ -30,7 +30,7 @@ BEGIN
       AND column_name NOT IN (
         'id', 'merchant_id', 'created_at', 'custom_robots_txt', 'updated_at',
         'credit_direct_public_key', 'custom_settings', 'facebook_capi_token',
-        'facebook_pixel_id', 'ga4_api_secret', 'google_analytics_id',
+        'chatgpt_pixel_id', 'facebook_pixel_id', 'ga4_api_secret', 'google_analytics_id',
         'google_place_id', 'repair_settings', 'shipping_providers',
         'snapchat_capi_token', 'snapchat_pixel_id', 'tiktok_access_token',
         'tiktok_pixel_id', 'twitter_pixel_id'

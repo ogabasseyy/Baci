@@ -15,7 +15,9 @@ import {
 import {
   buildBlogCategorySchemaUrl,
   findBlogCategoryLabelBySlug,
+  findOgabasseyBlogCategoryAliasLabel,
   getBlogCategorySlug,
+  isOgabasseyBlogStaticTenant,
 } from './blog-category-routing';
 import { parseBlogListingPage } from './blog-listing-page-params';
 import { buildBlogListingSchemaUrl } from './blog-listing-schema-url';
@@ -101,19 +103,29 @@ export async function buildBlogListingMetadata({
     };
   }
 
-  const baseUrl = buildStoreUrl(data.merchant);
+  const { merchant } = data;
+  const baseUrl = buildStoreUrl(merchant);
   const totalPages = Math.max(1, data.totalPages);
   const canonicalPage = Math.min(currentPage, totalPages);
   const categoryLabel = normalizedCategory
     ? formatBlogFilterLabel(normalizedCategory)
     : '';
   const publicCategories = filterPublicBlogCategories(data.categories);
-  const knownCategoryLabel = normalizedCategory
+  let knownCategoryLabel = normalizedCategory
     ? findBlogCategoryLabelBySlug(
         publicCategories,
         getBlogCategorySlug(normalizedCategory)
       )
     : null;
+
+  const isOgabasseyBlog = isOgabasseyBlogStaticTenant(slug);
+  if (!knownCategoryLabel && normalizedCategory && isOgabasseyBlog) {
+    knownCategoryLabel = findOgabasseyBlogCategoryAliasLabel(
+      publicCategories,
+      normalizedCategory
+    );
+  }
+
   // Canonical cases:
   // 1. Base blog: /blog.
   // 2. Known category page 1: /blog/category/<slug>.
@@ -129,7 +141,7 @@ export async function buildBlogListingMetadata({
       : undefined;
   const canonicalUrl =
     explicitCanonicalUrl ??
-    (shouldUseCleanCategoryCanonical
+    (shouldUseCleanCategoryCanonical && knownCategoryLabel
       ? buildBlogCategorySchemaUrl(baseUrl, knownCategoryLabel)
       : buildBlogListingSchemaUrl({
           baseUrl,
@@ -143,7 +155,7 @@ export async function buildBlogListingMetadata({
       : !normalizedCategory && !normalizedSearch && currentPage === 1;
   const socialImageCandidates = [
     data.posts[0]?.featured_image_url,
-    data.merchant.logo_url,
+    merchant.logo_url,
   ];
   const pageSuffix = currentPage > 1 ? ` | Page ${currentPage}` : '';
   const metadataTitleBase = normalizedSearch
@@ -156,23 +168,28 @@ export async function buildBlogListingMetadata({
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
       title: metadataTitleBase,
-      suffix: data.merchant.business_name,
+      suffix: merchant.business_name,
       fallback: 'Blog',
     });
   const baseDescription = normalizedSearch
-    ? `Search results for "${normalizedSearch}" on ${data.merchant.business_name}'s blog.`
+    ? `Search results for "${normalizedSearch}" on ${merchant.business_name}'s blog.`
     : knownCategoryLabel
-      ? `Read articles and updates about ${knownCategoryLabel.toLowerCase()} from ${data.merchant.business_name}.`
+      ? `Read articles and updates about ${knownCategoryLabel.toLowerCase()} from ${merchant.business_name}.`
       : normalizedCategory
-        ? `Read ${categoryLabel.toLowerCase()} articles and updates from ${data.merchant.business_name}.`
-        : `Read the latest articles, news, and insights from ${data.merchant.business_name}.`;
+        ? `Read ${categoryLabel.toLowerCase()} articles and updates from ${merchant.business_name}.`
+        : isOgabasseyBlog
+          ? `Read the latest tech news, smartphone and laptop reviews, buying guides, and insights from ${merchant.business_name} Blog.`
+          : `Read the latest articles, guides, and updates from ${merchant.business_name}.`;
   const pageAwareDescription =
     currentPage > 1
       ? `Page ${currentPage}: ${baseDescription}`
       : baseDescription;
+  const fallback = isOgabasseyBlog
+    ? `Explore expert tips, product comparisons, and maintenance guides curated by the ${merchant.business_name} team.`
+    : `Explore articles, guides, and updates curated by the ${merchant.business_name} team.`;
   const description = generateMetaDescription(pageAwareDescription, 160, {
     minLength: 110,
-    fallback: `Read articles, updates, and practical insights from ${data.merchant.business_name}.`,
+    fallback,
   });
 
   return {

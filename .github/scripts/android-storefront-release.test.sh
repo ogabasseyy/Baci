@@ -90,4 +90,60 @@ ANDROID_HOME="$valid_root" bash "$script" link-cmdline-tools-latest
 [ ! -L "$valid_root/cmdline-tools/latest" ]
 [ -x "$valid_root/cmdline-tools/latest/bin/sdkmanager" ]
 
+
+# Release builds must not share the default ~/.gradle cleanup target.
+runner_temp="$fixture_root/private-runner/_temp"
+mkdir -p "$runner_temp"
+private_env="$fixture_root/private-gradle-env"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+grep -Fxq "GRADLE_USER_HOME=$fixture_root/private-runner/gradle-user-home" "$private_env"
+[ -d "$fixture_root/private-runner/gradle-user-home" ]
+
+# Repeated setup repairs existing permissions without deleting warm outputs.
+touch "$fixture_root/private-runner/gradle-user-home/retained"
+chmod 755 "$fixture_root/private-runner/gradle-user-home"
+RUNNER_TEMP="$runner_temp" GITHUB_ENV="$private_env" \
+  bash "$script" configure-gradle-home
+[ -f "$fixture_root/private-runner/gradle-user-home/retained" ]
+[ "$(LC_ALL=C ls -ld "$fixture_root/private-runner/gradle-user-home" | cut -c 1-10)" = "drwx------" ]
+
+if RUNNER_TEMP=relative/_temp GITHUB_ENV="$fixture_root/invalid-gradle-env" \
+  bash "$script" configure-gradle-home >"$fixture_root/invalid-gradle-log" 2>&1; then
+  echo 'Expected a relative runner temp directory to fail' >&2
+  exit 1
+fi
+[ ! -e "$fixture_root/invalid-gradle-env" ]
+
+# Compile native prerequisites separately; packaging retains the release target.
+mkdir -p "$fixture_root/gradle"
+cat > "$fixture_root/gradle/gradlew" <<'GRADLE'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$GRADLE_CAPTURE"
+exit "${GRADLE_EXIT_CODE:-0}"
+GRADLE
+chmod +x "$fixture_root/gradle/gradlew"
+(
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/native-args" bash "$script" build-native
+  GRADLE_CAPTURE="$fixture_root/bundle-args" bash "$script" build
+)
+grep -qx ':react-native:packages:react-native:ReactAndroid:assembleRelease' "$fixture_root/native-args"
+grep -qx ':react-native:packages:react-native:ReactAndroid:hermes-engine:assembleRelease' "$fixture_root/native-args"
+if grep -q 'app:bundleRelease' "$fixture_root/native-args"; then exit 1; fi
+grep -qx 'app:bundleRelease' "$fixture_root/bundle-args"
+for args in "$fixture_root/native-args" "$fixture_root/bundle-args"; do
+  grep -qx -- '--build-cache' "$args"
+  grep -qx -- '--max-workers=2' "$args"
+done
+
+if (
+  cd "$fixture_root/gradle"
+  GRADLE_CAPTURE="$fixture_root/failed-native-args" GRADLE_EXIT_CODE=42 bash "$script" build-native
+); then
+  echo 'Expected native compilation failure to stop the release' >&2
+  exit 1
+else
+  test "$?" -eq 42
+fi
 echo 'Android storefront release script checks passed'

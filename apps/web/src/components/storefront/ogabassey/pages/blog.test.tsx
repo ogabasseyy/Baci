@@ -286,4 +286,19 @@ describe('OgabasseyV2Blog', () => {
 
     expect(screen.getByText('Mar 28, 2026')).toBeInTheDocument();
   });
+
+  it('renders h1 before featured post h2 and renders blog card titles as h2', () => {
+    render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
+
+    const h1 = screen.getByRole('heading', { level: 1, name: 'The Ogabassey Blog' });
+    const featuredH2 = screen.getByRole('heading', { level: 2, name: 'Featured Post' });
+    const regularH2 = screen.getByRole('heading', { level: 2, name: 'Regular Post' });
+
+    expect(h1).toBeInTheDocument();
+    expect(featuredH2).toBeInTheDocument();
+    expect(regularH2).toBeInTheDocument();
+
+    // Verify h1 comes before featured post h2 in DOM order
+    expect(h1.compareDocumentPosition(featuredH2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

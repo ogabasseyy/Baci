@@ -1,0 +1,55 @@
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role','authenticated',false),set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000005',false);
+DO $$ DECLARE hash text; BEGIN
+ SELECT input_fingerprint INTO hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000001']::uuid[]);
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','comparison',hash,'receipt-v1',repeat('b',64),'verified_receipt');
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','comparison',hash,'receipt-v1',repeat('b',64),'verified_receipt');
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','comparison',hash,'review-v1',repeat('c',64),'reviewed');
+ PERFORM test.denied(format('SELECT public.set_merchant_blog_classification_v1(%L,%L,%L,%L,%L,%L,%L)','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','news',hash,'receipt-v2',repeat('d',64),'verified_receipt'),'42501');
+ PERFORM test.denied(format('SELECT public.set_merchant_blog_classification_v1(%L,%L,NULL,%L,%L,%L,%L)','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001',hash,'receipt-v2',repeat('d',64),'verified_receipt'),'42501');
+END $$;
+RESET ROLE;
+SELECT test.assert((SELECT count(*)=3 FROM private.merchant_blog_classification_audit),'identical retries do not duplicate audit entries');
+SELECT test.assert((SELECT intent IS NULL AND intent_source IS NULL FROM public.blog_posts WHERE id='20000000-0000-0000-0000-000000000001'),'merchant platform-only fields remain NULL');
+SELECT test.denied($q$INSERT INTO public.merchant_blog_classifications(post_id,merchant_id,intent,source,classifier_version,input_fingerprint,actor_id) VALUES('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','news','merchant_declared','v1',repeat('0',64),'00000000-0000-0000-0000-000000000001')$q$,'23503');
+UPDATE public.blog_posts SET content='<p>Rewritten article.</p>' WHERE id='20000000-0000-0000-0000-000000000001';
+SELECT test.assert((SELECT stale_at IS NOT NULL FROM public.merchant_blog_classifications WHERE post_id='20000000-0000-0000-0000-000000000001'),'direct SQL content mutation invalidates classification');
+SELECT test.assert((SELECT count(*)=0 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000001']::uuid[])),'stale classification excluded from public reads');
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+DO $$ DECLARE hash text; BEGIN
+ SELECT input_fingerprint INTO hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000001']::uuid[]);
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','news',hash,'merchant-v2');
+ UPDATE public.blog_posts SET title=title WHERE id='20000000-0000-0000-0000-000000000001';
+ PERFORM test.assert((SELECT count(*)=1 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000001']::uuid[])),'no-op content update preserves classification');
+ UPDATE public.blog_posts SET tags=ARRAY['new'] WHERE id='20000000-0000-0000-0000-000000000001';
+ PERFORM test.assert((SELECT count(*)=0 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000001']::uuid[])),'RLS-scoped metadata update invalidates classification');
+ SELECT input_fingerprint INTO hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[]);
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','news',hash,'merchant-v2');
+ PERFORM test.assert((SELECT count(*)=0 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'classified draft remains private');
+ UPDATE public.blog_posts SET status='published',published_at=now() WHERE id='20000000-0000-0000-0000-000000000002';
+ PERFORM test.assert((SELECT count(*)=1 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'classification alone did not publish; explicit later publication makes visible');
+END $$;
+RESET ROLE;
+UPDATE public.blog_posts SET published_at=now()+interval '1 day' WHERE id='20000000-0000-0000-0000-000000000002';
+SELECT test.assert((SELECT count(*)=0 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'future-dated publication remains private');
+UPDATE public.blog_posts SET published_at=now()-interval '1 day' WHERE id='20000000-0000-0000-0000-000000000002';
+SET ROLE authenticated;
+DO $$ DECLARE hash text; field text; value text; BEGIN
+ FOREACH field IN ARRAY ARRAY['title','content','category','excerpt','tags','keywords'] LOOP
+   SELECT input_fingerprint INTO hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[]);
+   PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','news',hash,'merchant-v3');
+   value:=CASE WHEN field IN ('tags','keywords') THEN '{different}' ELSE 'Different input' END;
+   EXECUTE format('UPDATE public.blog_posts SET %I=%L WHERE id=%L',field,value,'20000000-0000-0000-0000-000000000002');
+   PERFORM test.assert((SELECT stale_at IS NOT NULL AND input_fingerprint<>hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'each classification input invalidates on direct update: '||field);
+ END LOOP;
+ SELECT input_fingerprint INTO hash FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[]);
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','news',hash,'merchant-v3');
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002',NULL,hash,'merchant-v3');
+ PERFORM test.assert((SELECT intent IS NULL FROM public.get_merchant_blog_classification_context_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'owner can clear a declared classification');
+ PERFORM public.set_merchant_blog_classification_v1('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','news',hash,'merchant-v3');
+END $$;
+RESET ROLE;
+UPDATE public.merchant_feature_settings SET blog_enabled=false WHERE merchant_id='10000000-0000-0000-0000-000000000001';
+SELECT test.assert((SELECT count(*)=0 FROM public.get_storefront_blog_classifications_v1('10000000-0000-0000-0000-000000000001',ARRAY['20000000-0000-0000-0000-000000000002']::uuid[])),'disabled blog hides classification');
+SELECT 'merchant blog classification security and lifecycle checks passed' AS result;

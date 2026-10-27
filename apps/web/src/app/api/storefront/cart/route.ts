@@ -164,7 +164,8 @@ export async function POST(request: NextRequest) {
     // drive body parsing or schema validation first.
     const context = await resolveCartRequestContext(
       request,
-      contextDeps('bootstrap', 'forbidden')
+      // Keep scope rejection distinct from the CSRF forbidden response.
+      contextDeps('bootstrap', 'unauthorized')
     );
     if (!context.ok) {
       return cartErrorResponse(context.error);

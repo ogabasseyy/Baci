@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -16,12 +16,21 @@ function runOverlap({
   repo = 'example-owner/example-repo',
   barrierScenario = 'missing',
   barriers = '',
+  ghLocation = 'path',
 }) {
   const workDir = mkdtempSync(join(tmpdir(), 'baci-promote-overlap-'));
   const binDir = join(workDir, 'bin');
   mkdirSync(binDir, { recursive: true });
+  const homeDir = join(workDir, 'home');
+  const homeBin = join(homeDir, '.local', 'bin');
+  mkdirSync(homeBin, { recursive: true });
+  for (const tool of ['bash', 'mktemp', 'cat', 'rm', 'sleep']) {
+    const location = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' });
+    assert.equal(location.status, 0);
+    symlinkSync(location.stdout.trim(), join(binDir, tool));
+  }
   const argsFile = join(workDir, 'gh-args.txt');
-  const stubPath = join(binDir, 'gh');
+  const stubPath = join(ghLocation === 'path' ? binDir : homeBin, 'gh');
   writeFileSync(
     stubPath,
     `#!/usr/bin/env bash
@@ -45,6 +54,8 @@ esac
 `
   );
   chmodSync(stubPath, 0o755);
+  if (ghLocation === 'missing') rmSync(stubPath);
+  if (ghLocation === 'not-executable') chmodSync(stubPath, 0o644);
   // Execute exactly as deploy.yml does so a missing executable bit fails CI.
   const result = spawnSync(scriptPath, [], {
     cwd: workDir,
@@ -58,13 +69,34 @@ esac
       GITHUB_RUN_ID: runId,
       GITHUB_REPOSITORY: repo,
       OVERLAP_RETRY_DELAY_SECONDS: '0',
-      PATH: `${binDir}:${process.env.PATH}`,
+      HOME: homeDir,
+      GH_TOKEN: 'test-only-not-a-real-token',
+      PATH: binDir,
     },
   });
-  return {
+  const observation = {
     result,
     ghArgs: existsSync(argsFile) ? readFileSync(argsFile, 'utf8') : '',
   };
+  rmSync(workDir, { recursive: true, force: true });
+  return observation;
+}
+
+test('uses the installed user CLI when the VPS runner PATH omits its directory', () => {
+  const { result, ghArgs } = runOverlap({ record: 'abc123:', ghLocation: 'home' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(ghArgs, /contents\/barriers/);
+  assert.match(ghArgs, /contents\/\.gigl-promote-record/);
+});
+
+for (const ghLocation of ['missing', 'not-executable']) {
+  test(`fails before API retries when the GitHub CLI is ${ghLocation}`, () => {
+    const { result, ghArgs } = runOverlap({ record: 'abc123:', ghLocation });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /GitHub CLI \(gh\) is required/);
+    assert.equal(ghArgs, '');
+    assert.doesNotMatch(result.stderr, /after 3 attempts/);
+  });
 }
 
 test('allows publish when this run is absent from the record', () => {

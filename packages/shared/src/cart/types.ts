@@ -1,3 +1,4 @@
+import type { CartErrorCode } from './error-codes';
 /**
  * Shared server cart contracts.
  *
@@ -29,6 +30,11 @@ export interface CartItemIdentity {
   productId: string;
   variantId?: string;
   condition?: CartCondition;
+  /**
+   * Exact product_offers row. Same canonical condition with a different
+   * offer stays a distinct line; omitted means the condition-only lane.
+   */
+  offerId?: string;
   options?: Record<string, string>;
 }
 
@@ -102,21 +108,7 @@ export interface CreateCartInput {
   currency?: string;
 }
 
-export type CartErrorCode =
-  | 'unauthorized'
-  | 'merchant_unavailable'
-  | 'not_found'
-  | 'expired'
-  | 'version_conflict'
-  | 'idempotency_conflict'
-  | 'invalid_item'
-  | 'cart_locked'
-  | 'refresh_required'
-  | 'temporarily_unavailable'
-  | 'rate_limited'
-  | 'merge_conflict'
-  | 'too_many_lines'
-  | 'handoff_consumed';
+export type { CartErrorCode } from './error-codes';
 
 export interface CartWarning {
   code: string;

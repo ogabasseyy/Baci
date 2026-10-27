@@ -6,7 +6,7 @@ import {
 } from '@/schemas/storefront-preflight-rpc';
 import type { BlogListingStatusIntent } from './cached-storefront-blog-listing-status';
 import {
-  resolveBlogListingVerdict,
+  evaluateBlogListingRequest,
   type StorefrontBlogListingStatusResolution,
 } from './storefront-blog-listing-verdict';
 import { storefrontInternalPreflight } from './storefront-internal-preflight';
@@ -179,5 +179,9 @@ export async function resolveStorefrontBlogListingStatus(
     return { kind: 'noop' };
   }
 
-  return resolveBlogListingVerdict(opts.intent, verdict);
+  return evaluateBlogListingRequest({
+    intent: opts.intent,
+    row: verdict,
+    identifier: opts.identifier,
+  });
 }

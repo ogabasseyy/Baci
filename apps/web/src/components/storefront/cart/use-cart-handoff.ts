@@ -1,7 +1,7 @@
 'use client';
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { fetchDestinationCart } from './cart-handoff-destination';
+import { loadDestinationCart } from './cart-handoff-destination-loader';
 import {
   type Choice,
   clearActiveHandoff,
@@ -44,7 +44,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setConflicts,
     setResolutions,
     setLoadError,
-    refreshPreview: () => loadPreview(),
+    refreshPreview: (signal) => loadPreview(signal),
   });
   const { lockedChoice, setLockedChoice, sentBody, lockChoice, postRedeem } =
     redeem;
@@ -67,30 +67,31 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     void loadPreview();
   }, []);
 
-  async function loadDestination(slug: string | null): Promise<void> {
-    setDestChecked(false);
-    setDestinationError(null);
-    const result = await fetchDestinationCart(slug);
-    if (result.status === 'error') {
-      setDestinationError(
-        'Could not check your existing cart. Please try again.'
-      );
-      return;
-    }
-    bootstrapRequired.current = result.bootstrapRequired;
-    setDestCart(result.cart);
-    setDestChecked(true);
+  function loadDestination(
+    slug: string | null,
+    signal?: AbortSignal
+  ): Promise<void> {
+    return loadDestinationCart(
+      { bootstrapRequired, setDestCart, setDestChecked, setDestinationError },
+      slug,
+      signal
+    );
   }
 
-  async function loadPreview(): Promise<PreviewResponse | null> {
+  async function loadPreview(
+    signal?: AbortSignal
+  ): Promise<PreviewResponse | null> {
     setLoadError(null);
     setPreviewRetryable(false);
     try {
       const response = await fetchJson(
         `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
-        { headers: { 'x-handoff-token': token } }
+        { headers: { 'x-handoff-token': token }, signal }
       );
       const payload = (await response.json()) as PreviewResponse;
+      // A superseded refresh (deadline elapsed, retry started) must not
+      // mutate preview, attempt, or locked-choice state afterwards.
+      if (signal?.aborted) return null;
       if (!response.ok) {
         if (response.status >= 500 || response.status === 429) {
           setPreviewRetryable(true);
@@ -112,7 +113,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       if (payload.merchant?.slug)
         recordActiveHandoff(token, handoffId, payload.merchant.slug);
       if (payload.status === 'pending') {
-        await loadDestination(payload.merchant?.slug ?? null);
+        await loadDestination(payload.merchant?.slug ?? null, signal);
       } else {
         setDestChecked(true);
         if (payload.status === 'expired') {
@@ -146,6 +147,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       }
       return payload;
     } catch {
+      if (signal?.aborted) return null;
       setPreviewRetryable(true);
       setLoadError('Could not load this cart link. Check your connection.');
       return null;

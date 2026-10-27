@@ -192,6 +192,38 @@ describe('buildPriceBandPageSchemas', () => {
     ).toBe('Best midrange pick');
   });
 
+  it('caps products at 20 items and truncates descriptions to at most 120 plain-text characters', () => {
+    const longHtmlDescription = `<p>This is a very detailed description that goes on and on and contains all sorts of HTML markup like <strong>strong text</strong>, <em>italics</em>, and extra filler text to easily exceed the one hundred and twenty character limit enforced by the price band schema builder.</p>`;
+    const products = Array.from({ length: 25 }, (_, i) => ({
+      id: `product-${i + 1}`,
+      slug: `phone-${i + 1}`,
+      name: `Phone ${i + 1}`,
+      category: 'Smartphones',
+      category_slug: 'smartphones',
+      price: 100_000 + i * 10_000,
+      description: longHtmlDescription,
+    }));
+
+    const schemas = buildPriceBandPageSchemas({
+      breadcrumbItems: [],
+      pageName: 'Best Phones Under 500k',
+      pageUrl: 'https://ogabassey.com/smartphones/best-under/under-500k',
+      currency: 'NGN',
+      products,
+    });
+
+    const items = schemas.itemList.itemListElement as Array<{
+      item: { name: string; description: string };
+    }>;
+
+    expect(items).toHaveLength(20);
+    for (const item of items) {
+      expect(item.item.description.length).toBeLessThanOrEqual(120);
+      expect(item.item.description).not.toContain('<');
+      expect(item.item.description).not.toContain('>');
+    }
+  });
+
   it('throws a clear error when the price-band pageUrl is not absolute', () => {
     expect(() =>
       buildPriceBandPageSchemas({

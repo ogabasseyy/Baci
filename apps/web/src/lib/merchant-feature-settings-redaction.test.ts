@@ -104,3 +104,28 @@ describe('merchant feature settings redaction', () => {
     });
   });
 });
+
+it.each([
+  undefined,
+  {},
+])('redacts all ad secrets even without custom_settings %j', (custom_settings) => {
+  const secrets = {
+    facebook_capi_token: 'fb-secret',
+    tiktok_access_token: 'tt-secret',
+    snapchat_capi_token: 'snap-secret',
+    ga4_api_secret: 'ga-secret',
+  };
+  const safe = redactMerchantFeatureSettingsResponse({
+    ...secrets,
+    custom_settings,
+    reviews_enabled: true,
+  }) as Record<string, unknown>;
+  expect(JSON.stringify(safe)).not.toMatch(
+    /fb-secret|tt-secret|snap-secret|ga-secret/
+  );
+  for (const key of Object.keys(secrets)) {
+    expect(safe[key]).toBeNull();
+    expect(safe[`${key}_configured`]).toBe(true);
+  }
+  expect(safe.reviews_enabled).toBe(true);
+});

@@ -3,9 +3,18 @@
 import { Button } from '@/components/ui/button';
 import { jumiaPreviewMessages } from './constants';
 import { GamingSelectionDraft } from './gaming-selection-draft';
+import type { JumiaMappingDraft } from './jumia-mapping-draft-types';
 import { useGamingSelectionPreview } from './use-gaming-selection-preview';
 
-export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
+export function GamingSelectionPreview({
+  merchantId,
+  integrationId = '',
+  mapping = null,
+}: {
+  merchantId: string;
+  integrationId?: string;
+  mapping?: JumiaMappingDraft | null;
+}) {
   const {
     snapshot,
     loading,
@@ -86,6 +95,8 @@ export function GamingSelectionPreview({ merchantId }: { merchantId: string }) {
             snapshot={snapshot}
             loading={loading}
             onPageChange={goToPage}
+            integrationId={integrationId}
+            mapping={mapping}
           />
         </>
       ) : null}

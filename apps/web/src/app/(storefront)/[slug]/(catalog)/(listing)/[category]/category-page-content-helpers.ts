@@ -1,12 +1,14 @@
 import type { Product as OgabasseyProduct } from '@/components/storefront/ogabassey/types';
 import type { getCachedCategoryPageData } from '@/lib/cached-data';
 import { formatCurrencyCompact } from '@/lib/currency';
+import { isExternalPlaceholderImageUrl } from '@/lib/image-utils';
 import {
   normalizeProduct,
   type ProductKeySpecsRecord,
   type RawDbProduct,
 } from '@/lib/normalize-product';
 import type { Product as SeoProduct } from '@/lib/products';
+import { generateMetaDescription } from '@/lib/seo-utils';
 import { buildCategoryHubModel } from '@/lib/storefront-category/build-category-hub-model';
 import type {
   BrandAuthorityEntry,
@@ -186,4 +188,51 @@ export function toCollectionSchemaProduct(
     })(),
     product_key_specs: product.product_key_specs ?? undefined,
   };
+}
+
+function isUsableProductImageUrl(url: string | null | undefined): boolean {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const [pathOnly] = trimmed.split(/[?#]/);
+  if (!pathOnly) return false;
+  if (/\/placeholder\.(svg|png)$/i.test(pathOnly)) return false;
+  if (isExternalPlaceholderImageUrl(trimmed)) return false;
+  return true;
+}
+
+export function resolveFirstUsableCategoryProductImage(
+  product: Pick<StorefrontCategoryProduct, 'image' | 'images'>
+): string | undefined {
+  const candidates = [product.image, ...(product.images ?? [])];
+  for (const candidate of candidates) {
+    if (isUsableProductImageUrl(candidate)) {
+      return candidate?.trim();
+    }
+  }
+  return undefined;
+}
+
+export function toClientCategoryPageProducts(
+  products: StorefrontCategoryProduct[]
+): StorefrontCategoryProduct[] {
+  return products.map((product) => {
+    const isMainImageUsable = isUsableProductImageUrl(product.image);
+    let clientImages: string[] | undefined;
+    if (!isMainImageUsable) {
+      const firstUsableImage = (product.images ?? [])
+        .find(isUsableProductImageUrl)
+        ?.trim();
+      clientImages = firstUsableImage ? [firstUsableImage] : undefined;
+    }
+
+    return {
+      ...product,
+      description: product.description
+        ? generateMetaDescription(product.description, 150)
+        : '',
+      images: clientImages,
+      product_key_specs: undefined,
+    };
+  });
 }

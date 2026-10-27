@@ -27,6 +27,7 @@ export const repairsDeviceDetailRouteParamsSchema = z.object({
 
 export const repairsDevicesQuerySchema = z.object({
   q: z.string().trim().max(100, 'Search query is too long').optional(),
+  mode: z.enum(['catalog', 'suggestions']).default('catalog'),
 });
 
 export type RepairsDevicesRouteParams = z.infer<

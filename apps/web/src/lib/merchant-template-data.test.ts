@@ -325,3 +325,17 @@ it('preserves public cart capability hints through the shell merchant projection
     shared_cart_realtime_enabled: true,
   });
 });
+
+it('preserves the derived growth capability and public Facebook ID but no token', () => {
+  const merchant = toTemplateMerchantData({
+    ...BASE_MERCHANT,
+    growth_integrations_enabled: true,
+    feature_settings: {
+      facebook_pixel_id: '2099259280261589',
+      facebook_capi_token: 'secret',
+    },
+  });
+  expect(merchant.growth_integrations_enabled).toBe(true);
+  expect(merchant.feature_settings?.facebook_pixel_id).toBe('2099259280261589');
+  expect(merchant.feature_settings).not.toHaveProperty('facebook_capi_token');
+});

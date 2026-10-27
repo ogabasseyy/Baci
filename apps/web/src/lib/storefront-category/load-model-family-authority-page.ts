@@ -1,5 +1,7 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { buildStoreUrl } from '@/lib/store-url';
+import { BRAND_AUTHORITY_PRODUCT_LIMIT } from '@/lib/storefront-category/brand-authority-product-limit';
+import { getCategoryAuthorityNoun } from '@/lib/storefront-category/get-category-authority-noun';
 import { brandAuthorityPageLoader } from '@/lib/storefront-category/load-brand-authority-page';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
@@ -7,6 +9,7 @@ import type { SupportedClusterCategory } from '@/lib/storefront-content/content-
 import { loadPublishedClusterPostsSafely } from '@/lib/storefront-content/load-published-cluster-posts-safely';
 import { getCountryShoppingContext } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import { authorityHubEligibility } from './authority-hub-eligibility';
 
 async function loadModelFamilyAuthorityPage(args: {
   merchantSlug: string;
@@ -31,15 +34,50 @@ async function loadModelFamilyAuthorityPage(args: {
   );
   if (!brandPage) return null;
 
-  const products = brandPage.products.filter((product) =>
-    modelFamilyAuthorityTaxonomy.matchesProduct(family, product.name)
+  const brandInventory = brandPage.brandInventory ?? {
+    products: brandPage.products,
+  };
+  const eligibility = authorityHubEligibility.resolveFamilyAuthorityEligibility(
+    brandInventory.products,
+    family
   );
-  if (products.length < family.minimumProducts) return null;
+  if (!eligibility.eligible) return null;
+  const allMatchedProducts = eligibility.products;
+
+  const matchedProducts = allMatchedProducts.slice(
+    0,
+    BRAND_AUTHORITY_PRODUCT_LIMIT
+  );
+
+  const categoryNoun = getCategoryAuthorityNoun(
+    args.categorySlug,
+    brandPage.categoryName
+  );
+
+  const siblingFamilyLinks = modelFamilyAuthorityTaxonomy
+    .getEntries(args.categorySlug, brandPage.brand.brandKey)
+    .filter((entry) => entry.familyKey !== family.familyKey)
+    .flatMap((entry) => {
+      const { productCount, eligible } =
+        authorityHubEligibility.resolveFamilyAuthorityEligibility(
+          brandInventory.products,
+          entry
+        );
+      return eligible
+        ? [
+            {
+              href: `${brandPage.canonicalUrl}/families/${entry.familyKey}`,
+              label: `${entry.displayName} ${categoryNoun.lowerNoun}`,
+              productCount,
+            },
+          ]
+        : [];
+    });
 
   const canonicalUrl = `${brandPage.canonicalUrl}/families/${family.familyKey}`;
   const countryContext = getCountryShoppingContext(brandPage.merchant.country);
   const countrySuffix = countryContext ? ` ${countryContext}` : '';
-  const heading = `${family.displayName} Phones and Prices${countrySuffix}`;
+  const heading = `${family.displayName} ${categoryNoun.titleNoun} and Prices${countrySuffix}`;
   const supportedCategory =
     args.categorySlug in CONTENT_CLUSTER_SUPPORT
       ? (args.categorySlug as SupportedClusterCategory)
@@ -48,10 +86,14 @@ async function loadModelFamilyAuthorityPage(args: {
     ? {
         pageKind: 'category' as const,
         categorySlug: supportedCategory,
-        brands: [brandPage.brand.displayName, brandPage.brand.brandKey],
+        brands: [
+          brandPage.brand.displayName,
+          brandPage.brand.brandKey,
+          ...(brandPage.brand.brandAliases ?? []),
+        ],
         modelFamilySlug: family.familyKey,
-        productNames: products.map((product) => product.name),
-        productSlugs: products.map((product) => product.slug),
+        productNames: matchedProducts.map((product) => product.name),
+        productSlugs: matchedProducts.map((product) => product.slug),
       }
     : null;
   const guidePosts = guideContext
@@ -62,14 +104,19 @@ async function loadModelFamilyAuthorityPage(args: {
     ...brandPage,
     canonicalUrl,
     heading,
-    intro: `Compare ${products.length} available ${family.displayName} phones from ${brandPage.merchant.business_name}, including current prices, specifications, condition, and availability.`,
+    intro: family.intro
+      ? family.intro.replaceAll(
+          '{merchantName}',
+          brandPage.merchant.business_name
+        )
+      : `Compare ${matchedProducts.length} available ${family.displayName} ${categoryNoun.lowerNoun} from ${brandPage.merchant.business_name}, including current prices, specifications, condition, and availability.`,
     metaTitle: buildStorefrontMetadataTitle({
       title: heading,
       suffix: brandPage.merchant.business_name,
       fallback: family.displayName,
     }).title,
-    metaDescription: `Compare ${products.length} ${family.displayName} phones from ${brandPage.merchant.business_name}, with current prices, specifications, condition, and availability${countrySuffix}.`,
-    products,
+    metaDescription: `Compare ${matchedProducts.length} ${family.displayName} ${categoryNoun.lowerNoun} from ${brandPage.merchant.business_name}, with current prices, specifications, condition, and availability${countrySuffix}.`,
+    products: matchedProducts,
     guideLinks: guideContext
       ? buildCommercialGuideLinks({
           storeUrl: buildStoreUrl(brandPage.merchant),
@@ -78,7 +125,7 @@ async function loadModelFamilyAuthorityPage(args: {
         })
       : [],
     brand: { ...brandPage.brand, displayName: family.displayName },
-    familyLinks: [],
+    familyLinks: siblingFamilyLinks,
     breadcrumbItems: [
       ...brandPage.breadcrumbItems,
       { name: family.displayName, url: canonicalUrl },

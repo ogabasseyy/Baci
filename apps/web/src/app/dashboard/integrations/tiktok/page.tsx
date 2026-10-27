@@ -20,11 +20,13 @@ import { asRoute } from '@/lib/routes';
 interface TikTokSettings {
   tiktok_pixel_id: string | null;
   tiktok_access_token: string | null;
+  tiktok_access_token_configured: boolean;
 }
 
 const SETTINGS_KEYS: (keyof TikTokSettings)[] = [
   'tiktok_pixel_id',
   'tiktok_access_token',
+  'tiktok_access_token_configured',
 ];
 
 export default function TikTokIntegrationPage() {
@@ -38,7 +40,7 @@ export default function TikTokIntegrationPage() {
   const handleSave = async (pixelId: string, token: string) => {
     await saveSettings({
       tiktok_pixel_id: pixelId || null,
-      tiktok_access_token: token || null,
+      ...(token.trim() ? { tiktok_access_token: token.trim() } : {}),
     });
   };
 
@@ -158,7 +160,8 @@ export default function TikTokIntegrationPage() {
       <TrackingPixelSection
         platform="TikTok"
         pixelId={settings?.tiktok_pixel_id || ''}
-        accessToken={settings?.tiktok_access_token || ''}
+        tokenConfigured={settings?.tiktok_access_token_configured === true}
+        onDisconnect={() => saveSettings({ tiktok_access_token: null })}
         pixelLabel="Pixel ID"
         tokenLabel="Access Token"
         onSave={handleSave}

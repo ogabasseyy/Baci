@@ -32,6 +32,20 @@ describe('eventPipelineJumiaCredentialPaths', () => {
     }
   });
 
+  it('registers only the exact preflight route credential roots', () => {
+    const preflightRoute =
+      'apps/web/src/app/api/marketplace/jumia/products/preflight/route.ts';
+    expect(jumiaApiRoutesUsingClient).toContain(preflightRoute);
+    expect(jumiaApiRoutesUsingClient).not.toContain(
+      'apps/web/src/app/api/marketplace/jumia/products/preflight-preview/route.ts'
+    );
+    expect(eventPipelineJumiaCredentialPaths).toContainEqual([
+      preflightRoute,
+      'apps/web/src/lib/jumia/client.ts',
+      'apps/web/src/env.ts',
+    ]);
+  });
+
   it('includes callback and client persistence paths', () => {
     expect(eventPipelineJumiaCredentialPaths).toContainEqual([
       'apps/web/src/scripts/sync-jumia-orders.ts',

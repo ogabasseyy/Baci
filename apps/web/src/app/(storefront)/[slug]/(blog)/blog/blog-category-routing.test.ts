@@ -9,6 +9,7 @@ import {
   getCollidingBlogCategorySlugs,
   getOgabasseyBlogCategoryAliasSlug,
   hasBlogCategorySlugCollision,
+  isOgabasseyBlogStaticTenant,
   OGABASSEY_BLOG_PRIMARY_STATIC_TENANT,
   OGABASSEY_BLOG_STATIC_TENANTS,
 } from './blog-category-routing';
@@ -93,14 +94,24 @@ describe('blog category routing', () => {
     ).toBe('Cases & Covers');
   });
 
-  it('keeps review category slugs exact and exposes the Ogabassey cleanup alias separately', () => {
+  it('keeps review and news category slugs exact and exposes the Ogabassey cleanup aliases separately', () => {
     expect(getCanonicalBlogCategorySlug('review')).toBe('review');
     expect(getOgabasseyBlogCategoryAliasSlug('review')).toBe('reviews');
+    expect(getCanonicalBlogCategorySlug('news')).toBe('news');
+    expect(getOgabasseyBlogCategoryAliasSlug('news')).toBe('tech-news');
+    expect(getOgabasseyBlogCategoryAliasSlug('smartphones')).toBeNull();
+    expect(isOgabasseyBlogStaticTenant('ogabassey.com')).toBe(true);
+    expect(isOgabasseyBlogStaticTenant('ogabassey')).toBe(true);
+    expect(isOgabasseyBlogStaticTenant('other-tenant')).toBe(false);
     expect(findBlogCategoryLabelBySlug(['Review'], 'review')).toBe('Review');
     expect(findBlogCategoryLabelBySlug(['Reviews'], 'review')).toBeNull();
+    expect(findBlogCategoryLabelBySlug(['Tech News'], 'news')).toBeNull();
     expect(buildBlogCategorySchemaUrl('https://ogabassey.com', 'Reviews')).toBe(
       'https://ogabassey.com/blog/category/reviews'
     );
+    expect(
+      buildBlogCategorySchemaUrl('https://ogabassey.com', 'Tech News')
+    ).toBe('https://ogabassey.com/blog/category/tech-news');
   });
 
   it('detects colliding category slugs', () => {

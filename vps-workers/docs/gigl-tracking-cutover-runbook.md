@@ -373,18 +373,32 @@ fail) — this is announced and intentional:
    the membership by hand to clear it).
 
 Later tracking changes follow the same deploy.sh-then-rerun rhythm.
-Web-only commits skip the exact-SHA/smoke verification once the latch
-exists; the marker still passes on install presence.
+Web-only commits reuse valid proof when tracking files and manifests match;
+the marker still passes on install presence.
 
 ## Stale-latch recovery
 
-The latch records the revision of the last passing smoke. If tracking
-changes land after that revision without a passing smoke (blocked
-tracking push followed by web pushes), the gate keeps blocking web
-pushes until the tree is re-smoked. Recover with `deploy.sh` from
-current main, then either push any tracking change (its smoke
-re-latches at HEAD) or dispatch the workflow (dispatch always runs the
-full smoke live and re-latches on success).
+The latch records the installed revision and credential identity of the last
+passing smoke. A worker promotion can preserve a latch from the previous
+revision. On a non-tracking push, readiness compares the installed tracking
+files (including GIGL migrations) and dependency manifests with the release,
+independently of that old latch. If both match, the workflow automatically
+runs a fresh live smoke **after migrations**. It pins the installed SHA seen
+at readiness, holds the deployment and GIGL locks, rechecks the installation
+and credential identity, then atomically records proof for that installed SHA.
+It never copies the release SHA onto proof for a different worker.
+
+Missing or rotated proof can recover this way; actual code or dependency
+drift cannot. For drift, use the [coordinated release procedure](../../docs/production-release-coordination.md)
+to converge workers from current main and run the postmigration smoke. Tracking
+pushes and manual dispatches still require exact release-SHA installation.
+Never edit the latch manually or call the release coordinator inside its own
+deployment workflow.
+
+The final `production-release-outcome` job fails when a required publication
+is skipped, failed or unconfirmed. Its summary shows the upstream job results
+and readiness booleans without credentials. A documentation-only push may
+intentionally skip publication; a green migration job alone is not a release.
 
 ## Manifest-only drift triage (worker-stale-first)
 
@@ -392,11 +406,10 @@ The monorepo manifests are deliberately outside the tracking smoke
 (see `.github/filters/deploy.yml`), but drift is ENFORCED: the latch
 check diffs the installed tree against HEAD over the manifests group,
 and the bypass term requires `manifest_drift == 'false'`. A
-manifest-only push therefore blocks the bypass (with a CI warning
-explaining the skip) until `deploy.sh` from current main converges
-the worker — plus a tracking push or dispatch to re-smoke, since the
-converge promote moves the installed SHA and invalidates the latch
-binding until the new tree is re-proven. For a time-sensitive
+manifest-only push therefore blocks publication until the coordinated
+release converges the worker and re-smokes it after migrations. Once installed
+contents match, a non-tracking push can also refresh stale proof automatically.
+For a time-sensitive
 dependency fix (transitive security patch the poller executes), run
 that sequence immediately after the merge instead of waiting. And one
 on-call rule survives the enforcement: **a manifest-only push
@@ -446,8 +459,8 @@ disabled smoke still probes the scope hook first (an already-issued JWT
 stays usable while the grant is live, so the latch must not certify an
 unreloaded hook); with no token it latches vacuously. The moment GIGL is
 re-enabled, that latch stops validating (by design — a disabled run must
-never certify enabled function), so the first non-tracking push after
-re-enabling BLOCKS until a live smoke re-proves the token+hook+provider.
+never certify enabled function). The next eligible non-tracking push runs a
+fresh postmigration smoke; it publishes only if token+hook+provider are proven.
 Procedure:
 
 1. Provision/verify `GIGL_TRACKING_WORKER_TOKEN` in the VPS `.env`
@@ -458,8 +471,8 @@ Procedure:
    capability smoke runs live and writes an enabled latch.
 4. Confirm the next web push deploys without a latch block.
 
-Skipping step 3 leaves web deploys blocked with `tracking_stale=true`
-until some smoke succeeds — that is the gate working, not a malfunction.
+An eligible non-tracking push can perform step 3 automatically. Failed smoke
+or installed code/dependency drift still blocks publication until resolved.
 
 ## Interim LOGIN password removal (one-time, post-merge)
 

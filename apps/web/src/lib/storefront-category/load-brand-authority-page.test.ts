@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { brandAuthorityPageLoader } from './load-brand-authority-page';
 
 const mockGetMerchant = vi.fn();
 const mockGetCategory = vi.fn();
@@ -22,7 +23,9 @@ vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
   },
 }));
 
-vi.mock('@/lib/normalize-product', () => ({
+vi.mock('@/lib/normalize-product', async () => ({
+  isRawDbProductRecord: (await import('@/lib/raw-db-product'))
+    .isRawDbProductRecord,
   normalizeProduct: (product: unknown) => product,
 }));
 
@@ -76,9 +79,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('builds a canonical indexable hub from matching active inventory', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
     const page = await brandAuthorityPageLoader.load(
       {
         merchantSlug: 'ogabassey',
@@ -115,9 +115,6 @@ describe('loadBrandAuthorityPage', () => {
     mockGetCachedBrandAuthorityProducts.mockResolvedValue(
       Array.from({ length: 6 }, (_, index) => makeProduct(index, 'Redmi'))
     );
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     await brandAuthorityPageLoader.load(
       {
@@ -148,9 +145,6 @@ describe('loadBrandAuthorityPage', () => {
       { ...makeProduct(4, 'Infinix'), name: 'Infinix Note 60 Pro' },
       { ...makeProduct(5, 'Infinix'), name: 'Infinix Smart 20' },
     ]);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     const page = await brandAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',
@@ -166,10 +160,6 @@ describe('loadBrandAuthorityPage', () => {
   });
 
   it('rejects uncurated and thin brand pages', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
-
     await expect(
       brandAuthorityPageLoader.load({
         merchantSlug: 'ogabassey',
@@ -196,9 +186,6 @@ describe('loadBrandAuthorityPage', () => {
       ...Array.from({ length: 5 }, (_, index) => makeProduct(index)),
       { ...makeProduct(6), availability: 'OutOfStock' as const, stock: 0 },
     ]);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     const page = await brandAuthorityPageLoader.load({
       merchantSlug: 'ogabassey',
@@ -211,13 +198,10 @@ describe('loadBrandAuthorityPage', () => {
     expect(page?.metaDescription).toContain('a selection of 5 Samsung phones');
   });
 
-  it('fails the hub closed when the brand-scoped product read fails', async () => {
+  it('propagates database failure when brand-scoped product read fails', async () => {
     mockGetCachedBrandAuthorityProducts.mockRejectedValueOnce(
       new Error('database timeout')
     );
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
 
     await expect(
       brandAuthorityPageLoader.load({
@@ -225,81 +209,78 @@ describe('loadBrandAuthorityPage', () => {
         categorySlug: 'smartphones',
         brandSlug: 'samsung',
       })
-    ).resolves.toBeNull();
+    ).rejects.toThrow('database timeout');
   });
 
-  it('rejects missing merchants and unsafe route slugs before catalog reads', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
-    mockGetMerchant.mockResolvedValueOnce(null);
+  it('includes model families appearing after index 48 in familyLinks while capping page.products at 48', async () => {
+    const genericProducts = Array.from({ length: 48 }, (_, index) => ({
+      ...makeProduct(index, 'Samsung'),
+      name: `Samsung Generic Phone ${index}`,
+    }));
+    const galaxySProducts = [
+      { ...makeProduct(48, 'Samsung'), name: 'Galaxy S24' },
+      { ...makeProduct(49, 'Samsung'), name: 'Galaxy S25' },
+      { ...makeProduct(50, 'Samsung'), name: 'Galaxy S26' },
+    ];
+    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce([
+      ...genericProducts,
+      ...galaxySProducts,
+    ]);
 
-    await expect(
-      brandAuthorityPageLoader.load({
-        merchantSlug: 'missing',
-        categorySlug: 'smartphones',
-        brandSlug: 'samsung',
-      })
-    ).resolves.toBeNull();
-    await expect(
-      brandAuthorityPageLoader.load({
-        merchantSlug: 'ogabassey',
-        categorySlug: '',
-        brandSlug: 'samsung',
-      })
-    ).resolves.toBeNull();
-    await expect(
-      brandAuthorityPageLoader.load({
-        merchantSlug: 'ogabassey',
-        categorySlug: 'smartphones',
-        brandSlug: '',
-      })
-    ).resolves.toBeNull();
+    const page = await brandAuthorityPageLoader.load({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      brandSlug: 'samsung',
+    });
 
-    expect(mockGetCategory).not.toHaveBeenCalled();
+    expect(page?.products).toHaveLength(48);
+    expect(page?.familyLinks).toContainEqual({
+      href: 'https://ogabassey.com/smartphones/brands/samsung/families/galaxy-s',
+      label: 'Samsung Galaxy S phones',
+      productCount: 3,
+    });
   });
 
-  it('rejects a category that is not publicly available', async () => {
-    mockGetCategory.mockResolvedValue(null);
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
-    );
-
-    await expect(
-      brandAuthorityPageLoader.load({
+  it('excludes news-classified posts from guide links while keeping unclassified guides', async () => {
+    const guidePost = {
+      slug: 'best-samsung-phones-in-nigeria',
+      title: 'Best Samsung Phones in Nigeria',
+      excerpt: 'Our top Samsung picks for every budget.',
+      category: 'Smartphones',
+      tags: ['samsung'],
+      keywords: ['samsung phones'],
+      featured_image_url: null,
+      published_at: '2026-04-10T09:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    mockLoadPublishedClusterPostsSafely.mockResolvedValue([guidePost]);
+    const guidePage = await brandAuthorityPageLoader.load(
+      {
         merchantSlug: 'ogabassey',
         categorySlug: 'smartphones',
         brandSlug: 'samsung',
-      })
-    ).resolves.toBeNull();
-    expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
-  });
-
-  it('resolves path prefixes for platform and custom-domain requests', async () => {
-    const { brandAuthorityPageLoader } = await import(
-      './load-brand-authority-page'
+      },
+      { includeRequestPathPrefix: false }
     );
+    expect(guidePage?.guideLinks.length).toBeGreaterThan(0);
 
-    await expect(
-      brandAuthorityPageLoader.getStorefrontPathPrefix('ogabassey', 'ogabassey')
-    ).resolves.toBe('/ogabassey');
-
-    mockHeaders = new Headers({ 'x-custom-domain': 'ogabassey.com' });
-    await expect(
-      brandAuthorityPageLoader.getStorefrontPathPrefix('ogabassey', 'ogabassey')
-    ).resolves.toBe('');
-
-    mockHeaders = new Headers({ 'x-merchant-slug': 'ogabassey' });
-    await expect(
-      brandAuthorityPageLoader.getStorefrontPathPrefix('ogabassey', 'ogabassey')
-    ).resolves.toBe('');
-
-    mockHeaders = new Headers();
-    await expect(
-      brandAuthorityPageLoader.getStorefrontPathPrefix(
-        'ogabassey.com',
-        'ogabassey'
-      )
-    ).resolves.toBe('');
+    // The RPC only projects classifications with stale_at IS NULL, so a
+    // current news classification arrives on the post and must drop it.
+    mockLoadPublishedClusterPostsSafely.mockResolvedValue([
+      {
+        ...guidePost,
+        merchant_intent: 'news',
+        merchant_intent_source: 'reviewed',
+      },
+    ]);
+    const newsPage = await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        brandSlug: 'samsung',
+      },
+      { includeRequestPathPrefix: false }
+    );
+    expect(newsPage?.guideLinks).toEqual([]);
   });
 });

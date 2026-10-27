@@ -78,6 +78,7 @@ function priceLine(raw: RawCartLine): {
         raw.condition === 'refurbished'
           ? raw.condition
           : undefined,
+      ...(raw.offerId ? { offerId: raw.offerId } : {}),
       options: { ...raw.options },
       productId: raw.productId,
       variantId: raw.variantId ?? undefined,

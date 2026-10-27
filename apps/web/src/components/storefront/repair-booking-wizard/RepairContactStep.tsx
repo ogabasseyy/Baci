@@ -10,6 +10,7 @@ import {
 } from '@/components/address-autocomplete';
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -119,18 +120,10 @@ export function RepairContactStep({
                   <FormControl>
                     <RadioGroupItem className="peer sr-only" value="dropoff" />
                   </FormControl>
-                  <FormLabel
-                    className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 transition-all hover:bg-accent hover:text-accent-foreground has-data-[state=checked]:border-current peer-data-[state=checked]:border-current"
-                    style={{
-                      borderColor:
-                        field.value === 'dropoff'
-                          ? 'var(--theme-primary, #dc2626)'
-                          : undefined,
-                    }}
-                  >
+                  <FormLabel className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary">
                     <MapPin className="mb-2 size-6" />
                     <span className="font-medium">Drop-off</span>
-                    <span className="text-center text-xs text-muted-foreground">
+                    <span className="text-center text-xs text-store-background-text/70">
                       I'll bring it to you
                     </span>
                   </FormLabel>
@@ -139,18 +132,10 @@ export function RepairContactStep({
                   <FormControl>
                     <RadioGroupItem className="peer sr-only" value="pickup" />
                   </FormControl>
-                  <FormLabel
-                    className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 transition-all hover:bg-accent hover:text-accent-foreground has-data-[state=checked]:border-current peer-data-[state=checked]:border-current"
-                    style={{
-                      borderColor:
-                        field.value === 'pickup'
-                          ? 'var(--theme-primary, #dc2626)'
-                          : undefined,
-                    }}
-                  >
+                  <FormLabel className="flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-store-border bg-store-background p-4 transition-all hover:border-store-primary/50 hover:bg-store-primary/10 has-data-[state=checked]:border-store-primary peer-data-[state=checked]:border-store-primary">
                     <Truck className="mb-2 size-6" />
                     <span className="font-medium">Pickup</span>
-                    <span className="text-center text-xs text-muted-foreground">
+                    <span className="text-center text-xs text-store-background-text/70">
                       Pick up from me
                     </span>
                   </FormLabel>
@@ -174,13 +159,18 @@ export function RepairContactStep({
                   country="ng"
                   onChange={field.onChange}
                   onSelect={onAddressSelect}
-                  placeholder="Enter your address"
+                  placeholder="Search for your pickup address"
                   showIcon
                   value={field.value}
                 />
               </FormControl>
+              <FormDescription className="text-xs text-store-background-text/70">
+                Select an address suggestion to calculate the GIG Logistics
+                pickup fee. Typing an address without selecting a suggestion
+                cannot be quoted.
+              </FormDescription>
               {isCalculatingShipping && (
-                <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                <div className="mt-2 flex items-center text-sm text-store-background-text/70">
                   <Loader2 className="mr-2 size-3 animate-spin" /> Calculating
                   pickup fee…
                 </div>
@@ -191,9 +181,7 @@ export function RepairContactStep({
                     'mt-2 flex items-center justify-between gap-3 rounded-md border p-2 text-sm font-medium',
                     shippingQuote.error
                       ? 'border-destructive/30 bg-destructive/5 text-destructive'
-                      : shippingQuote.isFree
-                        ? 'border-green-200 bg-green-50 text-green-700'
-                        : 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-store-primary/30 bg-store-primary/5 text-store-background-text'
                   )}
                 >
                   <span className="flex items-center">
@@ -236,7 +224,7 @@ export function RepairContactStep({
                   type="datetime-local"
                   {...field}
                 />
-                <Calendar className="pointer-events-none absolute top-2.5 right-3 size-4 text-muted-foreground" />
+                <Calendar className="pointer-events-none absolute top-2.5 right-3 size-4 text-store-background-text/70" />
               </div>
             </FormControl>
             <FormMessage />

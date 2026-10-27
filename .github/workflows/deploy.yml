@@ -85,6 +85,8 @@ jobs:
       cutover_latched: ${{ steps.gigl-cutover-latch.outputs.latched }}
       tracking_stale: ${{ steps.gigl-cutover-latch.outputs.tracking_stale }}
       manifest_drift: ${{ steps.gigl-cutover-latch.outputs.manifest_drift }}
+      installed_sha: ${{ steps.gigl-cutover-latch.outputs.installed_sha }}
+      installed_tracking_stale: ${{ steps.gigl-cutover-latch.outputs.installed_tracking_stale }}
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -149,9 +151,11 @@ jobs:
         # tree against HEAD over the manifests group: the poller executes
         # that dependency tree, so a manifest-only push must not bypass
         # while the installed tree predates HEAD's manifests. This
-        # step never fails: every error reports latched=false / stale=true
-        # / drift=true.
-        # Tracking pushes don't need the signal (they run the smoke).
+        # step never fails: errors keep the relevant signal closed.
+        # installed_sha and installed_tracking_stale independently identify
+        # an equivalent installed tree eligible for a fresh postmigration
+        # smoke when proof is stale. They never authorize a smoke bypass.
+        # Tracking pushes run their exact-SHA smoke instead.
         # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch
         # only), not a production credential.
         env:
@@ -165,11 +169,11 @@ jobs:
         # would deploy without refreshing the worker. The enforcement
         # lives in the bypass term (manifest_drift closes it until
         # deploy.sh converges); this warning explains the resulting
-        # skip. The operator converges with a manual deploy.sh from
-        # current main.
+        # skip. The release coordinator converges workers from current main
+        # before the post-migration recovery smoke.
         if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
         run: >-
-          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed — production deploys stay gated until deploy.sh converges from current main plus a tracking push or dispatch re-smokes.'
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed. Converge the worker from current main with the release coordinator; once installed tracking code and manifests match this release, the post-migration recovery smoke can re-prove capability without an additional tracking push or dispatch.'
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via
@@ -301,81 +305,32 @@ jobs:
   # smoke in vps-drain-readiness would fail every first deploy from a schema
   # that predates the wrappers.
   gigl-worker-capability:
-    needs: [changes, db-migrations]
-    # Run only when the changeset can affect tracking: an unconditional live
-    # smoke would turn worker-secret drift into a full release freeze for
-    # unrelated web deploys — so the condition is `tracking` only. GIGL
-    # migrations are inside the tracking filter already; the broad
-    # `migrations` output must never gate this job. always() so a skipped
-    # changes job (manual dispatch) still runs the smoke — unset outputs
-    # fail closed — instead of landing the cron removal unverified. Deploy
-    # procedure: run vps-workers/deploy.sh before dispatching a tracking
-    # deploy.
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && needs.changes.outputs.tracking != 'false'
+    needs: [changes, db-migrations, vps-drain-readiness]
+    # Tracking changes and manual dispatch still require the exact release
+    # SHA. For a non-tracking push, repair stale proof only when the installed
+    # tracking code (including schema) and dependencies match this release.
+    # This always runs AFTER migrations; equivalence alone is never proof of
+    # live capability. Unknown outputs or genuine drift cannot take recovery.
+    if: always() && github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success' && needs.db-migrations.result == 'success' && (needs.changes.outputs.tracking != 'false' || ((needs.vps-drain-readiness.outputs.cutover_latched != 'true' || needs.vps-drain-readiness.outputs.tracking_stale != 'false') && needs.vps-drain-readiness.outputs.installed_tracking_stale == 'false' && needs.vps-drain-readiness.outputs.manifest_drift == 'false'))
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
       contents: read
-    # Production identity is file-authoritative: the latch resolver must
-    # fingerprint the installed dotenv, never a runner export (the smoke
-    # entry sets the same mode for the filter it execs through).
     env:
       GIGL_ENV_FILE_AUTHORITATIVE: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Recheck installed SHA before smoke
-        # A manual deploy.sh run may have replaced the worker between the
-        # readiness check and this post-migration job; smoking (and
-        # latching) a different revision than readiness verified would
-        # record the workflow SHA against an unverified worker. Recheck
-        # install identity immediately before the smoke/latch sequence.
+      - name: Verify, smoke and persist the installed GIGL capability
+        # Pin the readiness-observed worker on recovery. The locked helper
+        # refuses a concurrent promote, dirty checkout, changed schedule,
+        # failed smoke or identity drift and writes proof atomically only
+        # for the installed revision it actually verified.
         env:
-          BACI_EXPECTED_APP_SHA: ${{ github.sha }}
+          BACI_EXPECTED_APP_SHA: ${{ needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.installed_sha || github.sha }}
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
-      - name: Capture pre-smoke latch identity
-        # The smoke and the latch persist below are separate steps: an
-        # operator edit to the worker .env between them would otherwise
-        # latch a fingerprint the live probe never smoked. Capture the
-        # identity now; the persist step re-resolves and refuses to write
-        # on any drift, forcing a clean re-run.
-        env:
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: |
-          echo "GIGL_PRE_SMOKE_IDENTITY=$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")" >> "$GITHUB_ENV"
-      - name: Smoke the live GIGL wrapper capability
-        env:
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: .github/scripts/smoke-gigl-worker-capability.sh
-      - name: Persist GIGL cutover latch
-        # Runs only after the smoke above succeeds (same job, no if): the
-        # latch file proves a live smoke verified token+hook+provider
-        # function at this revision. The gate requires it for
-        # tracking=false pushes,
-        # so a web push after a smoke-failed tracking push cannot deploy
-        # the cron removal with a broken worker. The latch records
-        # `<scope>:<sha>:<credential-fingerprint>` for the environment the smoke
-        # just observed: a GIGL-disabled skip (exit 0 no-op) latches a
-        # DISABLED scope, which authorizes the bypass only while the worker
-        # is still disabled — a disabled run can never certify future
-        # enabled function, and any enablement flip or token change since
-        # the smoke invalidates. The identity must also be unchanged
-        # since the pre-smoke capture: a token rotated or removed between
-        # the smoke and this persist was never probed, so a drifted
-        # identity fails the job instead of latching it. deploy.sh
-        # preserves this file on promote.
-        env:
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: |
-          identity="$(.github/scripts/resolve-gigl-latch-identity.sh "$VPS_WORKER_REMOTE_DIR")"
-          if [ "$identity" != "${GIGL_PRE_SMOKE_IDENTITY:-}" ]; then
-            echo "::error::GIGL latch identity changed between the capability smoke and the latch persist; refusing to latch an unsmoked token." >&2
-            exit 1
-          fi
-          printf '%s:%s:%s' "${identity%% *}" '${{ github.sha }}' "${identity#* }" \
-            > "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"
+        run: bash .github/scripts/refresh-gigl-cutover-latch.sh
 
   deploy-production:
     needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability, vps-drain-readiness]
@@ -389,13 +344,16 @@ jobs:
     # tracking push must stay blocked until some smoke succeeds and writes
     # the latch — and the latch revision must still cover the tree, so
     # tracking changes since the last successful smoke also block the
-    # bypass (recover with deploy.sh plus a tracking push or dispatch,
-    # which re-smokes at HEAD). The bypass also requires manifest_drift
+    # bypass. Equivalent installed contents can recover through the locked
+    # postmigration smoke above; actual drift requires a coordinated worker
+    # update. The bypass also requires manifest_drift
     # == 'false': manifests are deliberately outside the tracking smoke,
     # but the poller executes that dependency tree, so a manifest-only
     # push must not bypass while the installed tree predates HEAD's
-    # manifests. Recover the same way (deploy.sh from current main plus
-    # a tracking push or dispatch): the converge promote moves the
+    # manifests. Converge through the release coordinator (deploy.sh from
+    # current main). Once installed tracking code and manifests match the
+    # release, the post-migration recovery smoke can re-prove capability
+    # without an additional tracking push or dispatch. The promote moves the
     # installed SHA, which invalidates the latch binding until a fresh
     # smoke re-proves the new tree — so manifest changes end up
     # smoke-verified too, just outside the tracking gate. Steady-state
@@ -410,14 +368,12 @@ jobs:
     # requires coordinator identifiers: the in-job verifier fails an
     # uncoordinated dispatch closed before any production work.)
     if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true' && needs.vps-drain-readiness.outputs.tracking_stale == 'false' && needs.vps-drain-readiness.outputs.manifest_drift == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
-    # Run production prebuilt deploys on GitHub-hosted runners while the VPS
-    # provider is returning sustained CPU steal. This still uses a local
-    # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so
-    # Vercel does not perform a remote cloud build.
+    # Production builds and prebuilt publication use the approved VPS runner.
+    # A GitHub-hosted emergency builder requires explicit owner approval.
     concurrency:
       group: production-prebuilt-deploy
       cancel-in-progress: false
-    runs-on: ubuntu-24.04
+    runs-on: baci-deploy
     environment:
       name: production
       url: https://ogabassey.com
@@ -477,6 +433,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: .github/scripts/current-main-deploy-guard.mjs
+      - name: Verify publication tooling and worker barriers before build
+        # Catch missing CLI/auth/store prerequisites before an expensive build.
+        # The same guard still runs immediately before publish and each promote.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - uses: ./.github/actions/pnpm-install-cached
       # Pin Vercel CLI + allow esbuild postinstall in an isolated runner-temp
       # package so pnpm 10's strict ERR_PNPM_IGNORED_BUILDS does not block
@@ -649,3 +611,27 @@ jobs:
         if: always()
         run: |
           rm -rf .vercel
+
+  production-release-outcome:
+    name: Confirm production publication outcome
+    needs: [changes, vps-drain-readiness, db-migrations, gigl-worker-capability, cwv-runner-contracts, deploy-production]
+    # A required deployment skipped by a safety gate must make the run fail.
+    # This observes terminal results; it never relaxes or retries those gates.
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/check-production-release-outcome.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Require successful publication for release changes
+        env:
+          RELEASE_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node .github/scripts/check-production-release-outcome.mjs

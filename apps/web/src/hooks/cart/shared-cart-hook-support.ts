@@ -42,6 +42,7 @@ export interface UseSharedCartResult {
   cart: SharedCartDisplayItem[];
   cartId: string | null;
   version: number | null;
+  isTerminal: boolean;
   cartCount: number;
   cartTotal: number;
   isHydrated: boolean;
@@ -220,6 +221,7 @@ export function buildCommand(
     const item = cartItemToIdentity({
       condition: intent.options?.condition,
       id: intent.product.id,
+      offerId: intent.options?.offerId,
       selectedColor: intent.options?.color,
       selectedColorValue: intent.options?.colorValue,
       selectedStorage: intent.options?.storage,

@@ -8,10 +8,6 @@ vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ basePath: '' }),
 }));
 
-vi.mock('@/lib/consent-mode', () => ({
-  updateConsentMode: vi.fn(),
-}));
-
 vi.mock('next/link', () => ({
   default: ({
     children,

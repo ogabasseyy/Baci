@@ -85,7 +85,20 @@ describe('GET /api/storefront/[slug]/repairs/devices', () => {
     expect(body.groups).toEqual([{ brand: 'Apple', devices: [{ id: 'd1' }] }]);
     expect(mocks.getRepairDevicesForMerchant).toHaveBeenCalledWith(
       'merchant-1',
-      'iphone'
+      'iphone',
+      'catalog'
+    );
+  });
+
+  it('forwards suggestion mode to the data layer', async () => {
+    await GET(buildRequest('?q=iphone&mode=suggestions'), {
+      params: params('ogabassey'),
+    });
+
+    expect(mocks.getRepairDevicesForMerchant).toHaveBeenCalledWith(
+      'merchant-1',
+      'iphone',
+      'suggestions'
     );
   });
 

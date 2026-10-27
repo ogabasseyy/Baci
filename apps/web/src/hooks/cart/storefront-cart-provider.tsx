@@ -15,6 +15,7 @@ import {
 } from './cart-storage';
 import type { CartContextType, CartItem } from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
+import { delegatedCartValue } from './storefront-cart-delegated-value';
 import { useDeferredValidationActivation } from './use-deferred-validation-activation';
 import { useLegacyCartValidation } from './use-legacy-cart-validation';
 import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
@@ -268,22 +269,7 @@ export function StorefrontCartProvider({
     isHydrated: hydrated,
     sharedCartEnabled: delegated,
     sharedCartAccountsEnabled: delegated && sharedCartAccountsEnabled,
-    ...(delegated
-      ? {
-          syncStatus: shared.syncStatus,
-          syncError: shared.syncError,
-          retryPendingSync: shared.retryPendingSync,
-          importConflicts: shared.importConflicts,
-          importWarnings: shared.importWarnings,
-          discardLegacyImport: shared.discardLegacyImport,
-          resolveImportConflicts: shared.resolveImportConflicts,
-          sharedCartRef:
-            shared.cartId && shared.version !== null
-              ? { cartId: shared.cartId, version: shared.version }
-              : null,
-          refreshSharedCart: shared.refreshSharedCart,
-        }
-      : {}),
+    ...delegatedCartValue(delegated, shared),
   };
 
   const [snapshotStore] = useState(() => createCommittedSnapshotStore(value));

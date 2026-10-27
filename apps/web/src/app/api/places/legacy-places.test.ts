@@ -15,8 +15,8 @@ afterEach(() => {
 it('reserves every retry and stops before making an unbudgeted request', async () => {
   const reserve = vi
     .fn()
-    .mockResolvedValueOnce(true)
-    .mockResolvedValueOnce(false);
+    .mockResolvedValueOnce({ reserved: true })
+    .mockResolvedValueOnce({ reserved: false, reason: 'limit_reached' });
   mockFetch.mockResolvedValueOnce({
     ok: true,
     status: 200,
@@ -24,15 +24,26 @@ it('reserves every retry and stops before making an unbudgeted request', async (
   });
   const pending = fetchLegacyPlacesJson('https://provider.test', reserve);
   await vi.runAllTimersAsync();
-  expect(await pending).toEqual({ ok: false, status: 429 });
+  expect(await pending).toEqual({
+    ok: false,
+    status: 429,
+    failure: 'budget_limit_reached',
+  });
   expect(reserve).toHaveBeenCalledTimes(2);
   expect(mockFetch).toHaveBeenCalledOnce();
 });
 
 it('does not send a request when the initial reservation fails', async () => {
   expect(
-    await fetchLegacyPlacesJson('https://provider.test', async () => false)
-  ).toEqual({ ok: false, status: 429 });
+    await fetchLegacyPlacesJson('https://provider.test', async () => ({
+      reserved: false,
+      reason: 'unavailable',
+    }))
+  ).toEqual({
+    ok: false,
+    status: 503,
+    failure: 'budget_unavailable',
+  });
   expect(mockFetch).not.toHaveBeenCalled();
 });
 
@@ -40,7 +51,7 @@ it.each([
   'TimeoutError',
   'AbortError',
 ])('retries %s and reserves a new unit before succeeding', async (name) => {
-  const reserve = vi.fn(async () => true);
+  const reserve = vi.fn(async () => ({ reserved: true as const }));
   mockFetch
     .mockRejectedValueOnce(new DOMException('The operation timed out', name))
     .mockResolvedValueOnce({
@@ -58,19 +69,23 @@ it.each([
 it('stops timeout retries when the budget is exhausted', async () => {
   const reserve = vi
     .fn()
-    .mockResolvedValueOnce(true)
-    .mockResolvedValueOnce(false);
+    .mockResolvedValueOnce({ reserved: true })
+    .mockResolvedValueOnce({ reserved: false, reason: 'limit_reached' });
   mockFetch.mockRejectedValueOnce(
     new DOMException('Timed out', 'TimeoutError')
   );
   const pending = fetchLegacyPlacesJson('https://provider.test', reserve);
   await vi.runAllTimersAsync();
-  expect(await pending).toEqual({ ok: false, status: 429 });
+  expect(await pending).toEqual({
+    ok: false,
+    status: 429,
+    failure: 'budget_limit_reached',
+  });
   expect(mockFetch).toHaveBeenCalledOnce();
 });
 
 it('bounds repeated timeout retries at three upstream attempts', async () => {
-  const reserve = vi.fn(async () => true);
+  const reserve = vi.fn(async () => ({ reserved: true as const }));
   const timeout = new DOMException('Timed out', 'TimeoutError');
   mockFetch.mockRejectedValue(timeout);
   const assertion = expect(
@@ -83,7 +98,7 @@ it('bounds repeated timeout retries at three upstream attempts', async () => {
 });
 
 it('fails fast on timeout without retrying when the caller has a fallback', async () => {
-  const reserve = vi.fn(async () => true);
+  const reserve = vi.fn(async () => ({ reserved: true as const }));
   const timeout = new DOMException('Timed out', 'TimeoutError');
   mockFetch.mockRejectedValue(timeout);
   const assertion = expect(
@@ -98,7 +113,7 @@ it('fails fast on timeout without retrying when the caller has a fallback', asyn
 });
 
 it('still retries fast failures when timeout retries are disabled', async () => {
-  const reserve = vi.fn(async () => true);
+  const reserve = vi.fn(async () => ({ reserved: true as const }));
   mockFetch
     .mockRejectedValueOnce(new TypeError('fetch failed'))
     .mockResolvedValueOnce({

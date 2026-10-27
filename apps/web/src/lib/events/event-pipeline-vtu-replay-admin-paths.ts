@@ -6,6 +6,11 @@
 // — the same fulfillment the route itself performs. Both chains end
 // at the notification senders (email/SMS token delivery), never at a
 // client-reachable read.
+// The claim-join (PR #3741, Phase 2) invokes the same replay tail
+// server-side with a param-injected privileged client; the join adds
+// no new authority — the two join-prefixed chains below are the same
+// fulfillment chains rooted at the join module.
+const join = 'apps/web/src/lib/vtu-claim-join.ts';
 const replay = 'apps/web/src/lib/vtu-replay-fulfillment.ts';
 const fulfill = 'apps/web/src/lib/vtu-fulfillment.ts';
 const zepto = 'apps/web/src/lib/zeptomail.ts';
@@ -15,4 +20,6 @@ const admin = 'apps/web/src/lib/supabase/admin.ts';
 export const eventPipelineVtuReplayAdminPaths = [
   [replay, fulfill, zepto, sending, admin],
   [replay, fulfill, zepto, admin],
+  [join, replay, fulfill, zepto, sending, admin],
+  [join, replay, fulfill, zepto, admin],
 ];

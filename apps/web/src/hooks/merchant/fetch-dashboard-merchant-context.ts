@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { redactMerchantIntegrationContext } from '@/lib/merchant-feature-settings-redaction';
 import { dashboardMerchantContextSchema } from '@/schemas/dashboard-merchant-context';
 import { defaultStaffAccess } from './constants';
 import type { MerchantData, StaffAccess } from './types';
@@ -32,7 +33,9 @@ export async function fetchDashboardMerchantContext(
   }
 
   return {
-    merchant: parsed.data.merchant as MerchantData | null,
+    merchant: redactMerchantIntegrationContext(
+      parsed.data.merchant
+    ) as MerchantData | null,
     primaryDomain: parsed.data.primaryDomain?.domain ?? null,
     staffAccess: parsed.data.staffAccess as StaffAccess,
   };

@@ -133,9 +133,17 @@ describe('POST /api/internal/revalidate-products', () => {
 
     expect(res.status).toBe(200);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockMerchantLookup).toHaveBeenCalledWith('id', MERCHANT_ID);
     expect(mockScheduleStorefrontHostnamePurge).toHaveBeenCalledWith(
       'ogabassey'
+    );
+    expect(mockRevalidateProducts.mock.invocationCallOrder[1]).toBeLessThan(
+      mockScheduleStorefrontHostnamePurge.mock.invocationCallOrder[0]
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
     expect(mockScheduleStorefrontProductPurge).not.toHaveBeenCalled();
@@ -154,9 +162,17 @@ describe('POST /api/internal/revalidate-products', () => {
 
     expect(res.status).toBe(200);
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
+    expect(mockRevalidateProducts).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      undefined,
+      { expireImmediately: true }
+    );
     expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
       'ogabassey',
       [{ slug: 'iphone-15', categorySegment: 'smartphones' }]
+    );
+    expect(mockRevalidateProducts.mock.invocationCallOrder[1]).toBeLessThan(
+      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
     );
     expect(mockExpireProductBlogCache).toHaveBeenCalledWith(MERCHANT_ID);
   });

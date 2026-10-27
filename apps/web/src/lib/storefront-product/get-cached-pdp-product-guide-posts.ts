@@ -4,19 +4,27 @@ import { prepareStorefrontSingleAttemptQuery } from '@/lib/prepare-storefront-si
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 import type { PublishedClusterPost } from '@/lib/storefront-content/content-cluster-types';
 import { isPublishedClusterPost } from '@/lib/storefront-content/is-published-cluster-post';
+import { loadClassifiedClusterPosts } from '@/lib/storefront-content/load-classified-cluster-posts';
 
 const PDP_PRODUCT_GUIDE_LIMIT = 8;
 const PDP_PRODUCT_GUIDE_TIMEOUT_MS = 3_000;
 
-type LinkedBlogPost = PublishedClusterPost & { status?: string | null };
+type LinkedBlogPost = PublishedClusterPost & {
+  id?: string;
+  classification_revision?: string | null;
+  status?: string | null;
+};
+
+interface LinkedPostInput extends PublishedClusterPost {
+  id: string;
+  classification_revision: string | null;
+}
 
 interface LinkedBlogPostRow {
   blog_posts: LinkedBlogPost | LinkedBlogPost[] | null;
 }
 
-function normalizeLinkedPost(
-  row: LinkedBlogPostRow
-): PublishedClusterPost | null {
+function normalizeLinkedPost(row: LinkedBlogPostRow): LinkedPostInput | null {
   const post = Array.isArray(row.blog_posts)
     ? row.blog_posts[0]
     : row.blog_posts;
@@ -27,6 +35,8 @@ function normalizeLinkedPost(
   const title = post.title.trim();
 
   return {
+    id: typeof post.id === 'string' ? post.id : '',
+    classification_revision: post.classification_revision ?? null,
     category: post.category,
     excerpt: post.excerpt,
     featured_image_url: post.featured_image_url,
@@ -47,20 +57,27 @@ function normalizeLinkedPost(
  * hang under crawler load. A bounded indexed read plus local cache avoids both
  * the old combined-RPC timeout and a new remote-cache write on every PDP.
  */
-export function getCachedPdpProductGuidePosts(
+export async function getCachedPdpProductGuidePosts(
   merchantId: string,
   productId: string
 ): Promise<PublishedClusterPost[]> {
   if (typeof productId !== 'string' || productId.trim() === '') {
-    return Promise.resolve([]);
+    return [];
   }
-  return getCachedPdpProductGuidePostsForValidProduct(merchantId, productId);
+  const posts = await getCachedPdpProductGuidePostsForValidProduct(
+    merchantId,
+    productId
+  );
+  // Keep the optional classification overlay outside the product-keyed cache:
+  // a transient metadata failure must not cache an unclassified guide result.
+  const classifiedPosts = await loadClassifiedClusterPosts(merchantId, posts);
+  return classifiedPosts.filter((post) => post.merchant_intent !== 'news');
 }
 
 async function getCachedPdpProductGuidePostsForValidProduct(
   merchantId: string,
   productId: string
-): Promise<PublishedClusterPost[]> {
+): Promise<LinkedPostInput[]> {
   'use cache';
 
   try {
@@ -77,7 +94,7 @@ async function getCachedPdpProductGuidePostsForValidProduct(
   const query = getPublicSupabaseClient()
     .from('blog_post_products')
     .select(
-      'blog_posts!inner(slug, title, excerpt, category, tags, keywords, featured_image_url, published_at, reading_time_minutes, status)'
+      'blog_posts!inner(id, classification_revision, slug, title, excerpt, category, tags, keywords, featured_image_url, published_at, reading_time_minutes, status)'
     )
     .eq('merchant_id', merchantId)
     .eq('product_id', productId)
@@ -100,7 +117,7 @@ async function getCachedPdpProductGuidePostsForValidProduct(
 
     return ((data ?? []) as LinkedBlogPostRow[])
       .map(normalizeLinkedPost)
-      .filter((post): post is PublishedClusterPost => post !== null);
+      .filter((post): post is LinkedPostInput => post !== null);
   } finally {
     deadline.cleanup();
   }

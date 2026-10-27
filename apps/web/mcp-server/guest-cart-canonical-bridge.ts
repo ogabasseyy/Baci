@@ -20,6 +20,7 @@ const replySchema = z.object({
         .array(
           z.object({
             productId: z.string().uuid(),
+            offerId: z.string().uuid().optional(),
             quantity: z.number().int().min(1).max(10),
           })
         )
@@ -37,13 +38,14 @@ export interface GuestCanonicalBridge {
     token: string,
     input: {
       product_id: string;
+      offer_id?: string;
       quantity: number;
       expectedVersion?: number;
       operationId?: string;
     }
   ): Promise<{
     cart_token: string;
-    items: { product_id: string; quantity: number }[];
+    items: { product_id: string; offer_id?: string; quantity: number }[];
     expires_at: string;
     cart_url?: string;
     canonical_cart_id?: string;
@@ -177,7 +179,11 @@ export function createGuestCanonicalBridge(
   }
   function cartReply(token: string, reply: z.infer<typeof replySchema>) {
     if (!reply.state) throw new Error('Canonical cart unavailable');
-    return { cart_token: token, items: reply.state.lines.map((x) => ({ product_id: x.productId, quantity: x.quantity })),
+    return { cart_token: token, items: reply.state.lines.map((x) => ({
+      product_id: x.productId,
+      ...(x.offerId ? { offer_id: x.offerId } : {}),
+      quantity: x.quantity,
+    })),
       expires_at: reply.state.expiresAt, cart_url: reply.continueUrl ?? undefined,
       canonical_cart_id: reply.state.cartId, version: reply.state.version };
   }
@@ -186,6 +192,7 @@ export function createGuestCanonicalBridge(
     async update(token, input) {
       const reply = await send(token, {
         productId: input.product_id,
+        ...(input.offer_id ? { offerId: input.offer_id } : {}),
         quantity: input.quantity,
         expectedVersion: input.expectedVersion,
         operationId: input.operationId,

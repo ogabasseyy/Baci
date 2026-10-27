@@ -144,9 +144,12 @@ export async function ProductsPageContent({ params, searchParams }: PageProps) {
     currentProductIndex.totalCount === 0
       ? 0
       : rangeStart + currentProductIndex.products.length - 1;
-  const deepLinkProducts = firstPageProductIndex.products
-    .filter((product) => product.slug)
-    .slice(0, 18);
+  const deepLinkProducts =
+    currentPage > 1
+      ? firstPageProductIndex.products
+          .filter((product) => product.slug)
+          .slice(0, 18)
+      : [];
 
   return (
     <>

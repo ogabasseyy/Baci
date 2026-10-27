@@ -1,3 +1,6 @@
+import { reconcileOrphanedDeferredCartLogout } from '@/hooks/cart/cart-deferred-logout';
+import { CART_REQUEST_TIMEOUT_MS } from '@/hooks/cart/cart-request-deadline';
+import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
 // Session load/logout orchestration for the storefront customer auth provider.
 //
 // Extracted from `customer-auth-context.tsx` so the provider stays focused on
@@ -7,13 +10,20 @@
 //
 // The type imports below are type-only (erased at compile time); there is no
 // runtime cycle back into the context module.
+import { eraseRetiredCartCache } from '@/hooks/cart/retired-cart-cache';
 import {
+  beginDeferredCartLogout,
+  cancelDeferredCartLogout,
   clearCartDeviceRevocationPending,
+  clearCartDeviceSessionActive,
+  endDeferredCartLogout,
   markCartDeviceRevocationPending,
   revokeCartDeviceSession,
 } from '@/hooks/cart/shared-cart-session-revoke-client';
+import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
+import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import {
   clearCustomerAuthRollbackPending,
   getRememberedCustomerUserId,
@@ -29,25 +39,6 @@ export { resetRememberedCustomerSessionsForTests };
 interface CustomerSession {
   customer: Customer;
   user: CustomerUser;
-}
-
-async function retirePreviousAccountCartAuthority(
-  merchantSlug: string,
-  previousUserId: string
-): Promise<boolean> {
-  // Always mark revocation pending, clear local cart storage, and bump
-  // cartSessionGeneration so the browser drops local cart items and
-  // fences shared-cart adoption until server revocation succeeds.
-  markCartDeviceRevocationPending?.(merchantSlug);
-  clearCartStorage(merchantSlug, previousUserId);
-  const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok) {
-    setRememberedCustomerUserId(merchantSlug, previousUserId);
-    return false;
-  }
-  clearCartDeviceRevocationPending?.(merchantSlug);
-  setRememberedCustomerUserId(merchantSlug, null);
-  return true;
 }
 
 type CustomerSessionFetchResult =
@@ -104,6 +95,9 @@ export async function loadCustomerSession(
     merchantSlug,
     currentUserId
   );
+  // A page that closed mid-logout leaves a deferred marker behind;
+  // drop it once its lease expires so it cannot fence this load.
+  reconcileOrphanedDeferredCartLogout(merchantSlug);
   try {
     if (isCustomerAuthRollbackPending(merchantSlug)) {
       if (previousUserId) {
@@ -221,27 +215,82 @@ export async function performCustomerLogout(
   userId?: string | null
 ): Promise<void> {
   const previousUserId = getRememberedCustomerUserId(merchantSlug, userId);
-  // Do not clear Auth or report success until this device's cart
-  // authority is retired.
-  const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok)
-    throw new Error('Could not safely sign out. Please retry when connected.');
+  const retirement = beginCartSessionRetirement(merchantSlug);
+  markCartDeviceRevocationPending?.(merchantSlug);
+  // The deferred marker keeps concurrent lifecycle passes from
+  // clearing this revocation (and erasing the parked cache) before
+  // the auth logout commits.
+  beginDeferredCartLogout?.(merchantSlug);
+  bumpCartSessionGeneration({ merchantSlug });
+  let revokedOk = false;
   try {
-    const response = await fetch('/api/storefront/auth/logout', {
-      method: 'POST',
-    });
-    if (response.ok) {
-      clearCustomerAuthRollbackPending(merchantSlug);
+    const revoked = await retirement.drained
+      .then(() =>
+        revokeCartDeviceSession(merchantSlug, {
+          deferCacheErasure: true,
+          retiringUserId: previousUserId ?? userId,
+        })
+      )
+      .catch(() => ({ ok: false }));
+    if (!revoked.ok)
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
+    revokedOk = true;
+    let response: Response;
+    try {
+      response = await fetch('/api/storefront/auth/logout', {
+        method: 'POST',
+        signal:
+          typeof AbortSignal.timeout === 'function'
+            ? AbortSignal.timeout(CART_REQUEST_TIMEOUT_MS)
+            : undefined,
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
     }
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    setRememberedCustomerUserId(merchantSlug, null);
+    if (!response.ok) {
+      throw new Error(
+        'Could not safely sign out. Please retry when connected.'
+      );
+    }
+    endDeferredCartLogout?.(merchantSlug);
+    clearCustomerAuthRollbackPending(merchantSlug);
+    // Complete the deferred revocation cleanup now that logout committed.
+    // A storage failure must not strand the committed logout: keep the
+    // retirement fence for a later retry, but finish local sign-out.
+    const erased = eraseRetiredCartCache(
+      merchantSlug,
+      previousUserId ?? userId
+    );
+    if (erased) {
+      clearCartDeviceRevocationPending?.(merchantSlug);
+      clearCartDeviceSessionActive?.(merchantSlug);
+      // Clear cart on logout to prevent cart data leakage between
+      // users. Only on confirmed erasure: clearing unconditionally
+      // would delete unscoped fallback keys (possibly another
+      // merchant's parked cart) even when scoped erasure failed.
+      clearCartStorage(merchantSlug, previousUserId ?? userId);
+    }
+    // Only drop the remembered identity on confirmed erasure: it is
+    // the only record of which user the parked cache belongs to, and
+    // the retained revocation fence needs it for the retry cleanup.
+    if (erased) setRememberedCustomerUserId(merchantSlug, null);
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
-    // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug, previousUserId ?? userId);
+  } catch (error) {
+    // The auth logout did not commit: abandon the deferred revocation
+    // without erasing the parked cache. If revocation itself failed,
+    // keep its fence; the deferred marker always ends.
+    if (revokedOk) cancelDeferredCartLogout?.(merchantSlug);
+    else endDeferredCartLogout?.(merchantSlug);
+    throw error;
+  } finally {
+    retirement.release();
   }
 }

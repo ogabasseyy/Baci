@@ -1,3 +1,4 @@
+import { getAdTrackingData } from '@/lib/ad-tracking-cookies';
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
 import { getForwardableSelectedQuoteId } from './get-forwardable-selected-quote-id';
 import type { DeliveryMethod, SharedCartOrderBinding } from './types';
@@ -77,6 +78,7 @@ export function buildCheckoutOrderRequest({
     shipping_status: 'pending' as const,
     shipping_address: delivery.address,
     source: 'online_store' as const,
+    ad_tracking: getAdTrackingData(),
     delivery_method: delivery.method,
     ...(delivery.method === 'airport' && !delivery.quoteMatchesMethod
       ? { airport_type: delivery.airportType }

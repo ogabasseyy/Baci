@@ -128,6 +128,7 @@ export function CategoryPageResults({
 
         {/* Product Grid */}
         <div className={canShowFilters ? 'lg:col-span-3' : 'lg:col-span-4'}>
+          <h2 className="sr-only">{pageTitle} Product Catalog</h2>
           {!hasKnownProducts ? (
             <div className="text-center py-20 bg-store-background rounded-2xl border border-store-background-text/10 shadow-sm">
               <div className="size-16 bg-store-background-text/5 rounded-full flex items-center justify-center mx-auto mb-4">

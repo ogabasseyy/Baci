@@ -30,6 +30,7 @@ describe('AnalyticsProvider', () => {
     mockUseMerchantSafe.mockReturnValue({
       merchant: {
         feature_settings: {
+          chatgpt_pixel_id: ' chatgpt-context ',
           google_analytics_id: '   ',
           facebook_pixel_id: 12345,
         },
@@ -47,6 +48,7 @@ describe('AnalyticsProvider', () => {
     expect(mockAnalyticsPixelProvider).toHaveBeenCalledWith(
       {
         merchant: {
+          chatgpt_pixel_id: 'chatgpt-context',
           google_analytics_id: 'G-CONTEXT',
           facebook_pixel_id: '12345',
           tiktok_pixel_id: null,
@@ -79,6 +81,7 @@ describe('AnalyticsProvider', () => {
     expect(mockAnalyticsPixelProvider).toHaveBeenCalledWith(
       {
         merchant: {
+          chatgpt_pixel_id: null,
           google_analytics_id: 'G-FEATURE',
           facebook_pixel_id: null,
           tiktok_pixel_id: null,
@@ -94,6 +97,7 @@ describe('AnalyticsProvider', () => {
     mockUseMerchantSafe.mockReturnValue({
       merchant: {
         feature_settings: {
+          chatgpt_pixel_id: 'chatgpt-locked',
           google_analytics_id: 'G-FREE',
         },
         facebook_pixel_id: '12345',
@@ -107,6 +111,7 @@ describe('AnalyticsProvider', () => {
     expect(mockAnalyticsPixelProvider).toHaveBeenCalledWith(
       {
         merchant: {
+          chatgpt_pixel_id: null,
           google_analytics_id: null,
           facebook_pixel_id: null,
           tiktok_pixel_id: null,

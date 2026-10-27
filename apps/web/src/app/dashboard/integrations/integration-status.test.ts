@@ -17,7 +17,7 @@ describe('getIntegrationStatus', () => {
     const merchant = makeMerchant({
       feature_settings: {
         facebook_pixel_id: '1234567890',
-        facebook_capi_token: 'token',
+        facebook_capi_token_configured: true,
       },
     });
 
@@ -71,7 +71,7 @@ describe('getIntegrationStatus', () => {
     const merchant = makeMerchant({
       feature_settings: {
         facebook_pixel_id: '   ',
-        facebook_capi_token: 'token',
+        facebook_capi_token_configured: true,
       },
     });
 

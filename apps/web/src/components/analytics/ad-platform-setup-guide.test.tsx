@@ -11,11 +11,11 @@ const pinnedAssetDigests: Record<string, string> = {
   '/guides/ad-platforms/meta-settings.jpg':
     '89bee9add5c8ed98f5633d71ee0cbf5c5ae14924019eaa87b907c4dd307564a9',
   '/guides/ad-platforms/tiktok-settings.jpg':
-    'e0b6ee0304bb81ae0f5af57fff87cc03ab4199b4d5d806d939e7350a3bd98c63',
+    '65d62ae47eb904e6567fb8c3ed018da0a9ccf20738ba82dececc52693d3c821d',
   '/guides/ad-platforms/snapchat-pixel-settings.jpg':
     '320dd7a1b9fcb586e13b543434161c2fdb527d439d8989541c380f28f7b66c05',
   '/guides/ad-platforms/x-connection-settings.jpg':
-    '813b756510b5bcb0413d72dde361c5eef07bec6f4c73fe257eaf74d7a15fe4be',
+    '01925ae16ec7c8d09f2d9be3f6accc2823d306b16afe620268e375a8f235d59f',
 };
 const webRoot = resolve(__dirname, '../../../');
 const checklistPath = resolve(
@@ -74,7 +74,7 @@ describe('AdPlatformSetupGuide', () => {
         'Meta Pixel and Conversions API settings in Baci with identifiers masked',
       ],
       tiktok: [
-        'TikTok Pixel and Access Token settings in Baci; the Pixel ID is masked and the token value is not shown',
+        'TikTok Pixel ID and Access Token fields in Baci; the Pixel ID and saved-token status are masked',
       ],
       snapchat: [
         'Snapchat Pixel and optional Conversions API token fields in Baci; the Pixel ID is masked and the token field is empty',
@@ -129,6 +129,10 @@ describe('AdPlatformSetupGuide', () => {
     const checklist = readFileSync(checklistPath, 'utf8');
     expect(checklist).toMatch(
       /do not determine whether an\s+image is private/i
+    );
+    expect(checklist).toContain('no store domain is shown.');
+    expect(checklist).toMatch(
+      /no\s+save\/disconnect controls or saved-connection state/
     );
     for (const imagePath of Object.keys(pinnedAssetDigests)) {
       expect(checklist).toContain(imagePath.split('/').at(-1));

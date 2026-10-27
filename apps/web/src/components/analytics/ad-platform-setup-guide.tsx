@@ -52,9 +52,9 @@ const guides: Record<AdPlatform, Guide> = {
     screenshots: [
       {
         src: '/guides/ad-platforms/tiktok-settings.jpg',
-        alt: 'TikTok Pixel and Access Token settings in Baci; the Pixel ID is masked and the token value is not shown',
+        alt: 'TikTok Pixel ID and Access Token fields in Baci; the Pixel ID and saved-token status are masked',
         width: 1124,
-        height: 367,
+        height: 250,
       },
     ],
     steps: [
@@ -92,7 +92,7 @@ const guides: Record<AdPlatform, Guide> = {
         src: '/guides/ad-platforms/x-connection-settings.jpg',
         alt: 'X screenshot of the optional server credential fields in Baci; all input values are blank',
         width: 700,
-        height: 620,
+        height: 522,
       },
     ],
     steps: [
@@ -137,8 +137,8 @@ export function AdPlatformSetupGuide({ platform }: { platform: AdPlatform }) {
             <p className="text-sm text-muted-foreground">
               These genuine settings screens have account identifiers and
               credential values masked. Enter values from your own provider
-              account; never copy credentials from an image. Generic saved
-              status text may remain visible, but no credential value does.
+              account; never copy credentials from an image. Saved-credential
+              indicators are omitted from these screenshots.
             </p>
             {platform === 'x' ? (
               <p className="text-sm text-muted-foreground">

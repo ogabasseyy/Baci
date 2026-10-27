@@ -7,15 +7,16 @@ checklist aligned with the images used by the merchant guides.
 
 ## Baci provider settings
 
-- [ ] `meta-settings.jpg`: Pixel ID, store domain, and token state are masked.
-- [ ] `tiktok-settings.jpg`: Pixel ID is masked; the token field shows only the
-      generic saved-value notice, no token value; the full fields and Save
-      Changes control are visible.
-- [ ] `snapchat-pixel-settings.jpg`: store domain and Pixel ID are masked; the
-      optional token field is empty.
+- [ ] `meta-settings.jpg`: Pixel ID and Conversions API token fields are blank
+      or masked; no store domain is shown.
+- [ ] `tiktok-settings.jpg`: Pixel ID and saved-token status are masked; the
+      crop contains only the complete Pixel ID and Access Token fields, with no
+      save/disconnect controls or saved-connection state.
+- [ ] `snapchat-pixel-settings.jpg`: Pixel ID is masked and the optional token
+      field is empty; no store domain is shown.
 - [ ] `x-connection-settings.jpg`: no account identity or Pixel ID is shown;
-      credential fields are blank and the crop begins at a complete field label
-      without clipping any text or form controls.
+      credential fields are blank and the crop ends after the complete fields,
+      before any saved-connection state or buttons.
 
 ## ChatGPT Ads provider screens
 

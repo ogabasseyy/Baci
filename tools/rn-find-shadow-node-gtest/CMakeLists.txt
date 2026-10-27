@@ -99,6 +99,7 @@ target_include_directories(yoga INTERFACE ${REACT_COMMON_DIR}/yoga)
 
 include_directories(${REACT_COMMON_DIR})
 
+add_react_common_subdir(react/cxxstableapi)
 add_react_common_subdir(jsi)
 add_react_common_subdir(oscompat)
 add_react_common_subdir(callinvoker)
@@ -108,6 +109,7 @@ add_react_common_subdir(react/timing)
 add_react_common_subdir(reactperflogger)
 add_react_common_subdir(logger)
 add_react_common_subdir(react/featureflags)
+add_react_common_subdir(jserrorhandler)
 add_react_common_subdir(react/utils)
 add_react_common_subdir(jsinspector-modern/cdp)
 add_react_common_subdir(jsinspector-modern/network)
@@ -157,7 +159,7 @@ if(NOT EXISTS "${FIND_SHADOW_TEST_SRC}")
 endif()
 
 add_executable(find_shadow_node_by_tag_test ${FIND_SHADOW_TEST_SRC})
-target_include_directories(find_shadow_node_by_tag_test PRIVATE
+target_include_directories(find_shadow_node_by_tag_test BEFORE PRIVATE
   ${HOST_OVERRIDES_DIR}
   ${REACT_COMMON_DIR}
   ${REACT_COMMON_DIR}/jsi

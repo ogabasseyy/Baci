@@ -129,4 +129,5 @@ test('ReactCommon headers are visible to oscompat and other native targets', () 
   const rootInclude = body.indexOf('include_directories(${REACT_COMMON_DIR})');
   const oscompat = body.indexOf('add_react_common_subdir(oscompat)');
   assert.ok(rootInclude >= 0 && rootInclude < oscompat);
+  assert.match(body, /target_include_directories\(find_shadow_node_by_tag_test BEFORE PRIVATE\s+\$\{HOST_OVERRIDES_DIR\}/);
 });

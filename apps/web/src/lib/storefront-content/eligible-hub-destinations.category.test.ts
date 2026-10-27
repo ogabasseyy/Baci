@@ -26,6 +26,29 @@ describe('eligible-hub-destinations', () => {
       );
     });
 
+    it('trusts category_slug-only evidence as caller input (documented contract)', () => {
+      const products = [
+        'iPhone 15 Pro Max',
+        'iPhone 15 Pro',
+        'iPhone 15',
+        'iPhone 14',
+        'iPhone 13',
+      ].map((name) => ({
+        name,
+        brand: 'Apple',
+        stock: 5,
+        category_slug: 'smartphones',
+      }));
+      const result = resolveEligibleCategoryHubDestinations({
+        storeUrl: 'https://store.test',
+        categorySlug: 'smartphones',
+        products,
+      });
+      expect(result.brandHubs[0]?.href).toBe(
+        'https://store.test/smartphones/brands/apple'
+      );
+    });
+
     it('counts legacy category-text-only products toward hub eligibility', () => {
       const products = [
         'iPhone 15 Pro Max',

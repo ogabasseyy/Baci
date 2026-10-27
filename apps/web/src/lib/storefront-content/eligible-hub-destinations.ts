@@ -43,7 +43,17 @@ export interface ResolvedEligibleCategoryHubDestinations {
   familyHubs: EligibleHubItem[];
 }
 
-/** PROVISIONAL eligibility from caller-supplied rows (raw stock) — not destination-verified. Callers must re-verify against destination inventory before emitting links (see verifyEligibleHubsAgainstDestination), unless the pool is destination-verified. */
+/**
+ * PROVISIONAL eligibility from caller-supplied rows (raw stock) — not
+ * destination-verified. Callers must re-verify against destination
+ * inventory before emitting links (see
+ * verifyEligibleHubsAgainstDestination), unless the pool is
+ * destination-verified. Category evidence is trusted caller input:
+ * category_slug/category/category_slugs fields are accepted as supplied
+ * (the destination derives membership from category joins instead), so
+ * non-scoped callers must pass rows whose denormalized category fields
+ * agree with their join rows.
+ */
 export function resolveEligibleCategoryHubDestinations(
   input: ResolveEligibleCategoryHubDestinationsInput
 ): ResolvedEligibleCategoryHubDestinations {

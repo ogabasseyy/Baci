@@ -127,3 +127,24 @@ describe('always-mounted storefront client static import graph', () => {
     expect(findForbiddenChains(path.join(SRC, entry))).toEqual([]);
   });
 });
+
+const FIRST_PAINT_STOREFRONT_CLIENT_ENTRIES = [
+  'components/storefront/ad-attribution-capture.tsx',
+  'components/storefront/cookie-consent.tsx',
+  'components/storefront/ogabassey/pages/home.tsx',
+  'components/storefront/ogabassey/pages/product-details.tsx',
+  'components/storefront/ogabassey/pages/category-page.tsx',
+  'components/storefront/ogabassey/components/ProductCard.tsx',
+  'components/storefront/ogabassey/providers/v2-comparison-context.tsx',
+  'components/storefront/ogabassey/providers/v2-comparison-scope.tsx',
+  'app/(storefront)/[slug]/(catalog)/(listing)/search/search-compare-button.tsx',
+  'app/(storefront)/[slug]/(catalog)/(listing)/search/search-comparison.tsx',
+];
+
+describe('first-paint storefront client static import graph', () => {
+  it.each(
+    FIRST_PAINT_STOREFRONT_CLIENT_ENTRIES
+  )('%s keeps zod, supabase, and @/env out of its static graph', (entry) => {
+    expect(findForbiddenChains(path.join(SRC, entry))).toEqual([]);
+  });
+});

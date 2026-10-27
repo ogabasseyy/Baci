@@ -35,7 +35,7 @@ const guides: Record<AdPlatform, Guide> = {
         src: '/guides/ad-platforms/meta-settings.jpg',
         alt: 'Meta Pixel and Conversions API settings in Baci with identifiers masked',
         width: 1165,
-        height: 350,
+        height: 353,
       },
     ],
     steps: [

@@ -9,7 +9,7 @@ import { AdPlatformSetupGuide } from './ad-platform-setup-guide';
 // Digests detect changed binaries; they do not validate that a mask is present.
 const pinnedAssetDigests: Record<string, string> = {
   '/guides/ad-platforms/meta-settings.jpg':
-    'aced92857b686a695c7e9940701b2a8b77bcb9b92d2f3d9b4ec99ae3704c9402',
+    '5ac4e93a21a9aef5cabc1c95051fa364b250d143776786da1b1c1845ebdbba33',
   '/guides/ad-platforms/tiktok-settings.jpg':
     '65d62ae47eb904e6567fb8c3ed018da0a9ccf20738ba82dececc52693d3c821d',
   '/guides/ad-platforms/snapchat-pixel-settings.jpg':

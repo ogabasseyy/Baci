@@ -26,13 +26,10 @@ import { GET } from './route';
 
 const baseClaim = {
   claimed_at: null,
-  claimed_by_user_id: null,
-  customer_email: 'basseybjohn@yahoo.co.uk',
-  customer_id: 'customer-1',
   customer_name: 'Bassey John',
   expires_at: '2099-01-01T00:00:00.000Z',
   id: 'claim-1',
-  merchant_id: 'merchant-1',
+  kind: 'manual',
   merchant: {
     business_name: 'Ogabassey',
     slug: 'ogabassey',
@@ -60,7 +57,7 @@ function createSupabaseRpcMock(
 ) {
   return {
     rpc: vi.fn((name: string) => {
-      if (name === 'preview_receipt_claim') {
+      if (name === 'preview_receipt_claim_v3') {
         return Promise.resolve(response);
       }
 
@@ -108,7 +105,7 @@ describe('GET /api/storefront/receipts/claims/[token]', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim', {
+    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim_v3', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(supabase.rpc).toHaveBeenCalledWith('record_receipt_claim_click_v2', {

@@ -143,7 +143,7 @@ UPDATE public.receipt_claims SET notification_sent_at = now() WHERE token_hash =
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('cd', 32))->>'status' = 'created'), 'recipient correction rotates the redeemed claim');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('cd', 32) AND claimed_at IS NULL AND claimed_by_user_id IS NULL AND notification_sent_at IS NULL AND customer_email = 'corrected@example.com' FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'rotation clears the stale redemption for the new recipient');
 SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL AND delivered_token_hash IS NULL FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'recipient correction revokes historical hashes');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('cb', 32)) IS NULL), 'revoked hash no longer previews the new recipient');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('cb', 32)) IS NULL), 'revoked hash no longer previews the new recipient');
 SELECT public.record_receipt_claim_click_v2(repeat('cb', 32), 'web');
 SELECT pg_temp.assert_true((SELECT click_count = 0 FROM public.receipt_claims WHERE token_hash = repeat('cd', 32)), 'revoked hash records no activity');
 -- A retry rotation must not orphan the mailed link from the attempt before
@@ -158,7 +158,7 @@ SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SE
 SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL FROM public.receipt_claims WHERE token_hash = repeat('d1', 32)), 'fresh claim carries no previous hash');
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d2', 32))->>'status' = 'created'), 'retry rotates the grace-probe claim');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('d2', 32) AND previous_token_hash = repeat('d1', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'rotation stashes the replaced hash');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d1', 32)) IS NOT NULL), 'mailed link from before the rotation still previews');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('d1', 32)) IS NOT NULL), 'mailed link from before the rotation still previews');
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000094', 'grace@example.com', now(), null);
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
 SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
@@ -169,7 +169,7 @@ RESET ROLE;
 -- falls off while the newest predecessor still works.
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d3', 32))->>'status' = 'created'), 'second retry rotates the grace-probe claim again');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('d3', 32) AND previous_token_hash = repeat('d2', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'second rotation shifts the grace window');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d1', 32)) IS NULL), 'twice-superseded hash no longer previews');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('d1', 32)) IS NULL), 'twice-superseded hash no longer previews');
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
 SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
 SET LOCAL ROLE authenticated;
@@ -177,7 +177,7 @@ SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d1', 32), 'web
 RESET ROLE;
 -- Grace never bypasses expiry: the row expiry bounds both hashes.
 UPDATE public.receipt_claims SET expires_at = now() - interval '1 day' WHERE token_hash = repeat('d3', 32);
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32))->>'expired' = 'true'), 'graced hash previews the expired sentinel once lapsed');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('d2', 32))->>'expired' = 'true'), 'graced hash previews the expired sentinel once lapsed');
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
 SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
 SET LOCAL ROLE authenticated;
@@ -201,7 +201,7 @@ SELECT public.mark_manual_document_claim_sent((SELECT id FROM public.receipt_cla
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d4', 32))->>'status' = 'created'), 'rejected corrective attempt rotates past the delivered hash');
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d5', 32))->>'status' = 'created'), 'second rejected rotation shifts the grace window again');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('d5', 32) AND previous_token_hash = repeat('d4', 32) AND delivered_token_hash = repeat('d2', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'rotation preserves the delivered hash while shifting grace');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32)) IS NOT NULL), 'delivered hash previews past the grace window');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('d2', 32)) IS NOT NULL), 'delivered hash previews past the grace window');
 -- Activity recording resolves fallback hashes like preview and
 -- redemption: the mailed link's funnel rows survive rotation.
 SELECT public.record_receipt_claim_click_v2(repeat('d2', 32), 'app');
@@ -219,7 +219,7 @@ RESET ROLE;
 -- once its replacement is known-delivered.
 SELECT public.mark_manual_document_claim_sent((SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), '10000000-0000-4000-8000-000000000001', repeat('d5', 32));
 SELECT pg_temp.assert_true((SELECT delivered_token_hash = repeat('d5', 32) FROM public.receipt_claims WHERE token_hash = repeat('d5', 32)), 'newer acceptance advances the delivered hash');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32)) IS NULL), 'superseded delivered hash no longer previews');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('d2', 32)) IS NULL), 'superseded delivered hash no longer previews');
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
 SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
 SET LOCAL ROLE authenticated;
@@ -301,9 +301,12 @@ SELECT pg_temp.assert_true((SELECT expires_at > (SELECT e FROM exp_probe) FROM p
 DROP TABLE exp_probe;
 -- The anon preview payload carries only rendered fields: retired top-level
 -- identity UUIDs stay out of the directly invocable anon surface, while
--- the login-hint email and rendered claim fields remain.
+-- the login-hint email and rendered claim fields remain. These two lines
+-- run against the LEGACY function: they prove the postdeploy narrowing
+-- (160800). Everything above runs against v3, which carries app traffic.
 SELECT pg_temp.assert_true((SELECT p IS NOT NULL AND NOT (p ? 'customer_id') AND NOT (p ? 'merchant_id') AND NOT (p ? 'claimed_by_user_id') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview omits retired identity fields');
 SELECT pg_temp.assert_true((SELECT NOT (p ? 'customer_email') AND (p ? 'customer_name') AND (p ? 'orders') AND (p ? 'merchant') FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'anon preview keeps rendered fields without the email');
+SELECT pg_temp.assert_true((SELECT (p->>'kind') = 'manual' AND (p ? 'document_kind') AND NOT (p ? 'customer_email') FROM (SELECT public.preview_receipt_claim_v3(repeat('c7', 32)) AS p) AS s), 'v3 carries the kind discriminator without the email');
 -- The login-hint function is service-role-only: direct anon/authenticated
 -- PostgREST callers can never reach the raw recipient address, while the
 -- server resolves the live claim email through the service-role key.
@@ -325,5 +328,5 @@ SELECT pg_temp.assert_true((SELECT public.get_receipt_claim_login_hint(repeat('e
 -- harness rolls everything back) to cover the defensive branch.
 ALTER TABLE public.receipt_claims DISABLE TRIGGER ALL;
 UPDATE public.receipt_claims SET manual_notification_id = '20000000-0000-4000-8000-000000000001' WHERE token_hash = repeat('c7', 32);
-SELECT pg_temp.assert_true((SELECT (p->>'document_kind') IS NULL FROM (SELECT public.preview_receipt_claim(repeat('c7', 32)) AS p) AS s), 'missing outbox row previews unknown kind');
+SELECT pg_temp.assert_true((SELECT (p->>'document_kind') IS NULL FROM (SELECT public.preview_receipt_claim_v3(repeat('c7', 32)) AS p) AS s), 'missing outbox row previews unknown kind');
 ALTER TABLE public.receipt_claims ENABLE TRIGGER ALL;

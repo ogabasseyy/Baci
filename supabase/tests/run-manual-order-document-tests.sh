@@ -43,6 +43,7 @@ psql -X -h "$task_pg_dir" -p "$task_pg_port" -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_repo/supabase/migrations/20260930160089_suppress_unchanged_tax_subtotal_rebuilds.sql" \
   -f "$task_repo/supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql" \
   -f "$task_repo/supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql" \
+  -f "$task_repo/supabase/migrations/20260930160800_narrow_anon_receipt_claim_preview.sql" \
   -f "$task_repo/supabase/migrations/20260930160350_manual_document_snapshot_builders.sql" \
   -f "$task_repo/supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql" \
   -f "$task_repo/supabase/tests/manual_order_documents_activation.sql" \

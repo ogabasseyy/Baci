@@ -26,13 +26,10 @@ import { GET, POST } from './route';
 
 const baseClaim = {
   claimed_at: null,
-  claimed_by_user_id: null,
-  customer_email: '  BasseyBJohn@Yahoo.CO.UK  ',
-  customer_id: 'customer-1',
   customer_name: 'Bassey John',
   expires_at: '2099-01-01T00:00:00.000Z',
   id: 'claim-1',
-  merchant_id: 'merchant-1',
+  kind: 'manual',
   merchant: {
     business_name: 'Ogabassey',
     slug: 'ogabassey',
@@ -53,7 +50,7 @@ function createSupabaseRpcMock(
 ) {
   return {
     rpc: vi.fn((name: string) => {
-      if (name === 'preview_receipt_claim') {
+      if (name === 'preview_receipt_claim_v3') {
         return Promise.resolve(response);
       }
 
@@ -124,7 +121,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim', {
+    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim_v3', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(supabase.rpc).not.toHaveBeenCalledWith(
@@ -134,10 +131,11 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     expect(body).toEqual({ emailHint: 'b***@yahoo.co.uk' });
   });
 
-  it('serves the hint from the service function when the preview carries no email', async () => {
-    const { customer_email: _dropped, ...trimmedClaim } = baseClaim;
+  it('serves the hint from the service function', async () => {
+    // The v3 preview never carries an email: the hint function is the only
+    // source of the raw address.
     const supabase = createSupabaseRpcMock({
-      data: trimmedClaim,
+      data: baseClaim,
       error: null,
     });
     mockCreateClient.mockResolvedValue(supabase);
@@ -224,7 +222,7 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
       }
     );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'preview_receipt_claim',
+      'preview_receipt_claim_v3',
       expect.anything()
     );
   });
@@ -270,12 +268,9 @@ describe('GET /api/storefront/receipts/claims/[token]/login-email', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('returns an empty email hint when claim data has an invalid email', async () => {
+  it('returns an empty email hint when the hint function resolves junk', async () => {
     const supabase = createSupabaseRpcMock(
-      {
-        data: { ...baseClaim, customer_email: 'not-an-email' },
-        error: null,
-      },
+      { data: baseClaim, error: null },
       { data: null, error: null }
     );
     mockCreateClient.mockResolvedValue(supabase);

@@ -95,13 +95,13 @@ VALUES ('10000000-0000-4000-8000-000000000017', '10000000-0000-4000-8000-0000000
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000017', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', repeat('9', 64))->>'status' = 'created'), 'proforma order creates its claim');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'document_kind' = 'proforma_invoice'), 'unpaid invoice-method claim previews as proforma');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('9', 64))->>'document_kind' = 'proforma_invoice'), 'unpaid invoice-method claim previews as proforma');
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 0, 'NGN', NULL, 'unpaid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'proforma_invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description, 'assurance_fee', oi.assurance_fee, 'line_id', oi.line_id, 'unit_code', oi.unit_code, 'line_extension_amount', oi.line_extension_amount, 'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate, 'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'proforma dispatch marks with kind');
 UPDATE public.orders SET payment_status = 'partially_paid', amount_paid = 50 WHERE id = '10000000-0000-4000-8000-000000000017';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'mid-flight payment resets the dispatch marker');
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 SET LOCAL ROLE authenticated;
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'document_kind' = 'invoice'), 'reset preview follows the live rule the retry will send');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('9', 64))->>'document_kind' = 'invoice'), 'reset preview follows the live rule the retry will send');
 RESET ROLE;
 -- Legacy 'Partially Paid' (internal space) normalizes like the sender: a
 -- zero-amount invoice-method order previews as invoice, not proforma.
@@ -110,14 +110,14 @@ VALUES ('10000000-0000-4000-8000-000000000054', '10000000-0000-4000-8000-0000000
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000054', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000054' AND event_type = 'manual_order_invoice';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000054' AND event_type = 'manual_order_invoice'), 'm2-worker', repeat('c', 64))->>'status' = 'created'), 'spaced-status order creates its claim');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('c', 64))->>'document_kind' = 'invoice'), 'spaced Partially Paid previews as invoice');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('c', 64))->>'document_kind' = 'invoice'), 'spaced Partially Paid previews as invoice');
 -- An explicit stored 325 stays proforma on any method, like the sender.
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid, payment_method, invoice_type_code, created_at)
 VALUES ('10000000-0000-4000-8000-000000000059', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0, 'transfer', '325', '2026-09-30T10:00:00Z');
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000059', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000059' AND event_type = 'manual_order_invoice';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000059' AND event_type = 'manual_order_invoice'), 'm2-worker', repeat('b', 64))->>'status' = 'created'), 'stored-325 order creates its claim');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('b', 64))->>'document_kind' = 'proforma_invoice'), 'explicit 325 previews as proforma on any method');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('b', 64))->>'document_kind' = 'proforma_invoice'), 'explicit 325 previews as proforma on any method');
 -- An explicit stored 325 with an accepted partial payment still previews as
 -- the proforma the sender emits (resolveInvoiceTypeCode returns the stored
 -- code whenever the proforma branch is not taken, and partial payment takes
@@ -127,7 +127,7 @@ VALUES ('10000000-0000-4000-8000-000000000097', '10000000-0000-4000-8000-0000000
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000097', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000097' AND event_type = 'manual_order_invoice';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000097' AND event_type = 'manual_order_invoice'), 'm2-worker', repeat('de', 32))->>'status' = 'created'), 'partial-pay 325 order creates its claim');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('de', 32))->>'document_kind' = 'proforma_invoice'), 'explicit 325 with partial payment previews as proforma');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('de', 32))->>'document_kind' = 'proforma_invoice'), 'explicit 325 with partial payment previews as proforma');
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 50, 'NGN', NULL, 'partially_paid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description, 'assurance_fee', oi.assurance_fee, 'line_id', oi.line_id, 'unit_code', oi.unit_code, 'line_extension_amount', oi.line_extension_amount, 'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate, 'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'retry marks the fresh invoice snapshot');
 -- A virtual account expiring inside the 15-minute delivery buffer is
 -- excluded from the snapshot exactly like an expired one: the sender
@@ -140,7 +140,7 @@ DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8
 UPDATE public.order_notification_outbox SET status = 'sent' WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 UPDATE public.orders SET amount_paid = 100 WHERE id = '10000000-0000-4000-8000-000000000017';
 SET LOCAL ROLE authenticated;
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'document_kind' = 'invoice'), 'completed send keeps the sent preview across later payments');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('9', 64))->>'document_kind' = 'invoice'), 'completed send keeps the sent preview across later payments');
 RESET ROLE;
 -- Restore the mid-flight state the dispatch snapshot tests below expect:
 -- a processing row with the partial-payment snapshot.
@@ -285,8 +285,8 @@ SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_o
 -- An expired claim previews as a non-sensitive sentinel, even through a
 -- direct RPC call: the loader keeps its 410 contract, details stay hidden.
 UPDATE public.receipt_claims SET expires_at = now() - interval '1 second' WHERE token_hash = repeat('9', 64);
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'expired' = 'true'), 'expired manual claim previews as expired');
-SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'customer_email' IS NULL AND public.preview_receipt_claim(repeat('9', 64))->>'orders' IS NULL), 'expired preview hides claim details');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('9', 64))->>'expired' = 'true'), 'expired manual claim previews as expired');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim_v3(repeat('9', 64))->>'customer_email' IS NULL AND public.preview_receipt_claim_v3(repeat('9', 64))->>'orders' IS NULL), 'expired preview hides claim details');
 -- Commit, not rollback: the database is disposable (dropped after the run),
 -- and the redemption/dispatch script reuses this state (enabled triggers,
 -- merchants, customers, orders) in the same session.

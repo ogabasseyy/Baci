@@ -231,16 +231,16 @@ function normalizeReceiptClaimCampaignStats(value: unknown) {
   };
 }
 
-export const receiptClaimRecordSchema = z.object({
+export const receiptClaimPreviewV3Schema = z.object({
   claimed_at: z.string().nullable(),
-  claimed_by_user_id: z.string().nullish(),
-  customer_email: z.string().nullish(),
-  customer_id: z.string().nullish(),
   customer_name: z.string().nullable(),
-  document_kind: z.enum(['invoice', 'proforma_invoice', 'receipt']).nullish(),
+  document_kind: z
+    .enum(['invoice', 'proforma_invoice', 'receipt'])
+    .nullable()
+    .optional(),
   expires_at: z.string(),
   id: z.string(),
-  merchant_id: z.string().nullish(),
+  kind: z.enum(['manual', 'import']),
   merchant: receiptClaimMerchantSchema.nullable().optional(),
   orders: z.array(receiptClaimOrderSchema).nullable().optional(),
 });
@@ -288,7 +288,7 @@ export const receiptClaimCampaignStatsSchema = z.preprocess(
   })
 );
 
-export type ReceiptClaimRecord = z.infer<typeof receiptClaimRecordSchema>;
+export type ReceiptClaimPreviewV3 = z.infer<typeof receiptClaimPreviewV3Schema>;
 export type CreateReceiptClaimResult = z.infer<
   typeof createReceiptClaimResultSchema
 >;

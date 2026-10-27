@@ -20321,6 +20321,10 @@ export type Database = {
         }[];
       };
       preview_receipt_claim: { Args: { p_token_hash: string }; Returns: Json };
+      preview_receipt_claim_v3: {
+        Args: { p_token_hash: string };
+        Returns: Json;
+      };
       process_due_settlements: {
         Args: never;
         Returns: {

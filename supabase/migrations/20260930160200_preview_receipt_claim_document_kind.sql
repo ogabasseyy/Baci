@@ -1,7 +1,17 @@
--- Extends receipt-claim previews with the manual document kind so invoice
--- claim pages render invoice copy. Import claims (no manual notification)
--- keep the default receipt presentation.
-CREATE OR REPLACE FUNCTION private.preview_receipt_claim(p_token_hash text)
+-- Versioned receipt-claim preview contract (v3) plus the server-only
+-- login-hint email. v3 serves import and manual claims from one frozen
+-- contract with an explicit kind discriminator, so neither caller grafts
+-- semantics onto the legacy preview function: invoice claim pages render
+-- invoice copy from document_kind, import claims keep the default receipt
+-- presentation, and the recipient address never enters the anon payload.
+--
+-- private.preview_receipt_claim is deliberately left untouched: previous
+-- app revisions call it during the deploy window and their payload schema
+-- requires customer_email, so narrowing or replacing it here would 500
+-- every claim preview on the old revision. The anon-direct narrowing lands
+-- postdeploy in 20260930160800, after the drain. This file is pure
+-- addition (new functions plus grants), so it applies predeploy.
+CREATE OR REPLACE FUNCTION private.preview_receipt_claim_v3(p_token_hash text)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -152,17 +162,19 @@ BEGIN
     INTO v_document_kind;
   END IF;
 
-  -- The anon-facing payload carries only what the claim UI renders:
-  -- top-level customer/merchant UUIDs, the redeemer id, and the recipient
-  -- email are consumed by no anon caller, so they stay out of the directly
-  -- invocable anon surface. The login-hint email lives behind the
-  -- service-role-only get_receipt_claim_login_hint below and reaches the
-  -- client solely through the token-scoped login-email route.
+  -- The anon-facing v3 payload carries only what the claim UI renders,
+  -- plus the kind discriminator the loader routes on: top-level
+  -- customer/merchant UUIDs, the redeemer id, and the recipient email are
+  -- consumed by no anon caller, so they stay out of the directly invocable
+  -- anon surface. The login-hint email lives behind the service-role-only
+  -- get_receipt_claim_login_hint below and reaches the client solely
+  -- through the token-scoped login-email route.
   RETURN jsonb_build_object(
     'id', v_claim.id,
     'customer_name', v_claim.customer_name,
     'expires_at', v_claim.expires_at,
     'claimed_at', v_claim.claimed_at,
+    'kind', CASE WHEN v_claim.manual_notification_id IS NOT NULL THEN 'manual' ELSE 'import' END,
     'document_kind', v_document_kind,
     'merchant', v_merchant,
     'orders', v_orders
@@ -172,15 +184,28 @@ $$;
 -- Anonymous claim-link previews execute this SECURITY DEFINER function as
 -- anon (logged out) or authenticated; state the posture explicitly instead
 -- of relying on the default PUBLIC execute grant.
-REVOKE ALL ON FUNCTION private.preview_receipt_claim(text)
+REVOKE ALL ON FUNCTION private.preview_receipt_claim_v3(text)
   FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION private.preview_receipt_claim(text)
+GRANT EXECUTE ON FUNCTION private.preview_receipt_claim_v3(text)
   TO anon, authenticated, service_role;
--- The public wrapper delegates directly to the private implementation, so it
--- must also run as the owner: authenticated callers have no USAGE on schema
--- private (delegates boundary), and an INVOKER wrapper 42501s for signed-in
--- claim-link opens before automatic redemption can run.
-ALTER FUNCTION public.preview_receipt_claim(text) SECURITY DEFINER;
+-- The public v3 wrapper delegates directly to the private implementation,
+-- so it runs as the owner like the legacy wrapper: authenticated callers
+-- have no USAGE on schema private (delegates boundary), and an INVOKER
+-- wrapper 42501s for signed-in claim-link opens before automatic
+-- redemption can run. PostgREST exposes the public schema, so anon clients
+-- reach v3 through this wrapper.
+CREATE OR REPLACE FUNCTION public.preview_receipt_claim_v3(p_token_hash text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT private.preview_receipt_claim_v3(p_token_hash);
+$$;
+REVOKE ALL ON FUNCTION public.preview_receipt_claim_v3(text)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.preview_receipt_claim_v3(text)
+  TO anon, authenticated, service_role;
 -- Server-only login-hint email. The anon preview payload above no longer
 -- carries customer_email, so the token-scoped login-email route fetches it
 -- here through the service-role key. Granted to service_role only: direct

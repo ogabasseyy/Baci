@@ -67,7 +67,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '8f0f8eddc92b23214e704c0be4369ae70933e07db0d6f5f0e5665c8707a84be5',
+    sha256: '7c2c73793ac0266d896af558b078477d44db524f57455c8a61127ace84e0cbcd',
   },
   {
     repositoryPath:
@@ -98,5 +98,10 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260930160700_dead_letter_corrupt_outbox_rpc.sql',
     sha256: 'f90f8df9996c6547c2c078fdb77bbcfedb150e430df79ddca7f30b556bf824f1',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260930160800_narrow_anon_receipt_claim_preview.sql',
+    sha256: '49a2a4bb8db28408d233d11f74d7bfbd15bb11326a3ef71646f5156c08f7f795',
   },
 ];

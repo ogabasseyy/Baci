@@ -10,6 +10,18 @@ import type {
 } from './category-hub-types';
 import { modelFamilyAuthorityTaxonomy } from './model-family-authority-taxonomy';
 
+/** Mirror parseSemanticProductPrice: grouped strings like '1,000,000' parse. */
+function parseAuthorityProductPrice(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/,/g, '').trim();
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function isStringPricedDbRecord(product: unknown): boolean {
   if (!product || typeof product !== 'object') return false;
   const candidate = product as Record<string, unknown>;
@@ -17,8 +29,7 @@ function isStringPricedDbRecord(product: unknown): boolean {
     typeof candidate.id === 'string' &&
     typeof candidate.name === 'string' &&
     typeof candidate.price === 'string' &&
-    candidate.price.trim() !== '' &&
-    Number.isFinite(Number(candidate.price))
+    parseAuthorityProductPrice(candidate.price) !== null
   );
 }
 
@@ -44,7 +55,10 @@ function resolveBrandAuthorityEligibility(
         // PostgREST can return numeric columns as strings; sibling
         // loaders coerce instead of dropping those rows.
         typeof record.price === 'string'
-          ? { ...record, price: Number(record.price) }
+          ? {
+              ...record,
+              price: parseAuthorityProductPrice(record.price) ?? record.price,
+            }
           : record,
         { preferredCategorySlug: categorySlug }
       );

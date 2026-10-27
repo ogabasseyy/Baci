@@ -76,8 +76,9 @@ export async function buildClusterHubLinks(args: {
         storeUrl: args.storeUrl,
         categorySlug: args.categorySlug,
         products: args.products,
-        // Callers supply the category-scoped semantic/override pool.
-        assumeCategoryScoped: true,
+        // No assumeCategoryScoped: the destination counts only exact
+        // category membership, so the trusted seam exact-filters the
+        // override pool on category_slug/category/category_slugs too.
       })
     : buildAuthorityHubCandidates(
         args.categorySlug,

@@ -139,6 +139,24 @@ describe('buildClusterHubLinks', () => {
     );
   });
 
+  it('emits no hub links when a skipped-verification pool is child-category only', async () => {
+    const result = await buildClusterHubLinks({
+      post,
+      inferredBrands: ['Apple'],
+      categorySlug: 'smartphones',
+      categoryName: 'Smartphones',
+      storeUrl: 'https://store.test',
+      merchantId: 'merchant-1',
+      products: products.map((product) => ({
+        ...product,
+        category_slug: 'phone-accessories',
+      })),
+      skipDestinationVerification: true,
+    });
+    expect(result).toEqual({ brandHubLinks: [], familyHubLinks: [] });
+    expect(mockLoad).not.toHaveBeenCalled();
+  });
+
   it('returns no links when no brand is inferred', async () => {
     const result = await buildClusterHubLinks({
       post,

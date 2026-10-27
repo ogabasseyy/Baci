@@ -50,6 +50,20 @@ describe('authority hub eligibility contract', () => {
     expect(decision.productCount).toBe(apple.minimumProducts);
   });
 
+  it('accepts rows whose price is a grouped numeric string', () => {
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      Array.from({ length: apple.minimumProducts }, (_, index) => ({
+        ...row(index),
+        price: '1,000,000' as never,
+      })),
+      'smartphones',
+      apple
+    );
+    expect(decision.eligible).toBe(true);
+    expect(decision.productCount).toBe(apple.minimumProducts);
+    expect(decision.products[0]?.price).toBe(1_000_000);
+  });
+
   it('documents the caller-scope contract: brand and availability only', () => {
     // Category/parent/active scoping is owned by callers supplying the
     // destination pool; this helper must not double-filter child rows.

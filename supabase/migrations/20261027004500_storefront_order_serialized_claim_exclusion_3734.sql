@@ -88,21 +88,29 @@ DECLARE
       -- pre-fix loop wrongly reserved instead of refreshing them. The
       -- unit's own variant/branch/product is logged (order lines on
       -- simple products carry NULL variant_id; the unit sits on the
-      -- anchor variant), then fulfillment_data is rewritten so the
-      -- freed unit is not listed as assigned to the offer line.
+      -- anchor variant). Attributes are read in a second step because
+      -- FOR UPDATE cannot lock the nullable side of the outer join.
+      -- Fulfillment_data is then rewritten so the freed unit is not
+      -- listed as assigned to the offer line.
       DECLARE
-        v_release record;
+        v_release_id uuid;
+        v_release_variant_id uuid;
+        v_release_product_id uuid;
+        v_release_branch_id uuid;
       BEGIN
-        FOR v_release IN
-          SELECT vi.id, vi.variant_id, pv.product_id, vi.branch_id
-          FROM public.variant_inventory vi
-          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
+        FOR v_release_id IN
+          SELECT vi.id FROM public.variant_inventory vi
           WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
           FOR UPDATE
         LOOP
+          SELECT vi.variant_id, pv.product_id, vi.branch_id
+          INTO v_release_variant_id, v_release_product_id, v_release_branch_id
+          FROM public.variant_inventory vi
+          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
+          WHERE vi.id = v_release_id;
           PERFORM private.record_variant_inventory_event(
-            v_release.id, p_merchant_id, COALESCE(v_release.product_id, v_item.product_id), v_release.variant_id, 'reservation_released',
-            'reserved', 'available', p_order_id, v_item.id, v_release.branch_id, NULL, NULL,
+            v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
+            'reserved', 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
             jsonb_build_object('reason', 'offer_line_double_reservation_repair')
           );
           UPDATE public.variant_inventory
@@ -112,7 +120,7 @@ DECLARE
               reserved_at = NULL,
               reservation_expires_at = NULL,
               updated_at = now()
-          WHERE id = v_release.id;
+          WHERE id = v_release_id;
         END LOOP;
         UPDATE public.order_items AS oi
         SET fulfillment_data = jsonb_build_object(

@@ -27,6 +27,7 @@ describe('discardOrphanedClaimTransaction', () => {
         merchantId: 'merch-1',
         supabase,
         transactionId: 'txn-1',
+        userId: 'user-1',
       });
     } finally {
       consoleError.mockRestore();
@@ -36,6 +37,7 @@ describe('discardOrphanedClaimTransaction', () => {
       merchantId: 'merch-1',
       supabase,
       transactionId: 'txn-1',
+      userId: 'user-1',
     });
     expect(consoleError).not.toHaveBeenCalled();
   });
@@ -52,6 +54,7 @@ describe('discardOrphanedClaimTransaction', () => {
         merchantId: 'merch-1',
         supabase,
         transactionId: 'txn-9',
+        userId: 'user-1',
       });
 
       expect(consoleError).toHaveBeenCalledWith(
@@ -72,6 +75,7 @@ describe('discardOrphanedClaimTransaction', () => {
         merchantId: 'merch-1',
         supabase,
         transactionId: 'txn-2',
+        userId: 'user-1',
       })
     ).resolves.toBeUndefined();
   });

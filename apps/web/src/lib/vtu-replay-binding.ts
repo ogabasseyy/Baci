@@ -14,6 +14,13 @@ import type { ExistingIdempotencyRow } from './vtu-idempotency-key-lookup';
  * export per file); merging the two lookups into one operation
  * was rejected because the route runs ownership + fingerprint
  * guards between them and the error precedence must not change.
+ *
+ * The binding reads through get_vtu_replay_binding (4 columns,
+ * owner-scoped, zero rows for non-owners): there is deliberately
+ * NO buyer SELECT policy on vtu_transactions — a policy would let
+ * buyers query every column of their rows directly (commissions,
+ * provider diagnostics, metadata balances/PINs), reopening the
+ * exposure 20261012235000 removed (Codex P1, PR #3741).
  */
 
 export interface ReplayTransactionBinding {
@@ -27,15 +34,13 @@ async function findReplayTransactionBinding(
   supabase: SupabaseClient,
   transactionId: string
 ): Promise<ReplayTransactionBinding | null> {
-  const { data, error } = await supabase
-    .from('vtu_transactions')
-    .select('id, customer_id, merchant_id, status')
-    .eq('id', transactionId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('get_vtu_replay_binding', {
+    p_transaction_id: transactionId,
+  });
   if (error) {
     throw new Error(`Failed to look up replay transaction: ${error.message}`);
   }
-  return (data as ReplayTransactionBinding | null) ?? null;
+  return (data?.[0] as ReplayTransactionBinding | undefined) ?? null;
 }
 
 export type ReplayBindingVerdict =

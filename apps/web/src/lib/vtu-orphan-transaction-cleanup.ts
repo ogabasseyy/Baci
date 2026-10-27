@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY } from '@/lib/vtu-metadata-fields';
-import { VTU_REFUND_SKIPPED_NO_COLLECTION } from './vtu-refund-collection-evidence';
 
-/** User-safe terminal message for a discarded race orphan (fixed template). */
+/**
+ * User-safe terminal message for a discarded race orphan (fixed
+ * template). Mirrored inside the fail_orphan_vtu_transaction RPC —
+ * keep the two in sync.
+ */
 export const VTU_ORPHAN_DISCARD_MESSAGE =
   'Duplicate checkout request discarded; no charge was made.';
 
@@ -28,9 +30,11 @@ interface OrphanCleanupAttempt {
 /**
  * Removes a VTU row orphaned by a lost idempotency-key race: the row
  * was prepared, the key insert failed, and no client will ever
- * reference the row again. Verified delete first; when the delete
- * cannot be verified, fall back to a terminal failed mark instead
- * of logging and continuing (Muse R55 HIGH).
+ * reference the row again. Runs inside the ownership-verifying
+ * `fail_orphan_vtu_transaction` RPC (Phase 2, epic #3694 — no buyer
+ * UPDATE/DELETE policy exists by design): verified delete first;
+ * when the delete cannot be verified, a terminal failed mark
+ * instead of logging and continuing (Muse R55 HIGH).
  *
  * Log-and-continue would leave a pending orphan behind: a
  * stuck-pending history spinner today, and a second debit if any
@@ -42,110 +46,80 @@ interface OrphanCleanupAttempt {
  * never collects, so no evidence can exist — the skip marker is
  * pre-set rather than re-derived).
  *
- * Recovery semantics: a delete that errors but actually landed
- * (re-read finds no row) counts as deleted. A re-read row that is
- * no longer pending is owned elsewhere — claimed or settled by a
- * worker this orphan should never have met (log loudly; do NOT
- * mark over a live row). Only a still-pending re-read is marked,
- * CAS'd on status so a concurrent transition zero-matches instead
- * of clobbering. Error-driven failures (delete/reread/mark
- * transport errors) retry in-request up to
- * ORPHAN_CLEANUP_MAX_ATTEMPTS with backoff: a transient blip must
+ * Recovery semantics: RPC transport errors retry in-request up to
+ * ORPHAN_CLEANUP_MAX_ATTEMPTS with backoff (a transient blip must
  * not strand a pending orphan no reconciler can discover (Codex
- * R108 P2). Only sustained failure stays unresolved — the caller
- * proceeds (today's behavior) since no retry or cron can see an
- * unmapped row either, and a down database cannot persist a
- * cleanup marker anyway.
+ * R108 P2); the RPC is idempotent so retries are safe). Verdicts
+ * are terminal observations and return immediately. Only sustained
+ * failure stays unresolved — the caller proceeds (today's
+ * behavior) since no retry or cron can see an unmapped row
+ * either, and a down database cannot persist a cleanup marker
+ * anyway.
  */
 async function attemptOrphanCleanupOnce({
   merchantId,
   supabase,
   transactionId,
+  userId,
 }: {
   merchantId: string;
   supabase: SupabaseClient;
   transactionId: string;
+  userId: string;
 }): Promise<OrphanCleanupAttempt> {
-  const { data: deleted, error: deleteError } = await supabase
-    .from('vtu_transactions')
-    .delete()
-    .eq('id', transactionId)
-    .eq('status', 'pending')
-    .eq('merchant_id', merchantId)
-    .select('id')
-    .maybeSingle();
-  if (!deleteError && deleted) {
-    return { outcome: 'deleted', retryable: false };
-  }
-  const { data: current, error: rereadError } = await supabase
-    .from('vtu_transactions')
-    .select('id, metadata, status')
-    .eq('id', transactionId)
-    .maybeSingle();
-  if (rereadError) {
+  const { data: verdict, error } = await supabase.rpc(
+    'fail_orphan_vtu_transaction',
+    {
+      p_transaction_id: transactionId,
+      p_merchant_id: merchantId,
+      p_user_id: userId,
+    }
+  );
+  if (error) {
     return {
-      detail: rereadError,
+      detail: error,
       outcome: 'unresolved',
       retryable: true,
     };
   }
-  if (!current) {
-    // The delete landed while its response was lost: gone is gone.
-    return { outcome: 'deleted', retryable: false };
+  if (verdict === 'deleted' || verdict === 'marked_failed') {
+    return { outcome: verdict, retryable: false };
   }
-  if (current.status !== 'pending') {
+  if (verdict === 'owned_elsewhere') {
+    // The row progressed under the key race — claimed or settled
+    // by a worker this orphan should never have met. Log loudly;
+    // the RPC never marks over a live row.
     console.error(
       'Orphan VTU transaction progressed under the key race; leaving it to its owner:',
-      { status: current.status, transactionId }
+      { transactionId }
     );
     return { outcome: 'owned_elsewhere', retryable: false };
   }
-  const currentMetadata =
-    current.metadata !== null &&
-    typeof current.metadata === 'object' &&
-    !Array.isArray(current.metadata)
-      ? (current.metadata as Record<string, unknown>)
-      : {};
-  const { data: marked, error: markError } = await supabase
-    .from('vtu_transactions')
-    .update({
-      error_message: VTU_ORPHAN_DISCARD_MESSAGE,
-      metadata: {
-        ...currentMetadata,
-        [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
-        refundSkipped: VTU_REFUND_SKIPPED_NO_COLLECTION,
-      },
-      status: 'failed',
-    })
-    .eq('id', transactionId)
-    .eq('status', 'pending')
-    .select('id')
-    .maybeSingle();
-  if (markError) {
-    return { detail: markError, outcome: 'unresolved', retryable: true };
-  }
-  if (!marked) {
-    // Deterministic zero-match: the row provably left pending
-    // between re-read and mark. Retrying re-observes the same
-    // state, so return immediately (existing unresolved
-    // contract); the loud log preserves the mystery for triage.
-    console.error(
-      'Orphan VTU transaction left pending between re-read and mark; leaving it to its owner:',
-      { transactionId }
-    );
+  if (verdict === 'unresolved') {
+    // Deterministic CAS loss: the row provably left pending
+    // mid-mark. Retrying re-observes the same state, so return
+    // immediately (existing unresolved contract).
     return { outcome: 'unresolved', retryable: false };
   }
-  return { outcome: 'marked_failed', retryable: false };
+  // Unknown verdict (transport-mangled?): fail closed into the
+  // retryable path; sustained failure stays unresolved.
+  console.error('Orphan VTU cleanup returned an unknown verdict:', {
+    transactionId,
+    verdict,
+  });
+  return { outcome: 'unresolved', retryable: true };
 }
 
 export async function cleanupOrphanVtuTransactionAfterKeyRace({
   merchantId,
   supabase,
   transactionId,
+  userId,
 }: {
   merchantId: string;
   supabase: SupabaseClient;
   transactionId: string;
+  userId: string;
 }): Promise<OrphanVtuCleanupOutcome> {
   let attempt: OrphanCleanupAttempt = {
     outcome: 'unresolved',
@@ -160,6 +134,7 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
       merchantId,
       supabase,
       transactionId,
+      userId,
     });
     if (!attempt.retryable || attemptNumber === ORPHAN_CLEANUP_MAX_ATTEMPTS) {
       if (attempt.outcome === 'unresolved') {

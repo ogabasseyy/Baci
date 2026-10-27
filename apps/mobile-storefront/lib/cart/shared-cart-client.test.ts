@@ -6,6 +6,11 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
+jest.mock('./client-credential', () => ({
+  cartClientCredentialHeaders: async () => ({
+    'x-baci-client-credential': '44444444-4444-4444-8444-444444444444',
+  }),
+}));
 const merchant = '11111111-1111-4111-8111-111111111111';
 const cart = '22222222-2222-4222-8222-222222222222';
 const snapshot = {

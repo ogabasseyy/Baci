@@ -137,6 +137,12 @@ BEGIN
     WHERE oi.id = p_item_id;
   END IF;
 END $release_helper$;
+
+-- Internal mutation primitive: same privilege profile as the sibling
+-- private.record_variant_inventory_event (revoked from all API roles;
+-- reachable only through the privileged reuse/confirm paths).
+REVOKE ALL ON FUNCTION private.release_stale_offer_line_serialized_units(uuid, uuid, uuid, uuid, integer, jsonb)
+FROM PUBLIC, anon, authenticated;
 DO $claim_exclusion_prepare_3734$
 DECLARE
   function_oid oid;
@@ -181,7 +187,7 @@ DECLARE
       -- the ordered loop.
       PERFORM private.release_stale_offer_line_serialized_units(
         p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
-        jsonb_build_object('releaseReason', 'checkout_reuse')
+        jsonb_build_object('releaseReason', 'checkout_reuse', 'fulfillmentPath', 'order_reuse')
       );
     ELSIF v_has_reserved THEN
       IF v_is_pod THEN$marker$;
@@ -242,7 +248,7 @@ DECLARE
     IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL OR v_item.offer_labels_snapshotted IS TRUE THEN
       PERFORM private.release_stale_offer_line_serialized_units(
         p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
-        '{}'::jsonb
+        jsonb_build_object('fulfillmentPath', 'payment_confirmation')
       );
       CONTINUE;
     END IF;

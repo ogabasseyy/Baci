@@ -308,6 +308,19 @@ BEGIN
     RAISE EXCEPTION 'expected released offer line fulfillment to report line quantity as missing';
   END IF;
 
+  -- The release must be audited against the unit's own variant with
+  -- the actual from-status and the reuse path context.
+  IF (SELECT count(*) FROM private.variant_inventory_events
+      WHERE inventory_unit_id = '03d00000-0000-4000-8000-000000000006'
+      AND event_type = 'reservation_released'
+      AND from_status = 'reserved' AND to_status = 'available'
+      AND order_id = v_order_id AND order_item_id = v_item_id
+      AND variant_id = v_anchor_id
+      AND event_context->>'releaseReason' = 'checkout_reuse'
+      AND event_context->>'fulfillmentPath' = 'order_reuse') <> 1 THEN
+    RAISE EXCEPTION 'expected exactly one audited reuse release event for the legacy unit';
+  END IF;
+
   -- Post-deletion legacy shape: a condition-only offer line created
   -- before 19100000 whose offer was later deleted carries offer_line
   -- false with both FKs nulled (ON DELETE SET NULL) while the
@@ -362,6 +375,16 @@ BEGIN
   WHERE order_item_id = v_item_b;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units held for the post-deletion offer line, got %', v_claimed;
+  END IF;
+  IF (SELECT count(*) FROM private.variant_inventory_events
+      WHERE inventory_unit_id = '03d00000-0000-4000-8000-000000000012'
+      AND event_type = 'reservation_released'
+      AND from_status = 'reserved' AND to_status = 'available'
+      AND order_id = v_order_id AND order_item_id = v_item_b
+      AND variant_id = v_anchor_id
+      AND event_context->>'releaseReason' = 'checkout_reuse'
+      AND event_context->>'fulfillmentPath' = 'order_reuse') <> 1 THEN
+    RAISE EXCEPTION 'expected exactly one audited reuse release event for the post-deletion unit';
   END IF;
 
   -- Payment confirmation path: a paid serialized offer order must not

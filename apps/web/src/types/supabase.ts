@@ -17963,6 +17963,10 @@ export type Database = {
         };
       };
       deactivate_push_token: { Args: { p_token: string }; Returns: boolean };
+      dead_letter_corrupt_outbox_row: {
+        Args: { p_outbox_id: string; p_worker_id: string };
+        Returns: boolean;
+      };
       dead_letter_ingress_event_v1: {
         Args: {
           p_domain_event_id: string;

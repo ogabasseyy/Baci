@@ -67,12 +67,12 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: 'e312e617824b3ef8b5bb459cf95c20660d7ccb0a5a4885dc2a99154ec3f774bd',
+    sha256: '9ccd8624105659664abeaa32bddf8351477ccb731b207f56ae720d8469fc1a56',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: '2e1f50b50954daa6be946d787fcff58f625cff68aa944b93f05fcc76450e1a15',
+    sha256: '624794ac73de3057c1d0b685d2d8330d08a9e4aa749ef924e8f59cc0cab11f6b',
   },
   {
     repositoryPath:
@@ -93,5 +93,10 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260930160600_parent_first_review_link_locks.sql',
     sha256: '9e3052f37dc568c533ea6528278524385b2605a30bfb9498c04648e49c3650a5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260930160700_dead_letter_corrupt_outbox_rpc.sql',
+    sha256: 'f90f8df9996c6547c2c078fdb77bbcfedb150e430df79ddca7f30b556bf824f1',
   },
 ];

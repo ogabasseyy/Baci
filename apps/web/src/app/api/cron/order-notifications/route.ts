@@ -42,7 +42,7 @@ function isManualOutboxEventType(value: unknown): boolean {
     knownOutboxEventTypes.safeParse(value).success
   );
 }
-function hasUsableIdentity(value: unknown): boolean {
+function hasUsableIdentity(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 async function deadLetterCorruptOutboxRow(
@@ -57,40 +57,16 @@ async function deadLetterCorruptOutboxRow(
   if (hasUsableIdentity(raw.merchant_id) && hasUsableIdentity(raw.order_id))
     return false;
   try {
-    // The claim projection may transiently drop fields during a
-    // producer/worker rollout while the stored row is intact: verify the
-    // stored identities before terminalizing, or a claim-payload bug
-    // silently loses a document no later edit re-arms.
-    const { data: stored, error: readError } = await supabase
-      .from('order_notification_outbox')
-      .select('event_type, merchant_id, order_id')
-      .match({ id: raw.id, locked_by: workerId, status: 'processing' })
-      .maybeSingle();
-    if (
-      readError ||
-      !stored ||
-      !isManualOutboxEventType(stored.event_type) ||
-      (hasUsableIdentity(stored.merchant_id) &&
-        hasUsableIdentity(stored.order_id))
-    )
-      return false;
-    const { data, error } = await supabase
-      .from('order_notification_outbox')
-      .update({
-        dispatch_started_at: null,
-        last_error: 'unparseable_outbox_row',
-        locked_at: null,
-        locked_by: null,
-        next_attempt_at: null,
-        skip_reason: 'unparseable',
-        skipped_at: new Date().toISOString(),
-        status: 'skipped',
-        updated_at: new Date().toISOString(),
-      })
-      .match({ id: raw.id, locked_by: workerId, status: 'processing' })
-      .select('id')
-      .maybeSingle();
-    if (error || data?.id !== raw.id) {
+    // Terminalize through the scoped service_role-only RPC, never a generic
+    // table write: the RPC re-verifies the stored identities (the claim
+    // projection may transiently drop fields during a rollout while the
+    // stored row is intact) and scopes the write to this worker's claimed
+    // processing rows.
+    const { data, error } = await supabase.rpc(
+      'dead_letter_corrupt_outbox_row',
+      { p_outbox_id: raw.id, p_worker_id: workerId }
+    );
+    if (error || data !== true) {
       throw error ?? new Error('dead-letter claim was lost');
     }
     logger.error({

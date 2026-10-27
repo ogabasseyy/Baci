@@ -25,6 +25,7 @@ const MANUAL_DOCUMENT_MIGRATIONS = [
   '20260930160400_atomic_manual_document_dispatch.sql',
   '20260930160500_parent_first_custom_item_lock.sql',
   '20260930160600_parent_first_review_link_locks.sql',
+  '20260930160700_dead_letter_corrupt_outbox_rpc.sql',
 ] as const;
 
 describe('manual document pending replay sources', () => {

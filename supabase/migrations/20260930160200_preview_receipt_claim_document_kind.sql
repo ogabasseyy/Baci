@@ -190,21 +190,33 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_claim_id uuid;
+  v_claim_email_normalized text;
   v_email text;
   v_expires_at timestamptz;
+  v_manual_notification_id uuid;
 BEGIN
-  SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+  SELECT rc.customer_email, rc.expires_at, rc.id,
+    rc.customer_email_normalized, rc.manual_notification_id
+  INTO v_email, v_expires_at, v_claim_id,
+    v_claim_email_normalized, v_manual_notification_id
   FROM public.receipt_claims AS rc
   WHERE rc.token_hash = p_token_hash
   LIMIT 1;
   IF NOT FOUND THEN
-    SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+    SELECT rc.customer_email, rc.expires_at, rc.id,
+      rc.customer_email_normalized, rc.manual_notification_id
+    INTO v_email, v_expires_at, v_claim_id,
+      v_claim_email_normalized, v_manual_notification_id
     FROM public.receipt_claims AS rc
     WHERE rc.previous_token_hash = p_token_hash
     LIMIT 1;
   END IF;
   IF NOT FOUND THEN
-    SELECT rc.customer_email, rc.expires_at INTO v_email, v_expires_at
+    SELECT rc.customer_email, rc.expires_at, rc.id,
+      rc.customer_email_normalized, rc.manual_notification_id
+    INTO v_email, v_expires_at, v_claim_id,
+      v_claim_email_normalized, v_manual_notification_id
     FROM public.receipt_claims AS rc
     WHERE rc.delivered_token_hash = p_token_hash
     LIMIT 1;
@@ -213,6 +225,20 @@ BEGIN
     RETURN NULL;
   END IF;
   IF v_expires_at IS NOT NULL AND v_expires_at <= now() THEN
+    RETURN NULL;
+  END IF;
+  -- Fail closed like the anon preview and redemption when staff corrected
+  -- the manual recipient after the claim was created: this RPC is the
+  -- single source of the raw address, so the staleness check lives at the
+  -- boundary that owns it, not only in today's preview-gated caller.
+  IF v_manual_notification_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.receipt_claim_orders AS rco
+      JOIN public.orders AS o ON o.id = rco.order_id
+      WHERE rco.receipt_claim_id = v_claim_id
+        AND lower(btrim(COALESCE(o.customer_email, '')))
+          IS DISTINCT FROM v_claim_email_normalized
+    ) THEN
     RETURN NULL;
   END IF;
   RETURN v_email;

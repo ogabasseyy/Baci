@@ -34,58 +34,6 @@ function cronRequest(path = '/api/cron/order-notifications') {
   });
 }
 
-function createUpdateBuilder(
-  storedIdentities: {
-    event_type: string;
-    merchant_id: string | null;
-    order_id: string | null;
-  } | null = {
-    event_type: 'manual_order_receipt',
-    merchant_id: null,
-    order_id: null,
-  }
-) {
-  let matchedId = '';
-  const select = vi.fn();
-  const maybeSingle = vi.fn<
-    () => Promise<{
-      data: {
-        id: string;
-        metadata?: Record<string, unknown>;
-        event_type?: string;
-        merchant_id?: string | null;
-        order_id?: string | null;
-      } | null;
-      error: unknown;
-    }>
-  >(async () => {
-    const calls = select.mock.calls;
-    // The dead-letter path re-reads stored identities before terminalizing;
-    // answer that projection from the per-test stored row.
-    if (calls[calls.length - 1]?.[0] === 'event_type, merchant_id, order_id') {
-      return {
-        data: storedIdentities && {
-          id: matchedId,
-          ...storedIdentities,
-        },
-        error: null,
-      };
-    }
-    return { data: { id: matchedId }, error: null };
-  });
-  const builder = {
-    match: vi.fn((values: { id: string }) => {
-      matchedId = values.id;
-      return builder;
-    }),
-    maybeSingle,
-    select,
-    update: vi.fn(() => builder),
-  };
-  select.mockImplementation(() => builder);
-  return builder;
-}
-
 describe('GET /api/cron/order-notifications dead-letter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,7 +65,6 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       ],
       error: null,
     });
-    mockSupabase.from.mockReturnValue(createUpdateBuilder());
     mockSendManualOrderDocument.mockResolvedValue({
       status: 'sent',
       messageId: 'manual-document-1',
@@ -152,10 +99,12 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       skipped: 0,
       unparseable: 1,
     });
+    // Claim RPC only: the malformed row never reaches the dead-letter RPC.
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
-  it('dead-letters manual rows missing identity on first observation without an attempt threshold', async () => {
+  it('dead-letters manual rows missing identity through the scoped RPC', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [
         {
@@ -167,6 +116,7 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       ],
       error: null,
     });
+    mockSupabase.rpc.mockResolvedValueOnce({ data: true, error: null });
 
     const response = await GET(cronRequest());
     const body = await response.json();
@@ -178,63 +128,48 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       success: true,
       unparseable: 1,
     });
-    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
-    expect(mockSupabase.from).toHaveBeenCalledWith('order_notification_outbox');
-    expect(updateBuilder.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        dispatch_started_at: null,
-        next_attempt_at: null,
-        skip_reason: 'unparseable',
-        status: 'skipped',
-      })
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'dead_letter_corrupt_outbox_row',
+      {
+        p_outbox_id: 'outbox-corrupt-early',
+        p_worker_id: expect.any(String),
+      }
     );
-    expect(updateBuilder.match).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'outbox-corrupt-early',
-        status: 'processing',
-      })
-    );
+    // No generic table write: terminalization happens inside the RPC.
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
   it.each([
-    [{ merchant_id: null, order_id: 'order-1' }],
-    [{ merchant_id: 'merchant-1', order_id: null }],
-  ])('dead-letters stored rows missing exactly one identity (%#)', async (storedIdentity) => {
-    mockSupabase.rpc.mockResolvedValueOnce({
-      data: [
-        {
-          attempt_count: 1,
-          event_type: 'manual_order_receipt',
-          id: 'outbox-half-corrupt',
-          max_attempts: 5,
-        },
-      ],
-      error: null,
-    });
-    mockSupabase.from.mockReturnValue(
-      createUpdateBuilder({
-        event_type: 'manual_order_receipt',
-        ...storedIdentity,
-      })
-    );
+    ['rpc-decline', { data: false, error: null }],
+    ['rpc-error', { data: null, error: new Error('rpc unavailable') }],
+  ])(
+    'loops when the dead-letter RPC does not terminalize (%s)',
+    async (_case, rpcResult) => {
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: [
+          {
+            attempt_count: 1,
+            event_type: 'manual_order_receipt',
+            id: 'outbox-half-corrupt',
+            max_attempts: 5,
+          },
+        ],
+        error: null,
+      });
+      mockSupabase.rpc.mockResolvedValueOnce(rpcResult);
 
-    const response = await GET(cronRequest());
-    const body = await response.json();
+      const response = await GET(cronRequest());
+      const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      claimed: 1,
-      skipped: 1,
-      unparseable: 1,
-    });
-    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
-    expect(updateBuilder.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skip_reason: 'unparseable',
-        status: 'skipped',
-      })
-    );
-  });
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        claimed: 1,
+        skipped: 0,
+        unparseable: 1,
+      });
+      expect(mockSupabase.from).not.toHaveBeenCalled();
+    }
+  );
 
   it('loops when the claim projection drops fields the stored row still has', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
@@ -248,13 +183,8 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       ],
       error: null,
     });
-    mockSupabase.from.mockReturnValue(
-      createUpdateBuilder({
-        event_type: 'manual_order_receipt',
-        merchant_id: 'merchant-1',
-        order_id: 'order-1',
-      })
-    );
+    // The RPC re-verifies stored identities server-side and declines.
+    mockSupabase.rpc.mockResolvedValueOnce({ data: false, error: null });
 
     const response = await GET(cronRequest());
     const body = await response.json();
@@ -265,11 +195,14 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       skipped: 0,
       unparseable: 1,
     });
-    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
-    expect(updateBuilder.select).toHaveBeenCalledWith(
-      'event_type, merchant_id, order_id'
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'dead_letter_corrupt_outbox_row',
+      {
+        p_outbox_id: 'outbox-projection-glitch',
+        p_worker_id: expect.any(String),
+      }
     );
-    expect(updateBuilder.update).not.toHaveBeenCalled();
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
   it('never dead-letters shipping rows missing identity fields', async () => {
@@ -294,6 +227,7 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
       skipped: 0,
       unparseable: 1,
     });
+    expect(mockSupabase.rpc).toHaveBeenCalledTimes(1);
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 });

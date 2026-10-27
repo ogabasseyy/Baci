@@ -100,6 +100,42 @@ ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transa
 ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
 ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
 ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
+-- Re-fence after trigger enabling, immediately before the backfill scan:
+-- orders committed between the first fence and the ALTER TABLE locks would
+-- otherwise be mailed by the uncapped scan past the burst budget. The
+-- ALTERs above hold ACCESS EXCLUSIVE to transaction end, so no new order
+-- can slip between this re-check and the scan below.
+DO $$
+DECLARE
+  v_rescanned integer;
+BEGIN
+  SELECT count(*) INTO v_rescanned FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
+    AND o.customer_id IS NOT NULL
+    AND nullif(btrim(COALESCE(o.customer_email, '')), '') IS NOT NULL
+    AND lower(btrim(COALESCE(o.shipping_status, '')))
+      NOT IN ('cancelled', 'canceled', 'returned', 'failed')
+    AND EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = o.id)
+    AND ((o.amount_paid >= o.total
+        AND regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+          IN ('paid', 'unpaid', 'pending', 'partially_paid'))
+      OR regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+        IN ('unpaid', 'pending', 'partially_paid'))
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    );
+  IF v_rescanned > 500 THEN
+    RAISE EXCEPTION 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling: split the catch-up manually before retrying', v_rescanned;
+  END IF;
+END
+$$;
 -- Session SET (not LOCAL): the applier may run statements outside an
 -- explicit transaction, and RESET restores the default either way.
 SET statement_timeout = '120s';

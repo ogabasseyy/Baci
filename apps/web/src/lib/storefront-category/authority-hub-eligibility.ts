@@ -68,10 +68,20 @@ function resolveBrandAuthorityEligibility(
         product.availability === 'InStock' &&
         brandAuthorityTaxonomy.matchesBrand(entry, product.brand ?? null)
     );
+  return resolveAvailableBrandAuthorityEligibility(availableProducts, entry);
+}
+
+/** Brand threshold for already available, category-scoped rows. */
+function resolveAvailableBrandAuthorityEligibility<
+  T extends { brand?: string | null },
+>(products: readonly T[], entry: BrandAuthorityEntry) {
+  const matched = products.filter((product) =>
+    brandAuthorityTaxonomy.matchesBrand(entry, product.brand ?? null)
+  );
   return {
-    products: availableProducts,
-    productCount: availableProducts.length,
-    eligible: availableProducts.length >= entry.minimumProducts,
+    products: matched,
+    productCount: matched.length,
+    eligible: matched.length >= entry.minimumProducts,
   };
 }
 
@@ -92,5 +102,6 @@ function resolveFamilyAuthorityEligibility<T extends { name: string }>(
 
 export const authorityHubEligibility = {
   resolveBrandAuthorityEligibility,
+  resolveAvailableBrandAuthorityEligibility,
   resolveFamilyAuthorityEligibility,
 };

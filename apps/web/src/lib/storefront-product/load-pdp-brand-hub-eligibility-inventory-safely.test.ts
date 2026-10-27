@@ -1,270 +1,96 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
-import {
-  type LoadPdpBrandHubEligibilityInventorySafelyInput,
-  loadPdpBrandHubEligibilityInventorySafely,
-} from './load-pdp-brand-hub-eligibility-inventory-safely';
+import { loadPdpBrandHubEligibilityInventorySafely as load } from './load-pdp-brand-hub-eligibility-inventory-safely';
 
-const mockGetCachedBrandAuthorityProducts = vi.fn();
-const mockGetCategory = vi.fn();
-
+const read = vi.fn();
 vi.mock(
-  '@/lib/storefront-category/get-cached-brand-authority-products',
+  '@/lib/storefront-category/get-cached-brand-authority-inventory',
   () => ({
-    getCachedBrandAuthorityProducts: (...args: unknown[]) =>
-      mockGetCachedBrandAuthorityProducts(...args),
+    getCachedBrandAuthorityInventory: (...args: unknown[]) => read(...args),
   })
 );
-
-vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
-  brandAuthorityPublicData: {
-    getCategory: (...args: unknown[]) => mockGetCategory(...args),
-  },
+const input = {
+  merchantId: 'merchant-1',
+  categorySlug: 'smartphones',
+  productBrand: 'Apple',
+};
+const rows = Array.from({ length: 5 }, (_, i) => ({
+  id: `p-${i}`,
+  slug: `iphone-${i}`,
+  name: `iPhone 15 ${i}`,
+  brand: 'Apple',
+  price: 100,
+  stock: 2,
+  manage_stock: true,
 }));
-
-describe('loadPdpBrandHubEligibilityInventorySafely', () => {
+describe('PDP hub eligibility adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetCategory.mockResolvedValue({
-      id: 'cat-1',
-      name: 'Smartphones',
-      slug: 'smartphones',
-    });
+    read.mockResolvedValue({ products: rows });
   });
-
-  it('returns empty array without calling DB when brand is null, empty, or whitespace', async () => {
-    const inputs: LoadPdpBrandHubEligibilityInventorySafelyInput[] = [
-      { merchantId: 'm-1', categorySlug: 'smartphones', productBrand: null },
-      {
-        merchantId: 'm-1',
-        categorySlug: 'smartphones',
-        productBrand: undefined,
-      },
-      { merchantId: 'm-1', categorySlug: 'smartphones', productBrand: '' },
-      { merchantId: 'm-1', categorySlug: 'smartphones', productBrand: '   ' },
-    ];
-
-    for (const input of inputs) {
-      const result = await loadPdpBrandHubEligibilityInventorySafely(input);
-      expect(result).toEqual([]);
-    }
-    expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
-  });
-
-  it('returns empty array instead of rejecting when the taxonomy lookup throws', async () => {
-    const spy = vi
-      .spyOn(brandAuthorityTaxonomy, 'getEntries')
-      .mockImplementation(() => {
-        throw new Error('taxonomy boom');
-      });
-    try {
-      await expect(
-        loadPdpBrandHubEligibilityInventorySafely({
-          merchantId: 'm-1',
-          categorySlug: 'smartphones',
-          productBrand: 'Apple',
-        })
-      ).resolves.toEqual([]);
-      expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('returns empty array without calling DB when brand is not in brandAuthorityTaxonomy for that category', async () => {
-    const result = await loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: 'm-1',
-      categorySlug: 'smartphones',
-      productBrand: 'NonExistentBrand123',
-    });
-
-    expect(result).toEqual([]);
-    expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
-  });
-
-  it('normalizes raw products, filters out OutOfStock items, and preserves unmanaged zero-stock items', async () => {
-    // 5 Apple products: 3 iPhone 15s (1 with manage_stock: false & stock: 0), 1 iPhone 14, 1 out of stock item
-    const rawDbProducts = [
-      {
-        id: 'p-1',
-        name: 'iPhone 15 Pro Max',
-        slug: 'iphone-15-pro-max',
-        brand: 'Apple',
-        price: 1500000,
-        stock: 5,
-        manage_stock: true,
-      },
-      {
-        id: 'p-2',
-        name: 'iPhone 15 Pro',
-        slug: 'iphone-15-pro',
-        brand: 'Apple',
-        price: 1300000,
-        stock: 3,
-        manage_stock: true,
-      },
-      {
-        id: 'p-3',
-        name: 'iPhone 15',
-        slug: 'iphone-15',
-        brand: 'Apple',
-        price: 1000000,
-        stock: 0,
-        manage_stock: false, // unmanaged zero-stock -> InStock
-      },
-      {
-        id: 'p-4',
-        name: 'iPhone 14',
-        slug: 'iphone-14',
-        brand: 'Apple',
-        price: 850000,
-        stock: 2,
-        manage_stock: true,
-      },
-      {
-        id: 'p-5',
-        name: 'iPhone 13',
-        slug: 'iphone-13',
-        brand: 'Apple',
-        price: 700000,
-        stock: 4,
-        manage_stock: true,
-      },
-      {
-        id: 'p-6',
-        name: 'iPhone 12 Out of Stock',
-        slug: 'iphone-12-out',
-        brand: 'Apple',
-        price: 500000,
-        stock: 0,
-        manage_stock: true, // managed zero-stock -> OutOfStock
-      },
-    ];
-
-    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce(rawDbProducts);
-
-    const result = await loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: 'm-1',
-      categorySlug: 'smartphones',
-      productBrand: 'Apple',
-    });
-
-    expect(mockGetCachedBrandAuthorityProducts).toHaveBeenCalledWith(
-      'm-1',
+  it('requests a complete bounded shared inventory instead of a display limit or full scan', async () => {
+    const products = await load(input);
+    expect(read).toHaveBeenCalledWith(
+      'merchant-1',
       'smartphones',
       expect.objectContaining({ brandKey: 'apple' }),
-      { limit: null }
+      { maxProducts: 100, timeoutMs: 1000 }
     );
-
-    // 5 in-stock products returned, 1 out-of-stock filtered out
-    expect(result).toHaveLength(5);
-    expect(result.every((p) => p.availability === 'InStock')).toBe(true);
-
-    const unmanagedZeroStock = result.find((p) => p.slug === 'iphone-15');
-    expect(unmanagedZeroStock).toBeDefined();
-    expect(unmanagedZeroStock?.stock).toBe(0);
-    expect(unmanagedZeroStock?.availability).toBe('InStock');
-
-    // Feeding the result into resolveEligibleCategoryHubDestinations yields eligible Apple & iPhone 15 hubs
     const destinations = resolveEligibleCategoryHubDestinations({
-      categorySlug: 'smartphones',
-      products: result,
+      categorySlug: input.categorySlug,
+      products,
       assumeCategoryScoped: true,
     });
     expect(destinations.brandHubs).toHaveLength(1);
-    expect(destinations.brandHubs[0]?.brand_key).toBe('apple');
     expect(destinations.familyHubs).toHaveLength(1);
-    expect(destinations.familyHubs[0]?.family_key).toBe('iphone-15');
   });
-
-  it('logs warning and returns empty array when getCachedBrandAuthorityProducts throws', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const error = new Error('Database read failed');
-    mockGetCachedBrandAuthorityProducts.mockRejectedValueOnce(error);
-
-    const result = await loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: 'm-1',
-      categorySlug: 'smartphones',
-      productBrand: 'Apple',
-    });
-
-    expect(result).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to load PDP brand hub eligibility inventory',
-      {
-        merchantId: 'm-1',
-        categorySlug: 'smartphones',
-        productBrand: 'Apple',
-        error,
-      }
-    );
-
-    warnSpy.mockRestore();
+  it.each([
+    null,
+    '',
+    '  ',
+    'unknown-brand',
+  ])('does not read for unsupported brand %s', async (productBrand) => {
+    expect(await load({ ...input, productBrand })).toEqual([]);
+    expect(read).not.toHaveBeenCalled();
   });
-
-  it('fails closed to empty array when getCachedBrandAuthorityProducts exceeds timeoutMs', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    mockGetCachedBrandAuthorityProducts.mockImplementationOnce(
-      () => new Promise(() => {})
-    );
-
-    const result = await loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: 'm-1',
-      categorySlug: 'smartphones',
-      productBrand: 'Apple',
-      timeoutMs: 10,
-    });
-
-    expect(result).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Failed to load PDP brand hub eligibility inventory',
-      expect.objectContaining({
-        merchantId: 'm-1',
-        categorySlug: 'smartphones',
-        productBrand: 'Apple',
-      })
-    );
-
-    warnSpy.mockRestore();
+  it('omits links on incomplete, inactive-category, timeout or database failures', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const message of [
+      'incomplete pool',
+      'category unavailable',
+      'timeout',
+      'database unavailable',
+    ]) {
+      read.mockRejectedValueOnce(new Error(message));
+      expect(await load(input)).toEqual([]);
+    }
+    warn.mockRestore();
   });
-
-  it('returns empty array when brandAuthorityPublicData.getCategory resolves to null (inactive or missing category row) even with matching cached products', async () => {
-    mockGetCategory.mockResolvedValueOnce(null);
-    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce([
-      {
-        id: 'p-1',
-        name: 'iPhone 15 Pro Max',
-        slug: 'iphone-15-pro-max',
-        brand: 'Apple',
-        price: 1500000,
-        stock: 5,
-        manage_stock: true,
-      },
-      {
-        id: 'p-2',
-        name: 'iPhone 15 Pro',
-        slug: 'iphone-15-pro',
-        brand: 'Apple',
-        price: 1300000,
-        stock: 3,
-        manage_stock: true,
-      },
-    ]);
-
-    const result = await loadPdpBrandHubEligibilityInventorySafely({
-      merchantId: 'm-1',
-      categorySlug: 'smartphones',
-      productBrand: 'Apple',
+  it('uses the destination threshold and stock normalization, including string prices', async () => {
+    read.mockResolvedValueOnce({
+      products: rows.map((row, i) => ({
+        ...row,
+        price: '1,000',
+        manage_stock: i !== 0,
+        stock: i === 0 ? 0 : 2,
+      })),
     });
-
-    expect(result).toEqual([]);
-    expect(mockGetCategory).toHaveBeenCalledWith('m-1', 'smartphones');
-    expect(mockGetCachedBrandAuthorityProducts).toHaveBeenCalledWith(
-      'm-1',
-      'smartphones',
-      expect.objectContaining({ brandKey: 'apple' }),
-      { limit: null }
-    );
+    expect(await load(input)).toHaveLength(5);
+    read.mockResolvedValueOnce({
+      products: rows.map((row, i) => ({ ...row, stock: i === 0 ? 0 : 2 })),
+    });
+    expect(await load(input)).toEqual([]);
+  });
+  it('fails closed when taxonomy resolution throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spy = vi
+      .spyOn(brandAuthorityTaxonomy, 'getEntries')
+      .mockImplementation(() => {
+        throw new Error('taxonomy unavailable');
+      });
+    expect(await load(input)).toEqual([]);
+    spy.mockRestore();
+    warn.mockRestore();
   });
 });

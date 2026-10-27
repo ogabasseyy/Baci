@@ -1,4 +1,5 @@
 import { cacheLife, cacheTag } from 'next/cache';
+import { createStorefrontReadDeadline } from '@/lib/create-storefront-read-deadline';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
 import type { RawDbProduct } from '@/lib/normalize-product';
 import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
@@ -38,6 +39,14 @@ export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
       slug
     )
   )
+`;
+
+// Same scope and hydration as destination cards, without display-only payloads.
+const BRAND_AUTHORITY_ELIGIBILITY_SELECT = `
+  id, name, slug, brand, price, stock, stock_quantity, manage_stock,
+  is_parent, parent_product_id, category,
+  categories:category_id(id, slug),
+  product_categories(categories(id, slug))
 `;
 
 export function matchesBrandAuthorityCategory(
@@ -87,29 +96,97 @@ export function matchesBrandAuthorityCategory(
   return false;
 }
 
+/** Optional enrichment must prove a complete pool within a fixed work budget. */
+export interface BrandAuthorityInventoryBudget {
+  maxProducts: number;
+  timeoutMs: number;
+}
+
 async function readCachedBrandAuthorityInventory(
   merchantId: string,
   categorySlug: string,
-  entry: BrandAuthorityEntry
+  entry: BrandAuthorityEntry,
+  budget?: BrandAuthorityInventoryBudget
 ) {
   'use cache';
 
   try {
     cacheLife('products');
-    cacheTag('products', `products-${merchantId}`);
+    cacheTag(
+      'products',
+      `products-${merchantId}`,
+      'categories',
+      `categories-${merchantId}`
+    );
   } catch {
     // Unit tests run without Cache Components enabled.
   }
 
-  const supabase = brandAuthorityPublicData.createClient();
+  const deadline = budget
+    ? createStorefrontReadDeadline(budget.timeoutMs)
+    : null;
+  try {
+    return await (deadline
+      ? Promise.race([
+          readInventory(
+            merchantId,
+            categorySlug,
+            entry,
+            budget,
+            deadline.signal
+          ),
+          deadline.promise,
+        ])
+      : readInventory(merchantId, categorySlug, entry));
+  } finally {
+    deadline?.cleanup();
+  }
+}
+
+async function readInventory(
+  merchantId: string,
+  categorySlug: string,
+  entry: BrandAuthorityEntry,
+  budget?: BrandAuthorityInventoryBudget,
+  signal?: AbortSignal
+) {
+  if (
+    budget &&
+    (!Number.isInteger(budget.maxProducts) ||
+      budget.maxProducts < 1 ||
+      budget.maxProducts > 200 ||
+      !Number.isFinite(budget.timeoutMs) ||
+      budget.timeoutMs <= 0)
+  ) {
+    throw new Error('Invalid brand authority inventory budget');
+  }
+  if (budget) {
+    const category = await brandAuthorityPublicData.readCategory(
+      merchantId,
+      categorySlug,
+      signal
+    );
+    signal?.throwIfAborted();
+    if (!category) throw new Error('Brand authority category unavailable');
+  }
+  const supabase = brandAuthorityPublicData.createClient(signal);
+  // Keep PostgREST's type parser from expanding both long select literals.
+  const productSelect: string = budget
+    ? BRAND_AUTHORITY_ELIGIBILITY_SELECT
+    : BRAND_AUTHORITY_PRODUCTS_SELECT;
   const inStockProducts: RawDbProduct[] = [];
   let from = 0;
 
-  for (let page = 0; page < BRAND_AUTHORITY_MAX_QUERY_PAGES; page++) {
+  for (
+    let page = 0;
+    page < (budget ? 1 : BRAND_AUTHORITY_MAX_QUERY_PAGES);
+    page++
+  ) {
+    signal?.throwIfAborted();
     const brandQueryValues = brandAuthorityTaxonomy.getBrandQueryValues(entry);
     const baseQuery = supabase
       .from('products')
-      .select(BRAND_AUTHORITY_PRODUCTS_SELECT)
+      .select(productSelect, budget ? { count: 'exact' } : undefined)
       .eq('merchant_id', merchantId)
       .eq('status', 'active');
     const brandQuery =
@@ -125,16 +202,30 @@ async function readCachedBrandAuthorityInventory(
               ])
               .join(',')
           );
-    const { data, error } = await brandQuery
+    const { data, error, count } = await brandQuery
       .order('updated_at', { ascending: false })
       .order('id', { ascending: true })
-      .range(from, from + BRAND_AUTHORITY_QUERY_PAGE_SIZE - 1);
+      .range(
+        from,
+        budget ? budget.maxProducts : from + BRAND_AUTHORITY_QUERY_PAGE_SIZE - 1
+      );
+
+    signal?.throwIfAborted();
 
     if (error) {
       throw error;
     }
 
     const rawProducts = (data ?? []) as unknown as RawDbProduct[];
+    // Reject oversized or server-truncated pools before hydration fanout.
+    if (
+      budget &&
+      (count == null ||
+        count !== rawProducts.length ||
+        count > budget.maxProducts)
+    ) {
+      throw new Error('Brand authority inventory exceeds complete-pool budget');
+    }
 
     if (
       page + 1 >= BRAND_AUTHORITY_MAX_QUERY_PAGES &&
@@ -155,6 +246,7 @@ async function readCachedBrandAuthorityInventory(
         merchantId,
         matchingProducts
       );
+      signal?.throwIfAborted();
       inStockProducts.push(
         ...hydratedProducts.filter(isBrandAuthorityProductInStock)
       );
@@ -179,7 +271,13 @@ async function readCachedBrandAuthorityInventory(
 export function getCachedBrandAuthorityInventory(
   merchantId: string,
   categorySlug: string,
-  entry: BrandAuthorityEntry
+  entry: BrandAuthorityEntry,
+  budget?: BrandAuthorityInventoryBudget
 ) {
-  return readCachedBrandAuthorityInventory(merchantId, categorySlug, entry);
+  return readCachedBrandAuthorityInventory(
+    merchantId,
+    categorySlug,
+    entry,
+    budget
+  );
 }

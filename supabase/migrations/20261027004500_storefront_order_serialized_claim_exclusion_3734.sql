@@ -1,39 +1,49 @@
--- Issue #3734: the serialized-claim exclusion misses offer_id-without-condition
--- lines (double reservation risk).
+-- Issue #3734: serialized units are claimed for condition-offer lines
+-- (double reservation risk: offer stock decremented AND base-product
+-- units reserved, or serialized_inventory_unavailable in strict mode).
 --
--- private.create_storefront_order_unchecked persists the order line
--- condition as COALESCE(t.offer_condition, t.condition), but the
--- serialized-unit claim loop excludes condition-offer lines by comparing
--- the raw staging condition (t.condition, which falls back to the
--- product condition when the client submits offer_id without a
--- condition) against the persisted oi.condition. When the offer's live
--- condition differs from that fallback, the exclusion misses and
--- private.claim_variant_inventory_units_for_order_item_internal reserves
--- serialized base-product units after the condition-offer stock was
--- already decremented (or raises serialized_inventory_unavailable in
--- strict mode).
---
--- Fix: match the exclusion against the persisted shape,
--- COALESCE(t.offer_condition, t.condition), identical to the insert
--- list. Required source shape is asserted so schema drift fails closed
--- (same pg_get_functiondef string-patch pattern as 15140000).
+-- The creation exclusion in private.create_storefront_order_unchecked
+-- re-derived offer identity from a staging (product, variant,
+-- condition) tuple. That misses offer_id-only lines when the live
+-- offer condition differs from the product fallback, and wrongly
+-- catches plain lines whose condition merely equals an offer's. The
+-- fix keys the creation loop on the persisted line identity instead:
+-- order_items.offer_line (true for offer_id or condition_offer_id
+-- lines) and product_offer_id, both written by the insert list and the
+-- identity trigger. Plain lines can no longer be mis-excluded, and
+-- offer lines can no longer slip through on a condition mismatch.
 --
 -- The same gap exists in the pending-order reuse path:
 -- private.prepare_storefront_order_for_checkout iterates every order
 -- item and claims serialized units whenever none are reserved, with no
--- offer-line exclusion at all. An unpaid offer_id-only order (reusable
--- via /api/orders/reuse) would get base-product units claimed on reuse.
--- The reuse loop now selects oi.offer_line (persisted true for
--- offer_id or condition_offer_id lines) and skips the claim for those
--- lines. The reserved-units branch is untouched: with creation fixed,
--- offer lines never hold reservations, and pre-existing ones only get
--- their expiry refreshed, never new claims.
+-- offer-line exclusion at all. The reuse loop now selects the same
+-- persisted markers and skips the claim for offer lines. Because the
+-- pre-fix code ran unguarded, legacy orders may already hold wrongly
+-- reserved units (reserved or non-expiring): the reuse loop releases
+-- them (reservation_released events, units detached, fulfillment_data
+-- rewritten) instead of refreshing expiry, and skips the claim.
+--
+-- The payment-confirmation path had the same hole:
+-- private.confirm_order_inventory_reservations iterated every item and
+-- reclaimed units for held lines (or raised late_payment_reservation_lost
+-- for strict policies). It now releases stale reservations on offer
+-- lines first, then skips them; fulfillment_data is rewritten so freed
+-- units are not listed as assigned.
+--
+-- Legacy marker shape: rows created before 20261019100000 may carry
+-- product_offer_id with offer_line false (the backfill keyed on
+-- offer_id; the trigger derives from both only since 19100000).
+-- Reuse and confirm guards therefore key on either marker, matching
+-- the current trigger definition. Required source shape is asserted
+-- so schema drift fails closed (same pg_get_functiondef string-patch
+-- pattern as 15140000).
 DO $claim_exclusion_3734$
 DECLARE
   function_oid oid;
   definition text;
   old_marker text := $marker$        AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_storefront_order_items t WHERE t.condition_offer_id IS NOT NULL AND t.product_id=oi.product_id AND t.variant_id IS NOT DISTINCT FROM oi.variant_id AND t.condition IS NOT DISTINCT FROM oi.condition)$marker$;
-  new_marker text := $marker$        AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_storefront_order_items t WHERE t.condition_offer_id IS NOT NULL AND t.product_id=oi.product_id AND t.variant_id IS NOT DISTINCT FROM oi.variant_id AND COALESCE(t.offer_condition, t.condition) IS NOT DISTINCT FROM oi.condition)$marker$;
+  new_marker text := $marker$        AND oi.offer_line IS DISTINCT FROM TRUE
+        AND oi.product_offer_id IS NULL$marker$;
 BEGIN
   SELECT p.oid INTO STRICT function_oid
   FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -113,7 +123,7 @@ DECLARE
           PERFORM private.record_variant_inventory_event(
             v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
             v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
-            jsonb_build_object('reason', 'offer_line_double_reservation_repair')
+jsonb_build_object('releaseReason', 'checkout_reuse')
           );
           UPDATE public.variant_inventory
           SET status = 'available',
@@ -207,7 +217,7 @@ DECLARE
           PERFORM private.record_variant_inventory_event(
             v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
             v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
-            jsonb_build_object('reason', 'offer_line_double_reservation_repair')
+'{}'::jsonb
           );
           UPDATE public.variant_inventory
           SET status = 'available',

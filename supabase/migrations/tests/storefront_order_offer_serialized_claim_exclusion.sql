@@ -21,6 +21,7 @@ DECLARE
   v_merchant_id uuid := '03d00000-0000-4000-8000-000000000001';
   v_product_id uuid := '03d00000-0000-4000-8000-000000000002';
   v_offer_id uuid := '03d00000-0000-4000-8000-000000000003';
+  v_newoffer_id uuid := '03d00000-0000-4000-8000-000000000011';
   v_anchor_id uuid := '03d00000-0000-4000-8000-000000000004';
   v_unit_id uuid := '03d00000-0000-4000-8000-000000000005';
   v_plain_product_id uuid := '03d00000-0000-4000-8000-000000000008';
@@ -29,9 +30,13 @@ DECLARE
   v_order_id uuid;
   v_tracking_token text;
   v_item_id uuid;
+  v_item_b uuid;
+  v_item_c uuid;
+  v_item_d uuid;
   v_plain_item_id uuid;
   v_condition text;
   v_offer_stock integer;
+  v_newoffer_stock integer;
   v_claimed integer;
   v_plain_claimed integer;
   v_legacy_status text;
@@ -63,7 +68,9 @@ BEGIN
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition,
     price, stock_quantity, status, grade, condition_notes)
   VALUES (v_offer_id, v_product_id, v_merchant_id, 'used', 400000, 5,
-    'active', 'A', 'Light scratches');
+    'active', 'A', 'Light scratches'),
+    (v_newoffer_id, v_product_id, v_merchant_id, 'new', 450000, 5,
+    'active', 'A', 'Mint in box');
 
   -- Positive control: a plain serialized line (no offer) must still
   -- claim exactly one unit through creation, reuse, and confirmation.
@@ -105,6 +112,20 @@ BEGIN
           'quantity', 1
         ),
         jsonb_build_object(
+          'product_id', v_product_id,
+          'condition', 'used',
+          'quantity', 1
+        ),
+        jsonb_build_object(
+          'product_id', v_product_id,
+          'quantity', 1
+        ),
+        jsonb_build_object(
+          'product_id', v_product_id,
+          'offer_id', v_newoffer_id,
+          'quantity', 1
+        ),
+        jsonb_build_object(
           'product_id', v_plain_product_id,
           'quantity', 1
         )
@@ -116,9 +137,37 @@ BEGIN
 
   SELECT id, condition INTO v_item_id, v_condition
   FROM public.order_items
-  WHERE order_id = v_order_id AND product_id = v_product_id;
+  WHERE order_id = v_order_id AND product_id = v_product_id
+    AND offer_id = v_offer_id;
   IF v_condition IS DISTINCT FROM 'used' THEN
     RAISE EXCEPTION 'expected live offer condition used, got %', v_condition;
+  END IF;
+
+  SELECT id INTO v_item_b
+  FROM public.order_items
+  WHERE order_id = v_order_id AND product_id = v_product_id
+    AND offer_id IS NULL AND condition = 'used';
+  IF v_item_b IS NULL THEN
+    RAISE EXCEPTION 'expected condition-only line to persist';
+  END IF;
+
+  -- Collision case (wi-oo): same product/variant, plain line whose
+  -- condition equals the new offer's. Tuple matching would mis-exclude
+  -- it; line-identity markers must not.
+  SELECT id INTO v_item_c
+  FROM public.order_items
+  WHERE order_id = v_order_id AND product_id = v_product_id
+    AND offer_id IS NULL AND condition = 'new';
+  IF v_item_c IS NULL THEN
+    RAISE EXCEPTION 'expected same-product plain line to persist';
+  END IF;
+
+  SELECT id INTO v_item_d
+  FROM public.order_items
+  WHERE order_id = v_order_id AND product_id = v_product_id
+    AND offer_id = v_newoffer_id;
+  IF v_item_d IS NULL THEN
+    RAISE EXCEPTION 'expected new-condition offer line to persist';
   END IF;
 
   SELECT id INTO v_plain_item_id
@@ -130,20 +179,26 @@ BEGIN
 
   SELECT stock_quantity INTO v_offer_stock
   FROM public.product_offers WHERE id = v_offer_id;
-  IF v_offer_stock <> 4 THEN
-    RAISE EXCEPTION 'expected offer stock 4 after quantity 1, got %', v_offer_stock;
+  IF v_offer_stock <> 3 THEN
+    RAISE EXCEPTION 'expected used-offer stock 3 after two lines, got %', v_offer_stock;
+  END IF;
+
+  SELECT stock_quantity INTO v_newoffer_stock
+  FROM public.product_offers WHERE id = v_newoffer_id;
+  IF v_newoffer_stock <> 4 THEN
+    RAISE EXCEPTION 'expected new-offer stock 4 after quantity 1, got %', v_newoffer_stock;
   END IF;
 
   -- The serialized claim loop must skip the condition-offer line: no
   -- base-product unit may be reserved for it.
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_item_id;
+  WHERE order_item_id IN (v_item_id, v_item_b, v_item_d);
   SELECT count(*) INTO v_plain_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_plain_item_id;
-  IF v_plain_claimed <> 1 THEN
-    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  WHERE order_item_id IN (v_item_c, v_plain_item_id);
+  IF v_plain_claimed <> 2 THEN
+    RAISE EXCEPTION 'expected plain lines to keep exactly two claimed units, got %', v_plain_claimed;
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line, got %', v_claimed;
@@ -177,12 +232,12 @@ BEGIN
 
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_item_id;
+  WHERE order_item_id IN (v_item_id, v_item_b, v_item_d);
   SELECT count(*) INTO v_plain_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_plain_item_id;
-  IF v_plain_claimed <> 1 THEN
-    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  WHERE order_item_id IN (v_item_c, v_plain_item_id);
+  IF v_plain_claimed <> 2 THEN
+    RAISE EXCEPTION 'expected plain lines to keep exactly two claimed units, got %', v_plain_claimed;
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
@@ -230,6 +285,13 @@ BEGIN
     RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit after legacy release, got %', v_plain_claimed;
   END IF;
 
+  IF (SELECT fulfillment_data->'inventoryUnits' FROM public.order_items WHERE id = v_item_id) <> '[]'::jsonb THEN
+    RAISE EXCEPTION 'expected released offer line fulfillment to list no units';
+  END IF;
+  IF (SELECT (fulfillment_data->>'missingUnitCount')::integer FROM public.order_items WHERE id = v_item_id) <> 1 THEN
+    RAISE EXCEPTION 'expected released offer line fulfillment to report line quantity as missing';
+  END IF;
+
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
@@ -245,12 +307,12 @@ BEGIN
 
   SELECT count(*) INTO v_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_item_id;
+  WHERE order_item_id IN (v_item_id, v_item_b, v_item_d);
   SELECT count(*) INTO v_plain_claimed
   FROM public.variant_inventory
-  WHERE order_item_id = v_plain_item_id;
-  IF v_plain_claimed <> 1 THEN
-    RAISE EXCEPTION 'expected plain control line to keep exactly one claimed unit, got %', v_plain_claimed;
+  WHERE order_item_id IN (v_item_c, v_plain_item_id);
+  IF v_plain_claimed <> 2 THEN
+    RAISE EXCEPTION 'expected plain lines to keep exactly two claimed units, got %', v_plain_claimed;
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;

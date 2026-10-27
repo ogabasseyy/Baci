@@ -56,11 +56,20 @@ async function requestSharedCartSnapshot(
     response = await fetch(cartRoute('/api/storefront/cart', merchantSlug), {
       cache: 'no-store',
       credentials: 'same-origin',
+      headers: { 'x-baci-cart-probe': '1' },
       method: 'GET',
       signal,
     });
   } catch {
     return UNAVAILABLE_FETCH;
+  }
+  if (response.status === 204) {
+    return {
+      ok: false,
+      code: 'unauthorized',
+      snapshot: null,
+      retryable: false,
+    };
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {

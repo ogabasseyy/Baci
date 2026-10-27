@@ -33,19 +33,37 @@ export function CookieConsent() {
   return (
     <div
       className={cn(
-        'fixed bottom-4 left-4 right-4 z-50 md:left-1/2 md:right-auto md:-translate-x-1/2 md:max-w-5xl w-full',
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
         'will-change-transform'
       )}
       style={{
+        // Keep the delayed prompt out of document flow even before route CSS.
+        position: 'fixed',
+        bottom: '1rem',
+        left: 'max(1rem, calc((100% - 64rem) / 2))',
+        right: 'max(1rem, calc((100% - 64rem) / 2))',
+        width: 'auto',
+        // Below the cart drawer (z-60), above the mobile footer (z-40):
+        // an open drawer must not be covered by the consent prompt.
+        zIndex: 50,
         contain: 'layout style paint',
       }}
       role="dialog"
       aria-label="Cookie consent"
     >
       <div
+        style={{
+          background:
+            'var(--store-background, hsl(var(--background, 0 0% 100%)))',
+          color:
+            'var(--store-background-text, hsl(var(--foreground, 240 10% 3.9%)))',
+          border:
+            '1px solid var(--store-border, hsl(var(--border, 240 5.9% 90%)))',
+          borderRadius: '1rem',
+          padding: '1rem',
+        }}
         className={cn(
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
           'transition-all duration-300 ease-in-out'
@@ -72,6 +90,7 @@ export function CookieConsent() {
                   you agree to our{' '}
                   <Link
                     href={asRoute(`${basePath}/privacy`)}
+                    prefetch={false}
                     className="underline underline-offset-4 hover:text-white"
                   >
                     Read our policy

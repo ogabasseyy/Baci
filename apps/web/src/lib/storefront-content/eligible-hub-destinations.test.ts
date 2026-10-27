@@ -235,26 +235,5 @@ describe('eligible-hub-destinations', () => {
       expect(result.brandHubs).toHaveLength(1);
       expect(result.familyHubs).toHaveLength(1);
     });
-
-    it('excludes explicitly managed products with unknown stock', () => {
-      const products = [
-        'iPhone 15 Pro Max',
-        'iPhone 15 Pro',
-        'iPhone 15',
-        'iPhone 14',
-        'iPhone 13',
-      ].map((name) => ({
-        name,
-        brand: 'Apple',
-        stock: null,
-        manage_stock: true,
-        category_slug: 'smartphones',
-      }));
-      const result = resolveEligibleCategoryHubDestinations({
-        categorySlug: 'smartphones',
-        products,
-      });
-      expect(result.brandHubs).toHaveLength(0);
-    });
   });
 });

@@ -192,12 +192,18 @@ SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true
 );
 
+-- SELECT-INTO form: a PERFORM call inside an exception handler
+-- proved unreliable on the pinned replay image, while SELECT
+-- reads behave normally. The contract is unchanged: any
+-- successful execution fails, any error passes.
 DO $i2$
 DECLARE
+  v_id uuid;
   v_msg text;
 BEGIN
   BEGIN
-    PERFORM public.insert_prepared_vtu_transaction(
+    SELECT id INTO v_id
+    FROM public.insert_prepared_vtu_transaction(
       'e2e2e2e2-0000-4000-8000-000000000001',
       'f3f3f3f3-0000-4000-8000-000000000001',
       'b22df000-0000-4000-8000-000000000001',
@@ -211,7 +217,7 @@ BEGIN
     -- proves the service_role-only grant; the grants pin below
     -- asserts the grant absence directly.
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg = 'I2: authenticated prepare-insert unexpectedly allowed' THEN
+    IF v_msg LIKE 'I2: %' THEN
       RAISE;
     END IF;
   END;
@@ -318,12 +324,17 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
+-- SELECT-INTO form: a PERFORM call inside an exception handler
+-- proved unreliable on the pinned replay image, while SELECT
+-- reads behave normally.
 DO $k4$
 DECLARE
+  v_row record;
   v_msg text;
 BEGIN
   BEGIN
-    PERFORM public.lookup_vtu_idempotency_row(
+    SELECT * INTO v_row
+    FROM public.lookup_vtu_idempotency_row(
       'e5e5e5e5-0000-4000-8000-000000000001',
       'b22df000-0000-4000-8000-000000000001'
     );
@@ -333,7 +344,7 @@ BEGIN
     -- proves least privilege; the grants pin below asserts the
     -- grant absence directly.
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg = 'K4: anon unexpectedly executed lookup RPC' THEN
+    IF v_msg LIKE 'K4: %' THEN
       RAISE;
     END IF;
   END;
@@ -684,23 +695,27 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
+-- SELECT-INTO form: a PERFORM call inside an exception handler
+-- proved unreliable on the pinned replay image, while SELECT
+-- reads behave normally.
 DO $d5$
 DECLARE
+  v_status text;
   v_msg text;
 BEGIN
   BEGIN
-    PERFORM public.fail_orphan_vtu_transaction(
+    SELECT public.fail_orphan_vtu_transaction(
       'd4d4d4d4-0000-4000-8000-000000000003',
       'e2e2e2e2-0000-4000-8000-000000000001',
       'b22df000-0000-4000-8000-000000000001'
-    );
+    ) INTO v_status;
     RAISE EXCEPTION 'D5: anon unexpectedly executed fail-orphan RPC';
   EXCEPTION WHEN OTHERS THEN
     -- Outcome-based: only execution fails. Any denial error
     -- proves least privilege; the grants pin below asserts the
     -- grant absence directly.
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg = 'D5: anon unexpectedly executed fail-orphan RPC' THEN
+    IF v_msg LIKE 'D5: %' THEN
       RAISE;
     END IF;
   END;

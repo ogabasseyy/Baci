@@ -648,58 +648,6 @@ SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 
--- Caller-identity pin (diagnostic result): replay runs S4 as anon
--- (CI ordinal 173 stopped at the anon block), so the remaining
--- question is the applied ACL shape. Five separate blocks: the
--- first that fires names the shape (default-public / PUBLIC
--- grantee / explicit anon grantee / privilege-checker divergence).
-DO $s4acl_default$
-BEGIN
-  IF (SELECT proacl IS NULL FROM pg_catalog.pg_proc
-      WHERE oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure) THEN
-    RAISE EXCEPTION 'S4-acl: proacl IS NULL (default PUBLIC execute)';
-  END IF;
-END;
-$s4acl_default$;
-
-DO $s4acl_public$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.pg_proc p,
-      pg_catalog.aclexplode(p.proacl) a
-    WHERE p.oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure
-      AND a.grantee = 0
-  ) THEN
-    RAISE EXCEPTION 'S4-acl: PUBLIC grantee present';
-  END IF;
-END;
-$s4acl_public$;
-
-DO $s4acl_anon$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.pg_proc p,
-      pg_catalog.aclexplode(p.proacl) a
-    WHERE p.oid = 'public.get_vtu_checkout_settings(uuid, uuid)'::regprocedure
-      AND a.grantee = 'anon'::regrole::oid
-  ) THEN
-    RAISE EXCEPTION 'S4-acl: explicit anon grantee present';
-  END IF;
-END;
-$s4acl_anon$;
-
-DO $s4acl_haspriv$
-BEGIN
-  IF pg_catalog.has_function_privilege(
-    'anon',
-    'public.get_vtu_checkout_settings(uuid, uuid)',
-    'EXECUTE'
-  ) THEN
-    RAISE EXCEPTION 'S4-acl: has_function_privilege(anon) is TRUE';
-  END IF;
-END;
-$s4acl_haspriv$;
-
 DO $s4grant$
 BEGIN
   IF pg_catalog.has_function_privilege(
@@ -712,73 +660,31 @@ BEGIN
 END;
 $s4grant$;
 
--- Outcome capture (diagnostic): the replay runner surfaces only a
--- line number, so the probe records its SQLSTATE via set_config
--- (no table permissions involved) and follow-up blocks raise per
--- outcome — the failing line names what happened.
-DO $s4probe$
-BEGIN
-  BEGIN
-    PERFORM public.get_vtu_checkout_settings(
-      'e1e1e1e1-0000-4000-8000-000000000001',
-      'a11ce000-0000-4000-8000-000000000001'
-    );
-    PERFORM pg_catalog.set_config('vtu.s4state', 'EXECUTED', true);
-  EXCEPTION WHEN OTHERS THEN
-    PERFORM pg_catalog.set_config('vtu.s4state', SQLSTATE, true);
-  END;
-END;
-$s4probe$;
-
-DO $s4out_executed$
-BEGIN
-  IF pg_catalog.current_setting('vtu.s4state', true) = 'EXECUTED' THEN
-    RAISE EXCEPTION 'S4-outcome: anon executed settings RPC';
-  END IF;
-END;
-$s4out_executed$;
-
-DO $s4out_42501$
-BEGIN
-  IF pg_catalog.current_setting('vtu.s4state', true) = '42501' THEN
-    RAISE EXCEPTION 'S4-outcome: denied with 42501';
-  END IF;
-END;
-$s4out_42501$;
-
-DO $s4out_42883$
-BEGIN
-  IF pg_catalog.current_setting('vtu.s4state', true) = '42883' THEN
-    RAISE EXCEPTION 'S4-outcome: function unavailable (42883)';
-  END IF;
-END;
-$s4out_42883$;
-
-DO $s4out_other$
-BEGIN
-  IF pg_catalog.current_setting('vtu.s4state', true)
-      NOT IN ('EXECUTED', '42501', '42883') THEN
-    RAISE EXCEPTION 'S4-outcome: other SQLSTATE (see following blocks)';
-  END IF;
-END;
-$s4out_other$;
-
+-- SELECT-INTO form (same shape as the S1-S3 reads): a PERFORM call
+-- inside an exception handler proved unreliable on the pinned
+-- replay image, while SELECT reads behave normally. The contract
+-- is unchanged: any successful execution fails, any error passes.
 DO $s4$
 DECLARE
+  v_row record;
   v_msg text;
 BEGIN
   BEGIN
-    PERFORM public.get_vtu_checkout_settings(
+    SELECT * INTO v_row
+    FROM public.get_vtu_checkout_settings(
       'e1e1e1e1-0000-4000-8000-000000000001',
       'a11ce000-0000-4000-8000-000000000001'
     );
+    IF FOUND THEN
+      RAISE EXCEPTION 'S4: anon read settings row';
+    END IF;
     RAISE EXCEPTION 'S4: anon unexpectedly executed settings RPC';
   EXCEPTION WHEN OTHERS THEN
     -- Outcome-based: only execution fails. Any denial error
     -- (42501 or platform-specific) proves least privilege; the
     -- S4-grant pin above asserts the grant absence directly.
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
-    IF v_msg = 'S4: anon unexpectedly executed settings RPC' THEN
+    IF v_msg LIKE 'S4: %' THEN
       RAISE;
     END IF;
   END;

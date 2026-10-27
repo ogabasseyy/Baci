@@ -19,9 +19,9 @@ function readStorefrontFile(fileName: string): string {
 
 describe('critical PDP description geometry', () => {
   it('provides neutral fallbacks for visible summary colors when theme tokens are absent', () => {
-    const summaryRule = readStorefrontFile('storefront-pdp-critical.css').match(
-      /\[data-ogabassey-pdp-visible-summary\]\s*\{([\s\S]*?)\}/
-    )?.[1];
+    const summaryRule = readStorefrontFile(
+      'storefront-pdp-critical-summary.css'
+    ).match(/\[data-ogabassey-pdp-visible-summary\]\s*\{([\s\S]*?)\}/)?.[1];
 
     expect(summaryRule).toBeDefined();
     expect(summaryRule).toContain(

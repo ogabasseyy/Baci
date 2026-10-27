@@ -11,6 +11,26 @@ vi.mock(
   () => ({ loadCategoryScopedSemanticInventorySafely: vi.fn() })
 );
 
+// No-override cases must not reach real destination loaders: hub
+// verification passes hubs through, compare/manifest lookups fail closed.
+vi.mock('./verify-eligible-hubs-against-destination', () => ({
+  verifyEligibleHubsAgainstDestination: vi.fn(
+    async (args: { hubs: unknown }) => args.hubs
+  ),
+}));
+vi.mock(
+  '@/lib/storefront-compare/load-compare-category-inventory-safely',
+  () => ({ loadCompareCategoryInventorySafely: vi.fn(async () => null) })
+);
+vi.mock(
+  '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely',
+  () => ({
+    loadMaintainedCompareRouteManifestSafely: vi.fn(
+      async () => new Set<string>()
+    ),
+  })
+);
+
 const mockLoadScopedInventory = vi.mocked(
   loadCategoryScopedSemanticInventorySafely
 );

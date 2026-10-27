@@ -127,10 +127,7 @@ describe('isPromotedManualReceipt', () => {
       'fractional quantity',
       { items: [{ name: 'Phone', quantity: 1.5, price: 500 }] },
     ],
-    [
-      'zero quantity',
-      { items: [{ name: 'Phone', quantity: 0, price: 500 }] },
-    ],
+    ['zero quantity', { items: [{ name: 'Phone', quantity: 0, price: 500 }] }],
     [
       'negative quantity',
       { items: [{ name: 'Phone', quantity: -1, price: 500 }] },

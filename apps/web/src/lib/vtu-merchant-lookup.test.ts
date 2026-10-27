@@ -37,7 +37,6 @@ const MERCHANT = {
   id: 'merchant-1',
   slug: 'new-slug',
   business_name: 'Ogabassey',
-  paystack_subaccount_code: null,
 };
 
 describe('resolveVtuMerchant', () => {
@@ -59,6 +58,28 @@ describe('resolveVtuMerchant', () => {
 
     expect(merchant).toEqual(MERCHANT);
     expect(mockGetCurrentSlugForAliasStrict).not.toHaveBeenCalled();
+  });
+
+  it('never selects the revoked payment-secret column', async () => {
+    // paystack_subaccount_code is revoked from authenticated/anon
+    // (S1 PR 2b column ACL): selecting it 42501s the RLS-bound
+    // checkout, and no VTU caller consumes it (Phase 2, #3694).
+    const select = vi.fn((_cols: string) => ({
+      eq: vi.fn(() => ({
+        maybeSingle: vi.fn().mockResolvedValue({ data: MERCHANT, error: null }),
+      })),
+    }));
+    const supabase = {
+      from: vi.fn(() => ({ select })),
+    };
+
+    await resolveVtuMerchant({
+      merchantSlug: 'live-slug',
+      supabase: supabase as never,
+    });
+
+    expect(select).toHaveBeenCalledWith('id, slug, business_name');
+    expect(select.mock.calls[0]?.[0]).not.toContain('paystack_subaccount_code');
   });
 
   it('resolves a stale slug via the strict alias fallback', async () => {

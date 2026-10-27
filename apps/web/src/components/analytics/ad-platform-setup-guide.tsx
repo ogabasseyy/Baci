@@ -15,7 +15,7 @@ const guides: Record<AdPlatform, { name: string; steps: string[] }> = {
       'In Meta Events Manager, select the website Pixel already connected to your product catalog, if you have one.',
       'Copy that Pixel ID and create or retrieve its Conversions API access token. Keep the token private.',
       'Enter the Pixel ID and token in this Baci page, then save. Baci manages the storefront event wiring; do not add a second pixel script.',
-      'Grant Marketing consent on your storefront and check Test Events for browser activity. Check server delivery separately; a saved setting is not a delivery receipt.',
+      'Grant Analytics consent to load the Meta Pixel and check Test Events for browser activity. The Marketing preference controls Meta data processing options. Check server delivery separately; a saved setting is not a delivery receipt.',
     ],
   },
   tiktok: {
@@ -55,8 +55,8 @@ export function AdPlatformSetupGuide({ platform }: { platform: AdPlatform }) {
       <CardHeader>
         <CardTitle>{guide.name} setup guide</CardTitle>
         <CardDescription>
-          Use the Pixel and credentials from your own provider account. Never
-          share screenshots that reveal Pixel IDs, event codes, or credentials.
+          Keep access tokens, keys, and OAuth credentials private. Pixel IDs and
+          event codes belong to one store; do not copy them from examples.
         </CardDescription>
       </CardHeader>
       <CardContent>

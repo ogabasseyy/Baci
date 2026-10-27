@@ -29,9 +29,9 @@ export function ChatgptSetupGuide() {
       <CardContent className="space-y-6">
         <p className="text-sm text-muted-foreground">
           The example screen below shows a generic event setup view. It does not
-          contain a merchant Pixel ID or credentials. Use values from your own
-          Ads Manager account; never copy identifiers from examples or share
-          screenshots that reveal your IDs or keys.
+          contain merchant-specific values. Use the Pixel ID and key from your
+          own Ads Manager account; do not copy another store’s ID, and keep keys
+          private. Never share screenshots that reveal credentials.
         </p>
         {steps.map((step) => (
           <details key={step.title} className="rounded-lg border p-4">
@@ -68,7 +68,7 @@ export function ChatgptSetupGuide() {
           <h3 className="mb-2 font-medium">What to verify</h3>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>
-              Browser events appear after a visitor grants measurement consent.
+              Browser events appear after a visitor grants Analytics consent.
             </li>
             <li>Server delivery is confirmed separately in Event Stream.</li>
             <li>

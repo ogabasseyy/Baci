@@ -7,10 +7,15 @@ it('provides a safe example screen and warns merchants to use their own credenti
   render(<ChatgptSetupGuide />);
   expect(screen.getByText(/generic event setup view/)).toBeInTheDocument();
   expect(
-    screen.getByText(/never copy identifiers from examples/)
+    screen.getByText(/do not copy another store’s ID/)
   ).toBeInTheDocument();
   expect(
     screen.getByText(/Never share a screenshot of the generated key/)
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /Browser events appear after a visitor grants Analytics consent/
+    )
   ).toBeInTheDocument();
   expect(screen.getAllByRole('img')).toHaveLength(1);
   const image = screen.getByAltText('3. Connect the Pixel example screen');

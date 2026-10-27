@@ -76,9 +76,9 @@ export function buildSmartphoneProducts(): CategoryHubProduct[] {
       price: 350000,
       product_key_specs: {
         main_camera_mp: 48,
-        battery_mah: 5000,
-        ram_gb: 8,
-        storage_gb: 128,
+        battery_mah: 5500,
+        ram_gb: 12,
+        storage_gb: 256,
       },
     }),
     makeProduct({
@@ -88,9 +88,9 @@ export function buildSmartphoneProducts(): CategoryHubProduct[] {
       price: 480000,
       product_key_specs: {
         main_camera_mp: 50,
-        battery_mah: 5000,
-        ram_gb: 8,
-        storage_gb: 128,
+        battery_mah: 5500,
+        ram_gb: 12,
+        storage_gb: 256,
       },
     }),
     makeProduct({

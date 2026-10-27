@@ -1,90 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
 import { buildInformationalClusterModel } from './build-informational-cluster-model';
+import {
+  smartphoneCategoryData,
+  smartphoneGuidePost,
+} from './build-informational-cluster-model.test-fixtures';
 
 vi.mock(
   '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely',
   () => ({ loadCategoryScopedSemanticInventorySafely: vi.fn() })
 );
 
+// No-override cases must not reach real destination loaders: hub
+// verification passes hubs through, compare/manifest lookups fail closed.
+vi.mock('./verify-eligible-hubs-against-destination', () => ({
+  verifyEligibleHubsAgainstDestination: vi.fn(
+    async (args: { hubs: unknown }) => args.hubs
+  ),
+}));
+vi.mock(
+  '@/lib/storefront-compare/load-compare-category-inventory-safely',
+  () => ({ loadCompareCategoryInventorySafely: vi.fn(async () => null) })
+);
+vi.mock('./load-price-band-destination-pool-safely', () => ({
+  loadPriceBandDestinationPoolSafely: vi.fn(async () => null),
+}));
+vi.mock(
+  '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely',
+  () => ({
+    loadMaintainedCompareRouteManifestSafely: vi.fn(
+      async () => new Set<string>()
+    ),
+  })
+);
+
 const mockLoadScopedInventory = vi.mocked(
   loadCategoryScopedSemanticInventorySafely
 );
-
-const smartphoneGuidePost = {
-  slug: 'best-phones-in-nigeria',
-  title: 'Best Phones in Nigeria for 2026',
-  excerpt: 'Affordable Android and iPhone picks for buyers in Nigeria.',
-  category: 'Smartphones',
-  tags: ['budget', 'iphone', 'samsung'],
-  keywords: ['android', 'battery', 'smartphones'],
-  featured_image_url: null,
-  published_at: '2026-04-10T09:00:00.000Z',
-  reading_time_minutes: 6,
-};
-
-const smartphoneCategoryData = {
-  merchant: {
-    id: 'merchant-1',
-    business_name: 'Ogabassey',
-    slug: 'ogabassey',
-  },
-  category: {
-    slug: 'smartphones',
-    name: 'Smartphones',
-  },
-  products: [
-    {
-      slug: 'iphone-17-pro-max',
-      name: 'iPhone 17 Pro Max',
-      brand: 'Apple',
-      price: 495_000,
-      category_slug: 'smartphones',
-      product_key_specs: {
-        chipset: 'A19 Pro',
-        ram_gb: 8,
-        storage_gb: 256,
-      },
-    },
-    {
-      slug: 'samsung-galaxy-z-trifold',
-      name: 'Samsung Galaxy Z TriFold',
-      brand: 'Samsung',
-      price: 480_000,
-      category_slug: 'smartphones',
-      product_key_specs: {
-        chipset: 'Snapdragon 8 Elite',
-        ram_gb: 16,
-        storage_gb: 512,
-      },
-    },
-    {
-      slug: 'galaxy-a56',
-      name: 'Galaxy A56',
-      brand: 'Samsung',
-      price: 410_000,
-      category_slug: 'smartphones',
-      product_key_specs: {
-        chipset: 'Exynos',
-        ram_gb: 8,
-        storage_gb: 128,
-      },
-    },
-    {
-      slug: 'iphone-15',
-      name: 'iPhone 15',
-      brand: 'Apple',
-      price: 430_000,
-      category_slug: 'smartphones',
-      product_key_specs: {
-        chipset: 'A17',
-        ram_gb: 8,
-        storage_gb: 128,
-      },
-    },
-  ],
-  isCollection: false,
-};
 
 describe('buildInformationalClusterModel', () => {
   beforeEach(() => {
@@ -247,14 +199,10 @@ describe('buildInformationalClusterModel', () => {
       post: smartphoneGuidePost,
     });
 
-    // category_slug falls back to the inferred category slug (not the
-    // slugless /products/ href), and null stock is treated as in-stock so the
-    // product is still featured — matching the old getCachedCategoryPageData
-    // normalization the swap must preserve.
-    expect(model?.featuredProducts).toHaveLength(1);
-    expect(model?.featuredProducts[0]?.href).toBe(
-      'https://ogabassey.com/smartphones/mystery-phone'
-    );
+    // Featured picks stay on-brand: an inferred-brand article does not
+    // fall back to unrelated pool products, so this NoName row is not
+    // featured even though its category_slug fallbacks are preserved.
+    expect(model?.featuredProducts).toHaveLength(0);
   });
 
   it('returns null when the scoped inventory resolves to a collection', async () => {

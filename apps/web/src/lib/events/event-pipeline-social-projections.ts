@@ -7,6 +7,7 @@ export const socialDeliveryProjections = {
       ),
     merchant_feature_settings: ['twitter_pixel_id', 'twitter_event_ids'],
     merchant_x_ads_credentials: [
+      'pixel_token',
       'consumer_key',
       'consumer_secret',
       'access_token',

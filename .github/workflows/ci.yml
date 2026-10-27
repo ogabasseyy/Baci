@@ -551,11 +551,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Install psql client
+      - name: Install PostgreSQL client and server binaries
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client postgresql-16
       - name: Run disposable search suites
         env:
           PGHOST: localhost
@@ -563,6 +563,17 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-disposable-search-suites.sh
+
+      - name: Run X token authentication SQL contract
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          set -euo pipefail
+          command -v node >/dev/null
+          for binary in initdb pg_ctl psql; do
+            test -x "$PG_BIN/$binary"
+          done
+          node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
 
   quality-misc:
     name: Quality Gate - Misc

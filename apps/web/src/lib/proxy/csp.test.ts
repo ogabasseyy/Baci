@@ -34,6 +34,7 @@ const socialScriptOrigins = [
   'https://connect.facebook.net',
   'https://analytics.tiktok.com',
   'https://sc-static.net',
+  'https://tr.snapchat.com',
   'https://static.ads-twitter.com',
 ];
 const socialCollectorOrigins = [
@@ -85,4 +86,17 @@ it.each([
     expect(directive(policy, 'script-src')).toContain("'nonce-test_nonce'");
     expect(directive(policy, 'script-src')).not.toContain("'unsafe-inline'");
   }
+});
+
+it('allows the Snapchat SDK dynamic configuration script only on storefronts', () => {
+  const configurationScript = new URL(
+    'https://tr.snapchat.com/config/com/11111111-1111-4111-8111-111111111111.js'
+  );
+  expect(directive(generateCSP('storefront', false), 'script-src')).toContain(
+    configurationScript.origin
+  );
+  for (const route of ['admin', 'auth', 'api'] as const)
+    expect(
+      directive(generateCSP(route, false, 'nonce'), 'script-src')
+    ).not.toContain(configurationScript.origin);
 });

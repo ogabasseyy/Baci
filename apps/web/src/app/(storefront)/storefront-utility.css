@@ -2,8 +2,6 @@
 @import "./storefront-foundation.css";
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
-@source "../../components/storefront/cookie-consent.tsx";
-
 /* Essential utility-route styles must exist before the first interaction. */
 @source not "./**/*.test.ts";
 @source not "./**/*.test.tsx";
@@ -46,7 +44,6 @@
 @source "../../components/storefront/search-autocomplete.tsx";
 @source "../../components/themed";
 @source "../../components/ui/badge.tsx";
-@source "../../components/ui/button.tsx";
 @source "../../components/ui/card.tsx";
 @source "../../components/ui/command.tsx";
 @source "../../components/ui/dialog.tsx";

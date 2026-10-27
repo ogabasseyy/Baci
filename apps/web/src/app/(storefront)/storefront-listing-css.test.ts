@@ -5,7 +5,7 @@ import tailwind from '@tailwindcss/postcss';
 import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
-describe('storefront route-scoped listing, content, and utility CSS', () => {
+describe('storefront route-scoped listing, content, utility, and blog-post CSS', () => {
   it('compiles catalog listing styles under 120 KB without dashboard utilities', async () => {
     const from = fileURLToPath(
       new URL('./storefront-listing.css', import.meta.url)
@@ -24,6 +24,8 @@ describe('storefront route-scoped listing, content, and utility CSS', () => {
     }
     expect(result.css).toContain('.min-h-\\[1100px\\]');
     expect(result.css).toContain('.bg-store-primary');
+    expect(result.css).toContain('.aspect-square');
+    expect(result.css).toContain('.line-clamp-2');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 
@@ -45,6 +47,8 @@ describe('storefront route-scoped listing, content, and utility CSS', () => {
     }
     expect(result.css).toContain('.min-h-\\[1100px\\]');
     expect(result.css).toContain('.bg-store-primary');
+    expect(result.css).toContain('.rounded-3xl');
+    expect(result.css).toContain('.leading-7');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 
@@ -66,6 +70,29 @@ describe('storefront route-scoped listing, content, and utility CSS', () => {
     }
     expect(result.css).toContain('.min-h-\\[1100px\\]');
     expect(result.css).toContain('.bg-store-primary');
+    expect(result.css).toContain('.min-h-\\[100px\\]');
+    expect(result.css).toContain('.space-y-6');
+    expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
+  }, 20_000);
+
+  it('compiles additive blog post styles under 60 KB without re-emitting foundation rules', async () => {
+    const from = fileURLToPath(
+      new URL('./storefront-blog-post.css', import.meta.url)
+    );
+    const result = await postcss([tailwind({ optimize: true })]).process(
+      await readFile(from, 'utf8'),
+      { from, map: false }
+    );
+    expect(result.css.length).toBeLessThan(60_000);
+    expect(result.css).toContain('.bg-store-primary');
+    expect(result.css).toContain('.prose');
+    expect(result.css).toContain('.font-mono');
+    expect(result.css).toContain('.max-w-none');
+    expect(result.css).not.toContain('--store-primary:');
+    expect(result.css).not.toContain('--touch-target-min');
+    expect(result.css).not.toContain('--dashboard-surface');
+    expect(result.css).not.toContain('--viewport-height-dynamic');
+    expect(result.css).not.toContain('skeleton-shimmer');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 });

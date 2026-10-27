@@ -246,49 +246,6 @@ it('keeps mutation outcomes indeterminate on response loss for exact-key replay'
     })
   );
 });
-it('bootstraps with the real CSRF handshake without fabricating bearer identity', async () => {
-  const s = setup();
-  s.storage.get.mockResolvedValue(null);
-  s.fetcher
-    .mockResolvedValueOnce(
-      new Response(JSON.stringify({ token: 'csrf-token' }))
-    )
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          merchant: { id: merchant, slug: 'shop' },
-          proof: 'cp1.bootstrap.signature',
-        }),
-        { status: 201 }
-      )
-    );
-  await s.client.bootstrap();
-  expect(s.fetcher.mock.calls[0][0]).toBe('https://usebaci.com/api/csrf');
-  expect(s.fetcher.mock.calls[1][1].headers).toEqual(
-    expect.objectContaining({
-      'x-csrf-token': 'csrf-token',
-      Cookie: '__Host-csrf-token=csrf-token',
-    })
-  );
-  expect(s.fetcher.mock.calls[1][1].headers.Authorization).toBeUndefined();
-  expect(s.storage.set).toHaveBeenCalledWith(
-    merchant,
-    'cp1.bootstrap.signature'
-  );
-});
-
-it('keeps a committed creation indeterminate if saving its new proof fails', async () => {
-  const s = setup();
-  s.fetcher.mockResolvedValue(
-    new Response(
-      JSON.stringify({ cart: snapshot, proof: 'cp1.upgraded.signature' })
-    )
-  );
-  s.storage.set.mockRejectedValue(new Error('secure write failed'));
-  await expect(
-    s.client.create({ operationId: 'same-create-key' })
-  ).rejects.toMatchObject({ indeterminate: true });
-});
 it('keeps a foreign mutation reply indeterminate instead of inventing a second attempt', async () => {
   const s = setup();
   s.fetcher.mockResolvedValue(

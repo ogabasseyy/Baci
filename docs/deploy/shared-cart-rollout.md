@@ -213,7 +213,17 @@ authentication, advertising, or cross-merchant joins; clients
 store a separate credential per merchant and quota keys are
 merchant-salted SHA-256 hashes with the budget window as their
 retention, and the raw value is redacted from telemetry (below).
+Handoff preview sends no credential (the merchant is learned from
+the preview itself), so no cross-merchant raw value exists.
 Deleting site/app data rotates it.
+
+Accepted risk — Redis key cardinality: in the healthy-store path,
+each distinct credential creates its own quota key per merchant
+and operation (bounded per network by the backstop, e.g. 3,000
+bootstrap keys/hour/network/merchant, all TTL'd to their budget
+window). Alert on Redis key-count/memory growth alongside the
+degradation warning; revisit a cardinality guard only if key
+pressure is observed.
 
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,

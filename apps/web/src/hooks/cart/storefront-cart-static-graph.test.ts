@@ -102,3 +102,28 @@ describe('storefront cart provider static import graph', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Client providers/chrome mounted on every storefront page. Anything they
+ * statically import ships in every page's initial `<head>` JS. Regression:
+ * #3807 added `xEventIdsSchema` (zod) to the analytics provider and put a
+ * ~76 KB zod chunk back on every storefront page.
+ */
+const ALWAYS_MOUNTED_STOREFRONT_CLIENT_ENTRIES = [
+  'components/analytics/analytics-provider.tsx',
+  'components/analytics/analytics-pixel-provider.tsx',
+  'components/analytics/twitter-pixel.tsx',
+  'hooks/merchant/storefront-merchant-provider.tsx',
+  'components/storefront/storefront-theme-provider.tsx',
+  'components/storefront/ogabassey/storefront-layout-providers.tsx',
+  'components/storefront/ogabassey/storefront-layout-chrome.tsx',
+  'app/(storefront)/[slug]/storefront-wrapper.tsx',
+];
+
+describe('always-mounted storefront client static import graph', () => {
+  it.each(
+    ALWAYS_MOUNTED_STOREFRONT_CLIENT_ENTRIES
+  )('%s keeps zod, supabase, and @/env out of its static graph', (entry) => {
+    expect(findForbiddenChains(path.join(SRC, entry))).toEqual([]);
+  });
+});

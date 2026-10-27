@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { resolveEligibleCategoryHubDestinations } from '@/lib/storefront-content/eligible-hub-destinations';
 import {
   type LoadPdpBrandHubEligibilityInventorySafelyInput,
@@ -49,6 +50,26 @@ describe('loadPdpBrandHubEligibilityInventorySafely', () => {
       expect(result).toEqual([]);
     }
     expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
+  });
+
+  it('returns empty array instead of rejecting when the taxonomy lookup throws', async () => {
+    const spy = vi
+      .spyOn(brandAuthorityTaxonomy, 'getEntries')
+      .mockImplementation(() => {
+        throw new Error('taxonomy boom');
+      });
+    try {
+      await expect(
+        loadPdpBrandHubEligibilityInventorySafely({
+          merchantId: 'm-1',
+          categorySlug: 'smartphones',
+          productBrand: 'Apple',
+        })
+      ).resolves.toEqual([]);
+      expect(mockGetCachedBrandAuthorityProducts).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('returns empty array without calling DB when brand is not in brandAuthorityTaxonomy for that category', async () => {

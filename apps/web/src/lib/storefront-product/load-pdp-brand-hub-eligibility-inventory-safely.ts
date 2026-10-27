@@ -31,16 +31,15 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
     return [];
   }
 
-  const authorityEntry = brandAuthorityTaxonomy
-    .getEntries(input.categorySlug)
-    .find((entry) => brandAuthorityTaxonomy.matchesBrand(entry, rawBrand));
-
-  if (!authorityEntry) {
-    return [];
-  }
-
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const authorityEntry = brandAuthorityTaxonomy
+      .getEntries(input.categorySlug)
+      .find((entry) => brandAuthorityTaxonomy.matchesBrand(entry, rawBrand));
+
+    if (!authorityEntry) {
+      return [];
+    }
     const [categoryData, rawProducts] = await Promise.race([
       Promise.all([
         brandAuthorityPublicData.getCategory(

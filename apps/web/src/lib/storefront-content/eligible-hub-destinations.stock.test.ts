@@ -162,5 +162,38 @@ describe('eligible-hub-destinations', () => {
       expect(zeroStockResult.brandHubs).toHaveLength(0);
       expect(zeroStockResult.familyHubs).toHaveLength(0);
     });
+
+    it('does not let an InStock flag resurrect explicitly managed zero-stock rows', () => {
+      const products = [
+        'iPhone 15 Pro Max',
+        'iPhone 15 Pro',
+        'iPhone 15',
+        'iPhone 14',
+        'iPhone 13',
+      ].map((name) => ({
+        name,
+        brand: 'Apple',
+        stock: 0,
+        availability: 'InStock' as const,
+        manage_stock: true,
+        category_slug: 'smartphones',
+      }));
+      const result = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products,
+      });
+      expect(result.brandHubs).toHaveLength(0);
+      expect(result.familyHubs).toHaveLength(0);
+
+      const stockedResult = resolveEligibleCategoryHubDestinations({
+        categorySlug: 'smartphones',
+        products: products.map((product) => ({
+          ...product,
+          stock: 3,
+          availability: 'OutOfStock' as const,
+        })),
+      });
+      expect(stockedResult.brandHubs).toHaveLength(1);
+    });
   });
 });

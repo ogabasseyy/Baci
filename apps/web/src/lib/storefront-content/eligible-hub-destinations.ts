@@ -64,10 +64,16 @@ export function resolveEligibleCategoryHubDestinations(
   // Mirror the destination inventory scope: brand/family pages only count
   // parent or standalone rows (is_parent=true or no parent), never variants.
   const availableProducts = input.products.filter((product) => {
+    // Explicitly managed rows follow the destination contract exactly
+    // (positive effective stock), even when a caller-supplied availability
+    // flag contradicts it; the flag only speaks for unmanaged or
+    // pre-normalized rows whose stock fields no longer reconstruct it.
     const isAvailable =
-      product.availability != null
-        ? product.availability === 'InStock'
-        : isAvailableProduct(product);
+      product.manage_stock === true
+        ? isAvailableProduct(product)
+        : product.availability != null
+          ? product.availability === 'InStock'
+          : isAvailableProduct(product);
 
     return (
       isAvailable &&

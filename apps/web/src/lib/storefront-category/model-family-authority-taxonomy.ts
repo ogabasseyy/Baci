@@ -173,9 +173,9 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     'samsung',
     'galaxy-z',
     'Samsung Galaxy Z',
-    /^(?:Samsung )?(?:Galaxy )?Z\s*(?:Fold|Flip|TriFold)\b/i,
+    /^(?:Samsung )?(?:Galaxy )?Z\s*(?:(?:Fold|Flip)[0-9]?|TriFold)\b/i,
     [
-      /\bGalaxy\s+Z\s*(?:Fold|Flip|TriFold)\b/i,
+      /\bGalaxy\s+Z\s*(?:(?:Fold|Flip)[0-9]?|TriFold)\b/i,
       /\b(?:Galaxy|Samsung)\s+Z\s*(?:Fold|Flip)[0-9]?\b/i,
     ]
   ),
@@ -231,7 +231,8 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /\b(?:Xiaomi\s+)?Redmi\s+15\b/i,
   ]),
   fam('xiaomi', 'xiaomi-t', 'Xiaomi T Series', /^(?:Xiaomi )?[0-9]+T/i, [
-    /\b(?:Xiaomi\s+)?[0-9]{1,2}T\b/i,
+    /\bXiaomi\s+[0-9]{1,2}T\b/i,
+    /(?:^|[.!?]\s*)[0-9]{1,2}T\b[^.!?]*\bXiaomi\b/i,
   ]),
   fam('oppo', 'a-series', 'Oppo A Series', /^(?:Oppo\s+)?A(?=\s|\d)/i, [
     /\bOppo\s+A(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,

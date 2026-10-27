@@ -113,9 +113,11 @@ export function buildProductCompareCandidate(input: {
     (key) =>
       !NON_SPEC_METADATA_KEYS.has(key) && key in leftSpecs && key in rightSpecs
   );
-  const differentiatingSpecCount = overlappingKeys.filter((key) =>
-    compareProductKeySpecValues(leftSpecs[key], rightSpecs[key])
-  ).length;
+  const differentiatingSpecCount = overlappingKeys.filter((key) => {
+    // Null/absent spec values are missing data, not a difference.
+    if (leftSpecs[key] == null || rightSpecs[key] == null) return false;
+    return compareProductKeySpecValues(leftSpecs[key], rightSpecs[key]);
+  }).length;
 
   return {
     leftProduct: input.leftProduct,
@@ -168,7 +170,7 @@ export function buildBrandCompareCandidate(input: {
       for (const [key, value] of Object.entries(
         product.product_key_specs ?? {}
       )) {
-        if (NON_SPEC_METADATA_KEYS.has(key)) continue;
+        if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
         const values = existing.specValues.get(key) ?? new Set<string>();
         values.add(JSON.stringify(value));
         existing.specValues.set(key, values);
@@ -180,7 +182,7 @@ export function buildBrandCompareCandidate(input: {
     for (const [key, value] of Object.entries(
       product.product_key_specs ?? {}
     )) {
-      if (NON_SPEC_METADATA_KEYS.has(key)) continue;
+      if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
       specValues.set(key, new Set([JSON.stringify(value)]));
     }
     brandsByKey.set(canonicalKey, {

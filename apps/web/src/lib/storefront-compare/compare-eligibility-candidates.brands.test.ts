@@ -93,6 +93,40 @@ describe('compare eligibility candidate builders', () => {
     expect(candidate?.isIndexable).toBe(false);
   });
 
+  it('does not count null spec values as brand differences', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'smartphones',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `iphone-${i}`,
+          name: `iPhone ${i}`,
+          brand: 'Apple',
+          price: 500_000,
+          product_key_specs: {
+            ram_gb: 8,
+            storage_gb: null,
+            camera_mp: null,
+            battery_mah: null,
+          },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `galaxy-${i}`,
+          name: `Galaxy ${i}`,
+          brand: 'Samsung',
+          price: 450_000,
+          product_key_specs: {
+            ram_gb: 8,
+            storage_gb: 256,
+            camera_mp: 50,
+            battery_mah: 5000,
+          },
+        })),
+      ],
+    });
+    expect(candidate?.differentiatingSpecCount).toBe(0);
+    expect(candidate?.isIndexable).toBe(false);
+  });
+
   it('derives the grouped slug from canonical keys regardless of alias order', () => {
     const specs = { storage_gb: 825, ram_gb: 16, chipset: 'A' };
     const sonyFirst = buildBrandCompareCandidate({

@@ -178,6 +178,18 @@ describe('model family authority taxonomy', () => {
         'Xiaomi phone tips and repair tutorial'
       )
     ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        xiaomiT,
+        'Xiaomi 13 vs OnePlus 5T camera comparison'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        xiaomiT,
+        'Xiaomi 14T Pro review'
+      )
+    ).toBe(true);
 
     // 5. Competing brand models must not trigger false positive matches
     expect(

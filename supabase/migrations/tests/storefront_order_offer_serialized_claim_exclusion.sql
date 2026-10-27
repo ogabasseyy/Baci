@@ -251,6 +251,14 @@ BEGIN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line after reuse, got %', v_claimed;
   END IF;
 
+  -- Untouched offer lines keep their prior value: the rewrite runs
+  -- only when a release actually freed a unit.
+  IF (SELECT count(*) FROM public.order_items
+      WHERE id IN (v_item_id, v_item_b, v_item_d)
+      AND fulfillment_data IS NOT NULL) <> 0 THEN
+    RAISE EXCEPTION 'expected untouched offer lines to keep NULL fulfillment_data after reuse';
+  END IF;
+
   -- Legacy state: an order created before the fix holds a wrongly
   -- reserved unit. Reuse must release it instead of refreshing it.
   INSERT INTO public.variant_inventory (
@@ -300,6 +308,62 @@ BEGIN
     RAISE EXCEPTION 'expected released offer line fulfillment to report line quantity as missing';
   END IF;
 
+  -- Post-deletion legacy shape: a condition-only offer line created
+  -- before 19100000 whose offer was later deleted carries offer_line
+  -- false with both FKs nulled (ON DELETE SET NULL) while the
+  -- snapshotted flag stays true. Simulate it on the second same-offer
+  -- line, attach a wrongly reserved unit, and assert reuse still
+  -- routes it as an offer line (release, no claim).
+  RESET ROLE;
+  ALTER TABLE public.order_items DISABLE TRIGGER order_items_offer_id_snapshot_guard;
+  UPDATE public.order_items
+  SET offer_id = NULL,
+      offer_id_snapshot = NULL,
+      offer_line = false,
+      product_offer_id = NULL
+  WHERE id = v_item_b;
+  ALTER TABLE public.order_items ENABLE TRIGGER order_items_offer_id_snapshot_guard;
+  SET LOCAL ROLE service_role;
+
+  INSERT INTO public.variant_inventory (
+    id, variant_id, merchant_id, identifier_type, identifier_value,
+    status, order_id, order_item_id, reserved_at, first_reserved_at,
+    reservation_expires_at
+  )
+  VALUES (
+    '03d00000-0000-4000-8000-000000000012', v_anchor_id, v_merchant_id,
+    'imei', '933730000000012', 'reserved', v_order_id, v_item_b,
+    now(), now(), now() + interval '1 hour'
+  );
+
+  BEGIN
+    PERFORM private.prepare_storefront_order_for_checkout(
+      p_order_id => v_order_id,
+      p_merchant_id => v_merchant_id,
+      p_tracking_token => v_tracking_token,
+      p_customer_email => 'claim-exclusion-buyer@example.com',
+      p_payment_method => 'card'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order post-deletion reuse failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  SELECT status, order_item_id INTO v_legacy_status, v_legacy_item
+  FROM public.variant_inventory
+  WHERE id = '03d00000-0000-4000-8000-000000000012';
+  IF v_legacy_status IS DISTINCT FROM 'available' THEN
+    RAISE EXCEPTION 'expected post-deletion legacy unit released to available, got %', v_legacy_status;
+  END IF;
+  IF v_legacy_item IS NOT NULL THEN
+    RAISE EXCEPTION 'expected post-deletion legacy unit detached from the offer line, got %', v_legacy_item;
+  END IF;
+  SELECT count(*) INTO v_claimed
+  FROM public.variant_inventory
+  WHERE order_item_id = v_item_b;
+  IF v_claimed <> 0 THEN
+    RAISE EXCEPTION 'expected no serialized units held for the post-deletion offer line, got %', v_claimed;
+  END IF;
+
   -- Payment confirmation path: a paid serialized offer order must not
   -- reclaim base-product units nor raise late_payment_reservation_lost.
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order_id;
@@ -326,9 +390,11 @@ BEGIN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
   END IF;
 
-  -- Paid-without-reuse legacy case: a non-expiring reservation that
-  -- never passed the reuse cleanup must be released by confirmation,
-  -- not confirmed or skipped.
+  -- Paid-without-reuse legacy case: a durable (NULL-expiry) reserved
+  -- hold that never passed the reuse cleanup must be released by
+  -- confirmation, not confirmed or skipped. Durable holds are status
+  -- 'reserved' with reservation_expires_at NULL; no separate
+  -- non-expiring status exists in this schema.
   INSERT INTO public.variant_inventory (
     id, variant_id, merchant_id, identifier_type, identifier_value,
     status, order_id, order_item_id, reserved_at, first_reserved_at,
@@ -336,7 +402,7 @@ BEGIN
   )
   VALUES (
     '03d00000-0000-4000-8000-000000000007', v_anchor_id, v_merchant_id,
-    'imei', '933730000004', 'non-expiring', v_order_id, v_item_id,
+    'imei', '933730000000004', 'reserved', v_order_id, v_item_id,
     now(), now(), NULL
   );
 
@@ -353,10 +419,10 @@ BEGIN
   FROM public.variant_inventory
   WHERE id = '03d00000-0000-4000-8000-000000000007';
   IF v_legacy_status IS DISTINCT FROM 'available' THEN
-    RAISE EXCEPTION 'expected non-expiring legacy unit released to available, got %', v_legacy_status;
+    RAISE EXCEPTION 'expected durable legacy unit released to available, got %', v_legacy_status;
   END IF;
   IF v_legacy_item IS NOT NULL THEN
-    RAISE EXCEPTION 'expected non-expiring legacy unit detached, got %', v_legacy_item;
+    RAISE EXCEPTION 'expected durable legacy unit detached, got %', v_legacy_item;
   END IF;
 END;
 $$;

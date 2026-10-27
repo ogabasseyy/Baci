@@ -19,8 +19,22 @@ describe('getCachedBrandAuthorityEntries', () => {
       async (
         _merchantId: string,
         _categorySlug: string,
-        entry: { displayName: string }
+        entry: { displayName: string; brandQueryValue: string }
       ) => ({
+        products: Array.from(
+          {
+            length:
+              { 'Google Pixel': 6, Samsung: 5, Tecno: 4 }[entry.displayName] ??
+              0,
+          },
+          (_, i) => ({
+            id: `phone-${i}`,
+            name: `Phone ${i}`,
+            brand: entry.brandQueryValue,
+            price: 100000,
+            manage_stock: false,
+          })
+        ),
         productCount:
           { 'Google Pixel': 6, Samsung: 5, Tecno: 4 }[entry.displayName] ?? 0,
       })
@@ -40,7 +54,7 @@ describe('getCachedBrandAuthorityEntries', () => {
       ['samsung', 5],
       ['google', 6],
     ]);
-    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(8);
+    expect(mockGetCachedBrandAuthorityInventory).toHaveBeenCalledTimes(9);
   });
 
   it('fails optional category links open when the query fails', async () => {
@@ -62,8 +76,21 @@ describe('getCachedBrandAuthorityEntries', () => {
     );
 
     await expect(
-      getCachedBrandAuthorityEntries('merchant-1', 'laptops')
+      getCachedBrandAuthorityEntries('merchant-1', 'tablets')
     ).resolves.toEqual([]);
     expect(mockGetCachedBrandAuthorityInventory).not.toHaveBeenCalled();
+  });
+  it('does not advertise category brand cards using stale counts without renderable products', async () => {
+    mockGetCachedBrandAuthorityInventory.mockResolvedValue({
+      productCount: 100,
+      products: [],
+      productCountIsLowerBound: false,
+    });
+    const { getCachedBrandAuthorityEntries } = await import(
+      './get-cached-brand-authority-entries'
+    );
+    await expect(
+      getCachedBrandAuthorityEntries('merchant-1', 'smartphones')
+    ).resolves.toEqual([]);
   });
 });

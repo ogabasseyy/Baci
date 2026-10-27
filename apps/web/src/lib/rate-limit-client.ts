@@ -58,6 +58,22 @@ export function getClientIdentifier(request: NextRequest): string {
 }
 
 /**
+ * Bucket key for generic per-IP rate limiting. Rate-limit keys are
+ * opaque counters, never persisted as addresses, so a verified IPv6
+ * Cloudflare visitor is bucketed by /64 here: keying the full address
+ * would let them mint a fresh bucket per rotated interface
+ * identifier. All other clients keep the generic identifier, and
+ * consumers that persist or forward an address must keep using
+ * getClientIdentifier, which always returns a real IP.
+ */
+export function getRateLimitBucketKey(request: NextRequest): string {
+  const peerIp = platformPeerIp(request, proxyHeadersGuaranteed());
+  const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
+  if (visitorIp) return visitorQuotaIdentity(visitorIp);
+  return getClientIdentifier(request);
+}
+
+/**
  * Client identity for the unauthenticated cart budgets, which are the
  * only bound tying anonymous proofs to one client. Unlike
  * getClientIdentifier this never trusts x-forwarded-for: that header is

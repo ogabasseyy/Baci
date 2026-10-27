@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   check:
@@ -40,3 +41,20 @@ jobs:
           diff -u /tmp/live-v4.txt /tmp/hardcoded-v4.txt
           diff -u /tmp/live-v6.txt /tmp/hardcoded-v6.txt
           echo "Cloudflare ranges match the published lists."
+      # A red scheduled run nobody sees helps no one: drift silently
+      # collapses verified-visitor identity back into the shared
+      # egress bucket. File (or refresh) an issue instead.
+      - name: Open an issue when ranges drift (scheduled runs)
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='Cloudflare egress ranges drifted from cloudflare-peer.ts'
+          body='The weekly freshness check failed: Cloudflare published egress ranges that differ from the hardcoded lists in `apps/web/src/lib/cloudflare-peer.ts`. Until updated, shoppers arriving via unlisted egress ranges lose verified-visitor quota identity and share the egress bucket. Update `CLOUDFLARE_IPV4_RANGES`/`CLOUDFLARE_IPV6_RANGES` (and the fetch date) from https://www.cloudflare.com/ips-v4 and /ips-v6. Failed run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

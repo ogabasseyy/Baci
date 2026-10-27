@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getClientIdentifier,
+  getRateLimitBucketKey,
   getTrustedClientIdentifier,
 } from './rate-limit-client';
 
@@ -128,6 +129,34 @@ describe('getClientIdentifier behind Cloudflare', () => {
         })
       )
     ).toBe('unknown');
+  });
+});
+
+describe('getRateLimitBucketKey', () => {
+  it('buckets verified IPv6 visitors by /64 for generic rate limiting', () => {
+    vi.stubEnv('VERCEL', '1');
+    const headers = (visitor: string) => ({
+      'cf-connecting-ip': visitor,
+      'cf-ray': 'a509c917eae1b920-AMS',
+      'x-real-ip': '172.68.1.20',
+    });
+    // Rotating the interface identifier must not mint fresh buckets.
+    expect(getRateLimitBucketKey(requestWith(headers('2001:db8::1:2')))).toBe(
+      '2001:db8:0:0::/64'
+    );
+    expect(getRateLimitBucketKey(requestWith(headers('2001:db8::9:9')))).toBe(
+      '2001:db8:0:0::/64'
+    );
+    // The generic identifier still returns the real address.
+    expect(getClientIdentifier(requestWith(headers('2001:db8::1:2')))).toBe(
+      '2001:db8::1:2'
+    );
+  });
+
+  it('matches the generic identifier for non-Cloudflare clients', () => {
+    vi.stubEnv('VERCEL', '1');
+    const request = requestWith({ 'x-real-ip': '192.0.2.44' });
+    expect(getRateLimitBucketKey(request)).toBe(getClientIdentifier(request));
   });
 });
 

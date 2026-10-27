@@ -59,6 +59,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
     );
     expect(defaultDetailClient).not.toMatch(/storefront-pdp\.css/);
+
+    const pdpCss = readStorefrontFile('storefront-pdp.css');
+    expect(pdpCss).toContain('@source "./[slug]/storefront-loading-ui.tsx";');
+    expect(pdpCss).toContain(
+      '@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";'
+    );
   });
 
   it('keeps homepage critical CSS off Tailwind and off the streamed Hero graph', () => {

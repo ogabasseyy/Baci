@@ -16,6 +16,8 @@
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-detail-client.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/ogabassey-pdp-semantic-sections.tsx";
+@source "./[slug]/storefront-loading-ui.tsx";
+@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
 @source "../../components/storefront/deferred-page-view-tracker.tsx";
 @source "../../components/storefront/storefront-theme-provider.tsx";
 @source "../../components/storefront/ogabassey/storefront-layout.tsx";

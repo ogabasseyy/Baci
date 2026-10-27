@@ -1,4 +1,5 @@
 import { normalizeProduct, type RawDbProduct } from '@/lib/normalize-product';
+import { brandAuthorityPublicData } from '@/lib/storefront-category/brand-authority-public-data';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { getCachedBrandAuthorityProducts } from '@/lib/storefront-category/get-cached-brand-authority-products';
 import type { EligibleHubProductInput } from '@/lib/storefront-content/eligible-hub-destinations';
@@ -40,13 +41,19 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const rawProducts = await Promise.race([
-      getCachedBrandAuthorityProducts(
-        input.merchantId,
-        input.categorySlug,
-        authorityEntry,
-        { limit: null }
-      ),
+    const [categoryData, rawProducts] = await Promise.race([
+      Promise.all([
+        brandAuthorityPublicData.getCategory(
+          input.merchantId,
+          input.categorySlug
+        ),
+        getCachedBrandAuthorityProducts(
+          input.merchantId,
+          input.categorySlug,
+          authorityEntry,
+          { limit: null }
+        ),
+      ]),
       new Promise<never>((_, reject) => {
         timer = setTimeout(
           () =>
@@ -55,6 +62,10 @@ export async function loadPdpBrandHubEligibilityInventorySafely(
         );
       }),
     ]);
+
+    if (!categoryData) {
+      return [];
+    }
 
     return rawProducts
       .filter(isRawDbProduct)

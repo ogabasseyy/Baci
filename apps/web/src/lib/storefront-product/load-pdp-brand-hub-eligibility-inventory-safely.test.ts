@@ -6,6 +6,7 @@ import {
 } from './load-pdp-brand-hub-eligibility-inventory-safely';
 
 const mockGetCachedBrandAuthorityProducts = vi.fn();
+const mockGetCategory = vi.fn();
 
 vi.mock(
   '@/lib/storefront-category/get-cached-brand-authority-products',
@@ -15,9 +16,20 @@ vi.mock(
   })
 );
 
+vi.mock('@/lib/storefront-category/brand-authority-public-data', () => ({
+  brandAuthorityPublicData: {
+    getCategory: (...args: unknown[]) => mockGetCategory(...args),
+  },
+}));
+
 describe('loadPdpBrandHubEligibilityInventorySafely', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetCategory.mockResolvedValue({
+      id: 'cat-1',
+      name: 'Smartphones',
+      slug: 'smartphones',
+    });
   });
 
   it('returns empty array without calling DB when brand is null, empty, or whitespace', async () => {
@@ -194,5 +206,44 @@ describe('loadPdpBrandHubEligibilityInventorySafely', () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+  it('returns empty array when brandAuthorityPublicData.getCategory resolves to null (inactive or missing category row) even with matching cached products', async () => {
+    mockGetCategory.mockResolvedValueOnce(null);
+    mockGetCachedBrandAuthorityProducts.mockResolvedValueOnce([
+      {
+        id: 'p-1',
+        name: 'iPhone 15 Pro Max',
+        slug: 'iphone-15-pro-max',
+        brand: 'Apple',
+        price: 1500000,
+        stock: 5,
+        manage_stock: true,
+      },
+      {
+        id: 'p-2',
+        name: 'iPhone 15 Pro',
+        slug: 'iphone-15-pro',
+        brand: 'Apple',
+        price: 1300000,
+        stock: 3,
+        manage_stock: true,
+      },
+    ]);
+
+    const result = await loadPdpBrandHubEligibilityInventorySafely({
+      merchantId: 'm-1',
+      categorySlug: 'smartphones',
+      productBrand: 'Apple',
+    });
+
+    expect(result).toEqual([]);
+    expect(mockGetCategory).toHaveBeenCalledWith('m-1', 'smartphones');
+    expect(mockGetCachedBrandAuthorityProducts).toHaveBeenCalledWith(
+      'm-1',
+      'smartphones',
+      expect.objectContaining({ brandKey: 'apple' }),
+      { limit: null }
+    );
   });
 });

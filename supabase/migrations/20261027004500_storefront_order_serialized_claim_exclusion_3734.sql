@@ -121,6 +121,10 @@ BEGIN
       v_release_from_status, 'available', p_order_id, p_item_id, v_release_branch_id, NULL, NULL,
       p_event_context
     );
+    -- Lease state is cleared; first_reserved_at is deliberately
+    -- preserved: it is backfilled NOT NULL for all historical rows,
+    -- reused via COALESCE on re-reservation, and the canonical bulk
+    -- releases keep it (provenance, not lease state).
     UPDATE public.variant_inventory
     SET status = 'available',
         order_id = NULL,

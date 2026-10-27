@@ -125,7 +125,11 @@ postdeploy migration 20260930160200 lands: during the drain window the
 legacy anon preview RPC still returns the full recipient email to any
 token holder (pre-existing exposure), so keep the window minutes-long and
 verify the email is gone from the preview before treating the guarantee
-as live.
+as live. During the same window the new preview's login-hint RPC is also
+absent, so `loadReceiptClaimLoginEmailHint` falls back to the claim
+record's stored email as the mask input; the GET output stays masked
+(`b***@domain`) on both paths — the fallback changes where the mask input
+is read server-side, never what leaves the server.
 
 This ordering matters because old revisions 500 the whole claimed batch
 (including unrelated shipped/delivered rows, which then wait for lease

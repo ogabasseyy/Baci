@@ -169,8 +169,11 @@ export async function loadReceiptClaimLoginEmailHint({
   // login-hint handle so the anon preview payload never carries it, and
   // only a masked hint leaves the server: an anonymous token holder learns
   // which inbox to open, never the full address. During the predeploy
-  // window the function does not exist yet: fall back to the legacy preview
-  // email, which the schema still tolerates.
+  // window the function does not exist yet: the record's stored email is
+  // used as the mask input instead. Output stays masked either way — the
+  // fallback changes where the mask input is read, never what leaves the
+  // server (see the masked-hint exception in
+  // docs/manual-order-document-notifications.md).
   let rawEmail: string | null = null;
   const hintResult = await hintSupabase.rpc('get_receipt_claim_login_hint', {
     p_token_hash: hashReceiptClaimToken(token),

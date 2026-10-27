@@ -125,3 +125,124 @@ $$;
 SELECT pg_temp.assert_true((SELECT count(*) = 11 FROM pg_trigger WHERE tgname IN ('enqueue_manual_documents_after_items', 'enqueue_manual_documents_after_item_updates', 'enqueue_manual_documents_after_item_deletes', 'enqueue_manual_document_after_order_update', 'rearm_manual_documents_after_merchant_update', 'rearm_manual_documents_after_customer_restore', 'reset_manual_markers_after_tax_write', 'reset_manual_markers_after_transaction_write', 'reset_manual_markers_after_payment_account_write', 'reset_manual_markers_after_domain_write', 'reset_manual_markers_after_customer_delete') AND tgenabled = 'D'), 'abort leaves all triggers disabled');
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id IN (SELECT id FROM public.orders WHERE customer_email = 'bulk@example.com')), 'abort mails nothing from the gap');
 ROLLBACK;
+-- Re-fence abort path: when the re-scan trips AFTER the triggers were
+-- enabled, the re-fence disables every trigger again in a SEPARATE
+-- statement from the abort — a DO block is one statement whose implicit
+-- subtransaction rolls back everything it did when the error leaves it,
+-- so disables issued in the same block as the RAISE would be undone
+-- under every applier. The two DOs below mirror 20260930160300 exactly
+-- (disable + notice, then re-scan + raise); the rolled-back staging keeps
+-- later suites hermetic.
+BEGIN;
+-- Disable first: the earlier block committed the real migration's
+-- enablement, and its ROLLBACK only undid its own staging. The gap then
+-- accumulates while disabled (production order), so the rows carry no
+-- outbox row when the re-fence runs.
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates;
+ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes;
+ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
+ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update;
+ALTER TABLE public.customers DISABLE TRIGGER rearm_manual_documents_after_customer_restore;
+ALTER TABLE public.order_tax_subtotals DISABLE TRIGGER reset_manual_markers_after_tax_write;
+ALTER TABLE public.transactions DISABLE TRIGGER reset_manual_markers_after_transaction_write;
+ALTER TABLE public.order_payment_accounts DISABLE TRIGGER reset_manual_markers_after_payment_account_write;
+ALTER TABLE public.domains DISABLE TRIGGER reset_manual_markers_after_domain_write;
+ALTER TABLE public.customers DISABLE TRIGGER reset_manual_markers_after_customer_delete;
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+SELECT gen_random_uuid(), '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'refence@example.com', 'paid', 100
+FROM generate_series(1, 501);
+INSERT INTO public.order_items (order_id, name, quantity, price)
+SELECT id, 'Device', 1, 100 FROM public.orders WHERE customer_email = 'refence@example.com';
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_updates;
+ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_deletes;
+ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
+ALTER TABLE public.merchants ENABLE TRIGGER rearm_manual_documents_after_merchant_update;
+ALTER TABLE public.customers ENABLE TRIGGER rearm_manual_documents_after_customer_restore;
+ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after_tax_write;
+ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
+ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
+ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
+ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
+DO $$
+DECLARE
+  v_rescanned integer;
+BEGIN
+  SELECT count(*) INTO v_rescanned FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
+    AND o.customer_id IS NOT NULL
+    AND nullif(btrim(COALESCE(o.customer_email, '')), '') IS NOT NULL
+    AND lower(btrim(COALESCE(o.shipping_status, '')))
+      NOT IN ('cancelled', 'canceled', 'returned', 'failed')
+    AND EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = o.id)
+    AND ((o.amount_paid >= o.total
+        AND regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+          IN ('paid', 'unpaid', 'pending', 'partially_paid'))
+      OR regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+        IN ('unpaid', 'pending', 'partially_paid'))
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    );
+  IF v_rescanned > 500 THEN
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items';
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates';
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes';
+    EXECUTE 'ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update';
+    EXECUTE 'ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update';
+    EXECUTE 'ALTER TABLE public.customers DISABLE TRIGGER rearm_manual_documents_after_customer_restore';
+    EXECUTE 'ALTER TABLE public.order_tax_subtotals DISABLE TRIGGER reset_manual_markers_after_tax_write';
+    EXECUTE 'ALTER TABLE public.transactions DISABLE TRIGGER reset_manual_markers_after_transaction_write';
+    EXECUTE 'ALTER TABLE public.order_payment_accounts DISABLE TRIGGER reset_manual_markers_after_payment_account_write';
+    EXECUTE 'ALTER TABLE public.domains DISABLE TRIGGER reset_manual_markers_after_domain_write';
+    EXECUTE 'ALTER TABLE public.customers DISABLE TRIGGER reset_manual_markers_after_customer_delete';
+    RAISE NOTICE 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling: triggers disabled again, aborting before the backfill', v_rescanned;
+  END IF;
+END
+$$;
+DO $$
+DECLARE
+  v_rescanned integer;
+BEGIN
+  SELECT count(*) INTO v_rescanned FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
+    AND o.customer_id IS NOT NULL
+    AND nullif(btrim(COALESCE(o.customer_email, '')), '') IS NOT NULL
+    AND lower(btrim(COALESCE(o.shipping_status, '')))
+      NOT IN ('cancelled', 'canceled', 'returned', 'failed')
+    AND EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = o.id)
+    AND ((o.amount_paid >= o.total
+        AND regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+          IN ('paid', 'unpaid', 'pending', 'partially_paid'))
+      OR regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+        IN ('unpaid', 'pending', 'partially_paid'))
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    );
+  IF v_rescanned > 500 THEN
+    RAISE EXCEPTION 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling', v_rescanned;
+  END IF;
+  RAISE EXCEPTION 'FAIL: re-fence did not trip on a 501-order gap';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM LIKE 'FAIL:%' THEN
+    RAISE;
+  END IF;
+END
+$$;
+SELECT pg_temp.assert_true((SELECT count(*) = 11 FROM pg_trigger WHERE tgname IN ('enqueue_manual_documents_after_items', 'enqueue_manual_documents_after_item_updates', 'enqueue_manual_documents_after_item_deletes', 'enqueue_manual_document_after_order_update', 'rearm_manual_documents_after_merchant_update', 'rearm_manual_documents_after_customer_restore', 'reset_manual_markers_after_tax_write', 'reset_manual_markers_after_transaction_write', 'reset_manual_markers_after_payment_account_write', 'reset_manual_markers_after_domain_write', 'reset_manual_markers_after_customer_delete') AND tgenabled = 'D'), 're-fence abort disables all triggers again');
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM public.order_notification_outbox WHERE order_id IN (SELECT id FROM public.orders WHERE customer_email = 'refence@example.com')), 're-fence abort mails nothing from the gap');
+ROLLBACK;

@@ -101,10 +101,22 @@ ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_af
 ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
 ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
 -- Re-fence after trigger enabling, immediately before the backfill scan:
--- orders committed between the first fence and the ALTER TABLE locks would
--- otherwise be mailed by the uncapped scan past the burst budget. The
--- ALTERs above hold ACCESS EXCLUSIVE to transaction end, so no new order
--- can slip between this re-check and the scan below.
+-- orders committed between the first fence and the enabling above would
+-- otherwise be mailed by the uncapped scan past the burst budget. Lock
+-- scope honesty: the ALTERs above only hold ACCESS EXCLUSIVE to
+-- transaction end when the applier runs this file in one transaction, and
+-- the applier may run statements outside an explicit transaction (see the
+-- statement_timeout note below). So a re-fence abort must restore the
+-- disabled state itself in a SEPARATE statement from the abort: a DO block
+-- is one statement, and its implicit subtransaction rolls back everything
+-- the block did when the error leaves it — disables issued in the same
+-- block as the RAISE would be undone under every applier. The disable
+-- block below therefore only disables and notices; the abort block after
+-- it re-scans and raises. Under a non-transactional applier the disables
+-- commit before the abort, gap writes in between cannot mail (triggers
+-- are off and the backfill never ran), and the backfill's NOT EXISTS
+-- anti-join keeps the manual retry safe. A transactional applier rolls
+-- the whole file back instead, which is equally safe.
 DO $$
 DECLARE
   v_rescanned integer;
@@ -132,7 +144,50 @@ BEGIN
         AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     );
   IF v_rescanned > 500 THEN
-    RAISE EXCEPTION 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling: split the catch-up manually before retrying', v_rescanned;
+    -- Disable-on-abort, committed separately from the abort below.
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_items';
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates';
+    EXECUTE 'ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes';
+    EXECUTE 'ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update';
+    EXECUTE 'ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update';
+    EXECUTE 'ALTER TABLE public.customers DISABLE TRIGGER rearm_manual_documents_after_customer_restore';
+    EXECUTE 'ALTER TABLE public.order_tax_subtotals DISABLE TRIGGER reset_manual_markers_after_tax_write';
+    EXECUTE 'ALTER TABLE public.transactions DISABLE TRIGGER reset_manual_markers_after_transaction_write';
+    EXECUTE 'ALTER TABLE public.order_payment_accounts DISABLE TRIGGER reset_manual_markers_after_payment_account_write';
+    EXECUTE 'ALTER TABLE public.domains DISABLE TRIGGER reset_manual_markers_after_domain_write';
+    EXECUTE 'ALTER TABLE public.customers DISABLE TRIGGER reset_manual_markers_after_customer_delete';
+    RAISE NOTICE 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling: triggers disabled again, aborting before the backfill', v_rescanned;
+  END IF;
+END
+$$;
+DO $$
+DECLARE
+  v_rescanned integer;
+BEGIN
+  SELECT count(*) INTO v_rescanned FROM public.orders AS o
+  WHERE o.manual_document_notification_eligible
+    AND o.recorded_by_user_id IS NOT NULL
+    AND o.import_job_id IS NULL
+    AND nullif(btrim(COALESCE(o.external_source, '')), '') IS NULL
+    AND o.customer_id IS NOT NULL
+    AND nullif(btrim(COALESCE(o.customer_email, '')), '') IS NOT NULL
+    AND lower(btrim(COALESCE(o.shipping_status, '')))
+      NOT IN ('cancelled', 'canceled', 'returned', 'failed')
+    AND EXISTS (SELECT 1 FROM public.order_items AS oi WHERE oi.order_id = o.id)
+    AND ((o.amount_paid >= o.total
+        AND regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+          IN ('paid', 'unpaid', 'pending', 'partially_paid'))
+      OR regexp_replace(
+          lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g')
+        IN ('unpaid', 'pending', 'partially_paid'))
+    AND NOT EXISTS (
+      SELECT 1 FROM public.order_notification_outbox AS n
+      WHERE n.order_id = o.id
+        AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    );
+  IF v_rescanned > 500 THEN
+    RAISE EXCEPTION 'manual-order activation backfill re-scanned % eligible orders (budget 500) after trigger enabling: triggers were disabled again above, split the catch-up manually before retrying', v_rescanned;
   END IF;
 END
 $$;

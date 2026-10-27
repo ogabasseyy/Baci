@@ -145,11 +145,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
     credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
-    factoryModules: [
-      'apps/web/src/lib/supabase/admin.ts',
-      'apps/web/src/lib/supabase/server.ts',
-      'apps/web/src/lib/supabase/service.ts',
-    ],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    factoryModules: ['apps/web/src/lib/supabase/admin.ts', 'apps/web/src/lib/supabase/server.ts', 'apps/web/src/lib/supabase/service.ts'],
     legacySdkImporters: eventPipelineLegacySdkImporters,
     serverImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),

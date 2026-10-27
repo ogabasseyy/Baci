@@ -9,36 +9,31 @@ const KEY_ROW = {
   request_fingerprint: 'fp-1',
 };
 
-function buildSupabase(responses: Record<string, unknown>) {
+function buildSupabase(response: unknown) {
   return {
-    from: vi.fn((table: string) => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: vi.fn(() =>
-            Promise.resolve(responses[table] ?? { data: null, error: null })
-          ),
-        })),
-      })),
-    })),
-  } as never;
+    rpc: vi.fn((_fn: string, _args: unknown) => Promise.resolve(response)),
+  };
 }
 
 describe('verifyReplayTransactionBinding', () => {
   it('binds a transaction row owned by the key owner', async () => {
     const supabase = buildSupabase({
-      vtu_transactions: {
-        data: {
+      data: [
+        {
           id: 'vtu-1',
           customer_id: 'customer-1',
           merchant_id: 'merchant-1',
           status: 'processing',
         },
-        error: null,
-      },
+      ],
+      error: null,
     });
 
     await expect(
-      verifyReplayTransactionBinding({ supabase, keyRow: KEY_ROW })
+      verifyReplayTransactionBinding({
+        supabase: supabase as never,
+        keyRow: KEY_ROW,
+      })
     ).resolves.toEqual({
       bound: {
         id: 'vtu-1',
@@ -47,15 +42,20 @@ describe('verifyReplayTransactionBinding', () => {
         status: 'processing',
       },
     });
+    // Narrow RPC — never a table SELECT (no buyer policy exists).
+    expect(supabase.rpc).toHaveBeenCalledWith('get_vtu_replay_binding', {
+      p_transaction_id: 'vtu-1',
+    });
   });
 
   it('returns a terminal message when the transaction row is missing', async () => {
-    const supabase = buildSupabase({
-      vtu_transactions: { data: null, error: null },
-    });
+    const supabase = buildSupabase({ data: [], error: null });
 
     await expect(
-      verifyReplayTransactionBinding({ supabase, keyRow: KEY_ROW })
+      verifyReplayTransactionBinding({
+        supabase: supabase as never,
+        keyRow: KEY_ROW,
+      })
     ).resolves.toEqual({
       error: expect.stringMatching(/no longer exists/i),
     });
@@ -68,14 +68,15 @@ describe('verifyReplayTransactionBinding', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const supabase = buildSupabase({
-        vtu_transactions: {
-          data: { id: 'vtu-1', status: 'processing', ...owner },
-          error: null,
-        },
+        data: [{ id: 'vtu-1', status: 'processing', ...owner }],
+        error: null,
       });
 
       await expect(
-        verifyReplayTransactionBinding({ supabase, keyRow: KEY_ROW })
+        verifyReplayTransactionBinding({
+          supabase: supabase as never,
+          keyRow: KEY_ROW,
+        })
       ).resolves.toEqual({
         error: 'Idempotency-Key does not belong to this purchase.',
       });
@@ -92,11 +93,15 @@ describe('verifyReplayTransactionBinding', () => {
 
   it('throws fail-closed on a lookup error', async () => {
     const supabase = buildSupabase({
-      vtu_transactions: { data: null, error: { message: 'boom' } },
+      data: null,
+      error: { message: 'boom' },
     });
 
     await expect(
-      verifyReplayTransactionBinding({ supabase, keyRow: KEY_ROW })
+      verifyReplayTransactionBinding({
+        supabase: supabase as never,
+        keyRow: KEY_ROW,
+      })
     ).rejects.toThrow(/Failed to look up replay transaction/);
   });
 });

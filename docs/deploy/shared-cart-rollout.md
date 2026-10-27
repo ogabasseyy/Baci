@@ -270,9 +270,15 @@ callers; no anonymous fallback or new production secret is introduced.
   against the real worker scheduler.
 - Quota degradation is an explicit pre-activation gate: when the
   Redis quota store is degraded, anonymous/enumeration operations
-  and the server-to-server legacy bridge fail closed, but
-  authenticated shopper operations (commands, snapshot,
-  checkout_prepare) deliberately fall back to per-instance in-memory
+  (create, handoff preview/redeem/issue, account link, session
+  revoke) and the server-to-server legacy bridge fail closed.
+  Bootstrap is the exception — it is a stateless proof mint and
+  degrades to a reduced per-instance ceiling
+  (`DEGRADED_BOOTSTRAP_LIMIT`) so a Redis outage cannot blank every
+  shopper's cart at the first step; proofs minted then still cannot
+  materialize carts because create stays fail-closed. Authenticated
+  shopper operations (commands, snapshot, checkout_prepare)
+  deliberately fall back to per-instance in-memory
   counters, so one valid proof's effective budget multiplies by the
   instance count for the outage duration. Before any merchant is
   enrolled, put an operator alert on the throttled

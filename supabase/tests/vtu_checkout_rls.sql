@@ -660,10 +660,37 @@ BEGIN
 END;
 $s4grant$;
 
--- SELECT-INTO form (same shape as the S1-S3 reads): a PERFORM call
--- inside an exception handler proved unreliable on the pinned
--- replay image, while SELECT reads behave normally. The contract
--- is unchanged: any successful execution fails, any error passes.
+-- TEMPORARY BISECT LADDER (remove once the dictated fix lands):
+-- s4a: synthetic handler control as anon.
+-- s4c: denied call with a swallow-everything handler.
+-- s4:  the real probe. The first failing close-line names the
+-- broken mechanism.
+DO $s4a$
+BEGIN
+  BEGIN
+    RAISE EXCEPTION 's4a synthetic';
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+END;
+$s4a$;
+
+DO $s4c$
+DECLARE
+  v_row record;
+BEGIN
+  BEGIN
+    SELECT * INTO v_row
+    FROM public.get_vtu_checkout_settings(
+      'e1e1e1e1-0000-4000-8000-000000000001',
+      'a11ce000-0000-4000-8000-000000000001'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+END;
+$s4c$;
+
 DO $s4$
 DECLARE
   v_row record;

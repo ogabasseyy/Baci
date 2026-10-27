@@ -56,6 +56,32 @@ it('opens Wallet when the savings bubble is tapped', () => {
   expect(router.push).toHaveBeenCalledWith('/wallet');
 });
 
+it('reports visibility only when visibility changes across rerenders', () => {
+  const { rerender } = render(<WalletDiscoveryBubble {...props} />);
+  expect(mockVisibilityChange).toHaveBeenCalledTimes(1);
+  expect(mockVisibilityChange).toHaveBeenLastCalledWith(true);
+
+  rerender(
+    <WalletDiscoveryBubble
+      {...props}
+      walletCenter={210}
+      availableWidth={360}
+      onVisibilityChange={(visible) => mockVisibilityChange(visible)}
+    />
+  );
+  expect(mockVisibilityChange).toHaveBeenCalledTimes(1);
+
+  mockVisible = false;
+  rerender(<WalletDiscoveryBubble {...props} />);
+  expect(mockVisibilityChange).toHaveBeenCalledTimes(2);
+  expect(mockVisibilityChange).toHaveBeenLastCalledWith(false);
+
+  mockVisible = true;
+  rerender(<WalletDiscoveryBubble {...props} />);
+  expect(mockVisibilityChange).toHaveBeenCalledTimes(3);
+  expect(mockVisibilityChange).toHaveBeenLastCalledWith(true);
+});
+
 it('dismisses without navigating and provides a 44-point close target', () => {
   const { rerender } = render(<WalletDiscoveryBubble {...props} />);
   expect(mockVisibilityChange).toHaveBeenLastCalledWith(true);

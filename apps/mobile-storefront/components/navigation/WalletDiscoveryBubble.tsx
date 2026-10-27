@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { router, usePathname } from 'expo-router';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -48,7 +48,10 @@ export function WalletDiscoveryBubble({
     (!customerUserId || customerUserId === userId);
   const hint = useWalletDiscoveryHint({ enabled, userId, merchantId });
   const visible = enabled && hint.visible;
+  const lastReportedVisibility = useRef<boolean | null>(null);
   useLayoutEffect(() => {
+    if (lastReportedVisibility.current === visible) return;
+    lastReportedVisibility.current = visible;
     onVisibilityChange(visible);
   }, [onVisibilityChange, visible]);
   const colorScheme = useColorScheme();

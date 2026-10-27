@@ -153,9 +153,11 @@ BEGIN
   -- offer_line false (the backfill keyed on offer_id; the trigger now
   -- derives from both). Simulate it by flipping the marker with the
   -- identity guard disabled; the product_offer_id stays set.
+  RESET ROLE;
   ALTER TABLE public.order_items DISABLE TRIGGER order_items_offer_id_snapshot_guard;
   UPDATE public.order_items SET offer_line = false WHERE id = v_item_id;
   ALTER TABLE public.order_items ENABLE TRIGGER order_items_offer_id_snapshot_guard;
+  SET LOCAL ROLE service_role;
 
   -- The pending-order reuse path must skip it too, keyed on either
   -- marker: run the order through
@@ -252,6 +254,39 @@ BEGIN
   END IF;
   IF v_claimed <> 0 THEN
     RAISE EXCEPTION 'expected no serialized units claimed for the offer line on confirm, got %', v_claimed;
+  END IF;
+
+  -- Paid-without-reuse legacy case: a non-expiring reservation that
+  -- never passed the reuse cleanup must be released by confirmation,
+  -- not confirmed or skipped.
+  INSERT INTO public.variant_inventory (
+    id, variant_id, merchant_id, identifier_type, identifier_value,
+    status, order_id, order_item_id, reserved_at, first_reserved_at,
+    reservation_expires_at
+  )
+  VALUES (
+    '03d00000-0000-4000-8000-000000000007', v_anchor_id, v_merchant_id,
+    'imei', '933730000004', 'non-expiring', v_order_id, v_item_id,
+    now(), now(), NULL
+  );
+
+  BEGIN
+    PERFORM public.confirm_order_inventory_reservations(
+      p_merchant_id => v_merchant_id,
+      p_order_id => v_order_id
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'offer order second confirmation failed: % (%)', SQLERRM, SQLSTATE;
+  END;
+
+  SELECT status, order_item_id INTO v_legacy_status, v_legacy_item
+  FROM public.variant_inventory
+  WHERE id = '03d00000-0000-4000-8000-000000000007';
+  IF v_legacy_status IS DISTINCT FROM 'available' THEN
+    RAISE EXCEPTION 'expected non-expiring legacy unit released to available, got %', v_legacy_status;
+  END IF;
+  IF v_legacy_item IS NOT NULL THEN
+    RAISE EXCEPTION 'expected non-expiring legacy unit detached, got %', v_legacy_item;
   END IF;
 END;
 $$;

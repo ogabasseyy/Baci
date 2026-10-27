@@ -83,34 +83,36 @@ DECLARE
     END IF;$marker$;
   old_reserved text := $marker$    IF v_has_reserved THEN
       IF v_is_pod THEN$marker$;
-  new_reserved text := $marker$    IF v_has_reserved AND (v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL) THEN
+  new_reserved text := $marker$    IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL THEN
       -- Offer lines are fulfilled from offer stock: release units the
-      -- pre-fix loop wrongly reserved instead of refreshing them. The
-      -- unit's own variant/branch/product is logged (order lines on
-      -- simple products carry NULL variant_id; the unit sits on the
-      -- anchor variant). Attributes are read in a second step because
-      -- FOR UPDATE cannot lock the nullable side of the outer join.
-      -- Fulfillment_data is then rewritten so the freed unit is not
-      -- listed as assigned to the offer line.
+      -- pre-fix loop wrongly reserved (reserved or non-expiring)
+      -- instead of refreshing them, then skip the claim branch below.
+      -- The unit's own variant/branch/product is logged (order lines
+      -- on simple products carry NULL variant_id; the unit sits on
+      -- the anchor variant). Attributes are read in a second step
+      -- because FOR UPDATE cannot lock the nullable side of the
+      -- outer join. Fulfillment_data is rewritten so freed units are
+      -- not listed as assigned to the offer line.
       DECLARE
         v_release_id uuid;
         v_release_variant_id uuid;
         v_release_product_id uuid;
         v_release_branch_id uuid;
+        v_release_from_status text;
       BEGIN
         FOR v_release_id IN
           SELECT vi.id FROM public.variant_inventory vi
-          WHERE vi.order_item_id = v_item.id AND vi.status = 'reserved'
+          WHERE vi.order_item_id = v_item.id AND vi.status IN ('reserved', 'non-expiring')
           FOR UPDATE
         LOOP
-          SELECT vi.variant_id, pv.product_id, vi.branch_id
-          INTO v_release_variant_id, v_release_product_id, v_release_branch_id
+          SELECT vi.variant_id, pv.product_id, vi.branch_id, vi.status
+          INTO v_release_variant_id, v_release_product_id, v_release_branch_id, v_release_from_status
           FROM public.variant_inventory vi
           LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
           WHERE vi.id = v_release_id;
           PERFORM private.record_variant_inventory_event(
             v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
-            'reserved', 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
+            v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
             jsonb_build_object('reason', 'offer_line_double_reservation_repair')
           );
           UPDATE public.variant_inventory
@@ -180,10 +182,51 @@ DECLARE
     SELECT has_variants, variant_model, inventory_tracking_policy, inventory_anchor_variant_id
     INTO v_has_variants, v_variant_model, v_prod_policy, v_anchor_id$marker$;
   new_cbody text := $marker$  LOOP
-    -- Offer lines are fulfilled from offer stock: skip serialized
-    -- inventory confirmation entirely (no reclaim, no late-payment
-    -- reservation error, no fulfillment-data rewrite).
+    -- Offer lines are fulfilled from offer stock: release any stale
+    -- reserved units (pre-fix double reservations, possibly
+    -- non-expiring), then skip confirmation entirely (no reclaim, no
+    -- late-payment reservation error).
     IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL THEN
+      DECLARE
+        v_release_id uuid;
+        v_release_variant_id uuid;
+        v_release_product_id uuid;
+        v_release_branch_id uuid;
+        v_release_from_status text;
+      BEGIN
+        FOR v_release_id IN
+          SELECT vi.id FROM public.variant_inventory vi
+          WHERE vi.order_item_id = v_item.id AND vi.status IN ('reserved', 'non-expiring')
+          FOR UPDATE
+        LOOP
+          SELECT vi.variant_id, pv.product_id, vi.branch_id, vi.status
+          INTO v_release_variant_id, v_release_product_id, v_release_branch_id, v_release_from_status
+          FROM public.variant_inventory vi
+          LEFT JOIN public.product_variants pv ON pv.id = vi.variant_id
+          WHERE vi.id = v_release_id;
+          PERFORM private.record_variant_inventory_event(
+            v_release_id, p_merchant_id, COALESCE(v_release_product_id, v_item.product_id), v_release_variant_id, 'reservation_released',
+            v_release_from_status, 'available', p_order_id, v_item.id, v_release_branch_id, NULL, NULL,
+            jsonb_build_object('reason', 'offer_line_double_reservation_repair')
+          );
+          UPDATE public.variant_inventory
+          SET status = 'available',
+              order_id = NULL,
+              order_item_id = NULL,
+              reserved_at = NULL,
+              reservation_expires_at = NULL,
+              updated_at = now()
+          WHERE id = v_release_id;
+        END LOOP;
+        UPDATE public.order_items AS oi
+        SET fulfillment_data = jsonb_build_object(
+          'source', 'merchant_stock',
+          'reservationExpiresAt', NULL,
+          'inventoryUnits', '[]'::jsonb,
+          'missingUnitCount', v_item.quantity
+        )
+        WHERE oi.id = v_item.id;
+      END;
       CONTINUE;
     END IF;
     SELECT has_variants, variant_model, inventory_tracking_policy, inventory_anchor_variant_id

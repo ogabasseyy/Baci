@@ -171,22 +171,6 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
-  it('degrades on an impossible zero counter or scalar reply', async () => {
-    mockGetRedis.mockReturnValue({
-      createScript: () => ({ eval: async () => [0, 5_000] }),
-    });
-    await expect(
-      incrementWindowCounter('quota:zero', 60_000)
-    ).resolves.toMatchObject({ degraded: true });
-    mockGetRedis.mockReturnValue({
-      createScript: () => ({ eval: async () => 3 }),
-    });
-    await expect(
-      incrementWindowCounter('quota:scalar', 60_000)
-    ).resolves.toMatchObject({ degraded: true });
-    mockGetRedis.mockReturnValue(null);
-  });
-
   it('fails closed when the Redis reply is malformed but does not throw', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');

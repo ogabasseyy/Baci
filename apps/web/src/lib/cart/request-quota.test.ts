@@ -141,71 +141,8 @@ describe('incrementMemoryCounter store bound', () => {
     // Existing principals retain availability within their original budget.
     expect(incrementMemoryCounter('subject-1', 60_000).count).toBe(2);
   });
-
-  it('admits new subjects after expired windows release capacity', () => {
-    __resetCartQuotaStoreForTesting();
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    for (let index = 0; index < MEMORY_COUNTER_MAX_ENTRIES; index++) {
-      incrementMemoryCounter(`subject-${index}`, 60_000);
-    }
-    expect(incrementMemoryCounter('new-subject', 60_000).count).toBe(
-      Number.POSITIVE_INFINITY
-    );
-    now.mockReturnValue(1_060_001);
-    expect(incrementMemoryCounter('new-subject', 60_000).count).toBe(1);
-    expect(memoryCounters.size).toBe(1);
-  });
 });
 
-describe('quota degradation warning', () => {
-  it('warns while degraded, throttled to once a minute', async () => {
-    __resetCartQuotaStoreForTesting();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const now = vi.spyOn(Date, 'now');
-    try {
-      now.mockReturnValue(1_000_000);
-      await checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'bootstrap',
-        subject: 'warn-1',
-      });
-      const afterFirst = warn.mock.calls.length;
-      expect(afterFirst).toBeGreaterThanOrEqual(1);
-
-      // Still degraded a few seconds later: no second warning.
-      now.mockReturnValue(1_030_000);
-      await checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'bootstrap',
-        subject: 'warn-1',
-      });
-      expect(warn.mock.calls.length).toBe(afterFirst);
-
-      // A minute later the degradation is reported again.
-      now.mockReturnValue(1_061_000);
-      await checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'bootstrap',
-        subject: 'warn-1',
-      });
-      expect(warn.mock.calls.length).toBe(afterFirst + 1);
-    } finally {
-      warn.mockRestore();
-      now.mockRestore();
-      __resetCartQuotaStoreForTesting();
-    }
-  });
-
-  it('reports the Redis window expiry from PTTL, not now + window', async () => {
-    mockGetRedis.mockReturnValue({
-      createScript: () => ({ eval: async () => [3, 5_000] }),
-    });
-    const before = Date.now();
-    const result = await incrementWindowCounter('quota:test', 3_600_000);
-    const after = Date.now();
-    expect(result).toMatchObject({ count: 3, degraded: false });
-    expect(result.resetTime).toBeGreaterThanOrEqual(before + 5_000);
-    expect(result.resetTime).toBeLessThanOrEqual(after + 5_000);
-    mockGetRedis.mockReturnValue(null);
-  });
-});
+// Counter-machinery coverage (window counter, degradation warning,
+// PTTL expiry, memory-store bounds) lives in the colocated
+// request-quota-counter.test.ts suite.

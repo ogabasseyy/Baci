@@ -232,7 +232,6 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
   ]),
   fam('xiaomi', 'xiaomi-t', 'Xiaomi T Series', /^(?:Xiaomi )?[0-9]+T/i, [
     /\bXiaomi\s+[0-9]{1,2}T\b/i,
-    /(?:^|[.!?]\s*)[0-9]{1,2}T\b[^.!?]*\bXiaomi\b/i,
   ]),
   fam('oppo', 'a-series', 'Oppo A Series', /^(?:Oppo\s+)?A(?=\s|\d)/i, [
     /\bOppo\s+A(?:-Series|\s+Series|\s+[0-9]{1,3}\b|[0-9]{1,3}\b)/i,

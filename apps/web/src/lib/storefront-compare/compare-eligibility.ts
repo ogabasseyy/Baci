@@ -89,6 +89,13 @@ function normalizeComparableArray(value: unknown[]) {
   return value.map(String).sort((left, right) => left.localeCompare(right));
 }
 
+/** Serialize a spec value so set-like arrays compare order-insensitively. */
+function serializeSpecValue(value: unknown): string {
+  return JSON.stringify(
+    Array.isArray(value) ? normalizeComparableArray(value) : value
+  );
+}
+
 function compareProductKeySpecValues(left: unknown, right: unknown) {
   if (Array.isArray(left) && Array.isArray(right)) {
     return (
@@ -172,7 +179,7 @@ export function buildBrandCompareCandidate(input: {
       )) {
         if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
         const values = existing.specValues.get(key) ?? new Set<string>();
-        values.add(JSON.stringify(value));
+        values.add(serializeSpecValue(value));
         existing.specValues.set(key, values);
       }
       continue;
@@ -183,7 +190,7 @@ export function buildBrandCompareCandidate(input: {
       product.product_key_specs ?? {}
     )) {
       if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
-      specValues.set(key, new Set([JSON.stringify(value)]));
+      specValues.set(key, new Set([serializeSpecValue(value)]));
     }
     brandsByKey.set(canonicalKey, {
       label,

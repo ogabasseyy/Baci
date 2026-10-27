@@ -245,11 +245,15 @@ export async function buildInformationalClusterModel(
             : undefined,
         });
 
-  // Cap family hubs so verified commerce links are not crowded out of
-  // the final five-link slice by a roundup mentioning many generations.
+  // Reserve slots for verified commerce links before family hubs fill
+  // the final five-link slice; family hubs still cap at three.
+  const familyLinkBudget = Math.max(
+    0,
+    Math.min(3, 5 - brandHubLinks.length - verifiedCommerceLinks.length)
+  );
   const combinedLinkCandidates = [
     ...brandHubLinks,
-    ...familyHubLinks.slice(0, 3),
+    ...familyHubLinks.slice(0, familyLinkBudget),
     ...verifiedCommerceLinks,
   ];
 

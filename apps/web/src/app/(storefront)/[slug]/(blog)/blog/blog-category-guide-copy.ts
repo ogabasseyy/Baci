@@ -32,7 +32,7 @@ function createGuide(
   };
 }
 
-function normalizeCategoryKey(category: string): string {
+export function normalizeCategoryKey(category: string): string {
   return category
     .trim()
     .toLowerCase()

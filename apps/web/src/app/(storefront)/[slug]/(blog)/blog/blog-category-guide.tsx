@@ -2,6 +2,7 @@ import {
   type CategoryGuideCopy,
   type CategoryGuideCopyItem,
   getOgabasseyCategoryGuideCopy,
+  normalizeCategoryKey,
 } from './blog-category-guide-copy';
 
 function toGuideItems(
@@ -32,13 +33,7 @@ function buildCategoryGuideCopy({
     }
   }
 
-  const genericGuideKey =
-    category
-      .trim()
-      .toLowerCase()
-      .replace(/&/g, 'and')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'category';
+  const genericGuideKey = normalizeCategoryKey(category) || 'category';
 
   return {
     heading: `About ${category} articles from ${merchantName}`,

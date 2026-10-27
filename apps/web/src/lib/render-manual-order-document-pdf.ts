@@ -123,11 +123,17 @@ export async function renderManualOrderDocumentPdf({
     metadata: (row.metadata as { payment_method?: string } | null) ?? null,
   }));
   // Receipts render no tax breakdown, so tax rows gate invoices only.
+  // Gate the RAW snapshot values before coercion: Number(NULL) is 0, so
+  // validating the coerced rows would email an invoice the archive and
+  // download gates (which share isNonNegativeMoney's null-fails-closed
+  // semantics) hide. Every surface must agree on corrupt tax rows.
   if (!isPaid) {
-    for (const row of taxSubtotals) {
-      const valid = [row.vat_rate, row.taxable_amount, row.tax_amount].every(
-        isNonNegativeMoney
-      );
+    for (const row of taxRows as SnapshotChildRow[]) {
+      const valid = [
+        row.vat_rate,
+        row.taxable_amount,
+        row.tax_amount,
+      ].every(isNonNegativeMoney);
       if (!valid)
         throw new ManualDocumentValidationError('tax_breakdown_invalid');
     }

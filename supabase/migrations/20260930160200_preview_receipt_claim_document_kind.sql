@@ -40,6 +40,17 @@ BEGIN
     RETURN NULL;
   END IF;
 
+  -- The RPC is directly invocable via PostgREST, so the loader's 410 check
+  -- alone cannot hide an expired claim. Return a non-sensitive sentinel
+  -- instead of NULL so the documented expired-link (410) contract survives
+  -- while identity, merchant, and order details stay hidden. Expiry is
+  -- checked before recipient staleness below: the sentinel leaks no
+  -- identity or order data, so expired links consistently 410 even when
+  -- the recipient was also corrected.
+  IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN
+    RETURN jsonb_build_object('expired', true);
+  END IF;
+
   -- Manual claims preview against the CURRENT order recipient: a staff
   -- correction of orders.customer_email leaves the terminal outbox row (and
   -- this claim row) untouched by design, so without this check the
@@ -57,14 +68,6 @@ BEGIN
           IS DISTINCT FROM v_claim.customer_email_normalized
     ) THEN
     RETURN NULL;
-  END IF;
-
-  -- The RPC is directly invocable via PostgREST, so the loader's 410 check
-  -- alone cannot hide an expired claim. Return a non-sensitive sentinel
-  -- instead of NULL so the documented expired-link (410) contract survives
-  -- while identity, merchant, and order details stay hidden.
-  IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN
-    RETURN jsonb_build_object('expired', true);
   END IF;
 
   SELECT jsonb_build_object(

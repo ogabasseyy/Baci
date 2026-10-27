@@ -67,7 +67,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '9ccd8624105659664abeaa32bddf8351477ccb731b207f56ae720d8469fc1a56',
+    sha256: '8f0f8eddc92b23214e704c0be4369ae70933e07db0d6f5f0e5665c8707a84be5',
   },
   {
     repositoryPath:

@@ -119,4 +119,57 @@ describe('buildInformationalClusterModel commerce link cap', () => {
     expect(familyLinks.length).toBeGreaterThanOrEqual(1);
     expect(familyLinks.length).toBeLessThanOrEqual(2);
   });
+
+  it('reserves a slot for verified commerce links when five brand hubs compete', async () => {
+    const brands = ['Apple', 'Samsung', 'Google', 'Infinix', 'Tecno'];
+    const products = brands.flatMap((brand, brandIndex) =>
+      [1, 2, 3, 4, 5].map((index) =>
+        product(
+          `${brand.toLowerCase()}-phone-${index}`,
+          `${brand} Smartphone ${index}`,
+          brand,
+          300_000 + brandIndex * 50_000 + index * 10_000,
+          {
+            chipset: `${brand} Chip`,
+            ram_gb: 6 + brandIndex,
+            camera_mp: 48 + brandIndex * 10,
+          }
+        )
+      )
+    );
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: {
+        slug: 'best-smartphones-nigeria-compared',
+        title:
+          'Best Smartphones in Nigeria: Apple, Samsung, Google, Infinix and Tecno Compared',
+        excerpt:
+          'We compare Apple, Samsung, Google Pixel, Infinix and Tecno smartphones for Nigerian buyers.',
+        category: 'Smartphones',
+        tags: ['apple', 'samsung', 'google', 'infinix', 'tecno'],
+        keywords: ['best smartphones', 'apple samsung google infinix tecno'],
+        featured_image_url: null,
+        published_at: '2026-04-10T09:00:00.000Z',
+        reading_time_minutes: 5,
+      },
+      categoryDataOverride: {
+        category: { slug: 'smartphones', name: 'Smartphones' },
+        products,
+        isCollection: false,
+        destinationVerified: true,
+      },
+    });
+
+    const links = model?.commerceLinks.map((link) => link.href) ?? [];
+    expect(links).toHaveLength(5);
+    expect(links.some((href) => href.includes('/smartphones/brands/'))).toBe(
+      true
+    );
+    // Five eligible brand hubs must not crowd out the verified comparison.
+    expect(links).toContain(
+      'https://ogabassey.com/smartphones/compare/apple-vs-google'
+    );
+  });
 });

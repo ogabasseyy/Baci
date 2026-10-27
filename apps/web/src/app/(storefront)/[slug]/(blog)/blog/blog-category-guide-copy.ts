@@ -1,3 +1,5 @@
+import { normalizeCategoryKey } from './normalize-category-key';
+
 export interface CategoryGuideCopyItem {
   id: string;
   text: string;
@@ -30,15 +32,6 @@ function createGuide(
     paragraphs: buildGuideCopyItems(`${prefix}-paragraph`, paragraphs),
     bullets: buildGuideCopyItems(`${prefix}-bullet`, bullets),
   };
-}
-
-export function normalizeCategoryKey(category: string): string {
-  return category
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 const CATEGORY_ALIASES: Record<string, string> = {

@@ -245,14 +245,18 @@ export async function buildInformationalClusterModel(
             : undefined,
         });
 
-  // Reserve slots for verified commerce links before family hubs fill
+  // Reserve slots for verified commerce links before hub links fill
   // the final five-link slice; family hubs still cap at three.
+  const brandLinkBudget = Math.max(
+    0,
+    Math.min(brandHubLinks.length, 5 - verifiedCommerceLinks.length)
+  );
   const familyLinkBudget = Math.max(
     0,
-    Math.min(3, 5 - brandHubLinks.length - verifiedCommerceLinks.length)
+    Math.min(3, 5 - brandLinkBudget - verifiedCommerceLinks.length)
   );
   const combinedLinkCandidates = [
-    ...brandHubLinks,
+    ...brandHubLinks.slice(0, brandLinkBudget),
     ...familyHubLinks.slice(0, familyLinkBudget),
     ...verifiedCommerceLinks,
   ];

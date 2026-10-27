@@ -2,8 +2,8 @@ import {
   type CategoryGuideCopy,
   type CategoryGuideCopyItem,
   getOgabasseyCategoryGuideCopy,
-  normalizeCategoryKey,
 } from './blog-category-guide-copy';
+import { normalizeCategoryKey } from './normalize-category-key';
 
 function toGuideItems(
   prefix: string,

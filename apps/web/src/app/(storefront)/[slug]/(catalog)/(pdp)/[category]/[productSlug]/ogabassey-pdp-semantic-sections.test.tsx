@@ -1,84 +1,15 @@
+import './ogabassey-pdp-semantic-sections.test-fixtures';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { OgabasseyPdpSemanticSections } from './ogabassey-pdp-semantic-sections';
-
-type SemanticModel = {
-  contextParagraphs?: string[];
-  trustBullets: string[];
-  supportLinks: unknown[];
-  guideLinks: unknown[];
-  alternatives: null;
-  sameBrand: null;
-  samePrice: null;
-};
-
-const mockGetCachedProductSeoLinkData = vi.fn();
-const mockLoadPdpBrandHubEligibilityInventorySafely = vi.fn();
-const mockBuildProductSemanticModel =
-  vi.fn<(input: unknown) => SemanticModel>();
-const mockProductSemanticSections = vi.fn(
-  ({
-    model,
-    merchantName,
-    productComparePathPrefix,
-  }: {
-    merchantName?: string;
-    model: SemanticModel;
-    productCompareLinks?: unknown[];
-    productComparePathPrefix?: string;
-    productName?: string;
-  }) => (
-    <section aria-label="semantic sections">
-      {merchantName}
-      {productComparePathPrefix}
-      {model.trustBullets.join(' | ')}
-      {model.contextParagraphs?.join(' | ')}
-    </section>
-  )
-);
-
-vi.mock('@/lib/storefront-product/get-cached-product-seo-link-data', () => ({
-  getCachedProductSeoLinkData: (...args: unknown[]) =>
-    mockGetCachedProductSeoLinkData(...args),
-}));
-
-vi.mock(
-  '@/lib/storefront-product/load-pdp-brand-hub-eligibility-inventory-safely',
-  () => ({
-    loadPdpBrandHubEligibilityInventorySafely: (...args: unknown[]) =>
-      mockLoadPdpBrandHubEligibilityInventorySafely(...args),
-  })
-);
-
-vi.mock('@/lib/storefront-product/build-product-semantic-model', () => ({
-  buildProductSemanticModel: (input: unknown) =>
-    mockBuildProductSemanticModel(input),
-}));
-
-vi.mock(
-  '@/components/storefront/ogabassey/seo/product-semantic-sections',
-  () => ({
-    ProductSemanticSections: (props: { model: SemanticModel }) =>
-      mockProductSemanticSections(props),
-  })
-);
-
-const product = {
-  id: 'prod-1',
-  slug: 'lenovo-legion',
-  name: 'Lenovo Legion',
-  brand: 'Lenovo',
-  condition: 'new',
-  price: 3500000,
-  stock: 4,
-  category_slug: 'laptops',
-  product_key_specs: {
-    chipset: 'AMD Ryzen 9',
-    ram_gb: 32,
-    storage_gb: 1024,
-  },
-} as Product;
+import {
+  mockBuildProductSemanticModel,
+  mockGetCachedProductSeoLinkData,
+  mockLoadPdpBrandHubEligibilityInventorySafely,
+  mockProductSemanticSections,
+  product,
+} from './ogabassey-pdp-semantic-sections.test-fixtures';
 
 describe('OgabasseyPdpSemanticSections', () => {
   beforeEach(() => {
@@ -269,80 +200,5 @@ describe('OgabasseyPdpSemanticSections', () => {
       productSlug: 'legacy-item-42',
       storeSlug: 'ogabassey',
     });
-  });
-
-  it('renders existing semantic sections and compare links intact when loadPdpBrandHubEligibilityInventorySafely returns empty array', async () => {
-    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce([]);
-
-    render(
-      await OgabasseyPdpSemanticSections({
-        categoryName: 'Laptops',
-        categorySlug: 'laptops',
-        merchant: {
-          id: 'merchant-1',
-          business_name: 'OgaBassey',
-          country: 'NG',
-          payout_currency: 'NGN',
-        },
-        product,
-        productComparePathPrefix: '/ogabassey',
-        storeSlug: 'ogabassey',
-        storeUrl: 'https://ogabassey.com',
-      })
-    );
-
-    expect(screen.getByLabelText('semantic sections')).toHaveTextContent(
-      'Model trust bullet'
-    );
-    expect(mockProductSemanticSections).toHaveBeenCalledWith(
-      expect.objectContaining({
-        productCompareLinks: [
-          expect.objectContaining({
-            href: '/laptops/compare/lenovo-legion-vs-macbook-pro',
-          }),
-        ],
-      })
-    );
-    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hubEligibilityInventory: [],
-      })
-    );
-  });
-
-  it('forwards resolved hubEligibilityInventory to buildProductSemanticModel', async () => {
-    const mockHubInventory = [
-      {
-        slug: 'lenovo-legion-7',
-        name: 'Lenovo Legion 7',
-        brand: 'Lenovo',
-        price: 4000000,
-        availability: 'InStock' as const,
-        stock: 5,
-        category_slug: 'laptops',
-      },
-    ];
-    mockLoadPdpBrandHubEligibilityInventorySafely.mockResolvedValueOnce(
-      mockHubInventory
-    );
-
-    await OgabasseyPdpSemanticSections({
-      categoryName: 'Laptops',
-      categorySlug: 'laptops',
-      merchant: {
-        id: 'merchant-1',
-        business_name: 'OgaBassey',
-      },
-      product,
-      productComparePathPrefix: '/ogabassey',
-      storeSlug: 'ogabassey',
-      storeUrl: 'https://ogabassey.com',
-    });
-
-    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        hubEligibilityInventory: mockHubInventory,
-      })
-    );
   });
 });

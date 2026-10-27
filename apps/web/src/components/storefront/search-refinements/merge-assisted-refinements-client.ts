@@ -12,12 +12,12 @@ const ERR = 'Check your filter values and price range';
 
 function parseNumber(value: unknown, max: number): number | undefined {
   if (value == null) return undefined;
-  const str =
-    typeof value === 'number'
-      ? String(value)
-      : typeof value === 'string'
-        ? value.trim()
-        : null;
+  // Match the shared zod contract: non-numeric types fail instead of
+  // being silently dropped.
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error(ERR);
+  }
+  const str = typeof value === 'number' ? String(value) : value.trim();
   if (!str) return undefined;
   if (!/^\d+(\.\d{1,2})?$/.test(str)) throw new Error(ERR);
   const num = Number(str);

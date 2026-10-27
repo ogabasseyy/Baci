@@ -178,6 +178,16 @@ const INVALID_CASES: Array<{
     proposal: { query: 'phone', explanation: 'Rating too high', filters: {} },
     committedQuery: 'phone',
   },
+  {
+    name: 'non-numeric minPrice type',
+    current: {
+      brands: [],
+      sort: 'relevance',
+      minPrice: true as unknown as number,
+    },
+    proposal: { query: 'phone', explanation: 'Bad price type', filters: {} },
+    committedQuery: 'phone',
+  },
 ];
 
 describe('mergeAssistedRefinementsClient parity with mergeAssistedRefinements', () => {

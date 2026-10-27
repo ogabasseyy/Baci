@@ -38,6 +38,7 @@ export interface MerchantData {
    */
   paystack_subaccount_configured?: boolean;
   price_negotiation_enabled?: boolean;
+  growth_integrations_enabled?: boolean;
   shared_cart_enabled?: boolean;
   shared_cart_accounts_enabled?: boolean;
   shared_cart_realtime_enabled?: boolean;
@@ -99,6 +100,10 @@ export interface MerchantData {
   // Analytics & Tracking Pixels
   facebook_pixel_id?: string;
   facebook_capi_token?: string;
+  facebook_capi_token_configured?: boolean;
+  tiktok_access_token_configured?: boolean;
+  snapchat_capi_token_configured?: boolean;
+  ga4_api_secret_configured?: boolean;
   google_analytics_id?: string;
   ga4_api_secret?: string;
   tiktok_pixel_id?: string;

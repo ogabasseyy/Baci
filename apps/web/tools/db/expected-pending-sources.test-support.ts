@@ -9,6 +9,7 @@ import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sou
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
+import { EXPECTED_IMEI_PENDING_SOURCES } from './expected-imei-pending-sources.test-support';
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
@@ -38,17 +39,17 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_IMEI_PENDING_SOURCES,
   {
     repositoryPath:
-      'supabase/migrations/20261025130000_imei_device_analytics.sql',
-    sha256: 'ad1153b281cbcf39363e260b4afd545bf213a977fec3ccb53e3a489909ccff4c',
+      'supabase/migrations/20261026060604_x_ads_conversion_settings_and_destination.sql',
+    sha256: '62f9c97c017443b4a1adeaaf52b1fd69e45502557dc527d9c793b6930cc1e986',
   },
   {
     repositoryPath:
-      'supabase/migrations/20261025183000_petrock_guard_unsubmitted_refunds.sql',
-    sha256: '64786c82ec093b4e71fbe7ca2c93882687af47128f3865548625dedc4d950d3d',
+      'supabase/migrations/20261025220509_storefront_growth_integration_hint.sql',
+    sha256: 'bb39579411334105589c3cdd42447a7706accdc16d654937560b970b4d9b1427',
   },
-
   {
     repositoryPath:
       'supabase/migrations/20261024162000_chatgpt_ads_admin_destination.sql',

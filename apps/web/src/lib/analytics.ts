@@ -1,8 +1,12 @@
 'use client';
 
 import type { Product } from '@/lib/products';
+import { sendFacebookPixelEvent } from './analytics/facebook-pixel-client';
+import { trackCartView } from './analytics/track-cart-view';
+import { trackSocialFunnel } from './analytics/track-social-funnel';
 import { isAnalyticsAllowed } from './analytics-consent';
 import { facebookCatalogEvent } from './facebook-catalog-event';
+import { measureXEvent } from './x-ads/pixel-client';
 
 // Types for analytics events
 interface EcommerceItem {
@@ -70,35 +74,18 @@ function sendGA4Event(eventName: string, params: object) {
 }
 
 // Facebook Pixel Event Tracking
-function sendFBEvent(eventName: string, params?: object) {
+function sendFBEvent(
+  eventName: string,
+  params?: object,
+  options?: { eventID: string }
+) {
   if (!isAnalyticsAllowed()) return;
   if (typeof window === 'undefined' || !window.fbq) return;
 
   if (params) {
-    window.fbq('track', eventName, facebookCatalogEvent(params));
+    sendFacebookPixelEvent(eventName, facebookCatalogEvent(params), options);
   } else {
-    window.fbq('track', eventName);
-  }
-}
-
-// Helper to dispatch server-side CAPI events
-async function dispatchCAPI(
-  provider: 'facebook-capi' | 'snapchat',
-  payload: object
-) {
-  try {
-    const response = await fetch(`/api/analytics/${provider}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
-      console.warn(provider, 'CAPI dispatch failed:', response.statusText);
-    }
-  } catch (err) {
-    // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
-    console.warn(provider, 'CAPI dispatch error:', err);
+    sendFacebookPixelEvent(eventName, undefined, options);
   }
 }
 
@@ -117,7 +104,37 @@ export const analytics = {
   },
 
   // View product details
-  viewItem: (product: Product, currency: string = 'USD') => {
+  viewItem: (
+    product: Product,
+    currency: string = 'USD',
+    eventId: string = crypto.randomUUID()
+  ) => {
+    measureXEvent('viewContent', {
+      conversion_id: eventId,
+      currency,
+      value: product.price,
+      contents: [
+        {
+          content_id: product.id,
+          content_name: product.name,
+          content_price: product.price,
+          num_items: 1,
+        },
+      ],
+    });
+    trackSocialFunnel(
+      'view_item',
+      [
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+        },
+      ],
+      currency,
+      eventId
+    );
     const params: ViewItemParams = {
       currency,
       value: product.price,
@@ -129,14 +146,18 @@ export const analytics = {
     // Use joined categories.name from category_id, fallback to legacy TEXT field
     const categoryName = product.categories?.name || product.category || '';
 
-    sendFBEvent('ViewContent', {
-      content_ids: [product.id],
-      content_name: product.name,
-      content_type: 'product',
-      content_category: categoryName,
-      value: product.price,
-      currency,
-    });
+    sendFBEvent(
+      'ViewContent',
+      {
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: 'product',
+        content_category: categoryName,
+        value: product.price,
+        currency,
+      },
+      { eventID: eventId }
+    );
   },
 
   // Add to cart
@@ -144,8 +165,28 @@ export const analytics = {
     product: Product,
     quantity: number = 1,
     currency: string = 'USD',
-    variant?: string
+    variant?: string,
+    eventId: string = crypto.randomUUID()
   ) => {
+    measureXEvent('addToCart', {
+      conversion_id: eventId,
+      currency,
+      value: product.price * quantity,
+      contents: [
+        {
+          content_id: product.id,
+          content_name: product.name,
+          content_price: product.price,
+          num_items: quantity,
+        },
+      ],
+    });
+    trackSocialFunnel(
+      'add_to_cart',
+      [{ id: product.id, name: product.name, price: product.price, quantity }],
+      currency,
+      eventId
+    );
     const params: AddToCartParams = {
       currency,
       value: product.price * quantity,
@@ -154,14 +195,18 @@ export const analytics = {
 
     sendGA4Event('add_to_cart', params);
 
-    sendFBEvent('AddToCart', {
-      content_ids: [product.id],
-      content_name: product.name,
-      content_type: 'product',
-      value: product.price * quantity,
-      currency,
-      num_items: quantity,
-    });
+    sendFBEvent(
+      'AddToCart',
+      {
+        content_ids: [product.id],
+        content_name: product.name,
+        content_type: 'product',
+        value: product.price * quantity,
+        currency,
+        num_items: quantity,
+      },
+      { eventID: eventId }
+    );
   },
 
   // Remove from cart
@@ -177,79 +222,39 @@ export const analytics = {
     });
   },
 
-  // View cart (GA4 standard event + CAPI)
-  viewCart: (
-    products: Array<{ product: Product; quantity: number }>,
-    currency: string = 'USD',
-    additionalData?: {
-      merchantId: string;
-      // biome-ignore lint/suspicious/noExplicitAny: userData is intentionally flexible for analytics payloads
-      userData?: any;
-    }
-  ) => {
-    const value = products.reduce(
-      (sum, { product, quantity }) => sum + product.price * quantity,
-      0
-    );
-    const items = products.map(({ product, quantity }) =>
-      productToItem(product, quantity)
-    );
-
-    // Client-side GA4
-    sendGA4Event('view_cart', {
-      currency,
-      value,
-      items,
-    });
-
-    // Client-side FB Pixel (using InitiateCheckout as strict ViewCart doesn't exist/isn't standard)
-    // Actually, widespread practice is mapping ViewCart -> ViewContent (Category: Cart) or initiateCheckout for deeper intent.
-    // User requested "all CAPI structures".
-    // For FB CAPI, we'll map to 'ViewContent' or 'InitiateCheckout'.
-    // Given the flow sidebar -> checkout, 'InitiateCheckout' is strong.
-    // However, let's stick to ViewContent for "Viewing" to avoid inflating checkout starts.
-    sendFBEvent('ViewContent', {
-      content_ids: products.map((p) => p.product.id),
-      content_type: 'product_group',
-      content_name: 'Shopping Cart',
-      value,
-      currency,
-      num_items: products.reduce((sum, p) => sum + p.quantity, 0),
-    });
-
-    // Server-side CAPI Dispatch (if merchantId provided)
-    if (additionalData?.merchantId) {
-      // Facebook CAPI
-      dispatchCAPI('facebook-capi', {
-        event: 'ViewContent',
-        merchantId: additionalData.merchantId,
-        userData: additionalData.userData,
-        eventData: {
-          value,
-          currency,
-          products: products.map((p) => ({
-            id: p.product.id,
-            name: p.product.name,
-            quantity: p.quantity,
-            price: p.product.price,
-          })),
-        },
-        eventSourceUrl: window.location.href,
-      });
-
-      // Snapchat CAPI - No direct "View Cart", usually mapped to ADD_CART or START_CHECKOUT.
-      // We will skip Snapchat for *View* Cart to be safe, or could map to standard event if requested.
-      // User said "all capi structures". Let's map to 'move_to_checkout' equivalent or skip if invalid.
-      // Snapchat route supports: purchase, begin_checkout, add_to_cart.
-      // 'view_cart' doesn't map cleanly. We'll omit to prevent error 400 from endpoint.
-    }
-  },
+  viewCart: trackCartView,
 
   // View cart / Begin checkout
   beginCheckout: (
     products: Array<{ product: Product; quantity: number }>,
-    currency: string = 'USD'
+    currency: string = 'USD',
+    eventId: string = crypto.randomUUID()
   ) => {
+    measureXEvent('initiateCheckout', {
+      conversion_id: eventId,
+      currency,
+      value: products.reduce(
+        (sum, { product, quantity }) => sum + product.price * quantity,
+        0
+      ),
+      contents: products.map(({ product, quantity }) => ({
+        content_id: product.id,
+        content_name: product.name,
+        content_price: product.price,
+        num_items: quantity,
+      })),
+    });
+    trackSocialFunnel(
+      'begin_checkout',
+      products.map(({ product, quantity }) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity,
+      })),
+      currency,
+      eventId
+    );
     const value = products.reduce(
       (sum, { product, quantity }) => sum + product.price * quantity,
       0
@@ -264,13 +269,17 @@ export const analytics = {
       items,
     });
 
-    sendFBEvent('InitiateCheckout', {
-      content_ids: products.map((p) => p.product.id),
-      content_type: 'product',
-      value,
-      currency,
-      num_items: products.reduce((sum, p) => sum + p.quantity, 0),
-    });
+    sendFBEvent(
+      'InitiateCheckout',
+      {
+        content_ids: products.map((p) => p.product.id),
+        content_type: 'product',
+        value,
+        currency,
+        num_items: products.reduce((sum, p) => sum + p.quantity, 0),
+      },
+      { eventID: eventId }
+    );
   },
 
   // Add payment info (optional step)

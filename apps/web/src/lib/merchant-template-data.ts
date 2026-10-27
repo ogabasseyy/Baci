@@ -1,5 +1,6 @@
 import type { MerchantData } from '@/hooks/use-merchant';
 import type { CachedMerchant } from '@/lib/cached-data';
+import { xEventIdsSchema } from '@/schemas/x-ads-settings';
 
 function normalizePlanTier(
   planTier: CachedMerchant['plan_tier']
@@ -40,6 +41,7 @@ const PUBLIC_FEATURE_SETTING_KEYS = [
   'credit_direct_min_amount',
   'discount_codes_enabled',
   'faq_page_enabled',
+  'facebook_pixel_id',
   'free_shipping_threshold',
   'google_analytics_id',
   'google_place_id',
@@ -73,6 +75,7 @@ const PUBLIC_FEATURE_SETTING_KEYS = [
   'terms_page_enabled',
   'tiktok_pixel_id',
   'twitter_pixel_id',
+  'twitter_event_ids',
   'vtu_airtime_enabled',
   'vtu_checkout_addon_amounts',
   'vtu_checkout_addon_enabled',
@@ -152,6 +155,11 @@ function pickPublicFeatureSettings(
     }
 
     const value = source[key];
+    if (key === 'twitter_event_ids') {
+      const parsed = xEventIdsSchema.safeParse(value);
+      if (parsed.success) picked[key] = parsed.data;
+      continue;
+    }
 
     if (value !== undefined && isPublicFeatureSettingValue(value)) {
       picked[key] = value;
@@ -191,6 +199,7 @@ export function toTemplateMerchantData(merchant: CachedMerchant): MerchantData {
     // payment/order paths stay authoritative.
     paystack_subaccount_configured: merchant.paystack_subaccount_configured,
     price_negotiation_enabled: merchant.price_negotiation_enabled,
+    growth_integrations_enabled: merchant.growth_integrations_enabled,
     shared_cart_enabled: merchant.shared_cart_enabled,
     shared_cart_accounts_enabled: merchant.shared_cart_accounts_enabled,
     shared_cart_realtime_enabled: merchant.shared_cart_realtime_enabled,

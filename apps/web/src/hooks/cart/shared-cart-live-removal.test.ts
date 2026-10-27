@@ -1,0 +1,292 @@
+import { expect, it, vi } from 'vitest';
+import {
+  fetchSharedCartSnapshot,
+  sendSharedCartCommand,
+} from './shared-cart-client';
+import { removeCapacityLineFromLiveCart } from './shared-cart-live-removal';
+import { cartItem } from './shared-cart-provisioning.test-support';
+
+vi.mock('./shared-cart-client', () => ({
+  fetchSharedCartSnapshot: vi.fn(),
+  sendSharedCartCommand: vi.fn(),
+}));
+
+const snapshot = (quantity: number, version = 3) => ({
+  ok: true as const,
+  snapshot: {
+    cartId: 'cart-1',
+    currency: 'NGN',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    lines: [
+      {
+        hasAssurance: false,
+        id: 'line-1',
+        item: { productId: cartItem().id },
+        lineTotalMinor: 0,
+        quantity,
+        unitPriceMinor: 0,
+      },
+    ],
+    merchantId: 'merchant-1',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version,
+  },
+  warnings: [],
+});
+
+it('reduces the matching live line by the removed row quantity', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(snapshot(5) as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: { type: 'set_quantity', lineId: 'line-1', quantity: 3 },
+      expectedVersion: 3,
+    }),
+    'shop'
+  );
+});
+
+it('removes the live line when quantities match and retries a version conflict', async () => {
+  vi.mocked(fetchSharedCartSnapshot)
+    .mockResolvedValueOnce(snapshot(2) as never)
+    .mockResolvedValueOnce(snapshot(2, 4) as never);
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({ ok: false, code: 'version_conflict' } as never)
+    .mockResolvedValueOnce({ ok: true } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      command: { type: 'remove', lineId: 'line-1' },
+      expectedVersion: 4,
+    }),
+    'shop'
+  );
+  const calls = vi.mocked(sendSharedCartCommand).mock.calls;
+  expect(calls[0][0].operationId).toBeTruthy();
+  expect(calls[1][0].operationId).not.toBe(calls[0][0].operationId);
+});
+
+it('targets the line matching the assurance lane among same-identity lines', async () => {
+  const base = snapshot(4);
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        { ...base.snapshot.lines[0], id: 'line-plain', hasAssurance: false },
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-assured',
+          hasAssurance: true,
+          assuranceRate: 0.05,
+        },
+      ],
+    },
+  } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({ ok: true } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(
+      cartItem({ quantity: 1, hasAssurance: true, assuranceRate: 0.05 }),
+      'shop'
+    )
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: { type: 'set_quantity', lineId: 'line-assured', quantity: 3 },
+    }),
+    'shop'
+  );
+});
+it('reconciles an indeterminate command that actually committed', async () => {
+  const committed = snapshot(2);
+  vi.mocked(fetchSharedCartSnapshot)
+    .mockResolvedValueOnce(committed as never)
+    .mockResolvedValueOnce({
+      ...committed,
+      snapshot: { ...committed.snapshot, lines: [] },
+    } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+  const firstCall = vi.mocked(sendSharedCartCommand).mock.calls[0][0];
+  expect(firstCall.operationId).toBeTruthy();
+});
+it('clears group negotiations on remaining live lines when asked', async () => {
+  const base = snapshot(2);
+  const negotiated = {
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        base.snapshot.lines[0],
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-2',
+          item: { productId: 'other-product' },
+          negotiatedUnitPriceMinor: 5000,
+          negotiationStatus: 'accepted',
+        },
+      ],
+    },
+  };
+  vi.mocked(fetchSharedCartSnapshot)
+    .mockResolvedValueOnce(negotiated as never)
+    .mockResolvedValueOnce(negotiated as never);
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 4 },
+    } as never)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 5 },
+    } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop', {
+      clearGroupNegotiations: true,
+    })
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      command: {
+        type: 'set_negotiated_price',
+        lineId: 'line-2',
+        negotiatedUnitPriceMinor: null,
+      },
+      expectedVersion: 3,
+    }),
+    'shop'
+  );
+});
+it('reports failure when the snapshot fetch fails retryably', async () => {
+  window.localStorage.setItem('baci-cart-device-session-active:shop', '1');
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(false);
+});
+it('treats a retryable fetch failure as done when no live cart is known', async () => {
+  window.localStorage.removeItem('baci-cart-device-session-active:shop');
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+});
+it('matches an unassured live line despite a default cached assurance rate', async () => {
+  const base = snapshot(3);
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [{ ...base.snapshot.lines[0], assuranceRate: undefined }],
+    },
+  } as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({ ok: true } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(
+      cartItem({ quantity: 1, hasAssurance: false, assuranceRate: 0.1 }),
+      'shop'
+    )
+  ).resolves.toBe(true);
+  expect(sendSharedCartCommand).toHaveBeenCalledWith(
+    expect.objectContaining({
+      command: { type: 'set_quantity', lineId: 'line-1', quantity: 2 },
+    }),
+    'shop'
+  );
+});
+it('treats a missing live cart as nothing to update', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: false,
+    code: 'not_found',
+    retryable: false,
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(true);
+});
+it('reports failure when the live cart cannot be updated', async () => {
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(snapshot(2) as never);
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+  } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop')
+  ).resolves.toBe(false);
+});
+it('does not send a live removal when the removal fence is superseded', async () => {
+  vi.mocked(sendSharedCartCommand).mockClear();
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(snapshot(3) as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 1 }), 'shop', {
+      expectedEpoch: 'stale-epoch',
+    })
+  ).resolves.toBe(true);
+  // The fetch happens, but no command may be sent under a stale fence.
+  expect(sendSharedCartCommand).not.toHaveBeenCalled();
+});
+it('retries group-negotiation clearing after a version conflict', async () => {
+  const base = snapshot(2);
+  const negotiated = {
+    ...base,
+    snapshot: {
+      ...base.snapshot,
+      lines: [
+        base.snapshot.lines[0],
+        {
+          ...base.snapshot.lines[0],
+          id: 'line-2',
+          item: { productId: 'other-product' },
+          negotiatedUnitPriceMinor: 5000,
+          negotiationStatus: 'accepted',
+        },
+      ],
+    },
+  };
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue(negotiated as never);
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 4 },
+    } as never)
+    .mockResolvedValueOnce({ ok: false, code: 'version_conflict' } as never)
+    .mockResolvedValueOnce({
+      ok: true,
+      snapshot: { ...negotiated.snapshot, version: 5 },
+    } as never);
+  await expect(
+    removeCapacityLineFromLiveCart(cartItem({ quantity: 2 }), 'shop', {
+      clearGroupNegotiations: true,
+    })
+  ).resolves.toBe(true);
+  const clearCalls = vi
+    .mocked(sendSharedCartCommand)
+    .mock.calls.filter(
+      (call) =>
+        (call[0].command as { type: string }).type === 'set_negotiated_price'
+    );
+  expect(clearCalls.length).toBeGreaterThanOrEqual(2);
+});

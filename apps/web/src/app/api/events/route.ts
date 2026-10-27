@@ -6,6 +6,7 @@ import {
 } from '@/lib/analytics/send-to-ad-platforms';
 import { trustedServerAdPlatformFanout } from '@/lib/analytics/trusted-server-ad-platform-fanout';
 import { buildAnalyticsEventData } from '@/lib/events/build-analytics-event-data';
+import { clientMarketingTargets } from '@/lib/events/client-marketing-targets';
 import { createEventIngressClient } from '@/lib/events/event-ingress-capability';
 import { resolveEventIngressContext } from '@/lib/events/event-ingress-context';
 import {
@@ -30,6 +31,8 @@ import { resolveLegacyFanoutContext } from './resolve-legacy-fanout-context';
 const MAX_EVENT_BYTES = 64 * 1024;
 function deliveryData(input: AnalyticsEventRequest, request: NextRequest) {
   return {
+    analytics_consent: input.analytics_consent === true,
+    marketing_consent: input.marketing_consent === true,
     email: input.user_data?.em,
     external_id: input.user_data?.external_id,
     fbc: input.user_data?.fbc ?? request.cookies.get('_fbc')?.value,
@@ -206,7 +209,14 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    if (isConversionEvent(eventType) && !isLegacyAnalyticsFanoutDisabled()) {
+    if (
+      isConversionEvent(eventType) &&
+      !isLegacyAnalyticsFanoutDisabled() &&
+      clientMarketingTargets({
+        analytics: input.analytics_consent,
+        marketing: input.marketing_consent,
+      }).length > 0
+    ) {
       const contextSupabase = await createServerClient();
       verifiedFanoutMerchantId = await resolveLegacyFanoutContext({
         merchantId: input.merchant_id,

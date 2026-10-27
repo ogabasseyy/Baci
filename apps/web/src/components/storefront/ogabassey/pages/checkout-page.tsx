@@ -9,8 +9,8 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
 import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
-import { CheckoutScreen } from './checkout/components/CheckoutScreen';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
@@ -33,15 +33,8 @@ export const CheckoutPage: React.FC = () => {
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
 
-  // Address-form country: the merchant's own market (ISO-2, upper-case), NG as
-  // the pilot default when unset. Drives the state list source, the Places
-  // country bias, and whether the NG-only state->city sub-fetch runs — so a
-  // non-NG merchant's shoppers can populate state/city and reach merchant rates.
   const merchantCountry = (merchant?.country?.trim() || 'NG').toUpperCase();
 
-  // Merchant-resolved currency (payout_currency first, country second, NGN
-  // fallback). `currencyCode` is sent to /api/payments/initialize instead of a
-  // hardcoded 'NGN'; the compact formatter renders order amounts.
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
 
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
@@ -87,7 +80,6 @@ export const CheckoutPage: React.FC = () => {
 
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
-  // Mobile app order resume state
   // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const checkoutAttempt = useCheckoutAttemptSession({
     searchParams,
@@ -163,7 +155,6 @@ export const CheckoutPage: React.FC = () => {
   });
   const { cost: deliveryCost } = delivery;
 
-  // Live and resumed amount arithmetic feeds the payment session and summary.
   const { orderTotals, paymentSession, summaryAmounts } =
     useCheckoutFinancialSession({
       merchant,
@@ -241,8 +232,6 @@ export const CheckoutPage: React.FC = () => {
     attempt: checkoutAttempt,
   });
 
-  // Loading state (Initial fetch OR waiting for auto-trigger)
-  // This prevents the form from flashing briefly before the payment widget opens
   const isAutoTriggerProcessing =
     isHydrated &&
     checkoutCart.length === 0 &&
@@ -257,6 +246,12 @@ export const CheckoutPage: React.FC = () => {
   ) {
     return (
       <CheckoutResumeGate
+        capacityRecovery={{
+          validatedResume: Boolean(
+            resumedOrder && resumedOrder.id === resumeOrderId
+          ),
+          onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+        }}
         cartEmpty={checkoutCart.length === 0}
         isAutoTriggerProcessing={isAutoTriggerProcessing}
         isLoadingResumedOrder={isLoadingResumedOrder}
@@ -295,5 +290,11 @@ export const CheckoutPage: React.FC = () => {
     },
   });
 
-  return <CheckoutScreen {...screenModel} />;
+  return (
+    <CheckoutCartScreen
+      model={screenModel}
+      order={resumedOrder}
+      requestedId={searchParams.get('orderId')}
+    />
+  );
 };

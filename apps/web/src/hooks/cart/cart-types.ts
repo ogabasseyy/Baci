@@ -131,6 +131,8 @@ export interface CartContextType {
   discardLegacyImport?: () => void;
   /** Import warnings such as `import_capacity_exceeded`. */
   importWarnings?: string[];
+  /** Initial device-cart import lifecycle state, when delegated. */
+  importStatus?: SharedCartImportStatus;
   /** Legacy-import lines blocked on an explicit offer choice. */
   importConflicts?: import('@baci/shared/cart').CartMergeConflict[];
   /** Applies the shopper's per-line choices and retries the import. */

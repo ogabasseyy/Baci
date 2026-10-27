@@ -2,6 +2,30 @@ import { giglTrackingCredentialPaths } from './event-pipeline-credential-paths.g
 import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 export const eventPipelineCredentialPaths = [
+  // One host-verified public observation may mint only the existing
+  // short-lived event-ingress capability; it cannot read provider credentials.
+  [
+    'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/analytics/tiktok/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/analytics/snapchat/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+
   ...['lookup', 'product', 'search'].map(
     (operation) =>
       [

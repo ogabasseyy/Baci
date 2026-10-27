@@ -17,7 +17,6 @@ export type CartRouteErrorCode =
   | 'expired_proof'
   | 'merchant_unresolved'
   | 'merchant_mismatch'
-  | 'forbidden'
   | 'quota_exceeded';
 
 const ROUTE_STATUS: Record<CartRouteErrorCode, number> = {
@@ -50,7 +49,6 @@ const ROUTE_MESSAGES: Record<
   string
 > = {
   expired_proof: 'Your cart session ended. Reconnect to keep shopping.',
-  forbidden: 'This cart action is not allowed here.',
   invalid_proof: 'Your cart session is not valid here. Reconnect to continue.',
   invalid_request: 'This cart request was malformed.',
   merchant_mismatch: 'This cart session belongs to a different store.',

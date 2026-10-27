@@ -14,4 +14,16 @@ describe('isAvailableProduct', () => {
     expect(isAvailableProduct({ stock: 0, manage_stock: true })).toBe(false);
     expect(isAvailableProduct({ stock: null, manage_stock: true })).toBe(false);
   });
+
+  it('uses effective stock (stock_quantity with legacy fallback) for managed rows', () => {
+    expect(
+      isAvailableProduct({ stock: 0, stock_quantity: 5, manage_stock: true })
+    ).toBe(true);
+    expect(
+      isAvailableProduct({ stock: 4, stock_quantity: 0, manage_stock: true })
+    ).toBe(true);
+    expect(
+      isAvailableProduct({ stock: 0, stock_quantity: 0, manage_stock: true })
+    ).toBe(false);
+  });
 });

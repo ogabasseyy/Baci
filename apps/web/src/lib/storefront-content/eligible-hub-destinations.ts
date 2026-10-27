@@ -18,6 +18,7 @@ export interface EligibleHubProductInput {
   slug?: string;
   brand?: string | null;
   stock?: number | null;
+  stock_quantity?: number | null;
   price?: number;
   category_slug?: string | null;
   category_slugs?: string[] | null;

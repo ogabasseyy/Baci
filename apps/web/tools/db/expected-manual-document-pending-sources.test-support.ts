@@ -92,7 +92,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160550_sync_transaction_review_document_dates.sql',
-    sha256: '635bcf677b1e2c11874657f565d4217ed3c9999b453ac852192516877285371e',
+    sha256: 'fdb4d9315204691e8fba4295b731edad3014112afb5709d4099b05407d0f5674',
   },
   {
     repositoryPath:

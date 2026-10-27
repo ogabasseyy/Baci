@@ -33,9 +33,9 @@ BEGIN
   -- even for cost-only edits. When the day is unchanged the whole date block
   -- (including the stored instant) is preserved as-is.
   SELECT (
-    transaction_date AT TIME ZONE v_transaction_time_zone
+    transaction_date AT TIME ZONE p_time_zone
   )::date IS DISTINCT FROM (
-    p_transaction_date AT TIME ZONE v_transaction_time_zone
+    p_transaction_date AT TIME ZONE p_time_zone
   )::date,
     source IN ('manual', 'staff_entry', 'physical', 'instagram', 'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga')
   INTO v_day_changed, v_is_manual_order
@@ -49,13 +49,13 @@ BEGIN
       invoice_issue_date = CASE
         WHEN v_day_changed
          AND (v_is_manual_order OR invoice_issue_date_generated IS TRUE)
-        THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
+        THEN (p_transaction_date AT TIME ZONE p_time_zone)::date
         ELSE invoice_issue_date
       END,
       tax_point_date = CASE
         WHEN v_day_changed
          AND (v_is_manual_order OR tax_point_date_generated IS TRUE)
-        THEN (p_transaction_date AT TIME ZONE v_transaction_time_zone)::date
+        THEN (p_transaction_date AT TIME ZONE p_time_zone)::date
         ELSE tax_point_date
       END,
       invoice_issue_date_generated = CASE

@@ -78,12 +78,15 @@ END $claim_exclusion_3734$;
 -- claim-loop ordering guard (storefront_order_claim_loop_ordering)
 -- still sees the claim call inside the ordered loop with no intervening
 -- END LOOP. CREATE OR REPLACE converges on rerun.
+-- Any serialized unit attached to an offer line is definitionally
+-- stale (offer lines are fulfilled from offer stock and must hold
+-- zero units), so the helper frees all of them; there is deliberately
+-- no quantity bound.
 CREATE OR REPLACE FUNCTION private.release_stale_offer_line_serialized_units(
   p_merchant_id uuid,
   p_order_id uuid,
   p_item_id uuid,
   p_item_product_id uuid,
-  p_item_quantity integer,
   p_event_context jsonb
 ) RETURNS void LANGUAGE plpgsql AS $release_helper$
 DECLARE
@@ -141,7 +144,7 @@ END $release_helper$;
 -- Internal mutation primitive: same privilege profile as the sibling
 -- private.record_variant_inventory_event (revoked from all API roles;
 -- reachable only through the privileged reuse/confirm paths).
-REVOKE ALL ON FUNCTION private.release_stale_offer_line_serialized_units(uuid, uuid, uuid, uuid, integer, jsonb)
+REVOKE ALL ON FUNCTION private.release_stale_offer_line_serialized_units(uuid, uuid, uuid, uuid, jsonb)
 FROM PUBLIC, anon, authenticated;
 DO $claim_exclusion_prepare_3734$
 DECLARE
@@ -186,7 +189,7 @@ DECLARE
       -- claim-loop ordering guard still sees the claim call inside
       -- the ordered loop.
       PERFORM private.release_stale_offer_line_serialized_units(
-        p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
+        p_merchant_id, p_order_id, v_item.id, v_item.product_id,
         jsonb_build_object('releaseReason', 'checkout_reuse', 'fulfillmentPath', 'order_reuse')
       );
     ELSIF v_has_reserved THEN
@@ -247,7 +250,7 @@ DECLARE
     -- sees the ordered loop shape.
     IF v_item.offer_line IS TRUE OR v_item.product_offer_id IS NOT NULL OR v_item.offer_labels_snapshotted IS TRUE THEN
       PERFORM private.release_stale_offer_line_serialized_units(
-        p_merchant_id, p_order_id, v_item.id, v_item.product_id, v_item.quantity,
+        p_merchant_id, p_order_id, v_item.id, v_item.product_id,
         jsonb_build_object('fulfillmentPath', 'payment_confirmation')
       );
       CONTINUE;

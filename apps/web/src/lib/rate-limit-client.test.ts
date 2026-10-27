@@ -102,6 +102,22 @@ describe('getClientIdentifier behind Cloudflare', () => {
     expect(rotated).toBe(first);
   });
 
+  it('keeps the generic identifier a real IP address for IPv6 visitors', () => {
+    vi.stubEnv('VERCEL', '1');
+    // getClientIdentifier feeds consumers that persist or forward the
+    // value as an IP (order ad tracking, privacy-region detection):
+    // the /64 quota key must never leak into it.
+    expect(
+      getClientIdentifier(
+        requestWith({
+          'cf-connecting-ip': '2001:db8::1:2',
+          'cf-ray': 'a509c917eae1b920-AMS',
+          'x-real-ip': '172.68.1.20',
+        })
+      )
+    ).toBe('2001:db8::1:2');
+  });
+
   it('uses x-vercel-forwarded-for last hop as peer evidence', () => {
     vi.stubEnv('VERCEL', '1');
     expect(
@@ -195,8 +211,9 @@ describe('getTrustedClientIdentifier', () => {
     ['162.159.255.255', '203.0.113.9'],
     ['162.160.0.0', '162.160.0.0'],
     ['2a06:98c7:ffff::1', '203.0.113.9'],
-    ['2a06:98c8::1', '2a06:98c8::1'],
-    ['::1', '::1'],
+    // Outside-range IPv6 peers fall back to their own /64 quota key.
+    ['2a06:98c8::1', '2a06:98c8:0:0::/64'],
+    ['::1', '0:0:0:0::/64'],
   ] as const)('resolves Cloudflare peer boundary %s', (peer, expected) => {
     vi.stubEnv('VERCEL', '1');
     expect(

@@ -157,12 +157,12 @@ function isCloudflarePeer(ip: string): boolean {
  * peer address and gets null here.
  */
 /**
- * Quota identity for a verified visitor address. IPv6 visitors are
- * bucketed by their /64 network so rotating the interface identifier
- * cannot mint a fresh budget; IPv4-mapped addresses use the embedded
- * IPv4 form so one client cannot split across spellings.
+ * Canonical spelling of one client address: IPv4-mapped IPv6 forms
+ * unwrap to the embedded IPv4 address so one client cannot split
+ * across spellings. The result stays a real IP address, safe for
+ * consumers that persist or forward it as one.
  */
-function visitorQuotaIdentity(ip: string): string {
+function normalizedClientIp(ip: string): string {
   if (IPV4_REGEX.test(ip)) return ip;
   const value = ipv6ToBigInt(ip);
   if (value === null) return ip;
@@ -172,6 +172,20 @@ function visitorQuotaIdentity(ip: string): string {
       .map((shift) => Number((embedded >> shift) & 0xffn))
       .join('.');
   }
+  return ip;
+}
+
+/**
+ * Quota identity for a verified visitor address. IPv6 visitors are
+ * bucketed by their /64 network so rotating the interface identifier
+ * cannot mint a fresh budget. This is a quota key, not an IP address:
+ * only the trusted cart identifier may return it.
+ */
+function visitorQuotaIdentity(ip: string): string {
+  const normalized = normalizedClientIp(ip);
+  if (IPV4_REGEX.test(normalized)) return normalized;
+  const value = ipv6ToBigInt(normalized);
+  if (value === null) return normalized;
   const groups = [48n, 32n, 16n, 0n].map((shift) =>
     Number((value >> (64n + shift)) & 0xffffn).toString(16)
   );
@@ -217,7 +231,7 @@ function verifiedCloudflareVisitorIp(
     cloudflareIp &&
     isValidIP(cloudflareIp)
   ) {
-    return visitorQuotaIdentity(cloudflareIp);
+    return normalizedClientIp(cloudflareIp);
   }
   return null;
 }
@@ -287,12 +301,17 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     // address when the immediate peer proves Cloudflare traversal.
     const peerIp = platformPeerIp(request, true);
     const visitorIp = verifiedCloudflareVisitorIp(request, peerIp);
-    if (visitorIp) return visitorIp;
-    if (realIp && isValidIP(realIp)) return realIp;
+    if (visitorIp) return visitorQuotaIdentity(visitorIp);
+    // Fall back in platformPeerIp's trust order: the platform address
+    // outranks any header, even a guaranteed one.
+    if (requestIp && isValidIP(requestIp)) {
+      return visitorQuotaIdentity(requestIp);
+    }
+    if (realIp && isValidIP(realIp)) return visitorQuotaIdentity(realIp);
   }
 
   if (requestIp && isValidIP(requestIp)) {
-    return requestIp;
+    return visitorQuotaIdentity(requestIp);
   }
   return 'unknown';
 }

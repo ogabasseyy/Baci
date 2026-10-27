@@ -225,11 +225,15 @@ export function buildInvoiceContent({
   ) {
     taxSubtotals.push(...derivedLineTaxSubtotals);
   }
+  // Ogabassey Assurance is rolled into order.subtotal but VAT-free: the
+  // synthesized S base is the product-only remainder, or the reconciled O
+  // subtotal below counts the premium twice.
+  const assuranceTotal = sumAssuranceFees(itemRows);
   if (taxSubtotals.length === 0 && taxAmount > 0 && sellerIsVatRegistered) {
     taxSubtotals.push({
       vat_category_code: 'S',
       vat_rate: invoiceVatRate,
-      taxable_amount: subtotal,
+      taxable_amount: Number((subtotal - assuranceTotal).toFixed(2)),
       tax_amount: taxAmount,
     });
   }
@@ -246,10 +250,8 @@ export function buildInvoiceContent({
     alignSingleZeroTaxSubtotalWithDocumentTotal(taxSubtotals, preTaxTotal);
   }
 
-  // Ogabassey Assurance is rolled into order.subtotal but VAT-free and was never
-  // itemized — surface it as a single zero-rated line so the document reconciles.
-  const assuranceTotal = sumAssuranceFees(itemRows);
-
+  // Ogabassey Assurance was never itemized — surface it as a single
+  // zero-rated line so the document reconciles.
   // Document tax-exclusive (BT-109) / tax-inclusive (BT-112) totals. For
   // assurance orders, derive BT-109 from `subtotal` (which includes the VAT-free
   // premium on BOTH order-creation paths) + shipping - discount, rather than the

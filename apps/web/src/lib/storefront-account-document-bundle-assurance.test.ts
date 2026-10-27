@@ -209,4 +209,115 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     expect(result.invoiceData.tax_exclusive_amount).toBe(103000);
     expect(result.invoiceData.tax_inclusive_amount).toBe(103000);
   });
+
+  it('excludes the VAT-free assurance premium from the synthesized S subtotal', () => {
+    // Unpaid VAT order with no stored tax rows: subtotal 103,000 rolls in
+    // the 3,000 assurance premium, so S must be the product-only 100,000
+    // with the premium reconciled once as O — never counted twice.
+    const result = buildStorefrontAccountDocumentBundle({
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        email: null,
+        phone: null,
+        support_email: null,
+        support_phone: null,
+        business_address: null,
+        cac_rc_number: null,
+        tax_identification_number: null,
+        legal_entity_name: null,
+        brand_colors: null,
+        vat_registration_status: 'registered',
+        vat_rate: 7.5,
+        bank_code: null,
+        bank_account_number: null,
+        bank_name: null,
+        bank_account_name: null,
+        social_media: null,
+        pages: null,
+        registered_address: null,
+      },
+      customer: {
+        first_name: 'Oga',
+        last_name: 'Bassey',
+        email: 'customer@example.com',
+        phone: null,
+      },
+      order: {
+        id: 'order-vat-assurance',
+        order_number: 'ORD-VAT-ASR',
+        created_at: '2026-03-22T10:00:00.000Z',
+        updated_at: null,
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+        currency: 'NGN',
+        total: 103000,
+        subtotal: 103000,
+        shipping_fee: 0,
+        tax_amount: 7500,
+        discount_amount: 0,
+        amount_paid: 0,
+        shipping_address: 'Pickup',
+        customer_name: null,
+        customer_email: null,
+        customer_phone: null,
+        payment_method: 'bank_transfer',
+        is_credit_order: false,
+        tracking_number: null,
+        shipping_provider: null,
+        notes: null,
+        invoice_type_code: '380',
+        invoice_issue_date: null,
+        tax_point_date: null,
+        payment_due_date: null,
+        buyer_reference: null,
+        purchase_order_reference: null,
+        tax_exclusive_amount: 100000,
+        tax_inclusive_amount: 107500,
+        invoice_note: null,
+        firs_irn: null,
+        firs_csid: null,
+        firs_qr_code: null,
+        payment_terms: null,
+      },
+      itemRows: [
+        {
+          id: 'item-1',
+          product_id: 'prod-1',
+          variant_id: null,
+          variant_name: null,
+          name: 'iPhone 16',
+          quantity: 1,
+          price: 100000,
+          // No stored line VAT detail, as manual-order items arrive: the
+          // aggregate tax is allocated onto the product-only line, so the
+          // derived S base already excludes the premium.
+          vat_category_code: null,
+          vat_rate: null,
+          vat_amount: null,
+          assurance_fee: 3000,
+        },
+      ],
+      transactions: [],
+      paymentAccount: null,
+      taxRows: [],
+      paymentStatus: 'unpaid',
+      shippingStatus: 'pending',
+      currentDocumentKind: 'invoice',
+    });
+
+    expect(result.invoiceData.tax_subtotals).toEqual([
+      {
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+        taxable_amount: 100000,
+        tax_amount: 7500,
+      },
+      expect.objectContaining({
+        vat_category_code: 'O',
+        taxable_amount: 3000,
+      }),
+    ]);
+    expect(result.invoiceData.tax_exclusive_amount).toBe(103000);
+  });
 });

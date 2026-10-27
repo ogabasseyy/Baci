@@ -208,6 +208,17 @@ BEGIN
   END IF;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
   IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
+  -- Lock the claimed orders in claim -> order order BEFORE validating: the
+  -- recipient check below must read the order emails under the same locks
+  -- the link paths take, or a staff customer_email correction committing
+  -- between the check and the link lets the corrected-away recipient redeem.
+  -- (The legacy core never rechecks receipt_claim_orders or the owner, so
+  -- an unlocked check also lets a concurrent staff customer_id change strand
+  -- the consumed token on an order the redeemer cannot access.)
+  PERFORM 1 FROM public.orders AS o
+  WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
+                 WHERE rco.receipt_claim_id = v_claim.id)
+  FOR UPDATE;
   IF v_claim.manual_notification_id IS NOT NULL THEN
     -- Manual claims authorize against the claimed orders' CURRENT
     -- normalized recipient, not the claim row's stored email: a staff
@@ -217,7 +228,8 @@ BEGIN
     -- with the verified redeemer, or the corrected-away recipient keeps
     -- archive access through the old token. A corrected-to recipient
     -- without a token stays stranded until a deliberate resend — fail
-    -- closed, never open.
+    -- closed, never open. The orders above are already locked, so this
+    -- reads the recipient no correction can slip past.
     IF EXISTS (
       SELECT 1 FROM public.receipt_claim_orders AS rco
       JOIN public.orders AS o ON o.id = rco.order_id
@@ -264,14 +276,8 @@ BEGIN
     RETURN private.redeem_manual_order_claim_order_scoped(
       v_claim.id, v_user_id, v_email, p_source);
   END IF;
-  -- Lock the claimed orders in claim -> order order before validating:
-  -- the legacy core never rechecks receipt_claim_orders or the owner, so
-  -- an unlocked check lets a concurrent staff customer_id change strand
-  -- the consumed token on an order the redeemer cannot access.
-  PERFORM 1 FROM public.orders AS o
-  WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
-                 WHERE rco.receipt_claim_id = v_claim.id)
-  FOR UPDATE;
+  -- The claimed orders were locked before validation above, so the
+  -- binding checks below run under the same locks the link paths take.
   IF NOT EXISTS (SELECT 1 FROM public.receipt_claim_orders WHERE receipt_claim_id = v_claim.id)
     OR EXISTS (
       SELECT 1 FROM public.receipt_claim_orders AS rco JOIN public.orders AS o ON o.id = rco.order_id

@@ -148,6 +148,11 @@ export async function renderManualOrderDocumentPdf({
   // order_tax_subtotals rows: synthesize the S subtotal exactly like the
   // authenticated download path, or the emailed invoice omits the VAT
   // Breakdown the download shows. The marker snapshots the raw rows.
+  // order.subtotal rolls in the VAT-free assurance premium, so the
+  // synthesized S base is the product-only remainder: feeding the raw
+  // subtotal here would count the premium twice (once in S, once in the
+  // reconciled O subtotal below).
+  const assuranceTotal = sumAssuranceFees(order.order_items);
   if (
     !isPaid &&
     renderTaxSubtotals.length === 0 &&
@@ -157,11 +162,10 @@ export async function renderManualOrderDocumentPdf({
     renderTaxSubtotals.push({
       vat_category_code: 'S',
       vat_rate: merchant.vat_rate ?? 7.5,
-      taxable_amount: order.subtotal,
+      taxable_amount: Number((order.subtotal - assuranceTotal).toFixed(2)),
       tax_amount: order.tax_amount,
     });
   }
-  const assuranceTotal = sumAssuranceFees(order.order_items);
   if (!isPaid && assuranceTotal > 0) {
     const documentTaxExclusive = Number(
       (order.subtotal + order.shipping_fee - order.discount_amount).toFixed(2)

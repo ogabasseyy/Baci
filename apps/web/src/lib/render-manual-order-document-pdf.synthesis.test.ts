@@ -60,4 +60,60 @@ describe('render manual order document pdf VAT synthesis', () => {
     // The dispatch marker snapshots the stored rows, not the synthesis.
     expect(rendered.taxSubtotals).toEqual([]);
   });
+
+  it('excludes the VAT-free assurance premium from the synthesized S subtotal', async () => {
+    // order.subtotal rolls in the assurance premium (1,000 product + 100
+    // assurance = 1,100 with 75 tax): the S base must be the product-only
+    // 1,000, with the premium reconciled once as O — never counted twice.
+    const order = manualDocumentOrderSchema.parse({
+      ...orderFixture,
+      subtotal: 1100,
+      total: 1100,
+      tax_amount: 75,
+      order_items: [
+        {
+          id: 'item-1',
+          name: 'Pixel 10 Pro XL',
+          quantity: 1,
+          price: 1000,
+          condition: 'new',
+          variant_name: null,
+          item_description: null,
+          assurance_fee: 100,
+        },
+      ],
+    });
+    const merchant = manualDocumentMerchantSchema.parse({
+      ...merchantFixture,
+      vat_registration_status: 'registered',
+      vat_rate: 7.5,
+    });
+
+    await renderManualOrderDocumentPdf({
+      taxRows: [],
+      transactionRows: [],
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: false,
+      pdfDocumentKind: 'invoice',
+      invoiceTypeCode: '380',
+    });
+
+    expect(mockedPdf).toHaveBeenCalledOnce();
+    const [, , options] = mockedPdf.mock.calls[0];
+    expect(options?.taxSubtotals).toEqual([
+      {
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+        taxable_amount: 1000,
+        tax_amount: 75,
+      },
+      expect.objectContaining({
+        vat_category_code: 'O',
+        taxable_amount: 100,
+      }),
+    ]);
+  });
 });

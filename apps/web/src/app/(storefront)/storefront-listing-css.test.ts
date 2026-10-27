@@ -26,6 +26,9 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
     expect(result.css).toContain('.bg-store-primary');
     expect(result.css).toContain('.aspect-square');
     expect(result.css).toContain('.line-clamp-2');
+    // Route-unique: only CategoryFiltersSidebar (in this sheet's sources)
+    // uses slide-in-from-top-1, so a dropped sidebar @source fails here.
+    expect(result.css).toContain('.slide-in-from-top-1');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 
@@ -49,6 +52,9 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
     expect(result.css).toContain('.bg-store-primary');
     expect(result.css).toContain('.rounded-3xl');
     expect(result.css).toContain('.leading-7');
+    // Route-unique: only trust-policy-page-client (in this sheet's sources)
+    // uses tracking-[0.28em], so a dropped trust @source fails here.
+    expect(result.css).toContain('.tracking-\\[0\\.28em\\]');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 
@@ -70,7 +76,10 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
     }
     expect(result.css).toContain('.min-h-\\[1100px\\]');
     expect(result.css).toContain('.bg-store-primary');
+    // Route-unique: min-h-[100px] comes only from RepairDeviceStep and
+    // min-h-[250px] only from the quiz ad fallback in this sheet's sources.
     expect(result.css).toContain('.min-h-\\[100px\\]');
+    expect(result.css).toContain('.min-h-\\[250px\\]');
     expect(result.css).toContain('.space-y-6');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
@@ -88,6 +97,10 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
     expect(result.css).toContain('.prose');
     expect(result.css).toContain('.font-mono');
     expect(result.css).toContain('.max-w-none');
+    // The additive sheet must not emit Card utilities itself: the blog
+    // listing sheet (loaded first) owns Badge/Card. See the combined-order
+    // test in storefront-blog-css.test.ts.
+    expect(result.css).not.toContain('.bg-card');
     expect(result.css).not.toContain('--store-primary:');
     expect(result.css).not.toContain('--touch-target-min');
     expect(result.css).not.toContain('--dashboard-surface');

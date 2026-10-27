@@ -58,6 +58,21 @@ describe('modelFamilyContentMatching', () => {
     ).toBe(true);
   });
 
+  it('rejects bare model tokens owned by unlisted rival brands', () => {
+    expect(
+      modelFamilyContentMatching.matchesContent(
+        galaxyEntry('galaxy-a'),
+        'Realme S24 vs A55 camera test'
+      )
+    ).toBe(false);
+    expect(
+      modelFamilyContentMatching.matchesContent(
+        galaxyEntry('galaxy-s'),
+        'Huawei A55 and S24 rivals compared'
+      )
+    ).toBe(false);
+  });
+
   it('rejects non-model Galaxy phrases', () => {
     expect(
       modelFamilyContentMatching.matchesContent(

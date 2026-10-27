@@ -9,10 +9,10 @@ function matchesProduct(entry: ModelFamilyAuthorityEntry, productName: string) {
 }
 
 const RIVAL_BRAND_PATTERN =
-  /\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b/i;
+  /\b(?:Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus|Huawei|Realme|Motorola|Nokia|Sony|Nothing)\b/i;
 const SAMSUNG_BRAND_PATTERN = /\b(?:Samsung|Galaxy)\b/i;
 const ANY_BRAND_PATTERN =
-  /\b(?:Samsung|Galaxy|Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus)\b/gi;
+  /\b(?:Samsung|Galaxy|Apple|iPhone|Oppo|Redmi|Vivo|Tecno|Infinix|Itel|Xiaomi|Honor|Google|OnePlus|Huawei|Realme|Motorola|Nokia|Sony|Nothing)\b/gi;
 
 function matchesBareSamsungModel(content: string, letter: 'A' | 'S'): boolean {
   for (const sentence of content.split(/[.!?]+/)) {

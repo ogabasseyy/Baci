@@ -64,6 +64,28 @@ describe('authority hub eligibility contract', () => {
     expect(decision.products[0]?.price).toBe(1_000_000);
   });
 
+  it('counts post-hydration inventory row shapes without dropping rows', () => {
+    // getCachedBrandAuthorityInventory returns raw PostgREST rows passed
+    // through hydrateAndSanitizePublicProducts, which preserves id/name/
+    // price and only augments serialized-variant stock fields.
+    const decision = authorityHubEligibility.resolveBrandAuthorityEligibility(
+      Array.from({ length: apple.minimumProducts }, (_, index) => ({
+        ...row(index),
+        slug: `iphone-15-${index}`,
+        category_slug: 'smartphones',
+        inventory_tracking_policy: 'serialized_then_unlimited',
+        quantity: 2,
+        stock_quantity: 2,
+        has_condition_offers: false,
+        images: [],
+      })),
+      'smartphones',
+      apple
+    );
+    expect(decision.eligible).toBe(true);
+    expect(decision.productCount).toBe(apple.minimumProducts);
+  });
+
   it('documents the caller-scope contract: brand and availability only', () => {
     // Category/parent/active scoping is owned by callers supplying the
     // destination pool; this helper must not double-filter child rows.

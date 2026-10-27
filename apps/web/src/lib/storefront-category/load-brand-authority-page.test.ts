@@ -240,4 +240,47 @@ describe('loadBrandAuthorityPage', () => {
       productCount: 3,
     });
   });
+
+  it('excludes news-classified posts from guide links while keeping unclassified guides', async () => {
+    const guidePost = {
+      slug: 'best-samsung-phones-in-nigeria',
+      title: 'Best Samsung Phones in Nigeria',
+      excerpt: 'Our top Samsung picks for every budget.',
+      category: 'Smartphones',
+      tags: ['samsung'],
+      keywords: ['samsung phones'],
+      featured_image_url: null,
+      published_at: '2026-04-10T09:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    mockLoadPublishedClusterPostsSafely.mockResolvedValue([guidePost]);
+    const guidePage = await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        brandSlug: 'samsung',
+      },
+      { includeRequestPathPrefix: false }
+    );
+    expect(guidePage?.guideLinks.length).toBeGreaterThan(0);
+
+    // The RPC only projects classifications with stale_at IS NULL, so a
+    // current news classification arrives on the post and must drop it.
+    mockLoadPublishedClusterPostsSafely.mockResolvedValue([
+      {
+        ...guidePost,
+        merchant_intent: 'news',
+        merchant_intent_source: 'reviewed',
+      },
+    ]);
+    const newsPage = await brandAuthorityPageLoader.load(
+      {
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        brandSlug: 'samsung',
+      },
+      { includeRequestPathPrefix: false }
+    );
+    expect(newsPage?.guideLinks).toEqual([]);
+  });
 });

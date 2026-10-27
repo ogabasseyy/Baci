@@ -177,6 +177,24 @@ describe('model family authority taxonomy', () => {
       modelFamilyAuthorityTaxonomy.matchesProduct(galaxyZ, 'Galaxy Z Flip7')
     ).toBe(true);
     expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z Fold10'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesProduct(
+        galaxyZ,
+        'Samsung Galaxy Z Flip 10'
+      )
+    ).toBe(true);
+    expect(
+      modelFamilyAuthorityTaxonomy.matchesContent(
+        galaxyZ,
+        'Samsung Galaxy Z Fold10 hands-on'
+      )
+    ).toBe(true);
+    expect(
       modelFamilyAuthorityTaxonomy.matchesContent(
         galaxyZ,
         'The new Z Fold rival folds flat'

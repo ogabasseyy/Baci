@@ -127,6 +127,49 @@ describe('getCachedCategoryScopedSemanticInventory', () => {
     ]);
   });
 
+  it('returns a product with parent and child memberships exactly once', async () => {
+    // PostgREST embedding returns one row per product with the full
+    // membership array; multi-membership must not duplicate the product.
+    const productsQuery = createProductsQuery({
+      data: [
+        {
+          slug: 'macbook-air',
+          name: 'MacBook Air',
+          price: 950_000,
+          brand: 'Apple',
+          condition: 'new',
+          stock_quantity: 4,
+          product_categories: [
+            { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
+            {
+              category_id: 'cat-gaming-laptops',
+              categories: { slug: 'gaming-laptops' },
+            },
+          ],
+          product_key_specs: [{ ram_gb: 8 }],
+        },
+      ],
+      error: null,
+    });
+    mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);
+    mockGetPublicSupabaseClient.mockReturnValue({
+      from: vi.fn(() => productsQuery),
+    });
+
+    const result = await getCachedCategoryScopedSemanticInventory(
+      'merchant-1',
+      'laptops',
+      'ogabassey'
+    );
+
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0]?.slug).toBe('macbook-air');
+    expect(result.products[0]?.category_slugs).toEqual([
+      'laptops',
+      'gaming-laptops',
+    ]);
+  });
+
   it('bounds the query with the compare-page-aligned inventory limit', async () => {
     const productsQuery = createProductsQuery({ data: [], error: null });
     mockGetCachedCategoryPageShellData.mockResolvedValue(categoryScopeShell);

@@ -51,6 +51,7 @@ it('returns a private, noncacheable receiver credential after authorization', as
   });
   vi.mocked(checkCartQuota).mockResolvedValue({
     allowed: true,
+    degraded: false,
     limit: 240,
     remaining: 239,
     resetTime: 0,

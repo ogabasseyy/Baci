@@ -11,6 +11,10 @@ describe('sanitizeRedirect', () => {
     '/%5cevil.example',
     '/%252f%252fevil.example',
     '/%5Cevil.example',
+    '/%09/evil.example',
+    '/%0a/evil.example',
+    '/%0d/evil.example',
+    '/%09%2fevil.example',
   ])('rejects unsafe redirect %j', (input) => {
     expect(sanitizeRedirect(input)).toBe('/account');
   });

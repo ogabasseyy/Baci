@@ -22,6 +22,7 @@ export function sanitizeRedirect(redirect: string | null): string {
     !redirect.startsWith('/') ||
     redirect.startsWith('//') ||
     /^\/(?:%2f|%5c|%25)/i.test(redirect) ||
+    /%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(redirect.split(/[?#]/, 1)[0] ?? '') ||
     /[\\\p{Cc}]/u.test(redirect) ||
     redirect.includes(':')
   ) {

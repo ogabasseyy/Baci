@@ -199,6 +199,29 @@ describe('POST /api/storefront/imei-remediation/eligibility', () => {
     );
     expect(mocks.startChecks).toHaveBeenCalled();
   });
+  it('returns a terminal suppression when the house check cannot start', async () => {
+    mocks.loadEligibility.mockResolvedValue({
+      checks: ['carrier_detection'],
+      evidence: {
+        carrier: 'Unknown',
+        blacklistStatus: 'Clean',
+        simLock: 'Locked',
+      },
+      kind: 'checks_required',
+    });
+    mocks.startChecks.mockResolvedValue({
+      kind: 'suppressed',
+      reason: 'house_check_unavailable',
+    });
+    const response = await POST(request() as never);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'suppressed',
+      reason: 'house_check_unavailable',
+      offers: [],
+    });
+  });
+
   it('blocks direct assessment requests without explicit clean and locked evidence', async () => {
     mocks.loadEligibility.mockResolvedValue({
       checks: ['blacklist'],

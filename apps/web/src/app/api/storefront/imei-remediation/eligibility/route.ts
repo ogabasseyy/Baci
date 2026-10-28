@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       sourceLookupId: parsed.data.lookupId,
       supabaseAdmin,
     });
-    await submitNextPetrockEligibilityCheck({
+    const submission = await submitNextPetrockEligibilityCheck({
       client: createPetrockClient(config),
       identifier,
       order: assessment,
@@ -155,6 +155,14 @@ export async function POST(request: NextRequest) {
         readPetrockHouseCheckProduct(supabaseAdmin, productId),
       state: createPetrockEligibilityState(supabaseAdmin),
     });
+    if (submission.kind === 'suppressed') {
+      return NextResponse.json({
+        offers: [],
+        reason: submission.reason,
+        status: 'suppressed',
+        success: true,
+      });
+    }
     return NextResponse.json(
       {
         assessmentId: assessment.id,

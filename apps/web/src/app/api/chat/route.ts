@@ -23,6 +23,7 @@ import { headers } from 'next/headers';
 import z from 'zod';
 import { checkRateLimit } from '@/ai/provider';
 import { withChatTenantHeader } from '@/app/api/chat/chat-tenant';
+import { tryFastCatalogChat } from '@/app/api/chat/fast-catalog-flow';
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import {
@@ -163,6 +164,30 @@ export async function POST(req: Request) {
     }));
 
     const chatProvider = getAiChatProvider();
+    if (chatProvider === 'auto') {
+      const fastReply = await tryFastCatalogChat({
+        messages: sanitizedMessages,
+        signal: req.signal,
+        tenant,
+      });
+      if (fastReply) {
+        if (req.signal.aborted)
+          return withChatTenantHeader(
+            createClientClosedRequestResponse(),
+            tenant.merchantSlug
+          );
+        return withChatTenantHeader(
+          await negotiateChatAgentUiResponse(
+            req,
+            new Response(fastReply.text, {
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            }),
+            fastReply.events
+          ),
+          tenant.merchantSlug
+        );
+      }
+    }
     const shouldTryLlm = chatProvider === 'auto' || chatProvider === 'llm';
     const shouldTryOllama =
       chatProvider === 'auto' || chatProvider === 'ollama';

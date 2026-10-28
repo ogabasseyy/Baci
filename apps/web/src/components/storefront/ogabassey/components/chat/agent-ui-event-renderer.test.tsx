@@ -197,6 +197,13 @@ describe('AgentUiEventRenderer', () => {
     expect(screen.queryByRole('button', { name: 'Add to cart' })).toBeNull();
   });
 
+  it('does not advertise an unverified parent price for a selectable product', () => {
+    render(<AgentUiEventRenderer events={[event({ hasVariants: true })]} />);
+
+    expect(screen.queryByText(/1,200,000/)).toBeNull();
+    expect(screen.getByText('Choose options to see the price')).toBeDefined();
+  });
+
   it('caps a request for five units at managed stock of two', async () => {
     render(
       <AgentUiEventRenderer events={[event({ quantity: 5, stock: 2 })]} />

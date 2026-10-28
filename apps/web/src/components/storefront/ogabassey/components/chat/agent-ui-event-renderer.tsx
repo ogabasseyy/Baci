@@ -180,15 +180,17 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                         </p>
                       )}
                       <p className="mt-1 text-sm font-bold text-[var(--store-primary)]">
-                        {formatMerchantCurrency(
-                          product.price,
-                          {
-                            country: merchantContext?.merchant?.country,
-                            payout_currency:
-                              merchantContext?.merchant?.payout_currency,
-                          },
-                          { maximumFractionDigits: 0 }
-                        )}
+                        {needsSelection(product)
+                          ? 'Choose options to see the price'
+                          : formatMerchantCurrency(
+                              product.price,
+                              {
+                                country: merchantContext?.merchant?.country,
+                                payout_currency:
+                                  merchantContext?.merchant?.payout_currency,
+                              },
+                              { maximumFractionDigits: 0 }
+                            )}
                       </p>
                     </div>
                   </div>

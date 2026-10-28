@@ -36,6 +36,7 @@ export default function DomainOptionsSheet({
   const onActionRef = useRef(onAction);
   const [modalVisible, setModalVisible] = useState(visible);
   const [awaitingDismiss, setAwaitingDismiss] = useState(false);
+  const [dismissalFailed, setDismissalFailed] = useState(false);
   const transitionRef = useRef(0);
   const [transition, setTransition] = useState(0);
   const pendingActionRef = useRef<{
@@ -64,6 +65,7 @@ export default function DomainOptionsSheet({
   useEffect(() => {
     if (visible) {
       pendingActionRef.current = null;
+      setDismissalFailed(false);
       setAwaitingDismiss(false);
       setModalVisible(true);
     }
@@ -118,6 +120,20 @@ export default function DomainOptionsSheet({
     };
   }, [awaitingDismiss, modalVisible]);
 
+  // Never present a follow-up action without confirmation that the native
+  // modal has gone away. If iOS drops onDismiss, cancel and show recovery.
+  useEffect(() => {
+    if (!awaitingDismiss || modalVisible || !isRuntimePlatform('ios')) return;
+    const timeout = setTimeout(() => {
+      if (!isMountedRef.current || visibleRef.current) return;
+      const hadPendingAction = pendingActionRef.current !== null;
+      pendingActionRef.current = null;
+      setAwaitingDismiss(false);
+      if (hadPendingAction) setDismissalFailed(true);
+    }, 2000);
+    return () => clearTimeout(timeout);
+  }, [awaitingDismiss, modalVisible]);
+
   const handleAction = (action: DomainAction) => {
     if (!domain) return;
 
@@ -128,93 +144,112 @@ export default function DomainOptionsSheet({
   if (!domain) return null;
 
   return (
-    <Modal
-      transparent
-      visible={visible || modalVisible}
-      animationType="none"
-      onDismiss={() => {
-        if (isRuntimePlatform('ios') && awaitingDismiss) {
-          setAwaitingDismiss(false);
-          dispatchPending();
-        }
-      }}
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable
-        style={domainOptionsSheetStyles.overlay}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close options"
-        accessibilityHint="Closes the domain options menu"
-      >
-        <Animated.View
-          entering={FadeIn}
-          exiting={FadeOut}
-          style={[
-            domainOptionsSheetStyles.backdrop,
-            { backgroundColor: 'rgba(0,0,0,0.4)' },
-          ]}
-        />
-      </Pressable>
-
-      <View
-        style={domainOptionsSheetStyles.sheetContainer}
-        pointerEvents="box-none"
-      >
-        {visible && (
-          <Animated.View
-            entering={SlideInDown}
-            exiting={SlideOutDown.duration(CLOSE_DURATION_MS).withCallback(
-              (finished) => {
-                if (finished) runOnJS(finishExit)(transition);
-              }
-            )}
-            style={[
-              domainOptionsSheetStyles.sheet,
-              { backgroundColor: colors.card, paddingBottom: SPACING.xl * 2 },
-              shadows.lg,
-            ]}
+    <>
+      {dismissalFailed && (
+        <View
+          accessibilityRole="alert"
+          style={domainOptionsSheetStyles.dismissalNotice}
+        >
+          <Text style={{ color: colors.text }}>
+            The action was cancelled. Open domain options and try again.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss notice"
+            onPress={() => setDismissalFailed(false)}
           >
-            <View style={domainOptionsSheetStyles.handleContainer}>
-              <View
-                style={[
-                  domainOptionsSheetStyles.handle,
-                  { backgroundColor: colors.border },
-                ]}
-              />
-            </View>
+            <Text style={{ color: colors.primary }}>Dismiss</Text>
+          </Pressable>
+        </View>
+      )}
+      <Modal
+        transparent
+        visible={visible || modalVisible}
+        animationType="none"
+        onDismiss={() => {
+          if (isRuntimePlatform('ios') && awaitingDismiss) {
+            setAwaitingDismiss(false);
+            dispatchPending();
+          }
+        }}
+        onRequestClose={onClose}
+        statusBarTranslucent
+      >
+        <Pressable
+          style={domainOptionsSheetStyles.overlay}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close options"
+          accessibilityHint="Closes the domain options menu"
+        >
+          <Animated.View
+            entering={FadeIn}
+            exiting={FadeOut}
+            style={[
+              domainOptionsSheetStyles.backdrop,
+              { backgroundColor: 'rgba(0,0,0,0.4)' },
+            ]}
+          />
+        </Pressable>
 
-            <DomainOptionsSheetHeader domain={domain} />
-            <DomainOptionsSheetActions
-              domain={domain}
-              onAction={handleAction}
-            />
-
-            <View style={domainOptionsSheetStyles.footer}>
-              <Pressable
-                style={[
-                  domainOptionsSheetStyles.cancelButton,
-                  { backgroundColor: colors.background },
-                ]}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Cancel"
-                accessibilityHint="Closes the options menu without making changes"
-              >
-                <Text
+        <View
+          style={domainOptionsSheetStyles.sheetContainer}
+          pointerEvents="box-none"
+        >
+          {visible && (
+            <Animated.View
+              entering={SlideInDown}
+              exiting={SlideOutDown.duration(CLOSE_DURATION_MS).withCallback(
+                (finished) => {
+                  if (finished) runOnJS(finishExit)(transition);
+                }
+              )}
+              style={[
+                domainOptionsSheetStyles.sheet,
+                { backgroundColor: colors.card, paddingBottom: SPACING.xl * 2 },
+                shadows.lg,
+              ]}
+            >
+              <View style={domainOptionsSheetStyles.handleContainer}>
+                <View
                   style={[
-                    domainOptionsSheetStyles.cancelText,
-                    { color: colors.text },
+                    domainOptionsSheetStyles.handle,
+                    { backgroundColor: colors.border },
                   ]}
+                />
+              </View>
+
+              <DomainOptionsSheetHeader domain={domain} />
+              <DomainOptionsSheetActions
+                domain={domain}
+                onAction={handleAction}
+              />
+
+              <View style={domainOptionsSheetStyles.footer}>
+                <Pressable
+                  style={[
+                    domainOptionsSheetStyles.cancelButton,
+                    { backgroundColor: colors.background },
+                  ]}
+                  onPress={onClose}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
+                  accessibilityHint="Closes the options menu without making changes"
                 >
-                  Cancel
-                </Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        )}
-      </View>
-    </Modal>
+                  <Text
+                    style={[
+                      domainOptionsSheetStyles.cancelText,
+                      { color: colors.text },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          )}
+        </View>
+      </Modal>
+    </>
   );
 }

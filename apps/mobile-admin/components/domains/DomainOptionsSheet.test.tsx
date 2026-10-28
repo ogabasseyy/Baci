@@ -96,10 +96,42 @@ describe('DomainOptionsSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
     rerender(sheet(false, onClose, onAction));
     act(() => mocks.onExit?.(true));
-    act(() => vi.runAllTimers());
+    act(() => vi.advanceTimersByTime(1999));
     expect(onAction).not.toHaveBeenCalled();
     act(() => mocks.onDismiss?.());
     expect(onAction).toHaveBeenCalledWith('visit', baseDomain);
+    act(() => vi.advanceTimersByTime(2000));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('cancels a pending action and shows recovery when iOS never reports dismissal', () => {
+    mocks.platform.OS = 'ios';
+    const onAction = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(sheet(true, onClose, onAction));
+    fireEvent.click(screen.getByRole('button', { name: 'Visit Site' }));
+    rerender(sheet(false, onClose, onAction));
+    act(() => mocks.onExit?.(true));
+    act(() => vi.advanceTimersByTime(2000));
+    expect(onAction).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).toBeInTheDocument();
+    act(() => mocks.onDismiss?.());
+    expect(onAction).not.toHaveBeenCalled();
+    rerender(sheet(true, onClose, onAction));
+    expect(
+      screen.queryByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).not.toBeInTheDocument();
   });
 
   it('does not dispatch if the exit animation is cancelled', () => {

@@ -76,12 +76,18 @@ export function matchImeiCatalogImage(
   for (const product of products) {
     if (!isImeiCatalogModelMatch(profile, product)) continue;
     if (profile.color) {
-      const variants = product.variants.filter(
-        (variant) =>
+      const variants = product.variants.filter((variant) => {
+        const observedStorage = storageKey(profile.storage);
+        const variantStorage = storageKey(variant.attributes.storage);
+        return (
           typeof variant.attributes.color === 'string' &&
           imeiColorKey(variant.attributes.color) ===
-            imeiColorKey(profile.color ?? '')
-      );
+            imeiColorKey(profile.color ?? '') &&
+          (!observedStorage ||
+            !variantStorage ||
+            observedStorage === variantStorage)
+        );
+      });
       variants.sort(
         (a, b) =>
           Number(

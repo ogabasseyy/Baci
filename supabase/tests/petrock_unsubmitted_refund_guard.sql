@@ -22,6 +22,10 @@ DO $$ DECLARE reason text; state text; changed boolean; BEGIN
  -- A provider receipt wins even against an explicit rejection.
  UPDATE public.petrock_orders SET status='submitting',provider_attempt_started_at=now(),provider_order_id='accepted-1';
  IF public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','provider_submit_rejected','Rejected') THEN RAISE EXCEPTION 'provider receipt refunded after rejection race'; END IF;
+ -- An unknown submission cannot be refunded based on a stale rejection.
+ UPDATE public.petrock_orders SET status='submission_unknown',provider_attempt_started_at=now(),provider_order_id=NULL;
+ IF public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','provider_submit_rejected','Rejected') THEN RAISE EXCEPTION 'unknown submission refunded'; END IF;
+ IF (SELECT status FROM public.petrock_orders) <> 'submission_unknown' OR EXISTS(SELECT 1 FROM public.test_refund_receipts) THEN RAISE EXCEPTION 'unknown submission state changed'; END IF;
  -- Never-submitted paid rejection refunds exactly once through the existing path.
  UPDATE public.petrock_orders SET status='paid',provider_attempt_started_at=NULL,provider_order_id=NULL;
  IF NOT public.fail_petrock_remediation_before_acceptance('00000000-0000-4000-8000-000000000001','eligibility_evidence_invalid','Refunded') THEN RAISE EXCEPTION 'unsubmitted invalid paid order not refunded'; END IF;

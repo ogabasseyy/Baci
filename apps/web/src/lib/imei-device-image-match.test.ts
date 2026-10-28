@@ -113,3 +113,21 @@ it('prefers a same-colour variant with matching normalized storage', () => {
     )?.imageUrl
   ).toBe('https://cdn.example.com/512.jpg');
 });
+
+it('does not select a known different-storage variant for an identified device', () => {
+  const product = {
+    ...products[0],
+    variants: [
+      {
+        attributes: { color: 'Silver', storage: '256GB' },
+        images: ['https://cdn.example.com/256.jpg'],
+      },
+    ],
+  };
+  expect(
+    matchImeiCatalogImage(
+      getImeiDeviceProfile({ device: 'iPhone 17 Pro Max 512GB Silver' }),
+      [product]
+    )
+  ).toBeNull();
+});

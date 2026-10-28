@@ -17,3 +17,67 @@ export const DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH = 1080;
 export const DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH = 384;
 export const TRANSPARENT_PIXEL_SRC =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+const MAX_INLINE_SOURCE_SRCSET_CHARS = 360;
+
+interface ParsedSrcSetCandidate {
+  raw: string;
+  width: number | null;
+}
+
+function parseSrcSetCandidate(candidate: string): ParsedSrcSetCandidate {
+  const trimmed = candidate.trim();
+  const match = trimmed.match(/\s+(\d+)w$/i);
+  return {
+    raw: trimmed,
+    width: match ? Number.parseInt(match[1], 10) : null,
+  };
+}
+
+/**
+ * Cap responsive `srcSet` width rungs so hero `<picture>` elements never
+ * advertise oversized desktop variants or exceed React 19 Fizz's 500-byte
+ * inline `<Suspense>` boundary budget.
+ */
+export function capSrcSetWidthRungs(
+  srcSet: string | undefined,
+  maxWidth: number,
+  minWidth = 0,
+  maxRungs = 2
+): string | undefined {
+  if (!srcSet) {
+    return srcSet;
+  }
+
+  const candidates = srcSet
+    .split(/,\s+/)
+    .map(parseSrcSetCandidate)
+    .filter((entry) => entry.raw.length > 0);
+  if (
+    candidates.length === 0 ||
+    candidates.every((entry) => entry.width === null)
+  ) {
+    return srcSet;
+  }
+
+  const underMax = candidates.filter(
+    (entry) => entry.width === null || entry.width <= maxWidth
+  );
+  const boundedMax = underMax.length > 0 ? underMax : [candidates[0]];
+  const aboveMin = boundedMax.filter(
+    (entry) => entry.width === null || entry.width >= minWidth
+  );
+  const bounded = aboveMin.length > 0 ? aboveMin : boundedMax;
+
+  const selected =
+    bounded.length > maxRungs && maxRungs >= 2
+      ? [bounded[0], bounded[bounded.length - 1]]
+      : bounded.slice(0, Math.max(1, maxRungs));
+
+  const joined = selected.map((entry) => entry.raw).join(', ');
+  if (joined.length > MAX_INLINE_SOURCE_SRCSET_CHARS && selected.length > 1) {
+    return selected[selected.length - 1].raw;
+  }
+
+  return joined;
+}

@@ -1,6 +1,10 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   countCssImportsInSource,
+  countStorefrontRouteCssImports,
   extractAsyncHeadScriptUrls,
   extractAttribute,
   extractHeadSection,
@@ -57,6 +61,15 @@ describe('storefront-cwv-html-utils', () => {
     expect(extractAttribute('<img src="/hero.avif" alt="Hero"/>', 'src')).toBe(
       '/hero.avif'
     );
+    expect(
+      extractAttribute(
+        '<img data-src="/wrong.avif" src="/hero.avif" alt="Hero"/>',
+        'src'
+      )
+    ).toBe('/hero.avif');
+    expect(
+      extractAttribute('<img data-src="/wrong.avif" alt="Hero"/>', 'src')
+    ).toBeNull();
   });
 
   it('validates hero URLs against allowed origins and rejects dangerous schemes', () => {
@@ -80,6 +93,45 @@ describe('storefront-cwv-html-utils', () => {
       "void import('./deferred.css');",
     ].join('\n');
     expect(countCssImportsInSource(source)).toBe(4);
+  });
+
+  it('follows transitive local module and directory barrel imports when counting storefront route CSS imports', () => {
+    const tempSrcDir = mkdtempSync(path.join(tmpdir(), 'cwv-css-src-'));
+    try {
+      const listingDir = path.join(tempSrcDir, 'app/(storefront)/nested');
+      mkdirSync(listingDir, { recursive: true });
+      writeFileSync(
+        path.join(
+          tempSrcDir,
+          'app/(storefront)/storefront-eager-listing-css-layout.tsx'
+        ),
+        [
+          "import '@/app/(storefront)/storefront-core.css';",
+          "import { ChildStyles } from './nested';",
+          'export function StorefrontEagerListingCssLayout() { return ChildStyles(); }',
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        path.join(listingDir, 'index.ts'),
+        [
+          "import { GrandChildStyles } from './grandchild-styles';",
+          'export function ChildStyles() { return GrandChildStyles(); }',
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        path.join(listingDir, 'grandchild-styles.ts'),
+        [
+          "import './extra-listing.css';",
+          'export function GrandChildStyles() { return null; }',
+        ].join('\n'),
+        'utf8'
+      );
+      expect(countStorefrontRouteCssImports('category', tempSrcDir)).toBe(2);
+    } finally {
+      rmSync(tempSrcDir, { force: true, recursive: true });
+    }
   });
 
   it('computes inline Next.js RSC Flight byte size', () => {

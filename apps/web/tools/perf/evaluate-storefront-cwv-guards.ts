@@ -117,22 +117,14 @@ export function evaluateHomepageHtmlGuard(
     const pTag = preloadTags[0] ?? '';
     const iTag = heroImgTags[0] ?? '';
     const pSet = extractAttribute(pTag, 'imageSrcSet');
-    const pHref = extractAttribute(pTag, 'href');
     const iSet = extractAttribute(iTag, 'srcset');
-    const iSrc = extractAttribute(iTag, 'src');
     const matchesSrcSet =
       Boolean(pSet) && (pSet === iSet || heroSourceSrcSets.includes(pSet));
-    const matchesHref =
-      !pSet &&
-      !iSet &&
-      heroSourceSrcSets.length === 0 &&
-      Boolean(pHref) &&
-      pHref === iSrc;
     if (headImagePreloads !== 1) {
       failures.push(
         `Expected exactly 1 head image preload, found ${headImagePreloads}`
       );
-    } else if (!matchesSrcSet && !matchesHref) {
+    } else if (!matchesSrcSet) {
       failures.push('Head preload imageSrcSet does not match hero img srcset');
     }
   }

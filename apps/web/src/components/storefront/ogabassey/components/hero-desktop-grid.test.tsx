@@ -156,6 +156,17 @@ describe('HeroDesktopGrid', () => {
     const img = container.querySelector('picture img');
     expect(img).toHaveAttribute('loading', 'eager');
     expect(img).toHaveAttribute('fetchpriority', 'high');
+    expect(img).toHaveAttribute(
+      'src',
+      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
+    );
+    const mobileMuteSource = bigPicture?.querySelector(
+      'source[media="(max-width: 767px)"]'
+    );
+    expect(mobileMuteSource).toHaveAttribute(
+      'srcset',
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    );
   });
 
   it('serves external desktop images with only the fallback source when no AVIF tier exists', () => {

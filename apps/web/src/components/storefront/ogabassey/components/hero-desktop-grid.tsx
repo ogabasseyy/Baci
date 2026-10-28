@@ -4,11 +4,12 @@ import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import { asRoute } from '@/lib/routes';
-import { capSrcSetWidthRungs } from './hero-lcp-image-descriptor';
 import {
+  capSrcSetWidthRungs,
   DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
   DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH,
   DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH,
+  MOBILE_HERO_SOURCE_MEDIA,
   TRANSPARENT_PIXEL_SRC,
 } from './hero-mobile-image-config';
 import type { LaunchProductSlide } from './LaunchCarousel';
@@ -37,9 +38,9 @@ const SIDE_IMAGE_SOURCE_MEDIA = '(min-width: 768px)';
 const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
 const HERO_IMAGE_QUALITY = 70;
 
-/** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
- *  `<img>` falls back to a transparent pixel (zero network). Desktop keeps
- *  eager/high so this above-the-fold grid can still be the desktop LCP. */
+/** Media-scoped desktop hero image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel (zero network), while `<img src>` holds the real
+ *  fallback URL so no `fetchpriority="high"` hero `<img>` uses a `data:image/gif` `src`. */
 function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -86,10 +87,13 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
           srcSet={fallbackSrcSet}
         />
       </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={imgSrc}
         className="h-full w-full object-contain p-4 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>

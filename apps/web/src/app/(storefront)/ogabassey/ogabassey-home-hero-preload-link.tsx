@@ -1,16 +1,18 @@
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 
 /**
- * Single preload owner for the home hero's slide-0 LCP image.
+ * Synchronous component boundary and single preload owner for the home hero's
+ * slide-0 LCP image.
  *
- * Delegates directly to `preloadOgabasseyHomeHeroResources(src)` (`react-dom`
- * `preload()`) instead of rendering a literal `<link rel="preload">` JSX node:
- * in React 19 + Next.js App Router, a Server Component `<link rel="preload">`
- * both triggers an automatic `:HL` `preload()` hint AND hoists a literal
- * `<link>` into `<head>`, producing two duplicate `<link rel="preload"
- * as="image">` tags in the SSR HTML document. Calling `preload()` once emits
- * a single scanner-visible `<link rel="preload" as="image">` at the top of
- * `<head>` with attributes derived from `getOgabasseyHeroLcpImage`.
+ * 1. Keeping this as a synchronous component rendered by `async` callers
+ *    (such as `OgabasseyHomeCommittedSlideZeroPreload`) ensures `preload()`
+ *    executes inside an active synchronous React Fizz `performWork` tick where
+ *    `currentRequest` is bound.
+ * 2. Calling `preloadOgabasseyHomeHeroResources(src)` (`react-dom` `preload()`)
+ *    and returning `null` instead of rendering a literal `<link rel="preload">`
+ *    JSX element avoids React 19's `react-server-dom-webpack` double-preload
+ *    behavior (which both calls `preload()` for `<link rel="preload" as="image">`
+ *    AND serializes the `<link>` tag into `hoistableChunks`).
  */
 export function OgabasseyHomeHeroPreloadLink({
   src,

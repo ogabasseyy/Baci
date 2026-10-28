@@ -13,8 +13,8 @@ vi.mock('next/link', () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-describe('OgabasseyPdpCriticalShell visible summary', () => {
-  it('keeps the server-computed visible summary near the primary product information', () => {
+describe('OgabasseyPdpCriticalShell visible summary omission', () => {
+  it('omits the redundant visible summary paragraph because brand, title, condition, and variant buttons are server-rendered directly', () => {
     const { container } = render(
       <OgabasseyPdpCriticalShell
         basePath=""
@@ -40,27 +40,14 @@ describe('OgabasseyPdpCriticalShell visible summary', () => {
       />
     );
 
-    const summary = screen.getByText(
-      'Samsung Galaxy Z TriFold. Available choices: Storage 512 GB or 1 TB.'
-    );
-
-    expect(summary).toBeVisible();
-    expect(summary.closest('[data-ogabassey-pdp-summary]')).not.toBeNull();
     expect(
-      container.querySelector('[data-ogabassey-pdp-commerce-slot]')?.contains(
-        summary
+      screen.queryByText(
+        'Samsung Galaxy Z TriFold. Available choices: Storage 512 GB or 1 TB.'
       )
-    ).toBe(false);
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-ogabassey-pdp-visible-summary]')
+    ).toBeNull();
     expect(container.querySelector('article[aria-label*="summary"]')).toBeNull();
-
-    const price = container.querySelector('[data-ogabassey-pdp-price]');
-    expect(price).not.toBeNull();
-    expect(
-      Boolean(
-        price &&
-          price.compareDocumentPosition(summary) &
-            Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
   });
 });

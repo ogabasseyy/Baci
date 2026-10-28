@@ -64,13 +64,14 @@ export function extractPageSpeedLcpDiagnostics(
     RawLighthouseAudit
   >;
   const cats = isRecord(lhr.categories) ? lhr.categories : {};
-  const getScore = (id: string) =>
-    isRecord(cats[id]) && typeof cats[id].score === 'number'
-      ? Math.round((cats[id].score as number) * 100)
+  const getScore = (id: string) => {
+    const cat = cats[id];
+    return isRecord(cat) && typeof cat.score === 'number'
+      ? Math.round(cat.score * 100)
       : null;
-  const mItem = isRecord(audits.metrics?.details?.items?.[0])
-    ? (audits.metrics?.details?.items?.[0] as Record<string, unknown>)
-    : null;
+  };
+  const firstMetricsItem = audits.metrics?.details?.items?.[0];
+  const mItem = isRecord(firstMetricsItem) ? firstMetricsItem : null;
   const lcpSubparts = extractLcpSubparts(audits);
   const subVals = Object.values(lcpSubparts).filter(
     (v): v is number => v !== null
@@ -82,20 +83,6 @@ export function extractPageSpeedLcpDiagnostics(
     getNum(audits['largest-contentful-paint']?.numericValue) ??
     getNum(mItem?.largestContentfulPaint);
   const cutoffMs = observedLcpMs ?? simLcpMs;
-
-  let lcpOptimisticMs: number | null = null;
-  let lcpPessimisticMs: number | null = null;
-  for (const e of [
-    mItem,
-    ...(audits['metrics-lantern']?.details?.items ?? []),
-    audits['largest-contentful-paint']?.details,
-  ]) {
-    if (!isRecord(e)) continue;
-    lcpOptimisticMs ??=
-      getNum(e.optimisticLargestContentfulPaint) ?? getNum(e.optimisticLcp);
-    lcpPessimisticMs ??=
-      getNum(e.pessimisticLargestContentfulPaint) ?? getNum(e.pessimisticLcp);
-  }
 
   let preLcpRequestCount: number | null = null;
   let preLcpBytes: number | null = null;
@@ -146,8 +133,6 @@ export function extractPageSpeedLcpDiagnostics(
       getNum(mItem?.lcpLoadDelay) ?? lcpSubparts.resourceLoadDelayMs,
     lcpLoadDurationMs:
       getNum(mItem?.lcpLoadDuration) ?? lcpSubparts.resourceLoadDurationMs,
-    lcpOptimisticMs,
-    lcpPessimisticMs,
     lcpResourceOrigin: parseOrigin(lcpResourceUrl),
     lcpResourceUrl,
     lcpSubparts,

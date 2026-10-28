@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { brotliCompressSync } from 'node:zlib';
 import type {
@@ -56,7 +56,9 @@ export function extractImagePreloadTags(headHtml: string): string[] {
 /** Reads an HTML attribute value from a single opening tag string. */
 export function extractAttribute(tag: string, attrName: string): string | null {
   return (
-    tag.match(new RegExp(`\\b${attrName}=["']([^"']+)["']`, 'i'))?.[1] ?? null
+    tag.match(
+      new RegExp(`(?<![\\w:-])${attrName}=["']([^"']+)["']`, 'i')
+    )?.[1] ?? null
   );
 }
 
@@ -126,15 +128,53 @@ export function countCssImportsInSource(source: string): number {
   ].length;
 }
 
-/** Counts `.css` imports in the storefront route entry files for a monitored route. */
+function resolveLocalModulePath(
+  specifier: string,
+  importerPath: string,
+  webSrcDir: string
+): string | null {
+  if (specifier.endsWith('.css')) return null;
+  const basePath = specifier.startsWith('@/')
+    ? path.join(webSrcDir, specifier.slice(2))
+    : specifier.startsWith('.')
+      ? path.resolve(path.dirname(importerPath), specifier)
+      : null;
+  if (!basePath) return null;
+  for (const candidate of [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    path.join(basePath, 'index.ts'),
+    path.join(basePath, 'index.tsx'),
+  ]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/** Counts `.css` imports in the storefront route entry files (and transitive static local imports) for a monitored route. */
 export function countStorefrontRouteCssImports(
   route: StorefrontCwvGuardRoute,
   webSrcDir: string
 ): number {
+  const visited = new Set<string>();
   let count = 0;
-  for (const relPath of ROUTE_CSS_SOURCE_FILES[route]) {
-    const source = readFileSync(path.join(webSrcDir, relPath), 'utf8');
+  const visitFile = (filePath: string) => {
+    if (visited.has(filePath)) return;
+    visited.add(filePath);
+    const source = readFileSync(filePath, 'utf8');
     count += countCssImportsInSource(source);
+    for (const m of source.matchAll(
+      /^\s*import\s+(?!type\b)(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]/gm
+    )) {
+      const child = resolveLocalModulePath(m[1] ?? '', filePath, webSrcDir);
+      if (child) visitFile(child);
+    }
+  };
+  for (const relPath of ROUTE_CSS_SOURCE_FILES[route]) {
+    visitFile(path.join(webSrcDir, relPath));
   }
   return count;
 }

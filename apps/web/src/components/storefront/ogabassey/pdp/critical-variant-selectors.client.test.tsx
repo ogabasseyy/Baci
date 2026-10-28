@@ -34,8 +34,8 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
     );
 
     expect(
-      screen.getByText('Choose options below before checkout.')
-    ).toBeInTheDocument();
+      screen.queryByText('Choose options below before checkout.')
+    ).toBeNull();
     expect(screen.getByText('Storage:')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /select 128gb storage/i })

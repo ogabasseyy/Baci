@@ -21,7 +21,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
   renderableVariantAxes,
   selectedAttributes,
   variantAxisOptions = {},
-  variantCount,
   variants,
 }: OgabasseyPdpCriticalVariantSelectorsProps) {
   if (renderableVariantAxes.length === 0) {
@@ -30,11 +29,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
 
   return (
     <div data-ogabassey-pdp-commerce-variant-picker>
-      {variantCount > 1 ? (
-        <p data-ogabassey-pdp-commerce-selection-hint>
-          Choose options below before checkout.
-        </p>
-      ) : null}
       {renderableVariantAxes.length > 0 ? (
         <div data-ogabassey-pdp-commerce-variant-selectors>
           {renderableVariantAxes.map((axis) => {

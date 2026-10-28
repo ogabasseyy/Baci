@@ -3,6 +3,7 @@ import { rewriteOgabasseyTransformUrlFormat } from '@/lib/ogabassey-cdn-image-ur
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import {
+  capSrcSetWidthRungs,
   MOBILE_HERO_IMAGE_HEIGHT,
   MOBILE_HERO_IMAGE_QUALITY,
   MOBILE_HERO_IMAGE_SIZES,
@@ -12,7 +13,8 @@ import {
   MOBILE_HERO_SOURCE_MEDIA,
 } from './hero-mobile-image-config';
 
-const MAX_INLINE_SOURCE_SRCSET_CHARS = 360;
+export { capSrcSetWidthRungs };
+
 const WIDTH_DESCRIPTOR_PATTERN = /\s\d+w(?:,|$)/;
 
 export interface OgabasseyHeroLcpSlideSource {
@@ -39,70 +41,8 @@ export interface OgabasseyHeroLcpImageDescriptor {
   width: number;
 }
 
-interface ParsedSrcSetCandidate {
-  raw: string;
-  width: number | null;
-}
-
-function parseSrcSetCandidate(candidate: string): ParsedSrcSetCandidate {
-  const trimmed = candidate.trim();
-  const match = trimmed.match(/\s+(\d+)w$/i);
-  return {
-    raw: trimmed,
-    width: match ? Number.parseInt(match[1], 10) : null,
-  };
-}
-
 function getResponsiveSizes(srcSetValue: string, sizesValue?: string) {
   return WIDTH_DESCRIPTOR_PATTERN.test(srcSetValue) ? sizesValue : undefined;
-}
-
-/**
- * Cap responsive `srcSet` width rungs so hero `<picture>` elements never
- * advertise oversized desktop variants or exceed React 19 Fizz's 500-byte
- * inline `<Suspense>` boundary budget.
- */
-export function capSrcSetWidthRungs(
-  srcSet: string | undefined,
-  maxWidth: number,
-  minWidth = 0,
-  maxRungs = 2
-): string | undefined {
-  if (!srcSet) {
-    return srcSet;
-  }
-
-  const candidates = srcSet
-    .split(/,\s+/)
-    .map(parseSrcSetCandidate)
-    .filter((entry) => entry.raw.length > 0);
-  if (
-    candidates.length === 0 ||
-    candidates.every((entry) => entry.width === null)
-  ) {
-    return srcSet;
-  }
-
-  const underMax = candidates.filter(
-    (entry) => entry.width === null || entry.width <= maxWidth
-  );
-  const boundedMax = underMax.length > 0 ? underMax : [candidates[0]];
-  const aboveMin = boundedMax.filter(
-    (entry) => entry.width === null || entry.width >= minWidth
-  );
-  const bounded = aboveMin.length > 0 ? aboveMin : boundedMax;
-
-  const selected =
-    bounded.length > maxRungs && maxRungs >= 2
-      ? [bounded[0], bounded[bounded.length - 1]]
-      : bounded.slice(0, Math.max(1, maxRungs));
-
-  const joined = selected.map((entry) => entry.raw).join(', ');
-  if (joined.length > MAX_INLINE_SOURCE_SRCSET_CHARS && selected.length > 1) {
-    return selected[selected.length - 1].raw;
-  }
-
-  return joined;
 }
 
 export function getOgabasseyHeroLcpImage(

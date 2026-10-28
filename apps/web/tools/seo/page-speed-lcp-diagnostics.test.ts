@@ -26,9 +26,7 @@ function buildMockPsiReport(overrides: {
   lcpResourceUrl?: string;
   networkItems?: Record<string, unknown>[];
   observedLcpMs?: number;
-  optimisticLcp?: number;
   performanceScore?: number;
-  pessimisticLcp?: number;
   seoScore?: number;
 }) {
   const selector = overrides.lcpElementSelector ?? 'picture.block > img';
@@ -62,10 +60,6 @@ function buildMockPsiReport(overrides: {
                 lcpLoadDelay: 120,
                 lcpLoadDuration: 450,
                 observedLargestContentfulPaint: observedLcpMs,
-                optimisticLargestContentfulPaint:
-                  overrides.optimisticLcp ?? 1850,
-                pessimisticLargestContentfulPaint:
-                  overrides.pessimisticLcp ?? 2350,
               },
             ],
           },

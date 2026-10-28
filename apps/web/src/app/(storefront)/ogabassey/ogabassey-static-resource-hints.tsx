@@ -1,4 +1,4 @@
-import ReactDOM from 'react-dom';
+import { prefetchDNS } from 'react-dom';
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
 
 /**
@@ -8,6 +8,6 @@ import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/s
  * preconnect warning in Lighthouse.
  */
 export function OgabasseyStaticResourceHints() {
-  ReactDOM.prefetchDNS(OGABASSEY_CDN_ORIGIN);
+  prefetchDNS(OGABASSEY_CDN_ORIGIN);
   return null;
 }

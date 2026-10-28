@@ -140,11 +140,7 @@ export function useCustomerLoginForm() {
 
   const handleVerifyCode = async (codeString: string) => {
     if (verifyLock.current || sendLock.current) return;
-    if (otpState?.expiresAt !== undefined && Date.now() >= otpState.expiresAt) {
-      setError('This code has expired. Request a new code.');
-      setCode(['', '', '', '', '', '']);
-      return;
-    }
+
     verifyLock.current = true;
     setError('');
     setIsVerifying(true);

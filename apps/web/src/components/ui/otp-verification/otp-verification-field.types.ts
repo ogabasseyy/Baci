@@ -22,6 +22,8 @@ export interface OtpVerificationFieldProps {
   /** Successful send time in epoch milliseconds. No code or token is stored. */
   sentAt?: number;
   ttlSeconds?: number;
+  /** Display an estimated window without preventing server verification. */
+  expiryAdvisory?: boolean;
   /** Optional caller-specific resend delay, independent of OTP expiry. */
   resendCooldownSeconds?: number;
   resendSentAt?: number;

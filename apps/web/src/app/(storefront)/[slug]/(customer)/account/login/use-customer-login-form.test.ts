@@ -320,20 +320,32 @@ it('does not submit a second code while verification is pending', () => {
   pending.resolve({ success: false });
 });
 
-it('prompts for a new code rather than submitting an expired challenge', async () => {
+it('lets the server decide after the estimated window', async () => {
   mocks.auth.otpState = {
     codeSent: true,
     email: 'buyer@example.com',
     expiresAt: Date.now() - 1,
   };
-  mocks.verifyOtp.mockClear();
-  mocks.sendOtp.mockReset().mockResolvedValue({ success: true });
+  mocks.verifyOtp
+    .mockReset()
+    .mockResolvedValue({ success: false, error: 'Code expired' });
   const { result } = renderHook(() => useCustomerLoginForm());
-  act(() => result.current.handleCodeChange(0, '123456'));
-  expect(mocks.verifyOtp).not.toHaveBeenCalled();
-  expect(result.current.error).toMatch(/expired.*new code/i);
-  await act(async () => result.current.handleResendCode());
-  expect(mocks.sendOtp).toHaveBeenCalledOnce();
+  await act(async () => result.current.handleCodeChange(0, '123456'));
+  expect(mocks.verifyOtp).toHaveBeenCalledWith('123456');
+  expect(result.current.error).toMatch(/expired/i);
+});
+
+it('accepts server-confirmed success after the estimated window', async () => {
+  mocks.auth.otpState = {
+    codeSent: true,
+    email: 'buyer@example.com',
+    expiresAt: Date.now() - 1,
+  };
+  mocks.verifyOtp.mockReset().mockResolvedValue({ success: true });
+  const { result } = renderHook(() => useCustomerLoginForm());
+  await act(async () => result.current.handleCodeChange(0, '123456'));
+  expect(mocks.verifyOtp).toHaveBeenCalledWith('123456');
+  expect(result.current.error).toBe('');
 });
 
 it('accepts a partial multi-digit first-field autofill without verifying', () => {

@@ -32,6 +32,7 @@ export function OtpVerificationField({
   onStackComplete,
   sentAt,
   ttlSeconds = OTP_CODE_TTL_SECONDS,
+  expiryAdvisory = false,
   resendCooldownSeconds = 0,
   resendSentAt,
   onResend,
@@ -67,8 +68,9 @@ export function OtpVerificationField({
   const resendLock = useRef(false);
   const feedbackError = error || resendError;
   const expiredNow = () =>
-    expiry.expired ||
-    (expiry.expiresAt !== null && Date.now() >= expiry.expiresAt);
+    !expiryAdvisory &&
+    (expiry.expired ||
+      (expiry.expiresAt !== null && Date.now() >= expiry.expiresAt));
   async function resend() {
     if (
       !onResend ||
@@ -108,7 +110,9 @@ export function OtpVerificationField({
       <InputOTP
         ref={inputRef}
         id={id}
-        aria-invalid={Boolean(feedbackError) || expiry.expired}
+        aria-invalid={
+          Boolean(feedbackError) || (!expiryAdvisory && expiry.expired)
+        }
         aria-describedby={feedbackError ? `${id}-error` : `${id}-feedback`}
         form={form}
         name={name}
@@ -147,7 +151,7 @@ export function OtpVerificationField({
           pending ||
           verified ||
           resending ||
-          expiry.expired ||
+          (!expiryAdvisory && expiry.expired) ||
           !expiry.ready
         }
         pushPasswordManagerStrategy="none"
@@ -190,7 +194,7 @@ export function OtpVerificationField({
                 }
               >
                 <span>
-                  {pending || verified || expiry.expired
+                  {pending || verified || (!expiryAdvisory && expiry.expired)
                     ? null
                     : concealDigits && slot.char
                       ? '•'
@@ -198,7 +202,7 @@ export function OtpVerificationField({
                 </span>
                 {!pending &&
                   !verified &&
-                  !expiry.expired &&
+                  (expiryAdvisory || !expiry.expired) &&
                   slot.hasFakeCaret && <span className={styles.caret} />}
               </div>
             ))}
@@ -229,7 +233,11 @@ export function OtpVerificationField({
         ) : verified ? (
           successMessage
         ) : expiry.expired ? (
-          'This code has expired. Request a new code.'
+          expiryAdvisory ? (
+            'Your code may have expired. You can try it or request a new one.'
+          ) : (
+            'This code has expired. Request a new code.'
+          )
         ) : (
           hint || `Enter the ${length}-digit code.`
         )}
@@ -245,12 +253,14 @@ export function OtpVerificationField({
             {verified
               ? ''
               : expiry.expired
-                ? 'Code expired'
+                ? expiryAdvisory
+                  ? 'Code may have expired'
+                  : 'Code expired'
                 : expiry.remainingSeconds === null
                   ? sentAt === undefined
                     ? ''
                     : 'Checking code expiry…'
-                  : `Code expires in ${Math.floor(expiry.remainingSeconds / 60)}:${String(expiry.remainingSeconds % 60).padStart(2, '0')}`}
+                  : `${expiryAdvisory ? 'Estimated time remaining' : 'Code expires in'} ${Math.floor(expiry.remainingSeconds / 60)}:${String(expiry.remainingSeconds % 60).padStart(2, '0')}`}
           </span>
           {onResend && (
             <button

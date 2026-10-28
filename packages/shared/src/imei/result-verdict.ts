@@ -39,10 +39,15 @@ export function getImeiEffectiveVerdict(result: {
   if (result.verdictType === 'danger')
     return { type: 'danger', text: result.verdict };
   const blacklist = getImeiBlacklistState(result.blacklistStatus ?? undefined);
-  if (result.status === 'Blacklisted' || blacklist === 'risk')
+  if (blacklist === 'risk')
     return {
       type: 'danger',
       text: 'Blacklist risk detected. Verify this report before buying.',
+    };
+  if (result.status === 'Blacklisted')
+    return {
+      type: 'danger',
+      text: 'Device risk detected. Verify this report before buying.',
     };
   if (result.verdictType === 'caution')
     return { type: 'caution', text: result.verdict };

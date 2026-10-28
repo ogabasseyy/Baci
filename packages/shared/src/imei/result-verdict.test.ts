@@ -83,3 +83,17 @@ it.each([
     }).type
   ).toBe(type);
 });
+
+it('does not label a generic device risk as a blacklist risk', () => {
+  expect(
+    getImeiEffectiveVerdict({
+      status: 'Blacklisted',
+      verdictType: 'safe',
+      verdict: 'SAFE TO BUY',
+      blacklistStatus: 'Clean',
+    })
+  ).toEqual({
+    type: 'danger',
+    text: 'Device risk detected. Verify this report before buying.',
+  });
+});

@@ -33,7 +33,7 @@ const props = () => ({
   sentAt: Date.now(),
 });
 
-it('uses the configured one-hour login window and waits for explicit resend after expiry', () => {
+it('shows an estimated one-hour window without blocking verification afterward', () => {
   const handlers = props();
   render(<OtpVerificationForm {...handlers} />);
   expect(
@@ -47,8 +47,8 @@ it('uses the configured one-hour login window and waits for explicit resend afte
   act(() => {
     vi.advanceTimersByTime(3000000);
   });
-  expect(screen.getByRole('textbox')).toBeDisabled();
-  expect(screen.getByRole('status')).toHaveTextContent('expired');
+  expect(screen.getByRole('textbox')).toBeEnabled();
+  expect(screen.getByRole('status')).toHaveTextContent('may have expired');
   expect(handlers.onResend).not.toHaveBeenCalled();
 });
 
@@ -60,9 +60,9 @@ it('limits resends for 30 seconds after a customer code is sent', () => {
   expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
 });
 
-it('permits a fresh resend but not verification when timing is invalid', () => {
+it('permits a fresh resend and server verification when the estimate is invalid', () => {
   render(<OtpVerificationForm {...props()} sentAt={Number.NaN} />);
-  expect(screen.getByRole('textbox', { name: 'Email verification code' })).toBeDisabled();
+  expect(screen.getByRole('textbox', { name: 'Email verification code' })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Resend code' })).toBeEnabled();
 });
 

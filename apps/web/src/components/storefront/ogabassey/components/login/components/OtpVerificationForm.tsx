@@ -31,6 +31,7 @@ export function OtpVerificationForm({
         sentAt={sentAt}
         resendSentAt={resendSentAt}
         ttlSeconds={CUSTOMER_OTP_TTL_SECONDS}
+        expiryAdvisory
         resendCooldownSeconds={CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS}
         onResend={verified ? undefined : onResend}
         successMessage="Signed in successfully."

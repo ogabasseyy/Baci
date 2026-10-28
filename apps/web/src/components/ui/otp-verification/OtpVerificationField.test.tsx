@@ -175,3 +175,19 @@ it('does not move focus back to the input after confirmed success', () => {
   view.rerender(<OtpVerificationField {...props} verified />);
   expect(screen.getByRole('textbox')).not.toHaveFocus();
 });
+
+it('keeps the caret visible after an advisory expiry while input is editable', () => {
+  const view = render(
+    <OtpVerificationField
+      value=""
+      onChange={vi.fn()}
+      sentAt={Date.now() - 61_000}
+      ttlSeconds={60}
+      expiryAdvisory
+    />
+  );
+  const input = screen.getByRole('textbox');
+  fireEvent.focus(input);
+  expect(input).toBeEnabled();
+  expect(view.container.querySelector(`.${styles.caret}`)).toBeTruthy();
+});

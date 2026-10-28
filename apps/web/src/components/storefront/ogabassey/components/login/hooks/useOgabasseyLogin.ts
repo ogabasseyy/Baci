@@ -132,10 +132,7 @@ export function useOgabasseyLogin({
       !/^\d{6}$/.test(value)
     )
       return;
-    if (otpState?.expiresAt !== undefined && Date.now() >= otpState.expiresAt) {
-      setError('This code has expired. Request a new code.');
-      return;
-    }
+
     verifyLock.current = true;
     setError('');
     setIsVerifying(true);

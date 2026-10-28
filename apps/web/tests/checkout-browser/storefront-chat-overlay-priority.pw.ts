@@ -280,3 +280,20 @@ test('dragged launcher stays inside a pinch-zoomed visual viewport', async ({
   );
   await context.close();
 });
+
+test('open chat stays fully inside a short mobile viewport with the footer offset', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 568 });
+  await page.goto('/chat-launcher');
+
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  await launcher.click();
+
+  const chatWindow = page.locator('.ogabassey-chat-window');
+  await expect(chatWindow).toBeVisible();
+  const bounds = await chatWindow.boundingBox();
+  if (!bounds) throw new Error('Open chat window is missing its layout box');
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(568);
+});

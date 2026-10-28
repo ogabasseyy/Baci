@@ -40,6 +40,7 @@ function setup() {
   };
   const commitPosition = vi.fn();
   const scheduleViewportReclamp = vi.fn();
+  const syncCollision = vi.fn();
   const lifecycle = createChatLauncherGestureLifecycle({
     gesture,
     dragged,
@@ -50,6 +51,7 @@ function setup() {
     scheduleViewportReclamp,
     viewportReclampPending,
     suppressedDragClick,
+    syncCollision,
   });
   return {
     anchor,
@@ -60,6 +62,7 @@ function setup() {
     suppressedDragClick,
     viewportReclampPending,
     commitPosition,
+    syncCollision,
   };
 }
 
@@ -79,6 +82,7 @@ describe('chat launcher gesture lifecycle', () => {
     });
     expect(state.gesture.current).toBeNull();
     expect(state.anchor.hasAttribute('data-chat-launcher-dragging')).toBe(false);
+    expect(state.syncCollision).toHaveBeenCalledOnce();
   });
 
   it('rolls back a cancelled drag and clears click suppression', () => {
@@ -97,6 +101,7 @@ describe('chat launcher gesture lifecycle', () => {
     expect(state.dragged.current).toBe(false);
     expect(state.anchor.style.transform).toBe('translate3d(5px, 8px, 0)');
     expect(state.gesture.current).toBeNull();
+    expect(state.syncCollision).toHaveBeenCalledOnce();
   });
 
   it('re-clamps after finishing a drag when the viewport changed mid-gesture', () => {

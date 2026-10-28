@@ -120,6 +120,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       style={drag.anchorStyle}
       className={anchorClasses}
       data-chat-launcher-positioned={drag.position ? '' : undefined}
+      data-chat-panel-open={isOpen ? '' : undefined}
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >

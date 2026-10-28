@@ -42,7 +42,11 @@ export function useChatLauncherDrag(
   const [position, setPosition] = useState<Position | undefined>(initialPosition);
   const positionRef = useRef(position);
   const anchorRef = useRef<HTMLDivElement>(null);
-  useChatLauncherOfferCollision(anchorRef, position, active);
+  const syncCollisionDuringDrag = useChatLauncherOfferCollision(
+    anchorRef,
+    position,
+    active,
+  );
   const buttonRef = useRef<HTMLButtonElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const dragged = useRef(false);
@@ -75,6 +79,7 @@ export function useChatLauncherDrag(
     scheduleViewportReclamp,
     viewportReclampPending,
     suppressedDragClick,
+    syncCollision: syncCollisionDuringDrag,
   });
 
   useBrowserLayoutEffect(() => {
@@ -244,6 +249,7 @@ export function useChatLauncherDrag(
       if (!anchorRef.current || !gesture.current) return;
       const { next, base, left, top } = gesture.current;
       anchorRef.current.style.transform = `translate3d(${base.x + next.x - left}px, ${base.y + next.y - top}px, 0)`;
+      syncCollisionDuringDrag();
     });
   }
   function onPointerMove(event: PointerEvent<HTMLButtonElement>) {

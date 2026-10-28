@@ -3,6 +3,30 @@ import type { Position } from './chat-launcher-geometry';
 
 const COLLISION_ATTRIBUTE = 'data-chat-launcher-offer-collision';
 
+function overlapsOffer(anchor: HTMLElement, offer: HTMLElement) {
+  const overflowElements = [
+    ...anchor.querySelectorAll<HTMLElement>('[data-chat-launcher-overflow]'),
+  ].filter((element) => {
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  });
+  const launcher = anchor.querySelector<HTMLElement>(
+    '.ogabassey-chat-button',
+  );
+  const offerRect = offer.getBoundingClientRect();
+  const visibleRects = [
+    (launcher ?? anchor).getBoundingClientRect(),
+    ...overflowElements.map((element) => element.getBoundingClientRect()),
+  ];
+  return visibleRects.some(
+    (rect) =>
+      rect.left < offerRect.right &&
+      rect.right > offerRect.left &&
+      rect.top < offerRect.bottom &&
+      rect.bottom > offerRect.top,
+  );
+}
+
 export function useChatLauncherOfferCollision(
   anchorRef: { current: HTMLDivElement | null },
   position: Position | undefined,
@@ -45,27 +69,7 @@ export function useChatLauncherOfferCollision(
         anchor?.removeAttribute(COLLISION_ATTRIBUTE);
         return;
       }
-      const offerRect = offer.getBoundingClientRect();
-      const launcher = anchor.querySelector<HTMLElement>(
-        '.ogabassey-chat-button',
-      );
-      const visibleRects = [
-        (launcher ?? anchor).getBoundingClientRect(),
-        ...[...overflowElements]
-          .filter((element) => {
-            const style = window.getComputedStyle(element);
-            return style.display !== 'none' && style.visibility !== 'hidden';
-          })
-          .map((element) => element.getBoundingClientRect()),
-      ];
-      const overlaps = visibleRects.some(
-        (rect) =>
-          rect.left < offerRect.right &&
-          rect.right > offerRect.left &&
-          rect.top < offerRect.bottom &&
-          rect.bottom > offerRect.top,
-      );
-      anchor.toggleAttribute(COLLISION_ATTRIBUTE, overlaps);
+      anchor.toggleAttribute(COLLISION_ATTRIBUTE, overlapsOffer(anchor, offer));
     };
     const scheduleCollisionSync = () => {
       if (
@@ -130,4 +134,15 @@ export function useChatLauncherOfferCollision(
       syncCollisionRef.current();
     }
   }, [position]);
+
+  return () => {
+    if (!active) return;
+    const anchor = anchorRef.current;
+    const offer = document.querySelector<HTMLElement>('.ogabassey-offer-popup');
+    if (!anchor || !offer) {
+      anchor?.removeAttribute(COLLISION_ATTRIBUTE);
+      return;
+    }
+    anchor.toggleAttribute(COLLISION_ATTRIBUTE, overlapsOffer(anchor, offer));
+  };
 }

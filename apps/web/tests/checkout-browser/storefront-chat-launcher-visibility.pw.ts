@@ -136,3 +136,50 @@ test('offer collision includes a visible launcher overflow bubble', async ({
   await expect(page.locator('.ogabassey-offer-popup')).toBeHidden();
   await expect(launcher).toBeVisible();
 });
+
+test('offer yields as the launcher is dragged over it before release', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/chat-launcher');
+
+  const launcher = page.getByRole('button', { name: 'Open AI chat assistant' });
+  const initial = await launcher.boundingBox();
+  if (!initial) throw new Error('Chat launcher is missing its layout box');
+  await page.mouse.move(
+    initial.x + initial.width / 2,
+    initial.y + initial.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(80, 120, { steps: 4 });
+  await page.mouse.up();
+
+  const anchor = page.locator('.ogabassey-chat-anchor');
+  await expect(anchor).toHaveAttribute('data-chat-launcher-positioned', '');
+  const moved = await launcher.boundingBox();
+  if (!moved) throw new Error('Moved launcher is missing its layout box');
+  await launcher.evaluate((button) => button.blur());
+
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div class="ogabassey-offer-popup" style="position:fixed;left:180px;top:180px;width:150px;height:150px">Sponsored offer</div>'
+    );
+  });
+
+  const offer = page.locator('.ogabassey-offer-popup');
+  await expect(anchor).not.toHaveAttribute(
+    'data-chat-launcher-offer-collision'
+  );
+  await page.mouse.move(moved.x + moved.width / 2, moved.y + moved.height / 2);
+  await page.mouse.down();
+  await launcher.evaluate((button) => button.blur());
+  await page.mouse.move(228, 228, { steps: 5 });
+
+  await expect(anchor).toHaveAttribute(
+    'data-chat-launcher-offer-collision',
+    ''
+  );
+  await expect(offer).toHaveCSS('visibility', 'hidden');
+  await page.mouse.up();
+});

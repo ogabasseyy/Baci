@@ -20,6 +20,7 @@ type GestureLifecycleOptions = {
   scheduleViewportReclamp: () => void;
   viewportReclampPending: { current: boolean };
   suppressedDragClick: { current: SuppressedDragClick | null };
+  syncCollision: () => void;
 };
 
 export function createChatLauncherGestureLifecycle({
@@ -32,6 +33,7 @@ export function createChatLauncherGestureLifecycle({
   scheduleViewportReclamp,
   viewportReclampPending,
   suppressedDragClick,
+  syncCollision,
 }: GestureLifecycleOptions) {
   function finishGesture() {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -52,6 +54,7 @@ export function createChatLauncherGestureLifecycle({
           : start.base.y + start.next.y - start.top;
         anchor.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       }
+      syncCollision();
       commitPosition(start.next);
       suppressedDragClick.current = {
         pointerId: start.pointerId,
@@ -80,6 +83,7 @@ export function createChatLauncherGestureLifecycle({
         ? `translate3d(${current.x}px, ${current.y}px, 0)`
         : '';
     }
+    syncCollision();
     if (viewportReclampPending.current) {
       viewportReclampPending.current = false;
       scheduleViewportReclamp();

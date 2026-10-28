@@ -134,7 +134,11 @@ describe('DomainOptionsSheet', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('does not dispatch if the exit animation is cancelled', () => {
+  it.each([
+    'android',
+    'ios',
+  ])('cancels the action and removes the modal after a cancelled exit on %s', (platform) => {
+    mocks.platform.OS = platform;
     const onAction = vi.fn();
     const onClose = vi.fn();
     const { rerender } = render(sheet(true, onClose, onAction));
@@ -143,6 +147,14 @@ describe('DomainOptionsSheet', () => {
     act(() => mocks.onExit?.(false));
     act(() => vi.runAllTimers());
     expect(onAction).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Close options' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The action was cancelled. Open domain options and try again.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('does not strand an action after a suspended close render is discarded', () => {

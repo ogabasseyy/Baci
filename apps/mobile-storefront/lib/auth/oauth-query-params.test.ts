@@ -26,7 +26,7 @@ describe('OAuth callback parameters', () => {
   it('handles a fragment error before a stale query code', () => {
     expect(
       getOAuthQueryParams('ogabassey://auth?code=old#errorCode=access_denied')
-    ).toEqual({ params: { code: 'old' }, errorCode: 'access_denied' });
+    ).toEqual({ params: {}, errorCode: 'access_denied' });
   });
   it('lets fragment errors override query errors', () => {
     expect(

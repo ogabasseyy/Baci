@@ -13,5 +13,6 @@ export function getOAuthQueryParams(input: string): {
   });
   const errorCode = params.errorCode ?? null;
   delete params.errorCode;
+  if (errorCode) delete params.code;
   return { errorCode, params };
 }

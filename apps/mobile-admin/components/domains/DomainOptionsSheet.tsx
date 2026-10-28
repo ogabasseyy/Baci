@@ -78,13 +78,21 @@ export default function DomainOptionsSheet({
     if (pending) onActionRef.current(pending.action, pending.domain);
   };
 
-  const finishExit = (exitTransition: number) => {
+  const finishExit = (exitTransition: number, finished: boolean) => {
     if (
       !isMountedRef.current ||
       visibleRef.current ||
       transitionRef.current !== exitTransition
     )
       return;
+    if (!finished) {
+      const hadPendingAction = pendingActionRef.current !== null;
+      pendingActionRef.current = null;
+      setAwaitingDismiss(false);
+      setModalVisible(false);
+      if (hadPendingAction) setDismissalFailed(true);
+      return;
+    }
     setAwaitingDismiss(true);
     setModalVisible(false);
   };
@@ -201,7 +209,7 @@ export default function DomainOptionsSheet({
               entering={SlideInDown}
               exiting={SlideOutDown.duration(CLOSE_DURATION_MS).withCallback(
                 (finished) => {
-                  if (finished) runOnJS(finishExit)(transition);
+                  runOnJS(finishExit)(transition, finished);
                 }
               )}
               style={[

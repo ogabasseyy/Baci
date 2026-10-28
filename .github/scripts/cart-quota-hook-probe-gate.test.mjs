@@ -12,6 +12,9 @@ const ci = YAML.parse(
 const deployFilters = YAML.parse(
   readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
 );
+const ciFilters = YAML.parse(
+  readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8')
+);
 
 test('quota guard reload is witnessed before the membership migration can run', () => {
   const steps = deploy.jobs['db-migrations'].steps;
@@ -62,5 +65,39 @@ test('quota guard migration triggers the GIGL tracking deployment checks', () =>
   assert.ok(
     deployFilters.tracking.includes('supabase/migrations/*gigl*'),
     'GIGL migrations must trigger tracking checks'
+  );
+});
+
+test('relevant changes run the signed PostgREST quota check in CI', () => {
+  for (const pattern of [
+    '.github/scripts/cart-quota-*.mjs',
+    '.github/scripts/probe-cart-quota-hook-reload*',
+    '.github/scripts/verify-cart-quota-maintenance*',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/lib/cart/**',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/schemas/cart-quota-counter.ts',
+    'apps/web/src/scripts/probe-cart-quota.ts',
+    'supabase/migrations/*commerce_cart*',
+    'supabase/migrations/*gigl*',
+    'supabase/tests/commerce_cart_quota*',
+  ]) {
+    assert.ok(ciFilters.deploy_scripts.includes(pattern), `${pattern} must trigger the quota checks`);
+  }
+  const steps = ci.jobs['quality-misc'].steps;
+  const check = steps.find((step) =>
+    step.run?.includes('.github/scripts/cart-quota-postgrest.test.mjs')
+  );
+  assert.ok(check, 'the signed PostgREST test must run in CI');
+  assert.equal(check.if, "needs.changes.outputs.deploy_scripts == 'true'");
+  assert.match(check.run, /sha256sum -c/);
+  assert.match(check.run, /test -x "\$RUNNER_TEMP\/postgrest"/);
+  assert.match(check.run, /"\$RUNNER_TEMP\/postgrest" --version/);
+  assert.match(check.run, /node --test[^\n]*cart-quota-postgrest\.test\.mjs/);
+  assert.ok(
+    steps.some((step) =>
+      step.run?.includes('.github/scripts/probe-cart-quota-hook-reload-binding.test.mjs')
+    ),
+    'CI must also exercise quota hook binding and unanimity'
   );
 });

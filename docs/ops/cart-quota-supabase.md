@@ -62,7 +62,10 @@ instance stops, so log totals are a lower bound, not an exact denial rate.
    scoped role. The workflow blocks deployment unless the scheduled
    commerce-cart-quota-expiry job is active, correctly configured and has a
    recent successful run. The job runs every ten minutes and purges at most
-   10,000 rows expired for over an hour.
+   10,000 rows expired for over an hour. This deliberately blocks every
+   production deployment, including releases that still use Redis, if cleanup
+   is unhealthy. The workflow has no authoritative copy of Vercel's backend
+   flag, so a separate variable could drift and allow an unverified cutover.
 5. From an approved server environment containing the existing Supabase URL,
    anon key and scoped signer, run the synthetic HTTP probe before changing
    the flag:
@@ -133,6 +136,6 @@ backend will fail closed until a reviewed forward repair is deployed. The
 captured hashes, migration bytes, rollout owner and verification receipts are
 release-specific and must be reviewed before applying the recovery migration.
 
-Local SQL and PostgREST tests use synthetic credentials and a disposable
+Local and CI SQL and PostgREST tests use synthetic credentials and a disposable
 database. They do not establish production migration, deployment, MCP
 activation or mobile rollout.

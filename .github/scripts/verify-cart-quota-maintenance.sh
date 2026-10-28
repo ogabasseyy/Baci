@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Block cart quota activation if expired counters cannot be purged.
+# Block production deployment and cart quota activation if cleanup is unhealthy.
 set -euo pipefail
 
 : "${SUPABASE_ACCESS_TOKEN:?SUPABASE_ACCESS_TOKEN is required}"
@@ -24,7 +24,7 @@ extension="$(query "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'p
   exit 1
 }
 if ! jq -e 'type == "array" and length == 1 and .[0].installed == true' >/dev/null <<<"$extension"; then
-  echo "::error::pg_cron is unavailable; cart quota activation is blocked." >&2
+  echo "::error::pg_cron is unavailable; production deployment and cart quota activation are blocked." >&2
   exit 1
 fi
 

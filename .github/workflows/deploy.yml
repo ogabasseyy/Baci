@@ -299,6 +299,9 @@ jobs:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
       - name: Verify cart quota cleanup is running
+        # This deliberately gates every production deploy, even while Redis
+        # remains selected. The live backend flag belongs to Vercel and is not
+        # authoritative in this job; an independent variable could drift.
         run: .github/scripts/verify-cart-quota-maintenance.sh
       - name: Verify GIGL worker least-privilege final state
         # Production is currently mid-rollout (worker role LOGIN-capable with

@@ -27,10 +27,11 @@ test('accepts the active cleanup job after a recent successful run', async () =>
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('blocks activation if pg_cron is missing', async () => {
+test('reports the deployment and activation block if pg_cron is missing', async () => {
   const result = await check(() => [200, [{ installed: false }]]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /pg_cron/);
+  assert.match(result.stderr, /production deployment and cart quota activation are blocked/);
 });
 
 test('blocks activation if the expected cleanup job is missing or inactive', async () => {

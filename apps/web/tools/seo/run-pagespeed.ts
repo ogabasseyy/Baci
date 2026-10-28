@@ -1,4 +1,8 @@
-import { extractPageSpeedLcpDiagnostics } from './page-speed-lcp-diagnostics';
+import {
+  evaluatePageSpeedMultiRunSeries,
+  extractPageSpeedLcpDiagnostics,
+  OGABASSEY_MONITORED_CWV_ROUTES,
+} from './page-speed-lcp-diagnostics';
 import {
   AUDIT_THRESHOLDS,
   CATEGORY_THRESHOLDS,
@@ -238,22 +242,16 @@ async function describePageSpeedApiError(
   response: Response
 ): Promise<string | null> {
   let payload: unknown;
-
   try {
     payload = await response.json();
   } catch {
     return null;
   }
-
-  if (!isRecord(payload) || !isRecord(payload.error)) {
-    return null;
-  }
+  if (!isRecord(payload) || !isRecord(payload.error)) return null;
 
   const descriptions: string[] = [];
   const status = readSafeApiToken(payload.error.status);
-  if (status) {
-    descriptions.push(`API status ${status}`);
-  }
+  if (status) descriptions.push(`API status ${status}`);
 
   const reasons = [payload.error.errors, payload.error.details]
     .filter(Array.isArray)
@@ -267,7 +265,6 @@ async function describePageSpeedApiError(
   if (uniqueReasons.length > 0) {
     descriptions.push(`reasons ${uniqueReasons.join(', ')}`);
   }
-
   return descriptions.length > 0 ? descriptions.join('; ') : null;
 }
 
@@ -295,6 +292,8 @@ function resolveTimeoutMs(): number {
 
 export const pageSpeedTools = {
   ...pageSpeedShared,
+  evaluatePageSpeedMultiRunSeries,
   evaluatePageSpeedResult,
+  OGABASSEY_MONITORED_CWV_ROUTES,
   runPageSpeedAudit,
 } as const;

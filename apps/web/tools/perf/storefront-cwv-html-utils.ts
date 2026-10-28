@@ -117,6 +117,15 @@ const ROUTE_CSS_SOURCE_FILES: Readonly<
   blogPost: ['app/(storefront)/[slug]/(blog)/blog/[postSlug]/layout.tsx'],
 };
 
+/** Counts static (side-effect, default, named, namespace) `.css` imports in TypeScript/TSX source. */
+export function countCssImportsInSource(source: string): number {
+  return [
+    ...source.matchAll(
+      /^\s*import\s+(?:[^'"]+?\s+from\s+)?['"][^'"]+\.css['"]/gm
+    ),
+  ].length;
+}
+
 /** Counts `.css` imports in the storefront route entry files for a monitored route. */
 export function countStorefrontRouteCssImports(
   route: StorefrontCwvGuardRoute,
@@ -125,11 +134,7 @@ export function countStorefrontRouteCssImports(
   let count = 0;
   for (const relPath of ROUTE_CSS_SOURCE_FILES[route]) {
     const source = readFileSync(path.join(webSrcDir, relPath), 'utf8');
-    count += [
-      ...source.matchAll(
-        /(?:^\s*import\s+['"][^'"]+\.css['"]|\bimport\(\s*['"][^'"]+\.css['"]\s*\))/gm
-      ),
-    ].length;
+    count += countCssImportsInSource(source);
   }
   return count;
 }

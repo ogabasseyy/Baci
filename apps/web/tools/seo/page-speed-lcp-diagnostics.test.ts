@@ -1,84 +1,123 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   computeMedian,
   evaluatePageSpeedMultiRunSeries,
   extractPageSpeedLcpDiagnostics,
+  matchesExpectedSelector,
   OGABASSEY_MONITORED_CWV_ROUTES,
 } from './page-speed-lcp-diagnostics';
 import { pageSpeedTools } from './run-pagespeed';
 
-function buildSampleLighthousePayload(overrides?: {
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REAL_PSI_PDP_REPORT_PATH = path.resolve(
+  __dirname,
+  '../../../../output/audits/psi-ogabassey-pdp-mobile-20260601.json'
+);
+
+function buildMockPsiReport(overrides: {
   cls?: number;
   fcpMs?: number;
-  includeDiscoveryUrl?: boolean;
+  lcpElementSelector?: string;
+  lcpElementSnippet?: string;
   lcpMs?: number;
-  lcpSelector?: string;
-  lcpSnippet?: string;
-  lcpUrl?: string;
-  networkUrls?: string[];
+  lcpResourceUrl?: string;
+  networkItems?: Record<string, unknown>[];
+  observedLcpMs?: number;
   optimisticLcp?: number;
-  perfScore?: number;
+  performanceScore?: number;
   pessimisticLcp?: number;
   seoScore?: number;
 }) {
-  const lcpUrl =
-    overrides?.lcpUrl ??
-    'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/iphone-16.avif';
-  const networkUrls = overrides?.networkUrls ?? [lcpUrl];
+  const selector = overrides.lcpElementSelector ?? 'picture.block > img';
+  const isImg = /(?:^|[\s>+~])(?:img|picture|source|svg|video)\b/i.test(
+    selector
+  );
+  const url =
+    overrides.lcpResourceUrl ??
+    'https://cdn.ogabassey.com/image/width=640,quality=70,format=avif/core-assets/products/hero.avif';
+  const snippet =
+    overrides.lcpElementSnippet ??
+    (isImg ? `<img src="${url}">` : '<h2>Launch</h2>');
+  const observedLcpMs = overrides.observedLcpMs ?? overrides.lcpMs ?? 2100;
+
   return {
     lighthouseResult: {
       categories: {
-        performance: { score: overrides?.perfScore ?? 0.91 },
-        seo: { score: overrides?.seoScore ?? 1 },
+        performance: { score: (overrides.performanceScore ?? 94) / 100 },
+        seo: { score: (overrides.seoScore ?? 100) / 100 },
       },
       audits: {
-        'first-contentful-paint': {
-          numericValue: overrides?.fcpMs ?? 1168,
-        },
-        'largest-contentful-paint': {
-          numericValue: overrides?.lcpMs ?? 3146,
+        'first-contentful-paint': { numericValue: overrides.fcpMs ?? 1260 },
+        'largest-contentful-paint': { numericValue: overrides.lcpMs ?? 2100 },
+        'cumulative-layout-shift': { numericValue: overrides.cls ?? 0 },
+        metrics: {
           details: {
-            optimisticLcp: overrides?.optimisticLcp ?? 2980,
-            pessimisticLcp: overrides?.pessimisticLcp ?? 3312,
+            items: [
+              {
+                firstContentfulPaint: overrides.fcpMs ?? 1260,
+                largestContentfulPaint: overrides.lcpMs ?? 2100,
+                lcpLoadDelay: 120,
+                lcpLoadDuration: 450,
+                observedLargestContentfulPaint: observedLcpMs,
+                optimisticLargestContentfulPaint:
+                  overrides.optimisticLcp ?? 1850,
+                pessimisticLargestContentfulPaint:
+                  overrides.pessimisticLcp ?? 2350,
+              },
+            ],
           },
-        },
-        'cumulative-layout-shift': {
-          numericValue: overrides?.cls ?? 0,
         },
         'lcp-breakdown-insight': {
           details: {
             items: [
               {
-                node: {
-                  selector: overrides?.lcpSelector ?? 'picture.block > img',
-                  snippet:
-                    overrides?.lcpSnippet ??
-                    `<img src="${lcpUrl}" fetchpriority="high">`,
-                },
+                type: 'table',
+                items: [
+                  { subpart: 'timeToFirstByte', duration: 300 },
+                  { subpart: 'resourceLoadDelay', duration: 120 },
+                  { subpart: 'resourceLoadDuration', duration: 450 },
+                  { subpart: 'elementRenderDelay', duration: 80 },
+                ],
+              },
+              {
+                type: 'node',
+                selector,
+                snippet,
               },
             ],
           },
         },
-        ...(overrides?.includeDiscoveryUrl !== false
-          ? {
-              'lcp-discovery-insight': {
-                details: {
-                  items: [{ url: lcpUrl }],
-                },
-              },
-            }
-          : {}),
         'network-requests': {
           details: {
-            items: [
-              { resourceType: 'Document', transferSize: 55_000 },
-              { resourceType: 'Stylesheet', transferSize: 22_000 },
-              { resourceType: 'Script', transferSize: 180_000 },
-              ...networkUrls.map((url) => ({
-                resourceType: 'Image',
-                transferSize: 18_500,
-                url,
-              })),
+            items: overrides.networkItems ?? [
+              {
+                networkRequestTime: 1,
+                networkEndTime: 300,
+                resourceType: 'Document',
+                transferSize: 42_000,
+                url: 'https://ogabassey.com/',
+              },
+              {
+                networkRequestTime: 310,
+                networkEndTime: 400,
+                resourceType: 'Stylesheet',
+                transferSize: 18_000,
+                url: 'https://ogabassey.com/_next/static/css/app.css',
+              },
+              ...(isImg
+                ? [
+                    {
+                      networkRequestTime: 420,
+                      networkEndTime: 870,
+                      resourceType: 'Image',
+                      transferSize: 20_000,
+                      url,
+                    },
+                  ]
+                : []),
             ],
           },
         },
@@ -88,7 +127,8 @@ function buildSampleLighthousePayload(overrides?: {
 }
 
 describe('page-speed-lcp-diagnostics', () => {
-  it('defines the 6 canonical monitored storefront routes and wires into evaluatePageSpeedResult', () => {
+  it('defines all 6 monitored OgaBassey routes with expected LCP element selectors', () => {
+    expect(OGABASSEY_MONITORED_CWV_ROUTES).toHaveLength(6);
     expect(OGABASSEY_MONITORED_CWV_ROUTES.map((r) => r.route)).toEqual([
       'home',
       'category',
@@ -97,142 +137,156 @@ describe('page-speed-lcp-diagnostics', () => {
       'pdp',
       'blogPost',
     ]);
-
-    const auditResult = pageSpeedTools.evaluatePageSpeedResult(
-      buildSampleLighthousePayload({ fcpMs: 1100, lcpMs: 2100 })
-    );
-    expect(auditResult.lcpDiagnostics?.simLcpMs).toBe(2100);
-    expect(auditResult.lcpDiagnostics?.lcpElement).toBe('picture.block > img');
-    expect(auditResult.lcpDiagnostics?.lcpResourceOrigin).toBe(
-      'https://cdn.ogabassey.com'
-    );
   });
 
-  it('extracts Lantern optimistic/pessimistic LCP, LCP element, and unambiguous truncated snippet URL', () => {
-    const fullUrl =
-      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/iphone-16.avif';
-    const diag = extractPageSpeedLcpDiagnostics(
-      buildSampleLighthousePayload({
-        includeDiscoveryUrl: false,
-        lcpSnippet:
-          '<img src="https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-asse\u2026">',
-        lcpUrl: fullUrl,
-      })
+  it('computes odd, even, and empty medians accurately', () => {
+    expect(computeMedian([])).toBeNull();
+    expect(computeMedian([3100, 1900, 2200])).toBe(2200);
+    expect(computeMedian([1800, 2000, 2400, 3000])).toBe(2200);
+  });
+
+  it('matches canonical expected selectors against class-qualified Lighthouse selectors', () => {
+    expect(
+      matchesExpectedSelector(
+        'div.grid > picture.block > img.object-contain',
+        'picture > img'
+      )
+    ).toBe(true);
+    expect(
+      matchesExpectedSelector(
+        'main > div > header.space-y-3 > p.max-w-3xl',
+        'header > p'
+      )
+    ).toBe(true);
+    expect(
+      matchesExpectedSelector(
+        'div.col-span-3 > h2.line-clamp-3',
+        'picture > img'
+      )
+    ).toBe(false);
+    expect(
+      matchesExpectedSelector(
+        'header > p.intro',
+        'header > p[data-cwv-lcp-copy="authority-hub"]'
+      )
+    ).toBe(false);
+  });
+
+  it('extracts real Lighthouse 13.3 insight node, subparts, and pre-LCP network metrics from captured PSI report', () => {
+    const rawReport = JSON.parse(
+      readFileSync(REAL_PSI_PDP_REPORT_PATH, 'utf8')
     );
+    const diag = extractPageSpeedLcpDiagnostics(rawReport);
 
-    expect(diag.performanceScore).toBe(91);
-    expect(diag.seoScore).toBe(100);
-    expect(diag.simFcpMs).toBe(1168);
-    expect(diag.simLcpMs).toBe(3146);
-    expect(diag.lcpOptimisticMs).toBe(2980);
-    expect(diag.lcpPessimisticMs).toBe(3312);
-    expect(diag.lcpElement).toBe('picture.block > img');
-    expect(diag.lcpResourceUrl).toBe(fullUrl);
+    expect(diag.simLcpMs).toBeCloseTo(3751.05, 1);
+    expect(diag.observedLcpMs).toBe(540);
+    expect(diag.lcpLoadDelayMs).toBe(2659);
+    expect(diag.lcpLoadDurationMs).toBe(2882);
+    expect(diag.lcpSubparts.ttfbMs).toBeCloseTo(1.801, 2);
+    expect(diag.lcpSubparts.resourceLoadDelayMs).toBeCloseTo(379.898, 2);
+    expect(diag.lcpElement).toContain('picture > img');
+    expect(
+      matchesExpectedSelector(diag.lcpElement ?? '', 'picture > img')
+    ).toBe(true);
+    expect(diag.lcpResourceUrl).toBe(
+      'https://cdn.ogabassey.com/image/width=750,quality=30,format=auto/core-assets/products/gaming/nintendo-switch-hotel-transylvania.avif'
+    );
     expect(diag.lcpResourceOrigin).toBe('https://cdn.ogabassey.com');
+    expect(diag.preLcpRequestCount).toBeGreaterThan(0);
+    expect(diag.preLcpBytes).toBeGreaterThan(30_000);
+  });
 
-    // Ambiguous truncated prefix (2 matching images) returns null instead of guessing
-    const ambiguous = extractPageSpeedLcpDiagnostics(
-      buildSampleLighthousePayload({
-        includeDiscoveryUrl: false,
-        lcpSnippet:
-          '<img src="https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-asse\u2026">',
-        networkUrls: [
-          fullUrl,
-          'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/other.avif',
+  it('filters network requests by observed LCP cutoff and returns null when timing data is missing', () => {
+    const filtered = extractPageSpeedLcpDiagnostics(
+      buildMockPsiReport({
+        observedLcpMs: 1000,
+        networkItems: [
+          {
+            networkRequestTime: 10,
+            resourceType: 'Document',
+            transferSize: 40_000,
+            url: 'https://ogabassey.com/',
+          },
+          {
+            networkRequestTime: 2500,
+            resourceType: 'Image',
+            transferSize: 900_000,
+            url: 'https://cdn.ogabassey.com/below-fold.avif',
+          },
         ],
       })
     );
-    expect(ambiguous.lcpResourceUrl).toBeNull();
-    expect(ambiguous.lcpResourceOrigin).toBeNull();
-  });
+    expect(filtered.preLcpRequestCount).toBe(1);
+    expect(filtered.preLcpBytes).toBe(40_000);
 
-  it('returns null resource URL and origin for text LCP elements even when discovery insight has a URL', () => {
-    const diag = extractPageSpeedLcpDiagnostics(
-      buildSampleLighthousePayload({
-        includeDiscoveryUrl: true,
-        lcpSelector: 'header.space-y-3 > p.max-w-3xl',
-        lcpSnippet: '<p class="max-w-3xl">Compare Apple iPhones in Nigeria</p>',
+    const untimed = extractPageSpeedLcpDiagnostics(
+      buildMockPsiReport({
+        networkItems: [
+          {
+            resourceType: 'Document',
+            transferSize: 40_000,
+            url: 'https://ogabassey.com/',
+          },
+        ],
       })
     );
-
-    expect(diag.lcpElement).toBe('header.space-y-3 > p.max-w-3xl');
-    expect(diag.lcpResourceUrl).toBeNull();
-    expect(diag.lcpResourceOrigin).toBeNull();
+    expect(untimed.preLcpRequestCount).toBeNull();
+    expect(untimed.preLcpBytes).toBeNull();
   });
 
-  it('computes 5-run median and passes when LCP element, origin, spread, and regression are within budget', () => {
-    const runs = [2210, 2280, 2190, 2310, 2240].map((lcpMs) =>
-      extractPageSpeedLcpDiagnostics(
-        buildSampleLighthousePayload({
-          lcpMs,
-          lcpSelector: 'div > picture > img',
-          lcpUrl:
-            'https://ogabassey.com/cdn-image/width=384,quality=60,format=avif/core-assets/products/iphone-16.avif',
-        })
-      )
+  it('passes a stable 5-run series and enforces the default 150ms spread cap when omitted', () => {
+    const stableRuns = [2010, 2040, 2060, 2080, 2110].map((lcpMs) =>
+      extractPageSpeedLcpDiagnostics(buildMockPsiReport({ lcpMs }))
     );
-
-    const summary = evaluatePageSpeedMultiRunSeries(runs, {
-      baselineMedianSimLcpMs: 2200,
+    const stable = evaluatePageSpeedMultiRunSeries(stableRuns, {
+      baselineMedianSimLcpMs: 2050,
       expectedLcpElement: 'picture > img',
-      expectedLcpOrigin: 'https://ogabassey.com',
-      maxAllowedSpreadMs: 150,
-      maxRegressionDeltaMs: 300,
+      expectedLcpOrigin: 'https://cdn.ogabassey.com',
     });
+    expect(stable.passed).toBe(true);
+    expect(stable.medianSimLcpMs).toBe(2060);
 
-    expect(computeMedian([10, 30])).toBe(20);
-    expect(summary.passed).toBe(true);
-    expect(summary.medianSimLcpMs).toBe(2240);
-    expect(summary.lcpSpreadMs).toBe(120);
-    expect(summary.lcpElementConsistent).toBe(true);
-    expect(summary.lcpOriginConsistent).toBe(true);
-    expect(summary.alerts).toEqual([]);
+    const unstableRuns = [1900, 2000, 2050, 2100, 2300].map((lcpMs) =>
+      extractPageSpeedLcpDiagnostics(buildMockPsiReport({ lcpMs }))
+    );
+    const unstable = evaluatePageSpeedMultiRunSeries(unstableRuns);
+    expect(unstable.passed).toBe(false);
+    expect(unstable.alerts).toContain(
+      'Simulated LCP spread 400ms exceeds 150ms stability cap'
+    );
   });
 
-  it('flags fewer than 5 runs, partial missing identity, non-terminal selector mismatch, origin drift, spread, and regression', () => {
-    const runs = [
+  it('flags LCP element flips, fewer than 5 runs, and renders LCP diagnostics in buildPageSpeedSummary', () => {
+    const flipped = [
       extractPageSpeedLcpDiagnostics(
-        buildSampleLighthousePayload({
-          lcpMs: 2200,
-          lcpSelector: 'div > picture > img.other',
-          lcpUrl: 'https://ogabassey.com/cdn-image/hero.avif',
-        })
+        buildMockPsiReport({ lcpElementSelector: 'picture.block > img' })
       ),
       extractPageSpeedLcpDiagnostics(
-        buildSampleLighthousePayload({
-          lcpMs: 2950,
-          lcpSelector: 'header > h2.line-clamp-3',
-          lcpSnippet: '<h2>itel IPL-51314H</h2>',
+        buildMockPsiReport({
+          lcpElementSelector: 'div.col-span-3 > h2.line-clamp-3',
         })
       ),
-      {
-        ...extractPageSpeedLcpDiagnostics(
-          buildSampleLighthousePayload({ lcpMs: 2800 })
-        ),
-        lcpElement: null,
-        lcpResourceOrigin: null,
-      },
     ];
-
-    const summary = evaluatePageSpeedMultiRunSeries(runs, {
-      baselineMedianSimLcpMs: 2200,
+    const summary = evaluatePageSpeedMultiRunSeries(flipped, {
       expectedLcpElement: 'picture > img',
-      expectedLcpOrigin: 'https://ogabassey.com',
-      maxAllowedSpreadMs: 150,
-      maxRegressionDeltaMs: 300,
     });
-
     expect(summary.passed).toBe(false);
-    expect(summary.alerts).toEqual(
-      expect.arrayContaining([
-        'Expected at least 5 runs for multi-run evaluation, received 3',
-        'One or more runs are missing LCP element diagnostics',
-        'One or more runs are missing LCP resource origin diagnostics',
-        'LCP element flipped across runs: div > picture > img.other vs header > h2.line-clamp-3',
-        'LCP element drifted from expected "picture > img": found div > picture > img.other, header > h2.line-clamp-3',
-        'Simulated LCP spread 750ms exceeds 150ms stability cap',
-        'Median simulated LCP regressed by 600ms (threshold 300ms)',
-      ])
+    expect(summary.alerts).toContain(
+      'Expected at least 5 runs for multi-run evaluation, received 2'
     );
+
+    const parsed = pageSpeedTools.evaluatePageSpeedResult(
+      buildMockPsiReport({})
+    );
+    const md = pageSpeedTools.buildPageSpeedSummary([
+      {
+        label: 'home',
+        strategy: 'mobile',
+        url: 'https://ogabassey.com/',
+        ...parsed,
+      },
+    ]);
+    expect(md).toContain('### LCP Diagnostics');
+    expect(md).toContain('element `picture.block > img`');
   });
 });

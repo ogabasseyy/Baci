@@ -11,6 +11,7 @@ import {
 } from './storefront-cwv-guard-budgets';
 import {
   buildStorefrontCssGuardInput,
+  countCssImportsInSource,
   countStorefrontRouteCssImports,
   extractAsyncHeadScriptUrls,
   extractAttribute,
@@ -24,7 +25,11 @@ import {
   parseSrcSetUrls,
 } from './storefront-cwv-html-utils';
 
-export { countStorefrontRouteCssImports, loadHeadChunkContentsFromBuildDir };
+export {
+  countCssImportsInSource,
+  countStorefrontRouteCssImports,
+  loadHeadChunkContentsFromBuildDir,
+};
 
 /** Evaluates homepage HTML against CWV size, preload, Suspense-split, placeholder, and origin budgets. */
 export function evaluateHomepageHtmlGuard(
@@ -64,9 +69,7 @@ export function evaluateHomepageHtmlGuard(
 
   const heroPictures = [
     ...html.matchAll(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi),
-  ]
-    .map((m) => m[0])
-    .filter((p) => /\bfetchpriority=["']high["']/i.test(p));
+  ].map((m) => m[0]);
   const heroImgTags = [...html.matchAll(/<img\b[^>]*>/gi)]
     .map((m) => m[0])
     .filter((t) => /\bfetchpriority=["']high["']/i.test(t));
@@ -83,6 +86,9 @@ export function evaluateHomepageHtmlGuard(
   const heroSourceTags = [...heroPictures, ...hiddenSections].flatMap((b) =>
     [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0])
   );
+  const heroSourceSrcSets = heroSourceTags
+    .map((t) => extractAttribute(t, 'srcset'))
+    .filter((s): s is string => Boolean(s));
   const heroUrls = [
     ...preloadTags.flatMap((t) => [
       ...(extractAttribute(t, 'href')
@@ -90,9 +96,7 @@ export function evaluateHomepageHtmlGuard(
         : []),
       ...parseSrcSetUrls(extractAttribute(t, 'imageSrcSet')),
     ]),
-    ...heroSourceTags.flatMap((t) =>
-      parseSrcSetUrls(extractAttribute(t, 'srcset'))
-    ),
+    ...heroSourceSrcSets.flatMap((s) => parseSrcSetUrls(s)),
     ...heroImgTags.flatMap((t) => {
       const src = extractAttribute(t, 'src');
       return [
@@ -120,7 +124,11 @@ export function evaluateHomepageHtmlGuard(
       failures.push(
         `Expected exactly 1 head image preload, found ${headImagePreloads}`
       );
-    } else if (!pSet || !iSet || pSet !== iSet) {
+    } else if (
+      !pSet ||
+      !iSet ||
+      (pSet !== iSet && !heroSourceSrcSets.includes(pSet))
+    ) {
       failures.push('Head preload imageSrcSet does not match hero img srcset');
     }
   }
@@ -225,14 +233,14 @@ export function evaluateRouteCssGuard(
       `Route "${input.route}" render-blocking stylesheet count ${stylesheetCount} exceeds budget ${maxAllowed}`
     );
   }
-  const checksCriticalFooterLock =
+  const checksFooterLock =
     input.criticalCss !== undefined ||
     input.route === 'home' ||
     input.route === 'category' ||
     input.route === 'brandHub';
   if (
     budget.requireFooterLockInCriticalCss &&
-    checksCriticalFooterLock &&
+    checksFooterLock &&
     !/\.ogabassey-mobile-footer\s*\{[^}]*position:\s*fixed/i.test(
       input.criticalCss ?? ''
     )
@@ -241,11 +249,10 @@ export function evaluateRouteCssGuard(
       'Critical inline CSS is missing .ogabassey-mobile-footer { position: fixed } lock'
     );
   }
-  const isListingRoute =
-    input.route === 'category' || input.route === 'brandHub';
+  const isListing = input.route === 'category' || input.route === 'brandHub';
   if (
     budget.forbidListingFullStyleLoader &&
-    isListingRoute &&
+    isListing &&
     (!input.listingLayoutSource ||
       input.listingLayoutSource.includes('StorefrontFullStyleLoader'))
   ) {

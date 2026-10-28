@@ -1,6 +1,7 @@
 'use client';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
-import { type XEventIds, xEventIdsSchema } from '@/schemas/x-ads-settings';
+import { parseXEventIds } from '@/lib/x-ads/parse-x-event-ids';
+import type { XEventIds } from '@/schemas/x-ads-settings';
 
 type XQueue = ((
   action: string,
@@ -43,10 +44,10 @@ export function initializeXPixel(
     !isMarketingAllowed()
   )
     return;
-  const parsed = xEventIdsSchema.safeParse(eventIds);
+  const parsed = parseXEventIds(eventIds);
   const activation: Activation = {
     pixelId,
-    events: parsed.success ? parsed.data : {},
+    events: parsed ?? {},
     ready: false,
     pending: [],
   };

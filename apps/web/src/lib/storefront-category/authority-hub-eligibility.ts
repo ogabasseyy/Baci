@@ -63,11 +63,7 @@ function resolveBrandAuthorityEligibility(
         { preferredCategorySlug: categorySlug }
       );
     })
-    .filter(
-      (product) =>
-        product.availability === 'InStock' &&
-        brandAuthorityTaxonomy.matchesBrand(entry, product.brand ?? null)
-    );
+    .filter((product) => product.availability === 'InStock');
   return resolveAvailableBrandAuthorityEligibility(availableProducts, entry);
 }
 

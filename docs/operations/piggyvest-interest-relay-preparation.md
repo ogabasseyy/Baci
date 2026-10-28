@@ -23,6 +23,12 @@ Before a deployment that serves interest data, the database owner must confirm:
 - The interest webhook secret belongs to the `interest` key family. If provider
   delivery will be directed to this endpoint, prove durable capture and drain
   with synthetic signed fixtures before changing provider routing.
+- Verify the key PiggyVest will use to sign interest deliveries is configured
+  for the `interest` family, and prove a synthetic payout signed with that key
+  reaches durable capture. If the provider uses the same key for legacy and
+  interest events, prove the verifier grants that key both families. A
+  legacy-only configuration can return a retryable failure for interest. Keep
+  existing provider routing until the applicable checks pass in that environment.
 - Inbox creation and drain scheduling attestations match deployed receiver,
   worker role, and schedule state. Environment flags alone are not proof that
   those components are deployed.
@@ -31,6 +37,15 @@ The application must continue to fail closed while any item is missing. A
 retryable response for an explicit interest payout is not durable evidence;
 do not direct provider traffic to that path until the capture and drain drill
 has passed. Keep the existing legacy path and key-family rules intact.
+
+The checked-in Vercel configuration does not schedule a PiggyVest interest
+capture or drain job (`apps/web/vercel.json` has no cron entries). A web deploy
+does not establish worker or schedule readiness. Before traffic cutover, record
+the separately managed scheduler/worker identity, enabled schedule, deployed
+receiver and worker revisions, a successful synthetic capture-to-credit or
+quarantine drill, and evidence that retries do not lose the captured delivery.
+If no approved scheduler/worker is deployed, leave interest traffic on its
+current route and keep the rollout blocked.
 
 ## Relay destination configuration
 

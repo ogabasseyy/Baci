@@ -25,12 +25,15 @@ export {
 export type CartQuotaOperation =
   | 'account_link'
   | 'bootstrap'
+  | 'bootstrap_network_backstop'
   | 'create'
+  | 'create_network_backstop'
   | 'commands'
   | 'snapshot'
   | 'handoff_issue'
   | 'handoff_redeem'
   | 'handoff_preview'
+  | 'handoff_preview_network_backstop'
   | 'legacy_bridge'
   | 'session_revoke'
   | 'checkout_prepare';
@@ -47,7 +50,12 @@ export interface CartQuotaResult {
   limit: number;
   remaining: number;
   resetTime: number;
+  /** True when the count came from the degraded per-instance store. */
+  degraded: boolean;
 }
+
+/** Ratio between a credential budget and its network backstop. */
+export const NETWORK_BACKSTOP_MULTIPLIER = 25;
 
 export const CART_QUOTA_BUDGETS: Record<
   CartQuotaOperation,
@@ -60,8 +68,24 @@ export const CART_QUOTA_BUDGETS: Record<
   // (carrier NAT and corporate egress put many shoppers behind one
   // client address); it bounds scripted proof minting, not shoppers.
   bootstrap: { limit: 120, windowMs: 60 * 60 * 1000 },
+  // Network backstops: when a client credential keys the primary
+  // budget, the network identity is still checked at a multiple of
+  // the primary limit. The credential is client-minted, so without a
+  // non-rotatable dimension one host could reset budgets by rotating
+  // the header. The multiple is far above legitimate shared-egress
+  // traffic (many shoppers, roughly one bootstrap each), so fairness
+  // comes from the credential budget and the backstop only bounds
+  // scripted rotation.
+  bootstrap_network_backstop: {
+    limit: 120 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 60 * 1000,
+  },
   // A bootstrap proof should create about once; retries need headroom.
   create: { limit: 10, windowMs: 60 * 60 * 1000 },
+  create_network_backstop: {
+    limit: 10 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 60 * 1000,
+  },
   // Burst-friendly for quantity taps, bounded per principal.
   commands: { limit: 240, windowMs: 60 * 1000 },
   snapshot: { limit: 240, windowMs: 60 * 1000 },
@@ -70,6 +94,10 @@ export const CART_QUOTA_BUDGETS: Record<
   handoff_issue: { limit: 60, windowMs: 60 * 60 * 1000 },
   handoff_redeem: { limit: 120, windowMs: 60 * 60 * 1000 },
   handoff_preview: { limit: 120, windowMs: 60 * 1000 },
+  handoff_preview_network_backstop: {
+    limit: 120 * NETWORK_BACKSTOP_MULTIPLIER,
+    windowMs: 60 * 1000,
+  },
   // MCP legacy-bridge writes are token-authenticated server-to-server
   // calls: budgeted per merchant and legacy token, never by the shared
   // broker egress identity, and fail-closed on quota degradation
@@ -106,7 +134,12 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
   // bounded by the proxy per-IP rate limit. Create stays fail-closed
   // because it materializes carts/grants from anonymous capabilities.
   'create',
+  // Backstops inherit their primary operation's degradation posture:
+  // a backstop that multiplied per instance while its primary failed
+  // closed would reopen the rotation path during outages.
+  'create_network_backstop',
   'handoff_preview',
+  'handoff_preview_network_backstop',
   'handoff_redeem',
   // Credential-minting and account-linking operations also fail
   // closed: a degraded per-instance budget would multiply their
@@ -132,6 +165,20 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
 export const DEGRADED_BOOTSTRAP_LIMIT = 20;
 
 /**
+ * While degraded, a backstop IS the effective identity (the
+ * credential dimension is skipped), so its ceiling must match the
+ * primary operation's degraded ceiling — not the healthy multiple.
+ * Presenting a credential header must never raise a degraded
+ * caller's ceiling above a legacy caller's.
+ */
+const DEGRADED_LIMITS: Partial<Record<CartQuotaOperation, number>> = {
+  bootstrap: DEGRADED_BOOTSTRAP_LIMIT,
+  bootstrap_network_backstop: DEGRADED_BOOTSTRAP_LIMIT,
+  create_network_backstop: CART_QUOTA_BUDGETS.create.limit,
+  handoff_preview_network_backstop: CART_QUOTA_BUDGETS.handoff_preview.limit,
+};
+
+/**
  * Tenant/principal-scoped cart quotas reusing the Redis window-counter
  * primitive. Complements the proxy per-IP rate limit with budgets that
  * survive carrier-NAT sharing and bind anonymous creation to one
@@ -148,15 +195,19 @@ export async function checkCartQuota(
     quotaKey(input),
     budget.windowMs,
     !requiresSharedStore,
-    input.operation === 'bootstrap' ? bootstrapMemoryCounters : memoryCounters
+    input.operation.startsWith('bootstrap')
+      ? bootstrapMemoryCounters
+      : memoryCounters
   );
   const failClosed = counter.degraded && requiresSharedStore;
+  const degradedLimit = DEGRADED_LIMITS[input.operation];
   const limit =
-    counter.degraded && input.operation === 'bootstrap'
-      ? Math.min(budget.limit, DEGRADED_BOOTSTRAP_LIMIT)
+    counter.degraded && degradedLimit !== undefined
+      ? Math.min(budget.limit, degradedLimit)
       : budget.limit;
   return {
     allowed: !failClosed && counter.count <= limit,
+    degraded: counter.degraded,
     limit,
     remaining: failClosed ? 0 : Math.max(0, limit - counter.count),
     resetTime: counter.resetTime,

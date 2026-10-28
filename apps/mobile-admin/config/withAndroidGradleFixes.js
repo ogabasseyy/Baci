@@ -1,5 +1,6 @@
 const { withDangerousMod } = require('@expo/config-plugins');
 const fs = require('node:fs');
+const ensurePostHogAndroidPlugin = require('./withAndroidGradleFixes.posthog');
 const path = require('node:path');
 const {
   addAsyncStorageRepo,
@@ -201,6 +202,7 @@ function withAndroidGradleFixes(config) {
         // Keep kotlin.android plugin for MainApplication/MainActivity compilation.
         // android.builtInKotlin=false means AGP will not compile Kotlin by itself.
         content = ensureKotlinAndroidPlugin(content);
+        content = ensurePostHogAndroidPlugin(content);
 
         content = fixProguardOptimize(content, 'proguard optimize rewrite');
 

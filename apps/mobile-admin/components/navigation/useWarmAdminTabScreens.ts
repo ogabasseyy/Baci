@@ -78,7 +78,7 @@ export function useWarmAdminTabScreens({
     }
 
     return scheduleWarmAdminTabBatch(() => {
-      routesToWarm.forEach((route) => {
+      routesToWarm.slice(0, 1).forEach((route) => {
         try {
           router.prefetch({
             pathname: `/(admin)/(tabs)/${route.name}`,

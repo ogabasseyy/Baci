@@ -49,19 +49,15 @@ describe('useWarmAdminTabScreens', () => {
       pathname: '/(admin)/(tabs)/orders',
       params: { status: 'open' },
     });
-    expect(mocks.prefetch).toHaveBeenCalledWith({
-      pathname: '/(admin)/(tabs)/products',
-      params: {},
-    });
-    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
   });
   it('does not prefetch active or already warmed routes again', () => {
     const { rerender } = render(<Harness activeRouteName="index" />);
     flush();
-    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
     rerender(<Harness activeRouteName="orders" />);
     flush();
-    expect(mocks.prefetch).toHaveBeenCalledTimes(3);
+    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
     expect(mocks.prefetch).toHaveBeenLastCalledWith({
       pathname: '/(admin)/(tabs)/index',
       params: {},
@@ -73,21 +69,23 @@ describe('useWarmAdminTabScreens', () => {
     flush();
     expect(mocks.prefetch).not.toHaveBeenCalled();
   });
-  it('retries a synchronous prefetch failure and continues with other tabs', () => {
+  it('retries a synchronous prefetch failure on the next tab change', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.prefetch.mockImplementationOnce(() => {
       throw new Error('unavailable');
     });
     const { rerender } = render(<Harness activeRouteName="index" />);
     flush();
-    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
     rerender(<Harness activeRouteName="products" />);
     flush();
-    expect(mocks.prefetch).toHaveBeenCalledWith({
+    rerender(<Harness activeRouteName="index" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenLastCalledWith({
       pathname: '/(admin)/(tabs)/orders',
       params: { status: 'open' },
     });
-    expect(mocks.prefetch).toHaveBeenCalledTimes(4);
+    expect(mocks.prefetch).toHaveBeenCalledTimes(3);
     warn.mockRestore();
   });
 });

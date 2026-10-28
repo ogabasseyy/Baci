@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { groupImeiServices } from './service-groups';
-import { IMEI_SERVICE_TIERS, type ImeiServiceTierKey } from './service-tiers';
+import {
+  IMEI_SERVICE_TIERS,
+  type ImeiServiceTierKey,
+  PETROCK_DARK_IMEI_SERVICE_TIERS,
+} from './service-tiers';
 
 describe('customer service goals', () => {
   it('assigns every stable tier to exactly one goal', () => {
     const keys = Object.keys(IMEI_SERVICE_TIERS) as ImeiServiceTierKey[];
     const grouped = groupImeiServices(keys, 'basic').flatMap((g) => g.tierKeys);
     expect(grouped.sort()).toEqual([...keys].sort());
+  });
+
+  it('covers every dark Petrock tier exactly once when enabled', () => {
+    const keys = [...PETROCK_DARK_IMEI_SERVICE_TIERS];
+    const grouped = groupImeiServices(keys, keys[0]).flatMap(
+      (group) => group.tierKeys
+    );
+    expect(grouped.sort()).toEqual(keys.sort());
   });
 
   it('groups overlapping options without dropping their distinct tiers', () => {

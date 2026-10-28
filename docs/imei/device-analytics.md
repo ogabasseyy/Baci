@@ -26,6 +26,8 @@ The admin analytics page includes an Ogabassey IMEI panel for the selected perio
 The normal authenticated API requires `analytics.read`; the SQL function also
 checks that permission independently. The response contains aggregate counts,
 never raw identifiers, identifier hashes, customer identities or provider reports.
+The report may include a model or colour/storage variant checked once; there is
+no minimum-count threshold. Access is limited to authorized platform admins.
 
 - Requests count durable lookup rows created within the selected date window.
 - Completed checks count completed rows, including repeat checks in other tiers.

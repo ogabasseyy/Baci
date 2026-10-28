@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-27T20:04:10.694510+00:00",
-  "source_revision": "aee0f5d52a51fcab644c50007325bf0025ba6d9e",
-  "evidence_digest": "c1a21102cfe8d0611b4c83c7aec5c8a4eafc9417cec2383aa8c83c5b864a4d25",
-  "claims_digest": "fc68b8a4b417c978226e973e87e17ab40e701e1289fe257d7ecbf9ef7f3f9641",
+  "reviewed_at": "2026-10-28T04:40:45.338710+00:00",
+  "source_revision": "922ebfb970a3108cd0c9a72cdc9122fbbb2ff794",
+  "evidence_digest": "4ec9a291d5d132150ee58d84372380947068c38c4f7572ba2cee6557e1dcde78",
+  "claims_digest": "b56c83ffa11c56a45588b691d38ceb3bbc428a8f3a0ce9938cbcb849080c9890",
   "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged. The mobile admin inventory sheet empty footer uses undefined; the inventory capability remains unchanged.",
   "capabilities": [
     {

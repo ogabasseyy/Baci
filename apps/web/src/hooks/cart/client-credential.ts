@@ -37,13 +37,15 @@ function generateCredential(): string | null {
 /**
  * This browser profile's anonymous cart quota credential for one
  * merchant: generated once, persisted in localStorage under a
- * per-merchant key, and sent on bootstrap/create/handoff-preview
- * calls so the server keys anonymous budgets on it instead of the
- * shared network address. Per-merchant storage means one shopper
- * presents unlinkable credentials across merchants on a shared
- * platform origin; when the merchant is not yet known (handoff
- * preview) the 'shared' scope applies — on a merchant subdomain
- * origin that is still effectively per-merchant. It is not an
+ * per-merchant key, and sent on bootstrap/create calls so the
+ * server keys anonymous budgets on it instead of the shared
+ * network address. Web handoff preview deliberately sends no
+ * credential (the preview itself identifies the merchant) and
+ * uses the verified network identity instead. Per-merchant
+ * storage means one shopper presents unlinkable credentials
+ * across merchants on a shared platform origin; when the
+ * merchant is not yet known a 'shared'-scope value applies,
+ * and the server still salts each quota subject per merchant. It is not an
  * authentication credential and grants no access to any cart. When
  * storage is unavailable, a per-page-load credential still
  * separates this shopper from other egress-sharers for the session;

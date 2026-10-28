@@ -84,10 +84,11 @@ export function useCustomerLoginForm() {
 
   const handleCodeChange = (index: number, value: string) => {
     if (sendLock.current || verifyLock.current) return;
-    // Native OTP autofill can deliver the entire code in the first field.
-    if (index === 0 && /^\d{6}$/.test(value)) {
-      setCode(value.split(''));
-      handleVerifyCode(value);
+    // Native OTP autofill may deliver several digits in the first field.
+    if (index === 0 && /^\d{2,6}$/.test(value)) {
+      setCode(Array.from({ length: 6 }, (_, digit) => value[digit] ?? ''));
+      if (value.length === 6) handleVerifyCode(value);
+      else codeInputRefs.current[value.length]?.focus();
       return;
     }
     // Only allow individual digits otherwise.
@@ -123,7 +124,7 @@ export function useCustomerLoginForm() {
     const pastedData = e.clipboardData.getData('text').slice(0, 6);
     if (!/^\d+$/.test(pastedData)) return;
 
-    const newCode = [...code];
+    const newCode = ['', '', '', '', '', ''];
     for (let i = 0; i < pastedData.length && i < 6; i++) {
       newCode[i] = pastedData[i];
     }
@@ -132,6 +133,8 @@ export function useCustomerLoginForm() {
     // Auto-submit if complete
     if (newCode.every((d) => d) && newCode.join('').length === 6) {
       handleVerifyCode(newCode.join(''));
+    } else {
+      codeInputRefs.current[pastedData.length]?.focus();
     }
   };
 

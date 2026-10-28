@@ -335,3 +335,35 @@ it('prompts for a new code rather than submitting an expired challenge', async (
   await act(async () => result.current.handleResendCode());
   expect(mocks.sendOtp).toHaveBeenCalledOnce();
 });
+
+it('accepts a partial multi-digit first-field autofill without verifying', () => {
+  mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+  mocks.verifyOtp.mockClear();
+  const { result } = renderHook(() => useCustomerLoginForm());
+  act(() => result.current.handleCodeChange(0, '12345'));
+  expect(result.current.code).toEqual(['1', '2', '3', '4', '5', '']);
+  expect(mocks.verifyOtp).not.toHaveBeenCalled();
+});
+
+it('clears stale suffix digits when pasting a partial replacement', () => {
+  mocks.auth.otpState = { codeSent: true, email: 'buyer@example.com' };
+  mocks.verifyOtp.mockClear();
+  const { result } = renderHook(() => useCustomerLoginForm());
+  act(() => result.current.setCode(['9', '9', '9', '9', '9', '9']));
+  const input = render(
+    createElement('input', {
+      onPaste: result.current.handlePaste,
+      'aria-label': 'Code',
+    })
+  );
+  const next = document.createElement('input');
+  document.body.appendChild(next);
+  result.current.codeInputRefs.current[2] = next;
+  fireEvent.paste(input.getByRole('textbox', { name: 'Code' }), {
+    clipboardData: { getData: () => '12' },
+  });
+  expect(next).toHaveFocus();
+  next.remove();
+  expect(result.current.code).toEqual(['1', '2', '', '', '', '']);
+  expect(mocks.verifyOtp).not.toHaveBeenCalled();
+});

@@ -35,8 +35,10 @@ never raw identifiers, identifier hashes, customer identities or provider report
 - Historical responses without a normalized model count as unidentified.
 - Matching failures do not exclude an otherwise identified device from analytics.
 
-The new migration `20261025130000_imei_device_analytics.sql` must be applied with
-the application release. It has not been applied to production. Existing lookup
+The migrations `20261025130000_imei_device_analytics.sql` and
+`20261028050936_imei_analytics_normalize_storage.sql` must be applied in order
+with the application release. The latter consolidates recognized unit-bearing
+storage values without guessing units for legacy values. It has not been applied to production. Existing lookup
 retention controls the history available; this change adds no separate event log.
 
 ## Verification
@@ -44,8 +46,8 @@ retention controls the history available; this change adds no separate event log
 Colocated tests cover normalization, colour selection, safe catalog reads,
 completion persistence, API permission failures and dashboard error/retry states.
 SQL tests run against an isolated empty local PostgreSQL database using
-`supabase/tests/fixtures/imei_device_analytics.sql`, followed by the migration and
-`supabase/tests/imei_device_analytics.sql`. Never run the fixture against a shared
+`supabase/tests/fixtures/imei_device_analytics.sql`, followed by both migrations
+in order and `supabase/tests/imei_device_analytics.sql`. Never run the fixture against a shared
 or production database. Assertions cover tenant filtering, permission denial,
 case-insensitive grouping, distinct counts, date windows and replay behavior.
 

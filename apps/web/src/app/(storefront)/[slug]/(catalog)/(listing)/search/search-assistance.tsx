@@ -2,10 +2,10 @@
 import {
   buildCatalogSearchSuggestions,
   buildRefinedSearchHref,
-  mergeAssistedRefinements,
   type SearchRefinements,
   type SearchSuggestionProduct,
 } from '@baci/shared/lib';
+import { mergeAssistedRefinementsClient as mergeAssistedRefinements } from '@/components/storefront/search-refinements/merge-assisted-refinements-client';
 export function SearchAssistance({
   query,
   resultQuery,

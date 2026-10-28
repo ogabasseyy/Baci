@@ -1,5 +1,6 @@
 export interface HomepageHtmlGuardBudget {
   allowedHeroOrigins: readonly string[];
+  baseOrigin?: string;
   forbidDataGifHeroSrc: boolean;
   maxHeadImagePreloads: number;
   maxHtmlBytes: number;
@@ -82,6 +83,7 @@ export interface StorefrontCwvGuardBudgets {
 export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
   homepageHtml: {
     allowedHeroOrigins: ['https://cdn.ogabassey.com', 'https://ogabassey.com'],
+    baseOrigin: 'https://ogabassey.com',
     forbidDataGifHeroSrc: false,
     maxHeadImagePreloads: 2,
     maxHtmlBytes: 380_000,

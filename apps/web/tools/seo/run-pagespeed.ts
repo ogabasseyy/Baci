@@ -1,3 +1,4 @@
+import { extractPageSpeedLcpDiagnostics } from './page-speed-lcp-diagnostics';
 import {
   AUDIT_THRESHOLDS,
   CATEGORY_THRESHOLDS,
@@ -117,6 +118,7 @@ function evaluatePageSpeedResult(
   return {
     passed: failures.length === 0,
     failures,
+    lcpDiagnostics: extractPageSpeedLcpDiagnostics(payload),
     scores,
     vitals,
   };

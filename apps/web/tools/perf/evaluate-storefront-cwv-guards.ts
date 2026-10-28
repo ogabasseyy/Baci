@@ -9,80 +9,24 @@ import {
   STOREFRONT_CWV_GUARD_BUDGETS,
   type StorefrontCwvGuardRoute,
 } from './storefront-cwv-guard-budgets';
+import {
+  buildStorefrontCssGuardInput,
+  countStorefrontRouteCssImports,
+  extractAsyncHeadScriptUrls,
+  extractAttribute,
+  extractHeadSection,
+  extractHiddenSuspenseSections,
+  extractImagePreloadTags,
+  getInlineRscBytes,
+  hasBooleanAttribute,
+  isAllowedHeroUrl,
+  loadHeadChunkContentsFromBuildDir,
+  parseSrcSetUrls,
+} from './storefront-cwv-html-utils';
 
-function extractHeadSection(html: string): string {
-  return html.match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1] ?? '';
-}
+export { countStorefrontRouteCssImports, loadHeadChunkContentsFromBuildDir };
 
-function getInlineRscBytes(html: string): number {
-  let bytes = 0;
-  for (const m of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
-    if (m[1].includes('self.__next_f.push'))
-      bytes += Buffer.byteLength(m[1], 'utf8');
-  }
-  return bytes;
-}
-
-function extractHiddenSuspenseSections(html: string): string[] {
-  const sections: string[] = [];
-  const openRe = /<div\b[^>]*\bhidden\b[^>]*\bid=["']S:[^"']+["'][^>]*>/gi;
-  for (const open of html.matchAll(openRe)) {
-    const start = (open.index ?? 0) + open[0].length;
-    const divRe = /<(\/?)div\b[^>]*>/gi;
-    divRe.lastIndex = start;
-    let depth = 1;
-    let end = html.length;
-    for (let m = divRe.exec(html); m && depth > 0; m = divRe.exec(html)) {
-      depth += m[1] ? -1 : 1;
-      if (depth === 0) end = m.index;
-    }
-    sections.push(html.slice(start, end));
-  }
-  return sections;
-}
-
-function extractImagePreloadTags(headHtml: string): string[] {
-  return [...headHtml.matchAll(/<link\b[^>]*>/gi)]
-    .map((m) => m[0])
-    .filter(
-      (t) => /\brel=["']preload["']/i.test(t) && /\bas=["']image["']/i.test(t)
-    );
-}
-
-function extractAttribute(tag: string, attrName: string): string | null {
-  return (
-    tag.match(new RegExp(`\\b${attrName}=["']([^"']+)["']`, 'i'))?.[1] ?? null
-  );
-}
-
-function parseSrcSetUrls(srcSet: string | null): string[] {
-  if (!srcSet) return [];
-  return srcSet
-    .split(/,\s+/)
-    .map((c) => c.trim().split(/\s+/)[0])
-    .filter((url): url is string => Boolean(url));
-}
-
-function isAllowedHeroUrl(
-  rawUrl: string,
-  allowedOrigins: readonly string[]
-): boolean {
-  const u = rawUrl.trim().split(/\s+/)[0] ?? '';
-  if (
-    !u ||
-    u.startsWith('data:') ||
-    u.startsWith('/cdn-image/') ||
-    u.startsWith('/_next/')
-  ) {
-    return true;
-  }
-  try {
-    return allowedOrigins.includes(new URL(u).origin);
-  } catch {
-    return false;
-  }
-}
-
+/** Evaluates homepage HTML against CWV size, preload, Suspense-split, placeholder, and origin budgets. */
 export function evaluateHomepageHtmlGuard(
   html: string,
   budget: HomepageHtmlGuardBudget = STOREFRONT_CWV_GUARD_BUDGETS.homepageHtml
@@ -110,19 +54,25 @@ export function evaluateHomepageHtmlGuard(
     );
   }
 
-  const heroInsideHiddenSuspense = extractHiddenSuspenseSections(html).some(
-    (s) =>
-      /(?:<source\b[^>]*srcset=|<picture\b|\bfetchpriority=["']high["'])/i.test(
-        s
-      )
+  const hiddenSections = extractHiddenSuspenseSections(html);
+  const heroInsideHiddenSuspense = hiddenSections.some((s) =>
+    /(?:<source\b[^>]*srcset=|<picture\b|\bfetchpriority=["']high["'])/i.test(s)
   );
   if (budget.requireHeroOutsideHiddenSuspense && heroInsideHiddenSuspense) {
     failures.push('Hero <picture>/<source> found inside hidden Suspense slot');
   }
 
+  const heroPictures = [
+    ...html.matchAll(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi),
+  ]
+    .map((m) => m[0])
+    .filter((p) => /\bfetchpriority=["']high["']/i.test(p));
   const heroImgTags = [...html.matchAll(/<img\b[^>]*>/gi)]
     .map((m) => m[0])
     .filter((t) => /\bfetchpriority=["']high["']/i.test(t));
+  if (heroImgTags.length === 0) {
+    failures.push('No hero <img> with fetchpriority="high" found');
+  }
   const hasDataGifHeroSrc = heroImgTags.some((t) =>
     /\bsrc=["']data:image\/gif/i.test(t)
   );
@@ -130,6 +80,9 @@ export function evaluateHomepageHtmlGuard(
     failures.push('Hero <img> uses data:image/gif placeholder src');
   }
 
+  const heroSourceTags = [...heroPictures, ...hiddenSections].flatMap((b) =>
+    [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0])
+  );
   const heroUrls = [
     ...preloadTags.flatMap((t) => [
       ...(extractAttribute(t, 'href')
@@ -137,6 +90,9 @@ export function evaluateHomepageHtmlGuard(
         : []),
       ...parseSrcSetUrls(extractAttribute(t, 'imageSrcSet')),
     ]),
+    ...heroSourceTags.flatMap((t) =>
+      parseSrcSetUrls(extractAttribute(t, 'srcset'))
+    ),
     ...heroImgTags.flatMap((t) => {
       const src = extractAttribute(t, 'src');
       return [
@@ -146,7 +102,9 @@ export function evaluateHomepageHtmlGuard(
     }),
   ];
   for (const heroUrl of heroUrls) {
-    if (!isAllowedHeroUrl(heroUrl, budget.allowedHeroOrigins)) {
+    if (
+      !isAllowedHeroUrl(heroUrl, budget.allowedHeroOrigins, budget.baseOrigin)
+    ) {
       failures.push(`Disallowed hero image origin in URL: ${heroUrl}`);
     }
   }
@@ -179,6 +137,7 @@ export function evaluateHomepageHtmlGuard(
   };
 }
 
+/** Evaluates `<head>` async script count, chunk brotli total, and forbidden tokens for head-referenced scripts. */
 export function evaluateHeadJsGuard(
   input: {
     chunkContents?: Readonly<Record<string, HeadJsChunkContent>>;
@@ -188,32 +147,30 @@ export function evaluateHeadJsGuard(
 ): HeadJsGuardEvaluation {
   const failures: string[] = [];
   const headHtml = extractHeadSection(input.html);
-  const scriptUrls = [
-    ...headHtml.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi),
-  ].map((m) => m[1]);
+  const scriptUrls = extractAsyncHeadScriptUrls(headHtml);
   const asyncScriptCount = scriptUrls.length;
   if (asyncScriptCount > budget.maxAsyncScriptCount) {
     failures.push(
       `Head script count ${asyncScriptCount} exceeds budget ${budget.maxAsyncScriptCount}`
     );
   }
-  for (const scriptUrl of scriptUrls) {
-    if (!input.chunkContents?.[scriptUrl]) {
-      failures.push(
-        `Head script ${scriptUrl} has no chunk content; cannot verify tokens or size`
-      );
-    }
-  }
 
   let totalBrotliBytes = 0;
   const forbiddenMatches: Array<{ chunkUrl: string; token: string }> = [];
-  for (const [chunkUrl, chunk] of Object.entries(input.chunkContents ?? {})) {
+  for (const scriptUrl of [...new Set(scriptUrls)]) {
+    const chunk = input.chunkContents?.[scriptUrl];
+    if (!chunk) {
+      failures.push(
+        `Head script ${scriptUrl} has no chunk content; cannot verify tokens or size`
+      );
+      continue;
+    }
     totalBrotliBytes += chunk.brotliBytes;
     for (const token of budget.forbiddenChunkTokens) {
       if (chunk.raw.includes(token)) {
-        forbiddenMatches.push({ chunkUrl, token });
+        forbiddenMatches.push({ chunkUrl: scriptUrl, token });
         failures.push(
-          `Forbidden token "${token}" found in head chunk ${chunkUrl}`
+          `Forbidden token "${token}" found in head chunk ${scriptUrl}`
         );
       }
     }
@@ -233,6 +190,7 @@ export function evaluateHeadJsGuard(
   };
 }
 
+/** Evaluates route render-blocking stylesheet counts and route-scoped critical CSS locks. */
 export function evaluateRouteCssGuard(
   input: {
     brandAuthoritySource?: string;
@@ -253,16 +211,28 @@ export function evaluateRouteCssGuard(
   const headHtml = input.html ? extractHeadSection(input.html) : '';
   const stylesheetCount =
     input.stylesheetCount ??
-    [...headHtml.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)]
-      .length;
+    [...headHtml.matchAll(/<link\b[^>]*>/gi)]
+      .map((m) => m[0])
+      .filter(
+        (t) =>
+          /\brel=["']stylesheet["']/i.test(t) &&
+          !hasBooleanAttribute(t, 'disabled') &&
+          !/\bmedia=["']print["']/i.test(t)
+      ).length;
   const maxAllowed = budget.maxRenderBlockingStylesheets[input.route];
   if (stylesheetCount > maxAllowed) {
     failures.push(
       `Route "${input.route}" render-blocking stylesheet count ${stylesheetCount} exceeds budget ${maxAllowed}`
     );
   }
+  const checksCriticalFooterLock =
+    input.criticalCss !== undefined ||
+    input.route === 'home' ||
+    input.route === 'category' ||
+    input.route === 'brandHub';
   if (
     budget.requireFooterLockInCriticalCss &&
+    checksCriticalFooterLock &&
     !/\.ogabassey-mobile-footer\s*\{[^}]*position:\s*fixed/i.test(
       input.criticalCss ?? ''
     )
@@ -271,9 +241,13 @@ export function evaluateRouteCssGuard(
       'Critical inline CSS is missing .ogabassey-mobile-footer { position: fixed } lock'
     );
   }
+  const isListingRoute =
+    input.route === 'category' || input.route === 'brandHub';
   if (
     budget.forbidListingFullStyleLoader &&
-    input.listingLayoutSource?.includes('StorefrontFullStyleLoader')
+    isListingRoute &&
+    (!input.listingLayoutSource ||
+      input.listingLayoutSource.includes('StorefrontFullStyleLoader'))
   ) {
     failures.push(
       '(listing)/layout.tsx still references StorefrontFullStyleLoader'
@@ -281,6 +255,7 @@ export function evaluateRouteCssGuard(
   }
   if (
     budget.requireAuthorityHubLcpCopyLock &&
+    input.route === 'brandHub' &&
     !(input.brandAuthoritySource ?? '').includes(
       'data-cwv-lcp-copy="authority-hub"'
     )
@@ -290,4 +265,24 @@ export function evaluateRouteCssGuard(
     );
   }
   return { failures, passed: failures.length === 0, stylesheetCount };
+}
+
+/** Evaluates all 5 storefront routes against real source files in `apps/web/src`. */
+export function evaluateStorefrontSourceCssGuards(
+  webSrcDir: string,
+  criticalCss: string,
+  budget: RouteCssGuardBudget = STOREFRONT_CWV_GUARD_BUDGETS.css
+): Record<StorefrontCwvGuardRoute, RouteCssGuardEvaluation> {
+  const evalRoute = (route: StorefrontCwvGuardRoute): RouteCssGuardEvaluation =>
+    evaluateRouteCssGuard(
+      buildStorefrontCssGuardInput(route, webSrcDir, criticalCss),
+      budget
+    );
+  return {
+    blogPost: evalRoute('blogPost'),
+    brandHub: evalRoute('brandHub'),
+    category: evalRoute('category'),
+    home: evalRoute('home'),
+    pdp: evalRoute('pdp'),
+  };
 }

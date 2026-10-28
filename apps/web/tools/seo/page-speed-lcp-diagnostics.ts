@@ -1,300 +1,290 @@
-export const OGABASSEY_MONITORED_CWV_ROUTES = [
-  { label: 'ogabassey-home', path: '/' },
-  { label: 'ogabassey-category', path: '/smartphones' },
-  { label: 'ogabassey-brand-hub', path: '/smartphones/brands/apple' },
-  { label: 'ogabassey-pdp', path: '/smartphones/iphone-16-pro-max' },
-  {
-    label: 'ogabassey-blog',
-    path: '/blog/google-pixel-phones-in-nigeria-are-they-worth-buying-in-2026',
-  },
-] as const;
+import {
+  computeMedian,
+  isImageLcpNode,
+  isRecord,
+  type LighthouseAuditItem,
+  type MonitoredStorefrontRouteTarget,
+  OGABASSEY_MONITORED_CWV_ROUTES,
+  type PageSpeedLcpDiagnostics,
+  type PageSpeedMultiRunComparisonOptions,
+  type PageSpeedMultiRunSummary,
+  parseOrigin,
+  type RawLighthouseAudit,
+} from './page-speed-lcp-diagnostics.types';
 
-export interface PageSpeedLcpDiagnostics {
-  lcpElement: string | null;
-  lcpResourceOrigin: string | null;
-  lcpResourceUrl: string | null;
-  simFcpMs: number | null;
-  simLcpMs: number | null;
+export {
+  computeMedian,
+  type MonitoredStorefrontRouteTarget,
+  OGABASSEY_MONITORED_CWV_ROUTES,
+  type PageSpeedLcpDiagnostics,
+  type PageSpeedMultiRunComparisonOptions,
+  type PageSpeedMultiRunSummary,
+};
+
+/** Extracts the LCP element selector and snippet from Lighthouse `lcp-breakdown-insight`. */
+function extractLcpSelector(audits: Record<string, RawLighthouseAudit>): {
+  selector: string | null;
+  snippet: string | null;
+} {
+  const items = audits['lcp-breakdown-insight']?.details?.items;
+  if (!Array.isArray(items)) return { selector: null, snippet: null };
+  for (const item of items) {
+    if (!isRecord(item) || !isRecord(item.node)) continue;
+    const selector =
+      typeof item.node.selector === 'string' && item.node.selector.trim()
+        ? item.node.selector.trim()
+        : null;
+    const snippet =
+      typeof item.node.snippet === 'string' && item.node.snippet.trim()
+        ? item.node.snippet.trim()
+        : null;
+    if (selector || snippet) return { selector, snippet };
+  }
+  return { selector: null, snippet: null };
 }
 
-export interface PageSpeedSeriesBaseline {
-  expectedLcpElement?: string;
-  expectedLcpOrigin?: string;
-  medianLcpMs?: number;
-}
-
-export interface PageSpeedMultiRunSummary {
-  alerts: string[];
-  lcpElements: string[];
-  lcpOrigins: string[];
-  lcpResourceUrls: string[];
-  medianFcpMs: number | null;
-  medianLcpMs: number | null;
-  passed: boolean;
-  rangeLcpMs: [number, number] | null;
-  spreadLcpMs: number | null;
-}
-
-export interface AuditDetailsNode {
-  nodeLabel?: string;
-  selector?: string;
-  snippet?: string;
-}
-
-export interface RawAuditItem extends AuditDetailsNode {
-  items?: Array<{ node?: AuditDetailsNode; url?: string }>;
-  node?: AuditDetailsNode;
-  priority?: string;
-  resourceType?: string;
-  type?: string;
-  url?: string;
-}
-
-export interface PageSpeedInsightAuditEntry {
-  details?: { items?: RawAuditItem[] };
-  numericValue?: number | null;
-  score?: number | null;
-}
-
-export interface PageSpeedDiagnosticPayload {
-  lighthouseResult?: {
-    audits?: Record<string, PageSpeedInsightAuditEntry>;
-  };
-}
-
-function getOriginSafely(rawUrl: string | null): string | null {
-  if (!rawUrl) return null;
-  try {
-    return new URL(rawUrl).origin;
-  } catch {
+/** Resolves the full LCP image resource URL when the LCP element is an image node. */
+function resolveLcpResourceUrl(
+  audits: Record<string, RawLighthouseAudit>,
+  selector: string | null,
+  snippet: string | null
+): string | null {
+  if (!isImageLcpNode(selector, snippet)) {
     return null;
   }
-}
 
-function extractNodeLabel(node?: AuditDetailsNode): string | null {
-  if (!node) return null;
-  const candidate = node.selector || node.nodeLabel || node.snippet;
-  return typeof candidate === 'string' && candidate.trim().length > 0
-    ? candidate.trim()
-    : null;
-}
-
-function extractSnippetSrcPrefix(snippet?: string): string | null {
-  if (!snippet) return null;
-  const rawSrc = snippet.match(/\bsrc=["']([^"']+)["']/i)?.[1];
-  if (!rawSrc) return null;
-  const withoutEllipsis = rawSrc.replace(/\u2026|\.\.\.$/, '').trim();
-  return withoutEllipsis.startsWith('http') ? withoutEllipsis : null;
-}
-
-function resolveLcpResourceUrl(
-  audits: Record<string, PageSpeedInsightAuditEntry> | undefined
-): string | null {
-  const discoveryItems =
-    audits?.['lcp-discovery-insight']?.details?.items ?? [];
-  for (const item of discoveryItems) {
-    if (typeof item.url === 'string' && item.url.startsWith('http')) {
-      return item.url;
-    }
-  }
-
-  const nodeSnippets: string[] = [];
-  for (const item of [
-    ...discoveryItems,
-    ...(audits?.['lcp-breakdown-insight']?.details?.items ?? []),
-  ]) {
-    if (item.type === 'node') {
-      if (item.snippet) nodeSnippets.push(item.snippet);
-      if (item.node?.snippet) nodeSnippets.push(item.node.snippet);
-    }
-  }
-
-  const netItems = audits?.['network-requests']?.details?.items ?? [];
-  for (const snippet of nodeSnippets) {
-    const prefix = extractSnippetSrcPrefix(snippet);
-    if (!prefix) continue;
-    const matchedReq = netItems.find(
-      (req) => typeof req.url === 'string' && req.url.startsWith(prefix)
-    );
-    if (matchedReq?.url) return matchedReq.url;
-    if (getOriginSafely(prefix)) return prefix;
-  }
-
-  return null;
-}
-
-export function extractPageSpeedLcpDiagnostics(
-  payload: PageSpeedDiagnosticPayload
-): PageSpeedLcpDiagnostics {
-  const audits = payload.lighthouseResult?.audits;
-
-  const simFcpMs =
-    typeof audits?.['first-contentful-paint']?.numericValue === 'number'
-      ? Math.round(audits['first-contentful-paint'].numericValue)
-      : null;
-  const simLcpMs =
-    typeof audits?.['largest-contentful-paint']?.numericValue === 'number'
-      ? Math.round(audits['largest-contentful-paint'].numericValue)
-      : null;
-
-  let lcpElement: string | null = null;
-  const breakdownItems =
-    audits?.['lcp-breakdown-insight']?.details?.items ?? [];
-  for (const item of breakdownItems) {
-    if (item.type === 'node') {
-      lcpElement = extractNodeLabel(item) ?? extractNodeLabel(item.node);
-      if (lcpElement) break;
-    }
-  }
-
-  if (!lcpElement) {
-    const legacyItems =
-      audits?.['largest-contentful-paint-element']?.details?.items ?? [];
-    for (const item of legacyItems) {
-      lcpElement = extractNodeLabel(item.node);
-      if (lcpElement) break;
-      for (const sub of item.items ?? []) {
-        lcpElement = extractNodeLabel(sub.node);
-        if (lcpElement) break;
+  const discoveryItems = audits['lcp-discovery-insight']?.details?.items;
+  if (Array.isArray(discoveryItems)) {
+    for (const item of discoveryItems) {
+      if (
+        isRecord(item) &&
+        typeof item.url === 'string' &&
+        item.url.startsWith('http')
+      ) {
+        return item.url;
       }
-      if (lcpElement) break;
     }
   }
 
-  const lcpResourceUrl = resolveLcpResourceUrl(audits);
+  const rawSrc = snippet?.match(/\bsrc=["']([^"']+)["']/i)?.[1] ?? null;
+  if (!rawSrc) return null;
+  const isTruncated = rawSrc.includes('\u2026') || rawSrc.includes('...');
+  const prefix = rawSrc.split(/\u2026|\.\.\./)[0]?.trim() ?? '';
+  if (!prefix) return null;
 
+  const netItems = audits['network-requests']?.details?.items;
+  if (Array.isArray(netItems)) {
+    const matches = (netItems as LighthouseAuditItem[]).filter(
+      (r) =>
+        typeof r?.url === 'string' &&
+        r.url.startsWith(prefix) &&
+        (!r.resourceType || r.resourceType === 'Image')
+    );
+    if (matches.length === 1 && matches[0]?.url) {
+      return matches[0].url;
+    }
+    if (isTruncated) {
+      return null;
+    }
+  }
+  return !isTruncated && rawSrc.startsWith('http') ? rawSrc : null;
+}
+
+/** Extracts Lantern optimistic/pessimistic LCP timing, LCP element, and resource origin from a PSI/LH payload. */
+export function extractPageSpeedLcpDiagnostics(
+  payload: unknown
+): PageSpeedLcpDiagnostics {
+  const lhr =
+    isRecord(payload) && isRecord(payload.lighthouseResult)
+      ? payload.lighthouseResult
+      : isRecord(payload)
+        ? payload
+        : {};
+  const audits = (isRecord(lhr.audits) ? lhr.audits : {}) as Record<
+    string,
+    RawLighthouseAudit
+  >;
+  const categories = isRecord(lhr.categories) ? lhr.categories : {};
+
+  const getScore = (id: string): number | null => {
+    const cat = categories[id];
+    return isRecord(cat) && typeof cat.score === 'number'
+      ? Math.round(cat.score * 100)
+      : null;
+  };
+  const getMetric = (id: string): number | null => {
+    const val = audits[id]?.numericValue;
+    return typeof val === 'number' ? val : null;
+  };
+
+  const lanternItems = audits['metrics-lantern']?.details?.items ??
+    audits['lantern-metrics']?.details?.items ?? [
+      audits['largest-contentful-paint']?.details,
+    ];
+  let lcpOptimisticMs: number | null = null;
+  let lcpPessimisticMs: number | null = null;
+  if (Array.isArray(lanternItems)) {
+    for (const entry of lanternItems) {
+      if (!isRecord(entry)) continue;
+      if (typeof entry.optimisticLcp === 'number') {
+        lcpOptimisticMs = entry.optimisticLcp;
+      }
+      if (typeof entry.pessimisticLcp === 'number') {
+        lcpPessimisticMs = entry.pessimisticLcp;
+      }
+    }
+  }
+
+  let preLcpRequestCount = 0;
+  let preLcpBytes = 0;
+  const netItems = audits['network-requests']?.details?.items;
+  if (Array.isArray(netItems)) {
+    for (const item of netItems) {
+      if (!isRecord(item)) continue;
+      if (
+        item.resourceType === 'Document' ||
+        item.resourceType === 'Stylesheet' ||
+        item.resourceType === 'Script' ||
+        item.resourceType === 'Image'
+      ) {
+        preLcpRequestCount += 1;
+        preLcpBytes +=
+          typeof item.transferSize === 'number' ? item.transferSize : 0;
+      }
+    }
+  }
+
+  const { selector: lcpElement, snippet } = extractLcpSelector(audits);
+  const lcpResourceUrl = resolveLcpResourceUrl(audits, lcpElement, snippet);
   return {
+    cls: getMetric('cumulative-layout-shift'),
     lcpElement,
-    lcpResourceOrigin: getOriginSafely(lcpResourceUrl),
+    lcpOptimisticMs,
+    lcpPessimisticMs,
+    lcpResourceOrigin: parseOrigin(lcpResourceUrl),
     lcpResourceUrl,
-    simFcpMs,
-    simLcpMs,
+    performanceScore: getScore('performance'),
+    preLcpBytes,
+    preLcpRequestCount,
+    seoScore: getScore('seo'),
+    simFcpMs: getMetric('first-contentful-paint'),
+    simLcpMs: getMetric('largest-contentful-paint'),
   };
 }
 
-function computeMedian(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[mid]
-    : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+/** Checks whether an extracted LCP selector matches an expected selector exactly or as its terminal path. */
+function matchesExpectedSelector(actual: string, expected: string): boolean {
+  return actual === expected || actual.endsWith(` > ${expected}`);
 }
 
-export function evaluatePageSpeedMultiRunSeries(options: {
-  baseline?: PageSpeedSeriesBaseline;
-  maxIntraSeriesSpreadMs?: number;
-  maxLcpRegressionMs?: number;
-  runs: PageSpeedLcpDiagnostics[];
-}): PageSpeedMultiRunSummary {
-  const {
-    runs,
-    baseline,
-    maxLcpRegressionMs = 300,
-    maxIntraSeriesSpreadMs,
-  } = options;
-  const lcpValues = runs
+/** Evaluates a multi-run PSI/Lighthouse series for run count, median LCP, spread, and element/origin drift. */
+export function evaluatePageSpeedMultiRunSeries(
+  runs: readonly PageSpeedLcpDiagnostics[],
+  options: PageSpeedMultiRunComparisonOptions = {}
+): PageSpeedMultiRunSummary {
+  const alerts: string[] = [];
+  const minRuns = options.minRuns ?? 5;
+  if (runs.length < minRuns) {
+    alerts.push(
+      `Expected at least ${minRuns} runs for multi-run evaluation, received ${runs.length}`
+    );
+  }
+  const simLcpValues = runs
     .map((r) => r.simLcpMs)
     .filter((v): v is number => typeof v === 'number');
-  const fcpValues = runs
+  const simFcpValues = runs
     .map((r) => r.simFcpMs)
     .filter((v): v is number => typeof v === 'number');
 
-  const medianLcpMs = computeMedian(lcpValues);
-  const medianFcpMs = computeMedian(fcpValues);
-  const rangeLcpMs: [number, number] | null =
-    lcpValues.length > 0
-      ? [Math.min(...lcpValues), Math.max(...lcpValues)]
+  const medianSimLcpMs = computeMedian(simLcpValues);
+  const medianSimFcpMs = computeMedian(simFcpValues);
+  const lcpSpreadMs =
+    simLcpValues.length > 0
+      ? Math.max(...simLcpValues) - Math.min(...simLcpValues)
       : null;
-  const spreadLcpMs = rangeLcpMs ? rangeLcpMs[1] - rangeLcpMs[0] : null;
 
   const lcpElements = [
-    ...new Set(
-      runs.map((r) => r.lcpElement).filter((v): v is string => Boolean(v))
-    ),
+    ...new Set(runs.map((r) => r.lcpElement).filter(Boolean)),
   ];
   const lcpOrigins = [
-    ...new Set(
-      runs
-        .map((r) => r.lcpResourceOrigin)
-        .filter((v): v is string => Boolean(v))
-    ),
-  ];
-  const lcpResourceUrls = [
-    ...new Set(
-      runs.map((r) => r.lcpResourceUrl).filter((v): v is string => Boolean(v))
-    ),
+    ...new Set(runs.map((r) => r.lcpResourceOrigin).filter(Boolean)),
   ];
 
-  const alerts: string[] = [];
-
-  if (lcpValues.length === 0) {
-    alerts.push('No simLCP values extracted from any run');
-  } else if (lcpValues.length < runs.length) {
-    alerts.push(
-      `simLCP extracted from only ${lcpValues.length} of ${runs.length} runs`
-    );
+  if (runs.length === 0 || simLcpValues.length < runs.length) {
+    alerts.push('Missing simulated LCP values in multi-run series');
   }
-  if (baseline?.expectedLcpElement && lcpElements.length === 0) {
-    alerts.push('No LCP element extracted from any run');
+  if (runs.some((r) => !r.lcpElement)) {
+    alerts.push('One or more runs are missing LCP element diagnostics');
   }
-  if (baseline?.expectedLcpOrigin && lcpOrigins.length === 0) {
-    alerts.push('No LCP resource origin extracted from any run');
+  const expectsImageOrigin =
+    Boolean(options.expectedLcpOrigin) ||
+    runs.some((r) => isImageLcpNode(r.lcpElement, null));
+  if (expectsImageOrigin && runs.some((r) => !r.lcpResourceOrigin)) {
+    alerts.push('One or more runs are missing LCP resource origin diagnostics');
   }
-
   if (lcpElements.length > 1) {
     alerts.push(`LCP element flipped across runs: ${lcpElements.join(' vs ')}`);
   }
   if (
-    baseline?.expectedLcpElement &&
-    lcpElements.some((el) => !el.includes(baseline.expectedLcpElement ?? ''))
+    options.expectedLcpElement &&
+    lcpElements.some(
+      (el) =>
+        el && !matchesExpectedSelector(el, options.expectedLcpElement ?? '')
+    )
   ) {
     alerts.push(
-      `LCP element "${lcpElements.join(', ')}" drifted from expected "${baseline.expectedLcpElement}"`
+      `LCP element drifted from expected "${options.expectedLcpElement}": found ${lcpElements.join(', ')}`
     );
   }
-
   if (lcpOrigins.length > 1) {
-    alerts.push(`LCP origin flipped across runs: ${lcpOrigins.join(' vs ')}`);
-  }
-  if (
-    baseline?.expectedLcpOrigin &&
-    lcpOrigins.some((origin) => origin !== baseline.expectedLcpOrigin)
-  ) {
     alerts.push(
-      `LCP origin "${lcpOrigins.join(', ')}" drifted from expected "${baseline.expectedLcpOrigin}"`
+      `LCP resource origin changed across runs: ${lcpOrigins.join(' vs ')}`
     );
   }
-
   if (
-    typeof baseline?.medianLcpMs === 'number' &&
-    typeof medianLcpMs === 'number' &&
-    medianLcpMs - baseline.medianLcpMs > maxLcpRegressionMs
+    options.expectedLcpOrigin &&
+    lcpOrigins.some((origin) => origin !== options.expectedLcpOrigin)
   ) {
     alerts.push(
-      `Median simLCP ${medianLcpMs}ms regressed by ${medianLcpMs - baseline.medianLcpMs}ms (> ${maxLcpRegressionMs}ms) from baseline ${baseline.medianLcpMs}ms`
+      `LCP resource origin drifted from expected "${options.expectedLcpOrigin}": found ${lcpOrigins.join(', ')}`
     );
   }
-
+  const maxSpread = options.maxAllowedSpreadMs ?? 150;
   if (
-    typeof maxIntraSeriesSpreadMs === 'number' &&
-    typeof spreadLcpMs === 'number' &&
-    spreadLcpMs > maxIntraSeriesSpreadMs
+    options.maxAllowedSpreadMs !== undefined &&
+    lcpSpreadMs !== null &&
+    lcpSpreadMs > maxSpread
   ) {
     alerts.push(
-      `simLCP spread ${spreadLcpMs}ms exceeds stability cap ${maxIntraSeriesSpreadMs}ms`
+      `Simulated LCP spread ${Math.round(lcpSpreadMs)}ms exceeds ${maxSpread}ms stability cap`
+    );
+  }
+  const maxRegression = options.maxRegressionDeltaMs ?? 300;
+  if (
+    options.baselineMedianSimLcpMs !== undefined &&
+    medianSimLcpMs !== null &&
+    medianSimLcpMs - options.baselineMedianSimLcpMs > maxRegression
+  ) {
+    alerts.push(
+      `Median simulated LCP regressed by ${Math.round(medianSimLcpMs - options.baselineMedianSimLcpMs)}ms (threshold ${maxRegression}ms)`
     );
   }
 
   return {
     alerts,
-    lcpElements,
-    lcpOrigins,
-    lcpResourceUrls,
-    medianFcpMs,
-    medianLcpMs,
+    lcpElementConsistent:
+      runs.length > 0 &&
+      runs.every((r) => Boolean(r.lcpElement)) &&
+      lcpElements.length === 1,
+    lcpOriginConsistent:
+      runs.length > 0 &&
+      (!expectsImageOrigin ||
+        runs.every((r) => Boolean(r.lcpResourceOrigin))) &&
+      lcpOrigins.length <= 1,
+    lcpSpreadMs,
+    medianSimFcpMs,
+    medianSimLcpMs,
     passed: alerts.length === 0,
-    rangeLcpMs,
-    spreadLcpMs,
+    runs: [...runs],
   };
 }

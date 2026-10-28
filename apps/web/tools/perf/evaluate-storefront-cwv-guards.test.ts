@@ -1,112 +1,129 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { OgabasseyHomeHeroPreloadLink } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-preload-link';
 import { STOREFRONT_LCP_COPY_CSS } from '@/app/(storefront)/storefront-lcp-copy-css';
+import { HeroDesktopGrid } from '@/components/storefront/ogabassey/components/hero-desktop-grid';
+import { MobileLcpHeroImage } from '@/components/storefront/ogabassey/components/mobile-lcp-hero-image';
 import {
   evaluateHeadJsGuard,
   evaluateHomepageHtmlGuard,
   evaluateRouteCssGuard,
+  evaluateStorefrontSourceCssGuards,
+  loadHeadChunkContentsFromBuildDir,
 } from './evaluate-storefront-cwv-guards';
 import { STOREFRONT_CWV_GUARD_BUDGETS } from './storefront-cwv-guard-budgets';
 
 const WEB_SRC = path.resolve(process.cwd(), 'src');
+const HERO_SLIDE_URL =
+  'https://cdn.ogabassey.com/core-assets/products/hero-test.jpg';
 
-function countCssImports(relativeFilePath: string): number {
-  const source = readFileSync(path.join(WEB_SRC, relativeFilePath), 'utf8');
-  return [...source.matchAll(/^\s*import\s+['"][^'"]+\.css['"]/gm)].length;
-}
-
-describe('storefront CWV regression guards — current main baseline', () => {
-  it('passes current homepage HTML structure and counts only inline RSC script bytes', () => {
+describe('storefront CWV regression guards — real storefront components & sources', () => {
+  it('evaluates real rendered OgabasseyHomeHeroPreloadLink, MobileLcpHeroImage, and HeroDesktopGrid markup', () => {
+    const headMarkup = renderToStaticMarkup(
+      createElement(OgabasseyHomeHeroPreloadLink, { src: HERO_SLIDE_URL })
+    );
+    const bodyMarkup = renderToStaticMarkup(
+      createElement(
+        'div',
+        null,
+        createElement(MobileLcpHeroImage, {
+          alt: 'Test Phone',
+          imageFit: 'contain',
+          shouldPrioritizeImage: true,
+          src: HERO_SLIDE_URL,
+        }),
+        createElement(HeroDesktopGrid, {
+          slides: [
+            {
+              ctaLabel: 'Shop now',
+              href: '/smartphones/test-phone',
+              id: 'slide-1',
+              imageAlt: 'Test Phone',
+              imageUrl: HERO_SLIDE_URL,
+              name: 'Test Phone',
+              priceLabel: '₦500,000',
+            },
+          ],
+        })
+      )
+    );
     const rscScriptBody = 'self.__next_f.push([1,"chunk"])';
-    const sampleCurrentHomeHtml = `<!DOCTYPE html><html><head>
-      <script src="/_next/static/chunks/main.js" async></script>
-      <link rel="preload" as="image" imageSrcSet="https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/hero.avif 384w, https://cdn.ogabassey.com/image/width=640,quality=70,format=avif/core-assets/products/hero.avif 640w" imageSizes="(max-width: 767px) 40vw, 1px" fetchPriority="high"/>
-      <link rel="preload" as="image" href="https://cdn.ogabassey.com/image/width=960,quality=70,format=avif/core-assets/products/hero.avif" imageSrcSet="https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/hero.avif 384w" imageSizes="(max-width: 767px) 40vw, 1px" fetchPriority="high" data-ogabassey-home-hero-preload="true"/>
-    </head><body>
-      <picture><template id="B:6"></template><img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" fetchpriority="high" alt="Hero"/></picture>
-      <div hidden id="S:6"><source type="image/avif" srcset="https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/hero.avif 384w"/></div>
-      <script>${rscScriptBody}</script>
-    </body></html>`;
+    const fullHtml = `<!DOCTYPE html><html><head>${headMarkup}</head><body>${bodyMarkup}<script>${rscScriptBody}</script></body></html>`;
 
-    const result = evaluateHomepageHtmlGuard(sampleCurrentHomeHtml);
+    const result = evaluateHomepageHtmlGuard(fullHtml);
     expect(result.passed).toBe(true);
-    expect(result.headImagePreloads).toBe(2);
-    expect(result.heroInsideHiddenSuspense).toBe(true);
+    expect(result.headImagePreloads).toBe(1);
     expect(result.hasDataGifHeroSrc).toBe(true);
     expect(result.inlineRscBytes).toBe(
       Buffer.byteLength(rscScriptBody, 'utf8')
     );
   });
 
-  it('enforces current route CSS budgets against storefront route sources', () => {
-    const listingLayoutSource = readFileSync(
-      path.join(
-        WEB_SRC,
-        'app/(storefront)/[slug]/(catalog)/(listing)/layout.tsx'
-      ),
-      'utf8'
-    );
-    const brandAuthoritySource = readFileSync(
-      path.join(
-        WEB_SRC,
-        'app/(storefront)/[slug]/(catalog)/(listing)/[category]/brands/[brandSlug]/brand-authority-page-content.tsx'
-      ),
-      'utf8'
-    );
-    const pdpCssCount = countCssImports(
-      'app/(storefront)/[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx'
-    );
-    const blogPostLayoutCssCount = countCssImports(
-      'app/(storefront)/[slug]/(blog)/blog/[postSlug]/layout.tsx'
+  it('enforces current route CSS budgets by reading actual storefront route source files', () => {
+    const evaluations = evaluateStorefrontSourceCssGuards(
+      WEB_SRC,
+      STOREFRONT_LCP_COPY_CSS
     );
 
-    expect(
-      evaluateRouteCssGuard({
-        route: 'category',
-        stylesheetCount: 2,
-        criticalCss: STOREFRONT_LCP_COPY_CSS,
-        listingLayoutSource,
-      }).passed
-    ).toBe(true);
+    expect(evaluations.home.passed).toBe(true);
+    expect(evaluations.home.stylesheetCount).toBe(2);
+    expect(evaluations.category.passed).toBe(true);
+    expect(evaluations.category.stylesheetCount).toBe(2);
+    expect(evaluations.brandHub.passed).toBe(true);
+    expect(evaluations.brandHub.stylesheetCount).toBe(2);
+    expect(evaluations.pdp.passed).toBe(true);
+    expect(evaluations.pdp.stylesheetCount).toBe(4);
+    expect(evaluations.blogPost.passed).toBe(true);
+    expect(evaluations.blogPost.stylesheetCount).toBe(3);
+  });
 
-    expect(
-      evaluateRouteCssGuard({
-        route: 'brandHub',
-        stylesheetCount: 2,
-        brandAuthoritySource,
-      }).passed
-    ).toBe(true);
-
-    expect(
-      evaluateRouteCssGuard({
-        route: 'pdp',
-        stylesheetCount: pdpCssCount,
-      }).passed
-    ).toBe(true);
-
-    expect(
-      evaluateRouteCssGuard({
-        route: 'blogPost',
-        stylesheetCount: blogPostLayoutCssCount,
-      }).passed
-    ).toBe(true);
+  it('loads real head chunk files and brotli sizes from a .next build directory', () => {
+    const tempNextDir = mkdtempSync(path.join(tmpdir(), 'cwv-next-build-'));
+    try {
+      const chunksDir = path.join(tempNextDir, 'static', 'chunks');
+      mkdirSync(chunksDir, { recursive: true });
+      writeFileSync(
+        path.join(chunksDir, 'entry.js'),
+        'console.log("clean head chunk");',
+        'utf8'
+      );
+      const html =
+        '<html><head><script src="/_next/static/chunks/entry.js?dpl=1" async></script></head><body></body></html>';
+      const chunkContents = loadHeadChunkContentsFromBuildDir(
+        html,
+        tempNextDir
+      );
+      const guard = evaluateHeadJsGuard({ chunkContents, html });
+      expect(guard.passed).toBe(true);
+      expect(guard.asyncScriptCount).toBe(1);
+      expect(guard.totalBrotliBytes).toBeGreaterThan(0);
+    } finally {
+      rmSync(tempNextDir, { force: true, recursive: true });
+    }
   });
 });
 
 describe('storefront CWV regression guards — fail-closed enforcement', () => {
-  it('flags preload count, hidden Suspense split, data:image/gif src, and disallowed origin across srcset candidates', () => {
+  it('flags preload count, flipped-order hidden Suspense split, picture source origin, and disallowed relative origin', () => {
     const violatingHtml = `<!DOCTYPE html><html><head>
-      <link rel="preload" as="image" imageSrcSet="https://ogabassey.com/image/width=384,quality=70/hero.avif 384w, https://untrusted.example.com/hero.avif 640w"/>
-      <link rel="preload" as="image" href="https://ogabassey.com/hero.avif"/>
+      <link rel="preload" as="image" imageSrcSet="https://ogabassey.com/image/width=384,quality=70/hero.avif 384w"/>
+      <link rel="preload" as="image" href="/cdn-image/hero.avif"/>
     </head><body>
-      <picture><img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" srcset="https://ogabassey.com/other.avif 384w" fetchpriority="high"/></picture>
-      <div hidden id="S:6"><div class="wrapper"><source srcset="https://ogabassey.com/hero.avif 384w"/></div></div>
+      <picture>
+        <source type="image/avif" srcset="https://untrusted.example.com/hero.avif 384w"/>
+        <img src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" srcset="https://ogabassey.com/other.avif 384w" fetchpriority="high"/>
+      </picture>
+      <div id="S:6" hidden><div class="wrapper"><source srcset="https://ogabassey.com/hero.avif 384w"/></div></div>
       <script>self.__next_f.push([1,"${'x'.repeat(200)}"])</script>
     </body></html>`;
 
     const result = evaluateHomepageHtmlGuard(violatingHtml, {
-      allowedHeroOrigins: ['https://ogabassey.com'],
+      allowedHeroOrigins: ['https://cdn.ogabassey.com'],
+      baseOrigin: 'https://ogabassey.com',
       forbidDataGifHeroSrc: true,
       maxHeadImagePreloads: 1,
       maxHtmlBytes: 100,
@@ -123,40 +140,47 @@ describe('storefront CWV regression guards — fail-closed enforcement', () => {
         expect.stringContaining('Head image preload count 2 exceeds budget 1'),
         'Hero <picture>/<source> found inside hidden Suspense slot',
         'Hero <img> uses data:image/gif placeholder src',
+        'Disallowed hero image origin in URL: /cdn-image/hero.avif',
         'Disallowed hero image origin in URL: https://untrusted.example.com/hero.avif',
         'Expected exactly 1 head image preload, found 2',
       ])
     );
   });
 
-  it('passes ratcheted H1/H2/H4 homepage contract when single preload and synchronous picture match', () => {
+  it('fails closed when no hero <img> with fetchpriority="high" exists and allows relative URLs on baseOrigin', () => {
+    const missingHeroHtml =
+      '<!DOCTYPE html><html><head></head><body><img src="/images/hero.avif"/></body></html>';
+    expect(evaluateHomepageHtmlGuard(missingHeroHtml).failures).toContain(
+      'No hero <img> with fetchpriority="high" found'
+    );
+
     const cleanHtml = `<!DOCTYPE html><html><head>
-      <link rel="preload" as="image" imageSrcSet="/cdn-image/width=384,quality=60,format=avif/core-assets/products/hero.avif 384w" imageSizes="(max-width: 767px) 40vw, 1px" fetchPriority="high"/>
+      <link rel="preload" as="image" imageSrcSet="/images/hero.avif 384w" imageSizes="(max-width: 767px) 40vw, 1px" fetchPriority="high"/>
     </head><body>
       <picture>
-        <source type="image/avif" srcset="/cdn-image/width=384,quality=60,format=avif/core-assets/products/hero.avif 384w"/>
-        <img src="/cdn-image/width=384,quality=60,format=avif/core-assets/products/hero.avif" srcset="/cdn-image/width=384,quality=60,format=avif/core-assets/products/hero.avif 384w" fetchpriority="high" alt="Hero"/>
+        <source type="image/avif" srcset="/images/hero.avif 384w"/>
+        <img src="/images/hero.avif" srcset="/images/hero.avif 384w" fetchpriority="high" alt="Hero"/>
       </picture>
     </body></html>`;
 
     const result = evaluateHomepageHtmlGuard(cleanHtml, {
       ...STOREFRONT_CWV_GUARD_BUDGETS.homepageHtml,
       allowedHeroOrigins: ['https://ogabassey.com'],
+      baseOrigin: 'https://ogabassey.com',
       forbidDataGifHeroSrc: true,
       maxHeadImagePreloads: 1,
       requireHeroOutsideHiddenSuspense: true,
       requirePreloadMatchesImgSrcSet: true,
     });
-
     expect(result.passed).toBe(true);
-    expect(result.failures).toEqual([]);
   });
 
-  it('flags ZodError, GoTrueClient, RealtimeClient, script count, and brotli size in head JS', () => {
+  it('counts only async head scripts and ignores non-head chunks in chunkContents', () => {
     const headHtml = `<html><head>
       <script src="/_next/static/chunks/a.js" async></script>
-      <script src="/_next/static/chunks/b.js" async></script>
+      <script src="/_next/static/chunks/b.js" async=""></script>
       <script src="/_next/static/chunks/missing.js" async></script>
+      <script src="/_next/static/chunks/async-helper.js"></script>
     </head><body></body></html>`;
 
     const result = evaluateHeadJsGuard(
@@ -169,7 +193,11 @@ describe('storefront CWV regression guards — fail-closed enforcement', () => {
           },
           '/_next/static/chunks/b.js': {
             brotliBytes: 50_000,
-            raw: 'class GoTrueClient {} class RealtimeClient {}',
+            raw: 'class GoTrueClient {}',
+          },
+          '/_next/static/chunks/lazy-body.js': {
+            brotliBytes: 99_000,
+            raw: 'class RealtimeClient {}',
           },
         },
       },
@@ -181,10 +209,11 @@ describe('storefront CWV regression guards — fail-closed enforcement', () => {
     );
 
     expect(result.passed).toBe(false);
+    expect(result.asyncScriptCount).toBe(3);
+    expect(result.totalBrotliBytes).toBe(90_000);
     expect(result.forbiddenMatches).toEqual([
       { chunkUrl: '/_next/static/chunks/a.js', token: 'ZodError' },
       { chunkUrl: '/_next/static/chunks/b.js', token: 'GoTrueClient' },
-      { chunkUrl: '/_next/static/chunks/b.js', token: 'RealtimeClient' },
     ]);
     expect(result.failures).toEqual(
       expect.arrayContaining([
@@ -195,26 +224,43 @@ describe('storefront CWV regression guards — fail-closed enforcement', () => {
     );
   });
 
-  it('fails closed on missing CSS inputs, missing footer lock, StorefrontFullStyleLoader, and missing authority-hub lock', () => {
-    const result = evaluateRouteCssGuard(
-      {
-        route: 'category',
-        listingLayoutSource: '<StorefrontFullStyleLoader />',
+  it('excludes print/disabled stylesheets and scopes footer/listing/authority locks to their routes', () => {
+    const ratchetedCssBudget = {
+      forbidListingFullStyleLoader: true,
+      maxRenderBlockingStylesheets: {
+        ...STOREFRONT_CWV_GUARD_BUDGETS.css.maxRenderBlockingStylesheets,
+        pdp: 2,
       },
-      {
-        forbidListingFullStyleLoader: true,
-        maxRenderBlockingStylesheets: {
-          ...STOREFRONT_CWV_GUARD_BUDGETS.css.maxRenderBlockingStylesheets,
-          category: 2,
-        },
-        requireAuthorityHubLcpCopyLock: true,
-        requireFooterLockInCriticalCss: true,
-      }
-    );
+      requireAuthorityHubLcpCopyLock: true,
+      requireFooterLockInCriticalCss: true,
+    };
 
-    expect(result.passed).toBe(false);
-    expect(result.failures).toEqual([
-      'Route "category" CSS check requires stylesheetCount or html',
+    const pdpWithPrintSheet = evaluateRouteCssGuard(
+      {
+        html: `<html><head>
+          <link rel="stylesheet" href="/a.css"/>
+          <link rel="stylesheet" href="/styles/disabled.css"/>
+          <link rel="stylesheet" href="/print.css" media="print"/>
+          <link rel="stylesheet" href="/other.css" disabled/>
+        </head><body></body></html>`,
+        route: 'pdp',
+      },
+      ratchetedCssBudget
+    );
+    expect(pdpWithPrintSheet.passed).toBe(true);
+    expect(pdpWithPrintSheet.stylesheetCount).toBe(2);
+
+    const failingBrandHub = evaluateRouteCssGuard(
+      {
+        brandAuthoritySource: '<header><p>Intro</p></header>',
+        listingLayoutSource: '<StorefrontFullStyleLoader />',
+        route: 'brandHub',
+      },
+      ratchetedCssBudget
+    );
+    expect(failingBrandHub.passed).toBe(false);
+    expect(failingBrandHub.failures).toEqual([
+      'Route "brandHub" CSS check requires stylesheetCount or html',
       'Critical inline CSS is missing .ogabassey-mobile-footer { position: fixed } lock',
       '(listing)/layout.tsx still references StorefrontFullStyleLoader',
       'BrandAuthorityPageContent is missing data-cwv-lcp-copy="authority-hub"',

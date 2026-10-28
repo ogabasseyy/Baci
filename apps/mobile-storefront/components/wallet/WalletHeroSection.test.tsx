@@ -40,6 +40,26 @@ describe('WalletHeroSection', () => {
     expect(screen.getByText('Loyalty · Silver')).toBeOnTheScreen();
   });
 
+  it('keeps card funding accessible when funding-account creation is unavailable', () => {
+    render(
+      <WalletHeroSection
+        {...baseProps}
+        canCreateFundingAccount={false}
+        createFundingAccountUnavailableMessage="Bank transfers are unavailable."
+      />
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: 'Add money' }));
+
+    expect(baseProps.onOpenFundPanel).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText('Bank transfers are unavailable.')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByRole('button', { name: 'Create account number' })
+    ).toBeNull();
+  });
+
   it('shows an earnings dash when the hosted earnings contract is unavailable', () => {
     render(
       <WalletHeroSection

@@ -141,6 +141,8 @@ export function WalletHeroSection({
               goalId={savingsGoalId}
               isRefetching={isRefetching}
             />
+          ) : createFundingAccountUnavailableMessage ? (
+            <WalletHeroAction hasAccount onPress={onOpenFundPanel} />
           ) : (
             <WalletHeroCreateAccount
               canCreate={canCreateFundingAccount}

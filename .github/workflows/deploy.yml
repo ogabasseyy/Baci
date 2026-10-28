@@ -492,6 +492,8 @@ jobs:
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.production.local --generate-es256-jwk-standin
       - name: Build for Vercel
         run: .github/scripts/run-pinned-vercel.sh build --yes --prod
+      - name: Verify prebuilt setup guide images
+        run: node .github/scripts/assert-guide-prebuilt.mjs
       # Every production deploy replaces content-hashed _next/static chunk
       # filenames. Clients that already loaded HTML from a previous
       # deployment then request the OLD chunk filenames, which no longer

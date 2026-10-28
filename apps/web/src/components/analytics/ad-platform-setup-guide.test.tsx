@@ -18,6 +18,7 @@ const pinnedAssetDigests: Record<string, string> = {
     '01925ae16ec7c8d09f2d9be3f6accc2823d306b16afe620268e375a8f235d59f',
 };
 const webRoot = resolve(__dirname, '../../../');
+const repoRoot = resolve(webRoot, '../..');
 const checklistPath = resolve(
   webRoot,
   '../../docs/guides/ad-tracking-screenshot-review.md'
@@ -100,6 +101,17 @@ describe('AdPlatformSetupGuide', () => {
       expect(
         createHash('sha256').update(readFileSync(assetPath)).digest('hex')
       ).toBe(pinnedAssetDigests[src ?? '']);
+      // Production's Vercel deployment serves the repository-root public/
+      // directory. Keep the deployment copy byte-identical to the app copy.
+      const deployedAssetPath = resolve(
+        repoRoot,
+        'public',
+        src?.slice(1) ?? ''
+      );
+      expect(existsSync(deployedAssetPath)).toBe(true);
+      expect(
+        readFileSync(deployedAssetPath).equals(readFileSync(assetPath))
+      ).toBe(true);
       const metadata = await sharp(assetPath).metadata();
       expect(metadata.width).toBe(Number(screenshot.getAttribute('width')));
       expect(metadata.height).toBe(Number(screenshot.getAttribute('height')));

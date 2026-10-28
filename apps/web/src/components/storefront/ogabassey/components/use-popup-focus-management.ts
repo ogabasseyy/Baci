@@ -50,6 +50,7 @@ export function usePopupFocusManagement(
     }
     let observer: MutationObserver | null = null;
     const stopPendingRestore = () => {
+      restoreChatFocusAfterDismissal.current = false;
       observer?.disconnect();
       if (restoreFocusTimerRef.current) {
         clearTimeout(restoreFocusTimerRef.current);
@@ -135,5 +136,9 @@ export function usePopupFocusManagement(
       activeElement.closest(promotionSelector) !== null;
   };
 
-  return { rememberPromotionFocus };
+  const clearPromotionFocusRestore = () => {
+    restoreChatFocusAfterDismissal.current = false;
+  };
+
+  return { rememberPromotionFocus, clearPromotionFocusRestore };
 }

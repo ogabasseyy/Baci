@@ -11,10 +11,8 @@ export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { rememberPromotionFocus } = usePopupFocusManagement(
-    showNewsletter,
-    showAdPopup,
-  );
+  const { rememberPromotionFocus, clearPromotionFocusRestore } =
+    usePopupFocusManagement(showNewsletter, showAdPopup);
   const hasEngaged = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
@@ -64,8 +62,12 @@ export const PopupSystem: React.FC = () => {
     };
   }, []);
 
-  const handleCloseNewsletter = () => {
-    rememberPromotionFocus('.ogabassey-newsletter-popup');
+  const handleCloseNewsletter = (restoreFocus = true) => {
+    if (restoreFocus) {
+      rememberPromotionFocus('.ogabassey-newsletter-popup');
+    } else {
+      clearPromotionFocusRestore();
+    }
     setShowNewsletter(false);
 
     // Save dismissal to localStorage
@@ -100,7 +102,7 @@ export const PopupSystem: React.FC = () => {
             aria-label="Dismiss newsletter popup backdrop"
             tabIndex={-1}
             className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-xs"
-            onClick={handleCloseNewsletter}
+            onClick={() => handleCloseNewsletter()}
           />
           <div className="bg-[#1a1a1a] rounded-2xl shadow-2xl max-w-md w-full relative overflow-hidden z-10 animate-in zoom-in-95 duration-300 border border-white/10">
             {/* Decorative Header */}
@@ -116,7 +118,7 @@ export const PopupSystem: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={handleCloseNewsletter}
+                onClick={() => handleCloseNewsletter()}
                 className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
                 aria-label="Close newsletter"
               >
@@ -138,7 +140,7 @@ export const PopupSystem: React.FC = () => {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  handleCloseNewsletter();
+                  handleCloseNewsletter(false);
                 }}
               >
                 <input
@@ -159,7 +161,7 @@ export const PopupSystem: React.FC = () => {
               </form>
               <button
                 type="button"
-                onClick={handleCloseNewsletter}
+                onClick={() => handleCloseNewsletter()}
                 className="mt-4 text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >
                 No thanks, I prefer paying full price

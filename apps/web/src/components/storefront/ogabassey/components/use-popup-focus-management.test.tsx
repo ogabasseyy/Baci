@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { expect, it } from 'vitest';
 import { usePopupFocusManagement } from './use-popup-focus-management';
@@ -117,4 +117,76 @@ it('keeps focus restoration pending while the launcher is disabled', async () =>
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Assistant' })).toHaveFocus(),
   );
+});
+
+it('abandons a pending restore when another promotion replaces the dismissed one', async () => {
+  function ReplacedPromotionHarness() {
+    const [firstVisible, setFirstVisible] = useState(true);
+    const [secondVisible, setSecondVisible] = useState(false);
+    const [pageControlVisible, setPageControlVisible] = useState(true);
+    const { rememberPromotionFocus } = usePopupFocusManagement(
+      firstVisible,
+      secondVisible,
+    );
+
+    return (
+      <>
+        <div className="ogabassey-chat-anchor" style={{ display: 'none' }}>
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        {firstVisible && (
+          <div className="first-promotion">
+            <button
+              onClick={() => {
+                rememberPromotionFocus('.first-promotion');
+                setFirstVisible(false);
+              }}
+            >
+              Close first promotion
+            </button>
+          </div>
+        )}
+        <button onClick={() => setSecondVisible(true)}>Show next promotion</button>
+        {secondVisible && (
+          <div className="second-promotion">
+            <button onClick={() => setSecondVisible(false)}>
+              Close next promotion
+            </button>
+          </div>
+        )}
+        {pageControlVisible && (
+          <div>
+            <button>Page control</button>
+            <button onClick={() => setPageControlVisible(false)}>
+              Navigate away
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  render(<ReplacedPromotionHarness />);
+  fireEvent.keyDown(document, { key: 'Tab' });
+  const closeFirst = screen.getByRole('button', {
+    name: 'Close first promotion',
+  });
+  closeFirst.focus();
+  fireEvent.click(closeFirst);
+  fireEvent.click(screen.getByRole('button', { name: 'Show next promotion' }));
+
+  const pageControl = screen.getByRole('button', { name: 'Page control' });
+  pageControl.focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Navigate away' }));
+  expect(document.activeElement).not.toBe(pageControl);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Close next promotion' }));
+  const anchor = document.querySelector<HTMLElement>('.ogabassey-chat-anchor');
+  if (!anchor) throw new Error('Missing chat launcher anchor');
+  anchor.style.display = '';
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(screen.getByRole('button', { name: 'Assistant' })).not.toHaveFocus();
 });

@@ -121,6 +121,33 @@ describe('PopupSystem', () => {
     expect(screen.getByRole('button', { name: 'Assistant' })).toHaveFocus();
   });
 
+  it('keeps keyboard focus in context when the newsletter form is submitted', async () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button">Assistant</button>
+        </div>
+        <PopupSystem />
+      </>,
+    );
+
+    fireEvent.pointerDown(window);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(4000));
+
+    const submit = screen.getByRole('button', { name: 'Subscribe & Save' });
+    fireEvent.keyDown(document, { key: 'Tab' });
+    submit.focus();
+    fireEvent.submit(submit.closest('form')!);
+
+    expect(
+      screen.queryByRole('heading', { name: 'Join Ogabassey' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Assistant' })).not.toHaveFocus();
+  });
+
   it('does not steal focus when a promotion closes without owning focus', async () => {
     render(
       <>

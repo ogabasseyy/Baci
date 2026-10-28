@@ -55,7 +55,7 @@ export function ImeiCheckerTierSelector({
       <button
         aria-checked={isSelected}
         aria-label={`${tier.name}, ${tier.tagline}, ${tier.priceDisplay}`}
-        className={`relative flex h-full min-h-40 w-full flex-col rounded-2xl border-2 p-4 text-left text-store-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current ${isSelected ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/5' : 'border-gray-100 bg-white hover:border-gray-400'}`}
+        className={`relative flex h-full min-h-40 w-full flex-col rounded-2xl border-2 p-4 text-left text-store-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current ${isSelected ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/5' : 'border-[var(--store-border,#e5e7eb)] bg-[var(--store-background,#ffffff)] hover:border-[var(--store-primary)]'}`}
         key={tierKey}
         onClick={() => onSelectTier(tierKey)}
         onKeyDown={(event) => {
@@ -106,7 +106,7 @@ export function ImeiCheckerTierSelector({
           {isSelected && <Check aria-hidden="true" size={20} />}
         </div>
         <p className="mt-2 text-sm font-bold">{tier.name}</p>
-        <p className="mt-1 text-xs text-gray-600">{tier.tagline}</p>
+        <p className="mt-1 text-xs text-store-foreground">{tier.tagline}</p>
         <p className="mt-auto pt-3 text-sm font-bold">{tier.priceDisplay}</p>
       </button>
     );

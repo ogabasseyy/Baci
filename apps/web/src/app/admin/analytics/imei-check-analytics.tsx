@@ -74,7 +74,7 @@ export function ImeiCheckAnalyticsPanel({
             {[
               ['Requests', data.summary.requests],
               ['Completed checks', data.summary.completed],
-              ['Distinct device IDs', data.summary.uniqueDevices],
+              ['Distinct merchant-device IDs', data.summary.uniqueDevices],
               ['Unidentified results', data.summary.unidentified],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg bg-muted/40 p-3">
@@ -108,7 +108,7 @@ export function ImeiCheckAnalyticsPanel({
                   <th scope="col">Brand</th>
                   <th scope="col">Model</th>
                   <th scope="col">Checks</th>
-                  <th scope="col">Distinct device IDs</th>
+                  <th scope="col">Distinct merchant-device IDs</th>
                 </tr>
               </thead>
               <tbody>

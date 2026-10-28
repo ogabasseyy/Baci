@@ -36,6 +36,7 @@ describe('IMEI analytics panel', () => {
     render(<ImeiCheckAnalyticsPanel period="30d" />);
     await screen.findByRole('table', { name: 'Most checked device models' });
     expect(screen.getAllByText('iPhone 17 Pro Max')).toHaveLength(2);
+    expect(screen.getAllByText('Distinct merchant-device IDs')).toHaveLength(2);
     expect(screen.getByText('Silver')).toBeTruthy();
     expect(screen.getByText('512GB')).toBeTruthy();
     expect(fetchMock.mock.calls[0][0]).toContain('merchantSlug=ogabassey');

@@ -29,7 +29,7 @@ never raw identifiers, identifier hashes, customer identities or provider report
 
 - Requests count durable lookup rows created within the selected date window.
 - Completed checks count completed rows, including repeat checks in other tiers.
-- Distinct device IDs deduplicate the merchant and stored identifier hash. These
+- Distinct merchant-device IDs deduplicate the merchant and stored identifier hash. These
   are identifiers, not necessarily physical devices: one phone can have two IMEIs.
 - Model, brand, colour/storage and service rankings use completed rows only.
 - Historical responses without a normalized model count as unidentified.

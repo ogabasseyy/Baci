@@ -27,3 +27,9 @@ it('keeps encoded query values on local paths', () => {
     '/imei-check?next=%2Faccount'
   );
 });
+
+it('preserves colons in local redirect queries', () => {
+  expect(sanitizeRedirect('/receipts/claim/token?at=12:30')).toBe(
+    '/receipts/claim/token?at=12:30'
+  );
+});

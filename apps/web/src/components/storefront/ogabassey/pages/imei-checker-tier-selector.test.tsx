@@ -61,6 +61,13 @@ describe('ImeiCheckerTierSelector', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(4);
   });
 
+  it('uses storefront theme surfaces for unselected cards', () => {
+    render(<ImeiCheckerTierSelector canToggleServices={false} displayedTierKeys={['full', 'blacklist']} onSelectTier={vi.fn()} onToggleServices={vi.fn()} selectedTier="full" showAllServices={false} />);
+    const unselected = screen.getAllByRole('radio').find((radio) => radio.getAttribute('aria-checked') === 'false');
+    expect(unselected?.className).toContain('bg-[var(--store-background,#ffffff)]');
+    expect(unselected?.className).not.toContain('bg-white');
+  });
+
   it('marks the selected tier as aria-checked', () => {
     render(
       <ImeiCheckerTierSelector

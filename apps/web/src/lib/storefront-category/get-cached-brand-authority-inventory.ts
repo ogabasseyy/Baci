@@ -15,32 +15,12 @@ export const BRAND_AUTHORITY_MAX_QUERY_PAGES = 20;
 export const OPTIONAL_AUTHORITY_INVENTORY_MAX_PRODUCTS = 100;
 export const BRAND_AUTHORITY_QUERY_PAGE_SIZE = 100;
 export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
-  id,
-  name,
-  slug,
-  description,
-  images,
-  category,
-  brand,
-  price,
-  compare_at_price,
-  condition,
-  stock,
-  stock_quantity,
-  manage_stock,
-  is_parent,
-  parent_product_id,
-  ${PRODUCT_KEY_SPECS_RELATION_SELECT},
-  has_condition_offers,
-  updated_at,
+  id, name, slug, description, images, category, brand, price,
+  compare_at_price, condition, stock, stock_quantity, manage_stock,
+  is_parent, parent_product_id, ${PRODUCT_KEY_SPECS_RELATION_SELECT},
+  has_condition_offers, updated_at,
   categories:category_id(id, name, slug),
-  product_categories(
-    categories(
-      id,
-      name,
-      slug
-    )
-  )
+  product_categories(categories(id, name, slug))
 `;
 
 // Same scope, hydration and semantic metadata as destination cards, without images/descriptions.
@@ -173,7 +153,14 @@ async function readInventory(
       signal
     );
     signal?.throwIfAborted();
-    if (!category) throw new Error('Brand authority category unavailable');
+    // Deterministic inactive/missing category resolves inside 'use cache' so
+    // Next.js caches the negative verdict instead of re-querying every request.
+    if (!category) {
+      return {
+        ok: false as const,
+        errorMessage: 'Brand authority category unavailable',
+      };
+    }
   }
   const supabase = brandAuthorityPublicData.createClient(signal);
   // Keep PostgREST's type parser from expanding both long select literals.
@@ -223,13 +210,15 @@ async function readInventory(
     }
 
     const rawProducts = (data ?? []) as unknown as RawDbProduct[];
-    // Reject oversized or server-truncated pools before hydration fanout.
-    if (
-      budget &&
-      (count == null ||
-        count !== rawProducts.length ||
-        count > budget.maxProducts)
-    ) {
+    // Deterministic oversized pools resolve inside 'use cache' so Next.js
+    // caches the negative outcome; anomalous/truncated counts still throw.
+    if (budget && count != null && count > budget.maxProducts) {
+      return {
+        ok: false as const,
+        errorMessage: 'Brand authority inventory exceeds complete-pool budget',
+      };
+    }
+    if (budget && (count == null || count !== rawProducts.length)) {
       throw new Error('Brand authority inventory exceeds complete-pool budget');
     }
 
@@ -266,24 +255,29 @@ async function readInventory(
 
   const latestUpdatedAt = inStockProducts[0]?.updated_at;
   return {
-    latestUpdatedAt:
-      typeof latestUpdatedAt === 'string' ? latestUpdatedAt : null,
-    productCount: inStockProducts.length,
-    productCountIsLowerBound: false,
-    products: inStockProducts,
+    ok: true as const,
+    value: {
+      latestUpdatedAt:
+        typeof latestUpdatedAt === 'string' ? latestUpdatedAt : null,
+      productCount: inStockProducts.length,
+      productCountIsLowerBound: false,
+      products: inStockProducts,
+    },
   };
 }
 
-export function getCachedBrandAuthorityInventory(
+export async function getCachedBrandAuthorityInventory(
   merchantId: string,
   categorySlug: string,
   entry: BrandAuthorityEntry,
   budget?: BrandAuthorityInventoryBudget
 ) {
-  return readCachedBrandAuthorityInventory(
+  const result = await readCachedBrandAuthorityInventory(
     merchantId,
     categorySlug,
     entry,
     budget
   );
+  if (!result.ok) throw new Error(result.errorMessage);
+  return result.value;
 }

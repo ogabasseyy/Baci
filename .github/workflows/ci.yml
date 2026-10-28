@@ -611,6 +611,7 @@ jobs:
         run: >-
           pnpm --dir vps-workers test &&
           node --test
+          .github/scripts/assert-guide-prebuilt.test.mjs
           .github/scripts/current-main-deploy-guard.test.mjs
           .github/scripts/deploy-mcp-server.test.mjs
           .github/scripts/deploy-vps-readiness-checkout.test.mjs

@@ -76,6 +76,12 @@ it('provides a safe example screen and warns merchants to use their own credenti
     const filename = src?.split('/').at(-1) ?? '';
     const assetPath = resolve(webRoot, 'public', src?.slice(1) ?? '');
     expect(existsSync(assetPath)).toBe(true);
+    // Production serves guide assets from the repository-root public folder.
+    const deployedAssetPath = resolve(repoRoot, 'public', src?.slice(1) ?? '');
+    expect(existsSync(deployedAssetPath)).toBe(true);
+    expect(
+      readFileSync(deployedAssetPath).equals(readFileSync(assetPath))
+    ).toBe(true);
     const digest = createHash('sha256')
       .update(readFileSync(assetPath))
       .digest('hex');

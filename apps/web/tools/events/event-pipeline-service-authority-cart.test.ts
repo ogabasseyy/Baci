@@ -56,6 +56,7 @@ describe('cart scoped signing authority', () => {
       'account-request',
       'request-context',
       'request-quota',
+      'request-quota-counter',
       'supabase-quota-counter',
     ];
     for (let index = 0; index < roots.length; index++) {
@@ -71,6 +72,13 @@ describe('cart scoped signing authority', () => {
         roots.map((root) => `apps/web/src/lib/cart/${root}.ts`),
         new Map()
       )
+    ).toEqual([]);
+    const identity = 'apps/web/src/lib/cart/quota-identity.ts';
+    graph.set(identity, "import '@/lib/cart/request-quota';");
+    const operator = 'apps/web/src/scripts/probe-cart-quota.ts';
+    graph.set(operator, "import '@/lib/cart/scoped-client';");
+    expect(
+      serviceAuthorityGraphFindings(graph, [identity, operator], new Map())
     ).toEqual([]);
     const sibling = 'apps/web/src/lib/cart/rogue-quota.ts';
     graph.set(sibling, "import '@/lib/cart/supabase-quota-counter';");

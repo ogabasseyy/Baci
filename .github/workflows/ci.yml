@@ -426,6 +426,7 @@ jobs:
           --sql-check supabase/tests/mcp_guest_carts_rpc.sql
           --sql-check supabase/tests/mcp_guest_carts_privileges.sql
           --sql-check supabase/tests/mcp_guest_carts_capacity.sql
+          --sql-check supabase/tests/commerce_cart_quota.sql
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
@@ -602,6 +603,14 @@ jobs:
           pnpm --filter @baci/shared test -- src/storefront/delivery-evidence.test.ts src/storefront/delivery-evidence-manifest.test.ts &&
           pnpm --filter @baci/cloudflare-evidence-qualification-worker test &&
           pnpm --filter @baci/web exec vitest run tools/cost/storefront-origin-budget.test.ts tools/cost/ogabassey-current-origin-baseline.test.ts tools/cost/qualify-cloudflare-evidence-sources.test.ts tools/cost/cloudflare-evidence-process-isolation.test.ts tools/cost/mutate-cloudflare-evidence-sources.test.ts tools/cost/measure-cloudflare-evidence-sources.test.ts tools/cost/verify-cloudflare-evidence-token-policy.test.ts tools/cost/verify-cloudflare-evidence-read-token-policy.test.ts tools/cost/cloudflare-evidence-run-journal.test.ts
+      - name: Test cart quota guard staging on disposable PostgreSQL
+        if: needs.changes.outputs.deploy_scripts == 'true'
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          node --test .github/scripts/cart-quota-guard-stage.sql.test.mjs
       - name: Test Deployment and VPS Worker Scripts
         if: needs.changes.outputs.deploy_scripts == 'true'
         run: >-
@@ -646,6 +655,9 @@ jobs:
           .github/scripts/probe-guest-cart-hook-reload.test.mjs
           .github/scripts/probe-guest-cart-hook-reload-binding.test.mjs
           .github/scripts/guest-cart-hook-probe-gate.test.mjs
+          .github/scripts/probe-cart-quota-hook-reload.test.mjs
+          .github/scripts/verify-cart-quota-maintenance.test.mjs
+          .github/scripts/cart-quota-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs

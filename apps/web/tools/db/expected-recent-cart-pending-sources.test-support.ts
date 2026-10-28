@@ -157,6 +157,11 @@ export const EXPECTED_RECENT_CART_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261027051250_commerce_cart_quota_guard.sql',
+    sha256: '3c86d87c26babf70b64010ff1f345dea1ed1948f13c1ae27b1bacad1a2e77722',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261027051251_commerce_cart_supabase_quota_gigl_request_scope.sql',
     sha256: 'c17753b80ace9e4537e901510296c3239f515957734629bb16d051c83d331d04',
   },

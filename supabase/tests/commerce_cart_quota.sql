@@ -1,7 +1,7 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(27);
+SELECT plan(34);
 GRANT USAGE ON SCHEMA extensions TO commerce_cart_quota;
 
 SELECT ok(EXISTS(SELECT 1 FROM pg_roles WHERE rolname='commerce_cart_quota' AND NOT rolcanlogin AND NOT rolbypassrls), 'quota role cannot log in or bypass RLS');
@@ -60,9 +60,35 @@ SELECT set_config('request.path','/rpc/increment_commerce_cart_quota',true);
 SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','GIGL worker request is outside its capability scope','existing GIGL request isolation remains enforced');
 SELECT set_config('request.jwt.claims', '{"role":"mcp_guest_oauth_worker"}',true);
 SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','Guest OAuth worker request is outside its capability scope','existing guest OAuth isolation remains enforced');
+SELECT set_config('request.path','/rpc/mcp_guest_oauth_read',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','existing guest OAuth worker request remains allowed');
+SELECT set_config('request.jwt.claims', '{"role":"blog_media_sweep_worker"}',true);
+SELECT set_config('request.path','/rpc/blog_media_sweep_worker_claim',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','existing blog media worker request remains allowed');
+SELECT set_config('request.path','/rpc/increment_commerce_cart_quota',true);
+SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','Blog media worker request is outside its capability scope','existing blog media worker isolation remains enforced');
+SELECT set_config('request.jwt.claims', '{"role":"mcp_guest_cart_worker"}',true);
+SELECT set_config('request.path','/rpc/get_mcp_guest_cart',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','existing MCP guest cart worker request remains allowed');
+SELECT set_config('request.path','/rpc/increment_commerce_cart_quota',true);
+SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','Guest cart worker request is outside its capability scope','existing MCP guest cart worker isolation remains enforced');
+SELECT set_config('request.jwt.claims', '{"role":"authenticated"}',true);
+SELECT set_config('request.path','/rpc/ordinary_authenticated_rpc',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','ordinary authenticated requests remain allowed by the guard');
 SELECT set_config('request.jwt.claims', '{"role":"anon"}',true);
+SELECT set_config('request.path','/rpc/ordinary_anon_rpc',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','ordinary anonymous requests remain allowed by the guard');
 SELECT set_config('request.path','/rpc/__guest_oauth_hook_reload_canary__',true);
 SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','GUEST OAUTH hook reload canary observed','existing reload canary remains enforced');
 
-SELECT * FROM finish();
+-- The replay runner uses psql rather than pg_prove, so failed TAP assertions
+-- must become a SQL error for ON_ERROR_STOP to fail the release gate.
+DO $$
+DECLARE diagnostics text;
+BEGIN
+  SELECT string_agg(line, E'\n') INTO diagnostics FROM finish() AS line;
+  IF diagnostics IS NOT NULL THEN
+    RAISE EXCEPTION 'Cart quota SQL tests failed: %', diagnostics;
+  END IF;
+END $$;
 ROLLBACK;

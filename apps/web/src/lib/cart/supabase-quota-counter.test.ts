@@ -41,9 +41,11 @@ it('propagates an aborted request so quota policy can fail closed', async () => 
   mocks.abortSignal.mockRejectedValue(
     new DOMException('Timed out', 'TimeoutError')
   );
-  await expect(incrementSupabaseQuotaCounter('key', 60_000)).rejects.toThrow(
-    'Timed out'
-  );
+  await expect(
+    incrementSupabaseQuotaCounter('key', 60_000)
+  ).rejects.toMatchObject({
+    reason: 'timeout',
+  });
 });
 
 it.each([
@@ -53,9 +55,11 @@ it.each([
     data: { count: 1, resetTime: Date.now() + offset },
     error: null,
   });
-  await expect(incrementSupabaseQuotaCounter('key', 60_000)).rejects.toThrow(
-    'Invalid cart quota expiry'
-  );
+  await expect(
+    incrementSupabaseQuotaCounter('key', 60_000)
+  ).rejects.toMatchObject({
+    reason: 'invalid_expiry',
+  });
 });
 
 it.each([
@@ -67,4 +71,29 @@ it.each([
 ])('rejects malformed counter results', async (data) => {
   mocks.abortSignal.mockResolvedValue({ data, error: null });
   await expect(incrementSupabaseQuotaCounter('key', 60_000)).rejects.toThrow();
+});
+
+it('classifies an invalid counter response without exposing provider details', async () => {
+  mocks.abortSignal.mockResolvedValue({
+    data: { count: 'bad', resetTime: 1 },
+    error: null,
+  });
+  await expect(
+    incrementSupabaseQuotaCounter('secret-key', 60_000)
+  ).rejects.toMatchObject({
+    reason: 'invalid_response',
+    message: 'Cart quota counter unavailable',
+  });
+});
+
+it('classifies a deadline separately from a provider error', async () => {
+  mocks.abortSignal.mockRejectedValue(
+    new DOMException('secret provider detail', 'TimeoutError')
+  );
+  await expect(
+    incrementSupabaseQuotaCounter('secret-key', 60_000)
+  ).rejects.toMatchObject({
+    reason: 'timeout',
+    message: 'Cart quota counter unavailable',
+  });
 });

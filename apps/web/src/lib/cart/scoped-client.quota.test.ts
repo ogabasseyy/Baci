@@ -1,6 +1,18 @@
 import { createHash } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { createCartQuotaScopedClient } from './scoped-client';
+
+const mocks = vi.hoisted(() => ({
+  createClient: vi.fn(
+    (
+      _url: string,
+      _key: string,
+      _options: { global: { headers: { Authorization: string } } }
+    ) => ({})
+  ),
+}));
+vi.mock('@supabase/supabase-js', () => ({ createClient: mocks.createClient }));
 
 const options = {
   anonKey: 'synthetic-anon-key',
@@ -13,17 +25,15 @@ const options = {
 };
 
 function claims(windowMs: number) {
-  const client = createCartQuotaScopedClient(
-    'private-scoped-key',
-    windowMs,
-    options
-  );
-  const runtimeClient = client as unknown as { rest: { headers: Headers } };
-  const token = runtimeClient.rest.headers.get('Authorization');
-  if (!token?.startsWith('Bearer ')) throw new Error('Missing scoped token');
-  return JSON.parse(
-    Buffer.from(token.slice(7).split('.')[1], 'base64url').toString()
-  ) as Record<string, unknown>;
+  createCartQuotaScopedClient('private-scoped-key', windowMs, options);
+  const authorization =
+    mocks.createClient.mock.lastCall?.[2].global.headers.Authorization;
+  if (!authorization?.startsWith('Bearer '))
+    throw new Error('Missing scoped token');
+  const payload = authorization.slice(7).split('.')[1];
+  return z
+    .record(z.string(), z.unknown())
+    .parse(JSON.parse(Buffer.from(payload, 'base64url').toString()));
 }
 
 it('mints only a hashed counter capability with exactly sixty seconds of authority', () => {

@@ -99,3 +99,11 @@ it('uses storefront colors for the different-email action', () => {
   const button = screen.getByRole('button', { name: 'Use a different email' });
   expect(button).toHaveClass('bg-store-background', 'text-store-background-text', 'border-store-border');
 });
+
+it('starts the resend cooldown after a slow send response, independently of expiry', () => {
+  render(<OtpVerificationForm {...props()} sentAt={Date.now() - 90_000} resendSentAt={Date.now()} />);
+  expect(screen.getByRole('timer')).toHaveTextContent('58:30');
+  expect(screen.getByRole('button', { name: /resend/i })).toBeDisabled();
+  act(() => vi.advanceTimersByTime(30_000));
+  expect(screen.getByRole('button', { name: /resend/i })).toBeEnabled();
+});

@@ -68,6 +68,7 @@ export interface OtpVerificationFormProps {
   isSending: boolean;
   verified: boolean;
   sentAt?: number;
+  resendSentAt?: number;
 }
 
 /**
@@ -92,6 +93,7 @@ export interface UseOgabasseyLoginReturn {
   isVerifying: boolean;
   verified: boolean;
   codeSentAt?: number;
+  resendSentAt?: number;
   isGoogleLoading: boolean;
   isAppleLoading: boolean;
   isCodeSent: boolean;

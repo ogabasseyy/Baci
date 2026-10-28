@@ -15,6 +15,7 @@ export function OtpVerificationForm({
   isSending,
   verified,
   sentAt,
+  resendSentAt,
 }: OtpVerificationFormProps) {
   return (
     <div className="space-y-6">
@@ -28,6 +29,7 @@ export function OtpVerificationForm({
         disabled={isSending}
         error={error}
         sentAt={sentAt}
+        resendSentAt={resendSentAt}
         ttlSeconds={CUSTOMER_OTP_TTL_SECONDS}
         resendCooldownSeconds={CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS}
         onResend={verified ? undefined : onResend}

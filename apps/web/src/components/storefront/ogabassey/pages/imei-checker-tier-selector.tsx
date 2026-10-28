@@ -124,7 +124,7 @@ export function ImeiCheckerTierSelector({
           const comparisonId = `${id}-${group.id}`;
           return (
             <div
-              className={`flex min-w-0 flex-col ${expanded ? 'col-span-full rounded-2xl border border-gray-200 p-3' : ''}`}
+              className={`flex min-w-0 flex-col ${expanded ? 'col-span-full rounded-2xl border border-[var(--store-border,#e5e7eb)] p-3' : ''}`}
               key={group.id}
             >
               <h3 className="mb-2 flex min-h-10 items-center text-sm font-bold text-store-foreground">
@@ -191,14 +191,14 @@ export function ImeiCheckerTierSelector({
         </button>
         {showDetails && (
           <div
-            className="mt-3 space-y-3 rounded-xl border border-gray-200 p-4 text-left text-sm text-store-foreground"
+            className="mt-3 space-y-3 rounded-xl border border-[var(--store-border,#e5e7eb)] p-4 text-left text-sm text-store-foreground"
             id={detailsId}
           >
             <p>{currentTier.detail}</p>
             <ul className="flex flex-wrap gap-2">
               {currentTier.features.map((feature) => (
                 <li
-                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700"
+                  className="inline-flex items-center gap-1 rounded-full bg-[var(--store-background,#ffffff)] px-3 py-1 text-xs text-store-foreground"
                   key={feature}
                 >
                   <Check aria-hidden="true" size={12} />

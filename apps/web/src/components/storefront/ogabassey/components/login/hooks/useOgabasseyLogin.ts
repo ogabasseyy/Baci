@@ -237,6 +237,7 @@ export function useOgabasseyLogin({
       !editingEmail && (Boolean(otpState?.codeSent) || isVerifying || verified),
     verified,
     // Preserve the existing sign-in window; Oxygen's default is five minutes.
+    resendSentAt: otpState?.sentAt,
     codeSentAt:
       otpState?.expiresAt !== undefined
         ? otpState.expiresAt - CUSTOMER_OTP_TTL_SECONDS * 1000

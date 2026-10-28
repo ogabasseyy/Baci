@@ -79,6 +79,7 @@ function OgabasseyLoginPageContent() {
     handleAppleSignIn,
     verified,
     codeSentAt,
+    resendSentAt,
   } = useOgabasseyLogin({ initialEmail, redirectTo });
 
   // The claim login hint is masked guidance (never the full address):
@@ -162,6 +163,7 @@ function OgabasseyLoginPageContent() {
               isSending={isSending}
               verified={verified}
               sentAt={codeSentAt}
+              resendSentAt={resendSentAt}
             />
           )}
         </div>

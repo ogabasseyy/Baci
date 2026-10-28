@@ -4,37 +4,11 @@ import { Check } from 'lucide-react';
 import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import { InputOTP } from '@/components/ui/input-otp';
 import styles from './OtpVerificationField.module.css';
+import type { OtpVerificationFieldProps } from './otp-verification-field.types';
 import { OTP_CODE_TTL_SECONDS, useOtpExpiry } from './use-otp-expiry';
 import { useOtpResendCooldown } from './use-otp-resend-cooldown';
 
-export interface OtpVerificationFieldProps {
-  value: string;
-  onChange: (value: string) => void;
-  /** Opt in to completion handling; verification remains the caller's job. */
-  onComplete?: (value: string) => void;
-  length?: 4 | 6;
-  label?: string;
-  name?: string;
-  id?: string;
-  disabled?: boolean;
-  readOnly?: boolean;
-  pending?: boolean;
-  verified?: boolean;
-  form?: string;
-  error?: string;
-  hint?: string;
-  pendingMessage?: string;
-  successMessage?: string;
-  concealDigits?: boolean;
-  /** Visual completion only. Never treat animation completion as verification. */
-  onStackComplete?: () => void;
-  /** Successful send time in epoch milliseconds. No code or token is stored. */
-  sentAt?: number;
-  ttlSeconds?: number;
-  /** Optional caller-specific resend delay, independent of OTP expiry. */
-  resendCooldownSeconds?: number;
-  onResend?: () => Promise<boolean>;
-}
+export type { OtpVerificationFieldProps } from './otp-verification-field.types';
 
 /** Controlled input with paste, autofill, reduced motion and compositor-friendly motion. */
 export function OtpVerificationField({
@@ -59,6 +33,7 @@ export function OtpVerificationField({
   sentAt,
   ttlSeconds = OTP_CODE_TTL_SECONDS,
   resendCooldownSeconds = 0,
+  resendSentAt,
   onResend,
 }: OtpVerificationFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +57,7 @@ export function OtpVerificationField({
   const center = (length - 1) / 2;
   const expiry = useOtpExpiry(sentAt, ttlSeconds, !verified);
   const cooldown = useOtpResendCooldown(
-    sentAt,
+    resendSentAt ?? sentAt,
     resendCooldownSeconds,
     Boolean(onResend) && !verified
   );

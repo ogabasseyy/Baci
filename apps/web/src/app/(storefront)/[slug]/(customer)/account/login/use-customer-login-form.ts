@@ -47,7 +47,7 @@ export function useCustomerLoginForm() {
       ? undefined
       : otpState.expiresAt - CUSTOMER_OTP_TTL_SECONDS * 1000;
   const cooldown = useOtpResendCooldown(
-    sentAt,
+    otpState?.sentAt ?? sentAt,
     CUSTOMER_OTP_RESEND_COOLDOWN_SECONDS,
     !!otpState?.codeSent && !editingEmail
   );

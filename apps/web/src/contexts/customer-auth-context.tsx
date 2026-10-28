@@ -9,13 +9,13 @@ import {
   useState,
 } from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
-import { CUSTOMER_OTP_TTL_SECONDS } from '@/lib/customer-auth-constants';
 import {
   commitCustomerAuthSession,
   loadCustomerSession,
   performCustomerLogout,
 } from './customer-auth-session';
 import { publishCustomerIdentity } from './customer-live-identity';
+import { sendCustomerOtpRequest } from './customer-otp-send';
 
 export interface CustomerUser {
   id: string;
@@ -56,6 +56,7 @@ export interface OtpState {
   email: string;
   codeSent: boolean;
   expiresAt?: number;
+  sentAt?: number;
 }
 
 interface OAuthRedirectResponse {
@@ -161,23 +162,14 @@ export function CustomerAuthProvider({
     email: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch('/api/storefront/auth/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, merchantSlug }),
-      });
+      const result = await sendCustomerOtpRequest(email, merchantSlug);
+      if (!result.success) return result;
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Failed to send code' };
-      }
-
-      // Track the configured customer-auth challenge lifetime.
       setOtpState({
         email,
         codeSent: true,
-        expiresAt: Date.now() + CUSTOMER_OTP_TTL_SECONDS * 1000,
+        expiresAt: result.expiresAt,
+        sentAt: Date.now(),
       });
 
       return { success: true };

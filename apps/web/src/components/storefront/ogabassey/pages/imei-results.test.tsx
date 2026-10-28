@@ -163,6 +163,12 @@ describe('OgabasseyImeiResults', () => {
     );
   });
 
+  it('does not show a safe cached verdict when the blacklist field reports risk', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, status: 'Clean', verdictType: 'safe', verdict: 'Safe to buy', blacklistStatus: 'Blacklisted'}} />);
+    expect(screen.queryByText('Safe to buy')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Blacklist risk detected/i).length).toBeGreaterThan(0);
+  });
+
   it('replaces a cached safe verdict when finance is past due', () => {
     render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, financeStatus: 'Past Due'}} />);
     expect(screen.queryByText('Safe to buy')).not.toBeInTheDocument();

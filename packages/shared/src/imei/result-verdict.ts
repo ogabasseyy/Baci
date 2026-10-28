@@ -1,3 +1,5 @@
+import { getImeiBlacklistState } from './unlock-evidence';
+
 export function getImeiFinanceState(
   value: string | null | undefined
 ): 'unchecked' | 'clear' | 'risk' | 'unknown' {
@@ -32,10 +34,12 @@ export function getImeiEffectiveVerdict(result: {
   verdictType: string;
   verdict: string;
   financeStatus?: string | null;
+  blacklistStatus?: string | null;
 }): { type: 'safe' | 'caution' | 'danger'; text: string } {
   if (result.verdictType === 'danger')
     return { type: 'danger', text: result.verdict };
-  if (result.status === 'Blacklisted')
+  const blacklist = getImeiBlacklistState(result.blacklistStatus ?? undefined);
+  if (result.status === 'Blacklisted' || blacklist === 'risk')
     return {
       type: 'danger',
       text: 'Blacklist risk detected. Verify this report before buying.',
@@ -52,6 +56,11 @@ export function getImeiEffectiveVerdict(result: {
     return {
       type: 'caution',
       text: 'The finance status is unclear. Verify it before buying.',
+    };
+  if (blacklist === 'unknown')
+    return {
+      type: 'caution',
+      text: 'The blacklist status is unclear or was not checked. Verify it before buying.',
     };
   if (result.status !== 'Clean' || result.verdictType !== 'safe')
     return {

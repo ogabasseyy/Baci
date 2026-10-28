@@ -153,6 +153,17 @@ describe('ImeiCheckResultView', () => {
     });
   });
 
+  it('does not show a safe cached verdict when the blacklist field reports risk', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, blacklistStatus: 'Blacklisted' }}
+      />
+    );
+    expect(screen.getByText(/Blacklist risk detected/i)).toBeTruthy();
+    expect(screen.queryByText('SAFE TO BUY')).toBeNull();
+  });
+
   it('replaces a cached safe verdict when finance is past due', () => {
     render(
       <ImeiCheckResultView

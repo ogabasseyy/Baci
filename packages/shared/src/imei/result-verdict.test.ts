@@ -28,6 +28,7 @@ it('does not treat no outstanding balance as a finance concern', () => {
       verdictType: 'safe',
       verdict: 'Safe',
       financeStatus: 'No outstanding balance',
+      blacklistStatus: 'Clean',
     }).type
   ).toBe('safe');
 });
@@ -66,4 +67,19 @@ it.each([
   ['Pending', 'unknown'],
 ] as const)('classifies finance evidence %s as %s', (value, expected) => {
   expect(getImeiFinanceState(value)).toBe(expected);
+});
+
+it.each([
+  ['Blacklisted', 'danger'],
+  ['Unknown', 'caution'],
+  [undefined, 'caution'],
+] as const)('does not show a safe verdict for blacklist evidence %s', (blacklistStatus, type) => {
+  expect(
+    getImeiEffectiveVerdict({
+      status: 'Clean',
+      verdictType: 'safe',
+      verdict: 'SAFE TO BUY',
+      blacklistStatus,
+    }).type
+  ).toBe(type);
 });

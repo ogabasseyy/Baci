@@ -45,6 +45,21 @@ function getResponsiveSizes(srcSetValue: string, sizesValue?: string) {
   return WIDTH_DESCRIPTOR_PATTERN.test(srcSetValue) ? sizesValue : undefined;
 }
 
+function getLastSrcSetCandidateUrl(
+  srcSetValue: string | undefined
+): string | null {
+  if (!srcSetValue || !WIDTH_DESCRIPTOR_PATTERN.test(srcSetValue)) {
+    return null;
+  }
+  const entries = srcSetValue
+    .split(/,\s+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const lastEntry = entries[entries.length - 1];
+  const candidateUrl = lastEntry?.replace(/\s+\d+w$/i, '').trim();
+  return candidateUrl || null;
+}
+
 export function getOgabasseyHeroLcpImage(
   slideOrSrc: string | OgabasseyHeroLcpSlideSource | null | undefined
 ): OgabasseyHeroLcpImageDescriptor | null {
@@ -73,20 +88,23 @@ export function getOgabasseyHeroLcpImage(
     width: MOBILE_HERO_IMAGE_WIDTH,
   });
 
-  const fallbackSrc = ogabasseyFallbackImageLoader({
-    quality: MOBILE_HERO_IMAGE_QUALITY,
-    src: imageUrl,
-    width: MOBILE_HERO_IMAGE_WIDTH,
-  });
   const cappedSrcSet = capSrcSetWidthRungs(
     rawSrcSet,
     MOBILE_HERO_MAX_SRCSET_WIDTH,
     MOBILE_HERO_MIN_SRCSET_WIDTH
   );
+  const defaultFallbackSrc = ogabasseyFallbackImageLoader({
+    quality: MOBILE_HERO_IMAGE_QUALITY,
+    src: imageUrl,
+    width: MOBILE_HERO_MAX_SRCSET_WIDTH,
+  });
+  const fallbackSrc =
+    getLastSrcSetCandidateUrl(cappedSrcSet) ?? defaultFallbackSrc;
   const sourceSrcSet = inlineSrc ?? cappedSrcSet ?? fallbackSrc;
   const resolvedSizes = sizes ?? MOBILE_HERO_IMAGE_SIZES;
   const responsiveSizes = getResponsiveSizes(sourceSrcSet, resolvedSizes);
-  const srcSet = cappedSrcSet || `${fallbackSrc} ${MOBILE_HERO_IMAGE_WIDTH}w`;
+  const srcSet =
+    cappedSrcSet || `${fallbackSrc} ${MOBILE_HERO_MAX_SRCSET_WIDTH}w`;
   const avifSrc = rewriteOgabasseyTransformUrlFormat(fallbackSrc, 'avif');
   const avifSrcSet = buildOgabasseyAvifSrcSet(
     inlineSrc ? sourceSrcSet : srcSet

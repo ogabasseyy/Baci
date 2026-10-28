@@ -34,4 +34,18 @@ describe('hero-mobile-image-config', () => {
       `https://cdn.ogabassey.com/${longPath}?w=750 750w`
     );
   });
+
+  it('sorts unsorted ladders and clamps over-cap-only ladders to maxWidth', () => {
+    const unsorted =
+      'https://cdn.ogabassey.com/image/width=750/hero.avif 750w, https://cdn.ogabassey.com/image/width=384/hero.avif 384w';
+    expect(capSrcSetWidthRungs(unsorted, 750, 384)).toBe(
+      'https://cdn.ogabassey.com/image/width=384/hero.avif 384w, https://cdn.ogabassey.com/image/width=750/hero.avif 750w'
+    );
+
+    const overCapOnly =
+      'https://cdn.ogabassey.com/image/width=1080/hero.avif 1080w, https://cdn.ogabassey.com/image/width=1920/hero.avif 1920w';
+    expect(capSrcSetWidthRungs(overCapOnly, 750, 384)).toBe(
+      'https://cdn.ogabassey.com/image/width=750/hero.avif 750w'
+    );
+  });
 });

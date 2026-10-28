@@ -34,6 +34,20 @@ function parseSrcSetCandidate(candidate: string): ParsedSrcSetCandidate {
   };
 }
 
+function clampCandidateToMaxWidth(
+  candidate: ParsedSrcSetCandidate,
+  maxWidth: number
+): ParsedSrcSetCandidate {
+  const clampedRaw = candidate.raw
+    .replace(/\bwidth=\d+/i, `width=${maxWidth}`)
+    .replace(/([?&]w=)\d+/i, `$1${maxWidth}`)
+    .replace(/\s+\d+w$/i, ` ${maxWidth}w`);
+  return {
+    raw: clampedRaw,
+    width: maxWidth,
+  };
+}
+
 /**
  * Cap responsive `srcSet` width rungs so hero `<picture>` elements never
  * advertise oversized desktop variants or exceed React 19 Fizz's 500-byte
@@ -60,10 +74,18 @@ export function capSrcSetWidthRungs(
     return srcSet;
   }
 
-  const underMax = candidates.filter(
+  const sorted = [...candidates].sort(
+    (a, b) =>
+      (a.width ?? Number.MAX_SAFE_INTEGER) -
+      (b.width ?? Number.MAX_SAFE_INTEGER)
+  );
+  const underMax = sorted.filter(
     (entry) => entry.width === null || entry.width <= maxWidth
   );
-  const boundedMax = underMax.length > 0 ? underMax : [candidates[0]];
+  const boundedMax =
+    underMax.length > 0
+      ? underMax
+      : [clampCandidateToMaxWidth(sorted[0], maxWidth)];
   const aboveMin = boundedMax.filter(
     (entry) => entry.width === null || entry.width >= minWidth
   );

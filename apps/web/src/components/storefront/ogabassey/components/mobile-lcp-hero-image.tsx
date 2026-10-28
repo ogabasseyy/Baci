@@ -67,7 +67,6 @@ export function MobileLcpHeroImage({
         {...imgProps}
         alt={alt}
         fetchPriority={shouldPrioritizeImage ? 'high' : undefined}
-        sizes={responsiveSizes}
         src={productSrc}
         className={`h-full w-full ${
           imageFit === 'contain' ? 'object-contain object-right' : 'object-cover'

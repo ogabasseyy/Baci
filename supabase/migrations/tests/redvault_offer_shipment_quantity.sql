@@ -15,6 +15,9 @@ DECLARE
   tracking_token text;
   snapshot jsonb;
 BEGIN
+  -- Match protected REDVAULT writers; owner privileges do not bypass the guard.
+  INSERT INTO private.uba_redvault_write_context (transaction_id)
+  VALUES (pg_catalog.txid_current()) ON CONFLICT DO NOTHING;
   INSERT INTO public.merchants (id, email, business_name, slug, is_published)
   VALUES (merchant_id, 'remaining-unit@example.com', 'Remaining unit', 'remaining-unit', true);
   INSERT INTO public.products (id, merchant_id, name, price, status,

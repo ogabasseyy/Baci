@@ -52,9 +52,20 @@ describe('resolveInvoicePaymentAccount', () => {
     );
     expect(query.or).toHaveBeenNthCalledWith(
       2,
-      'expires_at.is.null,expires_at.gt.2026-08-27T10:15:00.000Z'
+      // Future assignments are selector-invisible: exclude them at the
+      // database so the selector never sees a row it would reject while
+      // starving the older eligible fallback.
+      'assigned_at.lte.2026-08-27T10:15:00.000Z,and(assigned_at.is.null,created_at.lte.2026-08-27T10:15:00.000Z),and(assigned_at.is.null,created_at.is.null)'
     );
-    expect(query.limit).toHaveBeenCalledWith(1);
+    expect(query.or).toHaveBeenNthCalledWith(
+      3,
+      // 15-minute validity buffer past now (10:15): an account expiring
+      // mid-delivery must not be printed on the invoice.
+      'expires_at.is.null,expires_at.gt.2026-08-27T10:30:00.000Z'
+    );
+    // No LIMIT: the shared selector ranks Paystack above newer
+    // non-Paystack rows, so it must see every eligible row.
+    expect(query.limit).not.toHaveBeenCalled();
     expect(result.paymentAccount?.account_number).toBe('2222222222');
     expect(result.error).toBeNull();
   });
@@ -193,5 +204,29 @@ describe('resolveInvoicePaymentAccount', () => {
 
     expect(result.transactionError).toBe(transactionError);
     expect(result.error).toBeNull();
+  });
+
+  it('breaks created_at ties by account number like the dispatch recheck', async () => {
+    const query = createQuery({ data: [], error: null });
+    const supabase = {
+      from: vi.fn(() => query),
+    } as unknown as SupabaseClient<Database>;
+
+    await resolveInvoicePaymentAccount(
+      supabase,
+      'order-1',
+      false,
+      new Date('2026-08-27T10:15:00.000Z')
+    );
+
+    // Null-created legacy rows sort last, matching the shared selector
+    // (-infinity) and the dispatch recheck (NULLS LAST).
+    expect(query.order).toHaveBeenNthCalledWith(1, 'created_at', {
+      ascending: false,
+      nullsFirst: false,
+    });
+    expect(query.order).toHaveBeenNthCalledWith(2, 'account_number', {
+      ascending: false,
+    });
   });
 });

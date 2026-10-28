@@ -91,3 +91,25 @@ it('accepts only model, manufacturer, storage and colour configuration tokens', 
     )?.productId
   ).toBe('p1');
 });
+
+it('prefers a same-colour variant with matching normalized storage', () => {
+  const product = {
+    ...products[0],
+    variants: [
+      {
+        attributes: { color: 'Silver', storage: '256GB' },
+        images: ['https://cdn.example.com/256.jpg'],
+      },
+      {
+        attributes: { color: 'Silver', storage: '512 GB' },
+        images: ['https://cdn.example.com/512.jpg'],
+      },
+    ],
+  };
+  expect(
+    matchImeiCatalogImage(
+      getImeiDeviceProfile({ device: 'iPhone 17 Pro Max 512GB Silver' }),
+      [product]
+    )?.imageUrl
+  ).toBe('https://cdn.example.com/512.jpg');
+});

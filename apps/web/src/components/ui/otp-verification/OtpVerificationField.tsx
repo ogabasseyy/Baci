@@ -124,7 +124,10 @@ export function OtpVerificationField({
 
   return (
     <div className="grid gap-3">
-      <label htmlFor={id} className="text-xs font-semibold text-gray-700">
+      <label
+        htmlFor={id}
+        className="text-xs font-semibold text-[var(--store-foreground,#111827)]"
+      >
         {label}
       </label>
       <InputOTP
@@ -238,8 +241,8 @@ export function OtpVerificationField({
         aria-atomic="true"
         className={
           feedbackError
-            ? 'text-sm leading-relaxed text-red-700'
-            : 'text-center text-xs text-gray-500'
+            ? 'text-sm leading-relaxed text-[var(--store-foreground,#111827)]'
+            : 'text-center text-xs text-[var(--store-foreground,#111827)]'
         }
       >
         {feedbackError ? (
@@ -257,7 +260,7 @@ export function OtpVerificationField({
         )}
       </div>
       {(sentAt !== undefined || onResend) && (
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-xs text-[var(--store-foreground,#111827)]">
           <span
             role="timer"
             aria-live="off"

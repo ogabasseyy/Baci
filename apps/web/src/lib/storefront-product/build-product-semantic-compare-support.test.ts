@@ -5,41 +5,10 @@ import {
   buildProductSemanticCompareSupport,
   isApprovedSupportLink,
 } from './build-product-semantic-compare-support';
-import type {
-  BuildProductSemanticModelInput,
-  ProductSemanticCandidate,
-} from './product-semantic-types';
-
-function makeCandidate(
-  overrides: Partial<ProductSemanticCandidate> &
-    Pick<ProductSemanticCandidate, 'slug' | 'name' | 'price'>
-): ProductSemanticCandidate {
-  return {
-    brand: 'Brand',
-    category_slug: 'smartphones',
-    condition: 'new',
-    product_key_specs: {
-      chipset: 'Chip',
-      ram_gb: 8,
-      storage_gb: 128,
-    },
-    stock: 5,
-    ...overrides,
-  };
-}
-
-function makeInput(
-  overrides: Partial<BuildProductSemanticModelInput> &
-    Pick<BuildProductSemanticModelInput, 'currentProduct' | 'inventory'>
-): BuildProductSemanticModelInput {
-  return {
-    storeUrl: 'https://ogabassey.com',
-    merchantBusinessName: 'Ogabassey',
-    categorySlug: 'smartphones',
-    categoryName: 'Smartphones',
-    ...overrides,
-  };
-}
+import {
+  makeCandidate,
+  makeInput,
+} from './build-product-semantic-compare-support.test-helpers';
 
 describe('buildProductSemanticCompareSupport', () => {
   it('does not approve a compare participant with a product-slug prefix only', () => {
@@ -146,7 +115,6 @@ describe('buildProductSemanticCompareSupport', () => {
         })
     );
     const currentProduct = inventory.at(-1);
-
     if (!currentProduct) {
       throw new Error('Expected generated current product');
     }

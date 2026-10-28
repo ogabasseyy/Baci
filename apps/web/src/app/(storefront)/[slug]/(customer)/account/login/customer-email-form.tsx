@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 
 type Props = {
   email: string;
+  emailHint?: string;
   error: string;
   isSending: boolean;
   isGoogleLoading: boolean;
@@ -16,6 +17,7 @@ type Props = {
 };
 export function CustomerEmailForm({
   email,
+  emailHint,
   error,
   isSending,
   isGoogleLoading,
@@ -27,6 +29,12 @@ export function CustomerEmailForm({
     <form onSubmit={onSendCode} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="email">Email address</Label>
+        {emailHint && (
+          <p className="text-sm text-store-background-text/70">
+            This receipt was sent to {emailHint} — sign in with that address to
+            continue.
+          </p>
+        )}
         <div className="relative">
           <Mail
             aria-hidden="true"

@@ -70,10 +70,24 @@ const detailFixture: ReceiptDetail = {
 };
 
 describe('useReceiptPreview', () => {
-  it('passes the issue date through to the generated receipt HTML', async () => {
+  it('dates a paid receipt from the completing payment, not the issue date', async () => {
     const { useReceiptPreview } = await import('./use-receipt-preview');
     mockUseMerchantReceiptInfo.mockReturnValue({ data: merchantFixture });
-    mockUseReceiptDetail.mockReturnValue({ data: detailFixture });
+    mockUseReceiptDetail.mockReturnValue({
+      data: {
+        ...detailFixture,
+        transactions: [
+          {
+            amount: 15000,
+            created_at: '2024-02-07T10:00:00.000Z',
+            description: null,
+            metadata: null,
+            status: 'completed',
+            transaction_type: 'payment',
+          },
+        ],
+      },
+    });
 
     function Probe({ orderId }: { orderId: string }) {
       const preview = useReceiptPreview();
@@ -96,7 +110,16 @@ describe('useReceiptPreview', () => {
 
     expect(screen.getByTestId('open').props.children).toBe('open');
     const html = screen.getByTestId('html').props.children as string;
-    expect(html).toContain('5 Feb 2024');
-    expect(html).not.toContain('3 Feb 2024');
+    const expected = new Date('2024-02-07T10:00:00.000Z').toLocaleDateString(
+      'en-GB',
+      {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos',
+      }
+    );
+    expect(html).toContain(expected);
+    expect(html).not.toContain('5 Feb 2024');
   });
 });

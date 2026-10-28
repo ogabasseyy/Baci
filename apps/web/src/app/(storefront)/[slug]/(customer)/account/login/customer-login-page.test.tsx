@@ -152,13 +152,12 @@ describe('CustomerLoginPage', () => {
     expect(screen.getByLabelText('Email address')).toHaveValue('');
   });
 
-  it('prefills receipt claim login email from the token redirect', async () => {
+  it('shows masked receipt guidance without prefilling the input', async () => {
     const fetchMock = vi.fn(
       async () =>
-        new Response(
-          JSON.stringify({ emailHint: '  BasseyBJohn@Yahoo.CO.UK  ' }),
-          { status: 200 }
-        )
+        new Response(JSON.stringify({ emailHint: 'b***@yahoo.co.uk' }), {
+          status: 200,
+        })
     );
     vi.stubGlobal('fetch', fetchMock);
     mockSearchParams.set('redirect', '/receipts/claim/token_123');
@@ -166,9 +165,10 @@ describe('CustomerLoginPage', () => {
     render(<CustomerLoginPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Email address')).toHaveValue(
-        'basseybjohn@yahoo.co.uk'
-      );
+      expect(
+        screen.getByText(/This receipt was sent to b\*\*\*@yahoo.co.uk/)
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('');
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/storefront/receipts/claims/token_123/login-email',

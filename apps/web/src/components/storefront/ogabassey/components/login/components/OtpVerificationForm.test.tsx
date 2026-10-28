@@ -92,3 +92,10 @@ it('keeps verification pending until the caller confirms success and blocks emai
     screen.queryByRole('button', { name: 'Resend code' })
   ).not.toBeInTheDocument();
 });
+
+
+it('uses storefront colors for the different-email action', () => {
+  render(<OtpVerificationForm {...props()} />);
+  const button = screen.getByRole('button', { name: 'Use a different email' });
+  expect(button).toHaveClass('bg-store-background', 'text-store-background-text', 'border-store-border');
+});

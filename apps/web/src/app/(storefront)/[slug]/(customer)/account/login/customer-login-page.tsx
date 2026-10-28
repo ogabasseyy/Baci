@@ -62,6 +62,7 @@ function DefaultLoginPage() {
     showCodeStep,
     handleDifferentEmail,
     email,
+    emailHint,
     setEmail,
     code,
     error,
@@ -147,6 +148,7 @@ function DefaultLoginPage() {
               // Email input form
               <CustomerEmailForm
                 email={email}
+                emailHint={emailHint}
                 error={error}
                 isSending={isSending}
                 isGoogleLoading={isGoogleLoading}

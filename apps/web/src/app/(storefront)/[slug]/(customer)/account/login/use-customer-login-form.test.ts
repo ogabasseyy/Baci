@@ -42,7 +42,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 vi.mock('@/lib/customer-login-prefill', () => ({
   sanitizeCustomerLoginEmailPrefill: (email: string | null) => email || '',
-  fetchCustomerLoginEmailPrefillForRedirect: async () => null,
+  fetchCustomerLoginEmailHintForRedirect: async () => null,
 }));
 vi.mock('@/lib/routes', () => ({ asRoute: (path: string) => path }));
 

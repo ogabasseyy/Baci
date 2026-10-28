@@ -17,12 +17,12 @@ import {
   dismissAuthenticatedLogin,
   getValidatedLoginEmailHint,
   getValidatedLoginMode,
-  loadLoginEmailHintFromReturnTo,
   normalizeEmail,
   returnToEmailFromAuthStep,
   validateLoginEmailInput,
 } from './login-screen-controller.helpers';
 import { runLoginSocialSignIn } from './login-social-sign-in';
+import { useLoginEmailHintGuidance } from './use-login-email-hint-guidance';
 import { useLoginHardwareBackHandler } from './useLoginHardwareBackHandler';
 
 const log = createLogger('Login');
@@ -99,16 +99,14 @@ export function useLoginScreenController() {
     }
   }, [isInitialized, user, returnTo]);
 
-  useEffect(() => {
-    return loadLoginEmailHintFromReturnTo({
-      currentEmail: email,
-      initialEmail,
-      onError: (error) =>
-        log.warn('Failed to load receipt claim email hint', error),
-      returnTo,
-      setEmail,
-    });
-  }, [email, initialEmail, returnTo]);
+  const emailHintGuidance = useLoginEmailHintGuidance({
+    currentEmail: email,
+    emailParam,
+    initialEmail,
+    onError: (error) =>
+      log.warn('Failed to load receipt claim email hint', error),
+    returnTo,
+  });
 
   useEffect(() => {
     if (validatedMode !== 'otp') {
@@ -267,6 +265,7 @@ export function useLoginScreenController() {
     dismissAndNavigate,
     email,
     emailError,
+    emailHintGuidance,
     handleAppleSignIn,
     handleBack,
     handleContinue,

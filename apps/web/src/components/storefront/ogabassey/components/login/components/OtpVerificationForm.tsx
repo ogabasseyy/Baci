@@ -44,7 +44,7 @@ export function OtpVerificationForm({
         <Button
           type="button"
           variant="outline"
-          className="w-full h-12 bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-xl"
+          className="w-full h-12 bg-store-background border-store-border text-store-background-text hover:bg-store-secondary hover:text-store-secondary-text rounded-xl"
           onClick={onChangeEmail}
           disabled={isSending || isVerifying || verified}
         >

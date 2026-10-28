@@ -62,6 +62,12 @@ export function isImeiCatalogModelMatch(
   );
 }
 
+function storageKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^(\d{1,4})\s*(GB|TB)$/i);
+  return match ? `${match[1]}${match[2].toUpperCase()}` : null;
+}
+
 export function matchImeiCatalogImage(
   profile: ImeiDeviceProfile,
   products: readonly ImeiCatalogProduct[]
@@ -78,8 +84,14 @@ export function matchImeiCatalogImage(
       );
       variants.sort(
         (a, b) =>
-          Number(b.attributes.storage === profile.storage) -
-          Number(a.attributes.storage === profile.storage)
+          Number(
+            storageKey(b.attributes.storage) === storageKey(profile.storage) &&
+              storageKey(profile.storage) !== null
+          ) -
+          Number(
+            storageKey(a.attributes.storage) === storageKey(profile.storage) &&
+              storageKey(profile.storage) !== null
+          )
       );
       for (const variant of variants) {
         const imageUrl = getPrimaryProductImage(variant.images);

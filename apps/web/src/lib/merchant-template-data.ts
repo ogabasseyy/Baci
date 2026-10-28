@@ -1,6 +1,6 @@
 import type { MerchantData } from '@/hooks/use-merchant';
 import type { CachedMerchant } from '@/lib/cached-data';
-import { xEventIdsSchema } from '@/schemas/x-ads-settings';
+import { parseXEventIds } from '@/lib/x-ads/parse-x-event-ids';
 
 function normalizePlanTier(
   planTier: CachedMerchant['plan_tier']
@@ -156,8 +156,8 @@ function pickPublicFeatureSettings(
 
     const value = source[key];
     if (key === 'twitter_event_ids') {
-      const parsed = xEventIdsSchema.safeParse(value);
-      if (parsed.success) picked[key] = parsed.data;
+      const parsed = parseXEventIds(value);
+      if (parsed) picked[key] = parsed;
       continue;
     }
 

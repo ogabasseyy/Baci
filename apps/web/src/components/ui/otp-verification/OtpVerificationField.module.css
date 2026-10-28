@@ -92,7 +92,7 @@
   justify-content: center;
   border-radius: 0.875rem;
   border: 2px solid var(--store-success-border, #16a34a);
-  color: var(--store-success-text, var(--storefront-dark-success, #047857));
+  color: var(--store-success-text, var(--store-foreground, #047857));
   background: color-mix(
     in srgb,
     var(--store-success-bg, #16a34a) 12%,

@@ -112,4 +112,97 @@ describe('resolveStorefrontOrderPaymentAccounts', () => {
       '2222222222'
     );
   });
+
+  it('loads transactions for settled manual balances under non-paid labels', async () => {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'get_customer_order_payment_accounts') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({
+        data: [
+          {
+            amount: 100,
+            created_at: '2026-09-30T12:00:00Z',
+            description: 'Transfer',
+            dva_account_number: null,
+            gateway: 'paystack',
+            id: 'transaction-1',
+            order_id: 'manual-order',
+            status: 'completed',
+            transaction_type: 'payment',
+          },
+        ],
+        error: null,
+      });
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const result = await resolveStorefrontOrderPaymentAccounts(
+      supabase,
+      [
+        {
+          id: 'manual-order',
+          payment_status: 'partially_paid',
+          recorded_by_user_id: 'staff-1',
+          total: 100,
+          amount_paid: 100,
+        },
+        { id: 'unpaid-order', payment_status: 'unpaid' },
+      ],
+      new Date('2026-09-30T13:00:00Z')
+    );
+
+    expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
+      p_order_ids: ['manual-order'],
+    });
+    expect(
+      result.transactionsByOrderId.get('manual-order')?.[0]?.created_at
+    ).toBe('2026-09-30T12:00:00Z');
+    expect(result.transactionsByOrderId.has('unpaid-order')).toBe(false);
+  });
+
+  it('loads transactions for partially paid available manual invoices', async () => {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'get_customer_order_payment_accounts') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+    const manualRow = {
+      payment_status: 'partially_paid',
+      shipping_status: 'pending',
+      recorded_by_user_id: 'staff-1',
+      total: 100,
+      subtotal: 100,
+      shipping_fee: 0,
+      tax_amount: 0,
+      discount_amount: 0,
+      amount_paid: 40,
+      currency: 'NGN',
+      order_items: [{ name: 'Device', quantity: 1, price: 100 }],
+    };
+
+    const result = await resolveStorefrontOrderPaymentAccounts(
+      supabase,
+      [
+        { id: 'partial-manual', ...manualRow },
+        // Cancelled rows are unavailable: no history to preview.
+        {
+          id: 'cancelled-manual',
+          ...manualRow,
+          shipping_status: 'cancelled',
+        },
+        // Zero-paid candidates load too: a sender-rejected settled row
+        // can hide behind a zero balance.
+        { id: 'zero-manual', ...manualRow, amount_paid: 0 },
+      ],
+      new Date('2026-09-30T13:00:00Z')
+    );
+
+    expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
+      p_order_ids: ['partial-manual', 'zero-manual'],
+    });
+    expect(result.transactionsByOrderId.has('cancelled-manual')).toBe(false);
+  });
 });

@@ -44,6 +44,7 @@ export function getPetrockCheckCatalog(
           (row) =>
             row.entryId === entry.id &&
             (!filter.brand ||
+              filter.brand === 'all' ||
               (row.brandScope ?? entry.brands).includes('all') ||
               (row.brandScope ?? entry.brands).includes(filter.brand)) &&
             (!filter.device ||

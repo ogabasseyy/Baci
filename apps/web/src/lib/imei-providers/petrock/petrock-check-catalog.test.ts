@@ -189,3 +189,12 @@ it('retains advertised Motorola serial input as unverified', () => {
     PETROCK_CHECK_MAPPINGS.find((row) => row.productId === '1991')
   ).toMatchObject({ identifiers: ['imei', 'serial'], evidence: 'unverified' });
 });
+
+it('treats the all-brand filter as unfiltered while retaining device filtering', () => {
+  expect(getPetrockCheckCatalog({ brand: 'all' })).toEqual(
+    getPetrockCheckCatalog()
+  );
+  expect(getPetrockCheckCatalog({ brand: 'all', device: 'laptop' })).toEqual(
+    getPetrockCheckCatalog({ device: 'laptop' })
+  );
+});

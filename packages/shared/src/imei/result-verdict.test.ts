@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { getImeiEffectiveVerdict } from './result-verdict';
+import { getImeiEffectiveVerdict, getImeiFinanceState } from './result-verdict';
 
 it('does not display a cached safe verdict when finance is past due', () => {
   expect(
@@ -57,4 +57,13 @@ it('treats ambiguous finance as caution without asserting a debt', () => {
     type: 'caution',
     text: 'The finance status is unclear. Verify it before buying.',
   });
+});
+
+it.each([
+  [undefined, 'unchecked'],
+  ['No outstanding balance', 'clear'],
+  ['Paid / Unpaid', 'risk'],
+  ['Pending', 'unknown'],
+] as const)('classifies finance evidence %s as %s', (value, expected) => {
+  expect(getImeiFinanceState(value)).toBe(expected);
 });

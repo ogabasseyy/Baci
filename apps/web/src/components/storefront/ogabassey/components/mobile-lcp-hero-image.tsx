@@ -1,13 +1,7 @@
-import { getImageProps } from 'next/image';
 import { Suspense } from 'react';
-import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
-import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { getOgabasseyHeroLcpImage } from './hero-lcp-image-descriptor';
 import {
-  MOBILE_HERO_IMAGE_HEIGHT,
-  MOBILE_HERO_IMAGE_SIZES,
-  MOBILE_HERO_IMAGE_WIDTH,
-  MOBILE_HERO_SOURCE_MEDIA,
-  MOBILE_HERO_IMAGE_QUALITY,
+  DESKTOP_HERO_SOURCE_MEDIA,
   TRANSPARENT_PIXEL_SRC,
 } from './hero-mobile-image-config';
 
@@ -19,12 +13,6 @@ interface MobileLcpHeroImageProps {
   src: string;
 }
 
-const WIDTH_DESCRIPTOR_PATTERN = /\s\d+w(?:,|$)/;
-
-function getResponsiveSizes(srcSetValue: string, sizesValue?: string) {
-  return WIDTH_DESCRIPTOR_PATTERN.test(srcSetValue) ? sizesValue : undefined;
-}
-
 export function MobileLcpHeroImage({
   alt,
   imageFit,
@@ -32,54 +20,55 @@ export function MobileLcpHeroImage({
   shouldPrioritizeImage,
   src,
 }: MobileLcpHeroImageProps) {
-  const {
-    props: { src: productSrc, srcSet, sizes, ...imgProps },
-  } = getImageProps({
+  const descriptor = getOgabasseyHeroLcpImage({
     alt,
-    decoding: 'sync',
-    fetchPriority: 'high',
-    height: MOBILE_HERO_IMAGE_HEIGHT,
-    loader: ogabasseyFallbackImageLoader,
-    loading: 'eager',
-    quality: MOBILE_HERO_IMAGE_QUALITY,
-    sizes: MOBILE_HERO_IMAGE_SIZES,
-    src,
-    width: MOBILE_HERO_IMAGE_WIDTH,
+    imageUrl: src,
+    inlineSrc,
   });
-  const productSrcSet = inlineSrc ?? srcSet ?? productSrc;
-  const productSizes = getResponsiveSizes(
-    productSrcSet,
-    sizes ?? MOBILE_HERO_IMAGE_SIZES
-  );
-  // Explicit `format=avif` twin of the fallback srcSet. Cloudflare Free ignores
-  // `Vary: Accept`, so per-format URLs (not one `format=auto` body) are the only
-  // way AVIF-capable browsers get AVIF while others get the decodable fallback.
-  // `null` when the source is not an OgaBassey transform URL (external image) —
-  // the plain `<source>` then serves everyone.
-  const avifSrcSet = buildOgabasseyAvifSrcSet(productSrcSet);
+  if (!descriptor) {
+    return null;
+  }
+
+  const {
+    avifSrcSet,
+    imgProps,
+    media,
+    responsiveSizes,
+    sourceSrcSet,
+    src: productSrc,
+  } = descriptor;
 
   return (
     <picture className="block h-full w-full">
-      <Suspense fallback={null}>
-        {avifSrcSet ? (
+      {avifSrcSet ? (
+        <Suspense fallback={null}>
           <source
-            media={MOBILE_HERO_SOURCE_MEDIA}
-            sizes={productSizes}
+            media={media}
+            sizes={responsiveSizes}
             srcSet={avifSrcSet}
             type="image/avif"
           />
-        ) : null}
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
-          media={MOBILE_HERO_SOURCE_MEDIA}
-          sizes={productSizes}
-          srcSet={productSrcSet}
+          media={media}
+          sizes={responsiveSizes}
+          srcSet={sourceSrcSet}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <source
+          media={DESKTOP_HERO_SOURCE_MEDIA}
+          srcSet={TRANSPARENT_PIXEL_SRC}
         />
       </Suspense>
       <img
         {...imgProps}
         alt={alt}
         fetchPriority={shouldPrioritizeImage ? 'high' : undefined}
-        src={TRANSPARENT_PIXEL_SRC}
+        sizes={responsiveSizes}
+        src={productSrc}
         className={`h-full w-full ${
           imageFit === 'contain' ? 'object-contain object-right' : 'object-cover'
         }`}

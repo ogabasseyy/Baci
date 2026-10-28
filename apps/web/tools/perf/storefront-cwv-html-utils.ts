@@ -151,22 +151,28 @@ export function buildStorefrontCssGuardInput(
   route: StorefrontCwvGuardRoute;
   stylesheetCount: number;
 } {
+  const needsListingLayout = route === 'category' || route === 'brandHub';
   return {
-    brandAuthoritySource: readFileSync(
-      path.join(
-        webSrcDir,
-        'app/(storefront)/[slug]/(catalog)/(listing)/[category]/brands/[brandSlug]/brand-authority-page-content.tsx'
-      ),
-      'utf8'
-    ),
+    brandAuthoritySource:
+      route === 'brandHub'
+        ? readFileSync(
+            path.join(
+              webSrcDir,
+              'app/(storefront)/[slug]/(catalog)/(listing)/[category]/brands/[brandSlug]/brand-authority-page-content.tsx'
+            ),
+            'utf8'
+          )
+        : '',
     criticalCss,
-    listingLayoutSource: readFileSync(
-      path.join(
-        webSrcDir,
-        'app/(storefront)/[slug]/(catalog)/(listing)/layout.tsx'
-      ),
-      'utf8'
-    ),
+    listingLayoutSource: needsListingLayout
+      ? readFileSync(
+          path.join(
+            webSrcDir,
+            'app/(storefront)/[slug]/(catalog)/(listing)/layout.tsx'
+          ),
+          'utf8'
+        )
+      : '',
     route,
     stylesheetCount: countStorefrontRouteCssImports(route, webSrcDir),
   };

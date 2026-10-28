@@ -1,42 +1,22 @@
-import { ogabasseyHomeHeroResourceHintProjection } from '@/lib/ogabassey-home-hero-resource-hint-projection';
+import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 
 /**
- * Scanner-visible twin of the react-dom `preload()` in
- * `preloadOgabasseyHomeHeroResources`.
+ * Single preload owner for the home hero's slide-0 LCP image.
  *
- * The `preload()` hint travels as a flight `:HL` row, so the browser can only
- * act on it after client JS processes the flight stream — while the hero
- * `<picture>` itself streams much later in the document. A literal `<link>`
- * is discoverable by the preload scanner during HTML parse instead. React
- * hoists it to the document head, so it never precedes the critical-shell
- * host node in the body (see the PPR resume note in
- * `ogabassey-pdp-product-resource-hints.ts`).
- *
- * Attributes come from the shared projection, so this can never diverge from
- * the flight hint or the rendered `<picture>` (same builders, same tiers).
- * Renders nothing for non-CDN/blank sources — fail-open like `preload()`.
+ * Delegates directly to `preloadOgabasseyHomeHeroResources(src)` (`react-dom`
+ * `preload()`) instead of rendering a literal `<link rel="preload">` JSX node:
+ * in React 19 + Next.js App Router, a Server Component `<link rel="preload">`
+ * both triggers an automatic `:HL` `preload()` hint AND hoists a literal
+ * `<link>` into `<head>`, producing two duplicate `<link rel="preload"
+ * as="image">` tags in the SSR HTML document. Calling `preload()` once emits
+ * a single scanner-visible `<link rel="preload" as="image">` at the top of
+ * `<head>` with attributes derived from `getOgabasseyHeroLcpImage`.
  */
 export function OgabasseyHomeHeroPreloadLink({
   src,
 }: {
   src: string | null | undefined;
 }) {
-  const projection = ogabasseyHomeHeroResourceHintProjection.build(src);
-  if (!projection) {
-    return null;
-  }
-
-  return (
-    <link
-      rel="preload"
-      as="image"
-      href={projection.href}
-      imageSrcSet={projection.imageSrcSet}
-      imageSizes={projection.imageSizes}
-      media={projection.media}
-      fetchPriority="high"
-      {...(projection.type ? { type: projection.type } : {})}
-      data-ogabassey-home-hero-preload="true"
-    />
-  );
+  preloadOgabasseyHomeHeroResources(src);
+  return null;
 }

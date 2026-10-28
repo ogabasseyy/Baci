@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
 import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
-import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import {
@@ -70,7 +69,6 @@ function renderOgabasseyStaticHomePageContentFromShell({
           <div data-ogabassey-home-lcp-shell="true">
             <OgabasseyHomeCriticalShell />
           </div>
-          <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
           <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
             <OgabasseyHomePageContent
               omitDocumentHeading

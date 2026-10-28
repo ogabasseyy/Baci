@@ -4,7 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/image', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/image')>();
+  return { ...actual };
+});
+
 import { OgabasseyHomeCriticalShell } from '@/app/(storefront)/ogabassey/ogabassey-home-critical-shell';
 import { OgabasseyHomeHeroPreloadLink } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-preload-link';
 import { STOREFRONT_LCP_COPY_CSS } from '@/app/(storefront)/storefront-lcp-copy-css';
@@ -83,6 +89,10 @@ describe('evaluate-storefront-cwv-guards', () => {
       '<source type="image/avif" srcset="https://untrusted.example.com/hero.avif 384w"/>',
       '<img src="https://cdn.ogabassey.com/hero.jpg" fetchpriority="high"/>',
       '</picture>',
+      '<picture>',
+      '<source type="image/avif" srcset="https://below-fold.example.com/card.avif 384w"/>',
+      '<img src="https://below-fold.example.com/card.jpg" loading="lazy"/>',
+      '</picture>',
       '</body></html>',
     ].join('');
 
@@ -90,6 +100,9 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(result.passed).toBe(false);
     expect(result.failures).toContain(
       'Disallowed hero image origin in URL: https://untrusted.example.com/hero.avif'
+    );
+    expect(result.failures).not.toContain(
+      'Disallowed hero image origin in URL: https://below-fold.example.com/card.avif'
     );
   });
 

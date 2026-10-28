@@ -69,7 +69,9 @@ export function evaluateHomepageHtmlGuard(
 
   const heroPictures = [
     ...html.matchAll(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi),
-  ].map((m) => m[0]);
+  ]
+    .map((m) => m[0])
+    .filter((p) => /\bfetchpriority=["']high["']/i.test(p));
   const heroImgTags = [...html.matchAll(/<img\b[^>]*>/gi)]
     .map((m) => m[0])
     .filter((t) => /\bfetchpriority=["']high["']/i.test(t));
@@ -83,10 +85,8 @@ export function evaluateHomepageHtmlGuard(
     failures.push('Hero <img> uses data:image/gif placeholder src');
   }
 
-  const heroSourceTags = [...heroPictures, ...hiddenSections].flatMap((b) =>
-    [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0])
-  );
-  const heroSourceSrcSets = heroSourceTags
+  const heroSourceSrcSets = [...heroPictures, ...hiddenSections]
+    .flatMap((b) => [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0]))
     .map((t) => extractAttribute(t, 'srcset'))
     .filter((s): s is string => Boolean(s));
   const heroUrls = [
@@ -114,21 +114,25 @@ export function evaluateHomepageHtmlGuard(
   }
 
   if (budget.requirePreloadMatchesImgSrcSet) {
-    const pSet = preloadTags[0]
-      ? extractAttribute(preloadTags[0], 'imageSrcSet')
-      : null;
-    const iSet = heroImgTags[0]
-      ? extractAttribute(heroImgTags[0], 'srcset')
-      : null;
+    const pTag = preloadTags[0] ?? '';
+    const iTag = heroImgTags[0] ?? '';
+    const pSet = extractAttribute(pTag, 'imageSrcSet');
+    const pHref = extractAttribute(pTag, 'href');
+    const iSet = extractAttribute(iTag, 'srcset');
+    const iSrc = extractAttribute(iTag, 'src');
+    const matchesSrcSet =
+      Boolean(pSet) && (pSet === iSet || heroSourceSrcSets.includes(pSet));
+    const matchesHref =
+      !pSet &&
+      !iSet &&
+      heroSourceSrcSets.length === 0 &&
+      Boolean(pHref) &&
+      pHref === iSrc;
     if (headImagePreloads !== 1) {
       failures.push(
         `Expected exactly 1 head image preload, found ${headImagePreloads}`
       );
-    } else if (
-      !pSet ||
-      !iSet ||
-      (pSet !== iSet && !heroSourceSrcSets.includes(pSet))
-    ) {
+    } else if (!matchesSrcSet && !matchesHref) {
       failures.push('Head preload imageSrcSet does not match hero img srcset');
     }
   }

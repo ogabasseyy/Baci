@@ -46,12 +46,20 @@ vi.mock('next/image', () => ({
     const imageSrc = String(src);
     const resolvedSrc =
       typeof loader === 'function'
-        ? loader({ src: imageSrc, width: Number(width), quality: Number(quality) })
+        ? loader({
+            src: imageSrc,
+            width: Number(width),
+            quality: Number(quality),
+          })
         : imageSrc;
+    const candidate = (w: number) =>
+      typeof loader === 'function'
+        ? `${loader({ src: imageSrc, width: w, quality: Number(quality) })} ${w}w`
+        : `${imageSrc}?w=${w} ${w}w`;
     return {
       props: {
         src: resolvedSrc,
-        srcSet: `${resolvedSrc} ${String(width)}w`,
+        srcSet: `${candidate(Number(width))}, ${candidate(1920)}`,
         sizes,
         alt,
         loading,

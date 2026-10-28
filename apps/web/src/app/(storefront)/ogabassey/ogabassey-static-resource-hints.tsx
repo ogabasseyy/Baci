@@ -1,13 +1,13 @@
-'use client';
-
-import * as ReactDOM from 'react-dom';
+import ReactDOM from 'react-dom';
 import { OGABASSEY_CDN_ORIGIN } from '@/components/storefront/ogabassey/config/storefront-origins';
 
+/**
+ * Warms DNS for the Ogabassey media CDN during the static shell flush.
+ * The HTTP `Link` response header already preconnects to the CDN origin, so
+ * emitting a late `ReactDOM.preconnect` here would only trigger an unused
+ * preconnect warning in Lighthouse.
+ */
 export function OgabasseyStaticResourceHints() {
-  // Next's Metadata API does not model resource hints; current Next docs
-  // require these ReactDOM hint calls from a Client Component so React can
-  // safely insert them into the document head during the initial render.
   ReactDOM.prefetchDNS(OGABASSEY_CDN_ORIGIN);
-  ReactDOM.preconnect(OGABASSEY_CDN_ORIGIN);
   return null;
 }

@@ -4,7 +4,13 @@ import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import { asRoute } from '@/lib/routes';
-import { TRANSPARENT_PIXEL_SRC } from './hero-mobile-image-config';
+import { capSrcSetWidthRungs } from './hero-lcp-image-descriptor';
+import {
+  DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+  DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH,
+  DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH,
+  TRANSPARENT_PIXEL_SRC,
+} from './hero-mobile-image-config';
 import type { LaunchProductSlide } from './LaunchCarousel';
 
 interface HeroDesktopGridProps {
@@ -50,7 +56,12 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
     width: BIG_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const fallbackSrcSet =
+    capSrcSetWidthRungs(
+      srcSet,
+      DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+      DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH
+    ) ?? imgSrc;
   // AVIF twin (per-format URL) so AVIF-capable browsers keep AVIF: CF Free
   // ignores `Vary: Accept`, so one `format=auto` body can't serve both tiers.
   // `null` for external images — the plain `<source>` then serves everyone.
@@ -58,15 +69,17 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
-      <Suspense fallback={null}>
-        {avifSrcSet ? (
+      {avifSrcSet ? (
+        <Suspense fallback={null}>
           <source
             media={BIG_IMAGE_SOURCE_MEDIA}
             sizes={sizes ?? BIG_IMAGE_SIZES}
             srcSet={avifSrcSet}
             type="image/avif"
           />
-        ) : null}
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={BIG_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? BIG_IMAGE_SIZES}
@@ -148,24 +161,29 @@ function HeroSideImage({ alt, src }: { alt: string; src: string }) {
     width: SIDE_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const fallbackSrcSet =
+    capSrcSetWidthRungs(srcSet, DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH) ?? imgSrc;
   const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
       {avifSrcSet ? (
+        <Suspense fallback={null}>
+          <source
+            media={SIDE_IMAGE_SOURCE_MEDIA}
+            sizes={sizes ?? SIDE_IMAGE_SIZES}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={SIDE_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? SIDE_IMAGE_SIZES}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={fallbackSrcSet}
         />
-      ) : null}
-      <source
-        media={SIDE_IMAGE_SOURCE_MEDIA}
-        sizes={sizes ?? SIDE_IMAGE_SIZES}
-        srcSet={fallbackSrcSet}
-      />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}

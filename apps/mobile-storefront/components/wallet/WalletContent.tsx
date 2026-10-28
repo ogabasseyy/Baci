@@ -15,7 +15,10 @@ import { WalletSavingsCarousel } from './WalletSavingsCarousel';
 import { WalletSavingsDeviceSwapModal } from './WalletSavingsDeviceSwapModal';
 import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
 import { WalletSavingsVariantResolutionModal } from './WalletSavingsVariantResolutionModal';
-import { WalletTransactionHistory } from './WalletTransactionHistory';
+import {
+  type WalletTransaction,
+  WalletTransactionHistory,
+} from './WalletTransactionHistory';
 import type { WalletContentProps } from './wallet-content.types';
 
 export type { WalletContentProps } from './wallet-content.types';
@@ -73,7 +76,10 @@ export function WalletContent(props: WalletContentProps) {
     customerId,
     refetch: onRefresh,
     returnTo: fundReturnTo,
-    transactions,
+    transactions: transactions.filter(
+      (transaction): transaction is WalletTransaction & { amount: number } =>
+        transaction.amount !== null
+    ),
   });
   const [showSavingsDeviceSwap, setShowSavingsDeviceSwap] = useState(false);
   const [showSavingsVariantResolution, setShowSavingsVariantResolution] =

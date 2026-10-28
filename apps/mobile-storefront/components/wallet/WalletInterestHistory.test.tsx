@@ -65,6 +65,32 @@ it('labels a newly recorded reversal date as an observation', () => {
   ).toBeOnTheScreen();
 });
 
+it('shows an oversized interest row with an explicitly unavailable amount', () => {
+  render(
+    <WalletTransactionHistory
+      colors={Colors.dark}
+      transactions={[
+        {
+          id: 'oversized-interest',
+          goal_id: 'goal-2',
+          amount: null,
+          type: 'credit',
+          description: 'Savings interest credited',
+          source_type: 'savings_interest',
+          created_at: '2026-10-13T08:00:00Z',
+        },
+      ]}
+    />
+  );
+  expect(screen.getByText('Amount unavailable')).toBeTruthy();
+  expect(
+    screen.getByRole('text', {
+      name: /Credit\. Savings interest credited\. Amount unavailable\./,
+    })
+  ).toBeOnTheScreen();
+  expect(screen.queryByText('₦0')).toBeNull();
+});
+
 it('labels historical reversal timestamps as unavailable', () => {
   render(
     <WalletTransactionHistory

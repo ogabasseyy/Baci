@@ -1,6 +1,5 @@
 import 'server-only';
 import { Client } from 'pg';
-import { z } from 'zod';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
@@ -53,31 +52,10 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       );
     else if (statement.includes('save_savings_reconciliation_checkpoint')) {
       const command: unknown = JSON.parse(parameters[2]);
-      const parsed = z
-        .strictObject({
-          operationId:
-            piggyvestPrimarySavingsTransferSchemas.request.shape.operationId,
-          claimToken: z.string().uuid(),
-          stage: z.enum(['date-window', 'full']).nullable(),
-          fingerprint: z
-            .string()
-            .regex(/^[0-9a-f]{64}$/)
-            .nullable(),
-          cursor: z.string().min(1).max(512).nullable(),
-          pageDigest: z
-            .string()
-            .regex(/^[0-9a-f]{64}$/)
-            .nullable(),
-        })
-        .parse(command);
+      const parsed = checkpointSchemas.saveCommand.parse(command);
       checkpointSchemas.state.parse(parsed);
     } else if (statement.includes('finish_savings_reconciliation_checkpoint'))
-      z.strictObject({
-        operationId:
-          piggyvestPrimarySavingsTransferSchemas.request.shape.operationId,
-        claimToken: z.string().uuid(),
-        reset: z.boolean(),
-      }).parse(JSON.parse(parameters[2]));
+      checkpointSchemas.finishCommand.parse(JSON.parse(parameters[2]));
     else JSON.parse(parameters[2]);
     const client = new Client({
       host: config.database.host,

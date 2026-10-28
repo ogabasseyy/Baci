@@ -51,6 +51,31 @@ it('loads earnings and history from one validated snapshot RPC', async () => {
   );
 });
 
+it('preserves oversized interest history rows with an unavailable amount', async () => {
+  mockRpc.mockResolvedValueOnce({
+    data: {
+      credited_interest_kobo: 733,
+      goal_interest_kobo: [],
+      interest_history: [
+        {
+          id: 'interest:oversized',
+          goal_id: '50000000-0000-4000-8000-000000000005',
+          amount: Number.MAX_SAFE_INTEGER,
+          type: 'credit',
+          description: 'Savings interest credited',
+          source_type: 'savings_interest',
+          created_at: '2026-10-13T08:00:00Z',
+        },
+      ],
+    },
+    error: null,
+  });
+  await expect(fetchWalletSavingsInterest(merchantId)).resolves.toMatchObject({
+    status: 'available',
+    transactions: [{ id: 'interest:oversized', amount: null }],
+  });
+});
+
 it('preserves validated history while marking unsafe earnings unavailable', async () => {
   const history = [
     {

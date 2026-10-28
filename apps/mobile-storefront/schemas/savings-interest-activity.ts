@@ -3,11 +3,14 @@ import { z } from 'zod';
 export const SavingsInterestActivitySchema = z.strictObject({
   id: z.string().min(1),
   goal_id: z.uuid(),
+  // Preserve the activity row when its amount cannot be represented safely in
+  // the wallet's currency type. The UI renders null as explicitly unavailable.
   amount: z
     .number()
     .finite()
-    .min(-Number.MAX_SAFE_INTEGER / 100)
-    .max(Number.MAX_SAFE_INTEGER / 100),
+    .transform((amount) =>
+      Math.abs(amount) <= Number.MAX_SAFE_INTEGER / 100 ? amount : null
+    ),
   type: z.enum(['credit', 'adjustment']),
   description: z.string(),
   date_basis: z.enum(['ledger', 'received', 'observed', 'unknown']).optional(),

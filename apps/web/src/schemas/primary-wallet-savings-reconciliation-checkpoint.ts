@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { piggyvestPrimarySavingsTransferSchemas } from './piggyvest-primary-savings-transfer';
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const stateShape = z.object({
@@ -41,4 +42,16 @@ export const primaryWalletSavingsReconciliationCheckpointSchemas = {
     }),
   ]),
   saved: z.boolean(),
+  saveCommand: z.strictObject({
+    operationId:
+      piggyvestPrimarySavingsTransferSchemas.request.shape.operationId,
+    claimToken: z.string().uuid(),
+    ...stateShape.shape,
+  }),
+  finishCommand: z.strictObject({
+    operationId:
+      piggyvestPrimarySavingsTransferSchemas.request.shape.operationId,
+    claimToken: z.string().uuid(),
+    reset: z.boolean(),
+  }),
 };

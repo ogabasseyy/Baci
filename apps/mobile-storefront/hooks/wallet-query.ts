@@ -54,7 +54,7 @@ export interface Transaction {
     | 'adjustment'
     | 'expiry'
     | 'refund';
-  amount: number;
+  amount: number | null;
   description: string;
   created_at: string | null;
   date_basis?: 'ledger' | 'received' | 'observed' | 'unknown';

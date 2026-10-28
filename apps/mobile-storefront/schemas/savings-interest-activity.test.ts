@@ -29,6 +29,14 @@ it('accepts an explicitly unknown timestamp for historical reversals', () => {
     }).created_at
   ).toBeNull();
 });
+it('preserves an activity with an amount outside safe currency precision as unavailable', () => {
+  const parsed = SavingsInterestActivitySchema.parse({
+    ...row,
+    amount: Number.MAX_SAFE_INTEGER,
+  });
+  expect(parsed.id).toBe(row.id);
+  expect(parsed.amount).toBeNull();
+});
 it.each([
   { goal_id: 'wrong' },
   { amount: Number.POSITIVE_INFINITY },

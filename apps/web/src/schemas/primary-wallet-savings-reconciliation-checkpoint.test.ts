@@ -63,4 +63,38 @@ describe('primary savings reconciliation checkpoint schema', () => {
         .success
     ).toBe(false);
   });
+
+  it('validates strict save and finish commands', () => {
+    const command = {
+      operationId: '00000000-0000-4000-8000-000000000001',
+      claimToken: '00000000-0000-4000-8000-000000000000',
+      stage: 'full',
+      fingerprint: 'a'.repeat(64),
+      cursor: 'cursor',
+      pageDigest: 'b'.repeat(64),
+    };
+    expect(schemas.saveCommand.parse(command)).toEqual(command);
+    expect(
+      schemas.saveCommand.safeParse({ ...command, extra: true }).success
+    ).toBe(false);
+    expect(
+      schemas.finishCommand.parse({
+        operationId: command.operationId,
+        claimToken: command.claimToken,
+        reset: false,
+      })
+    ).toEqual({
+      operationId: command.operationId,
+      claimToken: command.claimToken,
+      reset: false,
+    });
+    expect(
+      schemas.finishCommand.safeParse({
+        operationId: command.operationId,
+        claimToken: command.claimToken,
+        reset: false,
+        extra: true,
+      }).success
+    ).toBe(false);
+  });
 });

@@ -120,6 +120,20 @@ function buildPageSpeedSummary(results: PageSpeedAuditResult[]): string {
     }
   }
 
+  const resultsWithLcpDiag = results.filter((r) =>
+    Boolean(r.lcpDiagnostics?.lcpElement)
+  );
+  if (resultsWithLcpDiag.length > 0) {
+    lines.push('', '### LCP Diagnostics');
+    for (const result of resultsWithLcpDiag) {
+      const d = result.lcpDiagnostics;
+      if (!d) continue;
+      lines.push(
+        `- ${result.label} (${result.strategy}): element \`${d.lcpElement}\`, origin \`${d.lcpResourceOrigin ?? 'text'}\`, pre-LCP ${d.preLcpRequestCount ?? 'n/a'} reqs (${d.preLcpBytes ?? 'n/a'} B)`
+      );
+    }
+  }
+
   return `${lines.join('\n')}\n`;
 }
 

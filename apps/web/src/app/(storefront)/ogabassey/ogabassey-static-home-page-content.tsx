@@ -1,8 +1,7 @@
 import { Suspense } from 'react';
-import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
+import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
-import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import {
   type OgabasseyHomeHeroShellResult,
   resolveOgabasseyHomeHeroShell,
@@ -47,17 +46,10 @@ function renderOgabasseyStaticHomePageContentFromShell({
   // upstream committed slot already emits a scanner-visible <link> for the
   // live slide-0 URL, so any downstream hint for that URL would only
   // duplicate it. Emit downstream hints solely in the standalone
-  // composition, where this component owns the hero; there the flight hint
-  // additionally stays silent while live slide-0 still matches the
-  // committed constant. Origin preconnect stays covered by
-  // OgabasseyStaticResourceHints either way.
-  if (
-    committedMobileLcpUrl &&
-    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL &&
-    !omitCommittedHero
-  ) {
-    preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
-  }
+  // composition (`!omitCommittedHero`), where this component owns the hero
+  // via `OgabasseyHomeHeroPreloadLink` (which calls `preload()` inside a
+  // synchronous component render tick and returns `null`). Origin preconnect
+  // stays covered by OgabasseyStaticResourceHints either way.
   const paintCommittedHero =
     Boolean(committedMobileLcpUrl) && !omitCommittedHero;
 
@@ -66,6 +58,7 @@ function renderOgabasseyStaticHomePageContentFromShell({
       {!omitCommittedHero && <OgabasseyHomeStaticShellHead />}
       {paintCommittedHero && committedMobileLcpUrl ? (
         <>
+          <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
           <div data-ogabassey-home-lcp-shell="true">
             <OgabasseyHomeCriticalShell />
           </div>

@@ -167,7 +167,7 @@ export function countStorefrontRouteCssImports(
     const source = readFileSync(filePath, 'utf8');
     count += countCssImportsInSource(source);
     for (const m of source.matchAll(
-      /^\s*import\s+(?!type\b)(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]/gm
+      /^\s*(?:import|export)\s+(?!type\b)(?:[^'"]+?\s+from\s+)?['"]([^'"]+)['"]/gm
     )) {
       const child = resolveLocalModulePath(m[1] ?? '', filePath, webSrcDir);
       if (child) visitFile(child);

@@ -85,8 +85,14 @@ export function evaluateHomepageHtmlGuard(
     failures.push('Hero <img> uses data:image/gif placeholder src');
   }
 
-  const heroSourceSrcSets = [...heroPictures, ...hiddenSections]
-    .flatMap((b) => [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0]))
+  const heroSourceTags = [...heroPictures, ...hiddenSections].flatMap((b) =>
+    [...b.matchAll(/<source\b[^>]*>/gi)].map((m) => m[0])
+  );
+  const heroSourceSrcSets = heroSourceTags
+    .map((t) => extractAttribute(t, 'srcset'))
+    .filter((s): s is string => Boolean(s));
+  const mobileHeroSourceSrcSets = heroSourceTags
+    .filter((t) => extractAttribute(t, 'media') === '(max-width: 767px)')
     .map((t) => extractAttribute(t, 'srcset'))
     .filter((s): s is string => Boolean(s));
   const heroUrls = [
@@ -119,7 +125,8 @@ export function evaluateHomepageHtmlGuard(
     const pSet = extractAttribute(pTag, 'imageSrcSet');
     const iSet = extractAttribute(iTag, 'srcset');
     const matchesSrcSet =
-      Boolean(pSet) && (pSet === iSet || heroSourceSrcSets.includes(pSet));
+      Boolean(pSet) &&
+      (pSet === iSet || mobileHeroSourceSrcSets.includes(pSet));
     if (headImagePreloads !== 1) {
       failures.push(
         `Expected exactly 1 head image preload, found ${headImagePreloads}`

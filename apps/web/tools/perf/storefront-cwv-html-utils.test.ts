@@ -114,10 +114,7 @@ describe('storefront-cwv-html-utils', () => {
       );
       writeFileSync(
         path.join(listingDir, 'index.ts'),
-        [
-          "import { GrandChildStyles } from './grandchild-styles';",
-          'export function ChildStyles() { return GrandChildStyles(); }',
-        ].join('\n'),
+        "export { GrandChildStyles as ChildStyles } from './grandchild-styles';",
         'utf8'
       );
       writeFileSync(

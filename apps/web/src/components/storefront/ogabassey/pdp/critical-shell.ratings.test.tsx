@@ -16,7 +16,6 @@ describe('OgabasseyPdpCriticalShell ratings and order', () => {
       price: 5_800_000,
       rating: 4.5,
       reviewCount: 10,
-      visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
     });
 
     const summary = container.querySelector('[data-ogabassey-pdp-summary]');
@@ -45,10 +44,7 @@ describe('OgabasseyPdpCriticalShell ratings and order', () => {
     const { container } = render(
       <OgabasseyPdpCriticalShell
         basePath=""
-        product={{
-          ...defaultProduct,
-          visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
-        }}
+        product={defaultProduct}
         summaryCommerce={
           <div data-testid="summary-commerce">Commerce Options</div>
         }

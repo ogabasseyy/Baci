@@ -12,7 +12,6 @@ interface OgabasseyPdpCriticalVariantSelectorsProps {
   renderableVariantAxes: string[];
   selectedAttributes: Record<string, string>;
   variantAxisOptions?: Record<string, string[]>;
-  variantCount: number;
   variants: CartProduct['variants'];
 }
 

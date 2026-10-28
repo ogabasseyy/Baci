@@ -149,8 +149,8 @@ function HeroBigCard({
 }
 
 
-/** Desktop-only side-card image. The fallback `<img>` is a transparent pixel so
- * hidden desktop cards do not add mobile hero image requests. */
+/** Desktop-only side-card image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel so hidden desktop cards do not add mobile hero image requests. */
 function HeroSideImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -188,10 +188,13 @@ function HeroSideImage({ alt, src }: { alt: string; src: string }) {
           srcSet={fallbackSrcSet}
         />
       </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={imgSrc}
         className="h-full w-full object-contain p-2 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>

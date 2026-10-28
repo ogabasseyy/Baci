@@ -229,9 +229,19 @@ describe('HeroDesktopGrid', () => {
       expect(pictureSources).toHaveLength(2);
       expect(pictureSources[0]).toHaveAttribute('type', 'image/avif');
       expect(pictureSources[1]).not.toHaveAttribute('type');
+
+      const mobileMuteSource = picture.querySelector(
+        'source[media="(max-width: 767px)"]'
+      );
+      expect(mobileMuteSource).toHaveAttribute(
+        'srcset',
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+      );
     }
 
-    const sideSources = pictures[1]?.querySelectorAll('source');
+    const sideSources = pictures[1]?.querySelectorAll(
+      'source[media="(min-width: 768px)"]'
+    );
     expect(sideSources?.[0]?.getAttribute('srcset')).toBe(
       'https://cdn.ogabassey.com/image/width=320,quality=70,format=avif/core-assets/products/product-2.avif 320w'
     );
@@ -242,7 +252,7 @@ describe('HeroDesktopGrid', () => {
     const images = Array.from(container.querySelectorAll('picture img'));
     expect(images[1]).toHaveAttribute(
       'src',
-      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+      'https://cdn.ogabassey.com/image/width=320,quality=70,format=jpeg/core-assets/products/product-2.avif'
     );
     expect(images[1]).toHaveAttribute('loading', 'lazy');
   });

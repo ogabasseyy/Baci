@@ -54,6 +54,8 @@ jobs:
       # files. The contract checker enforces this ordering.
       - name: Test capability register binding
         uses: ./.github/actions/capability-gate
+      - name: Test Android release SDK alignment
+        run: node --test .github/scripts/android-release-sdk.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test pnpm store action input hardening

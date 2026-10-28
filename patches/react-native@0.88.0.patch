@@ -108,7 +108,7 @@ diff --git a/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil
      val attributes = intArrayOf(android.R.attr.enforceNavigationBarContrast)
      val typedArray = context.theme.obtainStyledAttributes(attributes)
  
-@@ -194,18 +156,12 @@
+@@ -194,18 +156,16 @@
      val isAppearanceLightNavigationBars =
          Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isDarkMode
  
@@ -117,15 +117,13 @@ diff --git a/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil
      insetsController.isAppearanceLightNavigationBars = isAppearanceLightNavigationBars
    }
  
--  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
      attributes.layoutInDisplayCutoutMode =
--        when {
--          Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
--              WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
--          else -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
--        }
-+        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+         when {
+           Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+               WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+           else -> WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+         }
    }
  }
  

@@ -65,13 +65,13 @@ describe('mobile admin Android edge-to-edge dependency guard', () => {
     expect(source).toContain('override fun setStyle');
   });
 
-  it('removes deprecated system-bar colors and cutout modes from WindowUtil', () => {
+  it('preserves legacy cutout support without deprecated system-bar colors', () => {
     const windowUtil = readReactNativeSource('views/view/WindowUtil.kt');
 
+    expect(windowUtil).toMatch(/VERSION_CODES\.P[\s\S]*LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES/);
     for (const deprecatedToken of [
       'statusBarColor',
       'navigationBarColor',
-      'LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES',
       'LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT',
     ]) {
       expect(windowUtil).not.toContain(deprecatedToken);

@@ -177,7 +177,7 @@ function removeKotlinGradlePlugin(content, description) {
   }
   const result = assertReplaceOrThrow(
     content,
-    /\s*classpath\((?:['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]|kotlinVersion\s*\?\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:\$kotlinVersion['"]\s*:\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"])\)\s*\n?/g,
+    /\s*classpath\(\s*(?:['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"]|kotlinVersion\s*\?\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin:\$kotlinVersion['"]\s*:\s*['"]org\.jetbrains\.kotlin:kotlin-gradle-plugin['"])\s*\)\s*\n?/g,
     '\n',
     description
   );

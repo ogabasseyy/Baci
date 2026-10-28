@@ -33,5 +33,7 @@ for (const [workflow, config, properties] of [
     const packages = packagesLine.trim().split(/\s+/);
     assert.ok(packages.includes(`platforms;android-${compile}`));
     assert.ok(packages.includes(`build-tools;${tools}`));
+    assert.deepEqual(packages.filter((value) => value.startsWith("platforms;")), [`platforms;android-${compile}`]);
+    assert.deepEqual(packages.filter((value) => value.startsWith("build-tools;")), [`build-tools;${tools}`]);
   });
 }

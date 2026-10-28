@@ -206,3 +206,18 @@ test('Kotlin classpath cleanup retains a version declaration used elsewhere', ()
   assert.match(result, /println kotlinVersion/);
   assert.doesNotMatch(result, /kotlin-gradle-plugin/);
 });
+
+
+test('removeKotlinGradlePlugin tolerates a wrapped conditional classpath', () => {
+  const { removeKotlinGradlePlugin } = require('./expoAndroidGradleFixes.js');
+  const source = `dependencies {
+  classpath(
+    kotlinVersion ? "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+      : "org.jetbrains.kotlin:kotlin-gradle-plugin"
+  )
+  classpath('com.android.tools.build:gradle')
+}`;
+  const result = removeKotlinGradlePlugin(source, 'wrapped Kotlin classpath');
+  assert.doesNotMatch(result, /org\.jetbrains\.kotlin:kotlin-gradle-plugin/);
+  assert.match(result, /com\.android\.tools\.build:gradle/);
+});

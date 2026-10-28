@@ -22,3 +22,16 @@ test('clean prebuild writes the official checksum alongside the wrapper version'
   const properties = ensureGradleWrapperVersion('distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-bin.zip\n');
   assert.ok(properties.includes(`distributionSha256Sum=${checksum}`));
 });
+
+for (const [app, workflow] of [
+  ['mobile-admin', 'android-release.yml'],
+  ['mobile-storefront', 'android-storefront-release.yml'],
+]) {
+  test(`${workflow} clears the wrapper version's DSL cache`, () => {
+    const properties = readFileSync(new URL(`../../apps/${app}/android/gradle/wrapper/gradle-wrapper.properties`, import.meta.url), 'utf8');
+    const version = properties.match(/gradle-([\d.]+)-bin\.zip/)?.[1];
+    assert.ok(version, 'missing Gradle wrapper version');
+    const release = readFileSync(new URL(`../workflows/${workflow}`, import.meta.url), 'utf8');
+    assert.ok(release.includes(`/caches/${version}"`));
+  });
+}

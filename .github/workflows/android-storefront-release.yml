@@ -123,7 +123,7 @@ jobs:
 
       - name: Reset Gradle 9 compiled DSL caches
         run: |
-          GRADLE_CACHE_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/9.3.1"
+          GRADLE_CACHE_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/9.4.1"
           rm -rf "$GRADLE_CACHE_HOME/groovy-dsl" \
                  "$GRADLE_CACHE_HOME/kotlin-dsl" \
                  "$GRADLE_CACHE_HOME/dependencies-accessors"

@@ -100,6 +100,10 @@ export interface MerchantData {
   // Analytics & Tracking Pixels
   facebook_pixel_id?: string;
   facebook_capi_token?: string;
+  facebook_capi_token_configured?: boolean;
+  tiktok_access_token_configured?: boolean;
+  snapchat_capi_token_configured?: boolean;
+  ga4_api_secret_configured?: boolean;
   google_analytics_id?: string;
   ga4_api_secret?: string;
   tiktok_pixel_id?: string;

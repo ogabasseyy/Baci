@@ -29,7 +29,12 @@ it.each([
   );
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: allowed })
+    JSON.stringify({
+      necessary: true,
+      analytics: allowed,
+      marketing: false,
+      functional: false,
+    })
   );
   const response = await POST(
     createOrderRequest({ ad_tracking: getAdTrackingData() })
@@ -38,7 +43,11 @@ it.each([
   const write = getLatestRpc().mock.calls.find(
     ([name]) => name === 'create_storefront_order'
   )?.[1];
-  expect(write?.p_ad_tracking).toMatchObject({ chatgptConsent: allowed });
+  expect(write?.p_ad_tracking).toMatchObject({
+    chatgptConsent: allowed,
+    analyticsConsent: allowed,
+    marketingConsent: false,
+  });
   if (allowed)
     expect(write?.p_ad_tracking).toMatchObject({
       oppref: 'checkout-click',

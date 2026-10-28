@@ -42,6 +42,7 @@ describe('conversionEventPayload', () => {
         event_source: 'web',
         event_time: 1_784_937_600,
         targets: ['facebook'],
+        analytics_consent: true,
         user_data: {},
       })
     ).toEqual({

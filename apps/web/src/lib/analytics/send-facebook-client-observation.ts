@@ -23,6 +23,14 @@ export async function sendFacebookClientObservation({
   baseUrl,
   ...input
 }: FacebookObservation): Promise<FacebookObservationResult> {
+  if (input.event === 'Purchase') {
+    return {
+      platform: 'Facebook',
+      success: false,
+      sent: false,
+      error: 'untrusted_purchase',
+    };
+  }
   if (!isAnalyticsAllowed()) {
     return {
       platform: 'Facebook',

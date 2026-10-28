@@ -6,7 +6,6 @@ import {
   type RawDbProduct,
 } from '@/lib/normalize-product';
 import { STOREFRONT_PRODUCTS_SELECT } from '@/lib/storefront-products-select';
-import { createClient } from '@/lib/supabase/client';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,6 +53,8 @@ export function useSearchComparisonFacts(
         return;
       }
       try {
+        const { createClient } = await import('@/lib/supabase/client');
+        if (!active) return;
         const { data, error } = await createClient()
           .from('products')
           .select(STOREFRONT_PRODUCTS_SELECT)

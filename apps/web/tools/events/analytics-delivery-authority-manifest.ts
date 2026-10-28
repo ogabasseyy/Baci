@@ -9,27 +9,27 @@ export const analyticsDeliveryAuthorityManifest = {
     eventPipelineAuthorityCutover.queueOnlyDeliveryActivated,
   authorityClosureHashes: {
     'apps/web/src/app/api/analytics/conversion/route.ts':
-      '8747272f15477bffc36d4bd8b18fa046338f1dbc6e1234bcd2400e11694057e2',
+      'c16a6142e32f25d4f2b993c4e4e0417fef1119b24d5fe10b38d0795b60922e3c',
     'apps/web/src/app/api/events/route.ts':
-      '3e758b45f0809b919f1a058251bb1acd85e6df6de93df2b63f45f6766be67aab',
+      '9a12cecfcd3bdaea37946d6ef449014008eae881ed5e2f3c327186458bd7e647',
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
       '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
     'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
       '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
     'apps/web/src/lib/supabase/service.ts':
-      '8be73838ea9affb50372adc500302a442e87604a969f577e93045338ee1f6ff9',
+      '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
   },
   callerScopedRouteHashes: {
     'apps/web/src/app/api/analytics/ads/route.ts':
       'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
     'apps/web/src/app/api/analytics/facebook-capi/route.ts':
-      '0703e8247fa68a3c5a12a979e1f019809c939d67c477431eb3b850a5773b5f59',
+      'd3f90424593ade0d945da79006044a1132779217e1144dc006056d9060f0715c',
     'apps/web/src/app/api/analytics/ga4/route.ts':
       '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
     'apps/web/src/app/api/analytics/snapchat/route.ts':
-      '1a7898d59038b6a37e057e74da3907f4a42da9c25c7236e9d324d7b1516e4cd3',
+      '9c6c1db9696259aef5526a6913610377fd4d9b27c4bdd99d8516240a2b3a0b1c',
     'apps/web/src/app/api/analytics/tiktok/route.ts':
-      '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
+      'f056ef330fc2a65f97e2cef6607c0fa3a1ab48149bd5941632eed38c1cee2283',
   },
   credentialProjections: {
     merchantEntitlement: 'plan_tier, plan_expires_at, premium_features',

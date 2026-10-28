@@ -3,7 +3,7 @@
 import { ShoppingBag, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useSafeTimeout } from '@/hooks/use-safe-timeout';
@@ -96,13 +96,29 @@ export const CartSidebar: React.FC = () => {
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  // Track ViewCart event when sidebar opens
+  // Track a logical cart once per open drawer; catalog hydration can replace row objects.
+  const lastCartView = useRef<string | null>(null);
   useEffect(() => {
+    if (!isCartOpen || displayCart.length === 0) {
+      lastCartView.current = null;
+      return;
+    }
     if (
       isCartOpen &&
       displayCart.length > 0 &&
       cartMerchantContextMatches
     ) {
+      const fingerprint = JSON.stringify([
+        merchant?.id, merchant?.payout_currency ?? 'NGN',
+        displayCart.map(item => JSON.stringify([item.id, item.variantId ?? null,
+          item.offerId ?? null, item.condition ?? null,
+          Object.entries(item.variantAttributes ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+          item.selectedColor ?? null, item.selectedStorage ?? null,
+          item.quantity, item.price,
+        ])).sort(),
+      ]);
+      if (lastCartView.current === fingerprint) return;
+      lastCartView.current = fingerprint;
       // Cart items already satisfy the Product shape analytics expects.
       const analyticsProducts = displayCart.map((item) => ({
         product: item,

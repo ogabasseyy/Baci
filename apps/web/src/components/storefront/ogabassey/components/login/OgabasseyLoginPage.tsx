@@ -14,10 +14,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchant } from '@/hooks/use-merchant-client';
-import {
-  fetchCustomerLoginEmailPrefillForRedirect,
-  sanitizeCustomerLoginEmailPrefill,
-} from '@/lib/customer-login-prefill';
+import { useReceiptClaimLoginHint } from '@/hooks/use-receipt-claim-login-hint';
+import { sanitizeCustomerLoginEmailPrefill } from '@/lib/customer-login-prefill';
 import { asRoute } from '@/lib/routes';
 import { Logo as OgabasseyLogo } from '../Logo';
 import {
@@ -83,34 +81,19 @@ function OgabasseyLoginPageContent() {
     codeInputRefs,
   } = useOgabasseyLogin({ initialEmail, redirectTo });
 
+  // The claim login hint is masked guidance (never the full address):
+  // display it so the customer knows which inbox to open, but never
+  // place it in the input — the OTP code must go to the real address.
+  // Shared hook: clears the hint whenever the redirect target or prefill
+  // changes so a stale masked address from a previous claim never lingers.
+  const emailHint = useReceiptClaimLoginHint(redirectTo, initialEmail || email);
+
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       router.push(asRoute(redirectTo));
     }
   }, [authLoading, isAuthenticated, router, redirectTo]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (initialEmail || email) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void fetchCustomerLoginEmailPrefillForRedirect(redirectTo).then(
-      (emailHint) => {
-        if (!cancelled && emailHint) {
-          setEmail(emailHint);
-        }
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [email, initialEmail, redirectTo, setEmail]);
 
   // Show loading screen while checking auth/merchant
   if (merchantLoading || authLoading) {
@@ -146,7 +129,9 @@ function OgabasseyLoginPageContent() {
             <p className="text-gray-500 text-sm">
               {isCodeSent
                 ? `We sent a 6-digit code to ${sentToEmail}`
-                : 'Enter your email to sign in or sign up instantly'}
+                : emailHint
+                  ? `This receipt was sent to ${emailHint} — sign in with that address.`
+                  : 'Enter your email to sign in or sign up instantly'}
             </p>
           </div>
 

@@ -19,15 +19,15 @@ describe('analytics delivery authority manifest', () => {
   it('hash-binds the reviewed temporary authority closure', () => {
     expect(manifest.authorityClosureHashes).toEqual({
       'apps/web/src/app/api/analytics/conversion/route.ts':
-        '8747272f15477bffc36d4bd8b18fa046338f1dbc6e1234bcd2400e11694057e2',
+        'c16a6142e32f25d4f2b993c4e4e0417fef1119b24d5fe10b38d0795b60922e3c',
       'apps/web/src/app/api/events/route.ts':
-        '3e758b45f0809b919f1a058251bb1acd85e6df6de93df2b63f45f6766be67aab',
+        '9a12cecfcd3bdaea37946d6ef449014008eae881ed5e2f3c327186458bd7e647',
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts':
         '95cc62af2d374bfed4b9b89b5b745e2dbd4c34ada1f3a25cf0c398e3cb376c1e',
       'apps/web/src/lib/analytics/trusted-server-ad-platform-fanout.ts':
         '2f330fb4efcd9cbcbef7a524f43232572082908e4f73e27d72a8cbb8636380b5',
       'apps/web/src/lib/supabase/service.ts':
-        '8be73838ea9affb50372adc500302a442e87604a969f577e93045338ee1f6ff9',
+        '9781da4be8bcd690fbb0d4feebf53e10c2f33aeaeb92c068f1f66b1ec446420c',
     });
   });
 

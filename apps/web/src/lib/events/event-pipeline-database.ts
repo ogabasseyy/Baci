@@ -11,12 +11,14 @@ import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipe
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelineManualOrderDocumentCredentialPaths } from '@/lib/events/event-pipeline-manual-order-document-credential-paths';
 import { onboardingEmailWorkerAuthority } from '@/lib/events/event-pipeline-onboarding-authority-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
+import { socialDeliveryProjections } from '@/lib/events/event-pipeline-social-projections';
 import {
   eventPipelineAdminAdjacentFunctions,
   eventPipelineExpenseCleanupAdjacentFunctions,
@@ -142,12 +144,9 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
-    factoryModules: [
-      'apps/web/src/lib/supabase/admin.ts',
-      'apps/web/src/lib/supabase/server.ts',
-      'apps/web/src/lib/supabase/service.ts',
-    ],
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    factoryModules: ['apps/web/src/lib/supabase/admin.ts', 'apps/web/src/lib/supabase/server.ts', 'apps/web/src/lib/supabase/service.ts'],
     legacySdkImporters: eventPipelineLegacySdkImporters,
     serverImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
@@ -169,7 +168,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
-      'apps/web/src/lib/jumia/server-credential-client.ts', 'apps/web/src/lib/loyalty/server-resolver-client.ts',
+      'apps/web/src/lib/jumia/server-credential-client.ts', 'apps/web/src/lib/loyalty/server-resolver-client.ts', 'apps/web/src/lib/receipts/server-login-hint-client.ts',
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
@@ -203,6 +202,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   },
   operations: {
     merchant_chatgpt_ads_credentials: ['select'],
+    merchant_x_ads_credentials: ['select'],
     analytics_events: ['insert', 'upsert'],
     domains: ['select'],
     merchant_feature_settings: ['select'],
@@ -214,6 +214,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     platform_settings: ['select'],
   },
   projectionAuthorities: {
+    'apps/web/src/lib/events/x-destination-adapter.ts': ['xDelivery'],
     'apps/web/src/lib/events/chatgpt-destination-adapter.ts': [
       'chatgptDelivery',
     ],
@@ -235,8 +236,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'apps/web/src/lib/platform-admin-auth.ts': ['operatorAuth'],
   },
   projections: {
-    // biome-ignore format: exact worker projection preserves the 300-line boundary gate.
-    chatgptDelivery: { merchants: columns('slug plan_tier plan_expires_at premium_features offline_conversions_enabled'), merchant_feature_settings: ['chatgpt_pixel_id'], merchant_chatgpt_ads_credentials: ['capi_key'], domains: ['domain'] },
+    ...socialDeliveryProjections,
     conversion: { merchants: columns('country payout_currency') },
     identity: {
       domains: ['merchant_id'],

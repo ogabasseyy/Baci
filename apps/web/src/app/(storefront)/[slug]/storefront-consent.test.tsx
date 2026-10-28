@@ -9,14 +9,22 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FacebookPixel } from '@/components/analytics/facebook-pixel';
 import { TikTokPixel } from '@/components/analytics/tiktok-pixel';
-import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
 import { getStoredConsent } from '@/lib/consent-mode';
 import { AboutPageClient } from './(content)/pages/about/about-page-client';
 import { ContactPageClient } from './(content)/pages/contact/contact-page-client';
 import { FAQPageClient } from './(content)/pages/faq/faq-page-client';
 import { PrivacyPageClient } from './(content)/pages/privacy/privacy-page-client';
 import { TermsPageClient } from './(content)/pages/terms/terms-page-client';
-import { StorefrontShellFrame } from './storefront-shell-frame';
+import {
+  expectMetaEventsBlocked,
+  expectMetaPixelConfigured,
+  expectNoPixels,
+  merchant,
+  revealPrompt,
+  shell,
+  withdrawOptionalConsent,
+} from './storefront-consent-fixtures.test-support';
+import { consentScriptMocks as sdkMocks } from './storefront-consent-script.test-support';
 
 // Keep consent UI, storage, event subscriptions and all three pixel gates real.
 // Script output is inert so tests never contact the advertising providers.
@@ -34,13 +42,12 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('next/script', () => ({
-  default: ({ id, children }: { id: string; children: ReactNode }) => (
-    <pre hidden data-testid={id}>
-      {children}
-    </pre>
-  ),
-}));
+vi.mock('next/script', async () => {
+  const { ConsentScriptStub } = await import(
+    './storefront-consent-script.test-support'
+  );
+  return { default: ConsentScriptStub };
+});
 vi.mock('next/dynamic', async () => {
   const { CookieConsent } = await import(
     '@/components/storefront/cookie-consent'
@@ -87,47 +94,12 @@ vi.mock('@/components/storefront/deferred-page-view-tracker', () => ({
 vi.mock('./storefront-layout-renderer', () => ({
   StorefrontLayoutRenderer: ({ children }: { children: ReactNode }) => (
     <>
-      <FacebookPixel pixelId="configured-meta-pixel" />
-      <TikTokPixel pixelId="configured-tiktok-pixel" />
+      <FacebookPixel pixelId="123456789" />
+      <TikTokPixel pixelId="CT123456789" />
       {children}
     </>
   ),
 }));
-
-const merchant = {
-  id: 'merchant-1',
-  user_id: 'user-1',
-  business_type: 'electronics',
-  slug: 'store',
-  business_name: 'Test Store',
-};
-const shellSnapshot = {
-  merchant,
-  routingMode: 'domain',
-  basePath: '',
-  navigationCategories: [],
-  chatgptPixelId: 'configured-chatgpt-pixel',
-} satisfies StorefrontShellSnapshot;
-function shell(children: ReactNode) {
-  return (
-    <StorefrontShellFrame
-      preloadHeroLcpImages={false}
-      shellSnapshot={shellSnapshot}
-    >
-      {children}
-    </StorefrontShellFrame>
-  );
-}
-function revealPrompt() {
-  act(() => vi.advanceTimersByTime(1000));
-}
-function expectNoPixels() {
-  expect(screen.queryByTestId('facebook-pixel')).not.toBeInTheDocument();
-  expect(screen.queryByTestId('tiktok-pixel')).not.toBeInTheDocument();
-  expect(
-    screen.queryByTestId('chatgpt-measurement-sdk')
-  ).not.toBeInTheDocument();
-}
 
 describe('storefront consent wiring', () => {
   beforeEach(() => {
@@ -137,9 +109,40 @@ describe('storefront consent wiring', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    sdkMocks.onReady.clear();
     Reflect.deleteProperty(window, 'gtag');
     Reflect.deleteProperty(window, 'oaiq');
+    Reflect.deleteProperty(window, 'fbq');
+    Reflect.deleteProperty(window, '_fbq');
     vi.useRealTimers();
+  });
+
+  it('waits for Meta readiness, then revokes consent and blocks later events', () => {
+    render(shell(<main>Product</main>));
+    revealPrompt();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    const fbq = window.fbq as unknown as { queue: unknown[][] };
+    expect(screen.getByTestId('facebook-pixel-sdk')).toBeInTheDocument();
+    act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expectMetaPixelConfigured(fbq.queue);
+
+    withdrawOptionalConsent();
+    expectNoPixels();
+    expect(fbq.queue.at(-1)).toEqual(['consent', 'revoke']);
+    expectMetaEventsBlocked(fbq.queue);
+  });
+
+  it('does not initialize or revoke Meta when consent is withdrawn before SDK readiness', () => {
+    render(shell(<main>Product</main>));
+    revealPrompt();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    const fbq = window.fbq as unknown as { queue: unknown[][] };
+    expect(fbq.queue).toEqual([]);
+
+    withdrawOptionalConsent();
+    expectNoPixels();
+    act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expect(fbq.queue).toEqual([]);
   });
 
   it('offers fresh visitors one consent prompt while both configured pixels remain denied', () => {
@@ -157,11 +160,25 @@ describe('storefront consent wiring', () => {
     const view = render(shell(<main>Product</main>));
     revealPrompt();
     fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
-    expect(screen.getByTestId('facebook-pixel')).toHaveTextContent(
-      'configured-meta-pixel'
+    const metaSdk = screen.getByTestId('facebook-pixel-sdk');
+    expect(metaSdk).toHaveAttribute(
+      'data-src',
+      'https://connect.facebook.net/en_US/fbevents.js'
     );
-    expect(screen.getByTestId('tiktok-pixel')).toHaveTextContent(
-      'configured-tiktok-pixel'
+    expect(metaSdk).toHaveTextContent('');
+    const fbq = window.fbq as unknown as { queue: unknown[][] };
+    expect(fbq.queue).toEqual([]);
+    expect(fbq.queue.some(([action]) => action === 'trackSingle')).toBe(false);
+    act(() => sdkMocks.onReady.get('facebook-pixel-sdk')?.());
+    expectMetaPixelConfigured(fbq.queue);
+    expect(fbq.queue).toContainEqual([
+      'trackSingle',
+      '123456789',
+      'PageView',
+      {},
+    ]);
+    expect(screen.getByTestId('tiktok-pixel-CT123456789')).toHaveTextContent(
+      'CT123456789'
     );
     expect(screen.getByTestId('chatgpt-measurement-sdk')).toBeInTheDocument();
     expect(getStoredConsent()).toMatchObject({
@@ -180,8 +197,8 @@ describe('storefront consent wiring', () => {
     expect(
       screen.queryByRole('dialog', { name: 'Cookie consent' })
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId('facebook-pixel')).toBeInTheDocument();
-    expect(screen.getByTestId('tiktok-pixel')).toBeInTheDocument();
+    expect(screen.getByTestId('facebook-pixel-sdk')).toBeInTheDocument();
+    expect(screen.getByTestId('tiktok-pixel-CT123456789')).toBeInTheDocument();
     expect(screen.getByTestId('chatgpt-measurement-sdk')).toBeInTheDocument();
   });
 
@@ -249,8 +266,10 @@ describe('storefront consent wiring', () => {
         analytics: true,
         marketing: true,
       });
-      expect(screen.getByTestId('facebook-pixel')).toBeInTheDocument();
-      expect(screen.getByTestId('tiktok-pixel')).toBeInTheDocument();
+      expect(screen.getByTestId('facebook-pixel-sdk')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('tiktok-pixel-CT123456789')
+      ).toBeInTheDocument();
     } finally {
       window.removeEventListener('cookie-consent-updated', consentEvents);
     }

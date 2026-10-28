@@ -9,6 +9,7 @@ import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gatewa
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
 import { onboardingEmailWorkerAuthority } from './event-pipeline-onboarding-authority-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
@@ -37,6 +38,20 @@ describe('event pipeline credential-path authority', () => {
       // short-lived event-ingress capability; it cannot read provider credentials.
       [
         'apps/web/src/app/api/analytics/facebook-capi/route.ts',
+        'apps/web/src/lib/events/event-ingress-capability.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/analytics/tiktok/route.ts',
+        'apps/web/src/lib/events/event-ingress-capability.ts',
+        'apps/web/src/lib/supabase/scoped-jwt.ts',
+        'apps/web/src/lib/agentic/jwt-signing-material.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/analytics/snapchat/route.ts',
         'apps/web/src/lib/events/event-ingress-capability.ts',
         'apps/web/src/lib/supabase/scoped-jwt.ts',
         'apps/web/src/lib/agentic/jwt-signing-material.ts',
@@ -254,6 +269,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineChatCredentialPaths,
       ...eventPipelinePaystackRefundCredentialPaths,
       ...eventPipelineGatewayCronCredentialPaths,
+      ...eventPipelineManualOrderDocumentCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
     ]);
   });

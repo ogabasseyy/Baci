@@ -1,5 +1,6 @@
 import type { MerchantData } from '@/hooks/use-merchant';
 import type { CachedMerchant } from '@/lib/cached-data';
+import { parseXEventIds } from '@/lib/x-ads/parse-x-event-ids';
 
 function normalizePlanTier(
   planTier: CachedMerchant['plan_tier']
@@ -74,6 +75,7 @@ const PUBLIC_FEATURE_SETTING_KEYS = [
   'terms_page_enabled',
   'tiktok_pixel_id',
   'twitter_pixel_id',
+  'twitter_event_ids',
   'vtu_airtime_enabled',
   'vtu_checkout_addon_amounts',
   'vtu_checkout_addon_enabled',
@@ -153,6 +155,11 @@ function pickPublicFeatureSettings(
     }
 
     const value = source[key];
+    if (key === 'twitter_event_ids') {
+      const parsed = parseXEventIds(value);
+      if (parsed) picked[key] = parsed;
+      continue;
+    }
 
     if (value !== undefined && isPublicFeatureSettingValue(value)) {
       picked[key] = value;

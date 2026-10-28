@@ -36,28 +36,42 @@ afterEach(() => {
 
 describe('SnapchatPixel', () => {
   it('loads the pixel with the afterInteractive strategy when marketing consent is granted', () => {
-    render(<SnapchatPixel pixelId="snap-123" />);
+    render(<SnapchatPixel pixelId="11111111-1111-4111-8111-111111111111" />);
 
     // afterInteractive (not lazyOnload): the inline bootstrap defines the
     // window.snaptr event-queue stub, so it must run right after hydration —
     // lazyOnload defers queue creation to window load and drops early
     // conversion events fired before then.
-    const script = screen.getByTestId('snapchat-pixel');
+    const script = screen.getByTestId(
+      'snapchat-pixel-11111111-1111-4111-8111-111111111111'
+    );
     expect(script).toHaveAttribute('data-strategy', 'afterInteractive');
-    expect(script.textContent).toContain("snaptr('init', 'snap-123'");
+    expect(script.textContent).toContain(
+      "snaptr('init', '11111111-1111-4111-8111-111111111111'"
+    );
+    expect(script.textContent).not.toContain('__INSERT_USER_EMAIL__');
+    expect(script.textContent).not.toContain('user_email');
   });
 
   it('renders nothing when marketing consent is not granted', () => {
     mocks.getStoredConsent.mockReturnValue({ marketing: false });
 
-    render(<SnapchatPixel pixelId="snap-123" />);
+    render(<SnapchatPixel pixelId="11111111-1111-4111-8111-111111111111" />);
 
-    expect(screen.queryByTestId('snapchat-pixel')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        'snapchat-pixel-11111111-1111-4111-8111-111111111111'
+      )
+    ).not.toBeInTheDocument();
   });
 
   it('renders nothing when the pixel id is empty', () => {
     render(<SnapchatPixel pixelId="" />);
 
-    expect(screen.queryByTestId('snapchat-pixel')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        'snapchat-pixel-11111111-1111-4111-8111-111111111111'
+      )
+    ).not.toBeInTheDocument();
   });
 });

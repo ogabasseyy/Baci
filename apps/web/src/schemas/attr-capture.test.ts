@@ -21,6 +21,7 @@ describe('attrCaptureSchema', () => {
       ttclid: 'ttclid.value_1',
       gclid: 'gclid-value',
       sccid: 'sccid~value',
+      marketing_consent: 'true',
     });
 
     expect(result.success).toBe(true);

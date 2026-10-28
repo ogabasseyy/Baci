@@ -50,3 +50,39 @@ describe('published blog typography', () => {
     expect(values.some((value) => value.includes('var(--'))).toBe(true);
   });
 });
+
+describe('blog sheets compiled in layout order', () => {
+  it('emits Badge/Card utilities exactly once across blog + blog-post', async () => {
+    const compile = async (name: string) => {
+      const from = join(directory, name);
+      const result = await postcss([tailwind({ optimize: true })]).process(
+        await readFile(from, 'utf8'),
+        { from, map: false }
+      );
+      return result.css;
+    };
+    // Layout order: [postSlug]/layout.tsx imports blog.css, then
+    // blog-post.css. The delta sheet relies on the listing sheet for
+    // Badge/Card utilities, so combined output must carry them once.
+    const combined = postcss.parse(
+      (await compile('storefront-blog.css')) +
+        (await compile('storefront-blog-post.css'))
+    );
+    for (const selector of [
+      '.bg-card',
+      '.text-card-foreground',
+      '.ring-offset-background',
+      // Renderer-only utilities from the delta sheet (blog-code-block).
+      '.bg-slate-950',
+      '.text-slate-50',
+    ]) {
+      let count = 0;
+      combined.walkRules((rule) => {
+        if (rule.selector === selector) {
+          count += 1;
+        }
+      });
+      expect(count).toBe(1);
+    }
+  }, 30_000);
+});

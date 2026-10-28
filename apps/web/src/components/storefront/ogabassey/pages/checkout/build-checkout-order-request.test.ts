@@ -108,7 +108,12 @@ it('reads current consent and SDK references when building the actual checkout r
   );
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: true })
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
   );
   expect(buildCheckoutOrderRequest(input)).toMatchObject({
     ad_tracking: {
@@ -119,7 +124,12 @@ it('reads current consent and SDK references when building the actual checkout r
   });
   localStorage.setItem(
     'baci-cookie-consent',
-    JSON.stringify({ analytics: false })
+    JSON.stringify({
+      necessary: true,
+      analytics: false,
+      marketing: false,
+      functional: false,
+    })
   );
   const denied = buildCheckoutOrderRequest(input);
   expect(denied).toMatchObject({ ad_tracking: { chatgptConsent: false } });

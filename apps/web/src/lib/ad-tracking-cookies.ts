@@ -17,6 +17,7 @@
  */
 
 import { isAnalyticsAllowed } from './analytics-consent';
+import { isMarketingAllowed } from './marketing-consent';
 
 // Cookie names for ad tracking
 export const AD_TRACKING_COOKIES = {
@@ -25,6 +26,7 @@ export const AD_TRACKING_COOKIES = {
   TIKTOK_CLICK_ID: 'baci_ttclid',
   GOOGLE_CLICK_ID: 'baci_gclid',
   SNAPCHAT_CLICK_ID: 'baci_sccid',
+  X_CLICK_ID: 'baci_twclid',
   // Browser IDs (read from platform cookies)
   FACEBOOK_BROWSER_ID: '_fbp',
   TIKTOK_BROWSER_ID: '_ttp',
@@ -44,6 +46,7 @@ export const CLICK_ID_PARAMS = {
   ttclid: AD_TRACKING_COOKIES.TIKTOK_CLICK_ID,
   gclid: AD_TRACKING_COOKIES.GOOGLE_CLICK_ID,
   sccid: AD_TRACKING_COOKIES.SNAPCHAT_CLICK_ID,
+  twclid: AD_TRACKING_COOKIES.X_CLICK_ID,
 } as const;
 
 // Cookie expiry: 90 days (matches Facebook's fbclid cookie)
@@ -56,6 +59,9 @@ export interface AdTrackingData {
   oppref?: string;
   obref?: string;
   chatgptConsent?: boolean;
+  marketingConsent?: boolean;
+  analyticsConsent?: boolean;
+  twclid?: string;
   // Click IDs from URL params
   fbclid?: string;
   ttclid?: string;
@@ -147,6 +153,7 @@ export function parseAdTrackingCookies(cookieString: string): AdTrackingData {
     ttclid: cookies[AD_TRACKING_COOKIES.TIKTOK_CLICK_ID],
     gclid: cookies[AD_TRACKING_COOKIES.GOOGLE_CLICK_ID],
     sccid: cookies[AD_TRACKING_COOKIES.SNAPCHAT_CLICK_ID],
+    twclid: cookies[AD_TRACKING_COOKIES.X_CLICK_ID],
     // Platform browser IDs (set by their pixels)
     fbp: cookies[AD_TRACKING_COOKIES.FACEBOOK_BROWSER_ID],
     ttp: cookies[AD_TRACKING_COOKIES.TIKTOK_BROWSER_ID],
@@ -190,7 +197,19 @@ export function getAdTrackingData(): AdTrackingData {
     delete tracking.oppref;
     delete tracking.obref;
   }
-  return { ...tracking, chatgptConsent: allowed };
+  const marketingConsent = isMarketingAllowed();
+  const twclid = marketingConsent
+    ? (new URLSearchParams(window.location.search).get('twclid') ??
+      tracking.twclid)
+    : null;
+  delete tracking.twclid;
+  return {
+    ...tracking,
+    chatgptConsent: allowed,
+    analyticsConsent: allowed,
+    marketingConsent,
+    ...(twclid && /^[A-Za-z0-9_-]{1,256}$/.test(twclid) ? { twclid } : {}),
+  };
 }
 
 /**

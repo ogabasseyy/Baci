@@ -11,6 +11,20 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/agentic/jwt-signing-material.ts',
     'apps/web/src/env.ts',
   ],
+  [
+    'apps/web/src/app/api/analytics/tiktok/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/analytics/snapchat/route.ts',
+    'apps/web/src/lib/events/event-ingress-capability.ts',
+    'apps/web/src/lib/supabase/scoped-jwt.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
 
   ...['lookup', 'product', 'search'].map(
     (operation) =>

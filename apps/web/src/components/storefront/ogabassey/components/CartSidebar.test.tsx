@@ -32,12 +32,16 @@ const mockApplyCartWideNegotiation = vi.fn();
 const mockClearNegotiatedPrice = vi.fn();
 const mockToggleAssurance = vi.fn();
 
+let mockIsCartOpen = true;
+
 type MockCartItem = {
   id: string;
   cartItemId: string;
   name: string;
   price: number;
   quantity: number;
+  variantId?:string;
+  variantAttributes?:Record<string,string>;
   image: string;
   category: string;
   brand: string;
@@ -64,7 +68,7 @@ let mockCartItems: MockCartItem[] = [
 
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
-    isCartOpen: true,
+    isCartOpen: mockIsCartOpen,
     setIsCartOpen: mockSetIsCartOpen,
     cart: mockCartItems,
     removeFromCart: mockRemoveFromCart,
@@ -163,6 +167,7 @@ import { CartSidebar } from './CartSidebar';
 describe('CartSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsCartOpen=true;
     vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
     mockMerchant = { id: 'merchant-abc', slug: 'test-store' };
     mockCartItems = [
@@ -345,4 +350,25 @@ describe('CartSidebar', () => {
       screen.getByRole('button', { name: /negotiate total amount/i })
     ).toBeInTheDocument();
   });
+});
+
+describe('stable logical cart view',()=>{
+ beforeEach(()=>{vi.clearAllMocks();mockIsCartOpen=true;mockMerchant={id:'merchant-abc',slug:'test-store'};mockCartItems=[{id:'p1',cartItemId:'ci-1',name:'Test Shoe',price:15000,quantity:1,image:'/shoe.jpg',category:'shoes',brand:'TestBrand'}];});
+it('does not count cloned or re-enriched cart metadata as a new view while the drawer stays open',()=>{
+ const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockCartItems=mockCartItems.map(item=>({...item,name:'Enriched catalog name',image:'/enriched.jpg'}));view.rerender(<CartSidebar/>);
+ expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+});
+it('tracks actual quantity, price or variant changes while the drawer remains open',()=>{
+ const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockCartItems=mockCartItems.map(item=>({...item,quantity:2}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(2);
+ mockCartItems=mockCartItems.map(item=>({...item,price:16000}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(3);
+ mockCartItems=mockCartItems.map(item=>({...item,variantId:'new-variant'}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(4);
+});
+it('counts closing and reopening the same cart as a new view',()=>{
+ mockIsCartOpen=true;const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
+ mockIsCartOpen=false;view.rerender(<CartSidebar/>);mockIsCartOpen=true;view.rerender(<CartSidebar/>);
+ expect(analytics.viewCart).toHaveBeenCalledTimes(2);
+});
+
 });

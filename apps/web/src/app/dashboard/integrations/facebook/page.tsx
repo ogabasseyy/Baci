@@ -2,7 +2,7 @@
 
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { SetupInstructions } from '@/components/analytics/setup-instructions';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { TrackingPixelSection } from '@/components/dashboard/integrations/tracking-pixel-section';
 import { Button } from '@/components/ui/button';
 import { useIntegrationSettings } from '@/hooks/use-integration-settings';
@@ -11,11 +11,13 @@ import { asRoute } from '@/lib/routes';
 interface FacebookSettings {
   facebook_pixel_id: string | null;
   facebook_capi_token: string | null;
+  facebook_capi_token_configured: boolean;
 }
 
 const SETTINGS_KEYS: (keyof FacebookSettings)[] = [
   'facebook_pixel_id',
   'facebook_capi_token',
+  'facebook_capi_token_configured',
 ];
 
 export default function FacebookIntegrationPage() {
@@ -28,7 +30,7 @@ export default function FacebookIntegrationPage() {
   const handleSave = async (pixelId: string, token: string) => {
     await saveSettings({
       facebook_pixel_id: pixelId || null,
-      facebook_capi_token: token || null,
+      ...(token.trim() ? { facebook_capi_token: token.trim() } : {}),
     });
   };
 
@@ -55,12 +57,13 @@ export default function FacebookIntegrationPage() {
       <TrackingPixelSection
         platform="Facebook"
         pixelId={settings?.facebook_pixel_id || ''}
-        accessToken={settings?.facebook_capi_token || ''}
+        tokenConfigured={settings?.facebook_capi_token_configured === true}
+        onDisconnect={() => saveSettings({ facebook_capi_token: null })}
         pixelLabel="Pixel ID"
         tokenLabel="Conversion API Access Token"
         onSave={handleSave}
       >
-        <SetupInstructions platform="facebook" />
+        <AdPlatformSetupGuide platform="facebook" />
       </TrackingPixelSection>
     </div>
   );

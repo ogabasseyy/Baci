@@ -213,9 +213,13 @@ authentication, advertising, or cross-merchant joins; clients
 store a separate credential per merchant and quota keys are
 merchant-salted SHA-256 hashes with the budget window as their
 retention, and the raw value is redacted from telemetry (below).
-Handoff preview sends no credential (the merchant is learned from
-the preview itself), so no cross-merchant raw value exists.
-Deleting site/app data rotates it.
+Web handoff preview sends no credential (the merchant is learned
+from the preview itself) and uses the verified network identity;
+mobile handoff preview sends its per-merchant credential (the slug
+is known from app config). Either way, stored quota keys are never
+joinable across merchants: clients store a separate credential per
+merchant wherever the merchant is known, and every quota subject is
+a merchant-salted hash. Deleting site/app data rotates it.
 
 Accepted risk — Redis key cardinality: in the healthy-store path,
 each distinct credential creates its own quota key per merchant

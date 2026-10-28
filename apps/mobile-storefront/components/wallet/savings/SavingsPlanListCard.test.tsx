@@ -19,7 +19,12 @@ const goal: WalletActiveSavingsGoal = {
 it('shows small positive progress without pretending the plan is empty', () => {
   const onPress = jest.fn();
   render(
-    <SavingsPlanListCard goal={goal} colors={Colors.dark} onPress={onPress} />
+    <SavingsPlanListCard
+      goal={goal}
+      colors={Colors.dark}
+      progressAvailable
+      onPress={onPress}
+    />
   );
   expect(screen.getByText('<1%')).toBeTruthy();
   expect(screen.getByText('₦100')).toBeTruthy();
@@ -44,6 +49,7 @@ it('clamps an overfunded completed plan to 100 percent with nothing left', () =>
     <SavingsPlanListCard
       goal={{ ...goal, current_amount: 300000, status: 'completed' }}
       colors={Colors.dark}
+      progressAvailable
       onPress={jest.fn()}
     />
   );
@@ -57,6 +63,7 @@ it('handles a zero target without invalid progress', () => {
     <SavingsPlanListCard
       goal={{ ...goal, target_amount: 0 }}
       colors={Colors.light}
+      progressAvailable
       onPress={jest.fn()}
     />
   );
@@ -74,6 +81,7 @@ it.each([
     <SavingsPlanListCard
       goal={{ ...goal, title, current_amount: amount }}
       colors={Colors.dark}
+      progressAvailable
       onPress={jest.fn()}
     />
   );
@@ -92,10 +100,27 @@ it('keeps a long savings device name on one line with a trailing ellipsis', () =
     <SavingsPlanListCard
       goal={{ ...goal, title }}
       colors={Colors.dark}
+      progressAvailable
       onPress={jest.fn()}
     />
   );
 
   expect(screen.getByText(title)).toHaveProp('numberOfLines', 1);
   expect(screen.getByText(title)).toHaveProp('ellipsizeMode', 'tail');
+});
+
+it('suppresses principal-only amounts and progress when earnings are unavailable', () => {
+  render(
+    <SavingsPlanListCard
+      goal={goal}
+      colors={Colors.dark}
+      onPress={jest.fn()}
+      progressAvailable={false}
+    />
+  );
+  expect(screen.getByText('—')).toBeOnTheScreen();
+  expect(screen.getByText('Progress unavailable')).toBeOnTheScreen();
+  expect(screen.queryByText('₦100')).toBeNull();
+  expect(screen.queryByLabelText('New phone progress')).toBeNull();
+  expect(screen.queryByText(/to go/)).toBeNull();
 });

@@ -16,12 +16,14 @@ type WalletSavingsPlanCardProps = {
   colors: (typeof Colors)['light'];
   goal: WalletActiveSavingsGoal;
   onOpen: () => void;
+  progressAvailable?: boolean;
 };
 
 export function WalletSavingsPlanCard({
   colors,
   goal,
   onOpen,
+  progressAvailable = false,
 }: WalletSavingsPlanCardProps) {
   const [isActionFocused, setIsActionFocused] = useState(false);
   const actionGlowColors = [
@@ -41,8 +43,9 @@ export function WalletSavingsPlanCard({
         ? 'View plan'
         : 'Add to savings';
   const hasSavingsGlow = actionLabel === 'Add to savings';
-  const heading =
-    goal.status === 'completed'
+  const heading = !progressAvailable
+    ? 'Progress unavailable'
+    : goal.status === 'completed'
       ? 'Plan complete'
       : goal.status === 'paused'
         ? 'Plan paused'
@@ -102,7 +105,7 @@ export function WalletSavingsPlanCard({
               numberOfLines={1}
               adjustsFontSizeToFit
             >
-              {formatNgnCurrency(goal.current_amount)}
+              {progressAvailable ? formatNgnCurrency(goal.current_amount) : '—'}
               <Text
                 style={[styles.targetAmount, { color: colors.textSecondary }]}
               >
@@ -115,30 +118,34 @@ export function WalletSavingsPlanCard({
       </View>
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          {hasStarted
-            ? `${formatNgnCurrency(remaining)} to go`
-            : 'Start with your first contribution'}
+          {!progressAvailable
+            ? 'Refresh to confirm your savings progress'
+            : hasStarted
+              ? `${formatNgnCurrency(remaining)} to go`
+              : 'Start with your first contribution'}
         </Text>
       </View>
-      <View
-        accessible
-        accessibilityRole="progressbar"
-        accessibilityLabel="Savings plan progress"
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: progress,
-          text: percentLabel,
-        }}
-        style={[styles.track, { backgroundColor: colors.primaryLowOpacity }]}
-      >
+      {progressAvailable ? (
         <View
-          style={[
-            styles.fill,
-            { width: `${progress}%`, backgroundColor: colors.primary },
-          ]}
-        />
-      </View>
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Savings plan progress"
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: progress,
+            text: percentLabel,
+          }}
+          style={[styles.track, { backgroundColor: colors.primaryLowOpacity }]}
+        >
+          <View
+            style={[
+              styles.fill,
+              { width: `${progress}%`, backgroundColor: colors.primary },
+            ]}
+          />
+        </View>
+      ) : null}
       <View
         style={[
           styles.viewPlanGlowFrame,

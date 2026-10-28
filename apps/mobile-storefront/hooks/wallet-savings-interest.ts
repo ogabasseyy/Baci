@@ -16,7 +16,7 @@ type InterestRpcClient = {
 };
 
 type WalletSavingsInterest = {
-  status: 'available' | 'unavailable';
+  status: 'available' | 'history-only' | 'unavailable';
   creditedInterestKobo: number | null;
   goalInterestKobo: WalletSavingsInterestResponse['goal_interest_kobo'];
   transactions?: WalletSavingsInterestResponse['interest_history'];
@@ -61,6 +61,14 @@ export async function fetchWalletSavingsInterest(
         snapshot.data
       );
       if (!parsed.success) return unavailable();
+      if (parsed.data.earnings_available === false) {
+        return {
+          status: 'history-only',
+          creditedInterestKobo: null,
+          goalInterestKobo: [],
+          transactions: parsed.data.interest_history,
+        };
+      }
       return {
         status: 'available',
         creditedInterestKobo: parsed.data.credited_interest_kobo,

@@ -9,7 +9,9 @@ const mockUseRequireAuth = jest.fn(() => ({
 }));
 const mockRefetch = jest.fn();
 let mockQuery: {
-  data?: { wallet: { savings_goals: typeof goals } };
+  data?: {
+    wallet: { savings_goals: typeof goals; earnings_available?: boolean };
+  };
   isLoading: boolean;
   isError: boolean;
   isRefetching: boolean;
@@ -52,7 +54,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockUseRequireAuth.mockReturnValue({ isLoading: false, redirectTo: null });
   mockQuery = {
-    data: { wallet: { savings_goals: goals } },
+    data: { wallet: { savings_goals: goals, earnings_available: true } },
     isLoading: false,
     isError: false,
     isRefetching: false,
@@ -96,6 +98,25 @@ it('shows the combined saved amount without changing it when filtering plans', (
   expect(screen.getByText('₦207.33')).toBeTruthy();
   fireEvent.press(screen.getByRole('button', { name: 'All plans' }));
   expect(screen.getByRole('button', { name: 'Open Laptop' })).toBeTruthy();
+});
+it('hides principal-only totals and per-plan progress while earnings are unavailable', () => {
+  mockQuery.data = {
+    wallet: { savings_goals: goals, earnings_available: false },
+  };
+  render(<SavingsPlansScreen />);
+  expect(screen.getAllByText('—')).toHaveLength(3);
+  expect(screen.getAllByText('Progress unavailable')).toHaveLength(2);
+  expect(screen.queryByText('₦207.33')).toBeNull();
+  expect(screen.queryByLabelText('Phone progress')).toBeNull();
+  expect(screen.queryByText('₦249,900 to go')).toBeNull();
+});
+it('fails closed for a legacy cached wallet without earnings availability', () => {
+  mockQuery.data = { wallet: { savings_goals: goals } };
+  render(<SavingsPlansScreen />);
+  expect(screen.getAllByText('—')).toHaveLength(3);
+  expect(screen.getAllByText('Progress unavailable')).toHaveLength(2);
+  expect(screen.queryByText('₦207.33')).toBeNull();
+  expect(screen.queryByLabelText('Phone progress')).toBeNull();
 });
 it('filters paused plans and exposes the selected filter accessibly', () => {
   render(<SavingsPlansScreen />);

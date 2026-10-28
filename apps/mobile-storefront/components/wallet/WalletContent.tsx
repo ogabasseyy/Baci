@@ -156,6 +156,7 @@ export function WalletContent(props: WalletContentProps) {
         />
         <WalletSavingsCarousel
           colors={colors}
+          progressAvailable={earningsAvailable}
           goals={
             props.savingsGoals ?? (activeSavingsGoal ? [activeSavingsGoal] : [])
           }
@@ -206,6 +207,7 @@ export function WalletContent(props: WalletContentProps) {
       >
         <WalletSavingsProgressModal
           embedded
+          progressAvailable={earningsAvailable}
           addAmount={savingsContributionAmount}
           colors={colors}
           goal={activeSavingsGoal}

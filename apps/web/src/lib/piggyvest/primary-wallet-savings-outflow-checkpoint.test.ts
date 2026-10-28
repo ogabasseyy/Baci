@@ -112,36 +112,11 @@ it('uses the shared fenced checkpoint wrapper for production outflow reconciliat
             source_wallet: 'source',
             destination_wallet: 'destination',
             status: 'successful',
+            category: 'p2p',
             amount: 2000,
             fee: 0,
             reference: 'provider-reference',
             third_party_reference: reference,
-          },
-        })
-      )
-    )
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          status: true,
-          data: {
-            edges: [
-              {
-                id: 'transaction',
-                business_id: 'business',
-                wallet_id: 'source',
-                api_customer_id: 'source-customer',
-                currency: 'NGN',
-                type: 'debit',
-                category: 'p2p',
-                status: 'successful',
-                amount: -2000,
-                charge: 0,
-                third_party_reference: reference,
-                provider_reference: 'provider-reference',
-              },
-            ],
-            pageInfo: { hasNextPage: false, endCursor: null },
           },
         })
       )
@@ -155,6 +130,7 @@ it('uses the shared fenced checkpoint wrapper for production outflow reconciliat
       fetchImplementation,
     })
   ).toBe('confirmed');
+  expect(fetchImplementation).toHaveBeenCalledTimes(3);
   expect(
     query.mock.calls.some(([statement]) =>
       String(statement).includes('claim_savings_reconciliation_checkpoint')

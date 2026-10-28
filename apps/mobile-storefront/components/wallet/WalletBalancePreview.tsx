@@ -17,6 +17,7 @@ export function WalletBalancePreview({
   isError?: boolean;
   onRetry?: () => void;
 }) {
+  const savingsProjectionAvailable = wallet.earnings_available === true;
   const cells = [
     {
       label: 'Earnings',
@@ -27,7 +28,9 @@ export function WalletBalancePreview({
     },
     {
       label: 'Savings',
-      amount: formatNgnCurrency(wallet.savings_balance ?? 0),
+      amount: savingsProjectionAvailable
+        ? formatNgnCurrency(wallet.savings_balance ?? 0)
+        : '—',
       icon: 'wallet-outline' as const,
     },
     {
@@ -47,7 +50,9 @@ export function WalletBalancePreview({
             numberOfLines={1}
             adjustsFontSizeToFit
           >
-            {formatNgnCurrency(wallet.total_balance ?? wallet.balance)}
+            {savingsProjectionAvailable
+              ? formatNgnCurrency(wallet.total_balance ?? wallet.balance)
+              : '—'}
           </Text>
         </View>
         <View style={styles.balanceSummaryRow}>

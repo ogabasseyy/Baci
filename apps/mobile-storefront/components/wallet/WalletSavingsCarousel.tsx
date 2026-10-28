@@ -12,11 +12,13 @@ export function WalletSavingsCarousel({
   colors,
   featuredGoalId,
   onOpenFeatured,
+  progressAvailable = false,
 }: {
   goals: WalletActiveSavingsGoal[];
   colors: (typeof Colors)['light'];
   featuredGoalId?: string;
   onOpenFeatured: () => void;
+  progressAvailable?: boolean;
 }) {
   const [width, setWidth] = useState(0);
   const [page, setPage] = useState(0);
@@ -52,6 +54,7 @@ export function WalletSavingsCarousel({
               <WalletSavingsPlanCard
                 goal={goal}
                 colors={colors}
+                progressAvailable={progressAvailable}
                 onOpen={() => {
                   if (
                     goal.status === 'completed' &&

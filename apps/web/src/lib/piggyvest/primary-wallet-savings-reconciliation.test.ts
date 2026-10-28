@@ -12,6 +12,32 @@ const reservation = {
   providerCustomerId: 'source-customer',
   reference: 'our-reference',
 };
+function productionIdentity(status: 'successful' | 'failed' = 'successful') {
+  return {
+    environment: 'production',
+    wallet: {
+      id: 'source',
+      business_id: 'business',
+      api_customer_id: 'source-customer',
+      currency: 'NGN',
+      status: 'active',
+      is_frozen: false,
+    },
+    transaction: {
+      id: 'transaction',
+      category: 'p2p',
+      status,
+      customer_id: 'business',
+      source_wallet: 'source',
+      destination_wallet: 'destination',
+      amount: 2000,
+      fee: 0,
+      reference: 'provider-reference',
+      third_party_reference: 'our-reference',
+      internal_reference: 'transaction',
+    },
+  };
+}
 function ports() {
   return {
     environment: 'production' as const,
@@ -26,12 +52,12 @@ function ports() {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     }),
-    resolveIdentity: vi.fn().mockResolvedValue(null),
+    resolveIdentity: vi.fn().mockResolvedValue(productionIdentity()),
     settle: vi.fn().mockResolvedValue('confirmed'),
     release: vi.fn().mockResolvedValue('released'),
   };
@@ -161,11 +187,14 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
+    dependencies.resolveIdentity.mockResolvedValue(
+      productionIdentity('failed')
+    );
     dependencies.release.mockResolvedValue(outcome);
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
@@ -191,11 +220,14 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'another-operation',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
+    dependencies.resolveIdentity.mockResolvedValue(
+      productionIdentity('failed')
+    );
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
     ).toEqual({ status: 'pending' });
@@ -217,7 +249,7 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
@@ -245,11 +277,14 @@ describe('primary savings reconciliation', () => {
           third_party_reference: 'our-reference',
           amount: 2000,
           fee: 0,
-          customer_id: 'source-customer',
+          customer_id: 'business',
           source_wallet: 'source',
           destination_wallet: 'destination',
         },
       });
+      dependencies.resolveIdentity.mockResolvedValue(
+        productionIdentity('failed')
+      );
       if (outcome instanceof Error)
         dependencies.release.mockRejectedValue(outcome);
       else dependencies.release.mockResolvedValue(outcome);

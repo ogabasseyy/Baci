@@ -40,7 +40,7 @@ export async function fetchWalletNumbers(
   ]);
   if (wallet.error) throw wallet.error;
   if (goals.error) throw goals.error;
-  if (interest.status !== 'available')
+  if (interest.status === 'unavailable')
     throw new Error('Could not refresh savings interest');
   const goalsWithMetadata = Array.isArray(goals.data)
     ? goals.data.map((goal) => ({

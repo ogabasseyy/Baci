@@ -74,6 +74,7 @@ jest.mock('@/hooks/use-wallet', () => ({
       wallet: {
         active_savings_goal: mockActiveGoal,
         savings_goals: mockSavingsGoals,
+        earnings_available: true,
       },
     },
     isLoading: false,

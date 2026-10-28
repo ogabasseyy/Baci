@@ -68,7 +68,7 @@ export function WalletHeroSection({
   needsPhone = false,
   onCreateFundingAccount = () => undefined,
   utilityAccentColor = '#F8B84C',
-  earningsAvailable = false,
+  earningsAvailable,
   earningsBalance,
   fundingAccount,
   creditWatch,
@@ -85,6 +85,7 @@ export function WalletHeroSection({
   const hasHeaderAction = !!fundingAccount || !!walletSetupState;
   const savingsGoalId =
     !fundingAccount &&
+    earningsAvailable === true &&
     isHostedStagingTestPaymentsEnabled() &&
     activeSavingsGoal?.status === 'active' &&
     activeSavingsGoal.source_mode === 'manual'
@@ -129,7 +130,9 @@ export function WalletHeroSection({
               adjustsFontSizeToFit
               minimumFontScale={0.55}
             >
-              {formatNgnCurrency(totalBalance)}
+              {earningsAvailable === true
+                ? formatNgnCurrency(totalBalance)
+                : '—'}
             </Text>
           </View>
           {fundingAccount ? (
@@ -210,7 +213,9 @@ export function WalletHeroSection({
             adjustsFontSizeToFit={true}
             minimumFontScale={0.5}
           >
-            {formatNgnCurrency(savingsBalance)}
+            {earningsAvailable === true
+              ? formatNgnCurrency(savingsBalance)
+              : '—'}
           </Text>
         </Pressable>
         <View style={styles.balanceSummaryCell}>

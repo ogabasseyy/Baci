@@ -21,6 +21,7 @@ it.each([
       <WalletSavingsProgressModal
         addAmount="5000"
         colors={colors}
+        progressAvailable
         goal={{
           contribution_amount: 500,
           contribution_frequency: 'weekly',

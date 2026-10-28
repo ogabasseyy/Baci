@@ -27,10 +27,14 @@ jest.mock('@/services/analytics', () => ({ trackEvent: jest.fn() }));
 jest.mock('./wallet-savings-interest', () => ({
   fetchWalletSavingsInterest: (...args: unknown[]) => mockInterest(...args),
   toWalletSavingsInterestEarnings: (interest: {
-    creditedInterestKobo: number;
+    status: string;
+    creditedInterestKobo: number | null;
   }) => ({
-    earnings_available: true,
-    earnings_balance: interest.creditedInterestKobo / 100,
+    earnings_available: interest.status === 'available',
+    earnings_balance:
+      interest.creditedInterestKobo === null
+        ? null
+        : interest.creditedInterestKobo / 100,
   }),
 }));
 beforeEach(() => {
@@ -131,6 +135,36 @@ it('does not replace paid-interest-inclusive savings with principal alone when i
   await expect(
     fetchWalletNumbers('customer-1', 'merchant-1', 'user-1')
   ).rejects.toThrow('Could not refresh savings interest');
+});
+
+it('returns history-only refreshes without presenting unavailable earnings as zero', async () => {
+  mockInterest.mockResolvedValue({
+    status: 'history-only',
+    creditedInterestKobo: null,
+    goalInterestKobo: [],
+    transactions: [
+      {
+        id: 'reversal-1',
+        goal_id: 'goal-1',
+        amount: -5,
+        type: 'adjustment',
+        description: 'Paid savings interest reversal',
+        created_at: null,
+      },
+    ],
+  });
+
+  const result = await fetchWalletNumbers('customer-1', 'merchant-1', 'user-1');
+  expect(result).toMatchObject({
+    wallet: {
+      earnings_available: false,
+      earnings_balance: null,
+      savings_balance: 200,
+      total_balance: 300,
+    },
+    interestTransactions: [{ id: 'reversal-1', amount: -5 }],
+    goals: [{ id: 'goal-1', current_amount: 200 }],
+  });
 });
 
 it('rejects a malformed wallet amount rather than displaying a fresh zero', async () => {

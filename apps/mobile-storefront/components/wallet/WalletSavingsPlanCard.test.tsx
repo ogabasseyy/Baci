@@ -30,6 +30,7 @@ describe('WalletSavingsPlanCard', () => {
     render(
       <WalletSavingsPlanCard
         colors={Colors.dark}
+        progressAvailable
         goal={{ ...goal, current_amount: amount, target_amount: 250000 }}
         onOpen={jest.fn()}
       />
@@ -51,6 +52,7 @@ describe('WalletSavingsPlanCard', () => {
     render(
       <WalletSavingsPlanCard
         colors={Colors.light}
+        progressAvailable
         goal={goal}
         onOpen={onOpen}
       />
@@ -75,6 +77,7 @@ describe('WalletSavingsPlanCard', () => {
     render(
       <WalletSavingsPlanCard
         colors={Colors.light}
+        progressAvailable
         goal={{ ...goal, current_amount: 50000 }}
         onOpen={jest.fn()}
       />
@@ -91,6 +94,7 @@ describe('WalletSavingsPlanCard', () => {
     render(
       <WalletSavingsPlanCard
         colors={Colors.light}
+        progressAvailable
         goal={{ ...goal, current_amount: 100000, status: 'completed' }}
         onOpen={jest.fn()}
       />
@@ -106,6 +110,7 @@ describe('WalletSavingsPlanCard', () => {
     const { UNSAFE_queryByType } = render(
       <WalletSavingsPlanCard
         colors={Colors.dark}
+        progressAvailable
         goal={{ ...goal, source_mode: 'auto_debit' }}
         onOpen={jest.fn()}
       />
@@ -121,6 +126,7 @@ describe('WalletSavingsPlanCard', () => {
     render(
       <WalletSavingsPlanCard
         colors={Colors.light}
+        progressAvailable
         goal={{
           ...goal,
           product_image: 'https://example.com/phone.jpg',
@@ -141,6 +147,7 @@ describe('WalletSavingsPlanCard', () => {
     const { toJSON } = render(
       <WalletSavingsPlanCard
         colors={Colors.dark}
+        progressAvailable
         goal={goal}
         onOpen={jest.fn()}
       />
@@ -156,7 +163,12 @@ describe('WalletSavingsPlanCard', () => {
   it('preserves the approved red Add to savings action in dark mode', () => {
     const onOpen = jest.fn();
     const { UNSAFE_getByType } = render(
-      <WalletSavingsPlanCard colors={Colors.dark} goal={goal} onOpen={onOpen} />
+      <WalletSavingsPlanCard
+        colors={Colors.dark}
+        progressAvailable
+        goal={goal}
+        onOpen={onOpen}
+      />
     );
 
     expect(UNSAFE_getByType(LinearGradient).props).toEqual(

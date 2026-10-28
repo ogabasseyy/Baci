@@ -49,6 +49,7 @@ function createProps(): WalletContentProps {
     canCreateFundingAccount: true,
     colors: Colors.light,
     contentContainerStyle: { paddingBottom: 32, paddingTop: 20 },
+    earningsAvailable: true,
     earningsBalance: 125000,
     fundAmount: '',
     fundingAccount: null,

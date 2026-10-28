@@ -184,3 +184,4 @@ DO $$ BEGIN
   EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;
 SELECT 'PRIMARY paid-interest raw capture regressions passed' AS result;
+\ir primary-wallet-paid-interest-history-independence.integration.sql

@@ -5,6 +5,14 @@ SELECT pg_temp.assert_true((public.get_customer_savings_interest_snapshot(
     '00000000-0000-4000-8000-000000000001')->'interest_history')='array',
   'Combined authenticated snapshot returns the production earnings and history in one call');
 RESET ROLE;
+SET ROLE anon;
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.get_customer_savings_interest_snapshot('00000000-0000-4000-8000-000000000001');
+    RAISE EXCEPTION 'Unauthenticated caller read the combined interest snapshot';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
 SELECT pg_temp.assert_true(NOT has_function_privilege('anon','public.get_customer_savings_interest_history(uuid)','EXECUTE')
   AND has_function_privilege('authenticated','public.get_customer_savings_interest_history(uuid)','EXECUTE')
   AND NOT has_function_privilege('service_role','public.get_customer_savings_interest_history(uuid)','EXECUTE')

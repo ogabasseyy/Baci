@@ -183,9 +183,11 @@ export async function fetchWalletDataUnbounded(
   const active = getActiveSavingsGoal(projected.goals);
   const mapGoal = (goal: SavingsGoalData) =>
     toActiveSavingsGoal({ goal, product: products.get(goal.id) });
+  const activeGoal = active ? mapGoal(active) : null;
   const savingsGoals = getOwnedSavingsGoals(projected.goals).flatMap((goal) => {
     const mapped = mapGoal(goal);
-    return mapped ? [mapped] : [];
+    if (!mapped) return [];
+    return [mapped];
   });
   const fundingAccount = resolveWalletFundingAccount(
     fundingAccountResult.data,
@@ -203,7 +205,7 @@ export async function fetchWalletDataUnbounded(
     ),
     wallet: {
       ...balances,
-      active_savings_goal: active ? mapGoal(active) : null,
+      active_savings_goal: activeGoal,
       funding_account: fundingAccount,
       requires_funding_account_consent: fundingAccount === null,
       savings_balance: projected.savingsBalance,

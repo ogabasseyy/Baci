@@ -115,6 +115,141 @@ describe('fetchWalletData interest', () => {
     expect(result.wallet.earnings_balance).toBe(500);
   });
 
+  it('keeps interest history while using the principal projection when earnings are unavailable', async () => {
+    const goalId = '30000000-0000-4000-8000-000000000001';
+    const goal = {
+      contribution_amount: '10000',
+      contribution_frequency: 'weekly',
+      current_amount: '20000',
+      id: goalId,
+      maturity_date: '2026-09-30',
+      product_id: null,
+      product_snapshot: {},
+      source_mode: 'manual' as const,
+      status: 'active' as const,
+      target_amount: '120000',
+      title: 'General savings',
+      variant_id: null,
+    };
+    const merchantId = '10000000-0000-4000-8000-000000000001';
+    const confirmedHistory = {
+      id: 'primary:interest-1',
+      goal_id: goalId,
+      amount: 5,
+      type: 'credit' as const,
+      description: 'Savings interest',
+      source_type: 'savings_interest' as const,
+      created_at: '2026-10-28T10:00:00Z',
+    };
+    setupSupabaseTables({ customer_savings_goals: createResult([goal]) });
+    mockRpc.mockImplementation(async () => ({
+      data: {
+        earnings_available: false,
+        credited_interest_kobo: null,
+        goal_interest_kobo: [],
+        interest_history: [confirmedHistory],
+      },
+      error: null,
+    }));
+
+    const reloaded = await fetchWalletData('customer-1', merchantId, 'user-1');
+
+    expect(reloaded.wallet.active_savings_goal).toEqual(
+      expect.objectContaining({ current_amount: 20000 })
+    );
+    expect(reloaded.wallet.savings_goals?.[0].current_amount).toBe(20000);
+    expect(reloaded.wallet.savings_balance).toBe(20000);
+    expect(reloaded.wallet.total_balance).toBe(25000);
+    expect(reloaded.wallet.earnings_available).toBe(false);
+    expect(reloaded.transactions).toContainEqual(
+      expect.objectContaining({
+        id: 'primary:interest-1',
+        amount: 5,
+        source_type: 'savings_interest',
+      })
+    );
+
+    const newReversal = {
+      id: 'primary-reversal:interest-reversal-1',
+      goal_id: goalId,
+      amount: -5,
+      type: 'adjustment' as const,
+      description: 'Savings interest reversal',
+      source_type: 'savings_interest' as const,
+      created_at: null,
+    };
+    setupSupabaseTables({ customer_savings_goals: createResult([goal]) });
+    mockRpc.mockImplementation(async () => ({
+      data: {
+        earnings_available: false,
+        credited_interest_kobo: null,
+        goal_interest_kobo: [],
+        interest_history: [confirmedHistory, newReversal],
+      },
+      error: null,
+    }));
+    const reloadedWithReversal = await fetchWalletData(
+      'customer-1',
+      merchantId,
+      'user-1'
+    );
+    expect(reloadedWithReversal.wallet.savings_balance).toBe(20000);
+    expect(reloadedWithReversal.wallet.total_balance).toBe(25000);
+    expect(reloadedWithReversal.transactions).toContainEqual(
+      expect.objectContaining({ id: newReversal.id, amount: -5 })
+    );
+
+    setupSupabaseTables({
+      customer_savings_goals: createResult([
+        { ...goal, current_amount: '25000' },
+      ]),
+    });
+    mockRpc.mockImplementation(async () => ({
+      data: {
+        earnings_available: false,
+        credited_interest_kobo: null,
+        goal_interest_kobo: [],
+        interest_history: [confirmedHistory],
+      },
+      error: null,
+    }));
+    const changedPrincipal = await fetchWalletData(
+      'customer-1',
+      merchantId,
+      'user-1'
+    );
+    expect(changedPrincipal.wallet.savings_goals?.[0].current_amount).toBe(
+      25000
+    );
+    expect(changedPrincipal.wallet.savings_balance).toBe(25000);
+
+    const addedGoalId = '30000000-0000-4000-8000-000000000002';
+    setupSupabaseTables({
+      customer_savings_goals: createResult([
+        { ...goal, id: addedGoalId, current_amount: '7000' },
+      ]),
+    });
+    mockRpc.mockImplementation(async () => ({
+      data: {
+        earnings_available: false,
+        credited_interest_kobo: null,
+        goal_interest_kobo: [],
+        interest_history: [confirmedHistory],
+      },
+      error: null,
+    }));
+    const changedGoalSet = await fetchWalletData(
+      'customer-1',
+      merchantId,
+      'user-1'
+    );
+    expect(changedGoalSet.wallet.savings_goals?.map(({ id }) => id)).toEqual([
+      addedGoalId,
+    ]);
+    expect(changedGoalSet.wallet.savings_balance).toBe(7000);
+    expect(changedGoalSet.wallet.total_balance).toBe(12000);
+  });
+
   it('marks earnings unavailable when the interest lookup fails', async () => {
     setupSupabaseTables();
 

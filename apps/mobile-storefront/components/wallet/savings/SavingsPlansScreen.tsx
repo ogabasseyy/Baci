@@ -24,6 +24,7 @@ export function SavingsPlansScreen() {
     'All' | 'Active' | 'Paused' | 'Completed'
   >('All');
   const goals = query.data?.wallet.savings_goals ?? [];
+  const progressAvailable = query.data?.wallet.earnings_available === true;
   const visibleGoals = goals.filter(
     (goal) => filter === 'All' || goal.status === filter.toLowerCase()
   );
@@ -67,12 +68,13 @@ export function SavingsPlansScreen() {
           <ActivityIndicator accessibilityLabel="Loading savings plans" />
         ) : (
           <Text style={[styles.total, { color: colors.text }]}>
-            {formatNgnCurrency(totalSaved)}
+            {progressAvailable ? formatNgnCurrency(totalSaved) : '—'}
           </Text>
         )}
         <Text style={[styles.support, { color: colors.textSecondary }]}>
-          {activeCount} active {activeCount === 1 ? 'plan' : 'plans'} · Every
-          goal has its own balance
+          {progressAvailable
+            ? `${activeCount} active ${activeCount === 1 ? 'plan' : 'plans'} · Every goal has its own balance`
+            : 'Savings progress is unavailable while earnings are being confirmed.'}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -150,6 +152,7 @@ export function SavingsPlansScreen() {
         <SavingsPlanListCard
           key={goal.id}
           goal={goal}
+          progressAvailable={progressAvailable}
           colors={colors}
           onPress={() =>
             router.push({

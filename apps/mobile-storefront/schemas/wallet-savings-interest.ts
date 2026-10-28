@@ -14,7 +14,8 @@ export const WalletSavingsInterestRequestSchema = z.strictObject({
 
 export const WalletSavingsInterestResponseSchema = z
   .strictObject({
-    credited_interest_kobo: creditedInterestKoboSchema,
+    earnings_available: z.boolean().optional(),
+    credited_interest_kobo: creditedInterestKoboSchema.nullable(),
     interest_history: z.array(SavingsInterestActivitySchema).max(20).optional(),
     goal_interest_kobo: z
       .array(
@@ -26,6 +27,38 @@ export const WalletSavingsInterestResponseSchema = z
       .max(1000),
   })
   .superRefine((response, context) => {
+    if (response.earnings_available === false) {
+      if (response.credited_interest_kobo !== null) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Unavailable earnings must not carry a numeric balance',
+          path: ['credited_interest_kobo'],
+        });
+      }
+      if (response.goal_interest_kobo.length > 0) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Unavailable earnings must not carry goal balances',
+          path: ['goal_interest_kobo'],
+        });
+      }
+      if (!response.interest_history) {
+        context.addIssue({
+          code: 'custom',
+          message: 'History-only responses must include interest history',
+          path: ['interest_history'],
+        });
+      }
+      return;
+    }
+    if (response.credited_interest_kobo === null) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Available earnings must include a numeric balance',
+        path: ['credited_interest_kobo'],
+      });
+      return;
+    }
     const goalIds = new Set<string>();
     let goalInterestTotal = 0n;
     response.goal_interest_kobo.forEach((entry, index) => {

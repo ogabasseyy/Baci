@@ -26,6 +26,7 @@ function renderProgress(currentAmount: number) {
     <WalletSavingsProgressModal
       addAmount=""
       colors={Colors.dark}
+      progressAvailable
       goal={{ ...goal, current_amount: currentAmount }}
       isAdding={false}
       onAddAmountChange={jest.fn()}
@@ -66,5 +67,33 @@ describe('bugfix: fractional savings progress in the modal', () => {
 
     expect(screen.getByText(goal.title)).toHaveProp('numberOfLines', 1);
     expect(screen.getByText(goal.title)).toHaveProp('ellipsizeMode', 'tail');
+  });
+
+  it('hides principal-only progress and disables contributions when earnings are unavailable', () => {
+    render(
+      <WalletSavingsProgressModal
+        addAmount=""
+        colors={Colors.dark}
+        goal={goal}
+        isAdding={false}
+        onAddAmountChange={jest.fn()}
+        onAddSavings={jest.fn()}
+        onChangeDevice={jest.fn()}
+        onClose={jest.fn()}
+        onFundWallet={jest.fn()}
+        visible
+        walletBalance={0}
+        usesWalletBankTransfer
+        progressAvailable={false}
+      />
+    );
+    expect(screen.getByText('Progress unavailable')).toBeOnTheScreen();
+    expect(
+      screen.getByText(/progress and contributions are unavailable/i)
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('₦100 saved')).toBeNull();
+    expect(screen.queryByText('₦249,900 left')).toBeNull();
+    expect(screen.queryByLabelText('Savings plan progress details')).toBeNull();
+    expect(screen.queryByText('Add to savings')).toBeNull();
   });
 });

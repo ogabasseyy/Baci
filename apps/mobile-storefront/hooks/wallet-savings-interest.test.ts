@@ -51,6 +51,36 @@ it('loads earnings and history from one validated snapshot RPC', async () => {
   );
 });
 
+it('preserves validated history while marking unsafe earnings unavailable', async () => {
+  const history = [
+    {
+      id: 'primary-reversal:integration:reversal-1',
+      goal_id: '50000000-0000-4000-8000-000000000005',
+      amount: -1.25,
+      type: 'adjustment',
+      description: 'Paid savings interest reversal',
+      source_type: 'savings_interest',
+      created_at: null,
+    },
+  ];
+  mockRpc.mockResolvedValueOnce({
+    data: {
+      earnings_available: false,
+      credited_interest_kobo: null,
+      goal_interest_kobo: [],
+      interest_history: history,
+    },
+    error: null,
+  });
+
+  await expect(fetchWalletSavingsInterest(merchantId)).resolves.toMatchObject({
+    status: 'history-only',
+    creditedInterestKobo: null,
+    goalInterestKobo: [],
+    transactions: history,
+  });
+});
+
 it('uses the one-argument RPC when the goals overload is absent', async () => {
   mockRpc
     .mockResolvedValueOnce({ data: null, error: { code: 'PGRST202' } })

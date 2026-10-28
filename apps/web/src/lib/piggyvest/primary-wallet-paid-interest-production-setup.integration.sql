@@ -16,6 +16,7 @@ ALTER TABLE public.customer_savings_goals ADD COLUMN non_withdrawable_accepted_a
 \ir ../../../../../supabase/migrations/20261027072530_customer_savings_interest_history.sql
 \ir ../../../../../supabase/migrations/20261027084837_customer_savings_interest_snapshot.sql
 \ir ../../../../../supabase/migrations/20261027200820_paid_interest_earnings_reversal_semantics.sql
+\ir ../../../../../supabase/migrations/20261028090000_customer_interest_snapshot_history_independence.sql
 INSERT INTO public.merchants(id) VALUES('00000000-0000-4000-8000-000000000099');
 
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$

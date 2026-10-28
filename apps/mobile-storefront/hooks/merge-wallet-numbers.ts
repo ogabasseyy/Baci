@@ -39,6 +39,8 @@ export function mergeWalletNumbers(
     wallet: {
       ...cached.wallet,
       ...fresh.wallet,
+      savings_balance: fresh.wallet.savings_balance,
+      total_balance: fresh.wallet.total_balance,
       savings_goals: goals.map(updateGoal),
       active_savings_goal: active ? updateGoal(active) : active,
     },

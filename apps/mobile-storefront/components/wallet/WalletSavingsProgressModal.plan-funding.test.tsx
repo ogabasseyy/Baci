@@ -55,6 +55,7 @@ function modal(
     <WalletSavingsProgressModal
       addAmount=""
       colors={Colors.dark}
+      progressAvailable
       goal={currentGoal}
       isAdding={false}
       onAddAmountChange={jest.fn()}

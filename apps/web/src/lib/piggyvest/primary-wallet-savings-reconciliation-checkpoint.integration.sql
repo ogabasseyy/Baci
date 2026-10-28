@@ -88,6 +88,66 @@ BEGIN
     RAISE EXCEPTION 'finish function ACL is not narrow';
   END IF;
 END $$;
+DO $checkpoint_privilege_contract$
+DECLARE
+  contract record;
+  routine oid;
+BEGIN
+  FOR contract IN
+    SELECT * FROM (VALUES
+      ('piggyvest_primary.claim_savings_reconciliation_checkpoint(uuid,text,uuid)', 'piggyvest_primary_evidence', true),
+      ('piggyvest_primary.save_savings_reconciliation_checkpoint(uuid,text,jsonb)', 'piggyvest_primary_evidence', true),
+      ('piggyvest_primary.finish_savings_reconciliation_checkpoint(uuid,text,jsonb)', 'piggyvest_primary_evidence', true),
+      ('piggyvest_primary.clear_terminal_savings_reconciliation_checkpoint()', NULL, true)
+    ) AS expected(signature, executor_role, security_definer)
+  LOOP
+    routine := pg_catalog.to_regprocedure(contract.signature);
+    IF routine IS NULL THEN
+      RAISE EXCEPTION 'required checkpoint routine is missing: %', contract.signature;
+    END IF;
+
+    IF (SELECT p.prosecdef FROM pg_catalog.pg_proc p WHERE p.oid = routine)
+      IS DISTINCT FROM contract.security_definer THEN
+      RAISE EXCEPTION 'unexpected SECURITY DEFINER property: %', contract.signature;
+    END IF;
+
+    IF contract.executor_role IS NOT NULL
+      AND NOT pg_catalog.has_function_privilege(contract.executor_role, routine, 'EXECUTE') THEN
+      RAISE EXCEPTION 'intended executor % cannot execute %', contract.executor_role, contract.signature;
+    END IF;
+
+    IF pg_catalog.has_function_privilege('anon', routine, 'EXECUTE')
+      OR pg_catalog.has_function_privilege('service_role', routine, 'EXECUTE') THEN
+      RAISE EXCEPTION 'anon or service_role can execute %', contract.signature;
+    END IF;
+
+    IF contract.executor_role IS DISTINCT FROM 'authenticated'
+      AND pg_catalog.has_function_privilege('authenticated', routine, 'EXECUTE') THEN
+      RAISE EXCEPTION 'authenticated can execute restricted routine %', contract.signature;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc p
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        COALESCE(p.proacl, pg_catalog.acldefault('f', p.proowner))
+      ) privilege
+      LEFT JOIN pg_catalog.pg_roles allowed_role
+        ON allowed_role.rolname = contract.executor_role
+      WHERE p.oid = routine
+        AND privilege.privilege_type = 'EXECUTE'
+        AND privilege.grantee <> p.proowner
+        AND (
+          privilege.grantee = 0
+          OR allowed_role.oid IS NULL
+          OR privilege.grantee <> allowed_role.oid
+        )
+    ) THEN
+      RAISE EXCEPTION 'unexpected EXECUTE grantee on %', contract.signature;
+    END IF;
+  END LOOP;
+END;
+$checkpoint_privilege_contract$;
 SET SESSION AUTHORIZATION primary_evidence_fixture;
 DO $$
 DECLARE v_operation uuid := '00000000-0000-4000-8000-000000000008'; v_claim jsonb;

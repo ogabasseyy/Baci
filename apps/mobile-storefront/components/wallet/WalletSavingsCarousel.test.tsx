@@ -11,9 +11,11 @@ jest.mock('./WalletSavingsPlanCard', () => {
     WalletSavingsPlanCard: ({
       goal,
       onOpen,
+      progressAvailable,
     }: {
       goal: WalletActiveSavingsGoal;
       onOpen: () => void;
+      progressAvailable?: boolean;
     }) => (
       <Pressable
         accessibilityRole="button"
@@ -21,6 +23,9 @@ jest.mock('./WalletSavingsPlanCard', () => {
         onPress={onOpen}
       >
         <Text>{goal.current_amount}</Text>
+        <Text testID={`progress-availability-${goal.id}`}>
+          {String(progressAvailable)}
+        </Text>
       </Pressable>
     ),
   };
@@ -65,6 +70,23 @@ it('opens the swiped plan by its own ID instead of contributing to the featured 
   expect(onOpenFeatured).not.toHaveBeenCalled();
   fireEvent.press(screen.getByRole('button', { name: 'Open Phone' }));
   expect(onOpenFeatured).toHaveBeenCalledTimes(1);
+});
+
+it('propagates unavailable earnings state to every carousel card', () => {
+  render(
+    <WalletSavingsCarousel
+      goals={[first]}
+      colors={Colors.dark}
+      onOpenFeatured={jest.fn()}
+      progressAvailable={false}
+    />
+  );
+  fireEvent(screen.getByTestId('savings-carousel'), 'layout', {
+    nativeEvent: { layout: { width: 390 } },
+  });
+  expect(screen.getByTestId('progress-availability-one')).toHaveTextContent(
+    'false'
+  );
 });
 
 it.each([

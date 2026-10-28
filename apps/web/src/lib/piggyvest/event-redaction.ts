@@ -68,5 +68,13 @@ export function redactEventDetails(
     });
     return redacted;
   }
+  if (event.eventType === 'wallet-transfer.outflow.success') {
+    // Candidate identity only: this projection does not certify settlement.
+    const transactionId = event.eventData.transaction_id;
+    if (typeof transactionId === 'string' && transactionId.length > 0) {
+      redacted.transaction_id = transactionId;
+    }
+    return redacted;
+  }
   return redacted;
 }

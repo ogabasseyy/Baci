@@ -34,3 +34,23 @@ it('keeps confirmed amounts and offers retry when details fail', () => {
   fireEvent.press(screen.getByRole('button'));
   expect(retry).toHaveBeenCalledTimes(1);
 });
+
+it('does not present principal-only savings as a confirmed total when earnings are unavailable', () => {
+  render(
+    <WalletBalancePreview
+      wallet={{ ...wallet, earnings_available: false }}
+      colors={Colors.dark}
+    />
+  );
+  expect(screen.getAllByText('—')).toHaveLength(3);
+  expect(screen.queryByText('₦300')).toBeNull();
+  expect(screen.queryByText('₦200')).toBeNull();
+});
+
+it('fails closed for a legacy cached wallet without earnings availability', () => {
+  const { earnings_available: _earningsAvailable, ...legacyWallet } = wallet;
+  render(<WalletBalancePreview wallet={legacyWallet} colors={Colors.dark} />);
+  expect(screen.getAllByText('—')).toHaveLength(3);
+  expect(screen.queryByText('₦300')).toBeNull();
+  expect(screen.queryByText('₦200')).toBeNull();
+});

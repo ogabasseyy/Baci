@@ -14,6 +14,7 @@ const props: ComponentProps<typeof WalletLoadingView> = {
       balance: 100,
       total_balance: 300,
       savings_balance: 200,
+      earnings_available: true,
       loyalty_points: 0,
     },
     isError: false,

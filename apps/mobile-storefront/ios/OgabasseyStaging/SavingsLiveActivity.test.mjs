@@ -82,12 +82,16 @@ test('native SavingsLiveActivity queue serializes track, clear, account switch, 
     const run = spawnSync(executable, [], {
       encoding: 'utf8',
       timeout: 30_000,
-      env: { PATH: process.env.PATH, DYLD_LIBRARY_PATH: modules },
+      env: {
+        PATH: process.env.PATH,
+        DYLD_LIBRARY_PATH: modules,
+        BACI_LIVE_ACTIVITY_TRACE: process.env.BACI_LIVE_ACTIVITY_TRACE,
+      },
     });
     assert.notEqual(
       run.error?.code,
       'ETIMEDOUT',
-      'native queue behavior exceeded the 30 second process timeout'
+      `native queue behavior exceeded the 30 second process timeout:\n${run.stderr}`
     );
     assert.equal(
       run.status,
@@ -95,6 +99,10 @@ test('native SavingsLiveActivity queue serializes track, clear, account switch, 
       `native queue behavior failed:\n${run.stdout}\n${run.stderr}`
     );
     assert.match(run.stdout, /SavingsLiveActivity behavioral scenarios passed/);
+    if (process.env.BACI_LIVE_ACTIVITY_TRACE === '1') {
+      assert.match(run.stderr, /harness: waiting for request\n/);
+      assert.match(run.stderr, /harness: received request\n/);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -127,13 +135,24 @@ public struct ActivityAuthorizationInfo { public static var activitiesEnabled = 
   public func end(_ content: ActivityContent<Attributes.ContentState>?, dismissalPolicy: ActivityDismissalPolicy) async { ended = true; TestEvents.emit("end"); await TestGate.pauseIfRequested() }
   public static func request(attributes: Attributes, content: ActivityContent<Attributes.ContentState>, pushType: Never?) throws -> Activity<Attributes> { TestEvents.emit("request"); return Activity(attributes: attributes, state: content.state) }
 }
-public enum TestGate {
+@MainActor public enum TestGate {
   public static var shouldPause = false
   private static var continuation: CheckedContinuation<Void, Never>?
   private static var entered: CheckedContinuation<Void, Never>?
-  public static func waitUntilEntered() async { if continuation != nil { return }; await withCheckedContinuation { entered = $0 } }
-  public static func pauseIfRequested() async { guard shouldPause else { return }; shouldPause = false; await withCheckedContinuation { continuation = $0; entered?.resume(); entered = nil } }
-  public static func release() { continuation?.resume(); continuation = nil }
+  private static func trace(_ value: String) { if ProcessInfo.processInfo.environment["BACI_LIVE_ACTIVITY_TRACE"] == "1" { fputs("gate: \\(value)\\n", stderr) } }
+  public static func waitUntilEntered() async { trace("wait entered; continuation=\\(continuation != nil)"); if continuation != nil { return }; await withCheckedContinuation { entered = $0 }; trace("entered") }
+  public static func pauseIfRequested() async { guard shouldPause else { return }; trace("pause begin"); shouldPause = false; await withCheckedContinuation { continuation = $0; entered?.resume(); entered = nil }; trace("pause end") }
+  public static func release() { trace("release; continuation=\\(continuation != nil)"); continuation?.resume(); continuation = nil }
+  public static func verifyRendezvous() async {
+    for _ in 0..<100 {
+      shouldPause = true
+      let waiter = Task { await waitUntilEntered() }
+      let pause = Task { await pauseIfRequested() }
+      await waiter.value
+      release()
+      await pause.value
+    }
+  }
 }
 `;
 
@@ -148,6 +167,7 @@ struct SavingsAttributes: ActivityAttributes {
 @main struct Harness {
   @MainActor static func main() async {
     prepareEvents()
+    await TestGate.verifyRendezvous()
     let bridge = SavingsLiveActivity()
     let a = "11111111-1111-4111-8111-111111111111"
     let b = "22222222-2222-4222-8222-222222222222"
@@ -214,8 +234,10 @@ struct SavingsAttributes: ActivityAttributes {
   static var events = TestEvents.stream.makeAsyncIterator()
   static func prepareEvents() { _ = events }
   static func waitFor(_ expected: String) async {
-    while let event = await events.next() { if event == expected { return } }
+    trace("waiting for \(expected)")
+    while let event = await events.next() { trace("received \(event)"); if event == expected { return } }
     preconditionFailure("event stream ended while waiting for \(expected)")
   }
+  static func trace(_ value: String) { if ProcessInfo.processInfo.environment["BACI_LIVE_ACTIVITY_TRACE"] == "1" { fputs("harness: \(value)\n", stderr) } }
 }
 `;

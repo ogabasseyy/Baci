@@ -27,6 +27,10 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Unconfigured history projection returned mixed values';
   EXCEPTION WHEN SQLSTATE '55000' THEN NULL; END;
   BEGIN
+    PERFORM public.get_customer_savings_interest_snapshot('00000000-0000-4000-8000-000000000001');
+    RAISE EXCEPTION 'Unconfigured combined snapshot returned partial history';
+  EXCEPTION WHEN SQLSTATE '55000' THEN NULL; END;
+  BEGIN
     INSERT INTO savings_interest_private.deployment_environment(singleton,environment) VALUES(true,'production');
     RAISE EXCEPTION 'Authenticated caller provisioned the marker';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;

@@ -9,10 +9,12 @@ export function SavingsPlanListCard({
   goal,
   colors,
   onPress,
+  progressAvailable = false,
 }: {
   goal: WalletActiveSavingsGoal;
   colors: (typeof Colors)['light'];
   onPress: () => void;
+  progressAvailable?: boolean;
 }) {
   const { percent: percentage, percentLabel: progressLabel } =
     getSavingsProgress(goal);
@@ -82,7 +84,7 @@ export function SavingsPlanListCard({
             SAVED
           </Text>
           <Text style={[styles.amount, { color: colors.text }]}>
-            {formatNgnCurrency(goal.current_amount)}
+            {progressAvailable ? formatNgnCurrency(goal.current_amount) : '—'}
           </Text>
         </View>
         <View style={styles.target}>
@@ -94,37 +96,45 @@ export function SavingsPlanListCard({
           </Text>
         </View>
       </View>
-      <View
-        accessible
-        accessibilityRole="progressbar"
-        accessibilityLabel={`${goal.title} progress`}
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: percentage,
-          text: progressLabel,
-        }}
-        style={[styles.track, { backgroundColor: colors.muted }]}
-      >
+      {progressAvailable ? (
         <View
-          style={{
-            height: 6,
-            width: `${percentage}%`,
-            backgroundColor: BRAND.primary,
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${goal.title} progress`}
+          accessibilityValue={{
+            min: 0,
+            max: 100,
+            now: percentage,
+            text: progressLabel,
           }}
-        />
-      </View>
-      <View style={styles.footer}>
-        <Text style={[styles.remaining, { color: colors.textSecondary }]}>
-          {formatNgnCurrency(
-            Math.max(0, goal.target_amount - goal.current_amount)
-          )}{' '}
-          to go
+          style={[styles.track, { backgroundColor: colors.muted }]}
+        >
+          <View
+            style={{
+              height: 6,
+              width: `${percentage}%`,
+              backgroundColor: BRAND.primary,
+            }}
+          />
+        </View>
+      ) : (
+        <Text style={[styles.unavailable, { color: colors.textSecondary }]}>
+          Progress unavailable
         </Text>
-        <Text style={[styles.progress, { color: BRAND.primary }]}>
-          {progressLabel}
-        </Text>
-      </View>
+      )}
+      {progressAvailable ? (
+        <View style={styles.footer}>
+          <Text style={[styles.remaining, { color: colors.textSecondary }]}>
+            {formatNgnCurrency(
+              Math.max(0, goal.target_amount - goal.current_amount)
+            )}{' '}
+            to go
+          </Text>
+          <Text style={[styles.progress, { color: BRAND.primary }]}>
+            {progressLabel}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -163,4 +173,5 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   remaining: { fontSize: 12, flex: 1 },
   progress: { fontSize: 12, fontWeight: '700' },
+  unavailable: { fontSize: 12, fontWeight: '600' },
 });

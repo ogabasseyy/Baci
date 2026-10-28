@@ -36,8 +36,8 @@ const config = {
   // teardown. This must apply everywhere (CI *and* the local lefthook pre-push
   // gate) — gating it on CI alone made `pnpm turbo test` hang indefinitely
   // locally, blocking every push and spawning zombie Jest processes. The
-  // handles are idle and only surface once suites are green, so
-  // forcing exit is always safe here.
+  // This can also mask leaked handles; investigate them separately with
+  // Jest's --detectOpenHandles before relying on the suite for cleanup checks.
   forceExit: true,
   // jest-expo 57.0.2 loads TypeScript sources from Expo packages nested under
   // its own pnpm node_modules tree, so that nested Expo subtree must be compiled.

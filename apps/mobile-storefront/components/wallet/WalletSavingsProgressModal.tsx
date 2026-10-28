@@ -3,20 +3,21 @@ import { Image } from 'expo-image';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DraggableModalSheet } from '@/components/ui/DraggableModalSheet';
-import { BRAND, type default as Colors, withAlpha } from '@/constants/Colors';
+import { BRAND, type default as Colors } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 import { getSavingsProgress } from './get-savings-progress';
 import { WalletSavingsContributionSection } from './WalletSavingsContributionSection';
+import { WalletSavingsProgressMetrics } from './WalletSavingsProgressMetrics';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 type WalletColors = (typeof Colors)['light'];
 
 type WalletSavingsProgressModalProps = {
   embedded?: boolean;
+  progressAvailable?: boolean;
   addAmount: string;
   colors: WalletColors;
   goal: WalletActiveSavingsGoal | null;
@@ -53,6 +54,7 @@ export function WalletSavingsProgressModal({
   walletBalance,
   usesWalletBankTransfer = false,
   embedded = false,
+  progressAvailable = false,
 }: WalletSavingsProgressModalProps) {
   const insets = useSafeAreaInsets();
   if (!goal) {
@@ -60,7 +62,6 @@ export function WalletSavingsProgressModal({
   }
 
   const { milestone, percent, percentLabel } = getSavingsProgress(goal);
-  const progressValue = { max: 100, min: 0, now: percent, text: percentLabel };
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
   const conditionLabel = formatProductConditionDisplay(goal.product_condition);
   const productImageSource = getSavingsGoalImageSource(goal, 170);
@@ -144,7 +145,7 @@ export function WalletSavingsProgressModal({
               <Text
                 style={[styles.milestoneText, { color: colors.textSecondary }]}
               >
-                {milestone}
+                {progressAvailable ? milestone : 'Progress unavailable'}
               </Text>
             </View>
 
@@ -203,71 +204,34 @@ export function WalletSavingsProgressModal({
             ) : null}
           </View>
         </View>
-        <View
-          style={[
-            styles.progressCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLeft, { color: colors.text }]}>
-              {formatNgnCurrency(goal.current_amount)} saved
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(goal.target_amount)} target
-            </Text>
-          </View>
-          <View
-            accessible
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress details"
-            accessibilityValue={progressValue}
-            style={[
-              styles.progressTrack,
-              { backgroundColor: withAlpha(BRAND.primary, 0.16) },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${percent}%`, backgroundColor: BRAND.primary },
-              ]}
-            />
-          </View>
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(amountLeft)} left
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              <Text style={{ color: BRAND.primary }}>{percentLabel}</Text>{' '}
-              complete
-            </Text>
-          </View>
-        </View>
-        <WalletSavingsContributionSection
-          addAmount={addAmount}
+        <WalletSavingsProgressMetrics
+          amountLeft={amountLeft}
           colors={colors}
-          isAdding={isAdding}
-          isFundPending={isFundPending}
-          onAddAmountChange={onAddAmountChange}
-          onAddSavings={onAddSavings}
-          onFundWallet={onFundWallet}
-          remainingAmount={amountLeft}
-          walletBalance={walletBalance}
           goal={goal}
-          canAdd={canAddToSavings}
-          hasPendingContribution={hasPendingContribution}
-          usesPlanFunding={usesPlanFunding}
-          usesWalletBankTransfer={usesWalletBankTransfer}
-          visible={visible}
-          onRefreshWallet={onRefreshWallet}
+          percent={percent}
+          percentLabel={percentLabel}
+          progressAvailable={progressAvailable}
         />
+        {progressAvailable ? (
+          <WalletSavingsContributionSection
+            addAmount={addAmount}
+            colors={colors}
+            isAdding={isAdding}
+            isFundPending={isFundPending}
+            onAddAmountChange={onAddAmountChange}
+            onAddSavings={onAddSavings}
+            onFundWallet={onFundWallet}
+            remainingAmount={amountLeft}
+            walletBalance={walletBalance}
+            goal={goal}
+            canAdd={canAddToSavings}
+            hasPendingContribution={hasPendingContribution}
+            usesPlanFunding={usesPlanFunding}
+            usesWalletBankTransfer={usesWalletBankTransfer}
+            visible={visible}
+            onRefreshWallet={onRefreshWallet}
+          />
+        ) : null}
         {canAddToSavings ||
         (goal.selection_unresolved &&
           (goal.status !== 'completed' ||

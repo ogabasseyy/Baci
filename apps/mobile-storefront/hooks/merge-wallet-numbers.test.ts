@@ -97,6 +97,137 @@ it('updates numbers and both goal projections without replacing account, product
   expect(cached.wallet.active_savings_goal?.current_amount).toBe(200);
 });
 
+it('uses the fresh principal projection during a history-only number refresh', () => {
+  const confirmedCredit = {
+    id: 'credit-1',
+    goal_id: goal.id,
+    amount: 5,
+    type: 'credit' as const,
+    description: 'Savings interest',
+    source_type: 'savings_interest',
+    created_at: '2026-10-28T10:00:00Z',
+  };
+  const cachedWithInterest: WalletQueryData = {
+    ...cached,
+    transactions: [confirmedCredit],
+    wallet: {
+      ...cached.wallet,
+      savings_balance: 205,
+      total_balance: 205,
+      savings_goals: [{ ...goal, current_amount: 205 }],
+      active_savings_goal: { ...goal, current_amount: 205 },
+    },
+  };
+  const merged = mergeWalletNumbers(cachedWithInterest, {
+    ...fresh,
+    interestTransactions: [confirmedCredit],
+    wallet: {
+      ...fresh.wallet,
+      savings_balance: 200,
+      total_balance: 300,
+      earnings_available: false,
+      earnings_balance: null,
+    },
+    goals: [{ ...fresh.goals[0], current_amount: 200 }],
+  });
+
+  expect(merged?.wallet).toMatchObject({
+    balance: 100,
+    savings_balance: 200,
+    total_balance: 300,
+    earnings_available: false,
+    earnings_balance: null,
+  });
+  expect(merged?.wallet.active_savings_goal?.current_amount).toBe(200);
+  expect(merged?.transactions).toEqual([confirmedCredit]);
+});
+
+it('drops cached interest when history-only refresh observes a new reversal', () => {
+  const confirmedCredit = {
+    id: 'credit-1',
+    goal_id: goal.id,
+    amount: 5,
+    type: 'credit' as const,
+    description: 'Savings interest',
+    source_type: 'savings_interest',
+    created_at: '2026-10-28T10:00:00Z',
+  };
+  const newReversal = {
+    id: 'reversal-1',
+    goal_id: goal.id,
+    amount: -5,
+    type: 'adjustment' as const,
+    description: 'Paid savings interest reversal',
+    source_type: 'savings_interest',
+    created_at: null,
+  };
+  const cachedWithInterest: WalletQueryData = {
+    ...cached,
+    transactions: [confirmedCredit],
+    wallet: {
+      ...cached.wallet,
+      savings_balance: 205,
+      savings_goals: [{ ...goal, current_amount: 205 }],
+      active_savings_goal: { ...goal, current_amount: 205 },
+    },
+  };
+  const merged = mergeWalletNumbers(cachedWithInterest, {
+    ...fresh,
+    interestTransactions: [confirmedCredit, newReversal],
+    wallet: {
+      ...fresh.wallet,
+      savings_balance: 200,
+      total_balance: 300,
+      earnings_available: false,
+      earnings_balance: null,
+    },
+    goals: [{ ...fresh.goals[0], current_amount: 200 }],
+  });
+
+  expect(merged?.wallet.active_savings_goal?.current_amount).toBe(200);
+  expect(merged?.wallet.savings_balance).toBe(200);
+  expect(merged?.wallet.total_balance).toBe(300);
+  expect(merged?.transactions).toEqual([confirmedCredit, newReversal]);
+});
+
+it('drops cached interest when a history-only refresh observes changed principal', () => {
+  const confirmedCredit = {
+    id: 'credit-1',
+    goal_id: goal.id,
+    amount: 5,
+    type: 'credit' as const,
+    description: 'Savings interest',
+    source_type: 'savings_interest',
+    created_at: '2026-10-28T10:00:00Z',
+  };
+  const cachedWithInterest: WalletQueryData = {
+    ...cached,
+    transactions: [confirmedCredit],
+    wallet: {
+      ...cached.wallet,
+      savings_balance: 205,
+      savings_goals: [{ ...goal, current_amount: 205 }],
+      active_savings_goal: { ...goal, current_amount: 205 },
+    },
+  };
+  const merged = mergeWalletNumbers(cachedWithInterest, {
+    ...fresh,
+    interestTransactions: [confirmedCredit],
+    wallet: {
+      ...fresh.wallet,
+      savings_balance: 250,
+      total_balance: 350,
+      earnings_available: false,
+      earnings_balance: null,
+    },
+    goals: [{ ...fresh.goals[0], current_amount: 250 }],
+  });
+
+  expect(merged?.wallet.active_savings_goal?.current_amount).toBe(250);
+  expect(merged?.wallet.savings_balance).toBe(250);
+  expect(merged?.wallet.total_balance).toBe(350);
+});
+
 it.each([
   { ...fresh, goals: [] },
   { ...fresh, goals: [...fresh.goals, { ...fresh.goals[0], id: 'goal-2' }] },

@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { fetchExistingSavingsPlanFunding } from '@/lib/customer-savings';
 import { WalletContent } from './WalletContent';
 import { WalletHeroSection } from './WalletHeroSection';
@@ -30,6 +24,7 @@ jest.mock('@/hooks/use-product-search', () => ({
 }));
 
 const props = {
+  earningsAvailable: true,
   earningsBalance: 0,
   loyaltyPoints: 0,
   onOpenFundPanel: jest.fn(),

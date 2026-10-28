@@ -1,6 +1,19 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { WalletHeroSection } from './WalletHeroSection';
 
+jest.mock('./WalletHeroSavingsAccount', () => {
+  const { Text } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    WalletHeroSavingsAccount: ({ goalId }: { goalId: string }) => (
+      <Text>Linked savings account {goalId}</Text>
+    ),
+  };
+});
+jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
+  isHostedStagingTestPaymentsEnabled: () => true,
+}));
+
 jest.mock('react-native-reanimated', () => {
   const { View } = jest.requireActual(
     'react-native'
@@ -60,7 +73,7 @@ describe('WalletHeroSection', () => {
     ).toBeNull();
   });
 
-  it('shows an earnings dash when the hosted earnings contract is unavailable', () => {
+  it('shows unavailable earnings, savings and total projections as dashes', () => {
     render(
       <WalletHeroSection
         {...baseProps}
@@ -69,8 +82,53 @@ describe('WalletHeroSection', () => {
       />
     );
 
-    expect(screen.getByText('—')).toBeOnTheScreen();
+    expect(screen.getAllByText('—')).toHaveLength(3);
     expect(screen.queryByText('₦125,000')).toBeNull();
+    expect(screen.queryByText('₦35,000')).toBeNull();
+    expect(screen.queryByText('₦160,000')).toBeNull();
+  });
+
+  it.each([
+    false,
+    undefined,
+  ])('hides linked savings funding and keeps wallet funding when earnings availability is %s', (earningsAvailable) => {
+    render(
+      <WalletHeroSection
+        {...baseProps}
+        earningsAvailable={earningsAvailable}
+        activeSavingsGoal={{
+          id: 'goal-legacy',
+          status: 'active',
+          source_mode: 'manual',
+        }}
+      />
+    );
+
+    expect(screen.queryByText('Linked savings account goal-legacy')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Create account number' })
+    ).toBeOnTheScreen();
+    expect(screen.getAllByText('—')).toHaveLength(3);
+  });
+
+  it('shows linked savings funding only after earnings availability is confirmed', () => {
+    render(
+      <WalletHeroSection
+        {...baseProps}
+        activeSavingsGoal={{
+          id: 'goal-confirmed',
+          status: 'active',
+          source_mode: 'manual',
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText('Linked savings account goal-confirmed')
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByRole('button', { name: 'Create account number' })
+    ).toBeNull();
   });
 
   it('does not invent a Bronze membership for a missing or historical Bronze tier', () => {

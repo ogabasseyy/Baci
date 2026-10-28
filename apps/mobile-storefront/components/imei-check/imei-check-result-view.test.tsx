@@ -130,6 +130,35 @@ describe('ImeiCheckResultView', () => {
     });
   });
 
+  it('replaces a cached safe verdict when finance is past due', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, financeStatus: 'Past Due' }}
+      />
+    );
+    expect(
+      screen.getByText(/finance balance or overdue payment/i)
+    ).toBeTruthy();
+  });
+
+  it('uses caution for a cached clean status with a lock warning', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          status: 'Clean',
+          verdictType: 'caution',
+          verdict: 'Device locked',
+        }}
+      />
+    );
+    expect(screen.getByText('94%')).toHaveStyle({
+      color: getVerdictColors('caution', Colors.light).text,
+    });
+  });
+
   it('renders the device summary, IMEI, and trust score for a clean result', () => {
     render(<ImeiCheckResultView {...baseProps} />);
 

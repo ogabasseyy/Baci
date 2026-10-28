@@ -1,4 +1,8 @@
-import { getImeiBlacklistState, getImeiDeviceProfile } from '@baci/shared/imei';
+import {
+  getImeiBlacklistState,
+  getImeiDeviceProfile,
+  getImeiFinanceState,
+} from '@baci/shared/imei';
 import {
   type ProviderLabelInput,
   parseProviderLabelMap,
@@ -18,6 +22,7 @@ import {
 
 const SCORE_PENALTIES = {
   BLACKLIST: 50,
+  FINANCE: 20,
   ICLOUD_LOCK: 30,
   ICLOUD_STATUS: 20,
   KNOX_GUARD: 30,
@@ -138,6 +143,9 @@ export function parseSickwResponse(
 
   const deviceType = inferDeviceType(device);
   const blacklistState = getImeiBlacklistState(blacklist);
+  const financeState = getImeiFinanceState(financeStatus);
+  const hasFinanceIssue = financeState === 'risk';
+  const hasFinanceUnknown = financeState === 'unknown';
   const isBlacklisted = blacklistState === 'risk';
   const hasIcloudLockOn = hasRiskToken(icloudLock, ['on', 'locked', 'lost']);
   const hasIcloudStatusIssue = hasRiskToken(icloudStatus, ['lost', 'locked']);
@@ -159,6 +167,7 @@ export function parseSickwResponse(
 
   let score = 100;
   if (isBlacklisted) score -= SCORE_PENALTIES.BLACKLIST;
+  if (hasFinanceIssue) score -= SCORE_PENALTIES.FINANCE;
   if (hasMiLostIssue) score -= SCORE_PENALTIES.MI_LOST;
   if (hasIcloudLockOn) score -= SCORE_PENALTIES.ICLOUD_LOCK;
   if (hasMdmIssue) score -= SCORE_PENALTIES.MDM_LOCK;
@@ -171,11 +180,20 @@ export function parseSickwResponse(
   const status: 'Clean' | 'Blacklisted' | 'Unknown' =
     isBlacklisted || hasIcloudStatusIssue || hasMiLostIssue
       ? 'Blacklisted'
-      : blacklistState === 'clean'
+      : blacklistState === 'clean' &&
+          !hasFinanceIssue &&
+          !hasFinanceUnknown &&
+          !hasIcloudLockOn &&
+          !hasMdmIssue &&
+          !hasKnoxGuardIssue &&
+          !hasMiLockIssue &&
+          !isSimLocked
         ? 'Clean'
         : 'Unknown';
 
   const verdict = buildVerdict({
+    hasFinanceIssue,
+    hasFinanceUnknown,
     hasIcloudLockOn,
     hasIcloudStatusIssue,
     hasKnoxGuardIssue,

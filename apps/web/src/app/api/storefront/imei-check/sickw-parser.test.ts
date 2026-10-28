@@ -255,3 +255,40 @@ it('retains danger when a partial report also says reported stolen', () => {
   expect(result.status).toBe('Blacklisted');
   expect(result.verdictType).toBe('danger');
 });
+
+it.each([
+  'iCloud Lock: ON',
+  'MDM Status: Active',
+  'Knox Guard: Active',
+  'MI Lock Status: Locked',
+  'SIM Lock Status: Locked',
+])('does not claim an overall clean report with %s', (risk) => {
+  const result = parseSickwResponse(
+    `Model Name: Xiaomi 14\nBlacklist Status: Clean\n${risk}`
+  );
+  expect(result.status).toBe('Unknown');
+  expect(result.verdictType).toBe('caution');
+});
+
+it.each([
+  'Past Due',
+  'Unpaid',
+  'Outstanding balance',
+])('does not present %s finance as safe', (finance) => {
+  const result = parseSickwResponse(
+    `Model Name: Galaxy S25\nBlacklist Status: Clean\nFinance Status: ${finance}`
+  );
+  expect(result.status).toBe('Unknown');
+  expect(result.verdictType).toBe('caution');
+  expect(result.verdict).toContain('finance');
+});
+it.each([
+  'Paid',
+  'No outstanding balance',
+])('does not infer a finance issue from %s', (finance) => {
+  const result = parseSickwResponse(
+    `Model Name: Galaxy S25\nBlacklist Status: Clean\nFinance Status: ${finance}`
+  );
+  expect(result.status).toBe('Clean');
+  expect(result.verdictType).toBe('safe');
+});

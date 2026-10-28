@@ -170,3 +170,16 @@ it('recognizes explicitly unreported lost and stolen evidence', () => {
     'clean'
   );
 });
+
+it.each([
+  'Not listed',
+  'Not listed on the blacklist',
+  'Not found in GSMA blacklist',
+])('does not infer risk or cleanliness from unverified negative phrasing: %s', (value) => {
+  expect(getImeiBlacklistState(value)).toBe('unknown');
+});
+it('retains affirmative risk beside an unverified negative phrase', () => {
+  expect(
+    getImeiBlacklistState('Not listed on blacklist / Reported stolen')
+  ).toBe('risk');
+});

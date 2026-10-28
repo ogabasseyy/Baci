@@ -13,7 +13,7 @@ export function getImeiBlacklistState(
     ''
   );
   const riskTerms = withoutExplicitUnreported.replace(
-    /\bnot blacklisted\b|\bnot reported\b|\b(?:not|no) (?:blocked|stolen|lost(?: or stolen)?)\b|\bunblocked\b|\bno blacklist record found\b/g,
+    /\bnot blacklisted\b|\bnot reported\b|\b(?:not|no) (?:blocked|stolen|lost(?: or stolen)?)\b|\bunblocked\b|\bno blacklist record found\b|\bnot (?:listed|found|matched) (?:on|in) (?:the )?(?:gsma )?blacklist\b/g,
     ''
   );
   const riskClauses = riskTerms

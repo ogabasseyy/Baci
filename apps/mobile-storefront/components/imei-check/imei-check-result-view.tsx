@@ -1,5 +1,8 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
-import { canAssessImeiNetworkUnlock } from '@baci/shared/imei';
+import {
+  canAssessImeiNetworkUnlock,
+  getImeiEffectiveVerdict,
+} from '@baci/shared/imei';
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
@@ -37,7 +40,8 @@ export function ImeiCheckResultView({
   onReset,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
-  const verdictColors = getVerdictColors(result.verdictType, colors);
+  const effectiveVerdict = getImeiEffectiveVerdict(result);
+  const verdictColors = getVerdictColors(effectiveVerdict.type, colors);
   const statusCards = getImeiResultStatusCards(
     result,
     colors,
@@ -135,7 +139,7 @@ export function ImeiCheckResultView({
           ]}
         >
           <Text style={[styles.verdictText, { color: verdictColors.text }]}>
-            {result.verdict}
+            {effectiveVerdict.text}
           </Text>
         </View>
 
@@ -206,15 +210,10 @@ function TrustScore({
   colors: ImeiCheckerColors;
   result: ImeiResult;
 }) {
-  const isClean = result.status === 'Clean';
-  const cleanPalette = getVerdictColors('safe', colors);
-  const dangerPalette = getVerdictColors('danger', colors);
-  const palette =
-    result.status === 'Unknown'
-      ? getVerdictColors('caution', colors)
-      : isClean
-        ? cleanPalette
-        : dangerPalette;
+  const palette = getVerdictColors(
+    getImeiEffectiveVerdict(result).type,
+    colors
+  );
 
   return (
     <View style={[styles.scoreContainer, { backgroundColor: palette.bg }]}>

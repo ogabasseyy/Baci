@@ -51,7 +51,7 @@ describe('parsePetrockReplay', () => {
       carrier: 'US AT&T',
       device: 'iPhone 17 Pro Max (A3525)',
       simLock: 'Locked',
-      status: 'Clean',
+      status: 'Unknown',
       verdictType: 'caution',
     });
   });

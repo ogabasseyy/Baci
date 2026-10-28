@@ -157,6 +157,17 @@ describe('OgabasseyImeiResults', () => {
     );
   });
 
+  it('replaces a cached safe verdict when finance is past due', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, financeStatus: 'Past Due'}} />);
+    expect(screen.queryByText('Safe to buy')).not.toBeInTheDocument();
+    expect(screen.getAllByText(/finance balance or overdue payment/i)).toHaveLength(2);
+  });
+
+  it('shows caution for a cached clean status with a lock warning', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, status: 'Clean', verdictType: 'caution', verdict: 'Device locked'}} />);
+    expect(screen.getByText('98%')).toHaveClass('text-[var(--store-warning-text,#854d0e)]');
+  });
+
   it('renders clean and non-clean trust-score tones', () => {
     const { rerender } = render(
       <OgabasseyImeiResults

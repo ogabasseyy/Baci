@@ -22,7 +22,7 @@ test('consent focus handoff works with storefront overlay CSS', async ({
   await page
     .getByRole('button', { name: 'Show consent' })
     .evaluate((button) => (button as HTMLButtonElement).click());
-  const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
+  const dismiss = page.getByRole('button', { name: 'Necessary Only' });
   await expect(launcher).toBeFocused();
   await expect(page.locator('.ogabassey-chat-anchor')).toBeVisible();
   await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
@@ -50,7 +50,7 @@ test('consent restores focus to the visible promotion when chat is suppressed', 
     .getByRole('button', { name: 'Show newsletter' })
     .evaluate((button) => (button as HTMLButtonElement).click());
 
-  await page.getByRole('button', { name: 'Dismiss consent' }).click();
+  await page.getByRole('button', { name: 'Necessary Only' }).click();
 
   await expect(page.locator('.ogabassey-chat-anchor')).toHaveCSS(
     'opacity',
@@ -77,8 +77,8 @@ test('consent dismissal restores the ordinary control focused before banner entr
     .evaluate((button) => {
       (button as HTMLButtonElement).click();
     });
-  await page.getByRole('button', { name: 'Consent details' }).focus();
-  const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
+  await page.getByRole('button', { name: 'Customize' }).focus();
+  const dismiss = page.getByRole('button', { name: 'Necessary Only' });
   await dismiss.focus();
   await expect(dismiss).toBeFocused();
   await dismiss.click();
@@ -96,7 +96,7 @@ test('consent dismissal preserves a newer outside focus after launcher handoff',
     .getByRole('button', { name: 'Show consent' })
     .evaluate((button) => (button as HTMLButtonElement).click());
 
-  const dismiss = page.getByRole('button', { name: 'Dismiss consent' });
+  const dismiss = page.getByRole('button', { name: 'Necessary Only' });
   await expect(launcher).toBeFocused();
   const origin = page.getByRole('button', { name: 'Focus origin' });
   await origin.focus();

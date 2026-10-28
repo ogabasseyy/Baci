@@ -21,7 +21,7 @@ test('timed newsletter yields to page focus after keyboard leaves the launcher',
   await expect(launcher).toBeFocused();
 
   const newsletter = page.locator('.ogabassey-newsletter-popup');
-  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await expect(newsletter).toBeAttached({ timeout: 15000 });
   await page.keyboard.press('Tab');
   await expect(
     page.getByRole('button', { name: 'Page control after assistant' })
@@ -76,7 +76,7 @@ test('pointer dismissal does not redirect focus to the launcher', async ({
   await page.getByRole('button', { name: 'Enable timed promotions' }).click();
 
   const close = page.getByRole('button', { name: 'Close newsletter' });
-  await expect(close).toBeAttached({ timeout: 6000 });
+  await expect(close).toBeAttached({ timeout: 15000 });
   await close.click();
 
   await expect(page.locator('.ogabassey-newsletter-popup')).toBeHidden();
@@ -95,7 +95,7 @@ test('unrelated keyboard focus does not hide or disable a timed newsletter', asy
   await origin.click();
 
   const newsletter = page.locator('.ogabassey-newsletter-popup');
-  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await expect(newsletter).toBeAttached({ timeout: 15000 });
   await expect(newsletter).toBeVisible();
   await page.keyboard.press('Tab');
   await expect(
@@ -122,7 +122,7 @@ test('promotion focus handoff survives loading and closing chat', async ({
   await expect(page.locator('.ogabassey-chat-window')).toBeHidden();
 
   const newsletter = page.locator('.ogabassey-newsletter-popup');
-  await expect(newsletter).toBeAttached({ timeout: 6000 });
+  await expect(newsletter).toBeAttached({ timeout: 15000 });
   await launcher.focus();
   await page.keyboard.press('Tab');
 

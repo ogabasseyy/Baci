@@ -91,14 +91,16 @@ export function OgabasseyImeiResults({
               </h2>
               {result.deviceProfile && (
                 <>
+                  {(result.deviceProfile.color || result.deviceProfile.storage) && (
                   <p className="mt-1 text-sm text-store-foreground">
                     {[result.deviceProfile.color, result.deviceProfile.storage]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
+                  )}
                   {result.deviceProfile.imageMatch !== 'none' && (
                     <p className="mt-1 text-xs text-store-foreground">
-                      {result.deviceProfile.imageMatch === 'color'
+                      {result.deviceProfile.imageMatch === 'color' && result.deviceProfile.color
                         ? `Catalog illustration · ${result.deviceProfile.color}`
                         : 'Model illustration · colour may differ'}
                     </p>

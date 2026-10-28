@@ -19,4 +19,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261028050936_imei_analytics_normalize_storage.sql',
     sha256: '6752519e2775306eff0a7e148ff0cdce5750b8fc530b0aa5f2a0ef29d5090217',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261028061429_petrock_exact_model_scope.sql',
+    sha256: 'dc42ac28f443956d92b7111748554871061c16975b8c936597814ef026ad4357',
+  },
 ];

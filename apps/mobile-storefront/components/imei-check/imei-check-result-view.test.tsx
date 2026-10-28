@@ -113,6 +113,29 @@ describe('ImeiCheckResultView', () => {
     expect(screen.getByText('Catalog illustration · Silver')).toBeTruthy();
   });
 
+  it('does not render null colour in cached illustration captions', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          deviceProfile: {
+            version: 1,
+            brand: 'Apple',
+            model: 'iPhone 15',
+            color: null,
+            storage: null,
+            imageMatch: 'color',
+          },
+        }}
+      />
+    );
+    expect(screen.queryByText(/illustration · null/i)).toBeNull();
+    expect(
+      screen.getByText('Model illustration · colour may differ')
+    ).toBeTruthy();
+  });
+
   it('shows caution when the report did not check the blacklist', () => {
     render(
       <ImeiCheckResultView

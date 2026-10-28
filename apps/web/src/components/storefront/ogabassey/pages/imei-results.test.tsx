@@ -86,6 +86,12 @@ describe('OgabasseyImeiResults', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('does not render null colour in cached illustration captions', () => {
+    render(<OgabasseyImeiResults currentTier={fullTier} onReset={vi.fn()} result={{...baseResult, deviceProfile: {version: 1, brand: 'Apple', model: 'iPhone 15', color: null, storage: null, imageMatch: 'color'}}} />);
+    expect(screen.queryByText(/illustration · null/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Model illustration · colour may differ')).toBeInTheDocument();
+  });
+
   it('renders the core status cards gated on checksIncluded', () => {
     render(
       <OgabasseyImeiResults

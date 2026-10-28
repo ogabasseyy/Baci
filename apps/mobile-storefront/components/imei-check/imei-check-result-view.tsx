@@ -93,18 +93,22 @@ export function ImeiCheckResultView({
             </Text>
             {result.deviceProfile && (
               <>
-                <Text
-                  style={[styles.imeiText, { color: colors.textSecondary }]}
-                >
-                  {[result.deviceProfile.color, result.deviceProfile.storage]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
+                {(result.deviceProfile.color ||
+                  result.deviceProfile.storage) && (
+                  <Text
+                    style={[styles.imeiText, { color: colors.textSecondary }]}
+                  >
+                    {[result.deviceProfile.color, result.deviceProfile.storage]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                )}
                 {result.deviceProfile.imageMatch !== 'none' && (
                   <Text
                     style={[styles.imeiText, { color: colors.textSecondary }]}
                   >
-                    {result.deviceProfile.imageMatch === 'color'
+                    {result.deviceProfile.imageMatch === 'color' &&
+                    result.deviceProfile.color
                       ? `Catalog illustration · ${result.deviceProfile.color}`
                       : 'Model illustration · colour may differ'}
                   </Text>

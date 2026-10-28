@@ -283,7 +283,9 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         params: {
           action: 'fund',
           requiredAmount: String(requiredAmount),
-          returnTo: '/wallet/savings/start',
+          returnTo: input.createdGoalId
+            ? `/wallet?action=savings&savingsGoalId=${encodeURIComponent(input.createdGoalId)}&savingsAmount=${encodeURIComponent(String(input.effectiveInitialContribution))}`
+            : '/wallet/savings/start',
         },
       });
     },

@@ -14,6 +14,8 @@ export function PlanTransferActions({
     | 'planFundingAccounts'
     | 'isSubmitting'
     | 'openWalletFundingScreen'
+    | 'submitBankTransferContribution'
+    | 'isPrimaryMerchant'
   >;
   onConfirmTransfer: () => void;
 }) {
@@ -32,6 +34,24 @@ export function PlanTransferActions({
           Open wallet funding screen
         </Text>
       </Pressable>
+      {!controller.isPrimaryMerchant &&
+      (controller.planFundingPhase === 'unavailable' ||
+        controller.planFundingPhase === 'error') ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Record wallet contribution"
+          accessibilityState={{ disabled: controller.isSubmitting }}
+          style={styles.modalCloseButton}
+          onPress={controller.submitBankTransferContribution}
+          disabled={controller.isSubmitting}
+        >
+          <Text
+            style={[styles.modalCloseText, { color: colors.textSecondary }]}
+          >
+            Record wallet contribution
+          </Text>
+        </Pressable>
+      ) : null}
       {usePlanAccount ? (
         <Pressable
           accessibilityRole="button"

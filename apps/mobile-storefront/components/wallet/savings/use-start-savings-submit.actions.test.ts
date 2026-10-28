@@ -199,7 +199,14 @@ describe('useStartSavingsSubmit actions', () => {
   });
 
   it('opens wallet funding route with fund action params', () => {
-    const { result } = renderHook(() => useStartSavingsSubmit(createInput()));
+    const { result } = renderHook(() =>
+      useStartSavingsSubmit(
+        createInput({
+          createdGoalId: 'goal&other=1',
+          effectiveInitialContribution: 12000,
+        })
+      )
+    );
 
     act(() => {
       result.current.openWalletFundingScreen();
@@ -208,7 +215,11 @@ describe('useStartSavingsSubmit actions', () => {
     expect(mockRouterPush).toHaveBeenCalledWith(
       expect.objectContaining({
         pathname: '/wallet',
-        params: expect.objectContaining({ action: 'fund' }),
+        params: expect.objectContaining({
+          action: 'fund',
+          returnTo:
+            '/wallet?action=savings&savingsGoalId=goal%26other%3D1&savingsAmount=12000',
+        }),
       })
     );
   });

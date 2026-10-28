@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useWallet } from '@/hooks/use-wallet';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
   deriveStartSavingsAmounts,
   formatDateInput,
@@ -239,6 +240,7 @@ export function useStartSavingsController() {
     initialContributionAmount,
     initialContributionEnabled,
     isAuthorizingCard,
+    isPrimaryMerchant: isPiggyvestPrimaryMerchant(activeMerchantId),
     isLoadingPaymentMethods,
     isProductsLoading,
     isRefetching,

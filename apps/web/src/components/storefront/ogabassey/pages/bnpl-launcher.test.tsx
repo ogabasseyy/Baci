@@ -7,7 +7,18 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetKlumpSdkLoadForTests } from '@/lib/klump-sdk';
+import {
+  mockApiPost,
+  mockCaptureCheckoutFunnelEventOnce,
+  mockCaptureClientEvent,
+  mockClearCart,
+  mockKlumpConstructor,
+  mockOpenCredPalCheckout,
+  mockOpenCreditDirectCheckout,
+  mockPush,
+  mockSearchParams,
+  resetBnplLauncherTestState,
+} from './bnpl-launcher.test-setup';
 import { BnplLauncher, KLUMP_REDIRECT_URL_KEY } from './bnpl-launcher';
 import {
   CREDIT_DIRECT_POPUP_MARKER_PREFIX,
@@ -16,117 +27,15 @@ import {
 import { CHECKOUT_IDEMPOTENCY_STORAGE_KEY } from './checkout/checkout-idempotency';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from './checkout/pending-checkout-order';
 
-const mockClearCart = vi.hoisted(() => vi.fn());
-const mockPush = vi.fn();
-const mockRouter = { push: mockPush };
-const mockSearchParams = vi.fn();
-const mockOpenCreditDirectCheckout = vi.fn();
-const mockOpenCredPalCheckout = vi.fn();
-const mockApiPost = vi.fn();
-const mockKlumpConstructor = vi.fn();
-
 interface TestReactNativeWebViewWindow extends Window {
   ReactNativeWebView?: {
     postMessage: (message: string) => void;
   };
 }
 
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(() => mockRouter),
-  useSearchParams: vi.fn(() => mockSearchParams()),
-}));
-
-vi.mock('@/hooks/use-merchant-client', () => ({
-  useMerchantSafe: vi.fn(() => ({
-    merchant: { slug: 'test-store' },
-    loading: false,
-  })),
-}));
-
-vi.mock('@/hooks/cart', () => ({
-  useCartSafe: () => ({ clearCart: mockClearCart }),
-}));
-
-vi.mock('@/lib/credit-direct-client', () => ({
-  openCreditDirectCheckout: (...args: unknown[]) =>
-    mockOpenCreditDirectCheckout(...args),
-}));
-
-vi.mock('@/lib/credpal', () => ({
-  openCredPalCheckout: (...args: unknown[]) =>
-    mockOpenCredPalCheckout(...args),
-  getCredPalKey: vi.fn(() => 'credpal_test_key'),
-}));
-
-vi.mock('@/lib/api-client', () => ({
-  apiPost: (...args: unknown[]) => mockApiPost(...args),
-  fetchWithCsrf: (input: RequestInfo | URL, init?: RequestInit) =>
-    fetch(input, init),
-}));
-
-const mockCaptureCheckoutFunnelEventOnce = vi.fn();
-const mockCaptureClientEvent = vi.fn();
-
-vi.mock('@/lib/posthog/capture-checkout-funnel-event', () => ({
-  captureCheckoutFunnelEventOnce: (...args: unknown[]) =>
-    mockCaptureCheckoutFunnelEventOnce(...args),
-}));
-
-vi.mock('@/lib/posthog/capture-client-event', () => ({
-  captureClientEvent: (...args: unknown[]) =>
-    mockCaptureClientEvent(...args),
-}));
-
 describe('BnplLauncher', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockOpenCreditDirectCheckout.mockReset();
-    mockOpenCredPalCheckout.mockReset();
-    window.history.replaceState({}, '', '/checkout/bnpl');
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    Reflect.deleteProperty(window, 'ReactNativeWebView');
-    document
-      .querySelectorAll('script[src="https://js.useklump.com/klump.js"]')
-      .forEach((script) => script.remove());
-    document
-      .querySelectorAll('#klump_checkout, #klump__checkout')
-      .forEach((element) => element.remove());
-    delete (window as TestReactNativeWebViewWindow).ReactNativeWebView;
-    resetKlumpSdkLoadForTests();
-    window.Klump = mockKlumpConstructor as never;
-    mockSearchParams.mockReturnValue(
-      new URLSearchParams({
-        orderId: 'order-1',
-        gateway: 'credit_direct',
-        merchant_slug: 'test-store',
-        trackingToken: 'tok-123',
-      })
-    );
-    mockApiPost.mockResolvedValue({ success: true });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          id: 'order-1',
-          tracking_token: 'track-order-token',
-          total: 1000,
-          customer_email: 'customer@example.com',
-          customer_phone: '08012345678',
-          customer_name: 'John Doe',
-          items: [
-            {
-              product_id: 'product-1',
-              name: 'Capsule',
-              price: 1000,
-              quantity: 1,
-            },
-          ],
-        }),
-      })
-    );
+    resetBnplLauncherTestState();
   });
 
   afterAll(() => {
@@ -189,39 +98,6 @@ describe('BnplLauncher', () => {
         '/api/storefront/orders/order-1?merchant_slug=test-store&token=stored-track-token'
       );
     });
-  });
-
-  it('verifies an in-page Credit Direct success before redirecting', async () => {
-    mockOpenCreditDirectCheckout.mockImplementation(({ onSuccess }) => {
-      onSuccess({
-        checkoutTransactionId: 'ref-1',
-        sessionId: 'signed-session-1',
-      });
-      return Promise.resolve();
-    });
-
-    render(<BnplLauncher />);
-
-    expect(
-      await screen.findByRole('heading', { name: 'Confirming your payment' })
-    ).toBeInTheDocument();
-    expect(readCreditDirectPopupMarker('order-1')?.transactionId).toBe('ref-1');
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/orders/credit-direct/client-completion',
-      {
-        method: 'POST',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: 'order-1',
-          checkoutTransactionId: 'ref-1',
-          customerEmail: 'customer@example.com',
-          sessionId: 'signed-session-1',
-          tracking_token: 'track-order-token',
-        }),
-      }
-    );
-    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('labels a signed-session-only success without inventing a transaction id', async () => {

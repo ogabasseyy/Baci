@@ -8,6 +8,8 @@ describe('PlanTransferActions account readiness gate', () => {
     planFundingAccounts: [],
     isSubmitting: false,
     openWalletFundingScreen: jest.fn(),
+    submitBankTransferContribution: jest.fn(),
+    isPrimaryMerchant: false,
   };
 
   it.each([
@@ -30,9 +32,15 @@ describe('PlanTransferActions account readiness gate', () => {
       screen.queryByRole('button', { name: 'Confirm plan transfer' })
     ).toBeNull();
     expect(screen.queryByText("I've funded wallet")).toBeNull();
-    expect(
-      screen.queryByRole('button', { name: 'Record wallet contribution' })
-    ).toBeNull();
+    if (phase === 'unavailable' || phase === 'error') {
+      expect(
+        screen.getByRole('button', { name: 'Record wallet contribution' })
+      ).toBeOnTheScreen();
+    } else {
+      expect(
+        screen.queryByRole('button', { name: 'Record wallet contribution' })
+      ).toBeNull();
+    }
     fireEvent.press(
       screen.getByRole('button', { name: 'Open wallet funding screen' })
     );
@@ -51,5 +59,49 @@ describe('PlanTransferActions account readiness gate', () => {
     expect(
       screen.queryByRole('button', { name: 'Confirm plan transfer' })
     ).toBeNull();
+  });
+
+  it.each([
+    'unavailable',
+    'error',
+  ] as const)('offers exact-goal wallet contribution recovery for a non-primary plan when account is %s', (phase) => {
+    const submit = jest.fn();
+    render(
+      <PlanTransferActions
+        colors={Colors.light}
+        controller={{
+          ...controller,
+          planFundingPhase: phase,
+          submitBankTransferContribution: submit,
+        }}
+        onConfirmTransfer={jest.fn()}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Record wallet contribution' })
+    );
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps primary plans on the wallet handoff without generic contribution recovery', () => {
+    render(
+      <PlanTransferActions
+        colors={Colors.light}
+        controller={{
+          ...controller,
+          planFundingPhase: 'error',
+          isPrimaryMerchant: true,
+        }}
+        onConfirmTransfer={jest.fn()}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Record wallet contribution' })
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Open wallet funding screen' })
+    ).toBeOnTheScreen();
   });
 });

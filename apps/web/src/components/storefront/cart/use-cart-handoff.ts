@@ -1,6 +1,7 @@
 'use client';
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+
 import { loadDestinationCart } from './cart-handoff-destination-loader';
 import {
   type Choice,
@@ -84,9 +85,16 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setLoadError(null);
     setPreviewRetryable(false);
     try {
+      // No client credential on preview: the merchant is only
+      // learned from the preview payload, and a slug-less shared
+      // credential would be linkable across merchants. Preview
+      // quotas key on the legacy network identity + backstop.
       const response = await fetchJson(
         `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
-        { headers: { 'x-handoff-token': token }, signal }
+        {
+          headers: { 'x-handoff-token': token },
+          signal,
+        }
       );
       const payload = (await response.json()) as PreviewResponse;
       // A superseded refresh (deadline elapsed, retry started) must not

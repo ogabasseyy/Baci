@@ -187,6 +187,48 @@ holder of that key from signing a forged issuance time.
 
 ## Telemetry redaction
 
+Anonymous cart calls carry the client quota credential in the
+`x-baci-client-credential` header. It is a quota identity, not an
+authentication secret, but a leaked value lets an attacker burn one
+shopper's quota bucket, so treat it like a session identifier: it is
+on the same proxy/APM redaction denylist below, and in-repo logging
+never records it (quota keys store only its SHA-256 hash).
+
+Abuse posture: credential budgets are always paired with a
+non-rotatable network backstop at 25x the primary limit. That
+backstop is a deliberate trade-off, not strict isolation — a hostile
+host sharing an egress with legitimate shoppers can still exhaust
+the shared backstop and deny them until the window resets, exactly
+as any finite per-network ceiling allows. The multiple is sized far
+above legitimate shared-egress volume; alert on sustained backstop
+denials rather than raising it silently. While the Redis quota
+store is degraded, the credential dimension is skipped and network
+identity alone applies, so the bounded per-instance memory store
+cannot be poisoned by credential churn.
+
+Privacy basis: the credential is a persistent random per-profile /
+per-install quota key. It exists solely so anonymous budgets follow
+the shopper instead of their network address. It is never used for
+authentication, advertising, or cross-merchant joins; clients
+store a separate credential per merchant and quota keys are
+merchant-salted SHA-256 hashes with the budget window as their
+retention, and the raw value is redacted from telemetry (below).
+Web handoff preview sends no credential (the merchant is learned
+from the preview itself) and uses the verified network identity;
+mobile handoff preview sends its per-merchant credential (the slug
+is known from app config). Either way, stored quota keys are never
+joinable across merchants: clients store a separate credential per
+merchant wherever the merchant is known, and every quota subject is
+a merchant-salted hash. Deleting site/app data rotates it.
+
+Accepted risk — Redis key cardinality: in the healthy-store path,
+each distinct credential creates its own quota key per merchant
+and operation (bounded per network by the backstop, e.g. 3,000
+bootstrap keys/hour/network/merchant, all TTL'd to their budget
+window). Alert on Redis key-count/memory growth alongside the
+degradation warning; revisit a cardinality guard only if key
+pressure is observed.
+
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
 and error-reporting pipelines in front of the cart routes must redact
@@ -194,11 +236,12 @@ that header exactly like `Authorization` before activation; in-repo
 logging never records request headers for these routes. This is an
 explicit pre-activation checklist item (not a documentation-only
 note): before any merchant is enrolled, verify against the deployed
-proxy and APM configuration that (1) `x-handoff-token` is on the
-header denylist alongside `Authorization`, and (2) a synthetic
-handoff preview request leaves no token value in proxy, APM, or
-error-reporting captures; record both checks in the activation
-evidence. Enrollment stays closed until they pass.
+proxy and APM configuration that (1) `x-handoff-token` and
+`x-baci-client-credential` are on the header denylist alongside
+`Authorization`, and (2) a synthetic handoff preview request and a
+synthetic bootstrap request leave no token or credential value in
+proxy, APM, or error-reporting captures; record both checks in the
+activation evidence. Enrollment stays closed until they pass.
 
 Preview RPC authority: both preview functions require the dedicated
 `commerce_cart_previewer` role and a server-signed `cart_handoff_id`

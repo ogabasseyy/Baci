@@ -31,6 +31,7 @@ beforeEach(() => {
   });
   vi.mocked(checkCartQuota).mockResolvedValue({
     allowed: true,
+    degraded: false,
     limit: 60,
     remaining: 59,
     resetTime: 0,
@@ -85,6 +86,7 @@ it('blocks revocation when the per-principal quota is exceeded', async () => {
   });
   vi.mocked(checkCartQuota).mockResolvedValue({
     allowed: false,
+    degraded: false,
     limit: 60,
     remaining: 0,
     resetTime: 0,

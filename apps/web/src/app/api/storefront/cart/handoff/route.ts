@@ -7,6 +7,7 @@ import {
   rpcHandoffMerchantId,
   rpcPreviewHandoff,
 } from '@/lib/cart/handoff';
+import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -21,7 +22,6 @@ import {
 } from '@/lib/cart/scoped-client';
 import { verifyCartSessionProof } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
@@ -151,13 +151,13 @@ export async function GET(request: NextRequest) {
     // Bound the expensive preview assembly before it runs: this endpoint
     // is unauthenticated, so a per-client budget applies first and the
     // merchant-scoped budget still applies once the merchant is known.
-    const preQuota = await checkCartQuota({
+    // Key the pre-merchant budget on the quota client identity: the
+    // handoff id is attacker-controlled before token validation, so
+    // keying on it would let one caller mint a fresh bucket per
+    // rotated id. Credential-keyed checks keep their network backstop.
+    const preQuota = await checkAnonymousCartQuota(request, {
       merchantId: 'handoff-preview',
       operation: 'handoff_preview',
-      // Key the pre-merchant budget on the client alone: the handoff
-      // id is attacker-controlled before token validation, so keying
-      // on it would let one caller mint a fresh bucket per rotated id.
-      subject: getTrustedClientIdentifier(request),
     });
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
@@ -190,10 +190,9 @@ export async function GET(request: NextRequest) {
       // running the expensive preview RPC under only the fixed bucket.
       return cartErrorResponse('not_found');
     }
-    const quota = await checkCartQuota({
+    const quota = await checkAnonymousCartQuota(request, {
       merchantId,
       operation: 'handoff_preview',
-      subject: getTrustedClientIdentifier(request),
     });
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');

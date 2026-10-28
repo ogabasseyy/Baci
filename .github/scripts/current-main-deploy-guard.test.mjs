@@ -181,6 +181,22 @@ test('gates Vercel deployment configuration in deploy and CI filters', () => {
   }
 });
 
+test('root public guide assets trigger web CI and production deployment', async () => {
+  const deployFilters = YAML.parse(
+    readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
+  );
+  const ciFilters = YAML.parse(
+    readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8')
+  );
+
+  assert.ok(deployFilters.web.includes('public/guides/**'));
+  assert.ok(ciFilters.web.includes('public/guides/**'));
+  await assert.rejects(
+    verifySupersededFile('public/guides/chatgpt-ads/01-pixel-setup.png'),
+    /superseded deployment SHA/
+  );
+});
+
 test('fails closed on malformed identity and GitHub API responses', async () => {
   await assert.rejects(
     verifyCurrentMainDeployment({

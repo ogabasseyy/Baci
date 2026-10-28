@@ -22,10 +22,13 @@ const WEB_PREFIXES = [
   'infra/cwv-runner/',
   'packages/shared/',
   'public/badges/',
+  'public/guides/',
   'supabase/migrations/',
 ];
 const WEB_WORKFLOW_FILES = new Set([
   '.github/filters/deploy.yml',
+  '.github/scripts/assert-guide-prebuilt.mjs',
+  '.github/scripts/assert-guide-prebuilt.test.mjs',
   '.github/scripts/blog-smoke-check.mjs',
   '.github/scripts/apply-atomic-migration-group.sh',
   '.github/scripts/apply-pending-migration.sh',

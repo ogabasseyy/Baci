@@ -168,6 +168,8 @@ cwv_runner:
   - '.github/actionlint.yaml'
 deploy_scripts:
   - '.github/scripts/recovery-release-approval.mjs'
+  - '.github/scripts/assert-guide-prebuilt.mjs'
+  - '.github/scripts/assert-guide-prebuilt.test.mjs'
   - '.github/scripts/recovery-release-approval.test.mjs'
   - '.dockerignore'
   - 'scripts/**'
@@ -275,6 +277,7 @@ deploy_scripts:
   - '.github/workflows/preview.yml'
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
+  - 'public/guides/**'
   - 'supabase/migrations/*customer_checkout_shipping_recovery*'
   - 'supabase/tests/*recovery*'
   - 'supabase/tests/extract-sql-function-definition*'
@@ -320,6 +323,8 @@ web:
   - '.github/scripts/tools-worker-typecheck-contract.test.mjs'
   - '.github/scripts/web-build-timeout-contract.test.mjs'
   - '.github/scripts/web-test-checkout-contract.test.mjs'
+  - '.github/scripts/assert-guide-prebuilt.mjs'
+  - '.github/scripts/assert-guide-prebuilt.test.mjs'
   - '.github/scripts/quiz-production-approval-workflow.test.mjs'
   - '.github/scripts/resolve-ci-test-plan.test.mjs'
   - '.github/scripts/resolve-ci-change-scope*'

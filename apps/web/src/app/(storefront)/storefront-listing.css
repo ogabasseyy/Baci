@@ -9,8 +9,7 @@
 
   Keep public catalog listing routes (/products, /search, /compare, /[category],
   and category hub subroutes) off the broad 331 KB storefront-full.css render-
-  blocking path on initial paint. Secondary storefront utilities remain deferred
-  via StorefrontFullStyleLoader in [slug]/(catalog)/(listing)/layout.tsx.
+  blocking path on initial paint via StorefrontEagerListingCssLayout.
 */
 /* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
 @source not "./**/*.test.ts";

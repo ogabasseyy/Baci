@@ -39,7 +39,17 @@ export function extractHiddenSuspenseSections(html: string): string[] {
       depth += m[1] ? -1 : 1;
       if (depth === 0) end = m.index;
     }
-    sections.push(html.slice(start, end));
+    sections.push(
+      html
+        .slice(start, end)
+        .replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, (pic) =>
+          /\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero\b/i.test(
+            pic
+          )
+            ? pic
+            : ''
+        )
+    );
   }
   return sections;
 }

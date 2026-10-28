@@ -24,7 +24,7 @@ describe('storefront CSS partitioning (route layouts and delta sheets)', () => {
     expect(blogLayout).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-blog\.css['"]/
     );
-    expect(listingLayout).toContain('StorefrontFullStyleLoader');
+    expect(listingLayout).not.toContain('StorefrontFullStyleLoader');
     expect(utilityLayout).toContain('StorefrontFullStyleLoader');
     expect(blogLayout).not.toContain('StorefrontBlogStyleLoader');
     expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');

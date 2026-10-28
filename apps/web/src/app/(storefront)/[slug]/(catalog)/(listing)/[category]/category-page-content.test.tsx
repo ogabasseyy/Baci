@@ -21,6 +21,31 @@ describe('CategoryPageContent', () => {
     resetCategoryPageContentMocks();
   });
 
+  it.each([
+    'ogabassey',
+    'demo-store',
+  ])('derives first-row loading from verified merchant %s', async (slug) => {
+    mockGetMerchantByIdentifier.mockResolvedValue({
+      id: 'merchant-1',
+      slug,
+      business_name: 'Shop',
+      country: 'NG',
+      payout_currency: 'NGN',
+    });
+    render(
+      await CategoryPageContent({
+        params: Promise.resolve({ slug: 'custom.example', category: 'phones' }),
+        searchParams: Promise.resolve({}),
+      })
+    );
+    expect(
+      screen.getByRole('region', { name: 'Category page' })
+    ).toHaveAttribute(
+      'data-image-priority',
+      slug === 'ogabassey' ? 'true' : 'false'
+    );
+  });
+
   it('renders collection, breadcrumb, and FAQ JSON-LD through the shared JsonLd component', async () => {
     mockGetMerchantByIdentifier.mockResolvedValue({
       id: 'merchant-1',
@@ -52,17 +77,15 @@ describe('CategoryPageContent', () => {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
     });
-
-    const ui = await CategoryPageContent({
-      params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
-      searchParams: Promise.resolve({ page: '1' }),
-    });
-
-    const { container } = render(ui);
+    const { container } = render(
+      await CategoryPageContent({
+        params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
+        searchParams: Promise.resolve({ page: '1' }),
+      })
+    );
     const schemaScripts = container.querySelectorAll(
       'script[type="application/ld+json"]'
     );
-
     expect(schemaScripts).toHaveLength(3);
     expect(schemaScripts[0]?.textContent).toContain('"@type":"CollectionPage"');
     expect(schemaScripts[1]?.textContent).toContain('"@type":"BreadcrumbList"');
@@ -84,12 +107,10 @@ describe('CategoryPageContent', () => {
       country: 'KE',
       payout_currency: 'KES',
     });
-
     await CategoryPageContent({
       params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
-
     expect(mockGenerateCollectionPageSchema).toHaveBeenCalledWith(
       expect.objectContaining({ currency: 'KES' })
     );
@@ -103,15 +124,10 @@ describe('CategoryPageContent', () => {
       country: 'NG',
       payout_currency: 'NGN',
     });
-
     await CategoryPageContent({
-      params: Promise.resolve({
-        slug: 'demo-store',
-        category: 'smartphones',
-      }),
+      params: Promise.resolve({ slug: 'demo-store', category: 'smartphones' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
-
     expect(mockGetPublishedClusterPosts).toHaveBeenCalledWith('merchant-1', {
       pageKind: 'category',
       categorySlug: 'smartphones',
@@ -146,14 +162,11 @@ describe('CategoryPageContent', () => {
       productsQueryFailed: false,
       categoryQueryFailed: false,
     });
-
     await CategoryPageContent({
       params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
-
     const hubModelInput = mockBuildCategoryPageHubModel.mock.calls.at(-1)?.[0];
-
     expect(hubModelInput).not.toHaveProperty('comparisonLinks');
     expect(mockGetCachedProductSemanticInventory).not.toHaveBeenCalled();
   });
@@ -251,13 +264,12 @@ describe('CategoryPageContent', () => {
         },
       ]
     );
-
-    const ui = await CategoryPageContent({
-      params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
-      searchParams: Promise.resolve({ page: '1' }),
-    });
-    render(ui);
-
+    render(
+      await CategoryPageContent({
+        params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
+        searchParams: Promise.resolve({ page: '1' }),
+      })
+    );
     expect(mockNormalizeCategoryPageProducts).toHaveBeenCalledWith(
       [{ id: 'product-1' }],
       'phones',
@@ -275,12 +287,10 @@ describe('CategoryPageContent', () => {
       country: null,
       payout_currency: null,
     });
-
     await CategoryPageContent({
       params: Promise.resolve({ slug: 'demo-store', category: 'phones' }),
       searchParams: Promise.resolve({ page: '1' }),
     });
-
     expect(mockGenerateCollectionPageSchema).toHaveBeenCalledWith(
       expect.objectContaining({ currency: 'NGN' })
     );

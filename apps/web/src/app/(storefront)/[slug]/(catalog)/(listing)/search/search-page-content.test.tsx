@@ -50,14 +50,19 @@ vi.mock('../products/product-index-card', () => ({
   ProductIndexCard: ({
     pathPrefix,
     product,
+    imagePriority,
   }: {
     pathPrefix: string;
     product: { name: string };
+    imagePriority?: boolean;
   }) => (
-    <div>
+    <article
+      aria-label={product.name}
+      data-image-priority={String(Boolean(imagePriority))}
+    >
       <span>{product.name}</span>
       <span data-testid={`path-prefix-${product.name}`}>{pathPrefix}</span>
-    </div>
+    </article>
   ),
 }));
 
@@ -76,6 +81,48 @@ function createSearchProducts(count: number): NormalizedProduct[] {
 }
 
 describe('SearchPageContent', () => {
+  it.each([
+    'ogabassey',
+    'another-store',
+  ])('bounds first-screen image priority for %s', async (slug) => {
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'shop.example.ng'],
+        ['x-pathname', '/search'],
+      ])
+    );
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug,
+      business_name: 'Shop',
+      payout_currency: 'NGN',
+    } as never);
+    mockGetStorefrontSearchProducts.mockResolvedValue({
+      count: 3,
+      products: createSearchProducts(3),
+      query: 'iphone',
+    } as never);
+    render(
+      (await SearchPageContent({
+        params: Promise.resolve({ slug }),
+        searchParams: Promise.resolve({ q: 'iphone' }),
+      })) as React.ReactElement
+    );
+    const expected = slug === 'ogabassey' ? 'true' : 'false';
+    expect(screen.getByRole('article', { name: 'iPhone 16' })).toHaveAttribute(
+      'data-image-priority',
+      expected
+    );
+    expect(screen.getByRole('article', { name: 'iPhone 18' })).toHaveAttribute(
+      'data-image-priority',
+      expected
+    );
+    expect(screen.getByRole('article', { name: 'iPhone 19' })).toHaveAttribute(
+      'data-image-priority',
+      'false'
+    );
+  });
+
   beforeEach(() => {
     vi.mocked(getRequestScopedMerchant).mockReset();
     mockGetStorefrontSearchProducts.mockReset();
@@ -194,38 +241,26 @@ describe('SearchPageContent', () => {
     expect(schemas.some((schema) => schema['@type'] === 'BreadcrumbList')).toBe(
       true
     );
-
     const collectionSchema = schemas.find(
       (schema) => schema['@type'] === 'CollectionPage'
     );
     const breadcrumbSchema = schemas.find(
       (schema) => schema['@type'] === 'BreadcrumbList'
     );
-
     expect(collectionSchema).toMatchObject({
       '@type': 'CollectionPage',
       url: 'https://shop.example.ng/search?q=iphone',
       numberOfItems: 20,
     });
     expect(collectionSchema?.mainEntity?.itemListElement).toHaveLength(20);
-    // Canonical URLs must preserve the stored `category_slug` verbatim.
-    // Remapping `phones` -> `smartphones` would cause a self-redirect loop
-    // in the product route (see buildProductUrl regression tests).
     expect(collectionSchema?.mainEntity?.itemListElement?.[0]).toMatchObject({
-      item: {
-        url: 'https://shop.example.ng/phones/iphone-16',
-      },
+      item: { url: 'https://shop.example.ng/phones/iphone-16' },
     });
-
     expect(breadcrumbSchema).toMatchObject({
       '@type': 'BreadcrumbList',
       itemListElement: [
-        {
-          item: 'https://shop.example.ng/',
-        },
-        {
-          item: 'https://shop.example.ng/search?q=iphone',
-        },
+        { item: 'https://shop.example.ng/' },
+        { item: 'https://shop.example.ng/search?q=iphone' },
       ],
     });
   });
@@ -238,7 +273,6 @@ describe('SearchPageContent', () => {
         ['x-pathname', '/search'],
       ])
     );
-
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       id: 'merchant-1',
       slug: 'ogabassey',
@@ -246,30 +280,18 @@ describe('SearchPageContent', () => {
       business_name: 'Ogabassey',
       payout_currency: 'NGN',
     } as never);
-
     vi.mocked(getStorefrontSearchProducts).mockResolvedValue({
       count: 1,
       didYouMean: null,
-      products: [
-        {
-          id: 'product-1',
-          name: 'iPhone 16',
-          price: 1200000,
-          slug: 'iphone-16',
-          category: 'Phones',
-          category_slug: 'phones',
-        },
-      ],
+      products: createSearchProducts(1),
       query: 'iphone',
     } as never);
-
-    const result = await SearchPageContent({
-      params: Promise.resolve({ slug: 'ogabassey' }),
-      searchParams: Promise.resolve({ q: 'iphone', page: '1' }),
-    });
-
-    render(result as React.ReactElement);
-
+    render(
+      (await SearchPageContent({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+        searchParams: Promise.resolve({ q: 'iphone', page: '1' }),
+      })) as React.ReactElement
+    );
     expect(screen.getByTestId('path-prefix-iPhone 16')).toBeEmptyDOMElement();
   });
 });

@@ -1,10 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import {
-  type NormalizedProduct,
-  normalizeProduct,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { NormalizedProduct, RawDbProduct } from '@/lib/normalize-product';
 import { STOREFRONT_PRODUCTS_SELECT } from '@/lib/storefront-products-select';
 
 const UUID_PATTERN =
@@ -53,8 +49,13 @@ export function useSearchComparisonFacts(
         return;
       }
       try {
-        const { createClient } = await import('@/lib/supabase/client');
-        if (!active) return;
+        // Comparison is opt-in: do not put the database SDK and normalization
+        // graph on the initial results-page transfer path.
+        const [{ createClient }, { normalizeProduct }] = await Promise.all([
+          import('@/lib/supabase/client'),
+          import('@/lib/normalize-product'),
+        ]);
+        if (!active || controller.signal.aborted) return;
         const { data, error } = await createClient()
           .from('products')
           .select(STOREFRONT_PRODUCTS_SELECT)

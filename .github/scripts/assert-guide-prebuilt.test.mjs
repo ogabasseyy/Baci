@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -66,6 +66,53 @@ test('fails when matching app and root files differ', () => {
   try {
     writeFileSync(join(root, 'apps/web/public/guides/chatgpt-ads/nested/diagram.svg'), 'changed app copy');
     assert.throws(() => assertGuidePrebuilt(root), /Guide asset copies differ: chatgpt-ads\/nested\/diagram\.svg/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when a guide file is a symlink', () => {
+  const root = createFixture();
+  try {
+    const guideDirectory = join(root, 'apps/web/public/guides');
+    const file = join(guideDirectory, 'chatgpt-ads/nested/diagram.svg');
+    const target = join(guideDirectory, 'chatgpt-ads/nested/diagram-target.svg');
+    writeFileSync(target, 'symlink target');
+    rmSync(file);
+    symlinkSync(target, file);
+
+    assert.throws(() => assertGuidePrebuilt(root), /symlinks: chatgpt-ads\/nested\/diagram\.svg/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when a guide directory is a symlink', () => {
+  const root = createFixture();
+  try {
+    const guideDirectory = join(root, 'apps/web/public/guides');
+    const actualDirectory = join(guideDirectory, 'linked-target');
+    mkdirSync(actualDirectory);
+    writeFileSync(join(actualDirectory, 'diagram.svg'), 'symlink target');
+    symlinkSync(actualDirectory, join(guideDirectory, 'linked-directory'));
+
+    assert.throws(() => assertGuidePrebuilt(root), /symlinks: linked-directory/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('fails closed when the prebuilt guide file path contains a symlink', () => {
+  const root = createFixture();
+  try {
+    const outputDirectory = join(root, '.vercel/output/static/guides');
+    const file = join(outputDirectory, 'chatgpt-ads/nested/diagram.svg');
+    const target = join(outputDirectory, 'chatgpt-ads/nested/diagram-target.svg');
+    writeFileSync(target, 'symlink target');
+    rmSync(file);
+    symlinkSync(target, file);
+
+    assert.throws(() => assertGuidePrebuilt(root), /symlinks: chatgpt-ads\/nested\/diagram\.svg/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

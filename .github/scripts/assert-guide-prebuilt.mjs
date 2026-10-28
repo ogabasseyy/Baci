@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -10,6 +10,8 @@ function listRegularFiles(directory, baseDirectory = directory) {
       files.push(...listRegularFiles(path, baseDirectory));
     } else if (entry.isFile()) {
       files.push(relative(baseDirectory, path));
+    } else if (entry.isSymbolicLink()) {
+      throw new Error(`Guide assets must not contain symlinks: ${relative(baseDirectory, path)}`);
     }
   }
   return files;
@@ -19,6 +21,7 @@ function guideFiles(root, directory) {
   const absoluteDirectory = resolve(root, directory);
   let files;
   try {
+    assertNoSymlinkPath(root, directory);
     files = listRegularFiles(absoluteDirectory);
   } catch (error) {
     if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
@@ -27,6 +30,19 @@ function guideFiles(root, directory) {
     throw error;
   }
   return files.map((file) => file.split(sep).join('/')).sort();
+}
+
+function assertNoSymlinkPath(root, file) {
+  let current = root;
+  if (lstatSync(current).isSymbolicLink()) {
+    throw new Error(`Guide paths must not contain symlinks: ${file}`);
+  }
+  for (const segment of file.split('/')) {
+    current = resolve(current, segment);
+    if (lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Guide paths must not contain symlinks: ${file}`);
+    }
+  }
 }
 
 export function assertGuidePrebuilt(root) {
@@ -54,6 +70,7 @@ export function assertGuidePrebuilt(root) {
 
     let outputBytes;
     try {
+      assertNoSymlinkPath(outputDirectory, file);
       outputBytes = readFileSync(resolve(outputDirectory, file));
     } catch (error) {
       if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {

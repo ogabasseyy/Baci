@@ -39,8 +39,10 @@ function shouldCaptureBeforeSchema(
   classification: RawWebhookClassification
 ): boolean {
   // Explicit interest deliveries and unrecognized envelopes need raw capture
-  // before strict schema parsing. Known non-interest events go through the
-  // normal family dispatcher and its quarantine path.
+  // before strict schema parsing. Falling through on an unknown authenticated
+  // payload would preserve only the legacy quarantine digest, losing exact
+  // bytes needed for later classification. Known non-interest events go
+  // through the normal family dispatcher and its quarantine path.
   return classification.kind !== 'known-other';
 }
 
@@ -103,5 +105,7 @@ export async function captureInterestRawDelivery(input: {
       { status: 200, headers: noStore }
     );
   }
+  // Do not acknowledge an unknown signed payload unless replay-grade bytes
+  // reached durable capture; the legacy quarantine stores only a digest.
   return retryableCaptureFailure();
 }

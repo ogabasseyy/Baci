@@ -3,18 +3,25 @@ import { savingsIdentityFixture as fixture } from '@/lib/piggyvest/primary-walle
 import { primaryWalletSavingsIdentitySchemas as schemas } from './primary-wallet-savings-identity';
 
 describe('primary savings identity evidence schemas', () => {
-  it('accepts production list evidence with its explicit environment', () => {
+  it('accepts production wallet-scoped single-transaction evidence', () => {
     expect(
       schemas.evidence.parse({
         environment: 'production',
         wallet: fixture.wallet,
-        transaction: fixture.transaction,
+        transaction: fixture.productionSingleTransaction,
       })
     ).toEqual({
       environment: 'production',
       wallet: fixture.wallet,
-      transaction: fixture.transaction,
+      transaction: fixture.productionSingleTransaction,
     });
+    expect(
+      schemas.evidence.safeParse({
+        environment: 'production',
+        wallet: fixture.wallet,
+        transaction: fixture.transaction,
+      }).success
+    ).toBe(false);
   });
 
   it('accepts the observed single-read projection only with staging provenance', () => {

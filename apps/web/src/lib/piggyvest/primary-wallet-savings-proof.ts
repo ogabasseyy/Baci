@@ -57,27 +57,31 @@ export function verifyPrimaryWalletSavingsProof(
     identity.data.transaction.third_party_reference === expected.reference &&
     (identity.data.transaction.internal_reference == null ||
       identity.data.transaction.internal_reference === actual.id);
-  const productionListIdentity =
+  const productionDirectIdentity =
     trustedEnvironment === 'production' &&
-    success.success &&
     actual.customer_id === expected.businessId &&
     identityWalletMatches &&
     identity.success &&
     identity.data.environment === 'production' &&
-    'wallet_id' in identity.data.transaction &&
+    'source_wallet' in identity.data.transaction &&
     identity.data.transaction.id === actual.id &&
-    identity.data.transaction.business_id === expected.businessId &&
-    identity.data.transaction.wallet_id === expected.sourceWalletId &&
-    identity.data.transaction.api_customer_id === expected.providerCustomerId &&
-    identity.data.transaction.amount === -expected.amountKobo &&
+    identity.data.transaction.category === 'p2p' &&
+    identity.data.transaction.status === actual.status &&
+    identity.data.transaction.customer_id === actual.customer_id &&
+    identity.data.transaction.source_wallet === expected.sourceWalletId &&
+    identity.data.transaction.destination_wallet ===
+      expected.destinationWalletId &&
+    identity.data.transaction.amount === actual.amount &&
+    identity.data.transaction.fee === 0 &&
+    identity.data.transaction.reference === actual.reference &&
     identity.data.transaction.third_party_reference === expected.reference &&
-    identity.data.transaction.provider_reference === actual.reference;
+    (identity.data.transaction.internal_reference == null ||
+      identity.data.transaction.internal_reference === actual.id);
   const customerIdentityMismatch =
     trustedEnvironment === 'staging'
       ? actual.customer_id !== expected.businessId &&
         actual.customer_id !== expected.providerCustomerId
-      : actual.customer_id !== expected.providerCustomerId &&
-        !productionListIdentity;
+      : actual.customer_id !== expected.businessId || !productionDirectIdentity;
   if (
     expected.sourceWalletId === expected.destinationWalletId ||
     actual.amount !== expected.amountKobo ||
@@ -86,6 +90,7 @@ export function verifyPrimaryWalletSavingsProof(
     actual.destination_wallet !== expected.destinationWalletId ||
     customerIdentityMismatch ||
     (trustedEnvironment === 'staging' && !stagingSingleIdentity) ||
+    (trustedEnvironment === 'production' && !productionDirectIdentity) ||
     (actual.business_id !== undefined &&
       actual.business_id !== expected.businessId) ||
     (actual.currency !== undefined && actual.currency !== 'NGN')

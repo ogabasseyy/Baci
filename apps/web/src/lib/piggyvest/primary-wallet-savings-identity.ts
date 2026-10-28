@@ -6,12 +6,7 @@ import { primaryWalletSavingsIdentitySchemas as schemas } from '@/schemas/primar
 import { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
-import { primarySavingsIdentityDateWindow } from './primary-wallet-savings-identity-date-window';
 import { primaryWalletSavingsIdentityLimits as limits } from './primary-wallet-savings-identity-limits';
-import {
-  primarySavingsIdentityCheckpointFingerprint,
-  scanPrimarySavingsIdentityList,
-} from './primary-wallet-savings-identity-scan';
 
 export async function resolvePrimaryWalletSavingsIdentity(input: {
   reservation: unknown;
@@ -29,9 +24,17 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     const expected = piggyvestPrimarySavingsTransferSchemas.reserved.parse(
       input.reservation
     );
-    const actual = prefundedCardTransferVerificationSchemas.rich.parse(
+    const success = prefundedCardTransferVerificationSchemas.rich.safeParse(
       input.providerResponse
-    ).data;
+    );
+    const failure = success.success
+      ? null
+      : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
+          input.providerResponse
+        );
+    if (!success.success && !failure?.success) return null;
+    const actual = (success.success ? success.data : failure?.data)?.data;
+    if (!actual) return null;
     const origin = getPrimaryWalletProviderOrigin(input.environment);
     const isStaging = origin === 'https://staging.piggyvest.business';
     const customerIdentityMatches = isStaging
@@ -99,7 +102,14 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
     )
       return null;
 
+    const checkpoint = input.checkpoint
+      ? { state: input.checkpoint.state, save: input.checkpoint.save }
+      : undefined;
+    if (checkpoint && !(await checkpoint.save(checkpointSchemas.emptyState)))
+      return null;
+
     if (isStaging) {
+      if (!success.success) return null;
       const transaction = schemas.singleTransaction.parse(
         await getData(
           `/api/v1/transaction/${encodeURIComponent(actual.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
@@ -127,130 +137,38 @@ export async function resolvePrimaryWalletSavingsIdentity(input: {
       });
     }
 
-    let directTransaction: z.infer<typeof schemas.singleTransaction> | null =
-      null;
-    let dateWindow: ReturnType<typeof primarySavingsIdentityDateWindow> = null;
-    if (!isStaging) {
-      let rawDirect: unknown;
-      let directUnavailable = false;
-      try {
-        rawDirect = await getData(
-          `/api/v1/transaction/${encodeURIComponent(actual.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
-          limits.transactionResponseBytes,
-          limits.locatorSearchReserveMs + limits.unfilteredFallbackReserveMs
-        );
-      } catch (error) {
-        if (
-          !(error instanceof Error) ||
-          !['PROVIDER_UNAVAILABLE', 'PROVIDER_TIMEOUT'].includes(error.message)
-        )
-          return null;
-        directUnavailable = true;
-      }
-      if (!directUnavailable) {
-        const parsedDirect = schemas.singleTransaction.safeParse(rawDirect);
-        if (!parsedDirect.success) return null;
-        directTransaction = parsedDirect.data;
-        if (
-          directTransaction.id !== actual.id ||
-          directTransaction.status !== 'successful' ||
-          directTransaction.customer_id !== actual.customer_id ||
-          directTransaction.source_wallet !== expected.sourceWalletId ||
-          directTransaction.destination_wallet !==
-            expected.destinationWalletId ||
-          directTransaction.amount !== actual.amount ||
-          directTransaction.reference !== actual.reference ||
-          directTransaction.third_party_reference !== expected.reference ||
-          directTransaction.fee !== 0 ||
-          (directTransaction.internal_reference != null &&
-            directTransaction.internal_reference !== actual.id)
-        )
-          return null;
-        if (
-          rawDirect &&
-          typeof rawDirect === 'object' &&
-          'created_at' in rawDirect
-        )
-          dateWindow = primarySavingsIdentityDateWindow(rawDirect.created_at);
-      }
-    }
-
-    if (input.checkpoint && (!directTransaction || !input.checkpointScope))
+    let direct: unknown;
+    try {
+      direct = await getData(
+        `/api/v1/transaction/${encodeURIComponent(actual.id)}?wallet_id=${encodeURIComponent(wallet.id)}`,
+        limits.transactionResponseBytes
+      );
+    } catch {
       return null;
-    const checkpoint = input.checkpoint
-      ? { state: input.checkpoint.state, save: input.checkpoint.save }
-      : undefined;
-    const resetCheckpoint = async () => {
-      if (!checkpoint) return true;
-      if (!(await checkpoint.save(checkpointSchemas.emptyState)))
-        throw new Error('Savings checkpoint fence lost');
-      return true;
-    };
-    const scan = (
-      window: ReturnType<typeof primarySavingsIdentityDateWindow>,
-      stage: 'date-window' | 'full'
-    ) =>
-      scanPrimarySavingsIdentityList({
-        getData,
-        reservation: expected,
-        actual,
-        direct: directTransaction ?? undefined,
-        walletId: wallet.id,
-        scope: input.checkpointScope,
-        stage,
-        window,
-        checkpoint,
-        pageSize: limits.pageSize,
-        maxPages: limits.maxPages,
-        pageResponseBytes: limits.pageResponseBytes,
-        fallbackReserveMs: limits.unfilteredFallbackReserveMs,
-      });
-
-    const resumeFull = Boolean(
-      input.checkpoint &&
-        directTransaction &&
-        dateWindow &&
-        input.checkpoint.state.stage === 'full' &&
-        input.checkpoint.state.fingerprint ===
-          primarySavingsIdentityCheckpointFingerprint({
-            stage: 'full',
-            window: null,
-            reservation: expected,
-            direct: directTransaction,
-            actual,
-            walletId: wallet.id,
-            scope: input.checkpointScope,
-          })
-    );
-    if (dateWindow && !resumeFull) {
-      const located = await scan(dateWindow, 'date-window');
-      if (located.status === 'matched') {
-        await resetCheckpoint();
-        return schemas.evidence.parse({
-          environment: 'production',
-          wallet,
-          transaction: located.transaction,
-        });
-      }
-      if (located.status === 'incomplete') return null;
-      if (located.status === 'invalid') {
-        await resetCheckpoint();
-        return null;
-      }
-      if (!(await resetCheckpoint())) return null;
     }
-    const scanned = await scan(null, 'full');
-    if (scanned.status === 'matched') {
-      await resetCheckpoint();
-      return schemas.evidence.parse({
-        environment: 'production',
-        wallet,
-        transaction: scanned.transaction,
-      });
-    }
-    if (scanned.status === 'not-found' || scanned.status === 'invalid')
-      await resetCheckpoint();
-    return null;
+    const parsedDirect = schemas.productionSingleTransaction.safeParse(direct);
+    if (!parsedDirect.success) return null;
+    const transaction = parsedDirect.data;
+    if (
+      transaction.id !== actual.id ||
+      transaction.status !== actual.status ||
+      transaction.category !== 'p2p' ||
+      transaction.customer_id !== actual.customer_id ||
+      transaction.source_wallet !== expected.sourceWalletId ||
+      transaction.destination_wallet !== expected.destinationWalletId ||
+      transaction.amount !== actual.amount ||
+      transaction.reference !== actual.reference ||
+      transaction.third_party_reference !== expected.reference ||
+      transaction.fee !== 0 ||
+      (transaction.internal_reference != null &&
+        transaction.internal_reference !== actual.id)
+    )
+      return null;
+    return schemas.evidence.parse({
+      environment: 'production',
+      wallet,
+      transaction,
+    });
   } catch {
     return null;
   }

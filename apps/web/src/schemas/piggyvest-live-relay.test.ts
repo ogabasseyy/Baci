@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { piggyvestLiveRelaySchemas as schemas } from './piggyvest-live-relay';
 
 const config = {
+  receiverOrigin: 'https://intake.example.com',
   endpoint: 'https://intake.example.com/piggyvest/intake',
   integrationId: '11111111-1111-4111-8111-111111111111',
   environment: 'production',
@@ -13,10 +14,22 @@ describe('piggyvestLiveRelaySchemas', () => {
     expect(schemas.config.parse(config)).toEqual(config);
   });
 
+  it('accepts a trailing slash on the pinned receiver origin', () => {
+    expect(
+      schemas.config.parse({
+        ...config,
+        receiverOrigin: `${config.receiverOrigin}/`,
+      })
+    ).toEqual({ ...config, receiverOrigin: `${config.receiverOrigin}/` });
+  });
+
   it.each([
     { ...config, endpoint: 'not-a-url' },
     { ...config, environment: 'staging' },
     { ...config, endpoint: 'https://intake.example.com/other' },
+    { ...config, endpoint: 'https://attacker.example/piggyvest/intake' },
+    { ...config, receiverOrigin: 'https://attacker.example' },
+    { ...config, receiverOrigin: 'http://intake.example.com' },
     {
       ...config,
       endpoint: 'https://intake.example.com/piggyvest/intake#fragment',

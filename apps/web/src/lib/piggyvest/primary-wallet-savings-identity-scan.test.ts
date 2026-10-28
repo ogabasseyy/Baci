@@ -134,4 +134,22 @@ describe('primary savings identity list checkpoint', () => {
       })
     );
   });
+
+  it('does not checkpoint past a page containing the matched debit', async () => {
+    const saved = checkpoint();
+    const result = await scanPrimarySavingsIdentityList({
+      ...base,
+      checkpoint: saved,
+      getData: async () =>
+        page([fixture.transaction], 'after-matched-debit', true),
+    });
+
+    expect(result).toEqual({
+      status: 'matched',
+      transaction: fixture.transaction,
+    });
+    expect(saved.save).not.toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: 'after-matched-debit' })
+    );
+  });
 });

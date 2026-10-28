@@ -168,7 +168,15 @@ export async function scanPrimarySavingsIdentityList(input: {
     if (nextCursor !== null && cursors.has(nextCursor))
       return { status: 'invalid' };
     if (nextCursor !== null) cursors.add(nextCursor);
-    if (input.checkpoint && page.pageInfo.hasNextPage && nextCursor !== null) {
+    // A page containing the target is terminal evidence for this scan. Do not
+    // persist its next cursor before the caller can clear the checkpoint: a
+    // crash between those steps would resume after the matched debit.
+    if (
+      input.checkpoint &&
+      matched === null &&
+      page.pageInfo.hasNextPage &&
+      nextCursor !== null
+    ) {
       const savedSuccessfully = await input.checkpoint.save({
         stage: input.stage,
         fingerprint: expectedFingerprint,

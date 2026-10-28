@@ -6,6 +6,7 @@ import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-sign
 const rawBody = Buffer.from('{ "eventId": "fixture" }');
 const signature = 'a'.repeat(128);
 const config = {
+  receiverOrigin: 'https://live-intake.example.com',
   endpoint: 'https://live-intake.example.com/piggyvest/intake',
   integrationId: '11111111-1111-4111-8111-111111111111',
   relayToken: 'fixture-relay-token-with-at-least-32-characters',

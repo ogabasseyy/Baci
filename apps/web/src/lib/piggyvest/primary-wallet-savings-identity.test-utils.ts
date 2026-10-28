@@ -12,9 +12,14 @@ export function requestInput(
   pages: unknown[] = [fixture.page],
   wallet: unknown = fixture.wallet,
   environment: 'staging' | 'production' = 'production',
-  singleTransaction: unknown = fixture.singleTransaction
+  singleTransaction?: unknown
 ) {
   const remainingPages = [...pages];
+  const directTransaction =
+    singleTransaction ??
+    (environment === 'production'
+      ? fixture.productionSingleTransaction
+      : fixture.singleTransaction);
   const fetchImplementation = vi
     .fn<typeof fetch>()
     .mockImplementation((input) => {
@@ -22,7 +27,7 @@ export function requestInput(
       const data = url.pathname.startsWith('/api/v1/wallet/')
         ? wallet
         : /^\/api\/v1\/transaction\/[^/]+$/.test(url.pathname)
-          ? singleTransaction
+          ? directTransaction
           : remainingPages.shift();
       return Promise.resolve(
         new Response(JSON.stringify({ status: true, data }))

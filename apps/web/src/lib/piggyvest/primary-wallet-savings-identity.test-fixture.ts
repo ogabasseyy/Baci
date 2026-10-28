@@ -32,6 +32,10 @@ const singleTransaction = {
   third_party_reference: transaction.third_party_reference,
   internal_reference: transaction.id,
 };
+const productionSingleTransaction = {
+  ...singleTransaction,
+  category: 'p2p',
+};
 
 export const savingsIdentityFixture = {
   reservation: {
@@ -65,6 +69,7 @@ export const savingsIdentityFixture = {
   wallet,
   transaction,
   singleTransaction,
+  productionSingleTransaction,
   page: {
     edges: [transaction],
     pageInfo: { hasNextPage: false, endCursor: null },

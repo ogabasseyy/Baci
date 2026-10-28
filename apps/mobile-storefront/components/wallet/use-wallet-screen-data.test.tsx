@@ -11,6 +11,9 @@ let mockNumberStatus = 'idle';
 const mockUseWallet = jest.fn();
 const mockRefetch = jest.fn().mockResolvedValue({});
 const mockRefreshNumbers = jest.fn().mockResolvedValue(undefined);
+const mockResetNumberRefresh = jest.fn(() => {
+  mockNumberStatus = 'idle';
+});
 jest.mock('expo-router', () => ({ useIsFocused: () => mockFocused }));
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: (...args: unknown[]) => {
@@ -30,6 +33,7 @@ jest.mock('@/hooks/use-wallet-number-refresh', () => ({
     isPaused: mockNumberStatus === 'paused',
     isPending: mockNumberStatus === 'pending',
     isError: mockNumberStatus === 'error',
+    reset: mockResetNumberRefresh,
   }),
 }));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_ID: 'merchant-1' } }));
@@ -53,6 +57,8 @@ beforeEach(() => {
   mockHasSnapshot = true;
   mockNumberStatus = 'idle';
   mockRefreshNumbers.mockResolvedValue(undefined);
+  mockResetNumberRefresh.mockClear();
+  mockRefetch.mockResolvedValue({ isError: false });
   jest
     .spyOn(AppState, 'addEventListener')
     .mockImplementation((_event, callback) => {
@@ -190,6 +196,80 @@ it.each([
   mockNumberStatus = status;
   const { result, unmount } = renderHook(() => useWalletScreenData());
   expect(result.current.refreshState).toBe(label);
+  unmount();
+});
+
+it('clears a numeric-refresh error after a successful manual full-wallet retry', async () => {
+  mockNumberStatus = 'error';
+  const { result, rerender, unmount } = renderHook(() => useWalletScreenData());
+  expect(result.current.refreshState).toBe('error');
+
+  await act(async () => {
+    await result.current.refetch();
+  });
+  rerender({});
+
+  expect(mockResetNumberRefresh).toHaveBeenCalledTimes(1);
+  expect(result.current.refreshState).toBeUndefined();
+  unmount();
+});
+
+it('keeps a numeric-refresh error when the manual full-wallet retry fails', async () => {
+  mockNumberStatus = 'error';
+  mockRefetch.mockResolvedValue({ isError: true });
+  const { result, unmount } = renderHook(() => useWalletScreenData());
+
+  await act(async () => {
+    await result.current.refetch();
+  });
+
+  expect(mockResetNumberRefresh).not.toHaveBeenCalled();
+  expect(result.current.refreshState).toBe('error');
+  unmount();
+});
+
+it('does not clear a numeric-refresh error when the wallet scope changes during retry', async () => {
+  let complete!: (result: { isError: false }) => void;
+  mockNumberStatus = 'error';
+  mockRefetch.mockReturnValueOnce(
+    new Promise((resolve) => {
+      complete = resolve;
+    })
+  );
+  const { result, rerender, unmount } = renderHook(() => useWalletScreenData());
+  let retry!: Promise<unknown>;
+  act(() => {
+    retry = result.current.refetch();
+  });
+
+  mockMerchantId = 'merchant-2';
+  rerender({});
+  await act(async () => {
+    complete({ isError: false });
+    await retry;
+  });
+
+  expect(mockResetNumberRefresh).not.toHaveBeenCalled();
+  expect(result.current.refreshState).toBe('error');
+  unmount();
+});
+
+it('does not clear a pending numeric refresh when a concurrent full retry succeeds', async () => {
+  let finishNumericRefresh!: () => void;
+  mockRefreshNumbers.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      finishNumericRefresh = resolve;
+    })
+  );
+  const { result, unmount } = renderHook(() => useWalletScreenData());
+  expect(mockRefreshNumbers).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    await result.current.refetch();
+  });
+
+  expect(mockResetNumberRefresh).not.toHaveBeenCalled();
+  await act(async () => finishNumericRefresh());
   unmount();
 });
 

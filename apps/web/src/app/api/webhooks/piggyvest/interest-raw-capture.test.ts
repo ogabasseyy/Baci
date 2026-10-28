@@ -116,6 +116,24 @@ it.each([
   expect(responseText).not.toContain('interest-payout.success');
 });
 
+it('does not acknowledge an unknown payload under a shared key when raw capture is disabled', async () => {
+  const body = '{"eventType":"future-interest-event","private":"payload"}';
+  mocks.inbox.mockResolvedValue('disabled');
+  const response = await captureInterestRawDelivery(
+    input(body, ['interest', 'legacy'])
+  );
+
+  expect(response?.status).toBe(503);
+  expect(await response?.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+  });
+  expect(mocks.inbox).toHaveBeenCalledWith({
+    rawBody: Buffer.from(body),
+    signature: 'synthetic-hmac',
+  });
+});
+
 it('does not capture any bytes without verified interest-family authority', async () => {
   expect(
     await captureInterestRawDelivery(

@@ -49,11 +49,15 @@ const singleTransaction = z.object({
   third_party_reference: identifier.nullable().optional(),
   internal_reference: identifier.nullable().optional(),
 });
+const productionSingleTransaction = singleTransaction.extend({
+  status: z.enum(['successful', 'failed']),
+  category: z.literal('p2p'),
+});
 const evidence = z.discriminatedUnion('environment', [
   z.strictObject({
     environment: z.literal('production'),
     wallet,
-    transaction,
+    transaction: productionSingleTransaction,
   }),
   z.strictObject({
     environment: z.literal('staging'),
@@ -67,5 +71,6 @@ export const primaryWalletSavingsIdentitySchemas = {
   page,
   transaction,
   singleTransaction,
+  productionSingleTransaction,
   evidence,
 };

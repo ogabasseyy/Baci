@@ -8,6 +8,20 @@ import { CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth-store';
 import type { WalletRefreshState } from './WalletRefreshNotice';
 
+async function refetchAndReset<
+  TArgs extends unknown[],
+  TResult extends { isError: boolean },
+>(
+  refetch: (...args: TArgs) => Promise<TResult>,
+  reset: () => void,
+  shouldReset: () => boolean,
+  ...args: TArgs
+) {
+  const result = await refetch(...args);
+  if (!result.isError && shouldReset()) reset();
+  return result;
+}
+
 export function useWalletScreenData() {
   const query = useWallet({
     cachePolicy: 'display',
@@ -30,6 +44,42 @@ export function useWalletScreenData() {
     !!userId && (!customer?.user_id || customer.user_id === userId);
   const hasSnapshot = !!query.data;
   const scope = `${activeMerchantId}:${customerId ?? ''}:${userId ?? ''}`;
+  const scopeGeneration = useRef({ scope, value: 0 });
+  if (scopeGeneration.current.scope !== scope) {
+    scopeGeneration.current = {
+      scope,
+      value: scopeGeneration.current.value + 1,
+    };
+  }
+  const refreshStateRef = useRef({
+    scope,
+    generation: scopeGeneration.current.value,
+    isPending: numbers.isPending,
+  });
+  refreshStateRef.current = {
+    scope,
+    generation: scopeGeneration.current.value,
+    isPending: numbers.isPending,
+  };
+  const numericRefreshCount = useRef(0);
+  const resetNumberRefresh = numbers.reset;
+  const refetchWallet = (...args: Parameters<typeof query.refetch>) => {
+    const generation = scopeGeneration.current.value;
+    return refetchAndReset(
+      query.refetch,
+      resetNumberRefresh,
+      () => {
+        const current = refreshStateRef.current;
+        return (
+          current.scope === scope &&
+          current.generation === generation &&
+          !current.isPending &&
+          numericRefreshCount.current === 0
+        );
+      },
+      ...args
+    );
+  };
   const lastObservation = useRef<{
     scope: string;
     hasSnapshot: boolean;
@@ -37,6 +87,7 @@ export function useWalletScreenData() {
   const resumedWhileLoading = useRef(false);
   const { refetch } = query;
   const { mutateAsync } = numbers;
+  const effectScopeGeneration = scopeGeneration.current.value;
   useEffect(() => {
     let active = true;
     let running = false;
@@ -49,6 +100,7 @@ export function useWalletScreenData() {
         return;
       }
       running = true;
+      numericRefreshCount.current++;
       try {
         do {
           pending = false;
@@ -59,13 +111,27 @@ export function useWalletScreenData() {
             isCurrent,
             includeTransactions: true,
             refetchFull: () =>
-              refetch({ cancelRefetch: false, throwOnError: true }),
+              refetchAndReset(
+                refetch,
+                resetNumberRefresh,
+                () => {
+                  const current = refreshStateRef.current;
+                  return (
+                    current.scope === scope &&
+                    current.generation === effectScopeGeneration &&
+                    !current.isPending &&
+                    numericRefreshCount.current === 0
+                  );
+                },
+                { cancelRefetch: false, throwOnError: true }
+              ),
           });
         } while (isCurrent() && pending);
       } catch {
         pending = false;
       } finally {
         running = false;
+        numericRefreshCount.current--;
       }
     };
     const previous = lastObservation.current;
@@ -96,6 +162,8 @@ export function useWalletScreenData() {
     hasSnapshot,
     mutateAsync,
     refetch,
+    resetNumberRefresh,
+    effectScopeGeneration,
     scope,
   ]);
 
@@ -107,5 +175,5 @@ export function useWalletScreenData() {
         : query.isError || numbers.isError
           ? 'error'
           : undefined;
-  return { ...query, refreshState };
+  return { ...query, refetch: refetchWallet, refreshState };
 }

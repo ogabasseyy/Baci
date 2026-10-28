@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-const scope = new URL('../../supabase/migrations/20261027051250_commerce_cart_quota_guard.sql', import.meta.url);
+const scope = new URL('../../supabase/migrations/20261027051250_commerce_cart_quota_gigl_guard.sql', import.meta.url);
 const grant = new URL('../../supabase/migrations/20261027051251_commerce_cart_supabase_quota_gigl_request_scope.sql', import.meta.url);
 
 test('quota role is granted only after the scoped guard is installed', () => {

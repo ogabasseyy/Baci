@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import YAML from 'yaml';
 
@@ -8,6 +8,9 @@ const deploy = YAML.parse(
 );
 const ci = YAML.parse(
   readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8')
+);
+const deployFilters = YAML.parse(
+  readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8')
 );
 
 test('quota guard reload is witnessed before the membership migration can run', () => {
@@ -44,5 +47,20 @@ test('database replay runs the cart quota RLS and worker-scope assertions', () =
       step.run?.includes('--sql-check supabase/tests/commerce_cart_quota.sql')
     ),
     'the replay must execute the cart quota SQL suite'
+  );
+});
+
+test('quota guard migration triggers the GIGL tracking deployment checks', () => {
+  const migrations = readdirSync(
+    new URL('../../supabase/migrations/', import.meta.url)
+  );
+  const guards = migrations.filter((name) =>
+    name.startsWith('20261027051250_')
+  );
+  assert.equal(guards.length, 1, 'the quota guard migration is unique');
+  assert.match(guards[0], /gigl/, 'the guard must match the tracking glob');
+  assert.ok(
+    deployFilters.tracking.includes('supabase/migrations/*gigl*'),
+    'GIGL migrations must trigger tracking checks'
   );
 });

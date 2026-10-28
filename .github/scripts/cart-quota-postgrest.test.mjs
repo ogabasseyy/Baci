@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const postgrest = spawnSync('which', ['postgrest'], { encoding: 'utf8' }).stdout.trim();
-const scope = new URL('../../supabase/migrations/20261027051250_commerce_cart_quota_guard.sql', import.meta.url);
+const scope = new URL('../../supabase/migrations/20261027051250_commerce_cart_quota_gigl_guard.sql', import.meta.url);
 const grant = new URL('../../supabase/migrations/20261027051251_commerce_cart_supabase_quota_gigl_request_scope.sql', import.meta.url);
 
 async function freePort() {

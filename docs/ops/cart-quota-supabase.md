@@ -50,7 +50,7 @@ instance stops, so log totals are a lower bound, not an exact denial rate.
    migration history. Confirm the quota grant migration is not already
    recorded. A late scope migration deliberately stops rather than revoking
    an already active quota role.
-2. Apply through 20261027051250_commerce_cart_quota_guard. It installs the
+2. Apply through 20261027051250_commerce_cart_quota_gigl_guard. It installs the
    quota guard and a reload canary while keeping authenticator membership
    revoked. The version is intentionally one step before the existing,
    un-applied 20261027051251 quota grant migration.

@@ -15,7 +15,24 @@ SET LOCAL ROLE commerce_cart_quota;
 SELECT set_config('request.jwt.claims', jsonb_build_object('role','commerce_cart_quota','cart_quota_key',repeat('a',64),'cart_quota_window_ms',60000,'iat',floor(extract(epoch FROM now())),'exp',floor(extract(epoch FROM now()))+60)::text,true);
 SELECT is((public.increment_commerce_cart_quota()->>'count')::int,1,'first request starts at one');
 SELECT is((public.increment_commerce_cart_quota()->>'count')::int,2,'next request increments the same window');
-SELECT ok((public.increment_commerce_cart_quota()->>'resetTime')::bigint BETWEEN floor(extract(epoch FROM now())*1000)::bigint AND floor(extract(epoch FROM now())*1000)::bigint+61000,'expiry comes from the database clock');
+-- Create a fresh window after the delay, not relative to the transaction start.
+SELECT set_config('request.jwt.claims', jsonb_build_object('role','commerce_cart_quota','cart_quota_key',repeat('f',64),'cart_quota_window_ms',60000,'iat',floor(extract(epoch FROM now())),'exp',floor(extract(epoch FROM now()))+60)::text,true);
+SELECT pg_sleep(1.1);
+WITH started AS MATERIALIZED (
+  SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS started_ms
+), incremented AS MATERIALIZED (
+  SELECT started_ms,
+    (public.increment_commerce_cart_quota()->>'resetTime')::bigint AS reset_at_ms
+  FROM started
+), finished AS MATERIALIZED (
+  SELECT started_ms, reset_at_ms,
+    floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS finished_ms
+  FROM incremented
+)
+SELECT ok(
+  reset_at_ms BETWEEN started_ms+60000 AND finished_ms+60000,
+  'expiry comes from the database clock'
+) FROM finished;
 SELECT set_config('request.jwt.claims', jsonb_build_object('role','commerce_cart_quota','cart_quota_key',repeat('b',64),'cart_quota_window_ms',60000,'iat',floor(extract(epoch FROM now())),'exp',floor(extract(epoch FROM now()))+60)::text,true);
 SELECT is((SELECT count(*)::int FROM cart_quota.counters),0,'a different scope cannot read the first counter');
 SELECT is((public.increment_commerce_cart_quota()->>'count')::int,1,'a different scope has its own counter');

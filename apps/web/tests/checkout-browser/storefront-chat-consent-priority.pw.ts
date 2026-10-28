@@ -30,6 +30,32 @@ test('consent remains available above an already-open conversation', async ({
   await expect(page.locator('.ogabassey-chat-window')).toBeVisible();
 });
 
+test('production consent stays centered on desktop with inline stacking', async ({
+  page,
+}) => {
+  const viewportWidth = 1440;
+  await page.setViewportSize({ width: viewportWidth, height: 900 });
+  await page.goto('/chat-launcher');
+  await page.getByRole('button', { name: 'Show consent' }).click();
+
+  const consent = page.getByRole('dialog', { name: 'Cookie consent' });
+  await expect(consent).toBeVisible();
+  const geometry = await consent.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      center: rect.left + rect.width / 2,
+      zIndex: getComputedStyle(element).zIndex,
+    };
+  });
+
+  expect(geometry.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.right).toBeLessThanOrEqual(viewportWidth);
+  expect(Math.abs(geometry.center - viewportWidth / 2)).toBeLessThanOrEqual(1);
+  expect(geometry.zIndex).toBe('50');
+});
+
 test('unrelated keyboard focus leaves a timed newsletter visible and interactive', async ({
   page,
 }) => {

@@ -1,5 +1,4 @@
 import type {
-  LighthouseAuditItem,
   PageSpeedLcpSubparts,
   RawLighthouseAudit,
 } from './page-speed-lcp-diagnostics.types';
@@ -133,17 +132,19 @@ export function resolveLcpResourceUrl(
   const isTrunc = Boolean(rawSrc && /(\u2026|\.\.\.)/.test(rawSrc));
   const prefix = rawSrc?.split(/\u2026|\.\.\./)[0]?.trim() ?? '';
   if (!prefix || prefix.startsWith('data:')) return null;
-  const net = (audits['network-requests']?.details?.items ??
-    []) as LighthouseAuditItem[];
+  const rawNet = audits['network-requests']?.details?.items;
+  const net = Array.isArray(rawNet) ? rawNet.filter(isRecord) : [];
   const matches = net.filter(
     (r) =>
-      typeof r?.url === 'string' &&
+      typeof r.url === 'string' &&
       r.url.startsWith(prefix) &&
       (!r.resourceType || r.resourceType === 'Image') &&
       (cutoffMs === null ||
         (getNum(r.networkRequestTime) ?? getNum(r.startTime) ?? 0) <=
           cutoffMs + 50)
   );
-  if (matches.length === 1 && matches[0]?.url) return matches[0].url;
+  if (matches.length === 1 && typeof matches[0]?.url === 'string') {
+    return matches[0].url;
+  }
   return !isTrunc && rawSrc?.startsWith('http') ? rawSrc : null;
 }

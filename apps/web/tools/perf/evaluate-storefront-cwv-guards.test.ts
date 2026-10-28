@@ -2,13 +2,33 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    prefetch: _prefetch,
+    ...rest
+  }: {
+    children: ReactNode;
+    href: string;
+    prefetch?: boolean;
+  } & Record<string, unknown>) =>
+    createElement('a', { href, ...rest }, children),
+}));
+
+vi.mock('next/image', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/image')>();
+  return { ...actual };
+});
+
 import { OgabasseyHomeCriticalShell } from '@/app/(storefront)/ogabassey/ogabassey-home-critical-shell';
 import { OgabasseyHomeHeroPreloadLink } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-preload-link';
 import { STOREFRONT_LCP_COPY_CSS } from '@/app/(storefront)/storefront-lcp-copy-css';
-import { MobileLcpHeroImage } from '@/components/storefront/ogabassey/components/mobile-lcp-hero-image';
+import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import {
   countStorefrontRouteCssImports,
   evaluateHeadJsGuard,
@@ -25,7 +45,7 @@ const SAMPLE_HERO_URL =
   'https://cdn.ogabassey.com/core-assets/products/iphone-16-pro-max.avif';
 
 describe('evaluate-storefront-cwv-guards', () => {
-  it('passes against real rendered OgaBassey homepage shell, preload link, and MobileLcpHeroImage components', () => {
+  it('passes against real rendered OgaBassey homepage shell, preload link, and full Hero (mobile + desktop grid)', () => {
     const preloadHtml = renderToStaticMarkup(
       createElement(OgabasseyHomeHeroPreloadLink, {
         src: SAMPLE_HERO_URL,
@@ -39,20 +59,35 @@ describe('evaluate-storefront-cwv-guards', () => {
         createElement(
           'main',
           null,
-          createElement(MobileLcpHeroImage, {
-            alt: 'iPhone 16 Pro Max',
-            imageFit: 'contain',
-            shouldPrioritizeImage: true,
-            src: SAMPLE_HERO_URL,
+          createElement(Hero, {
+            omitDocumentHeading: true,
+            prioritizeMobileHeroImage: true,
+            slides: [
+              {
+                ctaLabel: 'Shop now',
+                href: '/ogabassey/smartphones/iphone-16-pro-max',
+                id: 'slide-1',
+                imageAlt: 'iPhone 16 Pro Max',
+                imageUrl: SAMPLE_HERO_URL,
+                kind: 'product',
+                name: 'iPhone 16 Pro Max',
+                priceLabel: '₦1,800,000',
+              },
+            ],
           })
         )
       )
     );
     const fullHtml = `<!DOCTYPE html><html lang="en"><head>${preloadHtml}</head><body>${bodyHtml}</body></html>`;
+    expect(bodyHtml).toContain('data-ogabassey-mobile-hero="true"');
+    expect(bodyHtml).toContain('data-ogabassey-desktop-hero="true"');
+    expect(bodyHtml.match(/fetchPriority="high"/gi)).toHaveLength(2);
     const result = evaluateHomepageHtmlGuard(fullHtml);
     expect(result.passed).toBe(true);
     expect(result.failures).toEqual([]);
     expect(result.headImagePreloads).toBe(1);
+    expect(result.hasDataGifHeroSrc).toBe(false);
+    expect(result.heroInsideHiddenSuspense).toBe(false);
     expect(result.heroUrls.length).toBeGreaterThan(0);
   });
 
@@ -83,6 +118,10 @@ describe('evaluate-storefront-cwv-guards', () => {
       '<source type="image/avif" srcset="https://untrusted.example.com/hero.avif 384w"/>',
       '<img src="https://cdn.ogabassey.com/hero.jpg" fetchpriority="high"/>',
       '</picture>',
+      '<picture>',
+      '<source type="image/avif" srcset="https://below-fold.example.com/card.avif 384w"/>',
+      '<img src="https://below-fold.example.com/card.jpg" loading="lazy"/>',
+      '</picture>',
       '</body></html>',
     ].join('');
 
@@ -90,6 +129,9 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(result.passed).toBe(false);
     expect(result.failures).toContain(
       'Disallowed hero image origin in URL: https://untrusted.example.com/hero.avif'
+    );
+    expect(result.failures).not.toContain(
+      'Disallowed hero image origin in URL: https://below-fold.example.com/card.avif'
     );
   });
 
@@ -119,6 +161,19 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(result.headImagePreloads).toBe(2);
     expect(result.heroInsideHiddenSuspense).toBe(true);
     expect(result.hasDataGifHeroSrc).toBe(true);
+
+    const hrefOnlyPreloadHtml = [
+      '<!DOCTYPE html><html><head>',
+      '<link rel="preload" as="image" href="https://cdn.ogabassey.com/a.avif"/>',
+      '</head><body>',
+      '<picture><img src="https://cdn.ogabassey.com/a.avif" fetchpriority="high"/></picture>',
+      '</body></html>',
+    ].join('');
+    const hrefOnlyResult = evaluateHomepageHtmlGuard(hrefOnlyPreloadHtml);
+    expect(hrefOnlyResult.passed).toBe(false);
+    expect(hrefOnlyResult.failures).toContain(
+      'Head preload imageSrcSet does not match hero img srcset'
+    );
   });
 
   it('loads real brotli chunk sizes from a build directory and fails closed on missing or forbidden chunks', () => {
@@ -140,6 +195,23 @@ describe('evaluate-storefront-cwv-guards', () => {
       const cleanEval = evaluateHeadJsGuard({ chunkContents, html });
       expect(cleanEval.passed).toBe(true);
       expect(cleanEval.asyncScriptCount).toBe(1);
+
+      const forbiddenEval = evaluateHeadJsGuard({
+        chunkContents: {
+          '/_next/static/chunks/clean.js?dpl=1': {
+            brotliBytes: 42,
+            raw: 'new GoTrueClient({ url: "https://example.supabase.co" })',
+          },
+        },
+        html,
+      });
+      expect(forbiddenEval.passed).toBe(false);
+      expect(forbiddenEval.forbiddenMatches).toEqual([
+        {
+          chunkUrl: '/_next/static/chunks/clean.js?dpl=1',
+          token: 'GoTrueClient',
+        },
+      ]);
 
       const missingEval = evaluateHeadJsGuard({ chunkContents: {}, html });
       expect(missingEval.passed).toBe(false);

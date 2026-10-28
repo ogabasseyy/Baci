@@ -84,12 +84,12 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
   homepageHtml: {
     allowedHeroOrigins: ['https://cdn.ogabassey.com', 'https://ogabassey.com'],
     baseOrigin: 'https://ogabassey.com',
-    forbidDataGifHeroSrc: false,
-    maxHeadImagePreloads: 2,
+    forbidDataGifHeroSrc: true,
+    maxHeadImagePreloads: 1,
     maxHtmlBytes: 380_000,
     maxInlineRscBytes: 240_000,
-    requireHeroOutsideHiddenSuspense: false,
-    requirePreloadMatchesImgSrcSet: false,
+    requireHeroOutsideHiddenSuspense: true,
+    requirePreloadMatchesImgSrcSet: true,
   },
   headJs: {
     forbiddenChunkTokens: ['ZodError', 'GoTrueClient', 'RealtimeClient'],

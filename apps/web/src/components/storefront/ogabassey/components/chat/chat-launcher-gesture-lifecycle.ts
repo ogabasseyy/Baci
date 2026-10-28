@@ -41,7 +41,16 @@ export function createChatLauncherGestureLifecycle({
     anchor.current?.removeAttribute('data-chat-launcher-dragging');
     if (start && dragged.current) {
       if (anchor.current) {
-        anchor.current.style.transform = `translate3d(${start.next.x}px, ${start.next.y}px, 0)`;
+        const current = position();
+        const alreadyPositioned =
+          current?.x === start.next.x && current.y === start.next.y;
+        const x = alreadyPositioned
+          ? start.next.x
+          : start.base.x + start.next.x - start.left;
+        const y = alreadyPositioned
+          ? start.next.y
+          : start.base.y + start.next.y - start.top;
+        anchor.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       }
       commitPosition(start.next);
       suppressedDragClick.current = {

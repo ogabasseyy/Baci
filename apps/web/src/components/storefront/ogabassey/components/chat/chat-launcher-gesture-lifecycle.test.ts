@@ -69,6 +69,7 @@ describe('chat launcher gesture lifecycle', () => {
     state.lifecycle.finishGesture();
 
     expect(state.commitPosition).toHaveBeenCalledWith({ x: 25, y: 28 });
+    expect(state.anchor.style.transform).toBe('translate3d(20px, 20px, 0)');
     expect(state.suppressedDragClick.current).toEqual({
       pointerId: 3,
       pointerType: 'touch',

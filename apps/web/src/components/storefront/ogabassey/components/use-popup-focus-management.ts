@@ -3,14 +3,20 @@
 import { useEffect, useRef } from 'react';
 
 function canReceiveFocus(element: HTMLElement | null): element is HTMLElement {
-  if (!element?.isConnected) return false;
+  if (!element?.isConnected || element.matches(':disabled')) return false;
   for (
     let ancestor: HTMLElement | null = element;
     ancestor;
     ancestor = ancestor.parentElement
   ) {
     const style = window.getComputedStyle(ancestor);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (
+      ancestor.inert ||
+      style.display === 'none' ||
+      style.visibility === 'hidden'
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -72,8 +78,9 @@ export function usePopupFocusManagement(
         '.ogabassey-chat-anchor .ogabassey-chat-button',
       );
       if (!canReceiveFocus(launcher)) return false;
-      restoreChatFocusAfterDismissal.current = false;
       launcher.focus();
+      if (document.activeElement !== launcher) return false;
+      restoreChatFocusAfterDismissal.current = false;
       stopPendingRestore();
       return true;
     };
@@ -98,6 +105,8 @@ export function usePopupFocusManagement(
         attributeFilter: [
           'class',
           'style',
+          'disabled',
+          'inert',
           'data-chat-launcher-offer-collision',
           'data-chat-promotion-focus-handoff',
         ],

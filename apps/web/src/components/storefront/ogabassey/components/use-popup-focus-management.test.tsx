@@ -79,3 +79,42 @@ it('retries focus when removing a separate overlay reveals the launcher', async 
 
   await waitFor(() => expect(launcher).toHaveFocus());
 });
+
+it('keeps focus restoration pending while the launcher is disabled', async () => {
+  function DisabledLauncherUntilReady() {
+    const [visible, setVisible] = useState(true);
+    const [disabled, setDisabled] = useState(true);
+    const { rememberPromotionFocus } = usePopupFocusManagement(visible, false);
+    return (
+      <>
+        {visible && (
+          <div className="promotion">
+            <button
+              onClick={() => {
+                rememberPromotionFocus('.promotion');
+                setVisible(false);
+                setTimeout(() => setDisabled(false), 0);
+              }}
+            >
+              Close promotion
+            </button>
+          </div>
+        )}
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" disabled={disabled}>
+            Assistant
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  render(<DisabledLauncherUntilReady />);
+  fireEvent.keyDown(document, { key: 'Tab' });
+  screen.getByRole('button', { name: 'Close promotion' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Close promotion' }));
+
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Assistant' })).toHaveFocus(),
+  );
+});

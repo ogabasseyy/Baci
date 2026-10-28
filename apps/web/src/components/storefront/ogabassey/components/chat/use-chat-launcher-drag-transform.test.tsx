@@ -24,6 +24,23 @@ it('writes the release transform when a drag returns to its saved position', () 
   );
 });
 
+it('commits the first drag from the default corner placement', () => {
+  const { pointer, flush } = setup();
+  pointer('pointerdown', 220, 320);
+  pointer('pointermove', 320, 420);
+  flush();
+
+  expect(screen.getByTestId('anchor').style.transform).toBe(
+    'translate3d(100px, 100px, 0)',
+  );
+
+  pointer('pointerup', 320, 420);
+  const anchor = screen.getByTestId('anchor');
+  expect(anchor.style.left).toBe('0px');
+  expect(anchor.style.top).toBe('0px');
+  expect(anchor.style.transform).toBe('translate3d(300px, 400px, 0)');
+});
+
 it('skips viewport layout reads before the launcher has a saved position', () => {
   const viewport = Object.assign(new EventTarget(), {
     offsetLeft: 0,

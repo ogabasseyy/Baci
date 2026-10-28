@@ -125,7 +125,8 @@ export function useChatLauncherDrag(
   }
   useEffect(() => {
     if (!active) return;
-    const clearStaleDragClick = () => {
+    const clearStaleDragClick = (event: Event) => {
+      if (event.type === 'focusin' && event.target === buttonRef.current) return;
       clearChatLauncherDragClickOnNewInteraction(suppressedDragClick);
     };
     document.addEventListener('pointerdown', clearStaleDragClick, true);

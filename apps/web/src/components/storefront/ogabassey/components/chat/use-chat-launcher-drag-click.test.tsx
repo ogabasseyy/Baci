@@ -36,6 +36,18 @@ describe('useChatLauncherDrag click correlation', () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it('keeps drag suppression when touch focus arrives before the compatibility click', () => {
+    const { pointer, button, trustedClick, onOpen } = setup();
+    pointer('pointerdown', 220, 320, 7, 'touch');
+    pointer('pointermove', 120, 220, 7, 'touch');
+    pointer('pointerup', 120, 220, 7, 'touch');
+    button.focus();
+
+    trustedClick(120, 220, 0);
+
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
   it('clears the drag click token on keyboard activation', () => {
     const { pointer, click, onOpen } = setup();
     pointer('pointerdown', 220, 320, 7);

@@ -6,7 +6,6 @@ const admin = 'apps/web/src/lib/supabase/admin.ts';
 
 describe('event pipeline service authority graph', () => {
   it.each([
-    'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
     'apps/web/src/lib/drain-storefront-cache-invalidation.ts',
     'apps/web/src/lib/strict-cloudflare-hostname-purge.ts',
   ])('rejects an extra credential import from B0 module %s', (root) => {

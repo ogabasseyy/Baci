@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createCacheInvalidationWorkerClient: vi.fn(),
   drain: vi.fn(),
 }));
 vi.mock('@/lib/drain-storefront-cache-invalidation', () => ({
   drainStorefrontCacheInvalidation: mocks.drain,
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
+vi.mock('@/lib/cache-invalidation-worker-client', () => ({
+  createCacheInvalidationWorkerClient:
+    mocks.createCacheInvalidationWorkerClient,
 }));
 
 import { GET } from './route';
@@ -32,9 +33,9 @@ function makeClaim(index: number) {
   };
 }
 
-function request(secret = 'cron-secret') {
+function request(secret = 'cron-secret', query = '') {
   return new Request(
-    'https://app.usebaci.com/api/cron/drain-cache-invalidations',
+    `https://app.usebaci.com/api/cron/drain-cache-invalidations${query}`,
     {
       headers: { Authorization: `Bearer ${secret}` },
     }
@@ -48,7 +49,7 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('CRON_SECRET', 'cron-secret');
-    mocks.createServiceClient.mockReturnValue({ rpc });
+    mocks.createCacheInvalidationWorkerClient.mockReturnValue({ rpc });
     claimCalls = 0;
     rpc.mockImplementation((name: string) => {
       if (name === 'claim_cache_invalidations') {
@@ -91,7 +92,45 @@ describe('GET /api/cron/drain-cache-invalidations', () => {
     const response = await GET(request('wrong'));
 
     expect(response.status).toBe(401);
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createCacheInvalidationWorkerClient).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the restricted worker capability is unavailable', async () => {
+    mocks.createCacheInvalidationWorkerClient.mockImplementation(() => {
+      throw new Error('invalid capability');
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Cache invalidation worker unavailable',
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('preflights only the dead-letter boolean RPC and exposes no queue state', async () => {
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+
+    const response = await GET(request('cron-secret', '?preflight=1'));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ready: true });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('has_cache_invalidation_dead_letters');
+  });
+
+  it('fails the preflight closed when the worker RPC is not usable', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: new Error('denied') });
+
+    const response = await GET(request('cron-secret', '?preflight=1'));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'Cache invalidation worker unavailable',
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('has_cache_invalidation_dead_letters');
   });
   it('records a retry when an outer stage is not confirmed', async () => {
     mocks.drain.mockResolvedValue({

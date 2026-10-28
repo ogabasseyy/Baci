@@ -203,11 +203,11 @@ def rollback_crontab(original_exists, original, candidate):
 
 
 def main(arguments):
-    if len(arguments) != 8:
+    if len(arguments) != 9:
         raise TransitionError(
-            'expected remote_dir staging_dir node_bin codex_image codex_bin timeout proc_root global_lock_path'
+            'expected remote_dir staging_dir node_bin codex_image codex_bin timeout proc_root global_lock_path lock_dir'
         )
-    remote_dir, staging_dir, node_bin, codex_image, codex_bin, timeout, proc_root, global_lock_path = arguments
+    remote_dir, staging_dir, node_bin, codex_image, codex_bin, timeout, proc_root, global_lock_path, lock_dir = arguments
     remote_dir = Path(remote_dir).resolve()
     staging_dir = Path(staging_dir).resolve()
     try:
@@ -234,6 +234,7 @@ def main(arguments):
             BLOCK_START,
             BLOCK_END,
             global_lock_path,
+            lock_dir,
         )
         current_exists, current = read_crontab()
         if current_exists != original_exists or current != original:

@@ -24,7 +24,7 @@ describe('deploy crontab', () => {
       'install_worker_services'
     );
 
-    assert.match(releaseHelper, /NODE_BIN=\$\(ssh/);
+    assert.match(releaseHelper, /NODE_BIN=\$\(worker_exec_target "\$VPS"/);
     assert.notEqual(releasePreparationIndex, -1);
     assert.notEqual(triggerServiceIndex, -1);
     assert.ok(releasePreparationIndex < triggerServiceIndex);
@@ -38,7 +38,7 @@ describe('deploy crontab', () => {
   it('runs the staged direct-worker preflight before promotion and crontab', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const preflightFailureBlock =
-      /if ! ssh "\$VPS" "cd '\$STAGING_DIR' && \$NODE_BIN '\$STAGING_DIR\/jobs\/preflight-direct-web-workers\.mjs'"; then[\s\S]*?echo "Direct-worker environment preflight failed; live worker files and crontab were not changed\." >&2[\s\S]*?exit 1[\s\S]*?fi/;
+      /if ! worker_exec_target "\$VPS" "cd '\$STAGING_DIR' && \$NODE_BIN '\$STAGING_DIR\/jobs\/preflight-direct-web-workers\.mjs'"; then[\s\S]*?echo "Direct-worker environment preflight failed; live worker files and crontab were not changed\." >&2[\s\S]*?exit 1[\s\S]*?fi/;
     const preflightMatch = releaseHelper.match(preflightFailureBlock);
     const promotionIndex = releaseHelper.indexOf(
       'Promoting validated worker files'
@@ -76,6 +76,26 @@ describe('deploy crontab', () => {
     assert.doesNotMatch(
       deployScript,
       /docker build -f \$STAGING_DIR\/Dockerfile\.codex-remediator .* \$REMOTE_DIR/
+    );
+  });
+
+  it('uses only the protected lock namespace and leaves host migration operator-gated', () => {
+    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const transportSource = readFileSync(
+      join(workerRoot, 'lib', 'worker-transport.sh'),
+      'utf8'
+    );
+    const migrationRunbook = readFileSync(
+      join(workerRoot, 'docs', 'worker-lock-namespace-migration.md'),
+      'utf8'
+    );
+
+    assert.match(transportSource, /LOCK_DIR='\/srv\/baci-workers\/locks'/);
+    assert.doesNotMatch(deployScript, /\$REMOTE_DIR\/locks/);
+    assert.doesNotMatch(deployScript, /migrate-worker-lock-namespace\.py/);
+    assert.match(
+      migrationRunbook,
+      /python3 vps-workers\/bin\/migrate-worker-lock-namespace\.py/
     );
   });
 
@@ -161,7 +181,7 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /30 9\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/ios-live-build-sync\.lock/
+      /30 9\s+\* \* \* flock -n \$LOCK_DIR\/ios-live-build-sync\.lock/
     );
     assert.match(
       deployScript,
@@ -182,7 +202,7 @@ describe('deploy crontab', () => {
     assert.ok(androidCronLine);
     assert.match(
       androidCronLine,
-      /^45 9\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/android-live-build-sync\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/android-live-build-sync' >> \$REMOTE_DIR\/logs\/android-live-build-sync\.log 2>&1$/
+      /^45 9\s+\* \* \* flock -n \$LOCK_DIR\/android-live-build-sync\.lock bash -lc 'cd \$REMOTE_DIR && \$NODE_BIN \$REMOTE_DIR\/jobs\/run-web-cron\.mjs \/api\/cron\/android-live-build-sync' >> \$REMOTE_DIR\/logs\/android-live-build-sync\.log 2>&1$/
     );
   });
 
@@ -195,7 +215,7 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /15 4\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/sync-gigl-service-centres\.lock/
+      /15 4\s+\* \* \* flock -n \$LOCK_DIR\/sync-gigl-service-centres\.lock/
     );
     assert.match(
       deployScript,
@@ -211,7 +231,7 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /\*\/10 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/ollama-workload\.lock flock -n \$REMOTE_DIR\/locks\/ai-storefront-jobs\.lock/
+      /\*\/10 \* \* \* \* flock -n \$LOCK_DIR\/ollama-workload\.lock flock -n \$LOCK_DIR\/ai-storefront-jobs\.lock/
     );
     assert.match(
       deployScript,
@@ -224,7 +244,7 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /20 3\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/supabase-retention-cleanup\.lock/
+      /20 3\s+\* \* \* flock -n \$LOCK_DIR\/supabase-retention-cleanup\.lock/
     );
     assert.match(
       deployScript,
@@ -241,7 +261,7 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /10\s+\*\s+\*\s+\*\s+\* flock -n \$REMOTE_DIR\/locks\/cleanup-agentic-request-records\.lock/
+      /10\s+\*\s+\*\s+\*\s+\* flock -n \$LOCK_DIR\/cleanup-agentic-request-records\.lock/
     );
     assert.match(
       deployScript,
@@ -258,27 +278,21 @@ describe('deploy crontab', () => {
 
     assert.match(
       deployScript,
-      /17\s+\*\s+\*\s+\*\s+\* flock -n \$REMOTE_DIR\/locks\/process-import-jobs\.lock/
+      /17\s+\*\s+\*\s+\*\s+\* flock -n \$LOCK_DIR\/process-import-jobs\.lock/
     );
     assert.match(deployScript, /\$REMOTE_DIR\/bin\/process-import-jobs\.sh/);
     assert.doesNotMatch(
       deployScript,
-      /2-59\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/process-import-jobs\.lock/
+      /2-59\/5 \* \* \* \* flock -n \$LOCK_DIR\/process-import-jobs\.lock/
     );
   });
 
-  it('installs event workers and one-minute flock-guarded recovery sweeps', () => {
+  it('does not recreate event worker cron rows after migration to system services', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
 
-    assert.match(deployScript, /install-event-pipeline-services\.sh/);
-    assert.match(
-      deployScript,
-      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/process-domain-events\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/process-domain-events\.sh --once' >> \$REMOTE_DIR\/logs\/process-domain-events\.log 2>&1$/m
-    );
-    assert.match(
-      deployScript,
-      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/process-event-deliveries\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd \$REMOTE_DIR && \$REMOTE_DIR\/bin\/process-event-deliveries\.sh --once' >> \$REMOTE_DIR\/logs\/process-event-deliveries\.log 2>&1$/m
-    );
+    assert.doesNotMatch(deployScript, /install-event-pipeline-services\.sh|install-quiz-finalization-service\.sh/);
+    assert.doesNotMatch(deployScript, /process-domain-events\.sh|process-event-deliveries\.sh/);
+    assert.doesNotMatch(deployScript, /process-quiz-finalization\.sh|\/api\/quiz\/finalize/);
   });
 
   it('keeps the deployment entrypoint within the repository size limit', () => {

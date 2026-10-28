@@ -16,7 +16,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /20 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/reconcile-gateway-paid-orders\.lock/
+      /20 \*\s+\* \* \* flock -n \$LOCK_DIR\/reconcile-gateway-paid-orders\.lock/
     );
     assert.match(
       deployScript,
@@ -33,7 +33,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /\*\/5 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/order-notifications\.lock/
+      /\*\/5 \* \* \* \* flock -n \$LOCK_DIR\/order-notifications\.lock/
     );
     assert.match(
       deployScript,
@@ -50,7 +50,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /\*\/2 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/cache-invalidations\.lock/
+      /\*\/2 \* \* \* \* flock -n \$LOCK_DIR\/cache-invalidations\.lock/
     );
     assert.match(deployScript, /run-cache-invalidation-cron\.mjs/);
     assert.match(
@@ -65,7 +65,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /\*\/15 \* \* \* \* flock -n \$REMOTE_DIR\/locks\/ollama-workload\.lock flock -n \$REMOTE_DIR\/locks\/agentic-commerce-health\.lock/
+      /\*\/15 \* \* \* \* flock -n \$LOCK_DIR\/ollama-workload\.lock flock -n \$LOCK_DIR\/agentic-commerce-health\.lock/
     );
     assert.match(
       deployScript,
@@ -82,7 +82,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/merchant-signup-health\.lock/
+      /\*\/5 \*\s+\* \* \* flock -n \$LOCK_DIR\/merchant-signup-health\.lock/
     );
     assert.match(
       deployScript,
@@ -99,7 +99,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /0 10 {3}\* \* \* flock -n \$REMOTE_DIR\/locks\/storefront-update-nudge\.lock/
+      /0 10 {3}\* \* \* flock -n \$LOCK_DIR\/storefront-update-nudge\.lock/
     );
     assert.match(
       deployScript,
@@ -116,7 +116,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /15 2\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/sync-petrock-catalog\.lock/
+      /15 2\s+\* \* \* flock -n \$LOCK_DIR\/sync-petrock-catalog\.lock/
     );
     assert.match(
       deployScript,
@@ -133,7 +133,7 @@ describe('deploy crontab schedules', () => {
     assert.ok(cronLine);
     assert.match(
       cronLine,
-      /^\* \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/petrock-reconcile\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m \$REMOTE_DIR\/bin\/process-petrock-reconciliation\.sh' >> \$REMOTE_DIR\/logs\/petrock-reconcile\.log 2>&1$/
+      /^\* \*\s+\* \* \* flock -n \$LOCK_DIR\/petrock-reconcile\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m \$REMOTE_DIR\/bin\/process-petrock-reconciliation\.sh' >> \$REMOTE_DIR\/logs\/petrock-reconcile\.log 2>&1$/
     );
     assert.doesNotMatch(
       cronLine,
@@ -141,18 +141,9 @@ describe('deploy crontab schedules', () => {
     );
   });
 
-  it('retains a bounded once-only quiz finalization fallback with its existing lock', () => {
+  it('does not schedule quiz finalization after migration to its system service', () => {
     const deployScript = readDeployScript();
-    const cronLine = deployScript
-      .split('\n')
-      .find((line) => line.includes('quiz-finalize.lock'));
-
-    assert.ok(cronLine);
-    assert.match(
-      cronLine,
-      /^\* \* \* \* \* flock -n \$REMOTE_DIR\/locks\/quiz-finalize\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s \$REMOTE_DIR\/bin\/process-quiz-finalization\.sh --once' >> \$REMOTE_DIR\/logs\/quiz-finalize\.log 2>&1$/
-    );
-    assert.doesNotMatch(cronLine, /run-web-cron|\/api\/quiz\/finalize/);
+    assert.doesNotMatch(deployScript, /quiz-finalize\.lock|process-quiz-finalization\.sh|\/api\/quiz\/finalize/);
   });
 
   it('schedules bounded remediation storage cleanup', () => {
@@ -160,7 +151,7 @@ describe('deploy crontab schedules', () => {
 
     assert.match(
       deployScript,
-      /40 3\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/cleanup-remediation-storage\.lock/
+      /40 3\s+\* \* \* flock -n \$LOCK_DIR\/cleanup-remediation-storage\.lock/
     );
     assert.match(
       deployScript,

@@ -108,7 +108,7 @@ if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FI
     [
       '-c',
       // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell expansion passed to bash -c.
-      'set -euo pipefail; source "$RECORD_LIB"; record_deploy_workflow_promote "$RECORD_SHA" "${RECORD_PHASE:-post}"',
+      'set -euo pipefail; source "$RECORD_LIB"; _resolve_inflight_gh(){ _inflight_gh_bin=gh; }; _inflight_gh(){ "$_inflight_gh_bin" "$@"; }; record_deploy_workflow_promote "$RECORD_SHA" "${RECORD_PHASE:-post}"',
     ],
     {
       cwd: work,
@@ -118,7 +118,7 @@ if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FI
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
         // file:// fixture origins never parse as github remotes; the
         // override is the deterministic repo for the run-list query.
-        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
+        BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
         ...env,
         RECORD_LIB: libPath,
         RECORD_SHA: sha,

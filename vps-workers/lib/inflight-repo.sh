@@ -19,16 +19,17 @@ _is_valid_repo_slug() {
 }
 
 _set_inflight_repo() {
-  # Resolve the repo explicitly: gh follows the checkout's remotes,
-  # so a fork-clone deploy would query the fork (no runs) and pass
-  # vacuously. Fail closed; the override covers exotic setups.
+  # Every workflow query is pinned to the production repository. The
+  # override may only restate that same identity for unusual remotes.
+  inflight_canonical_repo='ogabasseyy/Baci'
   if [ -n "${BACI_DEPLOY_WORKFLOW_REPO:-}" ]; then
-    if ! _is_valid_repo_slug "$BACI_DEPLOY_WORKFLOW_REPO"; then
-      echo "Refusing worker promotion: BACI_DEPLOY_WORKFLOW_REPO must be 'owner/repo', got '$BACI_DEPLOY_WORKFLOW_REPO'." >&2
+    if ! _is_valid_repo_slug "$BACI_DEPLOY_WORKFLOW_REPO" ||
+      [ "$(printf '%s' "$BACI_DEPLOY_WORKFLOW_REPO" | /usr/bin/tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$inflight_canonical_repo" | /usr/bin/tr '[:upper:]' '[:lower:]')" ]; then
+      echo "Refusing worker promotion: BACI_DEPLOY_WORKFLOW_REPO must identify the canonical production repository." >&2
       return 1
     fi
-    _inflight_owner="${BACI_DEPLOY_WORKFLOW_REPO%%/*}"
-    _inflight_repo="${BACI_DEPLOY_WORKFLOW_REPO#*/}"
+    _inflight_owner='ogabasseyy'
+    _inflight_repo='Baci'
     return 0
   fi
   inflight_remote="$(git remote get-url origin 2>/dev/null || true)"
@@ -52,7 +53,7 @@ _set_inflight_repo() {
   # requires it and it carries no secret.
   case "$inflight_remote" in
     *://*)
-      _remote_scheme_part="$(printf '%s' "${inflight_remote%%://*}" | tr '[:upper:]' '[:lower:]')"
+      _remote_scheme_part="$(printf '%s' "${inflight_remote%%://*}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
       _remote_after_scheme="${inflight_remote#*://}"
       _remote_authority="${_remote_after_scheme%%/*}"
       # Decide path presence BEFORE userinfo stripping: for a
@@ -66,7 +67,7 @@ _set_inflight_repo() {
       fi
       case "$_remote_authority" in
         *@*)
-          _remote_userinfo="$(printf '%s' "${_remote_authority%%@*}" | tr '[:upper:]' '[:lower:]')"
+          _remote_userinfo="$(printf '%s' "${_remote_authority%%@*}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
           if [ "$_remote_userinfo" != 'git' ]; then
             _remote_authority="${_remote_authority##*@}"
           fi
@@ -92,7 +93,7 @@ _set_inflight_repo() {
       # github.com case-insensitively: lowercase (via tr, since macOS
       # ships bash 3 without ${var,,}) or a GitHub.com remote passes
       # validation then aborts the worker deploy as unresolvable.
-      _remote_host="$(printf '%s' "$_remote_host" | tr '[:upper:]' '[:lower:]')"
+      _remote_host="$(printf '%s' "$_remote_host" | /usr/bin/tr '[:upper:]' '[:lower:]')"
       # Strip the default HTTPS port, which the coordinator's URL
       # parse normalizes away: github.com:443 must resolve, while any
       # other port falls through to the refusal below.
@@ -113,7 +114,7 @@ _set_inflight_repo() {
       # match. The path stays case-sensitive.
       _scp_head="${inflight_remote%%:*}"
       _scp_tail="${inflight_remote#*:}"
-      inflight_remote="$(printf '%s' "$_scp_head" | tr '[:upper:]' '[:lower:]'):${_scp_tail}"
+      inflight_remote="$(printf '%s' "$_scp_head" | /usr/bin/tr '[:upper:]' '[:lower:]'):${_scp_tail}"
       ;;
     ssh://*)
       # Lowercase scheme://authority; the path stays case-sensitive.
@@ -125,7 +126,7 @@ _set_inflight_repo() {
       else
         _ssh_tail="/${_ssh_tail}"
       fi
-      inflight_remote="ssh://$(printf '%s' "$_ssh_head" | tr '[:upper:]' '[:lower:]')${_ssh_tail}"
+      inflight_remote="ssh://$(printf '%s' "$_ssh_head" | /usr/bin/tr '[:upper:]' '[:lower:]')${_ssh_tail}"
       ;;
   esac
   while :; do
@@ -143,9 +144,13 @@ _set_inflight_repo() {
   esac
   if ! _is_valid_repo_slug "$inflight_repo"; then
     _remote_display="${inflight_remote##*@}"
-    echo "Refusing worker promotion: cannot resolve the deploy repo from origin '$_remote_display'. Run from a clean clone of the production repo, or set BACI_DEPLOY_WORKFLOW_REPO=owner/repo." >&2
+    echo "Refusing worker promotion: cannot resolve the production repository from origin '$_remote_display'." >&2
     return 1
   fi
-  _inflight_owner="${inflight_repo%%/*}"
-  _inflight_repo="${inflight_repo#*/}"
+  if [ "$(printf '%s' "$inflight_repo" | /usr/bin/tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$inflight_canonical_repo" | /usr/bin/tr '[:upper:]' '[:lower:]')" ]; then
+    echo 'Refusing worker promotion: origin does not identify the canonical production repository.' >&2
+    return 1
+  fi
+  _inflight_owner='ogabasseyy'
+  _inflight_repo='Baci'
 }

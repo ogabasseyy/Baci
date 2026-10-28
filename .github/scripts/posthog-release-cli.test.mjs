@@ -13,7 +13,7 @@ function run({ mode, args = ['hermes', 'upload'], customMsg }) {
     const calls = join(root, 'calls');
     writeFileSync(cli, `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CALLS"
-count=$(wc -l < "$CALLS")
+count=$(awk 'END { print NR }' "$CALLS")
 if [[ -n "\${CUSTOM_MSG:-}" ]]; then echo "$CUSTOM_MSG"; exit 8; fi
 if [[ "$MODE" == transient && "$count" == 3 ]]; then exit 0; fi
 if [[ "$MODE" == auth ]]; then echo 'HTTP 401 unauthorized'; exit 7; fi

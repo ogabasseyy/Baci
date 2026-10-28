@@ -39,7 +39,13 @@ describe('event pipeline authority manifest', () => {
         'ad_tracking',
       ],
     });
-    expect(manifest.functions.typescriptApplication).toHaveLength(18);
+    expect(manifest.functions.typescriptApplication).toHaveLength(15);
+    const cacheInvalidationCron =
+      'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts';
+    expect(manifest.callers).not.toHaveProperty(cacheInvalidationCron);
+    expect(manifest.authority.serviceImporters).not.toContain(
+      cacheInvalidationCron
+    );
     expect(manifest.functions.vpsCleanup).toEqual([
       'cleanup_domain_event_pipeline_v1',
     ]);

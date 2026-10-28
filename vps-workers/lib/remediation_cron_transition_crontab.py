@@ -4,13 +4,17 @@ import re
 import shlex
 
 
-def is_legacy_owned(line, remote_dir, targets):
+def is_legacy_owned(line, remote_dir, targets, lock_dir):
     remote = shlex.quote(remote_dir)
     for name, schedule, wait in targets:
         target = shlex.quote(f'{remote_dir}/jobs/{name}.mjs')
         log = shlex.quote(f'{remote_dir}/logs/{name}.log')
-        prefix = f'{schedule} flock -n {remote}/locks/{name}.lock '
-        command_prefix = line[len(prefix) :] if line.startswith(prefix) else ''
+        prefixes = (
+            f'{schedule} flock -n {shlex.quote(f"{lock_dir}/{name}.lock")} ',
+            f'{schedule} flock -n {remote}/locks/{name}.lock ',
+        )
+        prefix = next((candidate for candidate in prefixes if line.startswith(candidate)), '')
+        command_prefix = line[len(prefix) :] if prefix else ''
         nested_global = r"^flock (?:-n|-w(?:\s+\d+)?)(?: -E 75)? (?:'[^']+'|\S+) bash -lc '"
         if not (
             command_prefix.startswith("bash -lc '")
@@ -45,7 +49,9 @@ def transition_crontab(
     block_start,
     block_end,
     global_lock_path=None,
+    lock_dir=None,
 ):
+    lock_dir = lock_dir or f'{remote_dir}/locks'
     retained = []
     lines = original.splitlines()
     index = 0
@@ -59,14 +65,14 @@ def transition_crontab(
             continue
         if line == block_end:
             raise RuntimeError('unexpected remediation cron block terminator')
-        if not is_legacy_owned(line, remote_dir, targets):
+        if not is_legacy_owned(line, remote_dir, targets, lock_dir):
             retained.append(line)
         index += 1
     while retained and not retained[-1].strip():
         retained.pop()
     remote = shlex.quote(remote_dir)
     global_lock = shlex.quote(
-        global_lock_path or f'{remote_dir}/locks/error-remediator-global.lock'
+        global_lock_path or f'{lock_dir}/error-remediator-global.lock'
     )
     command = (
         f'export BACI_CODEX_DOCKER_IMAGE={shlex.quote(codex_image)} '
@@ -80,7 +86,7 @@ def transition_crontab(
             f'{shlex.quote(node_bin)} {remote}/jobs/{name}.mjs'
         )
         block.append(
-            f'{schedule} flock -n {remote}/locks/{name}.lock bash -lc {shlex.quote(payload)} '
+            f'{schedule} flock -n {shlex.quote(f"{lock_dir}/{name}.lock")} bash -lc {shlex.quote(payload)} '
             f'>> {remote}/logs/{name}.log 2>&1'
         )
     block.append(block_end)

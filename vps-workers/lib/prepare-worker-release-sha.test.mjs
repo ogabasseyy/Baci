@@ -27,4 +27,16 @@ describe('prepare worker release checkout identity', () => {
 
     assert.match(script, /--exclude='\.gigl-capability-smoke-ok'/);
   });
+
+  it('snapshots, promotes, and restores systemd units with each worker release', () => {
+    const script = readFileSync(
+      join(directory, 'prepare-worker-release.sh'),
+      'utf8'
+    );
+
+    assert.match(script, /for entry in bin jobs lib config systemd node_modules app-checkout\.sha/);
+    assert.match(script, /for entry in bin jobs lib config systemd node_modules; do[\s\S]*rsync -a --delete/);
+    assert.equal((script.match(/for entry in bin jobs lib config systemd node_modules; do/g) ?? []).length, 2);
+    assert.match(script, /rsync -a --delete --exclude='\.env\*' --exclude='logs' --exclude='locks'/);
+  });
 });

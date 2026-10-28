@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -15,8 +16,6 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const repoRoot = join(workerRoot, '..');
-const deployScript = join(workerRoot, 'deploy.sh');
 const releaseHelper = join(workerRoot, 'lib', 'prepare-worker-release.sh');
 
 function writeExecutable(path, source) {
@@ -26,6 +25,28 @@ function writeExecutable(path, source) {
 
 function runDeployGuardScenario(scenario) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-deploy-guards-'));
+  const testRepoRoot = join(directory, 'repo');
+  const testWorkerRoot = join(testRepoRoot, 'vps-workers');
+  const testScriptsDir = join(testRepoRoot, '.github', 'scripts');
+  cpSync(workerRoot, testWorkerRoot, {
+    recursive: true,
+    filter: (source) => !source.includes('/node_modules'),
+  });
+  const inflightGuardPath = join(
+    testWorkerRoot,
+    'lib',
+    'check-deploy-workflow-inflight.sh'
+  );
+  writeFileSync(
+    inflightGuardPath,
+    `${readFileSync(inflightGuardPath, 'utf8')}\n_query_release_lock_status() { printf 'unlocked\\n'; }\n`
+  );
+  mkdirSync(testScriptsDir, { recursive: true });
+  writeFileSync(
+    join(testScriptsDir, 'trusted-gh.mjs'),
+    `process.stdout.write(\`\${process.env.TEST_GH_PATH}\\n\`);\n`
+  );
+  const testDeployScript = join(testWorkerRoot, 'deploy.sh');
   const binDirectory = join(directory, 'bin');
   const rsyncMarker = join(directory, 'rsync-called');
   const sshMarker = join(directory, 'ssh-called');
@@ -140,18 +161,18 @@ exit 74
 `
     );
 
-    const result = spawnSync('bash', [deployScript], {
-      cwd: repoRoot,
+    const result = spawnSync('bash', [testDeployScript], {
+      cwd: testRepoRoot,
       encoding: 'utf8',
       env: {
         ...process.env,
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
-        // The inflight guard fails closed without a resolvable repo;
-        // the stub git answers no origin, so pin the override (the
-        // stub gh swallows the query either way).
-        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
+        // The test copy of the trusted CLI helper points at this harness's
+        // stub. The production helper remains pinned to the verified host path.
+        BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
         PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
         TEST_RSYNC_MARKER: rsyncMarker,
+        TEST_GH_PATH: join(binDirectory, 'gh'),
         TEST_PROMOTION_MARKER: promotionMarker,
         TEST_SCENARIO: scenario,
         TEST_SSH_MARKER: sshMarker,

@@ -1,0 +1,21 @@
+[Unit]
+Description=Baci cache invalidation HTTP scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=baci-worker
+Group=baci-worker
+WorkingDirectory=/srv/baci-workers/current
+EnvironmentFile=/srv/baci-workers/runtime/worker.env
+Environment=HOME=/srv/baci-workers/home
+Environment=NODE_ENV=production
+Environment=CACHE_INVALIDATION_STATE_FILE=/srv/baci-workers/shared/cache-invalidations.json
+ExecStart=/usr/bin/flock -n /srv/baci-workers/locks/cache-invalidations.lock /usr/bin/timeout --signal=TERM --kill-after=10s 75s /usr/bin/node /srv/baci-workers/current/jobs/run-cache-invalidation-cron.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/baci-workers/locks /srv/baci-workers/logs /srv/baci-workers/shared
+TimeoutStartSec=90

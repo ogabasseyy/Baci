@@ -53,9 +53,8 @@ checkout stays frozen as the object source for future worktrees, the
 release symlink takes the `app-live` sibling name, and the live `.env`
 is re-pointed to it. Never pull the legacy path again. Roll back by
 re-running `deploy.sh` from the older SHA (missing worktrees are
-re-created from fetch; refuses while a production deploy is in flight
-unless `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` — emergency only, then
-re-run the smoke/latch sequence). For an emergency manual rollback,
+re-created from fetch; refuses while a production release is in flight).
+For an emergency manual rollback,
 restore the COMPLETE old worker release — not just the checkout
 symlink: repointing `app-live` alone leaves the newer `bin/`, `jobs/`,
 `lib/`, `config/`, `node_modules/`, and crontab installed, so cron
@@ -131,8 +130,7 @@ the same GitHub-side protocol as `deploy.sh` — run from a checkout
 of the production repo with an authenticated `gh` (the `bash -c`
 wrapper keeps the sourced functions out of the interactive shell and
 propagates the refusal status; the functions return, never exit, so
-even a direct source cannot kill the operator shell; emergency-only
-bypass `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1`, then re-verify the latch):
+even a direct source cannot kill the operator shell):
 
 ```sh
 bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && check_deploy_workflow_inflight'
@@ -159,7 +157,7 @@ would otherwise run mixed-release code:
 
 ```sh
 flock -x /tmp/baci-workers-deploy.lock \
-flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
+flock -x "$LOCK_DIR/gigl-tracking.lock" bash -c '
   set -euo pipefail
   # The remote dir arrives as $0 (the trailing argument), NOT via
   # $REMOTE_DIR: this child shell only inherits EXPORTED variables,
@@ -279,13 +277,12 @@ which runs the same check-before/record-after steps) and the
 production deploy workflow are mutually exclusive across the GitHub
 API, in both directions:
 
-- `deploy.sh` refuses to promote while any main-branch deploy run is
-  in flight (checked before staging for fail-fast, and again after
-  the image build, before the cron transition mutates live schedule —
-  a refusal there leaves live cron untouched). Override: set
-  `BACI_DEPLOY_WORKFLOW_REPO=owner/repo` when origin is unresolvable,
-  or `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` in an emergency (then re-run
-  the smoke/latch sequence and confirm the published revision).
+- `deploy.sh` refuses to promote while any main-branch deploy or
+  coordinator run is in flight (checked before staging for fail-fast,
+  and again after the image build, before the cron transition mutates
+  live schedule — a refusal there leaves live cron untouched). Missing
+  identity or run data is a hard refusal; reconcile the repository
+  remote and GitHub authentication before retrying.
 - Every promote records `<sha>:<in-flight-run-ids>` in the
   `ops/gigl-promote-record` branch (single file
   `.gigl-promote-record`, created automatically on first promote;

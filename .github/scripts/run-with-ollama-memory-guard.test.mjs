@@ -168,11 +168,9 @@ test('does not overlap periodic release checks', async () => {
   await resultPromise;
 });
 
-test('holds the shared Ollama workload lock while the Vercel build is running', async () => {
+test('uses the pinned Vercel CLI for the production prebuilt build', async () => {
   const workflow = await readFile(new URL('../workflows/deploy.yml', import.meta.url), 'utf8');
 
-  assert.match(
-    workflow,
-    /flock -w 120 \/home\/bassey\/baci-workers\/locks\/ollama-workload\.lock node \.github\/scripts\/run-with-ollama-memory-guard\.mjs -- pnpm dlx --allow-build=esbuild vercel@52\.0\.0 build --yes --prod/
-  );
+  assert.match(workflow, /- name: Build for Vercel\n\s+run: \.github\/scripts\/run-pinned-vercel\.sh build --yes --prod/);
+  assert.doesNotMatch(workflow, /pnpm dlx --allow-build=esbuild vercel@\d+\.\d+\.\d+ build/);
 });

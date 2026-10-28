@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createCacheInvalidationWorkerClient: vi.fn(),
   drain: vi.fn(),
 }));
 vi.mock('@/lib/drain-storefront-cache-invalidation', () => ({
   drainStorefrontCacheInvalidation: mocks.drain,
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
+vi.mock('@/lib/cache-invalidation-worker-client', () => ({
+  createCacheInvalidationWorkerClient:
+    mocks.createCacheInvalidationWorkerClient,
 }));
 
 import { GET } from './route';
@@ -19,7 +20,7 @@ describe('bugfix: divergent product_slugs must not skip sibling purges', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('CRON_SECRET', 'cron-secret');
-    mocks.createServiceClient.mockReturnValue({ rpc });
+    mocks.createCacheInvalidationWorkerClient.mockReturnValue({ rpc });
     mocks.drain.mockResolvedValue({ ok: true });
     let claimCalls = 0;
     rpc.mockImplementation((name: string) => {

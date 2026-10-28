@@ -10,6 +10,8 @@ describe('remediation cron transition', () => {
     assert.equal(outcome.locks.length, 5);
     assert.equal(outcome.barrierFiles, true);
     assert.match(outcome.crontab, /error-remediator-global\.lock/);
+    assert.match(outcome.crontab, new RegExp(`${outcome.lockDirectory}/vercel-error-remediator\\.lock`));
+    assert.doesNotMatch(outcome.crontab, /remote\/locks\/vercel-error-remediator\.lock/);
   });
 
   it('times out with a diagnostic when a legacy lock remains held', () => {

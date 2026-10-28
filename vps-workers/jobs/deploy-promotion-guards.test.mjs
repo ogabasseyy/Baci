@@ -11,11 +11,12 @@ import {
 // under the 300-line limit).
 
 describe('deploy promotion guards', () => {
-  it('serializes live promotion and runtime-directory creation under one lock', () => {
+  it('serializes live promotion while using the protected shared lock namespace', () => {
     const { promotionSource, source } = readPromotionSource();
 
     assert.match(promotionSource, /rsync -a --delete/);
-    assert.match(promotionSource, /mkdir -p.*logs.*locks/);
+    assert.match(promotionSource, /mkdir -p "\$remote_dir\/logs"/);
+    assert.doesNotMatch(promotionSource, /mkdir -p "\$remote_dir\/locks"/);
     // The checkout flip shares the deploy lock with the file promote,
     // so wrappers, SHA marker, and executed code change together.
     assert.match(
@@ -29,11 +30,11 @@ describe('deploy promotion guards', () => {
     // the locks-dir pre-create sits before the slice and pins separately.
     assert.match(
       promotionSource,
-      /flock -x '\$REMOTE_DIR\/locks\/gigl-tracking\.lock'/
+      /flock -x '\$LOCK_DIR\/gigl-tracking\.lock'/
     );
     assert.match(
       source,
-      /mkdir -p '\$REMOTE_DIR\/locks' && flock -x \/tmp\/baci-workers-deploy\.lock/
+      /flock -x \/tmp\/baci-workers-deploy\.lock flock -x '\$LOCK_DIR\/gigl-tracking\.lock'/
     );
   });
 
@@ -49,7 +50,7 @@ describe('deploy promotion guards', () => {
       /\.\s"\$staging_dir\/lib\/quiesce-worker-release\.sh"/
     );
     const callIndex = promotionSource.indexOf(
-      'quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh"'
+      'quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" "$lock_dir"'
     );
     assert.notEqual(callIndex, -1);
     assert.ok(callIndex < promotionSource.indexOf('rsync -a --delete'));
@@ -161,7 +162,7 @@ describe('deploy promotion guards', () => {
     );
     assert.match(
       quiesceSource,
-      /"\$gigl_global_path" -ef "\$remote_dir\/locks\/\$gigl_global_lock"/
+      /"\$gigl_global_path" -ef "\$lock_dir\/\$gigl_global_lock"/
     );
     assert.match(
       quiesceSource,
@@ -185,7 +186,7 @@ describe('deploy promotion guards', () => {
     );
     assert.match(
       promotionSource,
-      /for entry in bin jobs lib config node_modules/
+      /for entry in bin jobs lib config systemd node_modules/
     );
     assert.match(
       promotionSource,

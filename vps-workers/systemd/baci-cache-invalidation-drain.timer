@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Baci cache invalidation HTTP scheduler every two minutes
+
+[Timer]
+OnCalendar=*:0/2
+Persistent=true
+Unit=baci-cache-invalidation-drain.service
+
+[Install]
+WantedBy=timers.target

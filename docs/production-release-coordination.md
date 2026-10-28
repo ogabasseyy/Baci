@@ -1,67 +1,55 @@
 # Production release coordination
 
+> **Draft only:** automatic coordination is not active. The implementation in
+> this worktree is blocked on isolating the runner's persisted GitHub
+> credential from same-user worker installation code. See
+> `docs/superpowers/plans/2026-10-28-auto-worker-release.md` before treating
+> these procedures as current.
+
 ## Operator entry point
 
-After this change is reviewed and merged, use a clean checkout of current main:
+Normal pushes to `main` now enter `.github/workflows/production-release.yml`. To
+start a manual release, dispatch **Production Release Coordinator** on `main`
+from GitHub Actions. `deploy.yml` is callable only by that workflow; direct
+pushes and workflow dispatches to it are no longer release entry points.
 
-```sh
-node .github/scripts/release-production.mjs --approve-production --approve-prebuilt-fallback
-```
+The coordinator serializes releases with a shared GitHub concurrency group, checks
+out the triggering SHA, acquires a durable host lock, updates and verifies the
+workers, then calls `deploy.yml` within the same workflow run. The app workflow
+keeps its migration ordering, production environment, GIGL capability checks,
+prebuilt Vercel publication, overlap barrier, retry behavior, and post-deploy
+checks. It now checks the exact worker SHA on every app publication and verifies
+that the live alias serves the expected project, READY production deployment,
+and current main SHA before clearing the host lock.
 
-This replaces the manual worker-update, verification, dispatch, workflow-watch,
-and live-alias verification sequence. It does not activate REDVAULT or send payments.
-Production now builds on the approved VPS runner and publishes prebuilt output.
-The publication guard resolves an existing GitHub CLI from PATH or the runner
-user's `~/.local/bin`. It checks CLI/API/store access before the build and repeats
-the worker-overlap check before publication and every promotion attempt.
-The legacy `--approve-prebuilt-fallback` flag remains required by the coordinator's
-CLI contract; it does not change the runner or authorize a GitHub-hosted build.
-Any future emergency change to a GitHub-hosted builder requires explicit owner
-approval. Vercel cloud builds remain outside this flow.
+GitHub Actions OIDC is the only same-run worker exemption. The verifier checks
+the signed token's issuer, audience, repository ID, workflow path, ref, SHA,
+event, run attempt, and check-run ID, then joins that job to the GitHub Actions
+API and verifies the workflow, in-progress status, `baci-deploy` runner label,
+and live `main` SHA. A standalone `deploy.sh` call cannot forge this exemption.
+The worker job receives only Actions read, contents write for the existing
+promotion record, and the OIDC mint permission. Vercel and Supabase secrets stay
+in the app workflow. The Production environment configuration is unchanged.
 
-The coordinator requires authenticated GitHub and Vercel CLIs, working SSH access
-to the approved VPS, and the existing worker deployment prerequisites. The Vercel
-CLI must be >= 50.5.1, the first release shipping `vercel api` for live-alias
-verification; older CLIs are refused before dispatching. It refuses
-dirty or stale checkouts and concurrent deployments, rechecks main after worker
-preparation, verifies the dispatched SHA, rejects skipped publication, and checks
-the serving Vercel alias against the expected project, production state and SHA.
-It does not retry indeterminate dispatches or remove production overlap barriers.
-If it crashes or reports an indeterminate dispatch, reconcile the existing release before removing its local lock.
+## Durable lock and recovery
 
-## Unattended integration boundary
+The lock is `/home/bassey/.local/state/baci/pending-production-release.json` on
+the verified `ogabassey` host as UID 1001. It binds the workflow run, attempt,
+and SHA. It is created before worker promotion and remains after any failure,
+cancellation, main movement, unreadable API response, failed post-publish check,
+or uncertain publication. The next run fails closed while it exists. The lock is
+cleared automatically only when the reusable app workflow reports that the
+publication job was skipped, or verifies worker SHA, current main, project
+identity, live alias stability, READY state, and exact deployed SHA.
 
-This entry point is not an installed automatic-on-merge workflow. Do not invoke it
-inside deploy.yml: the worker script correctly rejects an in-flight publishing run.
-Before unattended integration, move release initiation into one outer coordinator,
-disable competing push publication, and retain manual dispatch as a coordinated
-operator path. Until then the guarantees in this document (SHA pinning,
-dispatch correlation, skipped-publication rejection, live-alias checks)
-apply to coordinator-driven workflow_dispatch releases only;
-push-to-main publication keeps its existing uncoordinated path.
-A push deploy interleaving a coordinated release is a known residual
-race: it publishes outside the sibling check, and the trailing
-live-alias verification fails the coordinator run without preventing
-the extra publication. The coordinator identifiers correlate a
-coordinator run with its dispatch; they are not authorization —
-anyone with workflow_dispatch permission and the right SHA passes
-the gate, so keep dispatch permission tightly scoped. Do not
-double-run the entry point for an already-released commit: republication
-is content-identical and passes verification, at the cost of a wasted
-deploy cycle — reconcile instead. Never run two coordinators concurrently
-(even on different machines): the lock is local-only and the sibling
-abort is best-effort, so concurrent runs are procedurally forbidden,
-not just detected. Freeze main pushes for the duration of a coordinated
-release: push deploys bypass the sibling check and can only be caught
-after the fact by live-alias verification.
-Provision restricted runner authentication and trusted VPS access
-without copying personal SSH keys or introducing a broad permanent token.
-
-The current VPS cannot SSH to its own deployment endpoint and has no gh CLI on its
-normal PATH. Those prerequisites must be deliberately provisioned before choosing
-it as the unattended coordinator runner. No dedicated deployment SSH credential
-was found in repository Actions secret names; the iOS signing key is not a release
-credential and must not be repurposed.
+Do not delete a retained lock based only on a failed workflow summary. Reconcile
+all attempts of the owning workflow, confirm no worker or app deployment remains
+active, verify the installed worker SHA, and inspect the live Vercel alias and
+deployment. If publication may have occurred, resolve it to an exact verified
+serving SHA first. Only then may an operator remove the lock on the verified host
+and re-dispatch the current `main` tip. No emergency environment flag skips the
+in-flight, record, or barrier checks. The promotion record and crash barriers
+remain independent protections and still require their existing reconciliation.
 
 The behind-base hook now validates ops/gigl-promote-record as an operational tree
 instead of comparing its separate history with main. It permits only one valid
@@ -113,14 +101,10 @@ refuses incomplete group files. Stop and reconcile partial history before releas
 The only supported predecessor upgrade is an explicitly approved coordinated
 release with all ten original recovery migrations applied under their exact
 identities, all eleven source files present, no activation table/history row,
-and no saved recovery previews. Use:
-
-```sh
-node .github/scripts/release-production.mjs --approve-production --approve-prebuilt-fallback --approve-recovery-gate-reconciliation
-```
-
-This optional approval reaches the migration job only on a coordinated manual
-dispatch; ordinary main pushes keep the partial-history rejection. Capped passes
+and no saved recovery previews. On a manual **Production Release Coordinator**
+dispatch, set `reconcile_checkout_recovery_legacy` only after verifying those
+preconditions. This approval reaches the migration job only on a coordinated
+manual dispatch; ordinary main pushes keep the partial-history rejection. Capped passes
 defer the gate upgrade while still applying migrations at or below the cap so the
 existing hook probes can complete. The uncapped pass installs only the new closed
 gate before any remaining pending migration. Its

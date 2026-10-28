@@ -131,8 +131,28 @@ case "$overlap_record" in
 esac
 case "$overlap_runs" in
   *,"$GITHUB_RUN_ID",*)
-    echo "Refusing production publish: a worker promote overlapped this run (record: $overlap_record), so its early latch/SHA read may be stale. Re-run this workflow off fresh reads." >&2
-    exit 1
+    # The coordinator intentionally promoted this worker during this
+    # exact workflow run. Ignore only its own ID after the current
+    # reusable-workflow job proves its signed OIDC identity and Actions
+    # API check-run binding. Any other recorded ID remains a hard stop.
+    trusted_node="$(PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' command -v node)" || exit 1
+    coordinator_auth="$("$trusted_node" .github/scripts/authorize-coordinator-worker.mjs publisher 2>/dev/null)" || {
+      echo "Refusing production publish: the promotion record includes this run, but its exact authenticated publisher job cannot be verified." >&2
+      exit 1
+    }
+    auth_run_id="${coordinator_auth%%$'\t'*}"
+    if [ "$auth_run_id" != "$GITHUB_RUN_ID" ]; then
+      echo "Refusing production publish: the authenticated coordinator run does not match this workflow run." >&2
+      exit 1
+    fi
+    remaining_runs="${overlap_runs//,"$GITHUB_RUN_ID",/,}"
+    case "$remaining_runs" in
+      ,,) ;;
+      *)
+        echo "Refusing production publish: another release overlapped this worker promotion (record: $overlap_record)." >&2
+        exit 1
+        ;;
+    esac
     ;;
 esac
 echo "No worker promote overlapped this run (record: ${overlap_record%%:*})."

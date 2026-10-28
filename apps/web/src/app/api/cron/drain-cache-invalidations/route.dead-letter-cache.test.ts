@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
+  createCacheInvalidationWorkerClient: vi.fn(),
   drain: vi.fn(),
 }));
 
 vi.mock('@/lib/drain-storefront-cache-invalidation', () => ({
   drainStorefrontCacheInvalidation: mocks.drain,
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
+vi.mock('@/lib/cache-invalidation-worker-client', () => ({
+  createCacheInvalidationWorkerClient:
+    mocks.createCacheInvalidationWorkerClient,
 }));
 
 import { GET } from './route';
@@ -29,7 +30,7 @@ describe('cache invalidation dead-letter alert cache', () => {
     vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'));
     vi.clearAllMocks();
     vi.stubEnv('CRON_SECRET', 'cron-secret');
-    mocks.createServiceClient.mockReturnValue({ rpc });
+    mocks.createCacheInvalidationWorkerClient.mockReturnValue({ rpc });
     rpc.mockImplementation((name: string) => {
       if (name === 'claim_cache_invalidations') {
         return Promise.resolve({ data: [], error: null });

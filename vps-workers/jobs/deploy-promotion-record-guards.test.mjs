@@ -72,11 +72,11 @@ describe('deploy promotion record guards', () => {
     );
     assert.match(
       rollbackSlice,
-      /quiesce_worker_release "\$remote_dir" "\$staging_dir\/bin\/gigl-dotenv\.sh" \|\| exit 1/
+      /quiesce_worker_release "\$remote_dir" "\$staging_dir\/bin\/gigl-dotenv\.sh" "\$lock_dir" \|\| exit 1/
     );
     assert.match(
       rollbackSlice,
-      /for entry in bin jobs lib config node_modules/
+      /for entry in bin jobs lib config systemd node_modules/
     );
     assert.match(
       rollbackSlice,
@@ -173,6 +173,7 @@ describe('deploy promotion record guards', () => {
     );
     for (const variable of [
       '$REMOTE_DIR',
+      '$LOCK_DIR',
       '$NODE_BIN',
       '$CODEX_REMEDIATOR_IMAGE',
       '$CODEX_CONTAINER_BIN',
@@ -194,6 +195,7 @@ describe('deploy promotion record guards', () => {
         '$CODEX_REMEDIATOR_IMAGE',
         '$CRON_BLOCK_END',
         '$CRON_BLOCK_START',
+        '$LOCK_DIR',
         '$NODE_BIN',
         '$REMOTE_DIR',
       ],
@@ -283,7 +285,7 @@ describe('deploy promotion record guards', () => {
       'record_deploy_workflow_promote "<full-sha>" pre'
     );
     const restoreIndex = runbook.indexOf(
-      'flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c'
+      'flock -x "$LOCK_DIR/gigl-tracking.lock" bash -c'
     );
     const postIndex = runbook.indexOf(
       'record_deploy_workflow_promote "<full-sha>"\''

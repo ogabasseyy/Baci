@@ -208,3 +208,96 @@ verify_post_promote_overlap() {
   fi
   return 1
 }
+
+# Restore the exact pre-staging production deployment after a post-promote
+# runtime preflight failure. Never promote the previous URL: Vercel requires a
+# rollback to move aliases back to a deployment that already served production.
+rollback_to_captured_production() {
+  local failed_target="$1"
+  local previous_capture="$2"
+  local previous_uid="${previous_capture%%|*}"
+  local rollback_attempt=0
+
+  if [ -z "$previous_capture" ] || [ -z "$previous_uid" ] || [ "$previous_uid" = "$failed_target" ]; then
+    echo "::error::No distinct captured production deployment is available to restore after ${failed_target}; manual reconciliation is required." >&2
+    return 1
+  fi
+  while [ "$rollback_attempt" -lt "$PROMOTE_ATTEMPTS" ]; do
+    rollback_attempt=$((rollback_attempt + 1))
+    if _run_vercel_rollback "$previous_uid"; then
+      local verification_attempt=0
+      local current_capture=""
+      while [ "$verification_attempt" -lt 3 ]; do
+        verification_attempt=$((verification_attempt + 1))
+        current_capture="$(capture_previous_production_deployment 2>/dev/null || true)"
+        if [ "${current_capture%%|*}" = "$previous_uid" ]; then
+          echo "Rolled production back to ${previous_uid} after runtime preflight failure of ${failed_target}; alias verified." >&2
+          return 0
+        fi
+        if [ "$verification_attempt" -lt 3 ]; then sleep "$BACKOFF_SECONDS"; fi
+      done
+      echo "::error::Rollback command for ${failed_target} returned success, but production alias verification did not confirm ${previous_uid}; manually reconcile Vercel and retain the release lock." >&2
+      return 1
+    fi
+    if [ "$rollback_attempt" -lt "$PROMOTE_ATTEMPTS" ]; then
+      sleep "$BACKOFF_SECONDS"
+    fi
+  done
+  echo "::error::Rollback of ${failed_target} to ${previous_uid} failed; manually restore ${previous_uid} in Vercel and reconcile the release lock." >&2
+  return 1
+}
+
+verify_promoted_candidate_serving() {
+  local candidate="$1"
+  local attempt=0
+  local serving_capture=""
+  local serving_uid=""
+  local serving_url=""
+  while [ "$attempt" -lt 3 ]; do
+    attempt=$((attempt + 1))
+    serving_capture="$(capture_previous_production_deployment 2>/dev/null || true)"
+    serving_uid="${serving_capture%%|*}"
+    serving_url="${serving_capture#*|}"
+    if [ "$candidate" = "$serving_uid" ] || [ "$candidate" = "$serving_url" ] || [ "$candidate" = "https://${serving_url}" ]; then
+      return 0
+    fi
+    if [ "$attempt" -lt 3 ]; then sleep "$BACKOFF_SECONDS"; fi
+  done
+  echo "::error::Production alias did not resolve to promoted candidate ${candidate}; runtime preflight is withheld." >&2
+  return 1
+}
+
+verify_post_promote_runtime() {
+  local new_target="$1"
+  local previous_capture="$2"
+  if [ -z "${DEPLOY_POST_PROMOTE_HEALTH_CHECK:-}" ]; then
+    return 0
+  fi
+  if ! verify_promoted_candidate_serving "$new_target"; then
+    echo "::error::Restoring captured production because the alias does not identify the candidate." >&2
+    rollback_to_captured_production "$new_target" "$previous_capture" || return 1
+    return 1
+  fi
+  if "$DEPLOY_POST_PROMOTE_HEALTH_CHECK"; then
+    return 0
+  fi
+  echo "::error::The promoted deployment ${new_target} failed its authenticated runtime preflight; restoring captured production." >&2
+  rollback_to_captured_production "$new_target" "$previous_capture" || return 1
+  # A confirmed rollback restores safety, but the publishing run remains a
+  # failed run and must not retry/re-promote this candidate.
+  return 1
+}
+
+validate_post_promote_health_configuration() {
+  if [ -n "$DEPLOY_POST_PROMOTE_HEALTH_CHECK" ] && [ -z "$DEPLOY_PROMOTE_OVERLAP_CHECK" ]; then
+    echo "DEPLOY_POST_PROMOTE_HEALTH_CHECK requires DEPLOY_PROMOTE_OVERLAP_CHECK to capture a rollback target." >&2
+    return 1
+  fi
+}
+
+verify_post_promote_runtime_with_fatal_flag() {
+  if ! verify_post_promote_runtime "$1" "$2"; then
+    fatal_promote_failure=1
+    return 1
+  fi
+}

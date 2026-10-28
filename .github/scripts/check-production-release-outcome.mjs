@@ -30,16 +30,6 @@ function report(message, failed, needs = {}) {
       `${name}: ${booleanSignal(needs.changes?.outputs?.[name])}`
     );
   }
-  for (const name of [
-    'cutover_latched',
-    'tracking_stale',
-    'installed_tracking_stale',
-    'manifest_drift',
-  ]) {
-    diagnostics.push(
-      `${name}: ${booleanSignal(needs['vps-drain-readiness']?.outputs?.[name])}`
-    );
-  }
   const details = diagnostics.map((line) => `- ${line}`).join('\n');
   const summary = `## Production release outcome\n\n${message}\n\n${details}\n`;
   if (process.env.GITHUB_STEP_SUMMARY) {

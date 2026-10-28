@@ -1,164 +1,283 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
+import { runGiglCapabilitySmoke } from './run-gigl-capability-smoke.mjs';
 
-const workflow = YAML.parse(
+const deploymentWorkflow = YAML.parse(
   readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8')
 );
-const capability = workflow.jobs['gigl-worker-capability'];
-const publication = workflow.jobs['deploy-production'];
-const installedSha = '1'.repeat(40);
-const workflowSha = '2'.repeat(40);
+const coordinatorWorkflow = YAML.parse(
+  readFileSync(new URL('../workflows/production-release.yml', import.meta.url), 'utf8')
+);
+const publication = deploymentWorkflow.jobs['deploy-production'];
+const releaseSha = 'a'.repeat(40);
 
-// Evaluate the checked-in Actions expressions, rather than reproducing their
-// conditions in the test. These expressions use only boolean operators,
-// string comparisons, context properties and always(). Missing outputs are
-// represented by empty strings, as they are for a skipped changes job.
-function evaluate(expression, context) {
-  assert.equal(typeof expression, 'string');
-  const source = expression
-    .replace(/^\s*\$\{\{([\s\S]*)\}\}\s*$/, '$1')
-    .replace(/\bneeds\.([\w-]+)/g, 'needs["$1"]');
-  return runInNewContext(
-    source,
-    { ...context, always: () => true },
-    { timeout: 1000 }
-  );
-}
-
-function fixture({
-  tracking = 'false',
-  latch = 'false',
-  stale = 'true',
-  installedStale = 'false',
-  manifests = 'false',
-  readiness = 'success',
-  migrations = 'success',
-  smoke = 'skipped',
-  event = 'push',
-  ref = 'refs/heads/main',
-} = {}) {
+function manualContext(overrides = {}) {
   return {
-    github: { event_name: event, ref, sha: workflowSha },
+    github: {
+      ref: 'refs/heads/main',
+      event_name: 'workflow_dispatch',
+      sha: releaseSha,
+    },
+    inputs: { expected_release_sha: releaseSha },
     needs: {
-      changes: {
-        result: event === 'workflow_dispatch' ? 'skipped' : 'success',
-        outputs: { tracking, web: 'true', migrations: 'false' },
-      },
-      'vps-drain-readiness': {
-        result: readiness,
-        outputs: {
-          cutover_latched: latch,
-          tracking_stale: stale,
-          installed_sha: installedSha,
-          installed_tracking_stale: installedStale,
-          manifest_drift: manifests,
-        },
-      },
-      'db-migrations': { result: migrations },
-      'gigl-worker-capability': { result: smoke },
+      changes: { result: 'skipped', outputs: {} },
+      'vps-drain-readiness': { result: 'success' },
+      'db-migrations': { result: 'success' },
+      'gigl-worker-capability': { result: 'success' },
+      'cache-worker-management': { result: 'success' },
+      'cache-invalidation-worker-capability': { result: 'success' },
       'cwv-runner-contracts': { result: 'skipped' },
+      ...overrides,
     },
   };
 }
 
-function expectedWorkerSha(context) {
-  const refresh = capability.steps.find(
-    (step) => step.run === 'bash .github/scripts/refresh-gigl-cutover-latch.sh'
-  );
-  assert.ok(refresh, 'the capability job must use the locked refresh helper');
-  return evaluate(refresh.env.BACI_EXPECTED_APP_SHA, context);
+function evaluateGithubExpression(expression, context) {
+  const source = expression
+    .replace(/^\s*\$\{\{\s*/, '')
+    .replace(/\s*\}\}\s*$/, '')
+    .trim();
+  const tokenPattern = /\s*(\&\&|\|\||==|!=|!|\(|\)|'[^']*'|[A-Za-z_][A-Za-z0-9_.-]*)/y;
+  const tokens = [];
+  let offset = 0;
+  while (offset < source.length) {
+    tokenPattern.lastIndex = offset;
+    const match = tokenPattern.exec(source);
+    if (!match) throw new Error(`Unsupported workflow expression at ${source.slice(offset)}`);
+    tokens.push(match[1]);
+    offset = tokenPattern.lastIndex;
+  }
+
+  let cursor = 0;
+  const peek = () => tokens[cursor];
+  const take = (expected) => {
+    const token = tokens[cursor++];
+    if (expected !== undefined && token !== expected) {
+      throw new Error(`Expected ${expected}, received ${token}`);
+    }
+    return token;
+  };
+  const resolve = (name) => {
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    return name.split('.').reduce((value, key) => value?.[key], context);
+  };
+
+  function primary() {
+    if (peek() === '(') {
+      take('(');
+      const value = disjunction();
+      take(')');
+      return value;
+    }
+    const token = take();
+    if (token?.startsWith("'")) return token.slice(1, -1);
+    if (peek() === '(') {
+      take('(');
+      take(')');
+      if (token === 'always') return true;
+      if (token === 'success') return true;
+      throw new Error(`Unsupported workflow function ${token}`);
+    }
+    return resolve(token);
+  }
+
+  function negation() {
+    if (peek() === '!') {
+      take('!');
+      return !negation();
+    }
+    return primary();
+  }
+
+  function equality() {
+    let value = negation();
+    while (peek() === '==' || peek() === '!=') {
+      const operator = take();
+      const right = negation();
+      value = operator === '==' ? value === right : value !== right;
+    }
+    return value;
+  }
+
+  function conjunction() {
+    let value = equality();
+    while (peek() === '&&') {
+      take('&&');
+      const right = equality();
+      value = value ? right : value;
+    }
+    return value;
+  }
+
+  function disjunction() {
+    let value = conjunction();
+    while (peek() === '||') {
+      take('||');
+      const right = conjunction();
+      value = value ? value : right;
+    }
+    return value;
+  }
+
+  const result = disjunction();
+  if (cursor !== tokens.length) throw new Error(`Unexpected workflow token ${peek()}`);
+  return result;
 }
 
-test('re-smokes an equivalent promoted worker after migrations instead of silently skipping publication', () => {
-  const context = fixture();
-  assert.equal(evaluate(capability.if, context), true);
-  assert.equal(expectedWorkerSha(context), installedSha);
-  assert.equal(evaluate(publication.if, context), false);
+function publicationRuns(context) {
+  return Boolean(evaluateGithubExpression(publication.if, context));
+}
 
-  context.needs['gigl-worker-capability'].result = 'success';
-  assert.equal(evaluate(publication.if, context), true);
-});
-
-test('recovers an unusable latch freshness check when installed contents are proven equivalent', () => {
-  const context = fixture({ latch: 'true', stale: 'true' });
-  assert.equal(evaluate(capability.if, context), true);
-  assert.equal(expectedWorkerSha(context), installedSha);
-});
-
-test('keeps a proven unchanged worker on the existing no-smoke path', () => {
-  const context = fixture({ latch: 'true', stale: 'false' });
-  assert.equal(evaluate(capability.if, context), false);
-  assert.equal(evaluate(publication.if, context), true);
-});
-
-test('does not recover when installed tracking or dependency equivalence is unknown or false', () => {
-  for (const overrides of [
-    { installedStale: 'true' },
-    { installedStale: '' },
-    { manifests: 'true' },
-    { manifests: '' },
-  ]) {
-    const context = fixture(overrides);
-    assert.equal(
-      evaluate(capability.if, context),
-      false,
-      JSON.stringify(overrides)
-    );
-    assert.equal(
-      evaluate(publication.if, context),
-      false,
-      JSON.stringify(overrides)
-    );
-  }
-});
-
-test('requires successful readiness and migrations before any recovery smoke', () => {
-  assert.ok(capability.needs.includes('vps-drain-readiness'));
-  for (const result of ['failure', 'skipped', 'cancelled', '']) {
-    for (const key of ['readiness', 'migrations']) {
-      const context = fixture({ [key]: result });
-      assert.equal(
-        evaluate(capability.if, context),
-        false,
-        `${key}: ${result}`
-      );
-    }
-  }
+test('manual coordinator dispatch reaches publication only after all current-run gates', () => {
+  const manualInput = coordinatorWorkflow.on.workflow_dispatch;
+  assert.ok(manualInput, 'the production coordinator must accept manual dispatches');
   assert.equal(
-    evaluate(capability.if, fixture({ ref: 'refs/heads/feature' })),
-    false
+    coordinatorWorkflow.jobs.workers.env.BACI_EXPECTED_APP_SHA,
+    '${{ github.sha }}'
+  );
+  assert.equal(
+    evaluateGithubExpression(coordinatorWorkflow.jobs.workers.if, {
+      github: { ref: 'refs/heads/main', event_name: 'workflow_dispatch' },
+      needs: { 'rollout-readiness': { result: 'success' } },
+    }),
+    true,
+    'manual coordinator runs still pass rollout readiness before worker sync'
+  );
+  const coordinatorDeploy = coordinatorWorkflow.jobs.deploy;
+  assert.deepEqual(coordinatorDeploy.needs, ['workers']);
+  assert.equal(coordinatorDeploy.with.expected_release_sha, '${{ github.sha }}');
+  assert.equal(
+    evaluateGithubExpression(coordinatorDeploy.if, {
+      needs: { workers: { result: 'success' } },
+    }),
+    true
+  );
+  assert.equal(
+    evaluateGithubExpression(coordinatorDeploy.if, {
+      needs: { workers: { result: 'failure' } },
+    }),
+    false,
+    'the reusable app workflow waits for brokered worker success'
+  );
+
+  const context = manualContext();
+  assert.equal(
+    evaluateGithubExpression(deploymentWorkflow.jobs.changes.if, context),
+    false,
+    'manual dispatch skips path filtering'
+  );
+  assert.equal(
+    evaluateGithubExpression(deploymentWorkflow.jobs['db-migrations'].if, context),
+    true,
+    'migrations still run after successful exact-SHA readiness'
+  );
+  assert.equal(
+    evaluateGithubExpression(deploymentWorkflow.jobs['gigl-worker-capability'].if, context),
+    true,
+    'the broker smoke still runs when changes are skipped'
+  );
+  assert.equal(
+    evaluateGithubExpression(deploymentWorkflow.jobs['cache-worker-management'].if, context),
+    true,
+    'manual dispatch selects cache-worker management even without path outputs'
+  );
+  assert.equal(
+    evaluateGithubExpression(
+      deploymentWorkflow.jobs['cache-invalidation-worker-capability'].if,
+      context
+    ),
+    true,
+    'the cache capability probe follows successful management and migrations'
+  );
+  assert.equal(publicationRuns(context), true);
+});
+
+test('missing, failed, skipped, or mismatched exact-SHA smoke blocks publication', async () => {
+  for (const smokeResult of ['failure', 'skipped', undefined]) {
+    const context = manualContext();
+    if (smokeResult === undefined) delete context.needs['gigl-worker-capability'];
+    else context.needs['gigl-worker-capability'] = { result: smokeResult };
+    assert.equal(
+      publicationRuns(context),
+      false,
+      `publication must block when smoke result is ${smokeResult ?? 'missing'}`
+    );
+  }
+
+  const wrongSha = 'b'.repeat(40);
+  await assert.rejects(
+    runGiglCapabilitySmoke({
+      env: { BACI_EXPECTED_APP_SHA: releaseSha },
+      broker: async (request) => {
+        assert.deepEqual(request, { operation: 'gigl-capability', sha: releaseSha });
+        return {
+          operation: 'gigl-capability',
+          sourceSha: wrongSha,
+          installedSha: wrongSha,
+          latchedSha: wrongSha,
+          smokePassed: true,
+          latched: true,
+          scope: 'enabled',
+        };
+      },
+    }),
+    /broker GIGL capability smoke receipt is invalid/
+  );
+  assert.equal(
+    publicationRuns(
+      manualContext({ 'gigl-worker-capability': { result: 'failure' } })
+    ),
+    false,
+    'a mismatched broker SHA makes the smoke job fail and blocks publication'
   );
 });
 
-test('tracking changes and manual or unknown changesets still require the exact workflow SHA', () => {
-  for (const overrides of [
-    { tracking: 'true' },
-    { tracking: '' },
-    { tracking: '', event: 'workflow_dispatch' },
-  ]) {
-    const context = fixture({
-      ...overrides,
-      installedStale: 'true',
-      manifests: 'true',
-    });
+test('failed, skipped, or missing cache capability blocks publication', () => {
+  for (const cacheResult of ['failure', 'skipped', undefined]) {
+    const context = manualContext();
+    if (cacheResult === undefined) delete context.needs['cache-invalidation-worker-capability'];
+    else context.needs['cache-invalidation-worker-capability'] = { result: cacheResult };
     assert.equal(
-      evaluate(capability.if, context),
-      true,
-      JSON.stringify(overrides)
-    );
-    assert.equal(
-      expectedWorkerSha(context),
-      workflowSha,
-      JSON.stringify(overrides)
+      publicationRuns(context),
+      false,
+      `publication must block when cache capability result is ${cacheResult ?? 'missing'}`
     );
   }
 });
 
-test('a failed or skipped recovery cannot authorize publication', () => {
-  for (const smoke of ['failure', 'skipped', 'cancelled', '']) {
-    assert.equal(evaluate(publication.if, fixture({ smoke })), false, smoke);
-  }
+test('accepts the broker smoke only when its receipt matches the published SHA', async () => {
+  const smoke = deploymentWorkflow.jobs['gigl-worker-capability'].steps.find(
+    (step) => step.run === 'node .github/scripts/run-gigl-capability-smoke.mjs'
+  );
+  assert.equal(smoke.env.BACI_EXPECTED_APP_SHA, '${{ github.sha }}');
+
+  const message = await runGiglCapabilitySmoke({
+    env: { BACI_EXPECTED_APP_SHA: releaseSha },
+    broker: async (request) => {
+      assert.deepEqual(request, { operation: 'gigl-capability', sha: releaseSha });
+      return {
+        operation: 'gigl-capability',
+        sourceSha: releaseSha,
+        installedSha: releaseSha,
+        latchedSha: releaseSha,
+        smokePassed: true,
+        latched: true,
+        scope: 'disabled',
+      };
+    },
+  });
+  assert.match(message, new RegExp(releaseSha));
+  assert.equal(publicationRuns(manualContext()), true);
+
+  assert.equal(
+    publicationRuns({
+      ...manualContext(),
+      inputs: { expected_release_sha: 'b'.repeat(40) },
+    }),
+    false,
+    'a coordinator SHA different from github.sha cannot publish'
+  );
 });

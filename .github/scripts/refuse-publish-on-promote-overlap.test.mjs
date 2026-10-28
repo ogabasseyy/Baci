@@ -119,8 +119,7 @@ test('refuses publish when this run is in the record', () => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Refusing production publish/);
-  assert.match(result.stderr, /promote overlapped this run/);
-  assert.match(result.stderr, /Re-run this workflow/);
+  assert.match(result.stderr, /exact authenticated publisher job cannot be verified/);
 });
 
 test('matches run ids on comma boundaries, not substrings', () => {

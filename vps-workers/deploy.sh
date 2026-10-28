@@ -16,9 +16,8 @@ source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
 # shellcheck source=lib/install-worker-services.sh
 source "$WORKER_ROOT/lib/install-worker-services.sh"
 
-VPS="bassey@82.29.190.219"
-REMOTE_DIR="/home/bassey/baci-workers"
-REMEDIATION_DISABLED_MARKER="/home/bassey/.config/baci/remediation.disabled"
+worker_configure_deploy_target
+REMEDIATION_DISABLED_MARKER='/home/bassey/.config/baci/remediation.disabled'
 APP_SHA=$(git rev-parse HEAD)
 CODEX_REMEDIATOR_IMAGE="baci-codex-remediator:$APP_SHA"
 # Exit protocol for the release coordinator: 42 means the live worker
@@ -43,10 +42,10 @@ fi
 check_deploy_workflow_inflight
 
 prepare_worker_release
-REMEDIATION_STATE=$(ssh "$VPS" "if [ -e '$REMEDIATION_DISABLED_MARKER' ] || [ -L '$REMEDIATION_DISABLED_MARKER' ]; then printf disabled; else printf enabled; fi")
+REMEDIATION_STATE=$(worker_exec_target "$VPS" "if [ -e '$REMEDIATION_DISABLED_MARKER' ] || [ -L '$REMEDIATION_DISABLED_MARKER' ]; then printf disabled; else printf enabled; fi")
 [[ "$REMEDIATION_STATE" == disabled || "$REMEDIATION_STATE" == enabled ]]
 if [ "$REMEDIATION_STATE" = enabled ]; then
-CODEX_CONTAINER_BIN=$(ssh "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
+CODEX_CONTAINER_BIN=$(worker_exec_target "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
 CODEX_READONLY_SECCOMP_PROFILE="$REMOTE_DIR/config/codex-readonly-seccomp.json"
 
 if [ -z "$CODEX_CONTAINER_BIN" ]; then
@@ -55,7 +54,7 @@ if [ -z "$CODEX_CONTAINER_BIN" ]; then
 fi
 
 echo "==> Building isolated Codex remediator image"
-ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
+worker_exec_target "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
 else
   CODEX_CONTAINER_BIN=''
   CODEX_READONLY_SECCOMP_PROFILE=''
@@ -104,7 +103,7 @@ record_deploy_workflow_promote "$APP_SHA" || {
 # The promote snapshot is no longer needed: the refresh landed, so no
 # rollback can follow. (A crashed deploy's orphaned snapshot retires
 # by age on later promotes.)
-ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
+worker_exec_target "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
 
 # The cron transition runs AFTER the recorded promote (never before
 # any live mutation can be refused): promote's quiesce therefore sees
@@ -115,67 +114,56 @@ ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
 # changes nothing it installs.
 install_remediation_cron_transition
 
-ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
-
 install_worker_services
-
-echo "==> Installing durable event-pipeline user services"
-ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR"
-
-echo "==> Installing durable quiz finalization user service"
-ssh "$VPS" "bash $REMOTE_DIR/install-quiz-finalization-service.sh $REMOTE_DIR"
 
 echo "==> Installing crontab entries on VPS (idempotent)"
 CRON_BLOCK_START="# >>> baci-workers >>>"
 CRON_BLOCK_END="# <<< baci-workers <<<"
-cat <<EOF | ssh "$VPS" "cat > $STAGING_DIR/crontab.fragment"
+cat <<EOF | worker_exec_target "$VPS" "cat > $STAGING_DIR/crontab.fragment"
 $CRON_BLOCK_START
-0,30 * * * * flock -n $REMOTE_DIR/locks/push-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/push-receipts.mjs' >> $REMOTE_DIR/logs/push-receipts.log 2>&1
-10 *   * * * flock -n $REMOTE_DIR/locks/cleanup-agentic-request-records.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-agentic-request-records.mjs' >> $REMOTE_DIR/logs/cleanup-agentic-request-records.log 2>&1
-0 0    * * * flock -n $REMOTE_DIR/locks/cleanup-push-tokens.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-push-tokens.mjs' >> $REMOTE_DIR/logs/cleanup-push-tokens.log 2>&1
-0 1    * * * flock -n $REMOTE_DIR/locks/cleanup-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/cleanup-orders' >> $REMOTE_DIR/logs/cleanup-orders.log 2>&1
-0 3    * * * flock -n $REMOTE_DIR/locks/cleanup-import-uploads.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-import-uploads.mjs' >> $REMOTE_DIR/logs/cleanup-import-uploads.log 2>&1
-12 *   * * * flock -n $REMOTE_DIR/locks/cleanup-legacy-expense-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-legacy-expense-receipts.mjs' >> $REMOTE_DIR/logs/cleanup-legacy-expense-receipts.log 2>&1
-18 *   * * * flock -n $REMOTE_DIR/locks/cleanup-private-expense-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-private-expense-receipts.mjs' >> $REMOTE_DIR/logs/cleanup-private-expense-receipts.log 2>&1
-20 3   * * * flock -n $REMOTE_DIR/locks/supabase-retention-cleanup.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/supabase-retention-cleanup.mjs' >> $REMOTE_DIR/logs/supabase-retention-cleanup.log 2>&1
-40 3   * * * flock -n $REMOTE_DIR/locks/cleanup-remediation-storage.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-remediation-storage.mjs' >> $REMOTE_DIR/logs/cleanup-remediation-storage.log 2>&1
-0 5    * * * flock -n $REMOTE_DIR/locks/process-settlements.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements' >> $REMOTE_DIR/logs/process-settlements.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/order-cancellation-side-effects.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements?cancellationsOnly=true' >> $REMOTE_DIR/logs/order-cancellation-side-effects.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
-20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
+0,30 * * * * flock -n $LOCK_DIR/push-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/push-receipts.mjs' >> $REMOTE_DIR/logs/push-receipts.log 2>&1
+10 *   * * * flock -n $LOCK_DIR/cleanup-agentic-request-records.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-agentic-request-records.mjs' >> $REMOTE_DIR/logs/cleanup-agentic-request-records.log 2>&1
+0 0    * * * flock -n $LOCK_DIR/cleanup-push-tokens.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-push-tokens.mjs' >> $REMOTE_DIR/logs/cleanup-push-tokens.log 2>&1
+0 1    * * * flock -n $LOCK_DIR/cleanup-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/cleanup-orders' >> $REMOTE_DIR/logs/cleanup-orders.log 2>&1
+0 3    * * * flock -n $LOCK_DIR/cleanup-import-uploads.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-import-uploads.mjs' >> $REMOTE_DIR/logs/cleanup-import-uploads.log 2>&1
+12 *   * * * flock -n $LOCK_DIR/cleanup-legacy-expense-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-legacy-expense-receipts.mjs' >> $REMOTE_DIR/logs/cleanup-legacy-expense-receipts.log 2>&1
+18 *   * * * flock -n $LOCK_DIR/cleanup-private-expense-receipts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-private-expense-receipts.mjs' >> $REMOTE_DIR/logs/cleanup-private-expense-receipts.log 2>&1
+20 3   * * * flock -n $LOCK_DIR/supabase-retention-cleanup.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/supabase-retention-cleanup.mjs' >> $REMOTE_DIR/logs/supabase-retention-cleanup.log 2>&1
+40 3   * * * flock -n $LOCK_DIR/cleanup-remediation-storage.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-remediation-storage.mjs' >> $REMOTE_DIR/logs/cleanup-remediation-storage.log 2>&1
+0 5    * * * flock -n $LOCK_DIR/process-settlements.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements' >> $REMOTE_DIR/logs/process-settlements.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/order-cancellation-side-effects.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/process-settlements?cancellationsOnly=true' >> $REMOTE_DIR/logs/order-cancellation-side-effects.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/reconcile-vtu-processing.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing' >> $REMOTE_DIR/logs/reconcile-vtu-processing.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/merchant-signup-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/merchant-signup-health' >> $REMOTE_DIR/logs/merchant-signup-health.log 2>&1
+20 *   * * * flock -n $LOCK_DIR/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
 # process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
-* *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/process-gigl-tracking.sh' >> $REMOTE_DIR/logs/gigl-tracking.log 2>&1
-*/5 * * * * flock -n $REMOTE_DIR/locks/order-notifications.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/order-notifications?batchSize=5' >> $REMOTE_DIR/logs/order-notifications.log 2>&1
-*/2 * * * * flock -n $REMOTE_DIR/locks/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=$REMOTE_DIR/state/cache-invalidations.json && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1
-*/15 * * * * flock -n $REMOTE_DIR/locks/vercel-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/vercel-error-remediator.mjs' >> $REMOTE_DIR/logs/vercel-error-remediator.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/sentry-mobile-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sentry-mobile-error-remediator.mjs' >> $REMOTE_DIR/logs/sentry-mobile-error-remediator.log 2>&1
-7-59/15 * * * * flock -n $REMOTE_DIR/locks/posthog-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/posthog-error-remediator.mjs' >> $REMOTE_DIR/logs/posthog-error-remediator.log 2>&1
-22 4   * * * flock -n $REMOTE_DIR/locks/remediation-codex-canary.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/remediation-codex-canary.mjs' >> $REMOTE_DIR/logs/remediation-codex-canary.log 2>&1
-*/15 * * * * flock -n $REMOTE_DIR/locks/ollama-workload.lock flock -n $REMOTE_DIR/locks/agentic-commerce-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/agentic-commerce-health' >> $REMOTE_DIR/logs/agentic-commerce-health.log 2>&1
-0 */6  * * * flock -n $REMOTE_DIR/locks/inventory-push-alerts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/inventory/push-alerts' >> $REMOTE_DIR/logs/inventory-push-alerts.log 2>&1
-*/5 *  * * * flock -n $REMOTE_DIR/locks/sync-jumia-orders.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/sync-jumia-orders.sh' >> $REMOTE_DIR/logs/sync-jumia-orders.log 2>&1
-17 *   * * * flock -n $REMOTE_DIR/locks/process-import-jobs.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-import-jobs.sh' >> $REMOTE_DIR/logs/process-import-jobs.log 2>&1
-*/10 * * * * flock -n $REMOTE_DIR/locks/merchant-onboarding-emails.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=merchant-onboarding-emails && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-merchant-onboarding-emails.sh' >> $REMOTE_DIR/logs/merchant-onboarding-emails.log 2>&1
-*/10 * * * * flock -n $REMOTE_DIR/locks/ollama-workload.lock flock -n $REMOTE_DIR/locks/ai-storefront-jobs.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=ai-storefront-jobs && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-ai-storefront-jobs.sh' >> $REMOTE_DIR/logs/ai-storefront-jobs.log 2>&1
-* * * * * flock -n $REMOTE_DIR/locks/process-domain-events.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-domain-events.sh --once' >> $REMOTE_DIR/logs/process-domain-events.log 2>&1
-* * * * * flock -n $REMOTE_DIR/locks/process-event-deliveries.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=event-pipeline && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-event-deliveries.sh --once' >> $REMOTE_DIR/logs/process-event-deliveries.log 2>&1
-0 2    * * * flock -n $REMOTE_DIR/locks/ai-jobs-worker.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/ai-jobs/worker' >> $REMOTE_DIR/logs/ai-jobs-worker.log 2>&1
-15 2   * * * flock -n $REMOTE_DIR/locks/sync-petrock-catalog.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/sync-petrock-catalog' >> $REMOTE_DIR/logs/sync-petrock-catalog.log 2>&1
-0 6    * * * flock -n $REMOTE_DIR/locks/wallet-payouts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/wallet-payouts' >> $REMOTE_DIR/logs/wallet-payouts.log 2>&1
-0 8    * * * flock -n $REMOTE_DIR/locks/alert-stuck-bnpl.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/alert-stuck-bnpl' >> $REMOTE_DIR/logs/alert-stuck-bnpl.log 2>&1
-30 8   1 * * flock -n $REMOTE_DIR/locks/vtu-cashback-summaries.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/vtu-cashback-summaries' >> $REMOTE_DIR/logs/vtu-cashback-summaries.log 2>&1
-*/15 * * * * flock -n $REMOTE_DIR/locks/publish-scheduled-posts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/publish-scheduled-posts' >> $REMOTE_DIR/logs/publish-scheduled-posts.log 2>&1
-0 10   * * * flock -n $REMOTE_DIR/locks/storefront-update-nudge.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/storefront-update-nudge' >> $REMOTE_DIR/logs/storefront-update-nudge.log 2>&1
-30 9   * * * flock -n $REMOTE_DIR/locks/ios-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/ios-live-build-sync' >> $REMOTE_DIR/logs/ios-live-build-sync.log 2>&1
-45 9   * * * flock -n $REMOTE_DIR/locks/android-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/android-live-build-sync' >> $REMOTE_DIR/logs/android-live-build-sync.log 2>&1
-* * * * * flock -n $REMOTE_DIR/locks/quiz-finalize.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=quiz-finalization && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=5s 50s $REMOTE_DIR/bin/process-quiz-finalization.sh --once' >> $REMOTE_DIR/logs/quiz-finalize.log 2>&1
-15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
+* *    * * * flock -n $LOCK_DIR/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/gigl-tracking.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/process-gigl-tracking.sh' >> $REMOTE_DIR/logs/gigl-tracking.log 2>&1
+*/5 * * * * flock -n $LOCK_DIR/order-notifications.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/order-notifications?batchSize=5' >> $REMOTE_DIR/logs/order-notifications.log 2>&1
+*/2 * * * * flock -n $LOCK_DIR/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=$REMOTE_DIR/state/cache-invalidations.json && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1
+*/15 * * * * flock -n $LOCK_DIR/vercel-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/vercel-error-remediator.mjs' >> $REMOTE_DIR/logs/vercel-error-remediator.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/sentry-mobile-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sentry-mobile-error-remediator.mjs' >> $REMOTE_DIR/logs/sentry-mobile-error-remediator.log 2>&1
+7-59/15 * * * * flock -n $LOCK_DIR/posthog-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/posthog-error-remediator.mjs' >> $REMOTE_DIR/logs/posthog-error-remediator.log 2>&1
+22 4   * * * flock -n $LOCK_DIR/remediation-codex-canary.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/remediation-codex-canary.mjs' >> $REMOTE_DIR/logs/remediation-codex-canary.log 2>&1
+*/15 * * * * flock -n $LOCK_DIR/ollama-workload.lock flock -n $LOCK_DIR/agentic-commerce-health.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/agentic-commerce-health' >> $REMOTE_DIR/logs/agentic-commerce-health.log 2>&1
+0 */6  * * * flock -n $LOCK_DIR/inventory-push-alerts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/inventory/push-alerts' >> $REMOTE_DIR/logs/inventory-push-alerts.log 2>&1
+*/5 *  * * * flock -n $LOCK_DIR/sync-jumia-orders.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/sync-jumia-orders.sh' >> $REMOTE_DIR/logs/sync-jumia-orders.log 2>&1
+17 *   * * * flock -n $LOCK_DIR/process-import-jobs.lock bash -lc 'export NODE_ENV=production && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-import-jobs.sh' >> $REMOTE_DIR/logs/process-import-jobs.log 2>&1
+*/10 * * * * flock -n $LOCK_DIR/merchant-onboarding-emails.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=merchant-onboarding-emails && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-merchant-onboarding-emails.sh' >> $REMOTE_DIR/logs/merchant-onboarding-emails.log 2>&1
+*/10 * * * * flock -n $LOCK_DIR/ollama-workload.lock flock -n $LOCK_DIR/ai-storefront-jobs.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=ai-storefront-jobs && cd $REMOTE_DIR && $REMOTE_DIR/bin/process-ai-storefront-jobs.sh' >> $REMOTE_DIR/logs/ai-storefront-jobs.log 2>&1
+0 2    * * * flock -n $LOCK_DIR/ai-jobs-worker.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/ai-jobs/worker' >> $REMOTE_DIR/logs/ai-jobs-worker.log 2>&1
+15 2   * * * flock -n $LOCK_DIR/sync-petrock-catalog.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/sync-petrock-catalog' >> $REMOTE_DIR/logs/sync-petrock-catalog.log 2>&1
+0 6    * * * flock -n $LOCK_DIR/wallet-payouts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/wallet-payouts' >> $REMOTE_DIR/logs/wallet-payouts.log 2>&1
+0 8    * * * flock -n $LOCK_DIR/alert-stuck-bnpl.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/alert-stuck-bnpl' >> $REMOTE_DIR/logs/alert-stuck-bnpl.log 2>&1
+30 8   1 * * flock -n $LOCK_DIR/vtu-cashback-summaries.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/vtu-cashback-summaries' >> $REMOTE_DIR/logs/vtu-cashback-summaries.log 2>&1
+*/15 * * * * flock -n $LOCK_DIR/publish-scheduled-posts.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/publish-scheduled-posts' >> $REMOTE_DIR/logs/publish-scheduled-posts.log 2>&1
+0 10   * * * flock -n $LOCK_DIR/storefront-update-nudge.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/storefront-update-nudge' >> $REMOTE_DIR/logs/storefront-update-nudge.log 2>&1
+30 9   * * * flock -n $LOCK_DIR/ios-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/ios-live-build-sync' >> $REMOTE_DIR/logs/ios-live-build-sync.log 2>&1
+45 9   * * * flock -n $LOCK_DIR/android-live-build-sync.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/android-live-build-sync' >> $REMOTE_DIR/logs/android-live-build-sync.log 2>&1
+15 4   * * * flock -n $LOCK_DIR/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
 $CRON_BLOCK_END
 EOF
 # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE' '$REMEDIATION_DISABLED_MARKER'" <<'REMOTE_SH'
+worker_exec_target "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA' '$REMEDIATION_STATE' '$REMEDIATION_DISABLED_MARKER' '$LOCK_DIR'" <<'REMOTE_SH'
 set -euo pipefail
 
 fragment_path="$1"
@@ -183,6 +171,7 @@ remote_dir="$2"
 cron_block_start="$3"
 cron_block_end="$4"
 expected_sha="${5:-}"
+lock_dir="${8:-/srv/baci-workers/locks}"
 # The crontab carries this deployment's identity (the pinned remediator
 # image tag): installing it after a concurrent promote would point live
 # cron at this deployment's image under another deployment's marker.
@@ -211,7 +200,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" "${6:-enabled}" "${7:-}" > "$tmp_file" <<'PY'
+python3 - "$fragment_path" "$remote_dir" "$cron_block_start" "$cron_block_end" "${6:-enabled}" "${7:-}" "$lock_dir" > "$tmp_file" <<'PY'
 import pathlib
 import subprocess
 import sys
@@ -221,6 +210,7 @@ remote_dir = sys.argv[2]
 block_start = sys.argv[3]
 block_end = sys.argv[4]
 disabled = pathlib.Path(sys.argv[6]) if sys.argv[6] else pathlib.Path(remote_dir).parent / '.config/baci/remediation.disabled'
+lock_dir = sys.argv[7]
 is_disabled = disabled.exists() or disabled.is_symlink()
 if sys.argv[5] == 'disabled' and not is_disabled:
     raise SystemExit('Remediation was re-enabled during deployment; rerun deploy.sh to prepare its image.')
@@ -261,7 +251,7 @@ for line in lines:
         and (' jobs/' in stripped_line or ' bin/' in stripped_line)
     )
     is_baci_worker_command = (
-        f'flock -n {remote_dir}/locks/' in stripped_line
+        (f'flock -n {lock_dir}/' in stripped_line or f'flock -n {remote_dir}/locks/' in stripped_line)
         and (uses_current_worker_paths or uses_legacy_relative_worker_paths)
     )
     if is_baci_worker_command:

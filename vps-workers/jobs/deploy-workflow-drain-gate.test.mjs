@@ -19,7 +19,7 @@ function jobBlock(name, nextName) {
   return workflow.slice(start, end);
 }
 
-describe('production cache-invalidation drain rollout gate', () => {
+describe('production worker and cache-invalidation rollout gates', () => {
   it('runs migrations on manual dispatch after successful readiness despite skipped changes', () => {
     const migrations = jobBlock('db-migrations', 'gigl-worker-capability');
     // Without an explicit status function, Actions adds success() across
@@ -31,34 +31,57 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
   });
 
-  it('verifies the installed VPS drain before production migrations', () => {
+  it('verifies the exact installed worker SHA through the trusted broker before migrations', () => {
     const readiness = jobBlock('vps-drain-readiness', 'db-migrations');
     const migrations = jobBlock('db-migrations', 'deploy-production');
 
-    assert.match(readiness, /runs-on: baci-deploy/);
+    assert.match(readiness, /runs-on: baci-release/);
+    assert.match(readiness, /check-worker-release-readiness\.mjs/);
     assert.match(
       readiness,
-      /vps-workers\/bin\/verify-cache-invalidation-drain-installed\.sh/
+      /vps-workers\/lib\/worker-release-broker-client\.mjs/
+    );
+    assert.match(readiness, /id-token: write/);
+    assert.match(
+      readiness,
+      /worker_units_ready: \$\{\{ steps\.worker-readiness\.outputs\.worker_units_ready \}\}/
     );
     assert.match(
       readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
+      /installed_sha: \$\{\{ steps\.worker-readiness\.outputs\.installed_sha \}\}/
     );
-    // The cutover marker runs on every push (no changeset condition),
-    // so an unrelated web push cannot deploy the cron removal while the
-    // worker was never installed.
-    assert.match(
+    assert.doesNotMatch(
       readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
+      /\/home\/bassey|VPS_WORKER_REMOTE_DIR|crontab -l/
     );
     assert.match(readiness, /needs: \[changes\]/);
-    assert.match(readiness, /needs\.changes\.outputs\.tracking != 'false'/);
+    assert.doesNotMatch(
+      readiness,
+      /cutover_latched|tracking_stale|manifest_drift/
+    );
     assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
-    // Production latch reads fingerprint the installed dotenv, never a
-    // runner export (job-level env reaches the check script's resolver).
-    assert.match(readiness, /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m);
+    // Readiness carries only an exact installed-SHA receipt. It does not
+    // export saved smoke/latch state that could bypass the current-run smoke.
+    const readinessScript = readFileSync(
+      join(
+        workerRoot,
+        '..',
+        '.github',
+        'scripts',
+        'check-worker-release-readiness.mjs'
+      ),
+      'utf8'
+    );
+    assert.match(
+      readinessScript,
+      /receipt\.ready !== true \|\| receipt\.sourceSha !== sha \|\| receipt\.installedSha !== sha/
+    );
+    assert.doesNotMatch(
+      readinessScript,
+      /cutover_latched|tracking_stale|manifest_drift/
+    );
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
     assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
     // Production is mid-rollout (worker role LOGIN-capable until this PR's
@@ -95,29 +118,25 @@ describe('production cache-invalidation drain rollout gate', () => {
       capability,
       /github\.event_name != 'workflow_dispatch'/
     );
-    // Tracking changes retain exact-SHA smoke. Unrelated changes may recover
-    // an unusable latch only when the installed worker contents are equivalent.
-    // The broad migrations output must not select the recovery path.
-    assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
-    assert.match(capability, /outputs\.installed_tracking_stale == 'false'/);
-    assert.match(capability, /outputs\.manifest_drift == 'false'/);
-    assert.doesNotMatch(capability, /outputs\.migrations/);
-    // One helper holds the worker locks across verification, smoke and proof
-    // persistence; separate workflow steps could race with a worker promotion.
     assert.match(
       capability,
-      /run: bash \.github\/scripts\/refresh-gigl-cutover-latch\.sh/
+      /needs: \[changes, db-migrations, vps-drain-readiness\]/
+    );
+    assert.match(capability, /needs\.db-migrations\.result == 'success'/);
+    assert.match(capability, /BACI_EXPECTED_APP_SHA: \$\{\{ github\.sha \}\}/);
+    assert.match(
+      capability,
+      /run: node \.github\/scripts\/run-gigl-capability-smoke\.mjs/
+    );
+    // Every release runs a current-run smoke after migrations. No saved
+    // latch, path-filter exception, or manifest-drift signal can bypass it.
+    assert.doesNotMatch(
+      capability,
+      /cutover_latched|tracking_stale|manifest_drift|outputs\.tracking/
     );
     assert.doesNotMatch(
       capability,
       /> "\$VPS_WORKER_REMOTE_DIR\/\.gigl-capability-smoke-ok"/
-    );
-    // Production smoke/identity is file-authoritative at the job level,
-    // so a runner export can never certify one token while cron runs
-    // another (the smoke entry sets the same mode for its filter).
-    assert.match(
-      capability,
-      /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m
     );
   });
 
@@ -131,19 +150,16 @@ describe('production cache-invalidation drain rollout gate', () => {
       deployment,
       /needs\.gigl-worker-capability\.result == 'success'/
     );
-    // The tracking=false bypass additionally requires the cutover latch
-    // (proven smoke function) at a revision that still covers the tree,
-    // so a web push cannot carry unsmoked tracking changes to production.
-    // It also requires manifest_drift == 'false': the poller executes
-    // the manifests-group dependency tree, so a manifest-only push must
-    // not bypass while the installed tree predates HEAD's manifests.
+    // Publication requires a successful current-run capability smoke and
+    // coordinator-bound exact SHA, without a saved-latch or changed-path bypass.
+    assert.match(deployment, /inputs\.expected_release_sha == github\.sha/);
     assert.match(
       deployment,
-      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true' && needs\.vps-drain-readiness\.outputs\.tracking_stale == 'false' && needs\.vps-drain-readiness\.outputs\.manifest_drift == 'false'\)/
+      /needs\.gigl-worker-capability\.result == 'success'/
     );
     assert.doesNotMatch(
       deployment,
-      /tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
+      /cutover_latched|tracking_stale|manifest_drift|outputs\.tracking/
     );
     assert.match(deployment, /needs: \[[^\]]*vps-drain-readiness[^\]]*\]/);
     // The pre-publish overlap check is the correctness backstop for
@@ -200,6 +216,10 @@ describe('production cache-invalidation drain rollout gate', () => {
 
     assert.match(tracking, /^ {2}- 'vercel\.json'$/m);
     assert.match(tracking, /^ {2}- 'vps-workers\/deploy\.sh'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/bin\/migrate-gigl-tracking-system-service\.sh'$/m
+    );
     assert.match(
       tracking,
       /^ {2}- 'vps-workers\/bin\/process-gigl-tracking\.sh'$/m

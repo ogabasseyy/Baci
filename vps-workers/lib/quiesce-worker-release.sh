@@ -21,6 +21,7 @@ quiesce_worker_release() {
   # before the rsync). Manual rollback callers without staging omit
   # it and keep the live-reader behavior.
   local gigl_dotenv_reader_override="${2:-}"
+  local lock_dir="${3:-$remote_dir/locks}"
 
   # Re-entry would reopen already-held locks on fresh descriptors and
   # self-deadlock (flock locks are per open-file-description), so the
@@ -46,7 +47,7 @@ quiesce_worker_release() {
   # yet); otherwise the live bin/ copy; otherwise the default — which
   # is also what the transition would use on a readerless tree.
   local gigl_global_lock="error-remediator-global.lock"
-  local gigl_global_path="$remote_dir/locks/error-remediator-global.lock"
+  local gigl_global_path="$lock_dir/error-remediator-global.lock"
   local gigl_dotenv_reader="$remote_dir/bin/gigl-dotenv.sh"
   if [ -n "$gigl_dotenv_reader_override" ] && [ -f "$gigl_dotenv_reader_override" ]; then
     gigl_dotenv_reader="$gigl_dotenv_reader_override"
@@ -60,7 +61,11 @@ quiesce_worker_release() {
       if [[ "$gigl_global_value" = /* ]]; then
         gigl_global_path="$gigl_global_value"
       else
-        gigl_global_path="$remote_dir/$gigl_global_value"
+        if [[ "$gigl_global_value" = locks/* ]]; then
+          gigl_global_path="$lock_dir/${gigl_global_value#locks/}"
+        else
+          gigl_global_path="$remote_dir/$gigl_global_value"
+        fi
       fi
       gigl_global_lock="$(basename "$gigl_global_value")"
     fi
@@ -69,8 +74,8 @@ quiesce_worker_release() {
   # symlink) is the standard case, not a second lock: holding both
   # spellings would self-deadlock (same inode on two fds, and flock
   # locks are per open-file-description).
-  if [ -e "$gigl_global_path" ] && [ "$gigl_global_path" -ef "$remote_dir/locks/$gigl_global_lock" ]; then
-    gigl_global_path="$remote_dir/locks/$gigl_global_lock"
+  if [ -e "$gigl_global_path" ] && [ "$gigl_global_path" -ef "$lock_dir/$gigl_global_lock" ]; then
+    gigl_global_path="$lock_dir/$gigl_global_lock"
   fi
   # Basename deferral only covers locks/*.lock (the crontab grep and
   # file scan below cannot see any other path). A global lock outside
@@ -80,7 +85,7 @@ quiesce_worker_release() {
   # skip BOTH holds (the loop never sees it, the exact fallback is
   # gated on an empty deferral), leaving the promote unquiesced.
   local gigl_defer_name=""
-  if [ "$gigl_global_path" = "$remote_dir/locks/$gigl_global_lock" ]; then
+  if [ "$gigl_global_path" = "$lock_dir/$gigl_global_lock" ]; then
     case "$gigl_global_lock" in
       *.lock) gigl_defer_name="$gigl_global_lock" ;;
     esac
@@ -124,7 +129,7 @@ quiesce_worker_release() {
   gigl_quiesce_names="$(
     {
       crontab -l 2>/dev/null | grep -o -E 'locks/[A-Za-z0-9_.-]+\.lock' | sed 's|^locks/||' || true
-      for gigl_quiesce_path in "$remote_dir"/locks/*.lock; do
+      for gigl_quiesce_path in "$lock_dir"/*.lock; do
         [ -e "$gigl_quiesce_path" ] || continue
         basename "$gigl_quiesce_path"
       done
@@ -173,7 +178,7 @@ EOF
     # is bounded (600s covers the longest cron timeout plus margin), so a
     # wedged tick fails the deploy loudly instead of hanging it forever.
     # shellcheck disable=SC2094
-    eval "exec ${gigl_quiesce_fd}>>\"\$remote_dir/locks/${gigl_quiesce_name}\"" || return 1
+    eval "exec ${gigl_quiesce_fd}>>\"\$lock_dir/${gigl_quiesce_name}\"" || return 1
     flock -w 600 -x "$gigl_quiesce_fd" || return 1
     gigl_quiesce_fd=$((gigl_quiesce_fd + 1))
   done

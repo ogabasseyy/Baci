@@ -12,13 +12,16 @@ import stat
 import subprocess
 import time
 from pathlib import Path
-from worker_release_descriptor_cgroup import require_empty_cgroup, require_process_member
+from worker_release_descriptor_cgroup import require_process_member
 from worker_release_descriptor_freeze import (
     FreezeRejected, _freeze_directory, _identity, _inventory_tree, _verify_frozen_tree,
 )
 from worker_release_descriptor_process import ProcessIdentityRejected, assert_no_uid_processes
 from worker_release_source_snapshot import pin_source_snapshot
-from worker_release_systemd_contract import UnitContractRejected, validate_unit_contract
+from worker_release_systemd_contract import (
+    UnitContractRejected, credential_mismatch, require_cgroup_empty_after_stop,
+    validate_unit_contract,
+)
 from worker_release_broker_common import MAX_ARCHIVE_COMPRESSED_BYTES
 
 EXTRACTOR = "baci-release-extractor"
@@ -45,34 +48,12 @@ def _run(*args: str, timeout: float = 10) -> str:
     return result.stdout.strip()
 
 
-def _credential_mismatch(status: str, uid: int, gid: int) -> str | None:
-    found = {}
-    try:
-        for line in status.splitlines():
-            if line.startswith(("Uid:", "Gid:", "Groups:")):
-                key, value = line.split(":", 1)
-                found[key] = tuple(int(item) for item in value.split())
-    except (ValueError, TypeError):
-        return "status-shape"
-    if found.get("Uid") != (uid, uid, uid, uid):
-        return "uid"
-    if found.get("Gid") != (gid, gid, gid, gid):
-        return "gid"
-    # systemd initializes supplementary memberships from the account database;
-    # SupplementaryGroups= only configures unit assignments, it does not replace
-    # those defaults. _identity() has already pinned that database list to [gid].
-    # Permit only that primary-group membership; any additional group fails closed.
-    if found.get("Groups") not in ((), (gid,)):
-        return "supplementary-groups"
-    return None
-
-
 def _pid_identity(pid: int, uid: int, gid: int) -> None:
     try:
         status = Path(f"/proc/{pid}/status").read_text(encoding="ascii")
     except OSError as error:
         raise ExtractorRejected("extractor process identity is unavailable") from error
-    mismatch = _credential_mismatch(status, uid, gid)
+    mismatch = credential_mismatch(status, uid, gid)
     if mismatch is not None:
         raise ExtractorRejected(f"extractor process identity mismatch ({mismatch})")
 
@@ -223,6 +204,7 @@ def extract_frozen_source(journal, archive: bytes, expected_archive_sha256: str)
     socket_info = control_path.lstat()
     listener.listen(1)
     cgroup_fd = -1
+    contract_verified = False
     try:
         _run("systemctl", "start", unit, timeout=25)
         connection, _ = listener.accept()
@@ -236,6 +218,7 @@ def extract_frozen_source(journal, archive: bytes, expected_archive_sha256: str)
             if uid != extractor.pw_uid or gid != extractor_gid:
                 raise ExtractorRejected("extractor control peer identity is invalid")
             main_pid, control_group = _unit_contract(unit, txid, extractor.pw_uid, extractor_gid)
+            contract_verified = True
             if pid != main_pid:
                 raise ExtractorRejected("extractor control peer is not the systemd main process")
             cgroup_fd, cgroup_info = _open_cgroup(control_group, txid)
@@ -251,7 +234,11 @@ def extract_frozen_source(journal, archive: bytes, expected_archive_sha256: str)
                 raise ExtractorRejected("extractor rejected the fixed archive input")
             entries = int(result.split()[1])
         _wait_stopped(unit)
-        require_empty_cgroup(cgroup_fd, cgroup_info.st_dev, cgroup_info.st_ino)
+        require_cgroup_empty_after_stop(
+            cgroup_fd, cgroup_info, unit=unit, transaction_id=txid,
+            extractor_uid=extractor.pw_uid, contract_verified=contract_verified,
+            cgroup_root=CGROUP_ROOT, run=_run,
+        )
         assert_no_uid_processes(extractor.pw_uid)
         if set(os.listdir(journal.resources.fd)) != {source.name}:
             raise ExtractorRejected("extractor created an unjournaled resource")
@@ -277,7 +264,11 @@ def extract_frozen_source(journal, archive: bytes, expected_archive_sha256: str)
             raise ExtractorRejected("extractor cgroup could not be pinned before cleanup") from cgroup_error
         if cgroup_fd >= 0:
             try:
-                require_empty_cgroup(cgroup_fd, cgroup_info.st_dev, cgroup_info.st_ino)
+                require_cgroup_empty_after_stop(
+                    cgroup_fd, cgroup_info, unit=unit, transaction_id=txid,
+                    extractor_uid=extractor.pw_uid, contract_verified=contract_verified,
+                    cgroup_root=CGROUP_ROOT, run=_run,
+                )
             except Exception as error:
                 raise ExtractorRejected("extractor cgroup could not be proven empty after failure") from error
         raise

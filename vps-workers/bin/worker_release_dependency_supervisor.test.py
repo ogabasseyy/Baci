@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import pwd
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,8 +43,22 @@ def execute_canonical_unit(command, script: str, process_factory):
                      "requires disposable root/systemd/cgroup-v2 workflow")
 class BuilderSupervisorSystemdTests(unittest.TestCase):
     def setUp(self):
-        if shutil.which("systemctl") is None or os.system("systemctl is-system-running >/dev/null 2>&1") != 0:
-            self.fail("CI requires a running systemd manager")
+        systemctl = shutil.which("systemctl")
+        if systemctl is None:
+            self.fail("CI requires systemctl")
+        try:
+            state = subprocess.run((systemctl, "is-system-running"), check=False,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, timeout=5, text=True).stdout.strip()
+            version = subprocess.run((systemctl, "show", "--property=Version", "--value"),
+                                     check=True, stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                     timeout=5, text=True).stdout.strip()
+            supervisor.preflight_cgroup_root(supervisor.CGROUP_ROOT)
+        except (OSError, subprocess.SubprocessError, CgroupProofRejected) as error:
+            self.fail(f"CI requires a responsive systemd manager and cgroup v2: {error}")
+        if state not in ("running", "degraded") or not version:
+            self.fail(f"CI systemd manager is unavailable (state={state or 'empty'})")
         self.builder = pwd.getpwnam("nobody")
         self.temp = tempfile.TemporaryDirectory(dir="/run")
         self.root = Path(self.temp.name)

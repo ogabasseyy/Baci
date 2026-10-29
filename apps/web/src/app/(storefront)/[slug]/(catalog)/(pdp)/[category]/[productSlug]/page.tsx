@@ -10,7 +10,6 @@ import { getStorefrontShellSnapshotBase } from '@/app/(storefront)/[slug]/storef
 import { OgabasseyPdpProductLcpSkeleton } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-lcp-skeleton';
 import { preloadOgabasseyPdpProductResources } from '@/app/(storefront)/ogabassey/ogabassey-pdp-product-resource-hints';
 import { JsonLd } from '@/components/seo/json-ld';
-import { buildOgabasseyProductVisibleSummary } from '@/components/storefront/ogabassey/pdp/build-product-visible-summary';
 import { OgabasseyPdpBelowFoldIsland } from '@/components/storefront/ogabassey/pdp/client-islands';
 import { createCriticalCartProduct } from '@/components/storefront/ogabassey/pdp/critical-cart-product';
 import { OgabasseyPdpCriticalCommerce } from '@/components/storefront/ogabassey/pdp/critical-commerce';
@@ -643,16 +642,6 @@ export default async function CategoryProductPage({
     offers: commerceProduct.offers,
     searchParams: resolvedSearchParams,
   });
-  const visibleSummary = criticalProduct
-    ? buildOgabasseyProductVisibleSummary({
-        brand: product.brand,
-        condition: criticalRouteOffer.offerCondition ?? product.condition,
-        has_variant_matrix: product.has_variant_matrix,
-        manage_stock: commerceProduct.manage_stock,
-        name: product.name,
-        variants: commerceProduct.variants,
-      })
-    : null;
   const criticalInitialVariantSelection = criticalProduct
     ? seedCriticalRouteOfferCondition(
         getInitialCriticalVariantSelection(
@@ -730,7 +719,6 @@ export default async function CategoryProductPage({
               ? { condition: criticalRouteOffer.offerCondition }
               : null),
             variantCount,
-            visibleSummary,
           },
           variantAxes: getFirstViewportVariantAxes(
             commerceProduct.variants,

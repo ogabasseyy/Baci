@@ -129,7 +129,7 @@ function buildPageSpeedSummary(results: PageSpeedAuditResult[]): string {
       const d = result.lcpDiagnostics;
       if (!d) continue;
       lines.push(
-        `- ${result.label} (${result.strategy}): element \`${d.lcpElement}\`, origin \`${d.lcpResourceOrigin ?? 'text'}\`, pre-LCP ${d.preLcpRequestCount ?? 'n/a'} reqs (${d.preLcpBytes ?? 'n/a'} B)`
+        `- ${result.label} (${result.strategy}): element \`${d.lcpElement}\`, origin \`${d.lcpResourceOrigin ?? 'n/a'}\`, pre-LCP ${d.preLcpRequestCount ?? 'n/a'} reqs (${d.preLcpBytes ?? 'n/a'} B)`
       );
     }
   }

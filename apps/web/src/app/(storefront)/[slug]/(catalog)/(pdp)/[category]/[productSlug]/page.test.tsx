@@ -2575,7 +2575,7 @@ describe('[category]/[productSlug] page render', () => {
     );
   });
 
-  it('renders one visible all-offer summary in the critical shell', async () => {
+  it('renders the critical shell without a duplicate visible summary paragraph', async () => {
     const { container } = render(
       await resolveRsc(
         await CategoryProductPage({
@@ -2601,8 +2601,11 @@ describe('[category]/[productSlug] page render', () => {
       container.querySelector('script[type="application/ld+json"]')
     ).not.toBeNull();
     expect(
-      screen.getByText('HP Laptop 14-ep0063nia. Condition: New.')
-    ).toBeInTheDocument();
+      screen.queryByText('HP Laptop 14-ep0063nia. Condition: New.')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-ogabassey-pdp-visible-summary]')
+    ).toBeNull();
   });
 
   it('keeps visible OgaBassey product identity aligned with Product JSON-LD input', async () => {

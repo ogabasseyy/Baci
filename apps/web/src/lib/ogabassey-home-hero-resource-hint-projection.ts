@@ -1,20 +1,22 @@
 import { createHash } from 'node:crypto';
 import 'server-only';
-import { getImageProps } from 'next/image';
 import { getOgabasseyImagePreloadType } from '@/app/(storefront)/ogabassey/ogabassey-image-preload-type';
 import {
-  MOBILE_HERO_IMAGE_HEIGHT,
+  getOgabasseyHeroLcpImage,
+  type OgabasseyHeroLcpImageDescriptor,
+  type OgabasseyHeroLcpSlideSource,
+} from '@/components/storefront/ogabassey/components/hero-lcp-image-descriptor';
+import type {
   MOBILE_HERO_IMAGE_QUALITY,
-  MOBILE_HERO_IMAGE_SIZES,
-  MOBILE_HERO_IMAGE_WIDTH,
   MOBILE_HERO_SOURCE_MEDIA,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
-import imageLoader from '@/lib/image-loader';
-import {
-  isOgabasseyCdnImageUrl,
-  rewriteOgabasseyTransformUrlFormat,
-} from '@/lib/ogabassey-cdn-image-url';
-import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { isOgabasseyCdnImageUrl } from '@/lib/ogabassey-cdn-image-url';
+
+export {
+  getOgabasseyHeroLcpImage,
+  type OgabasseyHeroLcpImageDescriptor,
+  type OgabasseyHeroLcpSlideSource,
+};
 
 export interface OgabasseyHomeHeroResourceHintIdentity {
   as: 'image';
@@ -60,27 +62,20 @@ function buildProjectionUnsafe(
     return null;
   }
 
+  const descriptor = getOgabasseyHeroLcpImage(imageUrl);
+  if (!descriptor) {
+    return null;
+  }
+
   const {
-    props: { srcSet, sizes },
-  } = getImageProps({
-    alt: '',
-    height: MOBILE_HERO_IMAGE_HEIGHT,
-    loader: imageLoader,
-    quality: MOBILE_HERO_IMAGE_QUALITY,
-    sizes: MOBILE_HERO_IMAGE_SIZES,
-    src: imageUrl,
-    width: MOBILE_HERO_IMAGE_WIDTH,
-  });
-  const fallbackHref = imageLoader({
-    quality: MOBILE_HERO_IMAGE_QUALITY,
-    src: imageUrl,
-    width: MOBILE_HERO_IMAGE_WIDTH,
-  });
-  const imageSizes = sizes ?? MOBILE_HERO_IMAGE_SIZES;
-  const fallbackSrcSet =
-    srcSet ?? `${fallbackHref} ${MOBILE_HERO_IMAGE_WIDTH}w`;
-  const avifHref = rewriteOgabasseyTransformUrlFormat(fallbackHref, 'avif');
-  const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
+    avifSrc: avifHref,
+    avifSrcSet,
+    media,
+    quality,
+    sizes: imageSizes,
+    src: fallbackHref,
+    srcSet: fallbackSrcSet,
+  } = descriptor;
   const projection: ResourceHintIdentityWithoutDigest = {
     as: 'image',
     fetchPriority: 'high',
@@ -88,8 +83,8 @@ function buildProjectionUnsafe(
     imageSizes,
     imageSrcSet: avifHref && avifSrcSet ? avifSrcSet : fallbackSrcSet,
     imageUrl,
-    media: MOBILE_HERO_SOURCE_MEDIA,
-    quality: MOBILE_HERO_IMAGE_QUALITY,
+    media,
+    quality,
     type:
       avifHref && avifSrcSet
         ? 'image/avif'

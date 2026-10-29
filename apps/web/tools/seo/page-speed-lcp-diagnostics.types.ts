@@ -19,8 +19,6 @@ export interface PageSpeedLcpDiagnostics {
   lcpElement: string | null;
   lcpLoadDelayMs: number | null;
   lcpLoadDurationMs: number | null;
-  lcpOptimisticMs: number | null;
-  lcpPessimisticMs: number | null;
   lcpResourceOrigin: string | null;
   lcpResourceUrl: string | null;
   lcpSubparts: PageSpeedLcpSubparts;

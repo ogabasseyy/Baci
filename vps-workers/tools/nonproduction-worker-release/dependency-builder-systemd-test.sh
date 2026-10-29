@@ -396,10 +396,13 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     )
     error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
     fixture_package = fixture_detail["fixture_package"] if fixture_detail else "diagnostic-unavailable"
+    package_coordinate_hash = (fixture_detail["package_coordinate_sha256"]
+                               if fixture_detail else "diagnostic-unavailable")
     evidence_transition = (fixture_detail["trust_evidence_transition"]
                            if fixture_detail else "diagnostic-unavailable")
     print(f"dependency fixture transient unit failed exit={process.returncode} "
           f"fixture_error={error_code} fixture_package={fixture_package} "
+          f"package_coordinate_sha256={package_coordinate_hash} "
           f"trust_evidence_transition={evidence_transition}",
           file=sys.stderr)
     raise subprocess.CalledProcessError(process.returncode, fixture_command)

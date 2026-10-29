@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import os
 import sys
 import tempfile
@@ -27,6 +28,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             "schema": 1,
             "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
             "fixture_package": "tsx",
+            "package_coordinate_sha256": hashlib.sha256(b"tsx@4.22.4").hexdigest(),
             "trust_evidence_transition": "unreported",
         })
         self.assertNotIn("must-not-leak", repr(summary))
@@ -45,7 +47,19 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                     "(possible package takeover)"
                 )
                 self.assertEqual(result["fixture_package"], expected)
+                self.assertEqual(len(result["package_coordinate_sha256"]), 64)
                 self.assertEqual(result["trust_evidence_transition"], "unreported")
+
+    def test_json_escaped_pnpm_headline_produces_coordinate_hash_only(self):
+        summary = fixture.summarize_failure(
+            r'{"error":{"code":"ERR_PNPM_TRUST_DOWNGRADE",'
+            r'"message":"High-risk trust downgrade for \"private-dep@3.4.5\" '
+            r'(possible package takeover)"}}'
+        )
+        self.assertEqual(summary["fixture_package"], "unknown")
+        self.assertEqual(summary["package_coordinate_sha256"],
+                         hashlib.sha256(b"private-dep@3.4.5").hexdigest())
+        self.assertNotIn("private-dep", repr(summary))
 
     def test_trust_transition_variants_are_exact_and_allowlisted(self):
         cases = {
@@ -118,18 +132,21 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
+                "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
+                "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertIsNone(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid + 1))
             target = root / "target"
             target.write_text('{"schema":1,"error_code":"OTHER_PNPM_ERROR",'
                               '"fixture_package":"not-applicable",'
+                              '"package_coordinate_sha256":"not-applicable",'
                               '"trust_evidence_transition":"not-applicable","raw":"secret"}')
             target.chmod(0o600)
             self.assertIsNone(fixture.read_diagnostic(target, owner_uid=target.stat().st_uid))
@@ -151,6 +168,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
+                "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_scratch_diagnostic(

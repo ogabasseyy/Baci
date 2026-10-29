@@ -299,8 +299,9 @@ class DependencyBuilderTests(unittest.TestCase):
             link = root / "store-link"
             link.symlink_to(target, target_is_directory=True)
             with patch.object(builder, "PNPM_STORE", link):
-                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode"):
+                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode") as raised:
                     builder._validate_offline_store(owner_uid=os.getuid())
+            self.assertEqual(raised.exception.safe_subtype, "root-type")
 
     def test_offline_store_validation_rejects_untrusted_store_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -308,8 +309,9 @@ class DependencyBuilderTests(unittest.TestCase):
             store.mkdir()
             (store / "index.json").write_text("{}", encoding="utf-8")
             with patch.object(builder, "PNPM_STORE", store):
-                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode"):
+                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode") as raised:
                     builder._validate_offline_store(owner_uid=os.getuid() + 1)
+            self.assertEqual(raised.exception.safe_subtype, "root-owner-mode")
 
     @unittest.skipUnless(os.geteuid() == 0, "changing store entry ownership requires root")
     def test_offline_store_validation_rejects_untrusted_entry_owner(self):
@@ -320,8 +322,9 @@ class DependencyBuilderTests(unittest.TestCase):
             child.write_text("{}", encoding="utf-8")
             os.chown(child, os.getuid() + 1234, os.getgid())
             with patch.object(builder, "PNPM_STORE", store):
-                with self.assertRaisesRegex(builder.BuilderRejected, "untrusted entry"):
+                with self.assertRaisesRegex(builder.BuilderRejected, "untrusted entry") as raised:
                     builder._validate_offline_store(owner_uid=os.getuid())
+            self.assertEqual(raised.exception.safe_subtype, "entry-owner-mode")
 
     def test_offline_store_validation_rejects_writable_modes_symlinks_and_specials(self):
         for case in ("root-mode", "child-mode", "symlink", "fifo"):
@@ -339,9 +342,33 @@ class DependencyBuilderTests(unittest.TestCase):
                     (store / "link").symlink_to(root / "outside")
                 else:
                     os.mkfifo(store / "pipe")
+                expected = {
+                    "root-mode": "root-owner-mode", "child-mode": "entry-owner-mode",
+                    "symlink": "entry-symlink", "fifo": "entry-special",
+                }[case]
                 with patch.object(builder, "PNPM_STORE", store):
-                    with self.assertRaises(builder.BuilderRejected):
+                    with self.assertRaises(builder.BuilderRejected) as raised:
                         builder._validate_offline_store(owner_uid=os.getuid())
+                self.assertEqual(raised.exception.safe_subtype, expected)
+
+    def test_offline_store_validation_reports_entry_and_size_limits(self):
+        for limit_name in ("entry", "size"):
+            with self.subTest(limit=limit_name), tempfile.TemporaryDirectory() as temporary:
+                store = Path(temporary) / "store"
+                store.mkdir()
+                (store / "one").write_bytes(b"1234")
+                (store / "two").write_bytes(b"5678")
+                patches = [patch.object(builder, "PNPM_STORE", store)]
+                if limit_name == "entry":
+                    patches.append(patch.object(builder, "MAX_BUILD_SCRATCH_ENTRIES", 1))
+                    expected = "entry-count-limit"
+                else:
+                    patches.append(patch.object(builder, "MAX_BUILD_SCRATCH_BYTES", 4))
+                    expected = "entry-size-limit"
+                with patches[0], patches[1]:
+                    with self.assertRaises(builder.BuilderRejected) as raised:
+                        builder._validate_offline_store(owner_uid=os.getuid())
+                self.assertEqual(raised.exception.safe_subtype, expected)
 
     def test_offline_store_validation_excludes_only_pnpm_project_link_indexes(self):
         with tempfile.TemporaryDirectory() as temporary:

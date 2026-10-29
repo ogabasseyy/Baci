@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import stat
@@ -37,7 +38,9 @@ _FIXTURE_PACKAGES = {
        for platform in _ESBUILD_PLATFORMS},
 }
 _TRUST_HEADLINE = re.compile(
-    r'high-risk trust downgrade for "([^"\s]{1,160})" \(possible package takeover\)'
+    r'high-risk trust downgrade for (?:\\?")'
+    r'((?:@[a-z0-9._-]+/)?[a-z0-9._-]+@[0-9][a-z0-9.+-]{0,63})'
+    r'(?:\\?") \(possible package takeover\)'
 )
 
 
@@ -48,7 +51,11 @@ def summarize_failure(output: str) -> dict[str, object]:
     normalized = re.sub(r"\s+", " ", sample)
     match = _TRUST_TRANSITION.search(normalized) if trust_failure else None
     headline = _TRUST_HEADLINE.search(normalized) if trust_failure else None
-    fixture_package = _FIXTURE_PACKAGES.get(headline.group(1), "unknown") if headline else (
+    coordinate = headline.group(1) if headline else None
+    coordinate_hash = hashlib.sha256(coordinate.encode("ascii")).hexdigest() if coordinate else (
+        "unreported" if trust_failure else "not-applicable"
+    )
+    fixture_package = _FIXTURE_PACKAGES.get(coordinate, "unknown") if coordinate else (
         "unknown" if trust_failure else "not-applicable"
     )
     transition = "unrecognized" if "earlier versions had" in normalized else "unreported"
@@ -58,6 +65,7 @@ def summarize_failure(output: str) -> dict[str, object]:
         "schema": 1,
         "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
         "fixture_package": fixture_package,
+        "package_coordinate_sha256": coordinate_hash,
         "trust_evidence_transition": transition if trust_failure else "not-applicable",
     }
 
@@ -171,20 +179,25 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
             return None
         value = json.loads(os.read(fd, 257))
         if (not isinstance(value, dict) or set(value) != {
-                "schema", "error_code", "fixture_package", "trust_evidence_transition"}
+                "schema", "error_code", "fixture_package", "package_coordinate_sha256",
+                "trust_evidence_transition"}
                 or value["schema"] != 1
                 or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
                 or value["fixture_package"] not in {"tsx", "dotenv", "unknown", "not-applicable"}
+                or value["package_coordinate_sha256"] not in {"unreported", "not-applicable"}
+                and not re.fullmatch(r"[0-9a-f]{64}", str(value["package_coordinate_sha256"]))
                 or value["trust_evidence_transition"] not in {
                     "trusted-publisher-to-provenance", "trusted-publisher-to-none",
                     "provenance-to-none", "unreported", "unrecognized", "not-applicable",
                 }
                 or (value["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE"
                     and (value["trust_evidence_transition"] == "not-applicable"
-                         or value["fixture_package"] == "not-applicable"))
+                         or value["fixture_package"] == "not-applicable"
+                         or value["package_coordinate_sha256"] == "not-applicable"))
                 or (value["error_code"] == "OTHER_PNPM_ERROR"
                     and (value["trust_evidence_transition"] != "not-applicable"
-                         or value["fixture_package"] != "not-applicable"))):
+                         or value["fixture_package"] != "not-applicable"
+                         or value["package_coordinate_sha256"] != "not-applicable"))):
             return None
         return value
     except (OSError, ValueError, TypeError):

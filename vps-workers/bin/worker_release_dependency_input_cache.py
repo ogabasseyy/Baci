@@ -7,7 +7,14 @@ import stat
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree
+from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, _hash_tree
+
+
+class OfflineStoreRejected(BuilderRejected):
+    def __init__(self, message: str, safe_subtype: str):
+        self.safe_subtype = safe_subtype if safe_subtype in OFFLINE_STORE_SUBTYPES else None
+        super().__init__(message)
 
 
 def validate_offline_store(
@@ -20,9 +27,11 @@ def validate_offline_store(
     try:
         info = store.lstat()
     except OSError as exc:
-        raise BuilderRejected("fixed offline pnpm store is unavailable") from exc
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o022:
-        raise BuilderRejected("fixed offline pnpm store ownership or mode is unsafe")
+        raise OfflineStoreRejected("fixed offline pnpm store is unavailable", "root-unavailable") from exc
+    if not stat.S_ISDIR(info.st_mode):
+        raise OfflineStoreRejected("fixed offline pnpm store ownership or mode is unsafe", "root-type")
+    if info.st_uid != owner_uid or info.st_mode & 0o022:
+        raise OfflineStoreRejected("fixed offline pnpm store ownership or mode is unsafe", "root-owner-mode")
     root_identity = (info.st_dev, info.st_ino)
     entries = 0
     total_bytes = 0
@@ -34,9 +43,9 @@ def validate_offline_store(
             child = path.lstat()
             entries += 1
             if entries > max_entries:
-                raise BuilderRejected("offline pnpm store has too many entries")
+                raise OfflineStoreRejected("offline pnpm store has too many entries", "entry-count-limit")
             if child.st_uid != owner_uid or child.st_mode & 0o022:
-                raise BuilderRejected("offline pnpm store contains an untrusted entry")
+                raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
             if stat.S_ISDIR(child.st_mode):
                 relative = "/".join((*relative_parent, name))
                 if (len(relative_parent) == 1 and re.fullmatch(r"v[0-9]+", relative_parent[0])
@@ -44,27 +53,30 @@ def validate_offline_store(
                     excluded_project_indexes.add(relative)
                     directories.remove(name)
                 continue
-            raise BuilderRejected("offline pnpm store contains a symlink or special file")
+            subtype = "entry-symlink" if stat.S_ISLNK(child.st_mode) else "entry-special"
+            raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", subtype)
         for name in files:
             path = Path(current) / name
             child = path.lstat()
             entries += 1
             if entries > max_entries:
-                raise BuilderRejected("offline pnpm store has too many entries")
+                raise OfflineStoreRejected("offline pnpm store has too many entries", "entry-count-limit")
             if child.st_uid != owner_uid or child.st_mode & 0o022:
-                raise BuilderRejected("offline pnpm store contains an untrusted entry")
+                raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
             if not stat.S_ISREG(child.st_mode) or child.st_nlink < 1:
-                raise BuilderRejected("offline pnpm store contains a symlink or special file")
+                subtype = "entry-symlink" if stat.S_ISLNK(child.st_mode) else "entry-special"
+                raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", subtype)
             total_bytes += child.st_size
             if total_bytes > max_bytes:
-                raise BuilderRejected("offline pnpm store exceeds the private-copy size limit")
+                raise OfflineStoreRejected("offline pnpm store exceeds the private-copy size limit",
+                                           "entry-size-limit")
     try:
         after = store.lstat()
     except OSError as exc:
-        raise BuilderRejected("fixed offline pnpm store changed during validation") from exc
+        raise OfflineStoreRejected("fixed offline pnpm store changed during validation", "root-changed") from exc
     if ((after.st_dev, after.st_ino) != root_identity
             or after.st_mtime_ns != info.st_mtime_ns or after.st_ctime_ns != info.st_ctime_ns):
-        raise BuilderRejected("fixed offline pnpm store changed during validation")
+        raise OfflineStoreRejected("fixed offline pnpm store changed during validation", "root-changed")
     return root_identity, frozenset(excluded_project_indexes)
 
 

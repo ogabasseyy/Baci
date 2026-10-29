@@ -41,6 +41,8 @@ from worker_release_dependency_diagnostics import (
     read_diagnostic,
     write_diagnostic,
 )
+from worker_release_dependency_input_cache import OfflineStoreRejected
+from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
@@ -239,6 +241,18 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                                RuntimeError("pnpm policy verification receipt metadata cache changed")),
             "experiment failure stage=receipt-validation category=policy-receipt-cache-changed",
         )
+
+    def test_offline_store_diagnostics_emit_only_closed_subtype(self):
+        for subtype in sorted(OFFLINE_STORE_SUBTYPES):
+            output = failure_diagnostic(
+                "offline-store-validation",
+                OfflineStoreRejected("private path and package name", subtype),
+            )
+            self.assertEqual(output,
+                             "experiment failure stage=offline-store-validation "
+                             f"category=filesystem-entry-invalid store_check={subtype}")
+            self.assertNotIn("private path", output)
+            self.assertNotIn("package name", output)
 
     def test_resource_guard_retries_transient_child_disappearance(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -11,6 +11,10 @@ SUFFIX_CATEGORIES = frozenset({
 LENGTH_BUCKETS = frozenset({"0", "1", "2", "3-8", "9+"})
 POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
 OS_ERROR_SUBSTAGES = frozenset({"preverify-filesystem", "pnpm-launch"})
+OFFLINE_STORE_SUBTYPES = frozenset({
+    "root-unavailable", "root-type", "root-owner-mode", "entry-count-limit",
+    "entry-owner-mode", "entry-symlink", "entry-special", "entry-size-limit", "root-changed",
+})
 _ERRNO_CATEGORIES = {
     errno.ENOSPC: "filesystem-no-space",
     errno.EACCES: "filesystem-permission",

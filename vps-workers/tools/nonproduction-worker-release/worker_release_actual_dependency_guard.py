@@ -10,7 +10,11 @@ import subprocess
 import time
 from pathlib import Path
 from worker_release_dependency_diagnostics import format_policy_line_shapes
-from worker_release_dependency_evidence_shape import safe_errno_category, validate_os_error
+from worker_release_dependency_evidence_shape import (
+    OFFLINE_STORE_SUBTYPES,
+    safe_errno_category,
+    validate_os_error,
+)
 from worker_release_actual_dependency_resources import (
     MAX_TREE_ENTRIES,
     ResourceEntryLimitExceeded,
@@ -46,6 +50,9 @@ class MonitorFailure(RuntimeError):
 def failure_diagnostic(stage: str, error: BaseException) -> str:
     """Render fixed diagnostics only; never include exception or command text."""
     entry_metadata = None
+    store_subtype = getattr(error, "safe_subtype", None)
+    if store_subtype not in OFFLINE_STORE_SUBTYPES:
+        store_subtype = None
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
         os_error = error.os_error
@@ -91,6 +98,8 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
                 ("timed out", "deadline"),
             )
             category = next((label for marker, label in categories if marker in message), "runtime-error")
+            if store_subtype is not None:
+                category = "filesystem-entry-invalid"
         else:
             category = "operation-error"
     suffix = f" exit={exit_code}" if isinstance(exit_code, int) else ""
@@ -112,6 +121,8 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         if (type(entries_seen) is int and 1 <= entries_seen <= MAX_TREE_ENTRIES + 1
                 and type(entry_limit) is int and 1 <= entry_limit <= MAX_TREE_ENTRIES):
             suffix += f" entries_seen={entries_seen} entry_limit={entry_limit}"
+    if store_subtype is not None:
+        suffix += f" store_check={store_subtype}"
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 

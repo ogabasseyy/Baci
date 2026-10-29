@@ -4,8 +4,13 @@ The storefront's production settings currently live in the native release
 workflow's GitHub secrets. An ordinary `eas update --environment production`
 does not inherit those settings. Use the **Prepare storefront iOS OTA export**
 workflow to build a reviewed main-branch commit with the same public settings
-as its native release. The workflow only prepares an artifact; it does not
+as the current native release workflow. The workflow only prepares an artifact; it does not
 publish an update or hold an Expo access token.
+
+The export snapshots the current native release workflow before checking out
+the selected source and compares their effective workflow, job and step
+environment declarations. This checks present-day workflow parity, not the
+historical values in a target binary; those must still be verified below.
 
 Before exporting, establish the target app's actual embedded runtime, build
 number, Expo project and channel from the installed binary or its release

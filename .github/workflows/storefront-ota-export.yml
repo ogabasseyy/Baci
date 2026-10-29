@@ -65,6 +65,7 @@ jobs:
           cp .github/scripts/prepare-storefront-ota-public-config.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-workflow-contract.test.mjs "$RUNNER_TEMP/"
           cp .github/workflows/storefront-ota-export.yml "$RUNNER_TEMP/"
+          cp .github/workflows/ios-storefront-release.yml "$RUNNER_TEMP/"
           git checkout --detach "$SOURCE_SHA"
 
       - name: Setup pnpm
@@ -85,9 +86,10 @@ jobs:
           PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Verify public environment parity with the target release
+      - name: Verify public environment parity with the current native release workflow
         env:
           BACI_OTA_WORKFLOW_PATH: ${{ runner.temp }}/storefront-ota-export.yml
+          BACI_NATIVE_RELEASE_WORKFLOW_PATH: ${{ runner.temp }}/ios-storefront-release.yml
         run: node --test "$RUNNER_TEMP/storefront-ota-workflow-contract.test.mjs"
 
       # Keep public variables aligned with the Fastlane release step. The

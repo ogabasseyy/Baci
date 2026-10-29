@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Suspense, startTransition, useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AddressAutocomplete } from './address-autocomplete';
 
@@ -6,6 +7,58 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+it('keeps the committed search alive when a locality render is suspended', async () => {
+  vi.useFakeTimers();
+  const waiting = new Promise<void>(() => undefined);
+  function PendingLocality({ pending }: { pending: boolean }) {
+    if (pending) throw waiting;
+    return null;
+  }
+  function Harness() {
+    const [revision, setRevision] = useState(0);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => startTransition(() => setRevision(1))}
+        >
+          Change locality
+        </button>
+        <Suspense fallback={<p>Loading locality</p>}>
+          <AddressAutocomplete
+            aria-label="Address"
+            selectionRevision={revision}
+          />
+          <PendingLocality pending={revision === 1} />
+        </Suspense>
+      </>
+    );
+  }
+  const fetchMock = vi.fn().mockResolvedValue(
+    Response.json({
+      predictions: [
+        {
+          placeId: 'fixture-google-place',
+          mainText: '12 Sample Street',
+          secondaryText: 'Ikeja, Lagos',
+          fullText: '12 Sample Street, Ikeja, Lagos',
+        },
+      ],
+    })
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  render(<Harness />);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Address' }), {
+    target: { value: '12 Sample' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Change locality' }));
+  await act(async () => vi.advanceTimersByTimeAsync(300));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole('button', { name: /12 Sample Street/ })
+  ).toBeInTheDocument();
 });
 
 it('retires a Google session when Details starts, even if the shopper types before it finishes', async () => {

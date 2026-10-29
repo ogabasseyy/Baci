@@ -124,7 +124,6 @@ export function CheckoutShippingStep({
                   placeholder="you@example.com"
                   {...field}
                   className="pl-10"
-                  name="shipping-email"
                   autoComplete="email"
                 />
               </FormControl>
@@ -205,7 +204,7 @@ export function CheckoutShippingStep({
               <FormControl>
                 <ThemedInput
                   placeholder="e.g. Ikeja, Lekki, Yaba"
-                  autoComplete="new-password"
+                  autoComplete="address-level2"
                   {...field}
                   onChange={(event) => {
                     clearDestinationPin(true);
@@ -226,7 +225,7 @@ export function CheckoutShippingStep({
               <FormControl>
                 <ThemedInput
                   placeholder="e.g. Lagos"
-                  autoComplete="new-password"
+                  autoComplete="address-level1"
                   {...field}
                   onChange={(event) => {
                     clearDestinationPin(true);

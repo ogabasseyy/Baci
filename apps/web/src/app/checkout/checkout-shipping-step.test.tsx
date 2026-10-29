@@ -120,6 +120,22 @@ beforeEach(() => {
   ]);
   details.mockResolvedValue(place);
 });
+it('identifies locality and email fields correctly for browser autofill', async () => {
+  render(<Harness />);
+  await act(async () => {});
+  expect(screen.getByRole('textbox', { name: 'City' })).toHaveAttribute(
+    'autocomplete',
+    'address-level2'
+  );
+  expect(screen.getByRole('textbox', { name: 'State' })).toHaveAttribute(
+    'autocomplete',
+    'address-level1'
+  );
+  expect(screen.getByRole('textbox', { name: 'Email' })).toHaveAttribute(
+    'name',
+    'email'
+  );
+});
 it('keeps typing predictions and async Details active, then clears the pin on locality edits', async () => {
   render(<Harness />);
   for (const name of [

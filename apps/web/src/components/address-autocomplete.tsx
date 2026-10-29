@@ -2,7 +2,7 @@
 
 import { Home, Loader2, X } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ThemedInput } from '@/components/themed';
 import { Input } from '@/components/ui/input';
 import {
@@ -51,16 +51,24 @@ export function AddressAutocomplete({
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const predictionRequestId = useRef(0);
   const placeDetailsRequestId = useRef(0);
-  const [previousRevision, setPreviousRevision] = useState(selectionRevision);
-  if (selectionRevision !== previousRevision) {
-    setPreviousRevision(selectionRevision);
+  const [controlledReset, setControlledReset] = useState(0);
+  const committedReset = useRef({ selectionRevision, controlledReset });
+  // Cancel only after commit. A suspended/abandoned render must not invalidate
+  // the search that still belongs to the visible, committed address.
+  useLayoutEffect(() => {
+    if (
+      committedReset.current.selectionRevision === selectionRevision &&
+      committedReset.current.controlledReset === controlledReset
+    )
+      return;
+    committedReset.current = { selectionRevision, controlledReset };
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     predictionRequestId.current += 1;
     placeDetailsRequestId.current += 1;
     setPredictions([]);
     setIsOpen(false);
     setIsLoading(false);
-  }
+  }, [selectionRevision, controlledReset]);
   // Sync internal value with the controlled prop during render (prev-prop
   // compare) so users never see a stale frame between commits.
   const [prevValue, setPrevValue] = useState(value);
@@ -68,12 +76,7 @@ export function AddressAutocomplete({
     setPrevValue(value);
     if (value !== undefined) {
       if (value !== internalValue) {
-        // Invalidate pending work like handleClear: a pending debounce or
-        // in-flight request would otherwise restore stale suggestions or
-        // overwrite the newly loaded address via onSelect.
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        predictionRequestId.current += 1;
-        placeDetailsRequestId.current += 1;
+        setControlledReset((revision) => revision + 1);
         setPredictions([]);
         setIsOpen(false);
         setIsLoading(false);

@@ -25,11 +25,22 @@ sys.path.insert(0, str(BIN))
 
 import worker_release_dependency_install as installer
 import worker_release_dependency_artifacts as artifacts
+import worker_release_dependency_builder as production_builder
 import worker_release_dependency_input_cache as input_cache
 import worker_release_dependency_policy_cache as policy
 import worker_release_dependency_policy_cli as policy_cli
 import worker_release_dependency_fs as dependency_fs
 import worker_release_dependency_sandbox as sandbox
+
+PRODUCTION_RESOURCE_LIMITS = {
+    "payload_bytes": artifacts.MAX_PAYLOAD_BYTES,
+    "materialized_bytes": installer.MAX_MATERIALIZED_BYTES,
+    "aggregate_build_bytes": production_builder.MAX_BUILD_SCRATCH_BYTES,
+    "aggregate_build_entries": production_builder.MAX_BUILD_SCRATCH_ENTRIES,
+    "build_filesystem_min_bytes": production_builder.MIN_BUILD_FILESYSTEM_BYTES,
+    "build_filesystem_max_bytes": production_builder.MAX_BUILD_FILESYSTEM_BYTES,
+    "metadata_cache_bytes": policy.MAX_CACHE_BYTES,
+}
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
     assert_deployed_package_matches_lock,
@@ -45,7 +56,8 @@ from worker_release_actual_dependency_limits import (
 from worker_release_actual_dependency_runner import run, run_policy_preverify as _run_policy_preverify
 from worker_release_actual_dependency_resources import (MAX_TREE_BYTES, MAX_TREE_ENTRIES, MIN_FREE_BYTES,
                                                         MIN_FREE_INODES, copy_verified_policy_cache,
-                                                        make_policy_cache_seed_read_only)
+                                                        make_policy_cache_seed_read_only,
+                                                        ResourceHighWater)
 from worker_release_actual_dependency_runtime import (
     independent_smoke,
     load_smoke_module,
@@ -55,10 +67,11 @@ from worker_release_actual_dependency_runtime import (
 
 
 def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
-                         timeout: int, resource_root: Path, diagnostic_path: Path) -> None:
+                         timeout: int, resource_root: Path, diagnostic_path: Path,
+                         observe_resource=None) -> None:
     _run_policy_preverify(command, cwd=cwd, env=env, timeout=timeout,
                           resource_root=resource_root, diagnostic_path=diagnostic_path,
-                          run_fn=run)
+                          run_fn=run, observe_resource=observe_resource)
 
 
 def _main() -> int:
@@ -104,6 +117,16 @@ def _main() -> int:
             source_size = tree_size(source, max_entries=500_000, max_bytes=512 * 1024 * 1024)[1]
             (source / ".baci-source-sha").write_text(expected_sha + "\n", encoding="ascii")
             reclaim_experiment_tree(archive, scratch_root=base)
+            production_high_water = ResourceHighWater()
+
+            def observe_production(stage_name: str, entries: int | None = None,
+                                   byte_count: int | None = None) -> tuple[int, int]:
+                if entries is None or byte_count is None:
+                    entries, byte_count = enforce_resource_limits(base)
+                production_high_water.observe(stage_name, entries, byte_count)
+                return entries, byte_count
+
+            observe_production("source-copy")
             store = base / "pnpm-store"
             store.mkdir(mode=0o700)
             cache = base / "pnpm-cache"
@@ -124,8 +147,10 @@ def _main() -> int:
                 preverify_command, cwd=ROOT,
                 env={"PATH": f"{Path(node).parent}:/usr/bin:/bin", "HOME": str(home), "CI": "true"},
                 timeout=600, resource_root=base, diagnostic_path=preverify_diagnostic,
+                observe_resource=production_high_water.observe,
             )
             stage = "offline-store-validation"
+            observe_production("offline-store-validation")
             _, validated_store_exclusions = input_cache.validate_offline_store(
                 store, owner_uid=os.geteuid(), max_entries=200_000,
                 max_bytes=EXPERIMENT_STORE_BYTES,
@@ -159,16 +184,19 @@ def _main() -> int:
                                     cache_max_bytes=EXPERIMENT_CACHE_BYTES)
             stage = "build-cache-snapshot"
             make_policy_cache_seed_read_only(cache)
+            observe_production("build-cache-snapshot")
             build_cache = base / "pnpm-build-cache"
             copy_verified_policy_cache(cache, build_cache,
                                       max_entries=policy.MAX_CACHE_ENTRIES,
                                       max_bytes=EXPERIMENT_CACHE_BYTES)
+            observe_production("build-cache-snapshot")
             offline_env["PNPM_CONFIG_CACHE_DIR"] = str(build_cache)
             injection_settings = policy.lock_injection_settings(source)
             web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
             run(web_cmd, cwd=source,
                 env={**offline_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"}, timeout=900,
-                stage="web-deploy", resource_root=base)
+                stage="web-deploy", resource_root=base,
+                observe_resource=production_high_water.observe)
             stage = "deploy-graph-validation"
             deployed_vercel_functions = assert_deployed_package_matches_lock(
                 output / "web", source / "pnpm-lock.yaml", "@vercel/functions"
@@ -179,7 +207,8 @@ def _main() -> int:
                           "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store))
             run(worker_cmd, cwd=source / "vps-workers",
                 env={**offline_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()}, timeout=900,
-                stage="worker-install", resource_root=base)
+                stage="worker-install", resource_root=base,
+                observe_resource=production_high_water.observe)
             stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
                                     cache_max_bytes=EXPERIMENT_CACHE_BYTES)
@@ -190,6 +219,7 @@ def _main() -> int:
             if checked_store_exclusions != validated_store_exclusions:
                 raise RuntimeError("offline pnpm store index layout changed during experiment")
             stage = "offline-store-validation"
+            observe_production("offline-store-validation")
             store_count, store_bytes = tree_size(store, max_entries=200_000,
                                                  max_bytes=EXPERIMENT_STORE_BYTES,
                                                  excluded_relative_directories=checked_store_exclusions)
@@ -202,15 +232,14 @@ def _main() -> int:
                     or worker_modules.stat().st_dev != worker_payload.parent.stat().st_dev):
                 raise RuntimeError("offline worker dependencies cannot be moved into the payload")
             os.rename(worker_modules, worker_payload)
-            # No pnpm command remains. Drop the large mutable source installs,
-            # offline store and policy cache before copying the payload again.
-            for completed_phase_tree in (store, cache, build_cache, source, home):
-                reclaim_experiment_tree(completed_phase_tree, scratch_root=base)
-            enforce_resource_limits(base)
+            # Match the production builder's retained-resource lifecycle: it
+            # snapshots the quiesced payload before cleaning the source, store,
+            # and policy caches. This reports the real copy peak rather than
+            # an artificially reclaimed export peak.
             stage = "payload-export"
             export_root = base / "payload-export"
             export_root.mkdir(mode=0o700)
-            current_entries, current_bytes = enforce_resource_limits(base)
+            current_entries, current_bytes = observe_production("payload-snapshot")
             export_entries = 0
             export_bytes = 0
 
@@ -220,6 +249,9 @@ def _main() -> int:
                     raise RuntimeError("experiment entry cap reached during isolated payload export")
                 if current_bytes + export_bytes + entry_bytes > MAX_TREE_BYTES:
                     raise RuntimeError("experiment disk cap reached during isolated payload export")
+                production_high_water.observe("payload-snapshot",
+                                              current_entries + export_entries + 1,
+                                              current_bytes + export_bytes + entry_bytes)
                 capacity = os.statvfs(base)
                 available_bytes = capacity.f_bavail * capacity.f_frsize
                 if available_bytes < MIN_FREE_BYTES + entry_bytes:
@@ -233,10 +265,12 @@ def _main() -> int:
             exported_output = dependency_fs.snapshot_payload(
                 base, export_root, os.geteuid(), before_entry=check_export_budget,
             )
-            enforce_resource_limits(base)
-            # Export is a regular, independently validated snapshot. The pnpm
-            # deploy tree is no longer needed once it has been copied here.
-            reclaim_experiment_tree(output, scratch_root=base)
+            observe_production("payload-snapshot")
+            # Export is a regular, independently validated snapshot. Now that
+            # the production-equivalent peak was measured, remove only these
+            # experiment-owned phase trees before follow-on analysis.
+            for completed_phase_tree in (store, cache, build_cache, source, home, output):
+                reclaim_experiment_tree(completed_phase_tree, scratch_root=base)
             enforce_resource_limits(base)
             stage = "payload-validation"
             configure_experiment_payload_limits()
@@ -288,6 +322,8 @@ def _main() -> int:
                 "materialized_bytes": materialized_bytes,
                 "smoke_sha256": smoke_hash,
                 "preverify_seconds": round(time.monotonic() - preverify_started, 2),
+                "production_equivalent_sampled_high_water": production_high_water.report(),
+                "production_limits_bytes_and_entries": PRODUCTION_RESOURCE_LIMITS,
                 "total_seconds": round(time.monotonic() - started, 2),
                 "network_policy": "preverify-only-fixed-registry; all builds offline",
                 "measurement_caps_bytes": {

@@ -31,6 +31,7 @@ from worker_release_actual_dependency_resources import (
     MIN_FREE_BYTES,
     MIN_FREE_INODES,
     ResourceEntryLimitExceeded,
+    ResourceHighWater,
     copy_verified_policy_cache,
     make_policy_cache_seed_read_only,
 )
@@ -48,6 +49,50 @@ from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_resource_high_water_records_monotonic_peak_and_fixed_stage(self):
+        high_water = ResourceHighWater()
+        high_water.observe("source-copy", 4, 40)
+        high_water.observe("web-deploy", 8, 70)
+        high_water.observe("worker-install", 6, 90)
+        high_water.observe("payload-snapshot", 8, 20)
+        self.assertEqual(high_water.report(), {
+            "kind": "sampled-high-water-lower-bound",
+            "logical_file_bytes": 90,
+            "logical_file_bytes_stage": "worker-install",
+            "entries": 8,
+            "entries_stage": "web-deploy",
+            "sampling": "1s subprocess polls plus exact logical-byte accounting during snapshot copy",
+            "transient_files_between_samples": "may be missed",
+            "allocated_block_bytes": None,
+            "allocated_block_bytes_status": "not-measured",
+        })
+        for stage, entries, byte_count in (("untrusted-stage", 1, 1), ("source-copy", -1, 1),
+                                           ("source-copy", 1, True)):
+            with self.subTest(stage=stage, entries=entries, byte_count=byte_count):
+                with self.assertRaisesRegex(ValueError, "sample is invalid"):
+                    high_water.observe(stage, entries, byte_count)
+
+    def test_live_resource_monitor_contributes_to_high_water(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            high_water = ResourceHighWater()
+            script = "import pathlib,time,sys; pathlib.Path(sys.argv[1]).write_bytes(b'x'*65536); time.sleep(.15)"
+            self.assertEqual(run_monitored(
+                (sys.executable, "-c", script, str(root / "payload.bin")), cwd=root,
+                env=os.environ.copy(), timeout=10, stage="web-deploy", resource_root=root,
+                poll_seconds=0.01, observe_resource=high_water.observe,
+            ), 0)
+            self.assertGreaterEqual(high_water.report()["logical_file_bytes"], 65_536)
+            self.assertEqual(high_water.report()["logical_file_bytes_stage"], "web-deploy")
+
+    def test_production_equivalent_snapshot_precedes_large_tree_reclamation(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        snapshot = source.index("exported_output = dependency_fs.snapshot_payload(")
+        reclaim = source.index("for completed_phase_tree in (store, cache, build_cache, source, home, output):")
+        self.assertLess(snapshot, reclaim)
+        self.assertIn('production_high_water.observe("payload-snapshot"', source)
+        self.assertIn('"production_equivalent_sampled_high_water": production_high_water.report()', source)
+
     def test_extracted_tree_size_suite_is_part_of_experiment_gate(self):
         for name in ("actual-dependency-tree-size.test.py",
                      "actual-dependency-payload-diagnostics.test.py"):
@@ -545,6 +590,15 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual(experiment.EXPERIMENT_PAYLOAD_BYTES, MAX_TREE_BYTES)
         self.assertEqual(production_payload_limit, 1024 * 1024 * 1024)
         self.assertEqual(production_materialized_limit, 1024 * 1024 * 1024)
+        self.assertEqual(experiment.PRODUCTION_RESOURCE_LIMITS, {
+            "payload_bytes": 1024 * 1024 * 1024,
+            "materialized_bytes": 1024 * 1024 * 1024,
+            "aggregate_build_bytes": 1536 * 1024 * 1024,
+            "aggregate_build_entries": 200_000,
+            "build_filesystem_min_bytes": 3 * 1024 * 1024 * 1024,
+            "build_filesystem_max_bytes": 4 * 1024 * 1024 * 1024,
+            "metadata_cache_bytes": 256 * 1024 * 1024,
+        })
         smoke = SimpleNamespace(MAX_BYTES=1024 * 1024 * 1024)
         with patch.object(experiment.artifacts, "MAX_PAYLOAD_BYTES", production_payload_limit), \
              patch.object(experiment.installer, "MAX_MATERIALIZED_BYTES", production_materialized_limit):
@@ -578,14 +632,16 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "target is invalid"):
                 experiment.reclaim_experiment_tree(outside, scratch_root=root)
 
-    def test_payload_phases_reclaim_large_inputs_before_materialization(self):
+    def test_payload_snapshot_precedes_reclamation_and_materialization(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("os.rename(worker_modules, worker_payload)", source)
         self.assertNotIn("shutil.copytree(worker_modules", source)
-        self.assertIn("(store, cache, build_cache, source, home)", source)
-        self.assertIn("reclaim_experiment_tree(output, scratch_root=base)", source)
-        self.assertLess(source.index("reclaim_experiment_tree(output, scratch_root=base)"),
-                        source.index("stage = \"payload-materialization\""))
+        self.assertIn("(store, cache, build_cache, source, home, output)", source)
+        snapshot = source.index("exported_output = dependency_fs.snapshot_payload(")
+        reclaim = source.index("for completed_phase_tree in (store, cache, build_cache, source, home, output):")
+        materialize = source.index('stage = "payload-materialization"')
+        self.assertLess(snapshot, reclaim)
+        self.assertLess(reclaim, materialize)
 
     def test_verified_seed_is_separate_from_mutable_offline_cache(self):
         with tempfile.TemporaryDirectory() as temporary:

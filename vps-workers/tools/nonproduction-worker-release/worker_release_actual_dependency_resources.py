@@ -13,6 +13,47 @@ MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 MIN_FREE_INODES = 20_000
 SCAN_RETRIES = 3
 SCAN_RETRY_SECONDS = 0.1
+HIGH_WATER_STAGES = frozenset({
+    "source-copy", "policy-preverify", "offline-store-validation", "build-cache-snapshot",
+    "web-deploy", "worker-install", "payload-snapshot",
+})
+
+
+class ResourceHighWater:
+    """Track peak logical bytes and entries for the production-shaped build phase.
+
+    Byte counts are the sum of regular-file st_size values, not allocated disk
+    blocks. The experiment samples during subprocesses and accounts for copied
+    entries synchronously while snapshotting.
+    """
+
+    def __init__(self) -> None:
+        self.entries = 0
+        self.bytes = 0
+        self.entries_stage = "source-copy"
+        self.bytes_stage = "source-copy"
+
+    def observe(self, stage: str, entries: int, byte_count: int) -> None:
+        if (stage not in HIGH_WATER_STAGES or type(entries) is not int or entries < 0
+                or type(byte_count) is not int or byte_count < 0):
+            raise ValueError("resource high-water sample is invalid")
+        if entries > self.entries:
+            self.entries, self.entries_stage = entries, stage
+        if byte_count > self.bytes:
+            self.bytes, self.bytes_stage = byte_count, stage
+
+    def report(self) -> dict[str, object]:
+        return {
+            "kind": "sampled-high-water-lower-bound",
+            "logical_file_bytes": self.bytes,
+            "logical_file_bytes_stage": self.bytes_stage,
+            "entries": self.entries,
+            "entries_stage": self.entries_stage,
+            "sampling": "1s subprocess polls plus exact logical-byte accounting during snapshot copy",
+            "transient_files_between_samples": "may be missed",
+            "allocated_block_bytes": None,
+            "allocated_block_bytes_status": "not-measured",
+        }
 
 
 class _TransientEntryRace(Exception):
@@ -132,5 +173,6 @@ def make_policy_cache_seed_read_only(seed: Path) -> None:
 
 
 __all__ = ["MAX_TREE_BYTES", "MAX_TREE_ENTRIES", "MIN_FREE_BYTES", "MIN_FREE_INODES",
-           "ResourceEntryLimitExceeded", "copy_verified_policy_cache", "enforce_resource_limits",
+           "HIGH_WATER_STAGES", "ResourceEntryLimitExceeded", "ResourceHighWater",
+           "copy_verified_policy_cache", "enforce_resource_limits",
            "make_policy_cache_seed_read_only"]

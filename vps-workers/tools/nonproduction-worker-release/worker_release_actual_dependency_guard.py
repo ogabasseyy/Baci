@@ -9,6 +9,7 @@ import stat
 import subprocess
 import time
 from pathlib import Path
+from typing import Callable
 from worker_release_actual_dependency_resources import (
     MAX_TREE_ENTRIES,
     ResourceEntryLimitExceeded,
@@ -150,10 +151,13 @@ def _resource_category(error: BaseException) -> tuple[str, str | None]:
 
 
 def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
-                  stage: str, resource_root: Path, poll_seconds: float = POLL_SECONDS) -> int:
-    def check_resources() -> None:
+                  stage: str, resource_root: Path, poll_seconds: float = POLL_SECONDS,
+                  observe_resource: Callable[[str, int, int], None] | None = None) -> int:
+    def check_resources(*, live_sample: bool = False) -> None:
         try:
-            enforce_resource_limits(resource_root)
+            entries, byte_count = enforce_resource_limits(resource_root, live_sample=live_sample)
+            if observe_resource is not None:
+                observe_resource(stage, entries, byte_count)
         except Exception as exc:
             kwargs = {}
             if isinstance(exc, ResourceEntryLimitExceeded):
@@ -180,7 +184,9 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
             if time.monotonic() >= deadline:
                 raise MonitorFailure(stage, "deadline")
             try:
-                enforce_resource_limits(resource_root, live_sample=True)
+                entries, byte_count = enforce_resource_limits(resource_root, live_sample=True)
+                if observe_resource is not None:
+                    observe_resource(stage, entries, byte_count)
             except Exception as exc:
                 kwargs = {}
                 if isinstance(exc, ResourceEntryLimitExceeded):

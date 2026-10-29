@@ -16,8 +16,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import worker_release_dependency_supervisor as supervisor
 import worker_release_dependency_builder as dependency_builder
-from worker_release_dependency_supervisor_cgroup import drain_until_proven
-from worker_release_descriptor_cgroup import CgroupProofRejected
+from worker_release_dependency_supervisor_cgroup import drain_until_proven, postspawn_drain
+from worker_release_descriptor_cgroup import (
+    CgroupProofRejected, require_process_member,
+)
+from worker_release_dependency_supervisor_cgroup import open_unit_cgroup
 from worker_release_dependency_supervisor_journal import (
     BuilderJournalRejected, BuilderUnitJournal, recover_recorded_builder,
 )
@@ -99,12 +102,12 @@ class BuilderSupervisorSystemdTests(unittest.TestCase):
                 )
 
     def test_success_returns_only_after_unit_cgroup_is_empty(self):
-        self.run_unit("import time; time.sleep(0.5)")
+        self.run_unit("import time; time.sleep(2)")
         self.assertEqual(list(self.scratch.iterdir()), [])
 
     def test_bound_violation_kills_descendant_and_proves_cgroup_empty(self):
         script = (
-            "import subprocess,time,pathlib,os; "
+            "import subprocess,time,pathlib,os; time.sleep(1); "
             "subprocess.Popen(['/usr/bin/python3','-c','import time; time.sleep(60)']); "
             "pathlib.Path('" + str(self.scratch / "oversize") + "').write_bytes(b'xx'); "
             "time.sleep(60)"
@@ -142,6 +145,20 @@ class BuilderSupervisorSystemdTests(unittest.TestCase):
                                          terminal_attempt_proven=lambda _fence: False)
             self.assertEqual(supervisor._systemctl("show", "--property=ActiveState", "--value", unit),
                              "active")
+            control_group = supervisor._systemctl(
+                "show", "--property=ControlGroup", "--value", unit,
+            )
+            self.assertEqual(control_group, supervisor._control_group(unit))
+            cgroup_fd, cgroup_info = open_unit_cgroup(supervisor.CGROUP_ROOT, unit)
+            try:
+                main_pid = int(supervisor._systemctl(
+                    "show", "--property=MainPID", "--value", unit,
+                ))
+                self.assertGreater(main_pid, 0)
+                require_process_member(cgroup_fd, cgroup_info.st_dev,
+                                       cgroup_info.st_ino, main_pid)
+            finally:
+                os.close(cgroup_fd)
             result = recover_recorded_builder(journal, fence,
                                               terminal_attempt_proven=lambda _fence: True)
             self.assertEqual(result, "drained")
@@ -187,7 +204,8 @@ class BuilderSupervisorContractTests(unittest.TestCase):
                                                          unit_journal=journal, usage_root=root)
                 runner(expected, scratch, unit)
                 journal.begin.assert_called_once_with(fence, unit, source, scratch,
-                                                      os.getuid(), os.getgid())
+                                                      os.getuid(), os.getgid(),
+                                                      input_root=None, result_dir=None)
                 run.assert_called_once_with(source, scratch, sha, os.getuid(),
                                             os.getgid(),
                                             unit, usage_root=root)
@@ -229,9 +247,12 @@ class QuarantineTests(unittest.TestCase):
         with patch.object(supervisor, "_drain_until_proven",
                           side_effect=CgroupProofRejected("descriptor changed")):
             with self.assertRaises(supervisor.BuilderQuiescenceUnproven):
-                supervisor._postspawn_drain(
+                postspawn_drain(
                     "baci-worker-deps-" + "a" * 12 + "-" + "b" * 32 + ".service",
                     Mock(), 10, os.stat_result((0,) * 10), deadline=1,
+                    drain_pinned=supervisor._drain_until_proven,
+                    drain_unpinned=supervisor._drain_unpinned_until_proven,
+                    journal=None, unproven=supervisor.BuilderQuiescenceUnproven,
                 )
 
     def test_unproven_cgroup_drain_has_distinct_fail_closed_error(self):

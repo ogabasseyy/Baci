@@ -70,6 +70,29 @@ def stop_unit(systemctl: str, unit: str) -> None:
             pass
 
 
+def bounded_systemctl_query(systemctl, deadline: float, rejected, *args: str) -> str:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise rejected("builder teardown deadline expired")
+    return systemctl(*args, timeout=min(1, remaining))
+
+
+def postspawn_drain(unit: str, process: subprocess.Popen, cgroup_fd: int,
+                    cgroup_info: os.stat_result | None, *, deadline: float,
+                    drain_pinned, drain_unpinned, journal, unproven) -> None:
+    try:
+        if cgroup_fd >= 0 and cgroup_info is not None:
+            drain_pinned(unit, cgroup_fd, cgroup_info, process, deadline=deadline)
+            if journal is not None:
+                journal.mark_drained(cgroup_info)
+        else:
+            drain_unpinned(unit, process, deadline=deadline, journal=journal)
+    except unproven:
+        raise
+    except BaseException as error:
+        raise unproven(unit, "post-launch teardown proof failed") from error
+
+
 def kill_cgroup(fd: int) -> None:
     control = os.open("cgroup.kill", os.O_WRONLY | os.O_NOFOLLOW, dir_fd=fd)
     try:
@@ -162,6 +185,6 @@ def drain_unpinned_until_proven(unit: str, process: subprocess.Popen, *, root: P
     raise unproven(unit, "timed out before absent unit/cgroup was proven")
 
 
-__all__ = ["UnitCgroupAbsent", "drain_unpinned_until_proven", "drain_until_proven",
+__all__ = ["UnitCgroupAbsent", "bounded_systemctl_query", "drain_unpinned_until_proven", "drain_until_proven",
            "kill_cgroup", "open_unit_cgroup", "preflight_cgroup_root",
-           "prove_stopped", "stop_unit"]
+           "postspawn_drain", "prove_stopped", "stop_unit"]

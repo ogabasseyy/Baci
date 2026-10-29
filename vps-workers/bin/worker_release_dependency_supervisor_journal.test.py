@@ -7,8 +7,13 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from worker_release_dependency_supervisor_journal import BuilderJournalRejected, BuilderUnitJournal
+from worker_release_dependency_supervisor_journal import (
+    BuilderJournalRejected, BuilderUnitJournal, recover_recorded_builder,
+)
+import worker_release_dependency_supervisor_journal as journal_module
+from worker_release_dependency_supervisor_cgroup import UnitCgroupAbsent
 
 SHA = "a" * 40
 FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads/main",
@@ -65,6 +70,25 @@ class BuilderUnitJournalTests(unittest.TestCase):
             with self.assertRaisesRegex(BuilderJournalRejected, "unresolved prior run"):
                 journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
 
+    def test_journal_binds_input_and_result_directory_inodes_before_spawn(self):
+        input_root = self.source.parent
+        input_root.chmod(0o555)
+        result = self.root / "candidate"
+        result.mkdir(mode=0o700)
+        with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
+            record = journal.begin(
+                FENCE, UNIT, self.source, self.scratch, self.uid, self.gid,
+                input_root=input_root, result_dir=result,
+            )
+            persisted = journal.read()
+            self.assertEqual(persisted["input_path"], str(input_root))
+            self.assertEqual((persisted["input_path_dev"], persisted["input_path_ino"]),
+                             (input_root.stat().st_dev, input_root.stat().st_ino))
+            self.assertEqual(persisted["result_path"], str(result))
+            self.assertEqual((persisted["result_path_dev"], persisted["result_path_ino"]),
+                             (result.stat().st_dev, result.stat().st_ino))
+            self.assertEqual(record, persisted)
+
     def test_temporary_record_symlink_cannot_be_used_for_recovery(self):
         with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
             journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
@@ -73,6 +97,40 @@ class BuilderUnitJournalTests(unittest.TestCase):
             with self.assertRaisesRegex(BuilderJournalRejected, "temporary state"):
                 journal.mark_drained(None)
             self.assertEqual(journal.read()["phase"], "prepared")
+
+    def test_missing_cgroup_root_or_slice_never_counts_as_absent_unit(self):
+        with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
+            journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            with patch.object(journal_module, "preflight_cgroup_root",
+                              side_effect=FileNotFoundError("missing root or slice")), patch.object(
+                journal_module, "_open_cgroup") as open_cgroup:
+                with self.assertRaisesRegex(BuilderJournalRejected, "hierarchy is unavailable"):
+                    recover_recorded_builder(
+                        journal, FENCE, terminal_attempt_proven=lambda _fence: True,
+                    )
+                open_cgroup.assert_not_called()
+            with patch.object(journal_module, "preflight_cgroup_root"), patch.object(
+                journal_module, "_systemctl", return_value="not-found"), patch.object(
+                journal_module, "_open_cgroup", side_effect=FileNotFoundError("slice missing")
+            ):
+                with self.assertRaisesRegex(BuilderJournalRejected, "cannot open the cgroup hierarchy"):
+                    recover_recorded_builder(
+                        journal, FENCE, terminal_attempt_proven=lambda _fence: True,
+                    )
+            self.assertEqual(journal.read()["phase"], "prepared")
+
+    def test_only_missing_unit_child_with_not_found_load_state_is_recoverable(self):
+        with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
+            journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            with patch.object(journal_module, "preflight_cgroup_root"), patch.object(
+                journal_module, "_systemctl", return_value="not-found"), patch.object(
+                journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent("no unit cgroup")
+            ):
+                result = recover_recorded_builder(
+                    journal, FENCE, terminal_attempt_proven=lambda _fence: True,
+                )
+            self.assertEqual(result, "drained")
+            self.assertEqual(journal.read()["phase"], "drained")
 
 
 if __name__ == "__main__":

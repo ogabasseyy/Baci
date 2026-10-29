@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import grp
 import os
 import re
 import stat
@@ -10,9 +11,10 @@ from typing import Any, Callable
 import time
 
 from worker_release_dependency_supervisor import (
-    BuilderSupervisorRejected, _control_group, _drain_until_proven, _open_cgroup,
-    _systemctl, _validate_live_unit,
+    CGROUP_ROOT, BuilderSupervisorRejected, _control_group, _drain_until_proven,
+    _open_cgroup, _systemctl, _validate_live_unit, preflight_cgroup_root,
 )
+from worker_release_dependency_supervisor_cgroup import UnitCgroupAbsent
 from worker_release_descriptor_cgroup import require_empty_cgroup, require_process_member
 
 JOURNAL = "dependency-builder-unit.json"
@@ -39,8 +41,15 @@ class BuilderUnitJournal:
             raise BuilderJournalRejected("builder journal caller identity is invalid")
         self.root = Path(worker_root)
         info = self.root.lstat()
+        private_root = stat.S_IMODE(info.st_mode) == 0o700
+        provisioned_worker_root = False
+        if owner_uid == 0 and stat.S_IMODE(info.st_mode) == 0o710:
+            try:
+                provisioned_worker_root = info.st_gid == grp.getgrnam("baci-locks").gr_gid
+            except KeyError:
+                provisioned_worker_root = False
         if (not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid
-                or stat.S_IMODE(info.st_mode) != 0o700):
+                or not (private_root or provisioned_worker_root)):
             raise BuilderJournalRejected("builder journal root is not owner-private")
         self.fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         opened = os.fstat(self.fd)
@@ -94,9 +103,19 @@ class BuilderUnitJournal:
                 or type(value.get("uid")) is not int or value["uid"] <= 0
                 or type(value.get("gid")) is not int or value["gid"] <= 0
                 or not isinstance(value.get("source_path"), str)
-                or not isinstance(value.get("scratch_path"), str)):
+                or not isinstance(value.get("scratch_path"), str)
+                or not self._optional_path_fields_valid(value, "input_path")
+                or not self._optional_path_fields_valid(value, "result_path")):
             raise BuilderJournalRejected("builder journal fields are invalid")
         return value
+
+    @staticmethod
+    def _optional_path_fields_valid(value: dict[str, Any], prefix: str) -> bool:
+        path = value.get(prefix)
+        dev, ino = value.get(f"{prefix}_dev"), value.get(f"{prefix}_ino")
+        return ((path is None and dev is None and ino is None)
+                or (isinstance(path, str) and type(dev) is int and type(ino) is int
+                    and type(value.get(f"{prefix}_gid")) is int))
 
     def _write(self, value: dict[str, Any], *, create: bool = False) -> None:
         temp = f".{JOURNAL}.{value['transaction_id']}.tmp"
@@ -141,7 +160,9 @@ class BuilderUnitJournal:
             raise
 
     def begin(self, fence: dict[str, object], unit: str, source: Path,
-              scratch: Path, uid: int, gid: int) -> dict[str, Any]:
+              scratch: Path, uid: int, gid: int, *,
+              input_root: Path | None = None,
+              result_dir: Path | None = None) -> dict[str, Any]:
         sha = fence.get("sha") if isinstance(fence, dict) else None
         if (not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha)
                 or not _valid_fence(fence, sha) or not unit.startswith(f"baci-worker-deps-{sha[:12]}-")
@@ -153,6 +174,19 @@ class BuilderUnitJournal:
                 or scratch_info.st_uid != uid or scratch_info.st_gid != gid
                 or stat.S_IMODE(scratch_info.st_mode) != 0o700):
             raise BuilderJournalRejected("builder source or scratch identity is unsafe")
+        resources: dict[str, Any] = {}
+        for name, path, expected_mode in (("input_path", input_root, 0o555),
+                                          ("result_path", result_dir, 0o700)):
+            if path is None:
+                resources.update({name: None, f"{name}_dev": None, f"{name}_ino": None,
+                                  f"{name}_gid": None})
+                continue
+            info = path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != self.owner_uid
+                    or stat.S_IMODE(info.st_mode) != expected_mode or info.st_mode & 0o022):
+                raise BuilderJournalRejected(f"builder {name} identity or mode is unsafe")
+            resources.update({name: str(path), f"{name}_dev": info.st_dev,
+                              f"{name}_ino": info.st_ino, f"{name}_gid": info.st_gid})
         if self.read() is not None:
             raise BuilderJournalRejected("builder journal has an unresolved prior run")
         transaction_id = unit.rsplit("-", 1)[1].removesuffix(".service")
@@ -161,7 +195,7 @@ class BuilderUnitJournal:
                   "source_path": str(source), "source_dev": source_info.st_dev,
                   "source_ino": source_info.st_ino, "scratch_path": str(scratch),
                   "scratch_dev": scratch_info.st_dev, "scratch_ino": scratch_info.st_ino,
-                  "cgroup_dev": None, "cgroup_ino": None}
+                  **resources, "cgroup_dev": None, "cgroup_ino": None}
         self._write(record, create=True)
         return record
 
@@ -211,6 +245,10 @@ def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, objec
         return "clean"
     if record["fence"] != fence or terminal_attempt_proven(fence) is not True:
         raise BuilderJournalRejected("builder recovery lacks matching terminal-run proof")
+    try:
+        preflight_cgroup_root(CGROUP_ROOT)
+    except (OSError, RuntimeError) as error:
+        raise BuilderJournalRejected("builder recovery cgroup v2 hierarchy is unavailable") from error
     unit = record["unit"]
     try:
         load_state = _systemctl("show", "--property=LoadState", "--value", unit)
@@ -218,12 +256,14 @@ def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, objec
         raise BuilderJournalRejected("builder recovery cannot query systemd") from error
     try:
         fd, info = _open_cgroup(unit)
-    except FileNotFoundError:
+    except UnitCgroupAbsent:
         if load_state != "not-found":
             raise BuilderJournalRejected("builder recovery cgroup is unavailable") from None
         if record["phase"] != "drained":
             journal.mark_drained(None)
         return "drained"
+    except OSError as error:
+        raise BuilderJournalRejected("builder recovery cannot open the cgroup hierarchy") from error
     try:
         if record["cgroup_dev"] is not None and (record["cgroup_dev"], record["cgroup_ino"]) != (
                 info.st_dev, info.st_ino):

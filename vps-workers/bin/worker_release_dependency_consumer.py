@@ -222,6 +222,7 @@ def build_and_install_dependencies(
     result_root: Path,
     release_root: Path,
     builder: Callable[[str, str], tuple[dict[str, object], Path]],
+    builder_quiesced: Callable[[dict[str, object]], bool],
     owner_uid: int = 0,
 ) -> dict[str, object]:
     """Build from the archive associated with an authenticated run and stage it.
@@ -242,10 +243,14 @@ def build_and_install_dependencies(
     manifest: dict[str, object] | None = None
     result_dir: Path | None = None
     candidate_pin = None
+    candidate_cleanup_authorized = False
     try:
         pinned_source = _validate_source_snapshot(source_snapshot, archive, identity, owner_uid=owner_uid)
         source = pinned_source.path
         manifest, result_dir = builder(str(source), identity.sha)
+        if builder_quiesced(identity.fence()) is not True:
+            raise BuilderRejected("dependency builder process-quiescence proof failed")
+        candidate_cleanup_authorized = True
         result_pin.verify_unchanged()
         result_dir = Path(result_dir)
         candidate_pin = pin_result_directory(result_pin, result_dir, owner_uid=owner_uid)
@@ -271,7 +276,7 @@ def build_and_install_dependencies(
         }
     finally:
         try:
-            if candidate_pin is not None:
+            if candidate_pin is not None and candidate_cleanup_authorized:
                 result_pin.verify_unchanged()
                 candidate_pin.remove()
         finally:

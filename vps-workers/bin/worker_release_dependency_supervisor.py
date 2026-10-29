@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -23,6 +24,7 @@ from worker_release_dependency_supervisor_contract import (
     BuilderUnitContractRejected, validate_builder_unit,
 )
 from worker_release_dependency_supervisor_cgroup import (
+    bounded_systemctl_query, postspawn_drain,
     UnitCgroupAbsent, drain_unpinned_until_proven as _drain_unpinned,
     drain_until_proven as _drain_cgroup,
     open_unit_cgroup, preflight_cgroup_root,
@@ -88,10 +90,7 @@ def _drain_until_proven(unit: str, fd: int, info: os.stat_result,
                         process: subprocess.Popen | None, *, deadline: float,
                         journal=None) -> None:
     def bounded_query(*args: str) -> str:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise BuilderSupervisorRejected("builder teardown deadline expired")
-        return _systemctl(*args, timeout=min(1, remaining))
+        return bounded_systemctl_query(_systemctl, deadline, BuilderSupervisorRejected, *args)
 
     _drain_cgroup(unit, fd, info, process, systemctl=SYSTEMCTL, query=bounded_query,
                   rejected=BuilderSupervisorRejected, deadline=deadline,
@@ -101,37 +100,11 @@ def _drain_until_proven(unit: str, fd: int, info: os.stat_result,
 def _drain_unpinned_until_proven(unit: str, process: subprocess.Popen, *,
                                  deadline: float, journal=None) -> None:
     _drain_unpinned(unit, process, root=CGROUP_ROOT, systemctl=SYSTEMCTL,
-                    query=lambda *args: _bounded_systemctl_query(deadline, *args),
+                    query=lambda *args: bounded_systemctl_query(
+                        _systemctl, deadline, BuilderSupervisorRejected, *args),
                     rejected=BuilderSupervisorRejected,
                     deadline=deadline, unproven=BuilderQuiescenceUnproven,
                     journal=journal)
-
-
-def _postspawn_drain(unit: str, process: subprocess.Popen, cgroup_fd: int,
-                     cgroup_info: os.stat_result | None, *, deadline: float,
-                     journal=None) -> None:
-    try:
-        if cgroup_fd >= 0 and cgroup_info is not None:
-            _drain_until_proven(unit, cgroup_fd, cgroup_info, process,
-                                deadline=deadline)
-            if journal is not None:
-                journal.mark_drained(cgroup_info)
-        else:
-            _drain_unpinned_until_proven(unit, process, deadline=deadline,
-                                         journal=journal)
-    except BuilderQuiescenceUnproven:
-        raise
-    except BaseException as error:
-        # Any unexpected proof/query/journal failure after spawn means cleanup
-        # cannot safely assume the unit is gone.
-        raise BuilderQuiescenceUnproven(unit, "post-launch teardown proof failed") from error
-
-
-def _bounded_systemctl_query(deadline: float, *args: str) -> str:
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise BuilderSupervisorRejected("builder teardown deadline expired")
-    return _systemctl(*args, timeout=min(1, remaining))
 
 
 def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: int,
@@ -158,6 +131,20 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             or (record.get("scratch_dev"), record.get("scratch_ino"))
             != (scratch_info.st_dev, scratch_info.st_ino)):
         raise BuilderSupervisorRejected("builder unit has no exact durable fence record")
+    for key in ("input_path", "result_path"):
+        path = record.get(key)
+        if path is None:
+            continue
+        try:
+            info = Path(path).lstat()
+        except OSError as error:
+            raise BuilderSupervisorRejected("journaled builder resource disappeared before launch") from error
+        if (not stat.S_ISDIR(info.st_mode)
+                or (info.st_dev, info.st_ino)
+                != (record.get(f"{key}_dev"), record.get(f"{key}_ino"))):
+            raise BuilderSupervisorRejected("journaled builder resource inode changed before launch")
+    if record.get("input_path") is not None and Path(record["input_path"]) != source.parent:
+        raise BuilderSupervisorRejected("builder source is outside its journaled input root")
     from worker_release_dependency_sandbox import systemd_command
 
     command = systemd_command(source, scratch, expected_sha, uid, gid, unit)
@@ -211,6 +198,8 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             _drain_unpinned_until_proven(unit, process, deadline=cleanup_deadline,
                                          journal=unit_journal)
             unit_quiesced = True
+            if failure is not None:
+                raise failure
             raise BuilderSupervisorRejected("builder cgroup was not pinned before completion")
         if failure is not None:
             _drain_until_proven(unit, cgroup_fd, cgroup_info, process,
@@ -245,8 +234,11 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
         raise
     except BaseException:
         if not unit_quiesced:
-            _postspawn_drain(unit, process, cgroup_fd, cgroup_info,
-                             deadline=cleanup_deadline, journal=unit_journal)
+            postspawn_drain(
+                unit, process, cgroup_fd, cgroup_info, deadline=cleanup_deadline,
+                drain_pinned=_drain_until_proven, drain_unpinned=_drain_unpinned_until_proven,
+                journal=unit_journal, unproven=BuilderQuiescenceUnproven,
+            )
         raise
     finally:
         if cgroup_fd >= 0:
@@ -261,7 +253,8 @@ def fixed_builder_runner(expected_sha: str, uid: int, gid: int, *,
     from worker_release_dependency_builder import BUILD_INPUT_ROOT
     entrypoint = Path(__file__).with_name("worker_release_dependency_builder.py")
 
-    def run(command: tuple[str, ...], scratch: Path, unit: str) -> None:
+    def run(command: tuple[str, ...], scratch: Path, unit: str, *,
+            input_root: Path | None = None, result_dir: Path | None = None) -> None:
         if len(command) < 6 or command[-5] != str(entrypoint) or command[-4] != "--sandbox-worker":
             raise BuilderSupervisorRejected("dependency builder command entrypoint is unexpected")
         source = Path(command[-3])
@@ -281,10 +274,12 @@ def fixed_builder_runner(expected_sha: str, uid: int, gid: int, *,
         expected = systemd_command(source, scratch, expected_sha, uid, gid, unit)
         if tuple(command) != expected:
             raise BuilderSupervisorRejected("dependency builder supplied a noncanonical systemd command")
-        unit_journal.begin(fence, unit, source, scratch, uid, gid)
+        unit_journal.begin(fence, unit, source, scratch, uid, gid,
+                           input_root=input_root, result_dir=result_dir)
         supervise_builder_unit(source, scratch, expected_sha, uid, gid, unit,
                                usage_root=usage_root, unit_journal=unit_journal)
 
+    run.accepts_build_resources = True
     return run
 
 

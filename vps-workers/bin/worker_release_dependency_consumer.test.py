@@ -125,7 +125,7 @@ class DependencyConsumerTests(unittest.TestCase):
             return manifest, result
         return build
 
-    def run_consumer(self, builder, archive=None, snapshot=None):
+    def run_consumer(self, builder, archive=None, snapshot=None, builder_quiesced=None):
         archive = archive_bytes() if archive is None else archive
         snapshot = self.make_snapshot(archive) if snapshot is None else snapshot
         return consumer.build_and_install_dependencies(
@@ -133,7 +133,8 @@ class DependencyConsumerTests(unittest.TestCase):
             source_snapshot=snapshot,
             expected_bundle_sha256=hashlib.sha256(archive).hexdigest(),
             result_root=self.result_root, release_root=self.release,
-            builder=builder, owner_uid=os.geteuid(),
+            builder=builder, builder_quiesced=builder_quiesced or (lambda _fence: True),
+            owner_uid=os.geteuid(),
         )
 
     def test_verified_archive_and_candidate_are_installed_with_regular_files_only(self):
@@ -216,7 +217,8 @@ class DependencyConsumerTests(unittest.TestCase):
             consumer.build_and_install_dependencies(
                 response, identity(), expected_bundle_sha256=hashlib.sha256(trusted_archive).hexdigest(),
                 source_snapshot=self.make_snapshot(trusted_archive), result_root=self.result_root,
-                release_root=self.release, builder=self.make_builder(), owner_uid=os.geteuid(),
+                release_root=self.release, builder=self.make_builder(),
+                builder_quiesced=lambda _fence: True, owner_uid=os.geteuid(),
             )
         self.assertTrue((self.source_tmp / "snapshot").is_dir())
         self.assertEqual(list(self.result_root.iterdir()), [])

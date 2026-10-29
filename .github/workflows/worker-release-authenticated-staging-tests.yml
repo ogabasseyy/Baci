@@ -1,0 +1,65 @@
+name: Worker release authenticated staging integration
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_authenticated_staging.py'
+      - 'vps-workers/bin/worker_release_authenticated_staging_recovery.py'
+      - 'vps-workers/bin/worker_release_authenticated_staging_layout.py'
+      - 'vps-workers/bin/worker_release_authenticated_staging.test.py'
+      - 'vps-workers/bin/worker_release_source_view_journal.py'
+      - 'vps-workers/bin/worker_release_source_view_journal.test.py'
+      - 'vps-workers/bin/worker_release_systemd_contract.py'
+      - 'vps-workers/bin/worker_release_systemd_extractor.py'
+      - 'vps-workers/bin/worker_release_archive_extract_child.py'
+      - 'vps-workers/bin/worker_release_dependency_consumer.py'
+      - 'vps-workers/bin/worker_release_dependency_artifacts.py'
+      - 'vps-workers/bin/worker_release_dependency_install.py'
+      - 'vps-workers/bin/worker_release_dependency_fs.py'
+      - 'vps-workers/bin/worker_release_dependency_artifacts.py'
+      - 'vps-workers/bin/worker_release_dependency_builder.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_journal.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.test.py'
+      - 'vps-workers/bin/worker_release_source_snapshot.py'
+      - 'vps-workers/bin/worker_release_result_root.py'
+      - 'vps-workers/bin/worker_release_lifecycle.py'
+      - 'vps-workers/bin/worker_release_broker.py'
+      - 'vps-workers/bin/worker_release_broker_common.py'
+      - 'vps-workers/bin/worker_release_broker_dispatch.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_process.py'
+      - 'vps-workers/bin/worker_release_descriptor_freeze.py'
+      - 'vps-workers/bin/worker_release_archive.py'
+      - 'vps-workers/bin/worker_release_stage_journal.py'
+      - 'vps-workers/bin/worker_release_stage_journal_io.py'
+      - 'vps-workers/bin/worker_release_stage_journal_resources.py'
+      - 'vps-workers/bin/worker_release_stage_journal_resource_api.py'
+      - 'vps-workers/bin/worker_release_staging.py'
+      - 'vps-workers/bin/provision-worker-source-extractor.py'
+      - 'vps-workers/bin/worker-release-source-extractor'
+      - 'vps-workers/systemd/baci-worker-source-extract@.service'
+      - 'vps-workers/systemd/baci-worker-source-extract.tmpfiles'
+      - '.github/workflows/worker-release-authenticated-staging-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disconnected-staging-systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install isolated extractor unit without enabling it
+        run: sudo /usr/bin/python3 -B vps-workers/bin/provision-worker-source-extractor.py --apply
+      - name: Verify source-view journal and descriptor-copy regressions
+        run: |
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_source_view_journal.test.py
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
+      - name: Run actual fixed-unit staging integration
+        run: sudo env WORKER_RELEASE_STAGE_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py

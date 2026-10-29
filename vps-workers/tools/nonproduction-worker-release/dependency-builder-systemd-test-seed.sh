@@ -40,6 +40,17 @@ store, cache = map(Path, sys.argv[1:])
 print("synthetic seed tree categories: "
       f"store={safe_tree_category(store)} cache={safe_tree_category(cache)}")
 PY
+PYTHONPATH="$(dirname "$0")" PYTHONDONTWRITEBYTECODE=1 \
+  python3 -B "$(dirname "$0")/dependency_builder_systemd_test_seed_normalize.test.py" -q
+PYTHONPATH="$(dirname "$0")" PYTHONDONTWRITEBYTECODE=1 python3 -B - \
+  "$store_root" "$pnpm_workspace_root" <<'PY'
+import sys
+from pathlib import Path
+from dependency_builder_systemd_test_seed_normalize import normalize_temporary_project_index
+
+removed = normalize_temporary_project_index(Path(sys.argv[1]), Path(sys.argv[2]), owner_uid=0)
+print("pnpm temporary workspace index normalized; removed=" + ("yes" if removed else "no"))
+PY
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +
 find "$source_root" -type f -exec chmod 0440 {} +

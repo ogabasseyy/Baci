@@ -18,17 +18,22 @@ export async function applySupabaseReplaySql(
       stage.kind === 'migration' ? 'migration application' : 'SQL check';
     const failureMatch =
       error instanceof Error
-        ? /^[A-Za-z0-9._-]+ failed: (non-zero-exit|spawn-error|stderr-limit|stdin-limit|stdout-limit|timeout)( \(line=(\d+)(?:,sqlstate=([0-9A-Z]{5}))?(?:,permission=([A-Za-z0-9_-]+))?\))?$/.exec(
+        ? /^[A-Za-z0-9._-]+ failed: (non-zero-exit|spawn-error|stderr-limit|stdin-limit|stdout-limit|timeout)( \(line=(\d+)(?:,sqlstate=([0-9A-Z]{5}))?(?:,permission=([A-Za-z0-9_-]+))?(?:,tap=(\d{1,9}))?\))?$/.exec(
             error.message
           )
         : undefined;
     const permission = failureMatch?.[5];
+    const tapIndex = failureMatch?.[6];
     const safePermission =
       permission && SAFE_PERMISSION_CATEGORIES.split('|').includes(permission)
         ? permission
         : undefined;
+    const safeTapIndex =
+      tapIndex && Number(tapIndex) > 0 && Number(tapIndex) <= 100_000
+        ? tapIndex
+        : undefined;
     const diagnostic = failureMatch?.[3]
-      ? ` (line=${failureMatch[3]}${failureMatch[4] ? `,sqlstate=${failureMatch[4]}` : ''}${safePermission ? `,permission=${safePermission}` : ''})`
+      ? ` (line=${failureMatch[3]}${failureMatch[4] ? `,sqlstate=${failureMatch[4]}` : ''}${safePermission ? `,permission=${safePermission}` : ''}${safeTapIndex ? `,tap=${safeTapIndex}` : ''})`
       : '';
     const failure = failureMatch
       ? `${failureMatch[1]}${diagnostic}`

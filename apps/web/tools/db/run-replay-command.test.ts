@@ -123,6 +123,21 @@ describe('createReplayCommand', () => {
     );
   });
 
+  it('reports only the first numeric pgTAP failure index from bounded stdout', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      "#!/bin/sh\nprintf 'not ok 34 - secret fixture description\nnot ok 35 - another secret\n'\nprintf 'psql:/owned/replay/secret.sql:110: ERROR:  P0001: fixture content secret\n' >&2\nexit 1\n",
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    const failure = await rejectedError(runCommand(psql, []));
+
+    expect(failure.message).toBe('psql failed: non-zero-exit (line=110,sqlstate=P0001,tap=34)');
+    expect(failure.message).not.toMatch(/fixture|description|secret|not ok/);
+  });
+
   it.each([
     ['must be owner of function save_x_ads_settings', 'owner_required'],
     ['permission denied for schema private', 'schema_access_denied'],

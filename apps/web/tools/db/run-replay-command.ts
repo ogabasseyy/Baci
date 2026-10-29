@@ -74,7 +74,8 @@ function safePermissionCategory(message: string): string | undefined {
 
 function boundedPsqlDiagnostic(
   command: string,
-  stderr: readonly Buffer[]
+  stderr: readonly Buffer[],
+  stdout: readonly Buffer[]
 ): string {
   const commandName = sanitizedCommandName(command);
   if (commandName === 'supabase') {
@@ -102,13 +103,23 @@ function boundedPsqlDiagnostic(
     sqlstate === '42501' && errorMessage
       ? safePermissionCategory(errorMessage)
       : undefined;
-  return ` (line=${line}${sqlstate ? `,sqlstate=${sqlstate}` : ''}${permissionCategory ? `,permission=${permissionCategory}` : ''})`;
+  // pgTAP prints a bounded, stable assertion index to stdout. Keep only the
+  // first numeric index; never include the assertion description or SQL text.
+  const tapOutput = Buffer.concat(stdout).toString('utf8');
+  const tapFailure = /^\s*not ok\s+(\d+)(?:\s|$)/m.exec(tapOutput)?.[1];
+  const tapIndex = tapFailure ? Number(tapFailure) : undefined;
+  const safeTapIndex =
+    Number.isSafeInteger(tapIndex) && tapIndex! > 0 && tapIndex! <= 100_000
+      ? tapIndex
+      : undefined;
+  return ` (line=${line}${sqlstate ? `,sqlstate=${sqlstate}` : ''}${permissionCategory ? `,permission=${permissionCategory}` : ''}${safeTapIndex ? `,tap=${safeTapIndex}` : ''})`;
 }
 
 function commandFailure(
   command: string,
   failure: FailureClass,
-  stderr: readonly Buffer[] = []
+  stderr: readonly Buffer[] = [],
+  stdout: readonly Buffer[] = []
 ): Error {
   const diagnostic =
     failure !== 'non-zero-exit'
@@ -117,7 +128,7 @@ function commandFailure(
         ? supabaseReplayFailureDiagnostic(
             Buffer.concat(stderr).toString('utf8')
           )
-        : boundedPsqlDiagnostic(command, stderr);
+        : boundedPsqlDiagnostic(command, stderr, stdout);
   return new Error(
     `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
   );
@@ -218,7 +229,7 @@ function createReplayCommand(
             return;
           }
           if (code !== 0 || stdinFailed) {
-            reject(commandFailure(command, 'non-zero-exit', stderr));
+            reject(commandFailure(command, 'non-zero-exit', stderr, stdout));
             return;
           }
           resolve({

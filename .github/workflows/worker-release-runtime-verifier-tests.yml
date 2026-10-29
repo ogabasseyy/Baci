@@ -1,0 +1,49 @@
+name: Worker release materialized runtime verifier
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_runtime_verifier.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier.test.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier_test_support.py'
+      - 'vps-workers/bin/worker_release_candidate_pin.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_lifecycle.py'
+      - '.github/workflows/worker-release-runtime-verifier-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-runtime-verifier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Provision disposable trusted candidate parent and Node runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nodejs
+          sudo install -d -o root -g root -m 0755 /etc/baci-workers
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers/releases
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers/runtime
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers/locks
+          test "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)" = '0:0:755'
+          test -x /usr/bin/systemd-run
+          test -x /usr/bin/systemctl
+          test -x /usr/bin/node
+      - name: Run candidate pinning and sandbox contract regressions
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v
+      - name: Run actual fixed systemd sandbox verification
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v

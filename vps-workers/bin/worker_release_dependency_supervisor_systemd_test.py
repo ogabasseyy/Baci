@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
@@ -26,6 +27,91 @@ from worker_release_dependency_supervisor_journal import (
 
 FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads/main",
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
+
+
+class SystemdStartupRejected(RuntimeError):
+    """The disposable manager did not become ready within its fixed test budget."""
+
+
+class SystemdStartupWaitTests(unittest.TestCase):
+    def test_retries_starting_and_transient_cgroup_preflight_until_ready(self):
+        now = [0.0]
+        responses = iter([
+            (1, "starting"),
+            (0, "systemd 255"),
+            (0, "starting"),
+            (0, "systemd 255"),
+            (0, "running"),
+            (0, "systemd 255"),
+        ])
+        preflights = [0]
+
+        def query(_kind, _timeout):
+            return next(responses)
+
+        def preflight():
+            preflights[0] += 1
+            if preflights[0] == 1:
+                raise RuntimeError("temporary cgroup startup delay")
+
+        def sleep(duration):
+            now[0] += duration
+
+        state, version = wait_for_systemd(
+            query, preflight, timeout=2, poll=0.25,
+            clock=lambda: now[0], sleep=sleep,
+        )
+        self.assertEqual((state, version), ("running", "systemd 255"))
+        self.assertEqual(preflights[0], 2)
+        self.assertGreater(now[0], 0)
+
+    def test_timeout_fails_closed_when_manager_never_reaches_ready_state(self):
+        now = [0.0]
+        calls = [0]
+
+        def query(kind, _timeout):
+            calls[0] += 1
+            return (1, "starting") if kind == "state" else (0, "systemd 255")
+
+        def sleep(duration):
+            now[0] += duration
+
+        with self.assertRaisesRegex(SystemdStartupRejected, "state=starting"):
+            wait_for_systemd(query, lambda: None, timeout=1, poll=0.25,
+                             clock=lambda: now[0], sleep=sleep)
+        self.assertGreaterEqual(calls[0], 4)
+        self.assertGreaterEqual(now[0], 1)
+
+
+def wait_for_systemd(query, preflight, *, timeout=30, poll=0.25,
+                     clock=time.monotonic, sleep=time.sleep):
+    deadline = clock() + timeout
+    last_state, last_reason = "unavailable", "manager-unreachable"
+    while (remaining := deadline - clock()) > 0:
+        try:
+            state_status, state = query("state", min(5.0, remaining))
+            version_status, version = query("version", min(5.0, remaining))
+            if state in ("starting", "initializing", "running", "degraded", "maintenance",
+                         "offline", "stopping"):
+                last_state = state
+            else:
+                last_state = "unexpected"
+            if state_status != 0 or version_status != 0 or not version:
+                last_reason = "manager-not-reachable"
+            else:
+                preflight()
+                if state in ("running", "degraded"):
+                    return state, version
+                last_reason = "manager-starting" if state in ("starting", "initializing") else "manager-not-ready"
+        except (OSError, subprocess.SubprocessError, CgroupProofRejected, RuntimeError):
+            last_reason = "cgroup-preflight-unavailable"
+        remaining = deadline - clock()
+        if remaining > 0:
+            sleep(min(poll, remaining))
+    raise SystemdStartupRejected(
+        f"systemd did not reach ready/degraded state within {timeout}s "
+        f"(state={last_state}, reason={last_reason})"
+    )
 
 
 def execute_canonical_unit(command, script: str, process_factory):
@@ -48,19 +134,21 @@ class BuilderSupervisorSystemdTests(unittest.TestCase):
         systemctl = shutil.which("systemctl")
         if systemctl is None:
             self.fail("CI requires systemctl")
+
+        def query(kind: str, timeout: float) -> tuple[int, str]:
+            command = ((systemctl, "is-system-running") if kind == "state" else
+                       (systemctl, "show", "--property=Version", "--value"))
+            result = subprocess.run(command, check=False, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                    timeout=timeout, text=True)
+            return result.returncode, result.stdout.strip()
+
         try:
-            state = subprocess.run((systemctl, "is-system-running"), check=False,
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, timeout=5, text=True).stdout.strip()
-            version = subprocess.run((systemctl, "show", "--property=Version", "--value"),
-                                     check=True, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                     timeout=5, text=True).stdout.strip()
-            supervisor.preflight_cgroup_root(supervisor.CGROUP_ROOT)
-        except (OSError, subprocess.SubprocessError, CgroupProofRejected) as error:
-            self.fail(f"CI requires a responsive systemd manager and cgroup v2: {error}")
-        if state not in ("running", "degraded") or not version:
-            self.fail(f"CI systemd manager is unavailable (state={state or 'empty'})")
+            self.manager_state, self.systemd_version = wait_for_systemd(
+                query, lambda: supervisor.preflight_cgroup_root(supervisor.CGROUP_ROOT),
+            )
+        except SystemdStartupRejected as error:
+            self.fail(f"CI systemd manager/cgroup v2 unavailable: {error}")
         self.builder = pwd.getpwnam("nobody")
         self.units = set()
         self.temp = tempfile.TemporaryDirectory(dir="/run")

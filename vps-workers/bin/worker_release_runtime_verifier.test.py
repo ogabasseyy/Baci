@@ -1,0 +1,219 @@
+"""Bounded contract tests for the disconnected materialized-runtime verifier."""
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+import uuid
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from worker_release_lifecycle import AuthenticatedRun
+from worker_release_runtime_verifier import (
+    RuntimeVerificationRejected,
+    RuntimeVerificationQuiescenceUnproven,
+    validate_runtime_receipt,
+    verify_materialized_candidate,
+)
+from worker_release_runtime_verifier_test_support import cleanup_candidate_after_verifier
+
+SHA = "a" * 40
+ARCHIVE = "b" * 64
+
+
+def identity() -> AuthenticatedRun:
+    return AuthenticatedRun(repository="ogabasseyy/Baci",
+                            workflow=".github/workflows/production-release.yml",
+                            ref="refs/heads/main", sha=SHA, run_id="234",
+                            run_attempt=1, job_id="567", status="in_progress")
+
+
+def freeze(path: Path, gid: int) -> None:
+    for current, directories, files in os.walk(path, topdown=False, followlinks=False):
+        for name in files:
+            child = Path(current) / name
+            info = child.lstat()
+            os.chown(child, os.geteuid(), gid)
+            os.chmod(child, 0o550 if info.st_mode & 0o111 else 0o440)
+        for name in directories:
+            child = Path(current) / name
+            os.chown(child, os.geteuid(), gid)
+            os.chmod(child, 0o550)
+    os.chown(path, os.geteuid(), gid)
+    os.chmod(path, 0o550)
+
+
+class MaterializedRuntimeVerifierTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
+        self.parent = Path(self.temporary.name) / "releases"
+        self.parent.mkdir(mode=0o700)
+        self.releases_root_patch = patch("worker_release_candidate_pin.RELEASES_ROOT", self.parent)
+        self.releases_root_patch.start()
+        self.candidate = self.parent / f".{SHA}.incoming.{('c' * 32)}"
+        self.candidate.mkdir(mode=0o700)
+        (self.candidate / "apps" / "web" / "node_modules" / ".bin").mkdir(parents=True)
+        (self.candidate / "vps-workers" / "bin").mkdir(parents=True)
+        (self.candidate / "node_modules" / "dotenv").mkdir(parents=True)
+        tsx = self.candidate / "apps" / "web" / "node_modules" / ".bin" / "tsx"
+        tsx.write_text("#!/bin/sh\nprintf 'tsx 1.2.3\\n'\n")
+        tsx.chmod(0o755)
+        (self.candidate / "vps-workers" / "bin" / "worker.mjs").write_text("export {};\n")
+        (self.candidate / "node_modules" / "dotenv" / "package.json").write_text(
+            '{"name":"dotenv","type":"module","exports":"./index.js"}\n')
+        (self.candidate / "node_modules" / "dotenv" / "index.js").write_text(
+            "export function config() { return {}; }\n")
+        freeze(self.candidate, os.getgid())
+
+    def tearDown(self):
+        self.releases_root_patch.stop()
+        def make_writable(path: Path):
+            for current, directories, _files in os.walk(path, topdown=True, followlinks=False):
+                os.chmod(current, 0o700)
+                for name in directories:
+                    child = Path(current) / name
+                    if not child.is_symlink():
+                        os.chmod(child, 0o700)
+        make_writable(Path(self.temporary.name))
+        self.temporary.cleanup()
+
+    @patch("worker_release_runtime_verifier._run_fixed_smokes",
+           return_value=("web_tsx_version", "worker_dotenv_import"))
+    def test_receipt_is_bound_to_exact_run_archive_inode_and_tree(self, _smokes):
+        receipt = verify_materialized_candidate(
+            self.candidate, identity(), archive_sha256=ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid())
+        self.assertTrue(validate_runtime_receipt(
+            receipt, self.candidate, identity(), ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid()))
+        self.assertFalse(validate_runtime_receipt(
+            receipt, self.candidate, identity(), "c" * 64,
+            owner_uid=os.geteuid(), owner_gid=os.getgid()))
+        other = AuthenticatedRun(**(identity().__dict__ | {"run_attempt": 2}))
+        self.assertFalse(validate_runtime_receipt(
+            receipt, self.candidate, other, ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid()))
+        self.assertFalse(validate_runtime_receipt(
+            {"runtime_ready": True}, self.candidate, identity(), ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid()))
+
+    @patch("worker_release_runtime_verifier._run_fixed_smokes",
+           return_value=("web_tsx_version", "worker_dotenv_import"))
+    def test_candidate_mutation_after_receipt_invalidates_it(self, _smokes):
+        receipt = verify_materialized_candidate(
+            self.candidate, identity(), archive_sha256=ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid())
+        changed = self.candidate / "vps-workers" / "bin" / "worker.mjs"
+        os.chmod(changed, 0o600)
+        changed.write_text("export const changed = true;\n")
+        freeze(self.candidate, os.getgid())
+        self.assertFalse(validate_runtime_receipt(
+            receipt, self.candidate, identity(), ARCHIVE,
+            owner_uid=os.geteuid(), owner_gid=os.getgid()))
+
+    @patch("worker_release_runtime_verifier._run_fixed_smokes",
+           return_value=("web_tsx_version", "worker_dotenv_import"))
+    def test_candidate_links_and_unbound_names_fail_before_smoke(self, smokes):
+        target = self.candidate / "node_modules" / "dotenv" / "index.js"
+        os.chmod(target.parent, 0o700)
+        os.chmod(target, 0o600)
+        target.unlink()
+        target.symlink_to("/etc/passwd")
+        with self.assertRaises(RuntimeVerificationRejected):
+            verify_materialized_candidate(
+                self.candidate, identity(), archive_sha256=ARCHIVE,
+                owner_uid=os.geteuid(), owner_gid=os.getgid())
+        smokes.assert_not_called()
+        renamed = self.parent / ("." + "d" * 40 + ".incoming." + "e" * 32)
+        self.candidate.rename(renamed)
+        with self.assertRaises(RuntimeVerificationRejected):
+            verify_materialized_candidate(
+                renamed, identity(), archive_sha256=ARCHIVE,
+                owner_uid=os.geteuid(), owner_gid=os.getgid())
+
+    @patch("worker_release_runtime_verifier._execute_fixed_unit")
+    def test_fixed_executor_has_no_credentials_network_or_unbounded_output(self, execute):
+        from worker_release_runtime_verifier import _run_fixed_smokes
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            checks = _run_fixed_smokes(self.candidate, "f" * 64)
+        self.assertEqual(checks, ("web_tsx_version", "worker_dotenv_import"))
+        self.assertEqual(execute.call_count, 2)
+        all_args = ""
+        for call in execute.call_args_list:
+            unit, _cwd, command, properties, _index = call.args
+            self.assertRegex(unit, r"^baci-worker-runtime-[0-9a-f]{16}-[0-9a-f]{12}-[01]\.service$")
+            self.assertEqual(properties["PrivateNetwork"], "yes")
+            self.assertEqual(properties["ProtectSystem"], "strict")
+            self.assertEqual(properties["ProtectProc"], "invisible")
+            self.assertEqual(properties["PrivateTmp"], "no")
+            self.assertEqual(properties["InaccessiblePaths"], "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc/baci-workers /srv/baci-workers/runtime /srv/baci-workers/locks")
+            self.assertEqual(properties["SupplementaryGroups"], "")
+            self.assertEqual(properties["ReadOnlyPaths"], str(self.candidate))
+            self.assertEqual(properties["RuntimeMaxSec"], "35")
+            self.assertEqual(properties["LimitFSIZE"], "4096")
+            self.assertIn("-i", command)
+            all_args += " ".join(command)
+        self.assertNotIn("DATABASE_URL", all_args)
+        self.assertNotIn("SUPABASE_SERVICE_ROLE_KEY", all_args)
+
+    @patch("worker_release_runtime_verifier._run_fixed_smokes",
+           side_effect=RuntimeVerificationRejected("fixed runtime check failed"))
+    def test_failed_smoke_never_returns_receipt(self, _smokes):
+        with self.assertRaises(RuntimeVerificationRejected):
+            verify_materialized_candidate(
+                self.candidate, identity(), archive_sha256=ARCHIVE,
+                owner_uid=os.geteuid(), owner_gid=os.getgid())
+
+    @patch("worker_release_runtime_verifier._run_fixed_smokes")
+    def test_untrusted_run_identity_fails_before_smoke(self, smokes):
+        invalid = AuthenticatedRun(**(identity().__dict__ | {"repository": "attacker/repo"}))
+        with self.assertRaises(RuntimeVerificationRejected):
+            verify_materialized_candidate(
+                self.candidate, invalid, archive_sha256=ARCHIVE,
+                owner_uid=os.geteuid(), owner_gid=os.getgid())
+        smokes.assert_not_called()
+
+    @patch("worker_release_candidate_pin.MAX_ENTRIES", 2)
+    def test_candidate_entry_bound_fails_closed(self):
+        with self.assertRaises(RuntimeVerificationRejected):
+            verify_materialized_candidate(
+                self.candidate, identity(), archive_sha256=ARCHIVE,
+                owner_uid=os.geteuid(), owner_gid=os.getgid())
+
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux")
+                         and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1",
+                         "requires disposable root/systemd CI and /usr/bin/node")
+    def test_actual_linux_sandbox_smoke_produces_receipt(self):
+        if not Path("/usr/bin/node").is_file():
+            self.fail("disposable Linux verifier job requires /usr/bin/node")
+        releases = Path("/srv/baci-workers/releases")
+        if not releases.is_dir() or releases.stat().st_uid != 0 or releases.stat().st_mode & 0o022:
+            self.fail("disposable Linux verifier job must provision the trusted release parent")
+        candidate = releases / f".{SHA}.incoming.{uuid.uuid4().hex}"
+        shutil.copytree(self.candidate, candidate, copy_function=shutil.copy2)
+        unproven_error = None
+        try:
+            with patch("worker_release_candidate_pin.RELEASES_ROOT", releases):
+                receipt = verify_materialized_candidate(
+                    candidate, identity(), archive_sha256=ARCHIVE,
+                    owner_uid=os.geteuid(), owner_gid=os.getgid())
+                self.assertTrue(validate_runtime_receipt(
+                    receipt, candidate, identity(), ARCHIVE,
+                    owner_uid=os.geteuid(), owner_gid=os.getgid()))
+        except RuntimeVerificationQuiescenceUnproven as error:
+            unproven_error = error
+            raise
+        finally:
+            cleanup_candidate_after_verifier(candidate, unproven_error)
+
+
+
+if __name__ == "__main__":
+    unittest.main()

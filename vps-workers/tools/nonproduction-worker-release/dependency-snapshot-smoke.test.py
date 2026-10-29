@@ -59,11 +59,19 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertNotIn("id -g baci-worker", fixture)
         self.assertNotIn("id -g baci-locks", fixture)
 
+    def test_linux_fixture_generates_lockfiles_like_real_repository(self):
+        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        self.assertEqual(
+            fixture.count("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only"),
+            2,
+        )
+
     def test_linux_fixture_stages_dependency_diagnostics_helper_and_workflow_tracks_it(self):
         fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("worker_release_dependency_diagnostics.py", fixture)
+        self.assertIn("worker_release_dependency_lock_settings.py", fixture)
         self.assertIn("worker_release_dependency_policy_cli.py", fixture)
         self.assertIn("vps-workers/bin/worker_release_dependency_*.py", workflow_text)
 

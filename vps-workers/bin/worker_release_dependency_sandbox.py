@@ -13,6 +13,7 @@ from worker_release_dependency_artifacts import BuilderRejected, copy_source_tre
 from worker_release_dependency_fs import directory_usage, write_smoke_evidence
 from worker_release_dependency_policy_cache import RECEIPT_NAME, TRUSTED_REGISTRY, validate_receipt
 from worker_release_dependency_diagnostics import has_policy_pass_marker
+from worker_release_dependency_lock_settings import lock_injection_settings
 
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -132,7 +133,7 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
         ("PNPM_CONFIG_FROZEN_LOCKFILE", "true"), ("PNPM_CONFIG_STORE_DIR", str(scratch / "pnpm-store")),
         ("PNPM_CONFIG_CACHE_DIR", str(scratch / "pnpm-cache")),
         ("PNPM_CONFIG_TRUST_LOCKFILE", "false"), ("PNPM_CONFIG_OFFLINE", "true"),
-        ("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES", "true"),
+        ("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES", "false"),
         ("PNPM_CONFIG_REGISTRY", TRUSTED_REGISTRY), ("npm_config_registry", TRUSTED_REGISTRY),
         ("npm_config_userconfig", "/dev/null"),
         ("npm_config_globalconfig", "/dev/null"),
@@ -174,17 +175,24 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
+    injection_settings = lock_injection_settings(working)
+    command_env = os.environ.copy()
     web_install = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
                                   "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile",
                                   "--ignore-scripts", "--ignore-pnpmfile", "--offline",
                                   "--store-dir", str(private_store)), cwd=working, check=True,
+                                 env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["pnpm-lock.yaml"]).lower()},
                                  capture_output=True, text=True, timeout=240)
     if not has_policy_pass_marker(web_install.stdout, web_install.stderr):
         raise BuilderRejected("web offline install did not verify lockfile supply-chain policy")
-    subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
+    subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True,
+                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"},
+                   capture_output=True, text=True, timeout=240)
     remove_workspace_self_link(web_output, working)
     workers_root = working / "vps-workers"
-    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, capture_output=True, text=True, timeout=240)
+    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True,
+                                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()},
+                                   capture_output=True, text=True, timeout=240)
     if not has_policy_pass_marker(worker_policy.stdout, worker_policy.stderr):
         raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version,

@@ -143,7 +143,7 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("PNPM_CONFIG_STORE_DIR=/scratch/pnpm-store", joined)
         self.assertIn("PNPM_CONFIG_CACHE_DIR=/scratch/pnpm-cache", joined)
         self.assertIn("PNPM_CONFIG_TRUST_LOCKFILE=false", joined)
-        self.assertIn("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=true", joined)
+        self.assertIn("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false", joined)
         self.assertIn("PNPM_CONFIG_PACKAGE_IMPORT_METHOD=copy", joined)
         self.assertIn(f"PNPM_CONFIG_REGISTRY={policy_cache.TRUSTED_REGISTRY}", joined)
         self.assertNotIn(str(builder.PNPM_STORE), joined)
@@ -163,12 +163,16 @@ class DependencyBuilderTests(unittest.TestCase):
             (scratch / "pnpm-store").mkdir(mode=0o700)
             (scratch / "pnpm-cache").mkdir(mode=0o700)
             calls = []
+            injection_settings = []
 
             def copy_source(_source, destination):
                 (destination / "vps-workers").mkdir(parents=True)
+                (destination / "pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
+                (destination / "vps-workers/pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
 
             def run(command, *, cwd, **_kwargs):
                 calls.append((tuple(command), Path(cwd)))
+                injection_settings.append(_kwargs.get("env", {}).get("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES"))
                 if command == (sandbox.PNPM, "--version"):
                     return type("Result", (), {"stdout": sandbox.EXPECTED_PNPM + "\n"})()
                 if "deploy" in command:
@@ -220,6 +224,7 @@ class DependencyBuilderTests(unittest.TestCase):
             for required in ("--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir"):
                 self.assertIn(required, worker_install)
             self.assertIn(str(scratch / "pnpm-store"), worker_install)
+            self.assertEqual(injection_settings[1:], ["false", "true", "false"])
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
 
     def test_private_offline_store_is_an_independent_writable_copy(self):
@@ -681,6 +686,11 @@ class DependencyBuilderTests(unittest.TestCase):
                 path = source / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\ntrustLockfile: true\n", encoding="utf-8")
+            web_lock = source / "pnpm-lock.yaml"
+            worker_lock = source / "vps-workers/pnpm-lock.yaml"
+            web_lock.write_text("lockfileVersion: '9.0'\n\nsettings:\n  excludeLinksFromLockfile: false\n", encoding="utf-8")
+            worker_lock.write_text("lockfileVersion: '9.0'\n\nsettings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
+            original_locks = (web_lock.read_bytes(), worker_lock.read_bytes())
             (source / ".npmrc").write_text("# registry configuration is pinned by the fixture\n", encoding="utf-8")
             safe_npmrc = source / "apps/mobile-storefront/.npmrc"
             safe_npmrc.parent.mkdir(parents=True, exist_ok=True)
@@ -727,7 +737,8 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertIn("--ignore-pnpmfile", command)
                 self.assertNotIn("--config.trust-lockfile=true", command)
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_TRUST_LOCKFILE"], "false")
-                self.assertEqual(kwargs["env"]["PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES"], "true")
+                expected_injection = ("true" if "deploy" in command else "false")
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES"], expected_injection)
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_PACKAGE_IMPORT_METHOD"], "copy")
                 self.assertIn("--registry", command)
                 registry_index = command.index("--registry")
@@ -738,9 +749,51 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertTrue(receipt.is_file())
             validated = policy_cache.validate_receipt(source, cache, receipt)
             self.assertEqual(validated["effectiveFlags"], policy_cache.POLICY_FLAGS)
-            self.assertTrue(validated["effectiveFlags"]["injectWorkspacePackages"])
+            self.assertEqual(validated["effectiveFlags"]["injectWorkspacePackages"], "per-lockfile-setting")
+            self.assertTrue(validated["effectiveFlags"]["deployInjectWorkspacePackages"])
+            self.assertEqual(validated["lockInjectionSettings"], {
+                "pnpm-lock.yaml": False,
+                "vps-workers/pnpm-lock.yaml": False,
+            })
+            self.assertEqual((web_lock.read_bytes(), worker_lock.read_bytes()), original_locks)
             self.assertFalse(validated["effectiveFlags"]["trustLockfile"])
             self.assertEqual(validated["registryRouting"], {"default": policy_cache.TRUSTED_REGISTRY, "scoped": "none"})
+
+    def test_policy_preverify_rejects_and_does_not_receipt_a_mutated_lockfile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            web_lock = source / "pnpm-lock.yaml"
+            web_lock.write_text("lockfileVersion: '9.0'\nsettings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
+            original = web_lock.read_bytes()
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            calls = 0
+
+            def run(command, **_kwargs):
+                nonlocal calls
+                calls += 1
+                if command[-1] == "--version":
+                    return type("Result", (), {"stdout": "11.7.0\n"})()
+                (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
+                if "@baci/web..." in command:
+                    web_lock.write_bytes(original + b"# mutation\n")
+                return type("Result", (), {
+                    "stdout": "✓ Lockfile passes supply-chain policies (1 entry in 2ms)",
+                    "stderr": "",
+                })()
+
+            with patch.object(policy_cache, "run_pnpm_checked", side_effect=run):
+                with self.assertRaisesRegex(policy_cache.BuilderRejected, "changed a lockfile or policy"):
+                    policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertNotEqual(web_lock.read_bytes(), original)
+            self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
 
     def test_preverify_rejects_archive_owned_registry_overrides(self):
         for relative, content in (

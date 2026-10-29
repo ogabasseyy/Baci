@@ -316,7 +316,8 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertNotIn("--legacy", command)
         self.assertEqual(command[command.index("--registry") + 1], experiment.policy.TRUSTED_REGISTRY)
         source = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('"PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"', source)
+        self.assertIn('"PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "false"', source)
+        self.assertIn('env={**offline_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"}', source)
         self.assertIn('"PNPM_CONFIG_TRUST_LOCKFILE": "false"', source)
 
     def test_large_measurement_caps_are_scoped_to_disposable_experiment(self):

@@ -148,7 +148,7 @@ def _main() -> int:
                 "PNPM_CONFIG_IGNORE_SCRIPTS": "true",
                 "PNPM_CONFIG_IGNORE_PNPMFILE": "true",
                 "PNPM_CONFIG_TRUST_LOCKFILE": "false",
-                "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true",
+                "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "false",
                 "PNPM_CONFIG_PACKAGE_IMPORT_METHOD": "copy",
                 "PNPM_CONFIG_OFFLINE": "true",
                 "PNPM_CONFIG_REGISTRY": policy.TRUSTED_REGISTRY,
@@ -160,8 +160,10 @@ def _main() -> int:
             stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
                                     cache_max_bytes=EXPERIMENT_CACHE_BYTES)
+            injection_settings = policy.lock_injection_settings(source)
             web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
-            run(web_cmd, cwd=source, env=offline_env, timeout=900,
+            run(web_cmd, cwd=source,
+                env={**offline_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"}, timeout=900,
                 stage="web-deploy", resource_root=base)
             stage = "deploy-graph-validation"
             deployed_vercel_functions = assert_deployed_package_matches_lock(
@@ -171,7 +173,8 @@ def _main() -> int:
             sandbox.remove_workspace_self_link(output / "web", source)
             worker_cmd = (node, pnpm, "--registry", policy.TRUSTED_REGISTRY, "--package-import-method=copy", "install",
                           "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store))
-            run(worker_cmd, cwd=source / "vps-workers", env=offline_env, timeout=900,
+            run(worker_cmd, cwd=source / "vps-workers",
+                env={**offline_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()}, timeout=900,
                 stage="worker-install", resource_root=base)
             stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,

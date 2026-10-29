@@ -224,8 +224,11 @@ if [ ! -f "$pnpm_entrypoint" ] || [ -L "$pnpm_entrypoint" ] || \
   exit 1
 fi
 /usr/bin/node "$pnpm_entrypoint" --version | grep -Fx '11.7.0'
-(cd "$source_root" && pnpm install --lockfile-only --ignore-scripts)
-(cd "$source_root/vps-workers" && pnpm install --lockfile-only --ignore-scripts)
+# Match real tracked locks, which omit settings.injectWorkspacePackages and
+# therefore use pnpm's false default. Frozen installs follow those lockfiles;
+# only the modern deploy command enables injection.
+(cd "$source_root" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
+(cd "$source_root/vps-workers" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
 cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
@@ -250,6 +253,7 @@ chown root:root "$helper_root"
 for module in worker_release_dependency_builder.py worker_release_dependency_artifacts.py \
   worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
+  worker_release_dependency_lock_settings.py \
   worker_release_dependency_input_cache.py worker_release_dependency_diagnostics.py \
   worker_release_dependency_policy_cli.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/../../bin/$module" "$helper_root/$module"

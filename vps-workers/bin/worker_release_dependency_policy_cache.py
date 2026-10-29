@@ -29,7 +29,8 @@ POLICY_FLAGS = {
     "ignorePnpmfile": True,
     "trustLockfile": False,
     "packageImportMethod": "copy",
-    "injectWorkspacePackages": True,
+    "injectWorkspacePackages": "per-lockfile-setting",
+    "deployInjectWorkspacePackages": True,
 }
 TRUSTED_REGISTRY = "https://registry.npmjs.org/"
 MAX_CACHE_BYTES = 256 * 1024 * 1024
@@ -40,6 +41,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 from worker_release_dependency_registry_policy import (
     validate_registry_routing as _validate_registry_routing,
 )
+from worker_release_dependency_lock_settings import lock_injection_settings
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
     has_fresh_policy_pass,
@@ -47,8 +49,6 @@ from worker_release_dependency_diagnostics import (
     run_pnpm_checked,
     write_diagnostic,
 )
-
-
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -73,8 +73,6 @@ def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes:
         return digest.hexdigest()
     finally:
         os.close(fd)
-
-
 def _hash_tree(root: Path, expected_owner: int | None = None,
                max_bytes: int = MAX_CACHE_BYTES) -> str:
     owner = os.geteuid() if expected_owner is None else expected_owner
@@ -116,8 +114,6 @@ def _hash_tree(root: Path, expected_owner: int | None = None,
     if (root_info.st_dev, root_info.st_ino, root_info.st_mtime_ns, root_info.st_ctime_ns) != (after_root.st_dev, after_root.st_ino, after_root.st_mtime_ns, after_root.st_ctime_ns):
         raise BuilderRejected("pnpm policy cache changed while hashing")
     return digest.hexdigest()
-
-
 def _input_hashes(source: Path) -> tuple[dict[str, str], dict[str, str]]:
     locks: dict[str, str] = {}
     policies: dict[str, str] = {}
@@ -140,8 +136,6 @@ def _input_hashes(source: Path) -> tuple[dict[str, str], dict[str, str]]:
             raise BuilderRejected("dependency policy input must be a regular file")
         policies[relative] = _sha256_regular_file(path)
     return locks, policies
-
-
 def _source_sha(source: Path) -> str:
     marker = source / ".baci-source-sha"
     try:
@@ -180,6 +174,7 @@ def make_receipt(source: Path, cache: Path, pnpm_version: str, *, cache_owner: i
         "lockfiles": locks,
         "policyFiles": policies,
         "effectiveFlags": POLICY_FLAGS,
+        "lockInjectionSettings": lock_injection_settings(source),
         "registryRouting": {"default": TRUSTED_REGISTRY, "scoped": "none"},
         "metadataCacheSha256": _hash_tree(cache, cache_owner, cache_max_bytes),
         "verification": "pnpm-online-frozen-install-passed",
@@ -244,22 +239,26 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         "PNPM_CONFIG_OFFLINE": "false",
         "PNPM_CONFIG_REGISTRY": TRUSTED_REGISTRY,
         "PNPM_CONFIG_PACKAGE_IMPORT_METHOD": "copy",
-        "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true",
+        # Frozen installs must match the setting recorded in their own lock.
+        # Modern pnpm deploy gets injection enabled on its individual command.
+        "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "false",
         "npm_config_registry": TRUSTED_REGISTRY,
         "npm_config_userconfig": "/dev/null",
         "npm_config_globalconfig": "/dev/null",
     }
     before = _input_hashes(source)
+    injection_settings = lock_injection_settings(source)
     with tempfile.TemporaryDirectory(prefix="pnpm-policy-home-", dir=cache.parent) as home:
         env["HOME"] = home
         with tempfile.TemporaryDirectory(prefix="pnpm-policy-preverify-", dir=cache.parent) as output_root:
             commands = (
-                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source),
-                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
-                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source, injection_settings["pnpm-lock.yaml"]),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source, True),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers", injection_settings["vps-workers/pnpm-lock.yaml"]),
             )
-            for stage, (command, cwd) in zip(("web-install", "web-deploy", "worker-install"), commands, strict=True):
-                result = run_pnpm_checked(command, cwd=cwd, env=env, timeout=240,
+            for stage, (command, cwd, inject_workspace_packages) in zip(("web-install", "web-deploy", "worker-install"), commands, strict=True):
+                command_env = {**env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(inject_workspace_packages).lower()}
+                result = run_pnpm_checked(command, cwd=cwd, env=command_env, timeout=240,
                                           stage=f"preverify {stage}")
                 stdout = getattr(result, "stdout", "") or ""
                 stderr = getattr(result, "stderr", "") or ""

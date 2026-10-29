@@ -38,6 +38,7 @@ from worker_release_actual_dependency_guard import (
     web_deploy_command,
 )
 from worker_release_actual_dependency_resources import (
+    MAX_TREE_BYTES,
     MAX_TREE_ENTRIES,
     MIN_FREE_BYTES,
     MIN_FREE_INODES,
@@ -51,6 +52,7 @@ from worker_release_actual_dependency_runtime import (
     pinned_pnpm,
     tree_size,
 )
+EXPERIMENT_PAYLOAD_BYTES = MAX_TREE_BYTES
 
 
 def run(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
@@ -72,6 +74,18 @@ def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, 
                                  else exc.exit_code, record.get("evidence"),
                                  record.get("os_error")) from exc
         raise
+
+
+def configure_experiment_payload_limits(smoke=None, *, materialization_limit: int | None = None) -> None:
+    """Raise only this disposable experiment's payload limits under the 12 GiB monitor."""
+    artifacts.MAX_PAYLOAD_BYTES = EXPERIMENT_PAYLOAD_BYTES
+    if materialization_limit is not None:
+        if (type(materialization_limit) is not int or materialization_limit < 0
+                or materialization_limit > EXPERIMENT_PAYLOAD_BYTES):
+            raise RuntimeError("experiment materialization headroom is invalid")
+        installer.MAX_MATERIALIZED_BYTES = materialization_limit
+    if smoke is not None:
+        smoke.MAX_BYTES = EXPERIMENT_PAYLOAD_BYTES
 
 
 def _main() -> int:
@@ -212,17 +226,25 @@ def _main() -> int:
             shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
             enforce_resource_limits(base)
             stage = "payload-validation"
+            configure_experiment_payload_limits()
             entries, payload_bytes = artifacts.validate_payload(output)
             release = base / "release"
             (release / "apps" / "web").mkdir(parents=True, mode=0o700)
             stage = "payload-materialization"
+            _, current_scratch_bytes = enforce_resource_limits(base)
+            materialization_headroom = MAX_TREE_BYTES - current_scratch_bytes
+            if materialization_headroom <= 0:
+                raise RuntimeError("experiment disk cap leaves no materialization headroom")
+            configure_experiment_payload_limits(materialization_limit=materialization_headroom)
             installer.install_payload(output, release, owner_uid=os.geteuid())
             enforce_resource_limits(base)
             stage = "independent-smoke"
-            smoke_hash = independent_smoke(release, node, load_smoke_module(ROOT), base)
+            smoke = load_smoke_module(ROOT)
+            configure_experiment_payload_limits(smoke)
+            smoke_hash = independent_smoke(release, node, smoke, base)
             stage = "materialized-tree-validation"
             materialized_count, materialized_bytes = tree_size(release, max_entries=200_000,
-                                                                max_bytes=1024 * 1024 * 1024)
+                                                                max_bytes=EXPERIMENT_PAYLOAD_BYTES)
             report = {
                 "experiment": "actual-checkout-offline-dependencies",
                 "checkout_sha": expected_sha,
@@ -242,7 +264,8 @@ def _main() -> int:
                 "measurement_caps_bytes": {
                     "metadata_cache": EXPERIMENT_CACHE_BYTES,
                     "store": EXPERIMENT_STORE_BYTES,
-                    "monitored_scratch": 12 * 1024 * 1024 * 1024,
+                    "payload": EXPERIMENT_PAYLOAD_BYTES,
+                    "monitored_scratch": MAX_TREE_BYTES,
                 },
                 "resource_guards": {
                     "monitored_entry_limit": MAX_TREE_ENTRIES,

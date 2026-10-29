@@ -526,12 +526,31 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual(source.count("validate_receipt(source, cache"), 2)
         self.assertIn("make_policy_cache_seed_read_only(cache)", source)
         self.assertIn('offline_env["PNPM_CONFIG_CACHE_DIR"] = str(build_cache)', source)
-        self.assertIn('"monitored_scratch": 12 * 1024 * 1024 * 1024', source)
+        self.assertIn('"monitored_scratch": MAX_TREE_BYTES', source)
+        self.assertIn('"payload": EXPERIMENT_PAYLOAD_BYTES', source)
         self.assertEqual(experiment.policy.make_receipt.__kwdefaults__["cache_max_bytes"],
                          256 * 1024 * 1024)
         production_builder = (SCRIPT.parents[3] / "vps-workers/bin/worker_release_dependency_builder.py")
         builder_source = production_builder.read_text(encoding="utf-8")
         self.assertIn("max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES", builder_source)
+
+    def test_payload_expansion_uses_only_the_disposable_12_gib_monitor(self):
+        production_payload_limit = experiment.artifacts.MAX_PAYLOAD_BYTES
+        production_materialized_limit = experiment.installer.MAX_MATERIALIZED_BYTES
+        self.assertEqual(experiment.EXPERIMENT_PAYLOAD_BYTES, MAX_TREE_BYTES)
+        self.assertEqual(production_payload_limit, 1024 * 1024 * 1024)
+        self.assertEqual(production_materialized_limit, 1024 * 1024 * 1024)
+        smoke = SimpleNamespace(MAX_BYTES=1024 * 1024 * 1024)
+        with patch.object(experiment.artifacts, "MAX_PAYLOAD_BYTES", production_payload_limit), \
+             patch.object(experiment.installer, "MAX_MATERIALIZED_BYTES", production_materialized_limit):
+            experiment.configure_experiment_payload_limits(smoke, materialization_limit=3 * 1024 * 1024 * 1024)
+            self.assertEqual(experiment.artifacts.MAX_PAYLOAD_BYTES, MAX_TREE_BYTES)
+            self.assertEqual(experiment.installer.MAX_MATERIALIZED_BYTES, 3 * 1024 * 1024 * 1024)
+            self.assertEqual(smoke.MAX_BYTES, MAX_TREE_BYTES)
+            with self.assertRaisesRegex(RuntimeError, "materialization headroom is invalid"):
+                experiment.configure_experiment_payload_limits(materialization_limit=MAX_TREE_BYTES + 1)
+        self.assertEqual(experiment.artifacts.MAX_PAYLOAD_BYTES, production_payload_limit)
+        self.assertEqual(experiment.installer.MAX_MATERIALIZED_BYTES, production_materialized_limit)
 
     def test_verified_seed_is_separate_from_mutable_offline_cache(self):
         with tempfile.TemporaryDirectory() as temporary:

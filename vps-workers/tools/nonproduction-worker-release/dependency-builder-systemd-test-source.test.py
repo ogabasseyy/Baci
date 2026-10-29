@@ -41,6 +41,14 @@ class SyntheticSourceSnapshotTests(unittest.TestCase):
                 self.assertEqual(path.read_text(encoding="utf-8"), f"fixture:{relative}\n")
                 self.assertEqual(path.stat().st_mode & 0o222, 0)
 
+    def test_pnpm_preverification_cannot_mutate_the_published_source_snapshot(self):
+        script = Path(__file__).with_name("dependency-builder-systemd-test-seed.sh")
+        source = script.read_text(encoding="utf-8")
+        self.assertIn('--preverify --source "$pnpm_workspace_root"', source)
+        self.assertIn('source, cache, store, seeds = map(Path, sys.argv[1:5])', source)
+        self.assertIn('published = publish_seed(source, cache, store, seeds, sha', source)
+        self.assertIn('"$seed_root" "$cache_root" "$store_root" "$published_seed_root"', source)
+
     def test_required_source_symlink_fails_closed_without_following_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

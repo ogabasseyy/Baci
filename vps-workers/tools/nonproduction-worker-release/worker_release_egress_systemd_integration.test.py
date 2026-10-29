@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import sys
+import os
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from worker_release_egress_systemd_integration import _safe_diagnostic
+from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 
 class SystemdIntegrationDiagnosticTests(unittest.TestCase):
@@ -19,6 +22,55 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
     def test_empty_diagnostic_is_explicit(self):
         self.assertEqual(_safe_diagnostic("", ""), "no diagnostic output")
+
+    def _fixture_source(self, root: Path) -> Path:
+        for index, relative in enumerate(FIXTURE_MODULES):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"fixed fixture module {index}\n", encoding="ascii")
+            path.chmod(0o644)
+        return root
+
+    def test_staging_copies_only_fixed_modules_into_readable_read_only_tree(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            source = self._fixture_source(root / "checkout")
+            destination = root / "protected" / "fixture"
+            destination.parent.mkdir()
+            staged_client = stage_fixture_modules(
+                source, destination, owner_uid=os.geteuid(), owner_gid=os.getegid())
+            self.assertEqual(staged_client, destination / FIXTURE_MODULES[4])
+            self.assertEqual(sorted(str(path.relative_to(destination)) for path in destination.rglob("*.py")),
+                             sorted(FIXTURE_MODULES))
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o711)
+            for index, relative in enumerate(FIXTURE_MODULES):
+                staged = destination / relative
+                self.assertEqual(staged.read_text(encoding="ascii"),
+                                 f"fixed fixture module {index}\n")
+                self.assertEqual(staged.stat().st_mode & 0o777, 0o444)
+                self.assertEqual(staged.stat().st_uid, os.geteuid())
+
+    def test_staging_rejects_symlinked_source_module(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            source = self._fixture_source(root / "checkout")
+            selected = source / FIXTURE_MODULES[4]
+            selected.unlink()
+            selected.symlink_to(source / FIXTURE_MODULES[0])
+            with self.assertRaises(OSError):
+                stage_fixture_modules(source, root / "protected" / "fixture",
+                                       owner_uid=os.geteuid(), owner_gid=os.getegid())
+
+    def test_staging_rejects_group_or_world_writable_source_module(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            source = self._fixture_source(root / "checkout")
+            (source / FIXTURE_MODULES[4]).chmod(0o664)
+            destination = root / "protected" / "fixture"
+            destination.parent.mkdir()
+            with self.assertRaisesRegex(RuntimeError, "source is unsafe"):
+                stage_fixture_modules(source, destination,
+                                       owner_uid=os.geteuid(), owner_gid=os.getegid())
 
 
 if __name__ == "__main__":

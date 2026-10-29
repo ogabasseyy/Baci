@@ -22,7 +22,7 @@ import worker_release_egress_broker as broker_module
 
 SYNTHETIC_REPLY = b"synthetic-registry-response-v1"
 _SAFE_DIAGNOSTIC = re.compile(r"[^A-Za-z0-9 _.,:=/@+()\-]")
-
+from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
     """Bound systemd fixture diagnostics to safe, printable synthetic evidence."""
@@ -41,6 +41,10 @@ def _run_host_fixture() -> int:
 
     with tempfile.TemporaryDirectory(prefix="worker-egress-systemd-") as scratch:
         os.chmod(scratch, 0o711)
+        scratch_root = Path(scratch)
+        fixture_root = scratch_root / "fixture"
+        fixture_client = stage_fixture_modules(Path(__file__).absolute().parents[3], fixture_root,
+                                                 owner_uid=0, owner_gid=0)
         socket_path = Path(scratch) / "broker.sock"
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(socket_path))
@@ -107,7 +111,7 @@ def _run_host_fixture() -> int:
                     f"--gid={peer_gid}", "--property=PrivateNetwork=yes",
                     "--property=NoNewPrivileges=yes",
                     "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
-                    "/usr/bin/python3", str(Path(__file__).with_name("worker_release_egress_systemd_client.py").resolve()), "--client",
+                    "/usr/bin/python3", str(fixture_client), "--client",
                     str(socket_path), str(os.stat("/proc/self/ns/net").st_ino),
                 ]
                 result = subprocess.run(command, check=False, capture_output=True,

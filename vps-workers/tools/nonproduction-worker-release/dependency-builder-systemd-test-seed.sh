@@ -29,7 +29,7 @@ print("synthetic source snapshot contains only the fixed workspace inputs")
 PY
 cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
-  --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
+  --preverify --source "$pnpm_workspace_root" --store "$store_root" --cache "$cache_root" \
   --pnpm "$pnpm_entrypoint" --node /usr/bin/node
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +

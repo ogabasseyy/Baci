@@ -21,6 +21,7 @@ import {
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
 import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
+import { completeCriticalVariantSelection } from './complete-critical-variant-selection';
 import { useCriticalRouteOfferState } from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,
@@ -228,7 +229,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
       dismissRouteOffer();
     }
 
-    const nextSelection = recoverHiddenSelectionsFromUniqueVariant(
+    const prunedSelection = recoverHiddenSelectionsFromUniqueVariant(
       pruneSelectionsByVariantAvailability(
         {
           ...selectedAttributes,
@@ -239,6 +240,12 @@ export function OgabasseyPdpCriticalCommerceProvider({
       ),
       hiddenRequiredVariantAxes,
       variants
+    );
+    const nextSelection = completeCriticalVariantSelection(
+      selectionCartProduct,
+      prunedSelection,
+      renderableVariantAxes,
+      variantAxisOptions
     );
 
     setSelectedVariantId(undefined);

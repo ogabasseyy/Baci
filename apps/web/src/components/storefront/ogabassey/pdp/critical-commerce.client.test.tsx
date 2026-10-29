@@ -140,7 +140,9 @@ describe('OgabasseyPdpCriticalCommerceClient', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByRole('button', { name: /add to cart/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /select 8gb ram/i }))
+      .toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('button', { name: /select 8gb ram/i }));
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));

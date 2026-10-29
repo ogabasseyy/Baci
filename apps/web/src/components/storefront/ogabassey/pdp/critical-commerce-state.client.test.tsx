@@ -134,6 +134,48 @@ afterEach(() => {
 });
 
 describe('OgabasseyPdpCriticalCommerceProvider', () => {
+  it('retains only jointly compatible siblings when completing a laptop SKU', () => {
+    const configurations = [
+      { storage: '128GB', ram: '4GB', processor: 'M5' },
+      { storage: '256GB', ram: '4GB', processor: 'M5 Pro' },
+      { storage: '256GB', ram: '8GB', processor: 'M5' },
+    ];
+    render(
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={{
+          ...variantCartProduct,
+          variants: configurations.map((attributes, index) => ({
+            ...variantCartProduct.variants?.[0],
+            attributes,
+            id: `laptop-${index}`,
+            merchant_id: 'merchant-1',
+            product_id: 'laptop',
+            price_override: 2000000 + index * 100000,
+            stock_quantity: 10,
+          })),
+        }}
+        variantAxes={['storage', 'ram', 'processor']}
+        variantCount={3}
+      >
+        <CriticalCommerceStateProbe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /select 256gb storage/i }));
+    expect(screen.getByText('selected storage:256GB')).toBeInTheDocument();
+    expect(screen.getByText('selected ram:4GB')).toBeInTheDocument();
+    expect(screen.getByText('2100000')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 2100000 }),
+      1,
+      expect.objectContaining({
+        variantId: 'laptop-1',
+        variantAttributes: configurations[1],
+      })
+    );
+  });
+
   it('shares selected variant state with summary and cart controls', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider
@@ -153,7 +195,9 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('selected ram:8GB')).toBeInTheDocument();
+    expect(screen.getByText('278418.6')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /select 8gb ram/i }));
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
@@ -518,9 +562,9 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByText('selected condition:')).toBeInTheDocument();
+    expect(screen.getByText('selected condition:new')).toBeInTheDocument();
     expect(screen.getByText('552000')).toBeInTheDocument();
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
     expect(cartMocks.addToCart).not.toHaveBeenCalled();
   });
 

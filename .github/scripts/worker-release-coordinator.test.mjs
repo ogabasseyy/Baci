@@ -51,6 +51,60 @@ test('runs the authenticated broker lifecycle in order and requires exact instal
   assert.equal(result.health.sourceSha, identity.sha);
 });
 
+test('recovers an exact interrupted stage fence before attempting a new stage', async () => {
+  const target = { run_id: '987', run_attempt: 4, sha: 'c'.repeat(40), job_id: '654' };
+  const calls = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      calls.push(args);
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false,
+        stageRecovery: { pending: true, target },
+      };
+      if (args.operation === 'stage-recovery') return {
+        ok: true, operation: 'stage-recovery', sourceSha: identity.sha, recovered: true,
+        recoveredFence: target, runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678',
+      };
+      if (args.operation === 'promote') return promoted;
+      if (args.operation === 'health') return health;
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease(args) { calls.push({ operation: 'stage', ...args }); return stage; },
+    async preflightWorkerRelease(args) { calls.push({ operation: 'preflight', ...args }); return preflight; },
+  };
+  const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
+  assert.equal(result.stageRecovery.recovered, true);
+  assert.deepEqual(result.stageRecovery.recoveredFence, target);
+  assert.deepEqual(calls.map(call => call.operation), [
+    'recovery-status', 'stage-recovery', 'stage', 'preflight', 'promote', 'health',
+  ]);
+  assert.deepEqual(calls[1].recoveryOf, target);
+});
+
+test('a mismatched stage-recovery receipt prevents new staging', async () => {
+  const target = { run_id: '987', run_attempt: 4, sha: 'c'.repeat(40), job_id: '654' };
+  const calls = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      calls.push(args.operation);
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false,
+        stageRecovery: { pending: true, target },
+      };
+      if (args.operation === 'stage-recovery') return {
+        ok: true, operation: 'stage-recovery', sourceSha: identity.sha, recovered: true,
+        recoveredFence: { ...target, sha: 'd'.repeat(40) },
+        runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678',
+      };
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease() { calls.push('stage'); return stage; },
+  };
+  await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
+                       /interrupted staging recovery receipt is invalid/);
+  assert.deepEqual(calls, ['recovery-status', 'stage-recovery']);
+});
+
 test('same active coordinator owner recovers through the real client without a completed-attempt target', async () => {
   const target = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, job_id: '5678' };
   const requests = [];

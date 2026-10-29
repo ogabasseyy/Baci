@@ -24,6 +24,7 @@ from typing import Callable, Sequence
 
 WORKER = "baci-worker"
 LOCK_GROUP = "baci-locks"
+RUNTIME_VERIFY_GROUP = "baci-worker-runtime-verify"
 DEFAULT_ROOT = "/srv/baci-workers"
 NOLOGIN = "/usr/sbin/nologin"
 CACHE_LOCK = "cache-invalidations.lock"
@@ -64,6 +65,7 @@ def provisioning_plan(root: str = DEFAULT_ROOT) -> tuple[Action, ...]:
     actions: list[Action] = [
         Action(("groupadd", "--system", WORKER)),
         Action(("groupadd", "--system", LOCK_GROUP)),
+        Action(("groupadd", "--system", RUNTIME_VERIFY_GROUP)),
         Action(("useradd", "--system", "--gid", WORKER, "--home-dir", str(root_path / "home"),
                 "--no-create-home", "--shell", NOLOGIN, WORKER)),
         Action(("usermod", "--append", "--groups", LOCK_GROUP, WORKER)),
@@ -135,9 +137,20 @@ def _identity_preflight(root: str = DEFAULT_ROOT) -> None:
         lock_group = grp.getgrnam(LOCK_GROUP)
     except KeyError:
         lock_group = None
+    try:
+        verify_group = grp.getgrnam(RUNTIME_VERIFY_GROUP)
+    except KeyError:
+        verify_group = None
 
     if lock_group is not None and set(lock_group.gr_mem) - {"bassey", WORKER}:
         raise RuntimeError("baci-locks group has unexpected members")
+
+    if verify_group is not None:
+        aliases = [entry for entry in grp.getgrall() if entry.gr_gid == verify_group.gr_gid]
+        primary_users = [entry for entry in pwd.getpwall() if entry.pw_gid == verify_group.gr_gid]
+        if (verify_group.gr_gid <= 0 or verify_group.gr_mem or primary_users or len(aliases) != 1
+                or aliases[0].gr_name != RUNTIME_VERIFY_GROUP):
+            raise RuntimeError("runtime verifier group is not uniquely isolated")
 
     if group is not None:
         primary_members = sorted(entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == group.gr_gid)

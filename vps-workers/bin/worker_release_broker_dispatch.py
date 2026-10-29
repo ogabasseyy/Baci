@@ -2,6 +2,45 @@
 from typing import Any, Callable
 import worker_release_broker as broker
 import stat
+from pathlib import Path
+
+
+def _stage_authenticated_release(verified: dict[str, Any], sha: str,
+                                 worker_gid: int) -> dict[str, object]:
+    """Send only the authenticated dispatcher envelope into the staged pipeline."""
+    from worker_release_authenticated_staging import stage_authenticated_archive
+    from worker_release_dependency_builder import BUILD_RESULTS_ROOT, BUILD_ROOT, build
+    from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
+
+    try:
+        identity = AuthenticatedRun.from_broker({
+            "repository": verified.get("repository"),
+            "workflow": verified.get("workflow"),
+            "ref": verified.get("ref"),
+            "sha": verified.get("sourceSha"),
+            "run_id": verified.get("runId"),
+            "run_attempt": verified.get("runAttempt"),
+            "job_id": verified.get("jobId"),
+            "status": verified.get("status"),
+        }, expected_sha=sha)
+    except LifecycleRejected as error:
+        raise broker.BrokerProtocolError("trusted dispatcher source identity is invalid") from error
+    digest = verified.get("archiveSha256")
+    if not isinstance(digest, str) or not broker.re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise broker.BrokerProtocolError("trusted dispatcher archive identity is invalid")
+    receipt = stage_authenticated_archive(
+        verified, identity, expected_archive_sha256=digest,
+        worker_root=Path(broker.WORKER_ROOT),
+        lock_path=Path(broker.WORKER_ROOT) / "release.lock",
+        result_root=BUILD_RESULTS_ROOT, worker_gid=worker_gid, builder=build,
+        builder_build_root=BUILD_ROOT, builder_results_root=BUILD_RESULTS_ROOT,
+    )
+    if (receipt.get("phase") != "committed" or receipt.get("source_sha") != sha
+            or receipt.get("archive_sha256") != digest
+            or type(receipt.get("entry_count")) is not int
+            or receipt["entry_count"] < 1):
+        raise broker.BrokerProtocolError("authenticated stage receipt is invalid")
+    return receipt
 
 def _health_after_restart(lease, probe):
     """Probe under an explicit live gate; unexpected EOF stops the units."""
@@ -62,7 +101,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
     quiescence = WorkerQuiesceLeaseManager(worker_uid=worker_uid, worker_gid=worker_gid)
 
     def dispatch(peer_uid: int, request: dict[str, Any]) -> dict[str, Any]:
-        if peer_uid != release_uid or request.get("operation") not in ("stage", "preflight", "readiness", "gigl-capability", "recovery-status", "recover", "promote", "health", "rollback"):
+        if peer_uid != release_uid or request.get("operation") not in ("stage", "preflight", "readiness", "gigl-capability", "recovery-status", "recover", "stage-recovery", "promote", "health", "rollback"):
             raise broker.BrokerProtocolError("unsupported broker operation")
         # No shell, cwd selection, PATH inheritance, or caller-selected executable.
         child_env = {
@@ -98,14 +137,15 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
         recovery_of = verified.get("recoveryOf")
         lease_fence = {"run_id": str(run_id), "run_attempt": run_attempt, "sha": sha}
         authenticated_fence = {**lease_fence, "job_id": str(job_id)}
-        if operation in ("stage", "readiness", "gigl-capability", "recovery-status", "recover", "promote", "health", "rollback"):
+        if operation in ("stage", "readiness", "gigl-capability", "recovery-status", "recover", "stage-recovery", "promote", "health", "rollback"):
             latch = quiescence.recovery_latch()
             active = quiescence.is_active_for(lease_fence)
             if not _latched_operation_is_allowed(operation, latch, active, authenticated_fence):
                 raise broker.BrokerProtocolError("worker release recovery latch blocks this operation")
-        if operation in ("recovery-status", "recover"):
+        if operation in ("recovery-status", "recover", "stage-recovery"):
             from worker_release_recovery_dispatch import recover, status as recovery_status
             from worker_release_lifecycle import AuthenticatedRun
+            from worker_release_dependency_builder import BUILD_RESULTS_ROOT
             identity = AuthenticatedRun.from_broker({
                 "repository": repository, "workflow": workflow, "ref": ref,
                 "sha": sha, "run_id": run_id, "run_attempt": run_attempt,
@@ -115,8 +155,47 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
             lock_path = broker.os.path.join(broker.WORKER_ROOT, "release.lock")
             state_path = broker.os.path.join(broker.WORKER_ROOT, "release-state.json")
             if operation == "recovery-status":
-                return recovery_status(source_sha=sha, quiescence=quiescence, state_path=state_path,
-                                       identity=identity)
+                result = recovery_status(source_sha=sha, quiescence=quiescence,
+                                         state_path=state_path, identity=identity)
+                from worker_release_authenticated_staging_recovery import stage_recovery_status
+                try:
+                    stage_pending = stage_recovery_status(
+                        Path(broker.WORKER_ROOT), BUILD_RESULTS_ROOT,
+                        worker_gid=worker_gid, view_root=Path("/var/lib/baci-worker-runtime-views"),
+                    )
+                except Exception as error:
+                    raise broker.BrokerProtocolError(
+                        "authenticated staging recovery status is unavailable") from error
+                result["stageRecovery"] = stage_pending
+                return result
+            if operation == "stage-recovery":
+                from worker_release_authenticated_staging_recovery import recover_interrupted_stage
+                recovery_target = recovery_of
+                if (not isinstance(recovery_target, dict)
+                        or set(recovery_target) != {"sha", "run_id", "run_attempt", "job_id"}):
+                    raise broker.BrokerProtocolError("terminal stage recovery target is invalid")
+                try:
+                    outcome = recover_interrupted_stage(
+                        Path(broker.WORKER_ROOT), Path(lock_path),
+                        BUILD_RESULTS_ROOT, worker_gid=worker_gid,
+                        terminal_attempt_proven=lambda fence: (
+                            str(fence.get("run_id")) == str(recovery_target.get("run_id"))
+                            and fence.get("run_attempt") == recovery_target.get("run_attempt")
+                            and fence.get("sha") == recovery_target.get("sha")
+                            and str(fence.get("job_id")) == str(recovery_target.get("job_id"))),
+                        current_link="current", expected_target=recovery_target,
+                        view_root=Path("/var/lib/baci-worker-runtime-views"),
+                    )
+                except Exception as error:
+                    raise broker.BrokerProtocolError(
+                        "interrupted authenticated staging recovery could not prove safe cleanup") from error
+                return {
+                    "ok": True, "operation": "stage-recovery", "sourceSha": sha,
+                    "recovered": outcome in ("clean", "recovered", "builder-recovered", "source-view-cleaned"),
+                    "alreadyClean": outcome == "clean",
+                    "recoveredFence": recovery_target,
+                    "runId": str(run_id), "runAttempt": run_attempt, "jobId": str(job_id),
+                }
             return recover(
                 verified={"sourceSha": sha, "runId": str(run_id), "runAttempt": run_attempt,
                           "jobId": str(job_id), "recoveryOf": recovery_of},
@@ -300,7 +379,9 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
         archive = broker.base64.b64decode(encoded, validate=True)
         if len(archive) > broker.MAX_ARCHIVE_COMPRESSED_BYTES or broker.hashlib.sha256(archive).hexdigest() != archive_digest:
             raise broker.BrokerProtocolError("trusted dispatcher archive digest mismatch")
-        count = _stage_archive(archive, releases_root, sha, worker_uid, worker_gid)
-        return {"ok": True, "operation": "stage", "sourceSha": sha, "entryCount": count}
+        del archive
+        receipt = _stage_authenticated_release(verified, sha, worker_gid)
+        return {"ok": True, "operation": "stage", "sourceSha": sha,
+                "entryCount": receipt["entry_count"]}
 
     return dispatch

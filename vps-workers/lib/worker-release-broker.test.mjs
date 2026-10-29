@@ -290,7 +290,7 @@ test('rejects unknown operations, malformed source SHA, and extra caller-control
 test('only the fixed operation set is exposed', () => {
   assert.deepEqual(policy.operations, [
     'stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover',
-    'promote', 'health', 'rollback',
+    'stage-recovery', 'promote', 'health', 'rollback',
   ]);
   assert.equal(policy.operations.includes('systemctl'), false);
   assert.equal(policy.operations.includes('exec'), false);

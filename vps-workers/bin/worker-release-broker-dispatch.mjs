@@ -50,7 +50,9 @@ try {
       installedSha: result.installedSha,
       latchedSha: result.latchedSha,
     } : {}),
-    ...(result.operation === 'recover' ? { recoveryOf: result.recoveryOf } : {}),
+    ...(['recover', 'stage-recovery'].includes(result.operation)
+      ? { recoveryOf: result.recoveryOf } : {}),
+    ...(result.operation === 'recovery-status' ? { stageRecovery: result.stageRecovery } : {}),
     ...(result.operation === 'stage' ? {
       archiveSha256: result.bundleSha256,
       archiveBase64: result.sourceArchive.toString('base64'),

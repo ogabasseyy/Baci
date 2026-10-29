@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import os
 import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from worker_release_runtime_acl import RuntimeAclRejected, expected_access_acl
 
 class CandidatePinRejected(RuntimeError):
     """The incoming candidate is not a stable frozen regular-file tree."""
@@ -51,7 +53,7 @@ def _open_parent_chain(parent: Path, *, owner_uid: int) -> int:
         raise
 
 
-def _tree_digest(root_fd: int, owner_uid: int, owner_gid: int) -> str:
+def _tree_digest(root_fd: int, owner_uid: int, owner_gid: int, verifier_gid: int) -> str:
     digest = hashlib.sha256()
     counts = {"entries": 0, "bytes": 0}
 
@@ -60,6 +62,20 @@ def _tree_digest(root_fd: int, owner_uid: int, owner_gid: int) -> str:
         if (not stat.S_ISDIR(before_dir.st_mode) or before_dir.st_uid != owner_uid
                 or before_dir.st_gid != owner_gid or stat.S_IMODE(before_dir.st_mode) != 0o550):
             raise CandidatePinRejected("candidate directory metadata is unsafe")
+        try:
+            acl = expected_access_acl(before_dir.st_mode, verifier_gid)
+            if os.getxattr(directory_fd, "system.posix_acl_access") != acl:
+                raise CandidatePinRejected("candidate verifier ACL is not exact")
+            try:
+                os.getxattr(directory_fd, "system.posix_acl_default")
+            except OSError as error:
+                if error.errno != getattr(errno, "ENODATA", 61):
+                    raise
+            else:
+                raise CandidatePinRejected("candidate directory has a default ACL")
+            digest.update(b"a\0" + acl)
+        except (OSError, RuntimeAclRejected) as error:
+            raise CandidatePinRejected("candidate verifier ACL is not exact") from error
         for name in sorted(os.listdir(directory_fd)):
             if name in {"", ".", ".."} or "/" in name or "\\" in name:
                 raise CandidatePinRejected("candidate entry name is unsafe")
@@ -77,6 +93,7 @@ def _tree_digest(root_fd: int, owner_uid: int, owner_gid: int) -> str:
                     if _identity(opened) != _identity(info):
                         raise CandidatePinRejected("candidate directory changed while pinning")
                     digest.update(b"d\0" + encoded + b"\0" + repr(_identity(opened)).encode("ascii"))
+                    digest.update(b"a\0" + expected_access_acl(opened.st_mode, verifier_gid))
                     visit(child_fd, relative, child_depth)
                     if _identity(os.stat(name, dir_fd=directory_fd, follow_symlinks=False)) != _identity(opened):
                         raise CandidatePinRejected("candidate directory path changed while pinning")
@@ -95,6 +112,13 @@ def _tree_digest(root_fd: int, owner_uid: int, owner_gid: int) -> str:
                     if _identity(opened) != _identity(info):
                         raise CandidatePinRejected("candidate file changed before reading")
                     digest.update(b"f\0" + encoded + b"\0" + repr(_identity(opened)).encode("ascii"))
+                    try:
+                        acl = expected_access_acl(opened.st_mode, verifier_gid)
+                        if os.getxattr(fd, "system.posix_acl_access") != acl:
+                            raise CandidatePinRejected("candidate verifier ACL is not exact")
+                    except (OSError, RuntimeAclRejected) as error:
+                        raise CandidatePinRejected("candidate verifier ACL is not exact") from error
+                    digest.update(b"a\0" + acl)
                     remaining = info.st_size
                     while remaining:
                         block = os.read(fd, min(1024 * 1024, remaining))
@@ -127,6 +151,7 @@ class CandidatePin:
     digest: str
     owner_uid: int
     owner_gid: int
+    verifier_gid: int
     closed: bool = False
 
     def verify_unchanged(self) -> None:
@@ -138,7 +163,8 @@ class CandidatePin:
         if (_identity(parent) != self.parent_identity or _identity(child) != self.candidate_identity
                 or _identity(named) != self.candidate_identity):
             raise CandidatePinRejected("candidate inode changed during verification")
-        if _tree_digest(self.candidate_fd, self.owner_uid, self.owner_gid) != self.digest:
+        if _tree_digest(self.candidate_fd, self.owner_uid, self.owner_gid,
+                        self.verifier_gid) != self.digest:
             raise CandidatePinRejected("candidate tree changed during verification")
 
     def close(self) -> None:
@@ -155,13 +181,14 @@ class CandidatePin:
 
 
 def pin_candidate(candidate: Path, *, expected_sha: str, owner_uid: int,
-                  owner_gid: int) -> CandidatePin:
+                  owner_gid: int, verifier_gid: int) -> CandidatePin:
     match = TX_RE.fullmatch(candidate.name)
     if (not match or match.group(1) != expected_sha
             or candidate.parent != RELEASES_ROOT
             or candidate.parent != Path(os.path.normpath(str(candidate.parent)))
             or type(owner_uid) is not int or owner_uid < 0
-            or type(owner_gid) is not int or owner_gid < 0):
+            or type(owner_gid) is not int or owner_gid < 0
+            or type(verifier_gid) is not int or verifier_gid <= 0 or verifier_gid == owner_gid):
         raise CandidatePinRejected("candidate name or ownership policy is invalid")
     parent_fd = _open_parent_chain(candidate.parent, owner_uid=owner_uid)
     candidate_fd = -1
@@ -174,12 +201,12 @@ def pin_candidate(candidate: Path, *, expected_sha: str, owner_uid: int,
         if (root.st_uid != owner_uid or root.st_gid != owner_gid
                 or stat.S_IMODE(root.st_mode) != 0o550):
             raise CandidatePinRejected("candidate root ownership or mode is unsafe")
-        digest = _tree_digest(candidate_fd, owner_uid, owner_gid)
+        digest = _tree_digest(candidate_fd, owner_uid, owner_gid, verifier_gid)
         named = os.stat(candidate.name, dir_fd=parent_fd, follow_symlinks=False)
         if _identity(named) != _identity(root):
             raise CandidatePinRejected("candidate path changed while pinning")
         return CandidatePin(candidate, parent_fd, candidate_fd, _identity(parent),
-                            _identity(root), digest, owner_uid, owner_gid)
+                            _identity(root), digest, owner_uid, owner_gid, verifier_gid)
     except BaseException:
         if candidate_fd >= 0:
             os.close(candidate_fd)

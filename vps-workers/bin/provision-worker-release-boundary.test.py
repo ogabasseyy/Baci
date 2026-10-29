@@ -1,5 +1,8 @@
 import importlib.util
+import ast
 import os
+import grp
+import stat
 import subprocess
 import sys
 import tempfile
@@ -15,8 +18,156 @@ provision = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = provision
 SPEC.loader.exec_module(provision)
 
+from provision_worker_release_install import ensure_root_directory
+
 
 class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
+    @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
+    def test_install_one_is_idempotent_for_exact_root_owned_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "protected.py"
+            item = provision.InstallFile("fixture", b"trusted module\n", 0o440,
+                                        destination, "root")
+
+            provision._install_one(item)
+            first = destination.lstat()
+            provision._install_one(item)
+            second = destination.lstat()
+
+            self.assertEqual(destination.read_bytes(), item.content)
+            self.assertEqual((second.st_uid, second.st_gid, stat.S_IMODE(second.st_mode)),
+                             (0, grp.getgrnam("root").gr_gid, 0o440))
+            self.assertEqual((first.st_dev, first.st_ino), (second.st_dev, second.st_ino))
+
+    @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
+    def test_install_one_refuses_mismatched_existing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "protected.py"
+            item = provision.InstallFile("fixture", b"trusted module\n", 0o440,
+                                        destination, "root")
+            provision._install_one(item)
+
+            mismatches = [
+                ("contents", lambda: destination.write_bytes(b"different contents\n")),
+                ("mode", lambda: os.chmod(destination, 0o444)),
+            ]
+            other_group = next((group for group in grp.getgrall()
+                                if group.gr_gid != grp.getgrnam("root").gr_gid), None)
+            if other_group is not None:
+                mismatches.append(("group", lambda: os.chown(destination, 0, other_group.gr_gid)))
+
+            for label, mutate in mismatches:
+                with self.subTest(mismatch=label):
+                    destination.unlink(missing_ok=True)
+                    provision._install_one(item)
+                    mutate()
+                    before = destination.lstat()
+                    contents = destination.read_bytes()
+                    with self.assertRaisesRegex(RuntimeError, "existing protected file differs"):
+                        provision._install_one(item)
+                    after = destination.lstat()
+                    self.assertEqual((after.st_dev, after.st_ino), (before.st_dev, before.st_ino))
+                    self.assertEqual(destination.read_bytes(), contents)
+
+    @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
+    def test_install_one_rejects_symlink_target_without_following_or_replacing_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / "protected.py"
+            target = root / "outside.py"
+            target.write_bytes(b"outside contents\n")
+            destination.symlink_to(target)
+            item = provision.InstallFile("fixture", b"trusted module\n", 0o440,
+                                        destination, "root")
+
+            with self.assertRaisesRegex(RuntimeError, "root-owned regular file"):
+                provision._install_one(item)
+
+            self.assertTrue(destination.is_symlink())
+            self.assertEqual(target.read_bytes(), b"outside contents\n")
+
+    def test_root_broker_installs_exact_python_import_closure(self):
+        source_root = SCRIPT.parents[2] / "vps-workers" / "bin"
+        pending = ["worker_release_broker", "worker_release_broker_dispatch"]
+        reachable = set()
+        while pending:
+            module = pending.pop()
+            if module in reachable:
+                continue
+            path = source_root / f"{module}.py"
+            self.assertTrue(path.is_file(), f"local broker import {module} has no source")
+            reachable.add(module)
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            imported = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    imported.append(node.module)
+            pending.extend(
+                name for name in imported
+                if name.startswith("worker_release_")
+                and (source_root / f"{name}.py").is_file()
+                and name not in reachable
+            )
+
+        self.assertEqual(set(provision.BROKER_RUNTIME_MODULES), reachable)
+        files = provision.install_files()
+        destinations = [file.destination for file in files]
+        self.assertEqual(len(destinations), len(set(destinations)))
+        installed = {file.destination.name: file for file in files
+                     if file.destination.parent == provision.HELPER_ROOT}
+        for module in provision.BROKER_RUNTIME_MODULES:
+            with self.subTest(module=module):
+                item = installed[f"{module}.py"]
+                expected_group = "baci-locks" if module == "worker_release_recovery_latch" else "root"
+                expected_mode = 0o550 if module == "worker_release_broker" else 0o440
+                self.assertEqual(item.group, expected_group)
+                self.assertEqual(item.mode, expected_mode)
+                self.assertEqual(item.content, (source_root / f"{module}.py").read_bytes())
+
+    def test_runtime_view_root_is_created_exactly_and_idempotently(self):
+        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+            path = Path(directory) / "runtime-views"
+            ensure_root_directory(path, uid=os.geteuid(), gid=os.getegid(), mode=0o711)
+            first = path.lstat()
+            ensure_root_directory(path, uid=os.geteuid(), gid=os.getegid(), mode=0o711)
+            second = path.lstat()
+
+            self.assertEqual((second.st_uid, second.st_gid, stat.S_IMODE(second.st_mode)),
+                             (os.geteuid(), os.getegid(), 0o711))
+            self.assertEqual((first.st_dev, first.st_ino), (second.st_dev, second.st_ino))
+
+    def test_runtime_view_root_rejects_symlink_and_wrong_permissions(self):
+        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+            root = Path(directory)
+            target = root / "actual"
+            target.mkdir(mode=0o711)
+            symlink = root / "runtime-views-link"
+            symlink.symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "symlink or non-directory"):
+                ensure_root_directory(
+                    symlink, uid=os.geteuid(), gid=os.getegid(), mode=0o711
+                )
+            self.assertTrue(symlink.is_symlink())
+            self.assertEqual(stat.S_IMODE(target.lstat().st_mode), 0o711)
+
+            wrong_mode = root / "wrong-mode"
+            wrong_mode.mkdir(mode=0o700)
+            with self.assertRaisesRegex(RuntimeError, "ownership or mode"):
+                ensure_root_directory(
+                    wrong_mode, uid=os.geteuid(), gid=os.getegid(), mode=0o711
+                )
+
+    def test_runtime_view_root_refuses_to_create_missing_parent(self):
+        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+            path = Path(directory) / "missing-parent" / "runtime-views"
+            with self.assertRaisesRegex(RuntimeError, "parent is missing"):
+                ensure_root_directory(
+                    path, uid=os.geteuid(), gid=os.getegid(), mode=0o711
+                )
+            self.assertFalse(path.parent.exists())
+
     def test_dry_run_is_complete_and_does_not_change_host(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "marker"
@@ -27,6 +178,9 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             self.assertIn("baci-worker-release-broker.service", result.stdout)
             self.assertIn("worker_release_broker_common.py sha256=", result.stdout)
             self.assertIn("worker_release_quiesce_lease_identity.py sha256=", result.stdout)
+            self.assertIn("worker_release_authenticated_staging.py sha256=", result.stdout)
+            self.assertIn("worker_release_runtime_verifier.py sha256=", result.stdout)
+            self.assertIn("install -d -o root -g root -m 0711 /var/lib/baci-worker-runtime-views", result.stdout)
             self.assertFalse(marker.exists())
 
     def test_install_plan_contains_only_fixed_protected_runtime_files(self):
@@ -83,6 +237,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         self.assertEqual(actions[0], ("groupadd", "--system", "baci-release"))
         self.assertEqual(actions[1][-2:], ("/usr/sbin/nologin", "baci-release"))
         self.assertIn(("systemctl", "enable", "--now", "baci-worker-release-broker.service"), actions)
+        self.assertIn(("install", "-d", "-o", "root", "-g", "root", "-m", "0711",
+                       "/var/lib/baci-worker-runtime-views"), actions)
         self.assertIn("NoNewPrivileges=yes", provision.UNIT)
         self.assertIn("ProtectHome=yes", provision.UNIT)
         self.assertIn("RuntimeDirectoryMode=0710", provision.UNIT)

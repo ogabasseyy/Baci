@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from worker_release_broker_module_closure import BROKER_RUNTIME_MODULES
+
 
 RELEASE = "baci-release"
 WORKER = "baci-worker"
@@ -139,6 +141,14 @@ def install_files() -> tuple[InstallFile, ...]:
         InstallFile("dispatcher-wrapper", DISPATCHER_WRAPPER.encode(), 0o550, HELPER_ROOT / "worker-release-broker-dispatch.mjs"),
         InstallFile("systemd-unit", UNIT.encode(), 0o644, UNIT_PATH),
     ]
+    installed_names = {file.destination.name for file in files
+                       if file.destination.parent == HELPER_ROOT}
+    for module in BROKER_RUNTIME_MODULES:
+        filename = f"{module}.py"
+        if filename not in installed_names:
+            files.append(InstallFile(f"broker-runtime-{module}",
+                                     _source(f"vps-workers/bin/{filename}"),
+                                     0o440, HELPER_ROOT / filename))
     return tuple(files)
 
 
@@ -150,6 +160,7 @@ def provisioning_plan() -> tuple[tuple[str, ...], ...]:
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT)),
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT / "bin")),
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT / "lib")),
+        ("install", "-d", "-o", "root", "-g", "root", "-m", "0711", str(RUNTIME_VIEW_ROOT)),
         ("systemctl", "daemon-reload"),
         ("systemctl", "enable", "--now", "baci-worker-release-broker.service"),
     )
@@ -224,7 +235,7 @@ def _check_release_home(*, account_exists: bool) -> bool:
     return True
 
 
-from provision_worker_release_install import read_existing as _read_existing, install_one as _install_one
+from provision_worker_release_install import read_existing as _read_existing, install_one as _install_one, ensure_runtime_view_root, RUNTIME_VIEW_ROOT
 
 
 def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
@@ -243,6 +254,7 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
         runner(("install", "-d", "-o", RELEASE, "-g", RELEASE, "-m", "0700", str(HOME)),
                check=True, stdin=subprocess.DEVNULL)
     _check_identities()
+    ensure_runtime_view_root()
     # Require the dedicated worker tree and refuse symlinks or permissions that
     # would let the release identity replace broker-owned paths.
     for path, owner, group, mode in (

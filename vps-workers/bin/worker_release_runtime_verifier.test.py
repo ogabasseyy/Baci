@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import grp
+import errno
 import io
 import shutil
 import sys
@@ -80,8 +82,37 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         (self.candidate / "node_modules" / "expo-server-sdk" / "index.js").write_text(
             "export class Expo {}\n")
         freeze(self.candidate, os.getgid())
+        self.acl_gid = 60000 if os.getgid() != 60000 else 60001
+        self.acl_patches = []
+        if not (os.geteuid() == 0 and sys.platform.startswith("linux")
+                and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1"):
+            from worker_release_runtime_acl import expected_access_acl
+            def fake_getxattr(target, attribute, *args, **kwargs):
+                if attribute == "system.posix_acl_access":
+                    info = os.fstat(target) if isinstance(target, int) else os.stat(target)
+                    return expected_access_acl(info.st_mode, self.acl_gid)
+                if attribute == "system.posix_acl_default":
+                    raise OSError(errno.ENODATA, "no default ACL")
+                raise OSError(errno.ENODATA, "not present")
+            for target in ("worker_release_runtime_acl.verifier_gid",
+                           "worker_release_runtime_verifier.verifier_gid",
+                           "worker_release_runtime_receipt.verifier_gid"):
+                item = patch(target, return_value=self.acl_gid)
+                item.start()
+                self.acl_patches.append(item)
+            item = patch("worker_release_runtime_verifier.grant_candidate_acl",
+                         side_effect=lambda *_a, **kwargs: kwargs["gid"])
+            item.start()
+            self.acl_patches.append(item)
+            for target, value in (("worker_release_runtime_acl.os.getxattr", fake_getxattr),
+                                  ("worker_release_runtime_acl.os.setxattr", lambda *_a, **_k: None)):
+                item = patch(target, side_effect=value, create=True)
+                item.start()
+                self.acl_patches.append(item)
 
     def tearDown(self):
+        for item in reversed(self.acl_patches):
+            item.stop()
         self.releases_root_patch.stop()
         def make_writable(path: Path):
             for current, directories, _files in os.walk(path, topdown=True, followlinks=False):
@@ -99,6 +130,9 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         receipt = verify_materialized_candidate(
             self.candidate, identity(), archive_sha256=ARCHIVE,
             owner_uid=os.geteuid(), owner_gid=os.getgid())
+        self.assertEqual(receipt.verifier_version, "materialized-worker-runtime-v2-dedicated-acl")
+        self.assertEqual(receipt.access_policy, "candidate-posix-acl-readonly-v1")
+        self.assertEqual(receipt.verifier_gid, self.acl_gid)
         self.assertTrue(validate_runtime_receipt(
             receipt, self.candidate, identity(), ARCHIVE,
             owner_uid=os.geteuid(), owner_gid=os.getgid()))
@@ -147,9 +181,19 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 renamed, identity(), archive_sha256=ARCHIVE,
                 owner_uid=os.geteuid(), owner_gid=os.getgid())
 
+    @patch("worker_release_runtime_smoke.create_runtime_view")
     @patch("worker_release_runtime_verifier._execute_fixed_unit")
-    def test_fixed_executor_has_no_credentials_network_or_unbounded_output(self, execute):
+    def test_fixed_executor_has_no_credentials_network_or_unbounded_output(self, execute, create_view):
         from worker_release_runtime_verifier import _run_fixed_smokes
+        class FakeView:
+            def __init__(self, unit, **_kwargs):
+                self.path = self.parent / unit
+                self.candidate_path = self.path / "candidate"
+            def verify_target(self): pass
+            def cleanup(self): pass
+            def abandon(self): pass
+        FakeView.parent = self.parent
+        create_view.side_effect = FakeView
         with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
                 patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
@@ -165,9 +209,11 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertEqual(properties["ProtectSystem"], "strict")
             self.assertEqual(properties["ProtectProc"], "invisible")
             self.assertEqual(properties["PrivateTmp"], "no")
-            self.assertEqual(properties["InaccessiblePaths"], "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc/baci-workers /srv/baci-workers/runtime /srv/baci-workers/locks")
+            self.assertEqual(properties["InaccessiblePaths"], "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups")
             self.assertEqual(properties["SupplementaryGroups"], "")
-            self.assertEqual(properties["ReadOnlyPaths"], str(self.candidate))
+            self.assertEqual(properties["Group"], str(self.acl_gid))
+            self.assertEqual(properties["BindReadOnlyPaths"],
+                             f"{self.candidate}:{self.parent / unit / 'candidate'}")
             self.assertEqual(properties["RuntimeMaxSec"], "35")
             self.assertEqual(properties["LimitFSIZE"], "4096")
             self.assertIn("-i", command)
@@ -178,6 +224,19 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.assertIn("expo-server-sdk", all_args)
         self.assertIn("synthetic-smoke-key", all_args)
         self.assertIn("synthetic-smoke-token", all_args)
+
+    @patch("worker_release_runtime_smoke.create_runtime_view")
+    @patch("worker_release_runtime_verifier._execute_fixed_unit")
+    def test_smoke_rejects_group_mismatch_before_creating_view(self, execute, create_view):
+        from worker_release_runtime_verifier import _run_fixed_smokes
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "group is invalid"):
+                _run_fixed_smokes(self.candidate, "f" * 64, 0)
+        create_view.assert_not_called()
+        execute.assert_not_called()
 
     def test_launcher_stderr_is_reduced_to_fixed_category(self):
         capture = BoundedLauncherStderr(io.BytesIO(
@@ -231,6 +290,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 if not (worker_modules / dependency).is_file():
                     self.fail("disposable Linux verifier job must install locked worker runtime dependencies")
             from worker_release_dependency_install import install_payload
+            worker_gid = grp.getgrnam("baci-worker").gr_gid
             with tempfile.TemporaryDirectory(prefix="runtime-verifier-payload-", dir=releases) as payload_dir:
                 payload = Path(payload_dir)
                 (payload / "root").mkdir()
@@ -241,14 +301,14 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 shutil.rmtree(candidate / "node_modules")
                 shutil.rmtree(candidate / "apps" / "web" / "node_modules")
                 install_payload(payload, candidate, owner_uid=os.geteuid())
-            freeze(candidate, os.getgid())
+            freeze(candidate, worker_gid)
             with patch("worker_release_candidate_pin.RELEASES_ROOT", releases):
                 receipt = verify_materialized_candidate(
                     candidate, identity(), archive_sha256=ARCHIVE,
-                    owner_uid=os.geteuid(), owner_gid=os.getgid())
+                    owner_uid=os.geteuid(), owner_gid=worker_gid)
                 self.assertTrue(validate_runtime_receipt(
                     receipt, candidate, identity(), ARCHIVE,
-                    owner_uid=os.geteuid(), owner_gid=os.getgid()))
+                    owner_uid=os.geteuid(), owner_gid=worker_gid))
         except RuntimeVerificationQuiescenceUnproven as error:
             unproven_error = error
             raise

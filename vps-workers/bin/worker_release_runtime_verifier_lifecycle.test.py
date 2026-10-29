@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import errno
 import shutil
 import sys
 import tempfile
@@ -68,8 +69,37 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         (self.candidate / "node_modules" / "dotenv" / "index.js").write_text(
             "export function config() { return {}; }\n")
         freeze(self.candidate, os.getgid())
+        self.acl_gid = 60000 if os.getgid() != 60000 else 60001
+        self.acl_patches = []
+        if not (os.geteuid() == 0 and sys.platform.startswith("linux")
+                and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1"):
+            from worker_release_runtime_acl import expected_access_acl
+            def fake_getxattr(target, attribute, *args, **kwargs):
+                if attribute == "system.posix_acl_access":
+                    info = os.fstat(target) if isinstance(target, int) else os.stat(target)
+                    return expected_access_acl(info.st_mode, self.acl_gid)
+                if attribute == "system.posix_acl_default":
+                    raise OSError(errno.ENODATA, "no default ACL")
+                raise OSError(errno.ENODATA, "not present")
+            patches = (
+                ("worker_release_runtime_acl.verifier_gid", patch("worker_release_runtime_acl.verifier_gid", return_value=self.acl_gid)),
+                ("worker_release_runtime_verifier.verifier_gid", patch("worker_release_runtime_verifier.verifier_gid", return_value=self.acl_gid)),
+                ("worker_release_runtime_receipt.verifier_gid", patch("worker_release_runtime_receipt.verifier_gid", return_value=self.acl_gid)),
+                ("worker_release_runtime_verifier.grant_candidate_acl", patch(
+                    "worker_release_runtime_verifier.grant_candidate_acl",
+                    side_effect=lambda *_a, **kwargs: kwargs["gid"])),
+                ("worker_release_runtime_acl.os.getxattr", patch(
+                    "worker_release_runtime_acl.os.getxattr", side_effect=fake_getxattr, create=True)),
+                ("worker_release_runtime_acl.os.setxattr", patch(
+                    "worker_release_runtime_acl.os.setxattr", return_value=None, create=True)),
+            )
+            for _name, item in patches:
+                item.start()
+                self.acl_patches.append(item)
 
     def tearDown(self):
+        for item in reversed(self.acl_patches):
+            item.stop()
         self.releases_root_patch.stop()
         for current, directories, _files in os.walk(self.temporary.name, topdown=True, followlinks=False):
             os.chmod(current, 0o700)

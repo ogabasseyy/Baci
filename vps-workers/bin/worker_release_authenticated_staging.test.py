@@ -12,10 +12,12 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import worker_release_broker
+import worker_release_candidate_pin
+import worker_release_authenticated_staging as staging_module
 from worker_release_authenticated_staging import (
     StagingOrchestrationRejected, _copy_contents, stage_authenticated_archive,
 )
@@ -70,6 +72,29 @@ def response(data: bytes) -> dict[str, object]:
 
 
 class AuthenticatedStagingTests(unittest.TestCase):
+    def test_runtime_verifier_receipt_is_required_before_publish(self):
+        run = identity()
+        candidate = Path("/srv/baci-workers/releases/." + SHA + ".incoming." + "b" * 32)
+        digest = "c" * 64
+        opaque_receipt = object()
+        with (patch.object(staging_module, "verify_materialized_candidate",
+                           return_value=opaque_receipt) as verify,
+              patch.object(staging_module, "validate_runtime_receipt", return_value=False) as validate):
+            with self.assertRaisesRegex(StagingOrchestrationRejected, "receipt does not match"):
+                staging_module._verify_runtime_before_publish(candidate, run, digest, 81)
+        verify.assert_called_once_with(candidate, run, archive_sha256=digest,
+                                       owner_uid=0, owner_gid=81)
+        validate.assert_called_once_with(opaque_receipt, candidate, run, digest,
+                                         owner_uid=0, owner_gid=81)
+
+    def test_unproven_runtime_unit_preserves_candidate_for_recovery(self):
+        run = identity()
+        candidate = Path("/srv/baci-workers/releases/." + SHA + ".incoming." + "c" * 32)
+        with patch.object(staging_module, "verify_materialized_candidate",
+                          side_effect=staging_module.RuntimeVerificationQuiescenceUnproven("unproven")):
+            with self.assertRaises(staging_module.RuntimeVerificationQuiescenceUnproven):
+                staging_module._verify_runtime_before_publish(candidate, run, "d" * 64, 81)
+
     def test_descriptor_copy_copies_regular_tree_and_rejects_links(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -157,14 +182,28 @@ class AuthenticatedStagingTests(unittest.TestCase):
                 payload = output / "payload"
                 cli = payload / "web" / "node_modules" / "tsx" / "cli.mjs"
                 cli.parent.mkdir(parents=True)
-                cli.write_text("export {};\n")
+                cli.write_text("#!/usr/bin/node\nconsole.log('tsx v4.20.6');\n")
                 cli.chmod(0o550)
                 binary = payload / "web" / "node_modules" / ".bin"
                 binary.mkdir()
                 (binary / "tsx").symlink_to("../tsx/cli.mjs")
                 dotenv = payload / "root" / "node_modules" / "dotenv" / "index.js"
                 dotenv.parent.mkdir(parents=True)
-                dotenv.write_text("export {};\n")
+                (dotenv.parent / "package.json").write_text(
+                    '{"name":"dotenv","type":"module","exports":"./index.js"}\n')
+                dotenv.write_text("export function config() { return {}; }\n")
+                supabase = payload / "root" / "node_modules" / "@supabase" / "supabase-js"
+                supabase.mkdir(parents=True)
+                (supabase / "package.json").write_text(
+                    '{"name":"@supabase/supabase-js","type":"module","exports":"./index.js"}\n')
+                (supabase / "index.js").write_text(
+                    "export function createClient() { return { from() {} }; }\n")
+                expo = payload / "root" / "node_modules" / "expo-server-sdk"
+                expo.mkdir(parents=True)
+                (expo / "package.json").write_text(
+                    '{"name":"expo-server-sdk","type":"module","exports":"./index.js"}\n')
+                (expo / "index.js").write_text(
+                    "export class Expo { sendPushNotificationsAsync() {} }\n")
                 locks = {"pnpm-lock.yaml": sha256_file(source / "pnpm-lock.yaml"),
                          "vps-workers/pnpm-lock.yaml": sha256_file(
                              source / "vps-workers" / "pnpm-lock.yaml")}
@@ -200,15 +239,16 @@ class AuthenticatedStagingTests(unittest.TestCase):
                         f"{systemd_unit_failure_summary(unit)}"
                     ) from error
 
-            receipt = stage_authenticated_archive(
-                response(data), identity(), expected_archive_sha256=digest,
-                worker_root=worker_root, lock_path=lock, result_root=results,
-                worker_gid=os.getgid(), builder=builder,
-                extractor=diagnostic_extractor,
-                builder_runner_factory=journaled_runner_factory,
-                builder_build_root=build_root, builder_results_root=results,
-                builder_quiesced=lambda _fence: True,
-            )
+            with patch.object(worker_release_candidate_pin, "RELEASES_ROOT", worker_root / "releases"):
+                receipt = stage_authenticated_archive(
+                    response(data), identity(), expected_archive_sha256=digest,
+                    worker_root=worker_root, lock_path=lock, result_root=results,
+                    worker_gid=account.pw_gid, builder=builder,
+                    extractor=diagnostic_extractor,
+                    builder_runner_factory=journaled_runner_factory,
+                    builder_build_root=build_root, builder_results_root=results,
+                    builder_quiesced=lambda _fence: True,
+                )
             release = Path(receipt["release_path"])
             self.assertEqual(receipt["phase"], "committed")
             self.assertFalse((worker_root / "current").exists())

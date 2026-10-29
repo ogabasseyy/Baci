@@ -83,6 +83,27 @@ export async function runWorkerReleaseCoordinator({
       throw new Error('worker release recovery receipt is invalid; persistent release lock remains held');
     }
   }
+  let stageRecovery;
+  if (recoveryStatus.stageRecovery?.pending) {
+    const target = recoveryStatus.stageRecovery.target;
+    if (!target || !SHA_RE.test(target.sha ?? '') ||
+        !/^[1-9][0-9]{0,19}$/.test(String(target.run_id)) ||
+        !Number.isSafeInteger(target.run_attempt) || target.run_attempt < 1 ||
+        !/^[1-9][0-9]{0,19}$/.test(String(target.job_id))) {
+      throw new Error('interrupted staging fence is invalid; persistent release lock remains held');
+    }
+    stageRecovery = await authorizedBroker.operateWorkerRelease({
+      operation: 'stage-recovery', ...common, recoveryOf: target,
+    });
+    const recoveredFence = stageRecovery?.recoveredFence;
+    if (stageRecovery?.ok !== true || stageRecovery.operation !== 'stage-recovery' ||
+        stageRecovery.sourceSha !== identity.sha || stageRecovery.recovered !== true ||
+        recoveredFence?.sha !== target.sha || String(recoveredFence.run_id) !== String(target.run_id) ||
+        recoveredFence.run_attempt !== target.run_attempt || String(recoveredFence.job_id) !== String(target.job_id) ||
+        !hasRunReceipt(stageRecovery, identity)) {
+      throw new Error('interrupted staging recovery receipt is invalid; persistent release lock remains held');
+    }
+  }
   const staged = await authorizedBroker.stageWorkerRelease(common);
   if (staged?.ok !== true || staged.operation !== 'stage' || staged.sourceSha !== identity.sha ||
       !Number.isSafeInteger(staged.entryCount) || staged.entryCount < 1) {
@@ -111,7 +132,7 @@ export async function runWorkerReleaseCoordinator({
         health.healthy !== true || !hasRunReceipt(health, identity, promoted.jobId)) {
       throw new Error('worker release installed SHA or health receipt is invalid');
     }
-    return { recovery, staged, preflight, promoted, health };
+    return { recovery, stageRecovery, staged, preflight, promoted, health };
   } catch (healthError) {
     try {
       const rollback = await authorizedBroker.operateWorkerRelease({ operation: 'rollback', ...common });

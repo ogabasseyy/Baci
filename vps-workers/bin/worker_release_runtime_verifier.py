@@ -20,7 +20,6 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from worker_release_candidate_pin import CandidatePinRejected, pin_candidate
@@ -30,8 +29,12 @@ from worker_release_dependency_supervisor_cgroup import (
 from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
 from worker_release_runtime_diagnostics import BoundedLauncherStderr, MAX_CAPTURE_BYTES
 from worker_release_runtime_smoke import run_fixed_smokes
+from worker_release_runtime_acl import RuntimeAclRejected, grant_candidate_acl, verifier_gid
+from worker_release_runtime_receipt import (
+    ACCESS_POLICY, RECEIPT_SEAL as _RECEIPT_SEAL, RuntimeVerificationReceipt,
+    VERIFIER_VERSION, validate_runtime_receipt,
+)
 
-VERIFIER_VERSION = "materialized-worker-runtime-v1"
 MAX_CHECK_SECONDS = 35
 MAX_LAUNCH_SECONDS = 5
 MAX_CLEANUP_SECONDS = 30
@@ -42,7 +45,6 @@ SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
-_RECEIPT_SEAL = object()
 
 
 class RuntimeVerificationRejected(RuntimeError):
@@ -53,20 +55,6 @@ class RuntimeVerificationQuiescenceUnproven(RuntimeVerificationRejected):
     """The exact transient smoke unit could not be proven stopped and empty."""
 
     preserve_candidate_required = True
-
-
-@dataclass(frozen=True)
-class RuntimeVerificationReceipt:
-    """In-process proof token; it is deliberately not serializable or portable."""
-
-    fence: tuple[tuple[str, object], ...]
-    archive_sha256: str
-    candidate_sha256: str
-    candidate_dev: int
-    candidate_ino: int
-    verifier_version: str
-    checks: tuple[str, ...]
-    _seal: object
 
 
 def _systemctl(*args: str, timeout: float = 1) -> str:
@@ -250,12 +238,14 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
         raise RuntimeVerificationRejected(failure)
 
 
-def _run_fixed_smokes(candidate: Path, fence_digest: str) -> tuple[str, ...]:
+def _run_fixed_smokes(candidate: Path, fence_digest: str,
+                      runtime_gid: int | None = None) -> tuple[str, ...]:
     """Execute only fixed package checks in bounded, drained systemd units."""
     return run_fixed_smokes(
         candidate, fence_digest, execute_unit=_execute_fixed_unit, unit_name=_unit_name,
         rejected=RuntimeVerificationRejected, max_seconds=MAX_CHECK_SECONDS,
         max_output_bytes=MAX_CAPTURE_BYTES, systemd_run=SYSTEMD_RUN, systemctl=SYSTEMCTL,
+        runtime_gid=verifier_gid() if runtime_gid is None else runtime_gid,
     )
 
 
@@ -279,40 +269,23 @@ def verify_materialized_candidate(candidate: Path, identity: AuthenticatedRun, *
         raise RuntimeVerificationRejected("authenticated archive binding is invalid")
     fence = tuple(sorted(identity.fence().items()))
     try:
-        pin_context = pin_candidate(Path(candidate), expected_sha=identity.sha, owner_uid=owner_uid, owner_gid=owner_gid)
-    except (CandidatePinRejected, OSError, UnicodeError) as error:
+        verifier_group = verifier_gid()
+        grant_candidate_acl(Path(candidate), expected_sha=identity.sha, owner_uid=owner_uid,
+                            owner_gid=owner_gid, gid=verifier_group)
+        pin_context = pin_candidate(Path(candidate), expected_sha=identity.sha, owner_uid=owner_uid,
+                                    owner_gid=owner_gid, verifier_gid=verifier_group)
+    except (CandidatePinRejected, RuntimeAclRejected, OSError, UnicodeError) as error:
         raise RuntimeVerificationRejected("candidate failed bounded inode and tree validation") from error
     with pin_context as pin:
         fence_digest = hashlib.sha256(
             repr((fence, archive_sha256, pin.digest, *pin.candidate_identity[:2])).encode("utf-8")
         ).hexdigest()
-        checks = _run_fixed_smokes(pin.path, fence_digest)
+        checks = _run_fixed_smokes(pin.path, fence_digest, pin.verifier_gid)
         pin.verify_unchanged()
         return RuntimeVerificationReceipt(fence, archive_sha256, pin.digest,
                                           pin.candidate_identity[0], pin.candidate_identity[1],
-                                          VERIFIER_VERSION, checks, _RECEIPT_SEAL)
+                                          VERIFIER_VERSION, pin.verifier_gid, ACCESS_POLICY,
+                                          checks, _RECEIPT_SEAL)
 
-
-def validate_runtime_receipt(receipt: object, candidate: Path, identity: AuthenticatedRun,
-                             archive_sha256: str, *, owner_uid: int = 0,
-                             owner_gid: int) -> bool:
-    """Validate only a receipt minted by this module for the unchanged candidate."""
-    if (not isinstance(identity, AuthenticatedRun) or identity.status != "in_progress"
-            or not _SHA_RE.fullmatch(identity.sha) or not isinstance(archive_sha256, str)
-            or not _DIGEST_RE.fullmatch(archive_sha256)
-            or not isinstance(receipt, RuntimeVerificationReceipt) or receipt._seal is not _RECEIPT_SEAL
-            or receipt.verifier_version != VERIFIER_VERSION
-            or receipt.checks != ("web_tsx_version", "worker_production_dependency_imports")
-            or receipt.archive_sha256 != archive_sha256
-            or receipt.fence != tuple(sorted(identity.fence().items()))):
-        return False
-    try:
-        with pin_candidate(Path(candidate), expected_sha=identity.sha, owner_uid=owner_uid, owner_gid=owner_gid) as pin:
-            pin.verify_unchanged()
-            return (pin.digest == receipt.candidate_sha256
-                    and (pin.candidate_identity[0], pin.candidate_identity[1])
-                    == (receipt.candidate_dev, receipt.candidate_ino))
-    except (OSError, RuntimeVerificationRejected, CandidatePinRejected):
-        return False
 
 __all__ = ["RuntimeVerificationReceipt", "RuntimeVerificationRejected", "validate_runtime_receipt", "verify_materialized_candidate"]

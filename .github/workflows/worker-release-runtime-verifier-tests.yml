@@ -4,11 +4,25 @@ on:
   pull_request:
     paths:
       - 'vps-workers/bin/worker_release_runtime_verifier.py'
+      - 'vps-workers/bin/worker_release_runtime_receipt.py'
       - 'vps-workers/bin/worker_release_runtime_verifier.test.py'
       - 'vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py'
       - 'vps-workers/bin/worker_release_runtime_verifier_test_support.py'
       - 'vps-workers/bin/worker_release_runtime_diagnostics.py'
       - 'vps-workers/bin/worker_release_runtime_smoke.py'
+      - 'vps-workers/bin/worker_release_runtime_view.py'
+      - 'vps-workers/bin/worker_release_runtime_view.test.py'
+      - 'vps-workers/bin/worker_release_runtime_view_journal.py'
+      - 'vps-workers/bin/worker_release_runtime_view_recovery.py'
+      - 'vps-workers/bin/worker_release_runtime_view_recovery.test.py'
+      - 'vps-workers/bin/worker_release_runtime_acl.py'
+      - 'vps-workers/bin/worker_release_runtime_acl.test.py'
+      - 'vps-workers/bin/provision-baci-worker.py'
+      - 'vps-workers/bin/provision-baci-worker.test.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.test.py'
+      - 'vps-workers/bin/provision_worker_release_install.py'
+      - 'vps-workers/bin/worker_release_broker_module_closure.py'
       - 'vps-workers/bin/worker_release_dependency_install.py'
       - 'vps-workers/bin/worker_release_dependency_artifacts.py'
       - 'vps-workers/bin/worker_release_candidate_pin.py'
@@ -47,12 +61,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes nodejs
+          sudo groupadd --system baci-worker
+          sudo groupadd --system baci-worker-runtime-verify
           sudo install -d -o root -g root -m 0755 /etc/baci-workers
           sudo install -d -o root -g root -m 0755 /srv/baci-workers
-          sudo install -d -o root -g root -m 0755 /srv/baci-workers/releases
+          sudo install -d -o root -g baci-worker -m 0750 /srv/baci-workers/releases
           sudo install -d -o root -g root -m 0755 /srv/baci-workers/runtime
           sudo install -d -o root -g root -m 0755 /srv/baci-workers/locks
-          test "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)" = '0:0:755'
+          sudo install -d -o root -g root -m 0711 /var/lib/baci-worker-runtime-views
+          test "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)" = "0:$(getent group baci-worker | cut -d: -f3):750"
+          test "$(stat -c '%u:%g:%a' /var/lib/baci-worker-runtime-views)" = '0:0:711'
+          test -z "$(getent group baci-worker-runtime-verify | cut -d: -f4)"
           test -x /usr/bin/systemd-run
           test -x /usr/bin/systemctl
           test -x /usr/bin/node
@@ -60,7 +79,12 @@ jobs:
         run: |
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view_recovery.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_acl.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/bin/provision-worker-release-boundary.test.py -v
       - name: Run actual fixed systemd sandbox verification
         run: |
           sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
           sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view_recovery.test.py -v

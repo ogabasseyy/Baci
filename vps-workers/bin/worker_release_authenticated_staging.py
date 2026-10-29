@@ -1,9 +1,10 @@
-"""Disconnected root orchestration for authenticated worker archive staging.
+"""Root orchestration for authenticated worker archive staging.
 
 The response and AuthenticatedRun must come directly from the fixed broker
 dispatcher. Their Python shapes are constructible and are not authentication
-tokens. Production wiring remains disabled until the broker call site and the
-isolated systemd tests establish that boundary.
+tokens. The fixed broker dispatch supplies them after OIDC/GitHub validation;
+this module binds them to isolated extraction, dependency construction, and
+prepublication runtime verification.
 """
 from __future__ import annotations
 
@@ -31,6 +32,10 @@ from worker_release_source_snapshot import pin_source_snapshot
 from worker_release_source_view_journal import SourceViewJournal
 from worker_release_stage_journal import StageJournal
 from worker_release_systemd_extractor import RESOURCE_ROOT, extract_frozen_source
+from worker_release_runtime_verifier import (
+    RuntimeVerificationQuiescenceUnproven, RuntimeVerificationRejected,
+    validate_runtime_receipt, verify_materialized_candidate,
+)
 
 OWNER_UID = 0
 MAX_COPY_BYTES = 512 * 1024 * 1024
@@ -176,6 +181,27 @@ _enable_install_parents = partial(enable_install_parents, owner_uid=OWNER_UID,
                                   rejected=StagingOrchestrationRejected)
 
 
+def _verify_runtime_before_publish(candidate: Path, identity: AuthenticatedRun,
+                                   archive_sha256: str, worker_gid: int):
+    """Require a sealed verifier receipt for this unchanged incoming candidate."""
+    try:
+        receipt = verify_materialized_candidate(
+            candidate, identity, archive_sha256=archive_sha256,
+            owner_uid=OWNER_UID, owner_gid=worker_gid,
+        )
+    except RuntimeVerificationQuiescenceUnproven:
+        raise
+    except (RuntimeVerificationRejected, OSError) as error:
+        raise StagingOrchestrationRejected(
+            "materialized release runtime verification failed") from error
+    if not validate_runtime_receipt(
+            receipt, candidate, identity, archive_sha256,
+            owner_uid=OWNER_UID, owner_gid=worker_gid):
+        raise StagingOrchestrationRejected(
+            "materialized release runtime receipt does not match candidate")
+    return receipt
+
+
 def stage_authenticated_archive(
     response: dict[str, object], identity: AuthenticatedRun, *, expected_archive_sha256: str,
     worker_root: Path, lock_path: Path, result_root: Path, worker_gid: int,
@@ -184,15 +210,15 @@ def stage_authenticated_archive(
     builder_build_root: Path | None = None,
     builder_results_root: Path | None = None,
     extractor: Callable[[StageJournal, bytes, str], dict[str, object]] = extract_frozen_source,
-    builder_quiesced: Callable[[dict[str, object]], bool],
+    builder_quiesced: Callable[[dict[str, object]], bool] | None = None,
 ) -> dict[str, object]:
     """Compose authenticated bytes, isolated extraction, source pinning and dependency build.
 
-    `response` must be the immediate result of the trusted dispatcher callback;
-    `builder_quiesced` must prove that its systemd build cgroup is empty before
+    `response` must be the immediate result of the trusted dispatcher callback.
+    The drained builder journal must match the exact authenticated fence before
     temporary output cleanup. The builder must accept and invoke the supplied
-    supervised `runner=` callback. This API is deliberately not wired into
-    broker dispatch and does not itself authenticate the dispatcher callback.
+    supervised `runner=` callback. This API does not itself authenticate the
+    dispatcher callback.
     """
     if os.geteuid() != OWNER_UID or not isinstance(identity, AuthenticatedRun):
         raise StagingOrchestrationRejected("root broker and authenticated run identity are required")
@@ -251,18 +277,30 @@ def stage_authenticated_archive(
                             runner = builder_runner_factory(identity, builder_journal)
                             return builder(source, sha, runner=runner)
 
+                        def prove_builder_quiesced(expected_fence: dict[str, object]) -> bool:
+                            record = builder_journal.read()
+                            if (record is None or record.get("fence") != expected_fence
+                                    or record.get("phase") != "drained"):
+                                return False
+                            return (builder_quiesced is None
+                                    or builder_quiesced(expected_fence) is True)
+
                         build_and_install_dependencies(
                             response, identity,
                             source_snapshot=BrokerFrozenSourceSnapshot(
                                 view, identity.sha, expected_archive_sha256),
                             expected_bundle_sha256=expected_archive_sha256,
                             result_root=result_root, release_root=incoming,
-                            builder=run_builder, builder_quiesced=builder_quiesced,
+                            builder=run_builder, builder_quiesced=prove_builder_quiesced,
                             owner_uid=OWNER_UID,
                         )
                         view_pin.verify_unchanged()
                         source_pin.verify_unchanged()
                         _freeze_release(incoming, worker_gid=worker_gid)
+                        # An unproven verifier cgroup raises a preserve-required
+                        # exception, leaving this journaled candidate recoverable.
+                        runtime_receipt = _verify_runtime_before_publish(
+                            incoming, identity, expected_archive_sha256, worker_gid)
                         journal.remove_source_snapshot()
                         source_view_journal.cleanup(fence=fence, current_owner_proven=True,
                                                     processes_quiesced=True)
@@ -273,6 +311,11 @@ def stage_authenticated_archive(
                                                 build_root=(builder_build_root or Path(
                                                     "/run/baci-worker-release-build")),
                                                 result_root=(builder_results_root or result_root))
+                        if not validate_runtime_receipt(
+                                runtime_receipt, incoming, identity, expected_archive_sha256,
+                                owner_uid=OWNER_UID, owner_gid=worker_gid):
+                            raise StagingOrchestrationRejected(
+                                "materialized release changed after runtime verification")
                         published = journal.publish()
                         from worker_release_staging import _validate_staged_release
                         count = _validate_staged_release(str(Path(worker_root) / "releases"),

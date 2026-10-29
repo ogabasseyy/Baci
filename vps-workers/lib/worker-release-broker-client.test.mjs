@@ -124,6 +124,30 @@ test('preflight rejects a receipt for another SHA', async () => {
   }), /preflight/);
 });
 
+test('stage recovery sends and validates the exact terminal attempt target', async () => {
+  const target = { run_id: '77', run_attempt: 3, sha: 'b'.repeat(40), job_id: '88' };
+  const receipt = await operateWorkerRelease({
+    operation: 'stage-recovery', sha, recoveryOf: target,
+    githubToken: token, oidcToken: 'signed-oidc-token',
+    exchangeImpl: async (_socketPath, request) => {
+      assert.deepEqual(Object.keys(request).sort(),
+                       ['githubToken', 'oidcToken', 'operation', 'recoveryOf', 'sourceSha']);
+      assert.equal(request.operation, 'stage-recovery');
+      assert.deepEqual(request.recoveryOf, target);
+      return { ok: true, operation: 'stage-recovery', sourceSha: sha, recovered: true,
+        recoveredFence: target, runId: '42', runAttempt: 1, jobId: '43' };
+    },
+  });
+  assert.equal(receipt.recovered, true);
+  await assert.rejects(operateWorkerRelease({
+    operation: 'stage-recovery', sha, recoveryOf: target,
+    githubToken: token, oidcToken: 'signed-oidc-token',
+    exchangeImpl: async () => ({ ok: true, operation: 'stage-recovery', sourceSha: sha,
+      recovered: true, recoveredFence: { ...target, job_id: '89' },
+      runId: '42', runAttempt: 1, jobId: '43' }),
+  }), /stage-recovery/);
+});
+
 test('client sends authenticated fixed lifecycle requests and validates operation receipts', async () => {
   const readinessUnits = [
     'baci-domain-event-router.service', 'baci-event-delivery-worker.service',

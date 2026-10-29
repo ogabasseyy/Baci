@@ -9,7 +9,7 @@ export const WORKER_RELEASE_BROKER_POLICY = Object.freeze({
   readinessJob: 'vps-drain-readiness',
   runnerLabel: 'baci-release',
   branch: 'refs/heads/main',
-  operations: Object.freeze(['stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover', 'promote', 'health', 'rollback']),
+  operations: Object.freeze(['stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover', 'stage-recovery', 'promote', 'health', 'rollback']),
   maxBundleBytes: 256 * 1024 * 1024,
   authorizationDeadlineMs: 330_000,
   githubRequestTimeoutMs: 30_000,
@@ -201,10 +201,10 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
   if (!OP_SET.has(operation)) fail('unknown operation');
   const expectedKeys = operation === 'stage'
     ? 'bundleSha256,githubToken,oidcToken,operation,sourceSha'
-    : operation === 'recover'
+    : ['recover', 'stage-recovery'].includes(operation)
       ? null
       : 'githubToken,oidcToken,operation,sourceSha';
-  if (operation === 'recover') {
+  if (['recover', 'stage-recovery'].includes(operation)) {
     if (!['githubToken,oidcToken,operation,sourceSha',
           'githubToken,oidcToken,operation,recoveryOf,sourceSha'].includes(keys.join(','))) {
       fail('request contains unsupported fields');
@@ -222,8 +222,9 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
     fail('source SHA is not current main');
   }
   let recoveryOf;
-  if (operation === 'recover') {
+  if (['recover', 'stage-recovery'].includes(operation)) {
     const target = request.recoveryOf;
+    if (operation === 'stage-recovery' && target === undefined) fail('stage recovery target is required');
     if (target !== undefined) {
       if (!target || Object.keys(target).sort().join(',') !== 'job_id,run_attempt,run_id,sha') fail('recovery target fields are invalid');
       try {
@@ -271,7 +272,7 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
     workerUid,
     workerRoot: WORKER_RELEASE_BROKER_POLICY.workerRoot,
     ...(operation === 'stage' ? { sourceArchive: archive.bytes } : {}),
-    ...(operation === 'recover' && recoveryOf ? { recoveryOf } : {}),
+    ...(['recover', 'stage-recovery'].includes(operation) && recoveryOf ? { recoveryOf } : {}),
   });
 }
 

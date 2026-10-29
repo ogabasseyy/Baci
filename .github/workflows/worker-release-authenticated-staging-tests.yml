@@ -5,8 +5,21 @@ on:
     paths:
       - 'vps-workers/bin/worker_release_authenticated_staging.py'
       - 'vps-workers/bin/worker_release_authenticated_staging_recovery.py'
+      - 'vps-workers/bin/worker_release_authenticated_staging_recovery.test.py'
       - 'vps-workers/bin/worker_release_authenticated_staging_layout.py'
       - 'vps-workers/bin/worker_release_authenticated_staging.test.py'
+      - 'vps-workers/bin/worker_release_broker_dispatch.py'
+      - 'vps-workers/bin/worker_release_broker_dispatch.test.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier.py'
+      - 'vps-workers/bin/worker_release_runtime_receipt.py'
+      - 'vps-workers/bin/worker_release_runtime_acl.py'
+      - 'vps-workers/bin/worker_release_runtime_diagnostics.py'
+      - 'vps-workers/bin/worker_release_runtime_smoke.py'
+      - 'vps-workers/bin/worker_release_runtime_view.py'
+      - 'vps-workers/bin/worker_release_candidate_pin.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
       - 'vps-workers/bin/worker_release_source_view_journal.py'
       - 'vps-workers/bin/worker_release_source_view_journal.test.py'
       - 'vps-workers/bin/worker_release_systemd_contract.py'
@@ -56,11 +69,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install the system Node runtime used by the isolated candidate smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes nodejs
+          test -x /usr/bin/node
       - name: Run isolated staging integration with checked worker-root fixture
         run: |
           sudo bash -s <<'BASH'
           set -euo pipefail
           fixture=/srv/baci-workers
+          view_fixture=/var/lib/baci-worker-runtime-views
+          verify_group=baci-worker-runtime-verify
+          verify_group_created=0
+          verify_group_gid=''
           if [[ ! -d /srv || -L /srv || "$(stat -c '%u:%g' /srv)" != "0:0" ]]; then
             echo 'unsafe /srv parent for disposable worker-root fixture' >&2
             exit 1
@@ -74,8 +96,23 @@ jobs:
             echo 'refusing pre-existing /srv/baci-workers fixture target' >&2
             exit 1
           fi
+          if [[ ! -d /var/lib || -L /var/lib || "$(stat -c '%u:%g' /var/lib)" != "0:0" ]]; then
+            echo 'unsafe /var/lib parent for runtime-view fixture' >&2
+            exit 1
+          fi
+          view_parent_mode="$(stat -c '%a' /var/lib)"
+          if (( (8#$view_parent_mode & 022) != 0 )); then
+            echo 'writable /var/lib parent for runtime-view fixture' >&2
+            exit 1
+          fi
+          if [[ -e "$view_fixture" || -L "$view_fixture" ]]; then
+            echo 'refusing pre-existing runtime-view fixture target' >&2
+            exit 1
+          fi
           install -d -o root -g root -m 0755 "$fixture"
           fixture_identity="$(stat -c '%d:%i:%u:%g:%a' "$fixture")"
+          install -d -o root -g root -m 0711 "$view_fixture"
+          view_fixture_identity="$(stat -c '%d:%i:%u:%g:%a' "$view_fixture")"
           fixture_created=1
           cleanup() {
             status=$?
@@ -89,15 +126,46 @@ jobs:
                 echo 'disposable worker-root fixture changed unexpectedly' >&2
                 status=1
               fi
+              if [[ -d "$view_fixture" && ! -L "$view_fixture" \
+                    && "$(stat -c '%d:%i:%u:%g:%a' "$view_fixture" 2>/dev/null || true)" == "$view_fixture_identity" \
+                    && -z "$(find "$view_fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+                rmdir "$view_fixture"
+              else
+                echo 'disposable runtime-view fixture changed unexpectedly' >&2
+                status=1
+              fi
+              if [[ "$verify_group_created" == 1 ]]; then
+                group_record="$(getent group "$verify_group" || true)"
+                if [[ "$group_record" == "$verify_group:x:$verify_group_gid:" \
+                      && -z "$(awk -F: -v gid="$verify_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]; then
+                  groupdel "$verify_group"
+                else
+                  echo 'disposable runtime verifier group changed unexpectedly' >&2
+                  status=1
+                fi
+              fi
             fi
             exit "$status"
           }
           trap cleanup EXIT
+          if getent group "$verify_group" >/dev/null; then
+            echo 'refusing pre-existing runtime verifier group' >&2
+            exit 1
+          fi
+          groupadd --system "$verify_group"
+          verify_group_created=1
+          verify_group_gid="$(getent group "$verify_group" | cut -d: -f3)"
+          [[ "$(getent group "$verify_group")" == "$verify_group:x:$verify_group_gid:" ]]
+          [[ -z "$(awk -F: -v gid="$verify_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]
           [[ "$fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$fixture")" ]]
           [[ -z "$(find "$fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
+          [[ "$view_fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$view_fixture")" ]]
+          [[ -z "$(find "$view_fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           /usr/bin/python3 -B vps-workers/bin/provision-worker-source-extractor.py --apply
           /usr/bin/python3 -B vps-workers/bin/worker_release_source_snapshot.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_source_view_journal.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_dispatch.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging_recovery.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
           WORKER_RELEASE_STAGE_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
           BASH

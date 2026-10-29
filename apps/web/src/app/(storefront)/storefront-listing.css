@@ -31,6 +31,7 @@
 @source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
 @source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
 @source "../../components/storefront/ogabassey/components/cart-sidebar*.tsx";
+@source "../../components/storefront/ogabassey/components/cart-variant-details.tsx";
 @source "../../components/storefront/ogabassey/components/CategoryFiltersSidebar.tsx";
 @source "../../components/storefront/ogabassey/components/CategoryRecentCarousel.tsx";
 @source "../../components/storefront/ogabassey/components/Footer.tsx";
@@ -40,6 +41,8 @@
 @source "../../components/storefront/ogabassey/components/Logo.tsx";
 @source "../../components/storefront/ogabassey/components/MobileFooter.tsx";
 @source "../../components/storefront/ogabassey/components/NegotiationModal.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationModalStatusContent.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationUploadForm.tsx";
 @source "../../components/storefront/ogabassey/components/OfflineNotice.tsx";
 @source "../../components/storefront/ogabassey/components/PopupSystem.tsx";
 @source "../../components/storefront/ogabassey/components/ProductCard.tsx";

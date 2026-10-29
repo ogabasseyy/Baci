@@ -29,11 +29,14 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
     // Route-unique: only CategoryFiltersSidebar (in this sheet's sources)
     // uses slide-in-from-top-1, so a dropped sidebar @source fails here.
     expect(result.css).toContain('.slide-in-from-top-1');
-    // Deferred shell chrome (CartSidebar / PopupSystem) must remain styled
-    // on listing routes without StorefrontFullStyleLoader.
+    // Deferred shell chrome (CartSidebar / PopupSystem / NegotiationModal) must
+    // remain styled on listing routes without StorefrontFullStyleLoader.
     expect(result.css).toContain('.w-screen');
     expect(result.css).toContain('.z-60');
     expect(result.css).toContain('.z-70');
+    expect(result.css).toContain('.space-y-0\\.5');
+    expect(result.css).toContain('.slide-in-from-bottom-2');
+    expect(result.css).toContain('.file\\:mr-4');
     expect(result.css).not.toContain(`.${['border', '14'].join('-')}`);
   }, 20_000);
 

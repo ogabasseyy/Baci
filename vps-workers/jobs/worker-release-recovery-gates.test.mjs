@@ -53,5 +53,8 @@ describe('worker release recovery launch gates', () => {
     assert.match(harness, /_lease = SimpleNamespace\(_state="active", _fence=manager\._fence\)/);
     assert.doesNotMatch(harness, /rm -f "\$latch"/);
     assert.match(harness, /Coordinator terminal-proof\/authentication is tested/);
+    assert.match(harness, /StartLimitIntervalSec=0/);
+    assert.match(harness, /worker ExecStart after recovery/);
+    assert.match(harness, /-p StartLimitBurst -p NRestarts/);
   });
 });

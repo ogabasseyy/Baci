@@ -48,7 +48,8 @@ cleanup() {
     echo "systemd fault harness diagnostics (${suffix})" >&2
     for unit in "${units[@]}"; do
       systemctl show "$unit" -p LoadState -p ActiveState -p SubState -p Result \
-        -p ExecCondition -p ExecConditionExits -p ExecMainStatus -p After -p BindsTo >&2
+        -p ExecCondition -p ExecConditionExits -p ExecMainStatus -p StartLimitIntervalUSec \
+        -p StartLimitBurst -p NRestarts -p After -p BindsTo >&2
       systemctl status --no-pager --full "$unit" >&2
       journalctl --no-pager -n 40 -u "$unit" >&2
     done
@@ -193,6 +194,10 @@ cat >"${unit_dir}/${core}" <<EOF
 [Unit]
 Description=Disposable core worker ${suffix}
 $(unit_relations "$core_fragment")
+# The fault sequence intentionally retries a gated launch several times.
+# Disable systemd's unrelated restart-rate limiter so the final post-recovery
+# attempt proves ExecStart actually ran.
+StartLimitIntervalSec=0
 [Service]
 Type=simple
 User=baci-worker
@@ -310,8 +315,9 @@ assert os.readlink(current) == f"releases/{latch['previous_sha']}"
 PY
 systemctl start "$core"
 systemctl is-active --quiet "$core"
-if [ "$(wc -l <"$started")" -ne 1 ]; then
-  echo "expected one active worker start after recovery" >&2
+for _ in $(seq 1 100); do [ -e "$started" ] && break; sleep 0.05; done
+if [ ! -e "$started" ] || [ "$(wc -l <"$started")" -ne 1 ]; then
+  echo "expected one worker ExecStart after recovery (systemd unit active alone is insufficient)" >&2
   exit 1
 fi
 systemctl stop "$core"

@@ -70,8 +70,8 @@ describe('GIGL direct worker cost contract', () => {
       join(repoRoot, '.github', 'scripts', 'worker-release-coordinator.mjs'),
       'utf8'
     );
-    const broker = readFileSync(
-      join(repoRoot, 'vps-workers', 'bin', 'worker_release_broker.py'),
+    const brokerDispatch = readFileSync(
+      join(repoRoot, 'vps-workers', 'bin', 'worker_release_broker_dispatch.py'),
       'utf8'
     );
     const quiesceAdapter = readFileSync(
@@ -88,9 +88,12 @@ describe('GIGL direct worker cost contract', () => {
     assert.match(coordinatorScript, /operation: 'promote'/);
     assert.match(coordinatorScript, /operation: 'health'/);
     assert.match(coordinatorScript, /operation: 'rollback'/);
-    assert.match(broker, /lease = quiescence\.acquire\(identity\.fence\(\)\)/);
     assert.match(
-      broker,
+      brokerDispatch,
+      /lease = quiescence\.acquire\(identity\.fence\(\)\)/
+    );
+    assert.match(
+      brokerDispatch,
       /lease = quiescence\.require_active\(identity\.fence\(\)\)/
     );
     assert.match(

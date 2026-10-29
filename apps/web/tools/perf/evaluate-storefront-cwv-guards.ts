@@ -61,7 +61,7 @@ export function evaluateHomepageHtmlGuard(
 
   const hiddenSections = extractHiddenSuspenseSections(html);
   const heroInsideHiddenSuspense = hiddenSections.some((s) =>
-    /(?:<source\b[^>]*srcset=|\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero\b)/i.test(
+    /(?:<source\b[^>]*srcset=|\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero=["'])/i.test(
       s
     )
   );

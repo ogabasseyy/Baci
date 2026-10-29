@@ -43,7 +43,7 @@ export function extractHiddenSuspenseSections(html: string): string[] {
       html
         .slice(start, end)
         .replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, (pic) =>
-          /\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero\b/i.test(
+          /\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero=["']/i.test(
             pic
           )
             ? pic

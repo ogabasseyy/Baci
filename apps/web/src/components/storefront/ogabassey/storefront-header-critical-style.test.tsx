@@ -22,6 +22,20 @@ it('anchors mobile navigation before an external stylesheet can arrive', () => {
   expect(values.bottom).toBe('0');
   expect(values.left).toBe('0');
   expect(values.right).toBe('0');
+  const hiddenValues: Record<string, string> = {};
+  for (const style of document.querySelectorAll('style')) {
+    postcss
+      .parse(style.textContent ?? '')
+      .walkRules(
+        '.ogabassey-mobile-footer.ogabassey-mobile-footer--hidden',
+        (rule) => {
+          rule.walkDecls((decl) => {
+            hiddenValues[decl.prop] = decl.value;
+          });
+        }
+      );
+  }
+  expect(hiddenValues.transform).toBe('translateY(100%)');
 });
 
 it('provides first-render icon geometry without loading an external sheet', () => {

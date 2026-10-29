@@ -30,7 +30,7 @@ export function useSearchComparisonFacts(
     error: boolean;
   }>({ key: '', products: [], pending: false, error: false });
   useEffect(() => {
-    if (!open || !key) return;
+    if (!open || !key || !merchantId) return;
     let active = true;
     const controller = new AbortController();
     setState({ key, products: [], pending: true, error: false });
@@ -56,6 +56,7 @@ export function useSearchComparisonFacts(
           import('@/lib/normalize-product'),
         ]);
         if (!active || controller.signal.aborted) return;
+        // Tenant-scoped public catalog read: filter by merchant_id and active status.
         const { data, error } = await createClient()
           .from('products')
           .select(STOREFRONT_PRODUCTS_SELECT)

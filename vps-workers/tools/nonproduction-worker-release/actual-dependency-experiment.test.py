@@ -15,10 +15,35 @@ SPEC = importlib.util.spec_from_file_location("actual_dependency_experiment", SC
 assert SPEC and SPEC.loader
 experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
-from worker_release_actual_dependency_guard import enforce_resource_limits, run_monitored
+from worker_release_actual_dependency_guard import (
+    MonitorFailure,
+    enforce_resource_limits,
+    failure_diagnostic,
+    run_monitored,
+)
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_failure_diagnostics_are_fixed_and_never_echo_error_text(self):
+        secret_like = "private-token /home/runner/private/path"
+        output = failure_diagnostic("policy-preverify", RuntimeError(secret_like))
+        self.assertEqual(output, "experiment failure stage=policy-preverify category=runtime-error")
+        self.assertNotIn(secret_like, output)
+        self.assertEqual(
+            failure_diagnostic("web-deploy", MonitorFailure("web-deploy", "process-exit", 23)),
+            "experiment failure stage=web-deploy category=process-exit exit=23",
+        )
+
+    def test_early_runtime_failures_have_safe_fixed_categories(self):
+        self.assertEqual(
+            failure_diagnostic("pnpm-pin", RuntimeError("could not identify exactly one pnpm 11.7.0 package entrypoint")),
+            "experiment failure stage=pnpm-pin category=runtime-pin-invalid",
+        )
+        self.assertEqual(
+            failure_diagnostic("checkout-identity", RuntimeError("checkout does not match dispatched SHA")),
+            "experiment failure stage=checkout-identity category=checkout-mismatch",
+        )
+
     def test_resource_guard_retries_transient_child_disappearance(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -78,10 +103,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             child = f"import time; from pathlib import Path; time.sleep(0.8); Path({str(marker)!r}).touch()"
             parent = f"import subprocess,sys,time; subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(10)"
             with patch("worker_release_actual_dependency_guard.enforce_resource_limits", return_value=(0, 0)):
-                with self.assertRaisesRegex(RuntimeError, "synthetic deadline timed out"):
+                with self.assertRaises(MonitorFailure) as raised:
                     run_monitored((sys.executable, "-c", parent), cwd=root, env=os.environ.copy(),
                                   timeout=0.15, stage="synthetic deadline", resource_root=root,
                                   poll_seconds=0.02)
+                self.assertEqual(raised.exception.category, "deadline")
             time.sleep(0.9)
             self.assertFalse(marker.exists())
 
@@ -101,10 +127,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                 raise RuntimeError("experiment disk cap exceeded")
 
             with patch("worker_release_actual_dependency_guard.enforce_resource_limits", side_effect=resource_check):
-                with self.assertRaisesRegex(RuntimeError, "experiment disk cap"):
+                with self.assertRaises(MonitorFailure) as raised:
                     run_monitored((sys.executable, "-c", parent), cwd=root, env=os.environ.copy(),
                                   timeout=10, stage="synthetic resource cap", resource_root=root,
                                   poll_seconds=0.02)
+                self.assertEqual(raised.exception.category, "disk-cap")
             time.sleep(0.9)
             self.assertFalse(marker.exists())
 

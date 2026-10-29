@@ -17,10 +17,72 @@ MIN_FREE_INODES = 20_000
 SCAN_RETRIES = 3
 SCAN_RETRY_SECONDS = 0.1
 POLL_SECONDS = 1.0
+STAGES = frozenset({
+    "checkout-identity", "runtime-pin", "pnpm-pin", "resource-preflight", "source-archive",
+    "source-extraction", "source-tree-validation", "policy-preverify", "offline-store-validation",
+    "source-lock-validation", "web-deploy", "deploy-graph-validation", "workspace-self-link-cleanup",
+    "worker-install", "receipt-validation", "payload-validation", "payload-materialization",
+    "independent-smoke", "materialized-tree-validation", "resource-scan", "experiment",
+})
 
 
 class _TransientEntryRace(Exception):
     pass
+
+
+class MonitorFailure(RuntimeError):
+    def __init__(self, stage: str, category: str, exit_code: int | None = None):
+        self.stage = stage if stage in STAGES else "experiment"
+        self.category = category
+        self.exit_code = exit_code
+        super().__init__(self.stage)
+
+
+def failure_diagnostic(stage: str, error: BaseException) -> str:
+    """Render fixed diagnostics only; never include exception or command text."""
+    if isinstance(error, MonitorFailure):
+        stage, category, exit_code = error.stage, error.category, error.exit_code
+    else:
+        stage = stage if stage in STAGES else "experiment"
+        exit_code = None
+        if isinstance(error, subprocess.CalledProcessError):
+            category, exit_code = "subprocess-exit", error.returncode
+        elif isinstance(error, subprocess.TimeoutExpired):
+            category = "subprocess-timeout"
+        elif isinstance(error, OSError):
+            category = "filesystem-error"
+        elif isinstance(error, (ValueError, TypeError)):
+            category = "invalid-result"
+        elif isinstance(error, RuntimeError):
+            message = str(error)
+            categories = (
+                ("launcher is unavailable", "runtime-unavailable"),
+                ("could not identify exactly one", "runtime-pin-invalid"),
+                ("installation exceeds entry bound", "runtime-entry-bound"),
+                ("expected checkout SHA is invalid", "input-invalid"),
+                ("does not match dispatched SHA", "checkout-mismatch"),
+                ("Node 24 runtime is unavailable", "runtime-unavailable"),
+                ("exceeds configured", "configured-bound"),
+                ("unsafe entry", "filesystem-entry-invalid"),
+                ("shared file inode", "filesystem-entry-invalid"),
+                ("unavailable", "expected-output-missing"),
+                ("disk cap", "disk-cap"),
+                ("free-space reserve", "free-space-reserve"),
+                ("free-inode reserve", "free-inode-reserve"),
+                ("entry cap", "entry-cap"),
+                ("tree changed repeatedly", "transient-tree-churn"),
+                ("differs from exact source lock", "lock-graph-drift"),
+                ("source lock does not pin", "lock-graph-invalid"),
+                ("measured tree exceeds", "tree-size-bound"),
+                ("did not produce", "expected-output-missing"),
+                ("receipt", "policy-receipt"),
+                ("timed out", "deadline"),
+            )
+            category = next((label for marker, label in categories if marker in message), "runtime-error")
+        else:
+            category = "operation-error"
+    suffix = f" exit={exit_code}" if isinstance(exit_code, int) else ""
+    return f"experiment failure stage={stage} category={category}{suffix}"
 
 
 def assert_deployed_package_matches_lock(deploy_root: Path, lockfile: Path, package_name: str) -> str:
@@ -126,27 +188,47 @@ def _terminate_group(process: subprocess.Popen) -> None:
         pass
 
 
+def _resource_category(error: BaseException) -> str:
+    message = str(error)
+    categories = (
+        ("disk cap", "disk-cap"),
+        ("free-space reserve", "free-space-reserve"),
+        ("free-inode reserve", "free-inode-reserve"),
+        ("entry cap", "entry-cap"),
+        ("tree changed repeatedly", "transient-tree-churn"),
+        ("resource root", "resource-root-invalid"),
+        ("unsupported filesystem", "filesystem-entry-invalid"),
+    )
+    return next((label for marker, label in categories if marker in message), "resource-scan-error")
+
+
 def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
                   stage: str, resource_root: Path, poll_seconds: float = POLL_SECONDS) -> int:
-    enforce_resource_limits(resource_root)
+    def check_resources() -> None:
+        try:
+            enforce_resource_limits(resource_root)
+        except Exception as exc:
+            raise MonitorFailure(stage, _resource_category(exc)) from exc
+
+    check_resources()
     try:
         process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                    start_new_session=True)
     except OSError as exc:
-        raise RuntimeError(f"{stage} could not start") from exc
+        raise MonitorFailure(stage, "process-start") from exc
     deadline = time.monotonic() + timeout
     try:
         while True:
             returncode = process.poll()
             if returncode is not None:
                 if returncode != 0:
-                    raise RuntimeError(f"{stage} failed with exit {returncode}")
-                enforce_resource_limits(resource_root)
+                    raise MonitorFailure(stage, "process-exit", returncode)
+                check_resources()
                 return returncode
             if time.monotonic() >= deadline:
-                raise RuntimeError(f"{stage} timed out")
-            enforce_resource_limits(resource_root)
+                raise MonitorFailure(stage, "deadline")
+            check_resources()
             time.sleep(poll_seconds)
     except BaseException:
         _terminate_group(process)

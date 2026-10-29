@@ -32,6 +32,7 @@ import worker_release_dependency_sandbox as sandbox
 from worker_release_actual_dependency_guard import (
     assert_deployed_package_matches_lock,
     enforce_resource_limits,
+    failure_diagnostic,
     run_monitored,
     web_deploy_command,
 )
@@ -118,12 +119,12 @@ def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> s
     if not tsx.is_file() or not os.access(tsx, os.X_OK):
         raise RuntimeError("materialized web tsx entrypoint is unavailable")
     run((str(tsx), "--version"), cwd=release / "apps/web", env=environment, timeout=30,
-        stage="materialized web tsx smoke", resource_root=resource_root)
+        stage="independent-smoke", resource_root=resource_root)
     dotenv = release / "node_modules/dotenv"
     if not dotenv.is_dir():
         raise RuntimeError("materialized worker dotenv package is unavailable")
     run((node, "--input-type=module", "-e", "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"),
-        cwd=release, env=environment, timeout=30, stage="materialized worker dotenv smoke",
+        cwd=release, env=environment, timeout=30, stage="independent-smoke",
         resource_root=resource_root)
     after = hashlib.sha256()
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web-after")))
@@ -133,41 +134,45 @@ def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> s
     return before.hexdigest()
 
 
-def main() -> int:
+def _main() -> int:
     started = time.monotonic()
+    stage = "checkout-identity"
     expected_sha = os.environ.get("EXPECTED_CHECKOUT_SHA", "")
     if len(expected_sha) != 40 or any(char not in "0123456789abcdef" for char in expected_sha):
-        print("experiment rejected: expected checkout SHA is invalid", file=sys.stderr)
-        return 2
+        raise RuntimeError("expected checkout SHA is invalid")
     head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
     if head != expected_sha:
-        print("experiment rejected: checkout does not match dispatched SHA", file=sys.stderr)
-        return 2
+        raise RuntimeError("checkout does not match dispatched SHA")
+    stage = "runtime-pin"
     node = shutil.which("node")
     if not node or subprocess.run((node, "--version"), capture_output=True, text=True, check=True).stdout.strip().split(".")[0] != "v24":
-        print("experiment rejected: Node 24 runtime is unavailable", file=sys.stderr)
-        return 2
+        raise RuntimeError("Node 24 runtime is unavailable")
+    stage = "pnpm-pin"
     pnpm = pinned_pnpm(node)
     try:
         with tempfile.TemporaryDirectory(prefix="baci-actual-dependency-experiment-") as temporary:
             base = Path(temporary)
+            stage = "resource-preflight"
             enforce_resource_limits(base)
             archive = base / "checkout.tar"
             git = shutil.which("git")
             if not git:
                 raise RuntimeError("git executable is unavailable")
+            stage = "source-archive"
             run((git, "archive", "--format=tar", "--output", str(archive), "HEAD"), cwd=ROOT,
                 env={"PATH": f"{Path(git).parent}:/usr/bin:/bin"}, timeout=120,
-                stage="checkout archive", resource_root=base)
+                stage="source-archive", resource_root=base)
             if archive.stat().st_size > 512 * 1024 * 1024:
                 raise RuntimeError("source archive exceeds configured size bound")
             source = base / "source"
             source.mkdir(mode=0o700)
+            stage = "source-extraction"
             with tarfile.open(archive, "r:") as tar:
                 members = tar.getmembers()
                 if len(members) > 500_000 or sum(member.size for member in members if member.isfile()) > 512 * 1024 * 1024:
                     raise RuntimeError("source archive exceeds configured expansion bound")
                 tar.extractall(source, members=members, filter="data")
+            stage = "source-tree-validation"
             enforce_resource_limits(base)
             source_size = tree_size(source, max_entries=500_000, max_bytes=512 * 1024 * 1024)[1]
             (source / ".baci-source-sha").write_text(expected_sha + "\n", encoding="ascii")
@@ -177,6 +182,7 @@ def main() -> int:
             cache.mkdir(mode=0o700)
             home = base / "home"
             home.mkdir(mode=0o700)
+            stage = "policy-preverify"
             preverify_started = time.monotonic()
             preverify_command = (
                 sys.executable, str(BIN / "worker_release_dependency_policy_cache.py"), "--preverify",
@@ -185,10 +191,12 @@ def main() -> int:
             )
             run(preverify_command, cwd=ROOT,
                 env={"PATH": f"{Path(node).parent}:/usr/bin:/bin", "HOME": str(home), "CI": "true"},
-                timeout=600, stage="online dependency policy preverification", resource_root=base)
+                timeout=600, stage="policy-preverify", resource_root=base)
+            stage = "offline-store-validation"
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
                                                max_bytes=1536 * 1024 * 1024)
+            stage = "source-lock-validation"
             lock_hashes, _ = policy._input_hashes(source)
             output = base / "payload"
             (output / "web").mkdir(parents=True)
@@ -212,22 +220,27 @@ def main() -> int:
                 "npm_config_globalconfig": "/dev/null",
             }
             preverify_receipt = store / policy.RECEIPT_NAME
+            stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
             web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
             run(web_cmd, cwd=source, env=offline_env, timeout=900,
-                stage="offline real web deploy", resource_root=base)
+                stage="web-deploy", resource_root=base)
+            stage = "deploy-graph-validation"
             deployed_vercel_functions = assert_deployed_package_matches_lock(
                 output / "web", source / "pnpm-lock.yaml", "@vercel/functions"
             )
+            stage = "workspace-self-link-cleanup"
             sandbox.remove_workspace_self_link(output / "web", source)
             worker_cmd = (node, pnpm, "--registry", policy.TRUSTED_REGISTRY, "--package-import-method=copy", "install",
                           "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store))
             run(worker_cmd, cwd=source / "vps-workers", env=offline_env, timeout=900,
-                stage="offline real standalone worker install", resource_root=base)
+                stage="worker-install", resource_root=base)
+            stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
                                                max_bytes=1536 * 1024 * 1024)
+            stage = "offline-store-validation"
             store_count, store_bytes = tree_size(store, max_entries=200_000, max_bytes=1536 * 1024 * 1024)
             worker_modules = source / "vps-workers" / "node_modules"
             if not worker_modules.is_dir() or worker_modules.is_symlink():
@@ -235,12 +248,16 @@ def main() -> int:
             (output / "root").mkdir()
             shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
             enforce_resource_limits(base)
+            stage = "payload-validation"
             entries, payload_bytes = artifacts.validate_payload(output)
             release = base / "release"
             (release / "apps" / "web").mkdir(parents=True, mode=0o700)
+            stage = "payload-materialization"
             installer.install_payload(output, release, owner_uid=os.geteuid())
             enforce_resource_limits(base)
+            stage = "independent-smoke"
             smoke_hash = independent_smoke(release, node, load_smoke_module(), base)
+            stage = "materialized-tree-validation"
             materialized_count, materialized_bytes = tree_size(release, max_entries=200_000,
                                                                 max_bytes=1024 * 1024 * 1024)
             report = {
@@ -263,16 +280,16 @@ def main() -> int:
             }
             print(json.dumps(report, sort_keys=True))
         return 0
-    except artifacts.BuilderRejected as exc:
-        print(f"experiment rejected: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(failure_diagnostic(stage, exc), file=sys.stderr)
         return 1
-    except (RuntimeError, OSError, subprocess.SubprocessError, tarfile.TarError) as exc:
-        # Stage labels are fixed; do not print subprocess streams or arbitrary input values.
-        message = str(exc)
-        if "failed with exit " in message or "timed out" in message:
-            print(f"experiment failed: {message}", file=sys.stderr)
-        else:
-            print(f"experiment failed: {type(exc).__name__}", file=sys.stderr)
+
+
+def main() -> int:
+    try:
+        return _main()
+    except Exception as exc:
+        print(failure_diagnostic("experiment", exc), file=sys.stderr)
         return 1
 
 

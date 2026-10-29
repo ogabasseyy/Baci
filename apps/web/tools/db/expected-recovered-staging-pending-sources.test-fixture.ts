@@ -69,4 +69,9 @@ export const EXPECTED_RECOVERED_STAGING_PENDING_SOURCES = [
       'supabase/migrations/20261028090000_customer_interest_snapshot_history_independence.sql',
     sha256: '58d8ead4fffc6ccd35e311aee967efd0b21497a22e7e874e92d52cec6e1cb839',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261029090000_piggyvest_primary_savings_reconciliation_checkpoint_integration_index.sql',
+    sha256: '9a28f83b8dffa210ed83c24260102eae5ff58b026426235e9a15396386ad8bfb',
+  },
 ];

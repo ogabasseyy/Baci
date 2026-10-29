@@ -7,6 +7,34 @@ CREATE TABLE public.customer_savings_contributions(
 );
 \ir ../../../../../supabase/migrations/20261007150000_piggyvest_primary_savings_settlement.sql
 \ir ../../../../../supabase/migrations/20261027211500_piggyvest_primary_savings_reconciliation_checkpoint.sql
+\ir ../../../../../supabase/migrations/20261029090000_piggyvest_primary_savings_reconciliation_checkpoint_integration_index.sql
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index index_definition
+    JOIN pg_catalog.pg_class index_relation
+      ON index_relation.oid = index_definition.indexrelid
+    JOIN pg_catalog.pg_namespace index_schema
+      ON index_schema.oid = index_relation.relnamespace
+    WHERE index_schema.nspname = 'piggyvest_primary'
+      AND index_relation.relname = 'primary_savings_reconciliation_checkpoint_integration_idx'
+      AND index_definition.indrelid =
+        'piggyvest_primary.savings_reconciliation_checkpoints'::regclass
+      AND index_definition.indisvalid
+      AND index_definition.indisready
+      AND index_definition.indkey[0] = (
+        SELECT attribute.attnum
+        FROM pg_catalog.pg_attribute attribute
+        WHERE attribute.attrelid = index_definition.indrelid
+          AND attribute.attname = 'integration_id'
+          AND NOT attribute.attisdropped
+      )
+  ) THEN
+    RAISE EXCEPTION 'checkpoint integration_id index is missing or not leading';
+  END IF;
+END $$;
 
 SET SESSION AUTHORIZATION primary_evidence_fixture;
 DO $$

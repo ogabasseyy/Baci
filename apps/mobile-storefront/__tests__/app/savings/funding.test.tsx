@@ -1,5 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import {
+  defaultSavingsFundingGoal,
+  type SavingsFundingGoalFixture,
+} from './funding.test-support';
 
 const mockFetchPlanFunding = jest.fn();
 const mockFetchExistingPlanFunding = jest.fn();
@@ -20,22 +24,14 @@ let mockPlanFundingAccounts = defaultPlanFundingAccounts();
 const mockUseSavingsPlanFunding = jest.fn();
 const mockKeyboardAwareScrollViewSpy = jest.fn();
 let mockUserId: string | null = 'customer-1';
-let mockSavingsGoals: ReturnType<typeof defaultActiveGoal>[] = [];
+let mockSavingsGoals: SavingsFundingGoalFixture[] = [];
 const mockAuthListeners = new Set<() => void>();
 let mockParams: Record<string, string | string[]> = {
   amount: '250000',
   goalId: '430314fd-cd8b-4579-98d4-e9f345713dd6',
 };
-const defaultActiveGoal = () => ({
-  current_amount: 0,
-  id: '430314fd-cd8b-4579-98d4-e9f345713dd6',
-  source_mode: 'manual',
-  status: 'active',
-  target_amount: 250000,
-  title: 'iPhone savings',
-});
-let mockActiveGoal: ReturnType<typeof defaultActiveGoal> | null =
-  defaultActiveGoal();
+let mockActiveGoal: SavingsFundingGoalFixture | null =
+  defaultSavingsFundingGoal();
 
 jest.mock('expo-router', () => ({
   Redirect: (props: unknown) => {
@@ -69,18 +65,20 @@ jest.mock('@/hooks/use-auth-guard', () => ({
   useRequireAuth: () => ({ isLoading: false, redirectTo: null }),
 }));
 jest.mock('@/hooks/use-wallet', () => ({
-  useWallet: () => ({
-    data: {
-      wallet: {
-        active_savings_goal: mockActiveGoal,
-        savings_goals: mockSavingsGoals,
-        earnings_available: true,
-      },
-    },
-    isLoading: false,
-    isRefetching: false,
-    refetch: mockRefetch,
-  }),
+  useWallet: () => {
+    const { createSavingsFundingWalletResponse } = jest.requireActual<
+      typeof import('./funding.test-support')
+    >('./funding.test-support');
+    return {
+      data: createSavingsFundingWalletResponse(
+        mockActiveGoal,
+        mockSavingsGoals
+      ),
+      isLoading: false,
+      isRefetching: false,
+      refetch: mockRefetch,
+    };
+  },
 }));
 jest.mock('@/stores/auth-store', () => {
   const { useSyncExternalStore } =
@@ -136,7 +134,7 @@ describe('SavingsPlanFundingRoute', () => {
     jest.clearAllMocks();
     mockUserId = 'customer-1';
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
-    mockActiveGoal = defaultActiveGoal();
+    mockActiveGoal = defaultSavingsFundingGoal();
     mockSavingsGoals = [];
     mockPlanFundingAccounts = defaultPlanFundingAccounts();
     mockParams = {
@@ -261,9 +259,9 @@ describe('SavingsPlanFundingRoute', () => {
   });
 
   it('loads an owned requested goal when another goal is the default', () => {
-    mockSavingsGoals = [defaultActiveGoal()];
+    mockSavingsGoals = [defaultSavingsFundingGoal()];
     mockActiveGoal = {
-      ...defaultActiveGoal(),
+      ...defaultSavingsFundingGoal(),
       id: '01932f3e-7a2d-7c1e-b4d5-9f8e7d6c5b4a',
     };
     render(<SavingsPlanFundingRoute />);
@@ -276,7 +274,7 @@ describe('SavingsPlanFundingRoute', () => {
 
   it('accepts UUID v7 goal ids emitted by the backend', () => {
     const v7GoalId = '01932f3e-7a2d-7c1e-b4d5-9f8e7d6c5b4a';
-    mockActiveGoal = { ...defaultActiveGoal(), id: v7GoalId };
+    mockActiveGoal = { ...defaultSavingsFundingGoal(), id: v7GoalId };
     mockParams = { amount: '250000', goalId: v7GoalId };
     render(<SavingsPlanFundingRoute />);
 

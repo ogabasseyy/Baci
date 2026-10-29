@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,7 +36,16 @@ test('real PostgREST confines a signed quota token and serializes increments', {
   let proxy;
   try {
     run('initdb', ['-D', join(dir, 'data'), '-A', 'trust', '--no-locale', '-U', 'postgres']);
-    run('pg_ctl', ['-D', join(dir, 'data'), '-l', join(dir, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${pgPort}`, '-w', 'start']);
+    // A package's default socket directory may not be writable by the CI user.
+    // Make that condition deterministic; this TCP-only test must not use it.
+    appendFileSync(join(dir, 'data', 'postgresql.conf'), "\nunix_socket_directories = '/dev/null'\n");
+    try {
+      run('pg_ctl', ['-D', join(dir, 'data'), '-l', join(dir, 'postgres.log'), '-o', `-k '' -h 127.0.0.1 -p ${pgPort}`, '-w', 'start']);
+    } catch (error) {
+      const logPath = join(dir, 'postgres.log');
+      const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : 'No startup log was written.';
+      throw new Error(`Disposable PostgreSQL failed to start:\n${log}`, { cause: error });
+    }
     pgStarted = true;
     run('psql', connection, `
       CREATE ROLE anon NOLOGIN;

@@ -18,7 +18,7 @@ from typing import Callable
 
 from worker_release_dependency_fs import directory_usage
 from worker_release_descriptor_cgroup import (
-    CgroupProofRejected, _require_cgroup2_fd, require_process_member,
+    CgroupProofRejected, _require_cgroup2_fd, require_empty_cgroup, require_process_member,
 )
 from worker_release_dependency_supervisor_contract import (
     BuilderUnitContractRejected, validate_builder_unit,

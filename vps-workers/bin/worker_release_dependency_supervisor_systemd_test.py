@@ -16,6 +16,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent))
 
 import worker_release_dependency_supervisor as supervisor
+import worker_release_dependency_builder as dependency_builder
 import worker_release_dependency_sandbox as sandbox
 import worker_release_dependency_supervisor_contract as unit_contract
 from worker_release_descriptor_cgroup import require_process_member
@@ -210,6 +211,17 @@ class BuilderSupervisorSystemdTests(unittest.TestCase):
                         unit_journal=journal,
                     )
                 except supervisor.BuilderSupervisorRejected as error:
+                    # Mirror build()'s finally block: ordinary failures reach
+                    # cleanup only after the supervisor proves the unit drained;
+                    # an unproven drain must retain every journaled tree.
+                    lock_fd = os.open(self.root / "builder-test.lock",
+                                      os.O_CREAT | os.O_RDWR, 0o600)
+                    dependency_builder._finish_build_attempt(
+                        self.scratch, None, None, success=False,
+                        preserve_for_recovery=isinstance(
+                            error, supervisor.BuilderQuiescenceUnproven),
+                        lock_fd=lock_fd,
+                    )
                     error.add_note(self.unit_state_metadata(unit))
                     raise
 
@@ -226,7 +238,9 @@ class BuilderSupervisorSystemdTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(supervisor.BuilderSupervisorRejected, "scratch exceeded"):
             self.run_unit(script, cap=1)
-        self.assertEqual(list(self.scratch.iterdir()), [])
+        # The test harness mirrors the production builder's cleanup after the
+        # ordinary rejection returns; unproven drains preserve this tree.
+        self.assertFalse(self.scratch.exists())
 
     def test_recovery_requires_terminal_proof_and_drains_recorded_unit(self):
         unit = f"baci-worker-deps-{'a' * 12}-{'c' * 32}.service"

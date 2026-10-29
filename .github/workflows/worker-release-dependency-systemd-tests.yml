@@ -40,6 +40,7 @@ jobs:
       - name: Run dependency consumer and pinned-path regressions
         run: |
           python3 vps-workers/bin/worker_release_dependency_consumer.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_install.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer_quiescence.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer_snapshot.test.py -q
           python3 vps-workers/bin/worker_release_source_snapshot.test.py -q

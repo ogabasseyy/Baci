@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import stat
 from pathlib import Path
@@ -52,8 +53,37 @@ def _copy_file(source: Path, destination: Path, budget: dict[str, int]) -> None:
         os.close(source_fd)
 
 
+def _write_executable_wrapper(destination: Path, target_relative: Path,
+                              budget: dict[str, int]) -> None:
+    """Replace a pnpm .bin symlink with a wrapper preserving target-relative imports."""
+    target = shlex.quote(target_relative.as_posix())
+    wrapper = ("#!/bin/sh\nset -eu\n"
+               "case $0 in */*) base=${0%/*} ;; *) base=. ;; esac\n"
+               f"exec \"$base\"/{target} \"$@\"\n").encode("utf-8")
+    budget["entries"] += 1
+    budget["bytes"] += len(wrapper)
+    if budget["entries"] > MAX_MATERIALIZED_ENTRIES:
+        raise BuilderRejected("materialized dependency candidate has too many entries")
+    if budget["bytes"] > MAX_MATERIALIZED_BYTES:
+        raise BuilderRejected("materialized dependency candidate exceeds configured bounds")
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                  | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        view = memoryview(wrapper)
+        while view:
+            count = os.write(fd, view)
+            if count <= 0:
+                raise BuilderRejected("dependency install write failed")
+            view = view[count:]
+        os.fchmod(fd, 0o550)
+    finally:
+        os.close(fd)
+
+
 def _materialize_directory(source: Path, destination: Path, payload_root: Path,
-                           budget: dict[str, int], ancestors: frozenset[tuple[int, int]]) -> None:
+                           budget: dict[str, int], ancestors: frozenset[tuple[int, int]],
+                           tree_root: Path | None = None,
+                           materialized_root: Path | None = None) -> None:
     resolved = source.resolve(strict=True)
     try:
         resolved.relative_to(payload_root)
@@ -65,6 +95,10 @@ def _materialize_directory(source: Path, destination: Path, payload_root: Path,
     inode = (before.st_dev, before.st_ino)
     if inode in ancestors:
         raise BuilderRejected("dependency directory link is cyclic")
+    if tree_root is None:
+        tree_root = resolved
+    if materialized_root is None:
+        materialized_root = destination
     budget["entries"] += 1
     if budget["entries"] > MAX_MATERIALIZED_ENTRIES:
         raise BuilderRejected("materialized dependency candidate has too many entries")
@@ -75,7 +109,8 @@ def _materialize_directory(source: Path, destination: Path, payload_root: Path,
         target = destination / entry.name
         info = child.lstat()
         if stat.S_ISDIR(info.st_mode):
-            _materialize_directory(child, target, payload_root, budget, next_ancestors)
+            _materialize_directory(child, target, payload_root, budget, next_ancestors,
+                                   tree_root, materialized_root)
         elif stat.S_ISREG(info.st_mode):
             _copy_file(child, target, budget)
         elif stat.S_ISLNK(info.st_mode):
@@ -90,9 +125,20 @@ def _materialize_directory(source: Path, destination: Path, payload_root: Path,
                     or link_target != os.readlink(child)):
                 raise BuilderRejected("dependency symlink changed while installing")
             if resolved_child.is_dir():
-                _materialize_directory(resolved_child, target, payload_root, budget, next_ancestors)
+                _materialize_directory(resolved_child, target, payload_root, budget, next_ancestors,
+                                       tree_root, materialized_root)
             elif resolved_child.is_file():
-                _copy_file(resolved_child, target, budget)
+                if child.parent.name == ".bin" and resolved_child.stat().st_mode & 0o111:
+                    try:
+                        target_relative = resolved_child.relative_to(tree_root)
+                    except ValueError as error:
+                        raise BuilderRejected(
+                            "dependency binary target escapes its installed root") from error
+                    destination_target = materialized_root / target_relative
+                    wrapper_relative = Path(os.path.relpath(destination_target, target.parent))
+                    _write_executable_wrapper(target, wrapper_relative, budget)
+                else:
+                    _copy_file(resolved_child, target, budget)
             else:
                 raise BuilderRejected("dependency symlink target is not a regular file or directory")
         else:

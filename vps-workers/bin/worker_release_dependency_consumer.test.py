@@ -144,7 +144,7 @@ class DependencyConsumerTests(unittest.TestCase):
         link = self.release / "apps" / "web" / "node_modules" / ".bin" / "tsx"
         self.assertTrue(link.is_file())
         self.assertFalse(link.is_symlink())
-        self.assertEqual(link.read_text(), "#!/usr/bin/env node\\n")
+        self.assertTrue(link.read_text().startswith("#!/bin/sh\nset -eu\n"))
         self.assertFalse((self.release / "apps" / "web" / "node_modules" / "sample").is_symlink())
         self.assertEqual((self.release / "apps" / "web" / "node_modules" / "sample" / "index.js").read_text(),
                          "export const sample = true;\\n")
@@ -246,11 +246,11 @@ class DependencyConsumerTests(unittest.TestCase):
         original = install._materialize_directory
         second_target_source = Path("/unused")
 
-        def fail_after_second_target(source, destination, payload_root, budget, ancestors):
+        def fail_after_second_target(source, destination, payload_root, budget, ancestors, *roots):
             if source == second_target_source:
-                original(source, destination, payload_root, budget, ancestors)
+                original(source, destination, payload_root, budget, ancestors, *roots)
                 raise consumer.BuilderRejected("injected install failure after materialization")
-            return original(source, destination, payload_root, budget, ancestors)
+            return original(source, destination, payload_root, budget, ancestors, *roots)
 
         def builder(source_arg, expected_sha):
             result = self.make_builder()(source_arg, expected_sha)
@@ -270,11 +270,11 @@ class DependencyConsumerTests(unittest.TestCase):
         original = install._materialize_directory
         second_target_source = Path("/unused")
 
-        def fail_after_second_target(source, destination, payload_root, budget, ancestors):
+        def fail_after_second_target(source, destination, payload_root, budget, ancestors, *roots):
             if source == second_target_source:
-                original(source, destination, payload_root, budget, ancestors)
+                original(source, destination, payload_root, budget, ancestors, *roots)
                 raise consumer.BuilderRejected("injected install failure")
-            return original(source, destination, payload_root, budget, ancestors)
+            return original(source, destination, payload_root, budget, ancestors, *roots)
 
         def builder(source_arg, expected_sha):
             result = self.make_builder()(source_arg, expected_sha)

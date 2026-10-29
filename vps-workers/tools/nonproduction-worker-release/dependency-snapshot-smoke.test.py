@@ -78,6 +78,7 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("worker_release_dependency_diagnostics.py", fixture)
+        self.assertIn("worker_release_dependency_evidence_shape.py", fixture)
         self.assertIn("worker_release_dependency_lock_settings.py", fixture)
         self.assertIn("worker_release_dependency_policy_cli.py", fixture)
         self.assertIn("vps-workers/bin/worker_release_dependency_*.py", workflow_text)

@@ -114,7 +114,14 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             error_output = StringIO()
             with patch.object(experiment.policy_cli.policy, "preverify",
                               side_effect=PnpmStepRejected("preverify-worker-install",
-                                                           "dependency-resolution", 19)), \
+                                                           "dependency-resolution", 19,
+                                                           {"classification": "malformed", "phrase_lines": 1,
+                                                            "recognized_lines": 0, "line_shapes": [{
+                                                                "prefix_category": "checkmark",
+                                                                "prefix_length_bucket": "2",
+                                                                "suffix_category": "other",
+                                                                "suffix_length_bucket": "3-8",
+                                                            }]})), \
                  redirect_stderr(error_output):
                 result = experiment.policy_cli.main([
                     "--preverify", "--source", str(root), "--store", str(root),
@@ -124,8 +131,14 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             self.assertEqual(result, 1)
             self.assertEqual(read_diagnostic(diagnostic, owner_uid=os.geteuid()), {
                 "stage": "preverify-worker-install", "category": "dependency-resolution", "exit_code": 19,
+                "evidence": {"classification": "malformed", "phrase_lines": 1,
+                             "recognized_lines": 0, "line_shapes": [{
+                                 "prefix_category": "checkmark", "prefix_length_bucket": "2",
+                                 "suffix_category": "other", "suffix_length_bucket": "3-8",
+                             }]},
             })
             self.assertIn("category=dependency-resolution", error_output.getvalue())
+            self.assertIn("line_shape=checkmark:2/other:3-8", error_output.getvalue())
             self.assertNotIn("dependency-resolution failed", error_output.getvalue())
             self.assertNotIn("/fixed/pnpm", error_output.getvalue())
 

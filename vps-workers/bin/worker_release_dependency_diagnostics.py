@@ -10,6 +10,11 @@ import stat
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected
+from worker_release_dependency_evidence_shape import (
+    format_policy_line_shapes,
+    summarize_line_shape,
+    validate_evidence_summary as _validate_evidence_summary,
+)
 
 DIAGNOSTIC_STAGES = frozenset({
     "policy-preverify", "preverify-web-install", "preverify-worker-install", "web-install", "web-deploy", "worker-install",
@@ -33,7 +38,6 @@ _POLICY_PASS_CACHED = re.compile(
 )
 MAX_RECENT_VERIFICATION_AGE_MS = 10 * 60 * 1000
 MAX_FRESH_VERIFICATION_ELAPSED_MS = 240 * 1000
-POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
 
 
 class PnpmStepRejected(BuilderRejected):
@@ -51,12 +55,17 @@ def policy_evidence_summary(stdout: str, stderr: str) -> dict[str, object]:
     phrase_lines = 0
     recognized = 0
     first_evidence: tuple[str, int] | None = None
+    line_shapes: list[dict[str, object]] = []
     for output in (stdout, stderr):
         normalized = _ANSI_ESCAPE.sub("", output)
         for line in normalized.splitlines():
             if POLICY_PASS_MARKER not in line:
                 continue
             phrase_lines += 1
+            if len(line_shapes) < 2:
+                marker_at = line.find(POLICY_PASS_MARKER)
+                prefix, suffix = line[:marker_at], line[marker_at + len(POLICY_PASS_MARKER):]
+                line_shapes.append(summarize_line_shape(prefix, suffix))
             fresh = _POLICY_PASS_FRESH.fullmatch(line)
             cached = _POLICY_PASS_CACHED.fullmatch(line)
             if fresh and int(fresh.group(1)) > 0:
@@ -88,6 +97,7 @@ def policy_evidence_summary(stdout: str, stderr: str) -> dict[str, object]:
         "classification": classification,
         "phrase_lines": min(phrase_lines, 255),
         "recognized_lines": min(recognized, 255),
+        "line_shapes": line_shapes,
     }
 
 
@@ -139,15 +149,6 @@ def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
         return None
     finally:
         os.close(fd)
-
-
-def _validate_evidence_summary(value: dict[str, object]) -> dict[str, object]:
-    if (not isinstance(value, dict) or set(value) != {"classification", "phrase_lines", "recognized_lines"}
-            or value["classification"] not in POLICY_EVIDENCE_CLASSES
-            or type(value["phrase_lines"]) is not int or not 0 <= value["phrase_lines"] <= 255
-            or type(value["recognized_lines"]) is not int or not 0 <= value["recognized_lines"] <= 255):
-        raise ValueError("policy evidence summary is invalid")
-    return value
 
 
 def pnpm_failure_category(output: str) -> str:

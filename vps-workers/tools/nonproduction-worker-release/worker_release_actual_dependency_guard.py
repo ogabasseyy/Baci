@@ -9,6 +9,7 @@ import stat
 import subprocess
 import time
 from pathlib import Path
+from worker_release_dependency_diagnostics import format_policy_line_shapes
 
 MAX_TREE_BYTES = 12 * 1024 * 1024 * 1024
 MAX_TREE_ENTRIES = 500_000
@@ -89,6 +90,7 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         evidence = error.evidence
         suffix += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
                    f" recognized_lines={evidence['recognized_lines']}")
+        suffix += format_policy_line_shapes(evidence)
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 

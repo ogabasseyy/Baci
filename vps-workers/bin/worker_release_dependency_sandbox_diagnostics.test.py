@@ -13,7 +13,7 @@ class SandboxPnpmDiagnosticsTests(unittest.TestCase):
     def test_marker_failure_prints_only_fixed_evidence_metadata(self):
         output = failure_diagnostic("policy-preverify", MonitorFailure(
             "preverify-web-install", "policy-pass-marker-missing", 0,
-            {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0},
+            {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0, "line_shapes": []},
         ))
         self.assertEqual(output,
                          "experiment failure stage=preverify-web-install category=policy-pass-marker-missing "
@@ -42,7 +42,8 @@ class SandboxPnpmDiagnosticsTests(unittest.TestCase):
                 def poll():
                     return 1
 
-            evidence = {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0}
+            evidence = {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0,
+                        "line_shapes": []}
             with patch("worker_release_dependency_sandbox.subprocess.Popen", return_value=FailedProcess()), \
                  patch("worker_release_dependency_sandbox.directory_usage"), \
                  patch("worker_release_dependency_sandbox.read_diagnostic", return_value={

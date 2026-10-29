@@ -9,6 +9,7 @@ from worker_release_dependency_diagnostics import (
     MAX_FRESH_VERIFICATION_ELAPSED_MS,
     MAX_RECENT_VERIFICATION_AGE_MS,
     PnpmStepRejected,
+    format_policy_line_shapes,
     has_fresh_policy_pass,
     has_policy_pass_marker,
     policy_pass_evidence,
@@ -61,23 +62,39 @@ class PolicyPassEvidenceTests(unittest.TestCase):
         stale = "✓ Lockfile passes supply-chain policies (verified 601s ago)\n"
         malformed = "progress: Lockfile passes supply-chain policies"
         self.assertEqual(policy_evidence_summary("", ""), {
-            "classification": "absent", "phrase_lines": 0, "recognized_lines": 0,
+            "classification": "absent", "phrase_lines": 0, "recognized_lines": 0, "line_shapes": [],
         })
         self.assertEqual(policy_evidence_summary(fresh, ""), {
             "classification": "fresh", "phrase_lines": 1, "recognized_lines": 1,
+            "line_shapes": [{"prefix_category": "checkmark", "prefix_length_bucket": "2",
+                             "suffix_category": "fresh-positive", "suffix_length_bucket": "9+"}],
         })
         self.assertEqual(policy_evidence_summary(stale, ""), {
             "classification": "stale", "phrase_lines": 1, "recognized_lines": 1,
+            "line_shapes": [{"prefix_category": "checkmark", "prefix_length_bucket": "2",
+                             "suffix_category": "cached", "suffix_length_bucket": "9+"}],
         })
         self.assertEqual(policy_evidence_summary(malformed, ""), {
             "classification": "malformed", "phrase_lines": 1, "recognized_lines": 0,
+            "line_shapes": [{"prefix_category": "other", "prefix_length_bucket": "9+",
+                             "suffix_category": "empty", "suffix_length_bucket": "0"}],
         })
+        zero = "✓ Lockfile passes supply-chain policies (0 entries in 5ms)\n"
+        self.assertEqual(policy_evidence_summary(zero, "")["line_shapes"][0]["suffix_category"],
+                         "fresh-zero-count")
         self.assertEqual(policy_evidence_summary(fresh, fresh)["classification"], "ambiguous")
+
+    def test_line_shape_redacts_all_text_outside_fixed_marker(self):
+        secret = "private-token /home/runner/secret"
+        summary = policy_evidence_summary(f"{secret} ✓ {secret}Lockfile passes supply-chain policies ({secret}ms)\n", "")
+        shape_text = format_policy_line_shapes(summary)
+        self.assertNotIn(secret, shape_text)
+        self.assertEqual(shape_text, " line_shape=other:9+/parenthesized:9+")
 
     def test_policy_evidence_metadata_round_trips_only_as_closed_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "diagnostic.json"
-            evidence = {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0}
+            evidence = {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0, "line_shapes": []}
             write_diagnostic(path, "preverify-web-install", "policy-pass-marker-missing", 0, evidence)
             self.assertEqual(read_diagnostic(path, owner_uid=os.geteuid()), {
                 "stage": "preverify-web-install",
@@ -88,7 +105,8 @@ class PolicyPassEvidenceTests(unittest.TestCase):
             path.unlink()
             with self.assertRaises(ValueError):
                 write_diagnostic(path, "preverify-web-install", "policy-pass-marker-missing", 0,
-                                 {"classification": "secret=bad", "phrase_lines": 0, "recognized_lines": 0})
+                                 {"classification": "secret=bad", "phrase_lines": 0, "recognized_lines": 0,
+                                  "line_shapes": []})
             self.assertIsNone(read_diagnostic(path, owner_uid=os.geteuid()))
 
     def test_checked_pnpm_failure_suppresses_raw_subprocess_cause(self):

@@ -12,6 +12,7 @@ from worker_release_dependency_artifacts import BuilderRejected
 import worker_release_dependency_policy_cache as policy
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
+    format_policy_line_shapes,
     policy_rejection_category,
     write_diagnostic,
 )
@@ -66,6 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if evidence is not None:
             message += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
                         f" recognized_lines={evidence['recognized_lines']}")
+            message += format_policy_line_shapes(evidence)
         print(message, file=sys.stderr)
         return 1
     except Exception:

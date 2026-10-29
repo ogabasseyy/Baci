@@ -5,11 +5,14 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { AdUnit } from './AdUnit';
 import { useDeferredActivation } from './deferred-shell-feature';
+import { usePopupFocusManagement } from './use-popup-focus-management';
 
 export const PopupSystem: React.FC = () => {
   const [showNewsletter, setShowNewsletter] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const adTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { rememberPromotionFocus, clearPromotionFocusRestore } =
+    usePopupFocusManagement(showNewsletter, showAdPopup);
   const hasEngaged = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
@@ -59,7 +62,12 @@ export const PopupSystem: React.FC = () => {
     };
   }, []);
 
-  const handleCloseNewsletter = () => {
+  const handleCloseNewsletter = (restoreFocus = true) => {
+    if (restoreFocus) {
+      rememberPromotionFocus('.ogabassey-newsletter-popup');
+    } else {
+      clearPromotionFocusRestore();
+    }
     setShowNewsletter(false);
 
     // Save dismissal to localStorage
@@ -77,17 +85,24 @@ export const PopupSystem: React.FC = () => {
     }, 10000);
   };
 
+  const clearChatPromotionFocusHandoff = () => {
+    delete document.body.dataset.chatPromotionFocusHandoff;
+  };
+
   return (
     <>
       {/* --- 1. NEWSLETTER POPUP (Centered Overlay) --- */}
       {showNewsletter && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300">
+        <div
+          className="ogabassey-newsletter-popup fixed inset-0 z-70 flex items-center justify-center px-4 animate-in fade-in duration-300"
+          onFocusCapture={clearChatPromotionFocusHandoff}
+        >
           <button
             type="button"
             aria-label="Dismiss newsletter popup backdrop"
             tabIndex={-1}
             className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-xs"
-            onClick={handleCloseNewsletter}
+            onClick={() => handleCloseNewsletter()}
           />
           <div className="bg-[#1a1a1a] rounded-2xl shadow-2xl max-w-md w-full relative overflow-hidden z-10 animate-in zoom-in-95 duration-300 border border-white/10">
             {/* Decorative Header */}
@@ -103,7 +118,7 @@ export const PopupSystem: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={handleCloseNewsletter}
+                onClick={() => handleCloseNewsletter()}
                 className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
                 aria-label="Close newsletter"
               >
@@ -125,7 +140,7 @@ export const PopupSystem: React.FC = () => {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  handleCloseNewsletter();
+                  handleCloseNewsletter(false);
                 }}
               >
                 <input
@@ -146,7 +161,7 @@ export const PopupSystem: React.FC = () => {
               </form>
               <button
                 type="button"
-                onClick={handleCloseNewsletter}
+                onClick={() => handleCloseNewsletter()}
                 className="mt-4 text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >
                 No thanks, I prefer paying full price
@@ -158,12 +173,19 @@ export const PopupSystem: React.FC = () => {
 
       {/* --- 2. AD POPUP (Bottom Left Slide-in) --- */}
       {showAdPopup && (
-        <div className="fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in">
+        <div
+          className="ogabassey-offer-popup fixed bottom-0 left-0 p-4 md:p-6 z-60 animate-in slide-in-from-left-10 duration-500 fade-in"
+          onFocusCapture={clearChatPromotionFocusHandoff}
+        >
           <div className="bg-white rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-gray-100 overflow-hidden max-w-[320px] md:max-w-[350px] relative">
             {/* Close Button */}
             <button
               type="button"
-              onClick={() => setShowAdPopup(false)}
+              onClick={() => {
+                clearChatPromotionFocusHandoff();
+                rememberPromotionFocus('.ogabassey-offer-popup');
+                setShowAdPopup(false);
+              }}
               className="absolute top-2 right-2 size-6 bg-white/80 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-white transition-colors z-20 shadow-sm"
               aria-label="Close ad"
             >

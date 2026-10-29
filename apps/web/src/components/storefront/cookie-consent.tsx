@@ -8,6 +8,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 import { useCookieConsentController } from './use-cookie-consent-controller';
+import { useCookieConsentFocus } from './use-cookie-consent-focus';
 
 export { isCookieAllowed } from './is-cookie-allowed';
 export { useCookieConsent } from './use-cookie-consent';
@@ -27,12 +28,14 @@ export function CookieConsent() {
   } = useCookieConsentController();
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath || '';
+  const consentFocus = useCookieConsentFocus(isVisible, showDetails);
 
   if (!isVisible) return null;
 
   return (
     <div
       className={cn(
+        'storefront-cookie-consent max-h-[calc(100dvh-2rem)] overflow-y-auto',
         isClosing
           ? 'animate-out fade-out slide-out-to-bottom-4 duration-200'
           : 'animate-in slide-in-from-bottom-4 duration-500',
@@ -52,6 +55,10 @@ export function CookieConsent() {
       }}
       role="dialog"
       aria-label="Cookie consent"
+      aria-modal={false}
+      ref={consentFocus.bannerRef}
+      onFocusCapture={consentFocus.onFocusCapture}
+      onBlurCapture={consentFocus.onBlurCapture}
     >
       <div
         style={{
@@ -65,7 +72,7 @@ export function CookieConsent() {
           padding: '1rem',
         }}
         className={cn(
-          'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
+          'bg-background backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
           'transition-all duration-300 ease-in-out'
         )}
       >
@@ -103,7 +110,7 @@ export function CookieConsent() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowDetails(true)}
+                onClick={consentFocus.switchView(() => setShowDetails(true))}
                 className="text-muted-foreground hover:text-foreground h-9"
                 type="button"
               >
@@ -112,7 +119,7 @@ export function CookieConsent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={acceptNecessary}
+                onClick={consentFocus.dismissWithFocus(acceptNecessary)}
                 className="h-9"
               >
                 Necessary Only
@@ -120,7 +127,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={acceptAll}
+                onClick={consentFocus.dismissWithFocus(acceptAll)}
                 className="h-9 px-6 shadow-sm"
               >
                 Accept All
@@ -145,7 +152,7 @@ export function CookieConsent() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowDetails(false)}
+                onClick={consentFocus.switchView(() => setShowDetails(false))}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted"
                 aria-label="Close details"
               >
@@ -254,7 +261,7 @@ export function CookieConsent() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowDetails(false)}
+                onClick={consentFocus.switchView(() => setShowDetails(false))}
                 className="text-muted-foreground h-9"
               >
                 Cancel
@@ -262,7 +269,7 @@ export function CookieConsent() {
               <ThemedButton
                 colorRole="primary"
                 size="sm"
-                onClick={savePreferences}
+                onClick={consentFocus.dismissWithFocus(savePreferences)}
                 className="h-9 px-6"
               >
                 Save Preferences

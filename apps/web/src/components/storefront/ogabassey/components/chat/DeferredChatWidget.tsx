@@ -1,13 +1,18 @@
 'use client';
 
-import { Sparkles } from 'lucide-react';
+import { RotateCw, Sparkles } from 'lucide-react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StorefrontChatStyleLoader } from '@/app/(storefront)/storefront-chat-style-loader';
 import { useCart } from '@/hooks/cart';
+import { CHAT_MOBILE_OFFSET_ATTRIBUTES } from '../../config/chat-mobile-offsets';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
 import type { ChatWidgetProps } from './ChatWidget';
+import { getChatMobileOffset } from './get-chat-mobile-offset';
+import { useChatLauncherDrag } from './use-chat-launcher-drag';
+import { useChatPromotionFocusHandoff } from './use-chat-promotion-focus-handoff';
 
 interface ChatWidgetModule {
   ChatWidget: React.ComponentType<ChatWidgetProps>;
@@ -17,50 +22,54 @@ interface DeferredChatWidgetProps {
   loadChatWidget?: () => Promise<ChatWidgetModule>;
 }
 
-const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
-  'data-mobile-offset-cart': '6.75rem',
-  'data-mobile-offset-default': '5.75rem',
-  'data-mobile-offset-product': '6.25rem',
-  'data-mobile-offset-screen': '1rem',
-} as const;
-
 // Module-scope so the dynamic import() expression stays outside the component
 // body (React Compiler cannot lower import expressions). Code splitting is
 // unaffected: the chunk still loads on first activation only.
 const loadDefaultChatWidget = () => import('./ChatWidget');
 
-function getMobileOffset(pathname: string | null) {
-  const isProductPage =
-    pathname?.match(/\/[^/]+\/[^/]+\/[^/]+/) &&
-    !pathname.includes('/cart') &&
-    !pathname.includes('/checkout');
-  const isCartPage = pathname?.includes('/cart');
-
-  if (isProductPage) {
-    return 'product';
-  }
-
-  if (isCartPage) {
-    return 'cart';
-  }
-
-  return 'default';
-}
-
 export function DeferredChatWidget({
   loadChatWidget,
 }: DeferredChatWidgetProps) {
+  // Keep handoff tracking mounted while this component swaps to ChatWidget.
+  useChatPromotionFocusHandoff();
   const { isCartOpen } = useCart();
   const { theme } = useV2Theme();
   const pathname = usePathname();
   const isFooterVisible = useOgabasseyScrollVisibility();
-  const [ChatRuntime, setChatRuntime] =
-    useState<ChatWidgetModule['ChatWidget'] | null>(null);
+  const [ChatRuntime, setChatRuntime] = useState<
+    ChatWidgetModule['ChatWidget'] | null
+  >(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const focusLauncherOnMount = useRef(false);
 
   const isSanta = theme === 'santa';
-  const footerOffset = getMobileOffset(pathname);
+  const footerOffset = getChatMobileOffset(pathname);
   const mobileOffset = isFooterVisible ? footerOffset : 'screen';
+  const drag = useChatLauncherDrag(
+    undefined,
+    false,
+    false,
+    isCartOpen,
+    mobileOffset,
+    !ChatRuntime,
+  );
+  useEffect(() => {
+    if (!isLoading && loadFailed && focusLauncherOnMount.current) {
+      const launcher = drag.buttonRef.current;
+      const activeElement = document.activeElement;
+      if (
+        launcher &&
+        (!activeElement ||
+          activeElement === document.body ||
+          activeElement === launcher ||
+          !activeElement.isConnected)
+      ) {
+        launcher.focus();
+      }
+      focusLauncherOnMount.current = false;
+    }
+  }, [drag.buttonRef, isLoading, loadFailed]);
   const anchorClasses = [
     'ogabassey-chat-anchor',
     isCartOpen && 'ogabassey-chat-anchor--hidden',
@@ -71,15 +80,18 @@ export function DeferredChatWidget({
     'ogabassey-chat-button',
     isSanta && 'ogabassey-chat-button--santa',
     isLoading && 'ogabassey-chat-button--loading',
+    loadFailed && 'ogabassey-chat-button--retry',
   ]
     .filter(Boolean)
     .join(' ');
 
-  const activateChat = () => {
-    if (ChatRuntime || isLoading) {
+  const activateChat = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (drag.suppressClick(event) || ChatRuntime || isLoading) {
       return;
     }
 
+    focusLauncherOnMount.current = event.detail === 0;
+    setLoadFailed(false);
     setIsLoading(true);
     const resolveChatWidget = loadChatWidget ?? loadDefaultChatWidget;
 
@@ -87,31 +99,63 @@ export function DeferredChatWidget({
       .then((module) => {
         setChatRuntime(() => module.ChatWidget);
       })
+      .catch(() => setLoadFailed(true))
       .finally(() => {
         setIsLoading(false);
       });
   };
 
   if (ChatRuntime) {
-    return <ChatRuntime openOnMount />;
+    return (
+      <ChatRuntime
+        openOnMount
+        focusLauncherOnMount={focusLauncherOnMount.current}
+        initialLauncherPosition={drag.position}
+      />
+    );
   }
 
   return (
     <div
+      ref={drag.anchorRef}
+      style={drag.anchorStyle}
       className={anchorClasses}
+      data-chat-launcher-positioned={drag.position ? '' : undefined}
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >
       <StorefrontChatStyleLoader />
       <div className="relative group">
         <button
+          {...drag.buttonProps}
           type="button"
           onClick={activateChat}
           disabled={isLoading}
           className={buttonClasses}
-          aria-label="Open AI chat assistant"
+          aria-label={
+            loadFailed
+              ? 'Chat did not load. Activate to retry.'
+              : 'Open AI chat assistant'
+          }
+          title={
+            loadFailed ? 'Chat did not load. Activate to retry.' : undefined
+          }
+          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+          aria-describedby={
+            loadFailed
+              ? 'ogabassey-deferred-chat-keyboard-help ogabassey-deferred-chat-load-error'
+              : 'ogabassey-deferred-chat-keyboard-help'
+          }
         >
-          {isSanta ? (
+          {loadFailed ? (
+            <span
+              className="ogabassey-chat-retry-indicator"
+              aria-hidden="true"
+            >
+              <RotateCw size={15} />
+              <span>Retry</span>
+            </span>
+          ) : isSanta ? (
             <div className="relative w-full h-full">
               <img
                 src="/african-santa-head.svg"
@@ -129,13 +173,27 @@ export function DeferredChatWidget({
               />
               <span className="ogabassey-chat-badge">
                 <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">
-                  AI
-                </span>
+                <span className="ogabassey-chat-badge__label">AI</span>
               </span>
             </>
           )}
         </button>
+        <span
+          id="ogabassey-deferred-chat-keyboard-help"
+          className="sr-only"
+        >
+          Use arrow keys to move the assistant launcher. Hold Shift for
+          48-pixel steps.
+        </span>
+        {loadFailed && (
+          <span
+            id="ogabassey-deferred-chat-load-error"
+            className="sr-only"
+            role="status"
+          >
+            Chat did not load. Activate again to retry.
+          </span>
+        )}
       </div>
     </div>
   );

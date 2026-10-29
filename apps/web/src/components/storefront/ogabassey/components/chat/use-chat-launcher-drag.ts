@@ -1,0 +1,305 @@
+'use client';
+
+import {
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import {
+  clampChatLauncherPosition,
+  getChatLauncherAnchorStyle,
+  readChatLauncherOverflow,
+  readChatLauncherMobileOffset,
+  readChatLauncherSafeArea,
+  readChatLauncherSafeAreaEdges,
+  type Position,
+} from './chat-launcher-geometry';
+import type { Gesture } from './chat-launcher-gesture';
+import { createChatLauncherGestureLifecycle } from './chat-launcher-gesture-lifecycle';
+import {
+  clearChatLauncherDragClickOnNewInteraction,
+  isSuppressedChatLauncherDragClick,
+} from './chat-launcher-click-suppression';
+import { getChatLauncherKeyboardPosition } from './chat-launcher-keyboard';
+import { useChatLauncherOfferCollision } from './use-chat-launcher-offer-collision';
+
+const DRAG_THRESHOLD = 6;
+const useBrowserLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
+export function useChatLauncherDrag(
+  initialPosition?: Position,
+  isOpen = false,
+  overflowKey: string | boolean = false,
+  isHidden = false,
+  constraintKey: string | boolean = false,
+  active = true,
+) {
+  const [position, setPosition] = useState<Position | undefined>(initialPosition);
+  const positionRef = useRef(position);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const syncCollisionDuringDrag = useChatLauncherOfferCollision(
+    anchorRef,
+    position,
+    active,
+  );
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const gesture = useRef<Gesture | null>(null);
+  const dragged = useRef(false);
+  const frame = useRef<number | null>(null);
+  const viewportFrame = useRef<number | null>(null);
+  const viewportReclampPending = useRef(false);
+  const isOpenRef = useRef(isOpen);
+  const isHiddenRef = useRef(isHidden);
+  // Keep delayed compatibility clicks correlated; clear the token on new input.
+  const suppressedDragClick = useRef<{
+    pointerId: number;
+    pointerType: string;
+    x: number;
+    y: number;
+    expiresAt: number;
+  } | null>(null);
+  const safeAreaProbe = useRef<HTMLDivElement | null>(null);
+
+  const commitPosition = (next: Position) => {
+    positionRef.current = next;
+    setPosition(next);
+  };
+  const lifecycle = createChatLauncherGestureLifecycle({
+    gesture,
+    dragged,
+    frame,
+    anchor: anchorRef,
+    position: () => positionRef.current,
+    commitPosition,
+    scheduleViewportReclamp,
+    viewportReclampPending,
+    suppressedDragClick,
+    syncCollision: syncCollisionDuringDrag,
+  });
+
+  useBrowserLayoutEffect(() => {
+    isOpenRef.current = isOpen;
+    isHiddenRef.current = isHidden;
+  }, [isOpen, isHidden]);
+  function reclampPosition() {
+    const current = positionRef.current;
+    if (gesture.current) {
+      viewportReclampPending.current = true;
+      return;
+    }
+    if (isOpenRef.current || isHiddenRef.current || !current) return;
+    const button = buttonRef.current;
+    const rect = button?.getBoundingClientRect();
+    if (!button || !rect || rect.width === 0 || rect.height === 0) return;
+    const overflow = readChatLauncherOverflow(button, rect);
+    const next = clampChatLauncherPosition(
+      current.x,
+      current.y,
+      rect.width,
+      rect.height,
+      readChatLauncherSafeArea(safeAreaProbe.current),
+      readChatLauncherMobileOffset(anchorRef.current),
+      overflow,
+      readChatLauncherSafeAreaEdges(safeAreaProbe.current),
+    );
+    if (next.x !== current.x || next.y !== current.y) {
+      commitPosition(next);
+    }
+  }
+  function scheduleViewportReclamp() {
+    if (gesture.current) {
+      viewportReclampPending.current = true;
+      return;
+    }
+    if (viewportFrame.current !== null) return;
+    viewportFrame.current = requestAnimationFrame(() => {
+      viewportFrame.current = null;
+      reclampPosition();
+    });
+  }
+  function handleOverflowAnimationEnd(event: Event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.matches('[data-chat-launcher-overflow]')) return;
+    scheduleViewportReclamp();
+  }
+  useEffect(() => {
+    if (!active) return;
+    const clearStaleDragClick = (event: Event) => {
+      if (event.type === 'focusin' && event.target === buttonRef.current) return;
+      clearChatLauncherDragClickOnNewInteraction(suppressedDragClick);
+    };
+    document.addEventListener('pointerdown', clearStaleDragClick, true);
+    document.addEventListener('keydown', clearStaleDragClick, true);
+    document.addEventListener('focusin', clearStaleDragClick, true);
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'height:env(safe-area-inset-bottom, 0px);padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);position:fixed;visibility:hidden;pointer-events:none;width:0;';
+    document.body.append(probe);
+    safeAreaProbe.current = probe;
+    window.addEventListener('resize', scheduleViewportReclamp);
+    const anchor = anchorRef.current;
+    const button = buttonRef.current;
+    const observer =
+      button && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(reclampPosition)
+        : null;
+    if (button) observer?.observe(button);
+    anchor?.addEventListener('animationend', handleOverflowAnimationEnd, true);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener('resize', scheduleViewportReclamp);
+    visualViewport?.addEventListener('scroll', scheduleViewportReclamp);
+    return () => {
+      document.removeEventListener('pointerdown', clearStaleDragClick, true);
+      document.removeEventListener('keydown', clearStaleDragClick, true);
+      document.removeEventListener('focusin', clearStaleDragClick, true);
+      window.removeEventListener('resize', scheduleViewportReclamp);
+      anchor?.removeEventListener('animationend', handleOverflowAnimationEnd, true);
+      visualViewport?.removeEventListener('resize', scheduleViewportReclamp);
+      visualViewport?.removeEventListener('scroll', scheduleViewportReclamp);
+      observer?.disconnect();
+      probe.remove();
+      safeAreaProbe.current = null;
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      if (viewportFrame.current !== null)
+        cancelAnimationFrame(viewportFrame.current);
+    };
+  }, [active]);
+  useBrowserLayoutEffect(() => {
+    if (!isOpen && !isHidden && position) reclampPosition();
+  }, [constraintKey, isHidden, isOpen, overflowKey, position]);
+
+  function onPointerDown(event: PointerEvent<HTMLButtonElement>) {
+    if (isOpen || gesture.current) return;
+    if (event.button !== 0 || event.isPrimary === false) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const bottomSafeArea = readChatLauncherSafeArea(safeAreaProbe.current);
+    const safeArea = readChatLauncherSafeAreaEdges(safeAreaProbe.current);
+    const mobileOffset = readChatLauncherMobileOffset(anchorRef.current);
+    const overflow = readChatLauncherOverflow(event.currentTarget, rect);
+    gesture.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      x: event.clientX,
+      y: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      bottomSafeArea,
+      safeArea,
+      mobileOffset,
+      overflow,
+      base: position ?? { x: 0, y: 0 },
+      next: { x: rect.left, y: rect.top },
+    };
+    anchorRef.current?.setAttribute('data-chat-launcher-dragging', '');
+    dragged.current = false;
+    suppressedDragClick.current = null;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+  function onKeyboardMove(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (isOpen || isHidden) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const next = getChatLauncherKeyboardPosition(
+      event.key,
+      event.shiftKey,
+      position ?? { x: rect.left, y: rect.top },
+      rect,
+      readChatLauncherSafeArea(safeAreaProbe.current),
+      readChatLauncherMobileOffset(anchorRef.current),
+      readChatLauncherOverflow(event.currentTarget, rect),
+      readChatLauncherSafeAreaEdges(safeAreaProbe.current),
+    );
+    if (!next) return;
+    event.preventDefault();
+    commitPosition(next);
+  }
+  function updateGesturePosition(x: number, y: number) {
+    const start = gesture.current;
+    if (!start) return;
+    start.lastX = x;
+    start.lastY = y;
+    const dx = x - start.x;
+    const dy = y - start.y;
+    if (!dragged.current && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    dragged.current = true;
+    start.next = clampChatLauncherPosition(
+      start.left + dx,
+      start.top + dy,
+      start.width,
+      start.height,
+      start.bottomSafeArea,
+      start.mobileOffset,
+      start.overflow,
+      start.safeArea,
+    );
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      if (!anchorRef.current || !gesture.current) return;
+      const { next, base, left, top } = gesture.current;
+      anchorRef.current.style.transform = `translate3d(${base.x + next.x - left}px, ${base.y + next.y - top}px, 0)`;
+      syncCollisionDuringDrag();
+    });
+  }
+  function onPointerMove(event: PointerEvent<HTMLButtonElement>) {
+    if (gesture.current?.pointerId !== event.pointerId) return;
+    updateGesturePosition(event.clientX, event.clientY);
+  }
+  function suppressClick(event: Parameters<typeof isSuppressedChatLauncherDragClick>[0]) {
+    const suppress = isSuppressedChatLauncherDragClick(
+      event,
+      suppressedDragClick.current,
+    );
+    // Any activation consumes the token. In particular, after keyboard-open
+    // the mounted chat toggle must not inherit the previous drag correlation.
+    suppressedDragClick.current = null;
+    if (event.detail === 0) dragged.current = false;
+    return suppress;
+  }
+  const anchorStyle = getChatLauncherAnchorStyle(position, isOpen);
+
+  return {
+    position,
+    anchorRef,
+    buttonRef,
+    anchorStyle,
+    suppressClick,
+    buttonProps: {
+      ref: buttonRef,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
+        if (gesture.current?.pointerId === event.pointerId) {
+          updateGesturePosition(event.clientX, event.clientY);
+        }
+        lifecycle.onPointerUp(event);
+      },
+      onKeyDown: onKeyboardMove,
+      onPointerCancel: (event: PointerEvent<HTMLButtonElement>) =>
+        gesture.current?.pointerId === event.pointerId && lifecycle.cancelGesture(),
+      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
+        if (gesture.current?.pointerId !== event.pointerId) return;
+        updateGesturePosition(event.clientX, event.clientY);
+        if (dragged.current) lifecycle.finishGesture();
+        else lifecycle.cancelGesture();
+      },
+      style: {
+        touchAction: isOpen ? 'auto' : 'none',
+        userSelect: 'none',
+      } as CSSProperties,
+      onDragStart: (event: DragEvent<HTMLButtonElement>) =>
+        event.preventDefault(),
+    },
+  };
+}

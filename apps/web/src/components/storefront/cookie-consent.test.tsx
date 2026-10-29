@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CookieConsent, useCookieConsent } from './cookie-consent';
@@ -49,6 +49,15 @@ describe('CookieConsent', () => {
     expect(typeof useCookieConsent).toBe('function');
   });
 
+  it('keeps the mobile consent dialog inside the viewport', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    const dialog = screen.getByRole('dialog', { name: 'Cookie consent' });
+    expect(dialog).toHaveClass('overflow-y-auto');
+    expect(dialog).not.toHaveClass('w-full');
+  });
+
   it('links the banner policy CTA to the canonical privacy route', () => {
     render(<CookieConsent />);
 
@@ -71,5 +80,220 @@ describe('CookieConsent', () => {
       width: 'auto',
       zIndex: 50,
     });
+  });
+
+  it('does not steal chat focus when non-modal consent appears', () => {
+    const { container } = render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <CookieConsent />
+      </>
+    );
+    const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+    launcher.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    const customizeButton = screen.getByRole('button', { name: 'Customize' });
+    expect(launcher).toHaveFocus();
+    expect(customizeButton).not.toHaveFocus();
+    expect(container.querySelector('.storefront-cookie-consent')).toBeTruthy();
+
+    customizeButton.focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(launcher).toHaveFocus();
+  });
+
+  it('keeps keyboard focus within consent when switching preference views', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+
+    const customize = screen.getByRole('button', { name: 'Customize' });
+    customize.focus();
+    fireEvent.click(customize);
+    const closeDetails = screen.getByRole('button', { name: 'Close details' });
+    expect(closeDetails).toHaveFocus();
+
+    closeDetails.focus();
+    fireEvent.click(closeDetails);
+    const customizeAgain = screen.getByRole('button', { name: 'Customize' });
+    expect(customizeAgain).toHaveFocus();
+
+    fireEvent.click(customizeAgain);
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    cancel.focus();
+    fireEvent.click(cancel);
+    expect(screen.getByRole('button', { name: 'Customize' })).toHaveFocus();
+  });
+
+  it('does not steal focus back after the shopper moves outside consent', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(outside).toHaveFocus();
+  });
+
+  it('keeps focus where the shopper moves during the consent exit animation', () => {
+    render(
+      <>
+        <div className="ogabassey-chat-anchor">
+          <button className="ogabassey-chat-button" type="button">
+            Assistant launcher
+          </button>
+        </div>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    screen.getByRole('button', { name: 'Assistant launcher' }).focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const accept = screen.getByRole('button', { name: 'Accept All' });
+    accept.focus();
+    fireEvent.click(accept);
+
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(outside).toHaveFocus();
+  });
+
+  it('does not restore chat focus after consent loses focus to the document body', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <button className="ogabassey-chat-button" type="button">
+          Assistant launcher
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const launcher = screen.getByRole('button', { name: 'Assistant launcher' });
+    launcher.focus();
+    act(() => vi.advanceTimersByTime(1000));
+    const accept = screen.getByRole('button', { name: 'Accept All' });
+    accept.focus();
+    accept.blur();
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.click(accept);
+    act(() => vi.advanceTimersByTime(200));
+
+    expect(launcher).not.toHaveFocus();
+  });
+
+  it('does not move focus out of an open chat conversation', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <div className="ogabassey-chat-window">
+          <input aria-label="Chat message" />
+          <button className="ogabassey-chat-button" type="button">
+            Close chat
+          </button>
+        </div>
+        <CookieConsent />
+      </div>
+    );
+    const input = screen.getByRole('textbox', { name: 'Chat message' });
+    input.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(input).toHaveFocus();
+  });
+
+  it('remains a non-modal banner when focus starts on another page control', () => {
+    render(
+      <>
+        <button type="button">Outside control</button>
+        <CookieConsent />
+      </>
+    );
+    const outside = screen.getByRole('button', { name: 'Outside control' });
+    outside.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(
+      screen.getByRole('dialog', { name: 'Cookie consent' })
+    ).toHaveAttribute('aria-modal', 'false');
+    expect(outside).toHaveFocus();
+  });
+
+  it('keeps focus on the chat toggle when consent appears during an open chat', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <div className="ogabassey-chat-window">
+          <input aria-label="Chat message" />
+        </div>
+        <button className="ogabassey-chat-button" type="button">
+          Close chat
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const toggle = screen.getByRole('button', { name: 'Close chat' });
+    toggle.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(toggle).toHaveFocus();
+  });
+
+  it('does not steal focus from the chat message dismiss control', () => {
+    render(
+      <div className="ogabassey-chat-anchor">
+        <button type="button" className="ogabassey-chat-button">
+          Assistant launcher
+        </button>
+        <button type="button" aria-label="Dismiss chat message">
+          Dismiss
+        </button>
+        <CookieConsent />
+      </div>
+    );
+    const dismiss = screen.getByRole('button', {
+      name: 'Dismiss chat message',
+    });
+    dismiss.focus();
+
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(dismiss).toHaveFocus();
+    screen.getByRole('button', { name: 'Customize' }).focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept All' }));
+    act(() => vi.advanceTimersByTime(200));
+    expect(dismiss).toHaveFocus();
   });
 });

@@ -1,0 +1,107 @@
+import type { PointerEvent } from 'react';
+import type { Gesture } from './chat-launcher-gesture';
+import { CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS } from './chat-launcher-click-suppression';
+
+export type SuppressedDragClick = {
+  pointerId: number;
+  pointerType: string;
+  x: number;
+  y: number;
+  expiresAt: number;
+};
+
+type GestureLifecycleOptions = {
+  gesture: { current: Gesture | null };
+  dragged: { current: boolean };
+  frame: { current: number | null };
+  anchor: { current: HTMLDivElement | null };
+  position: () => { x: number; y: number } | undefined;
+  commitPosition: (position: { x: number; y: number }) => void;
+  scheduleViewportReclamp: () => void;
+  viewportReclampPending: { current: boolean };
+  suppressedDragClick: { current: SuppressedDragClick | null };
+  syncCollision: () => void;
+};
+
+export function createChatLauncherGestureLifecycle({
+  gesture,
+  dragged,
+  frame,
+  anchor,
+  position,
+  commitPosition,
+  scheduleViewportReclamp,
+  viewportReclampPending,
+  suppressedDragClick,
+  syncCollision,
+}: GestureLifecycleOptions) {
+  function finishGesture() {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    const start = gesture.current;
+    gesture.current = null;
+    anchor.current?.removeAttribute('data-chat-launcher-dragging');
+    if (start && dragged.current) {
+      if (anchor.current) {
+        const current = position();
+        const alreadyPositioned =
+          current?.x === start.next.x && current.y === start.next.y;
+        const x = alreadyPositioned
+          ? start.next.x
+          : start.base.x + start.next.x - start.left;
+        const y = alreadyPositioned
+          ? start.next.y
+          : start.base.y + start.next.y - start.top;
+        anchor.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      }
+      syncCollision();
+      commitPosition(start.next);
+      suppressedDragClick.current = {
+        pointerId: start.pointerId,
+        pointerType: start.pointerType,
+        x: start.lastX,
+        y: start.lastY,
+        expiresAt: Date.now() + CHAT_LAUNCHER_DRAG_CLICK_MAX_DELAY_MS,
+      };
+    }
+    if (viewportReclampPending.current) {
+      viewportReclampPending.current = false;
+      scheduleViewportReclamp();
+    }
+  }
+
+  function cancelGesture() {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    gesture.current = null;
+    dragged.current = false;
+    suppressedDragClick.current = null;
+    anchor.current?.removeAttribute('data-chat-launcher-dragging');
+    if (anchor.current) {
+      const current = position();
+      anchor.current.style.transform = current
+        ? `translate3d(${current.x}px, ${current.y}px, 0)`
+        : '';
+    }
+    syncCollision();
+    if (viewportReclampPending.current) {
+      viewportReclampPending.current = false;
+      scheduleViewportReclamp();
+    }
+  }
+
+  function onPointerUp(event: PointerEvent<HTMLButtonElement>) {
+    if (gesture.current?.pointerId !== event.pointerId) return;
+    const start = gesture.current;
+    if (start) {
+      start.lastX = event.clientX;
+      start.lastY = event.clientY;
+    }
+    finishGesture();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  return { finishGesture, cancelGesture, onPointerUp };
+}

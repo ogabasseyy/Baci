@@ -4,6 +4,20 @@ import { defineConfig } from '@playwright/test';
 
 const configuredPort = process.env.CHECKOUT_BROWSER_PORT?.trim();
 const port = Number(configuredPort || 3217);
+const firefoxHome = process.getuid?.() === 0 ? '/root' : os.homedir();
+// Hosted CI gives Firefox only its runtime variables to avoid passing secrets.
+// Local Firefox runs inherit the developer's environment.
+const firefoxEnv = Object.fromEntries(
+  [
+    'PATH',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'DISPLAY',
+    'WAYLAND_DISPLAY',
+    'LD_LIBRARY_PATH',
+  ].flatMap((name) => (process.env[name] ? [[name, process.env[name]]] : []))
+);
 export default defineConfig({
   testDir: './tests/checkout-browser',
   testMatch: '**/*.pw.ts',
@@ -21,10 +35,22 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     serviceWorkers: 'block',
   },
-  projects: ['chromium', 'webkit'].map((browserName) => ({
-    name: browserName,
-    use: { browserName: browserName as 'chromium' | 'webkit' },
-  })),
+  projects: [
+    ...(['chromium', 'webkit'] as const).map((browserName) => ({
+      name: browserName,
+      use: { browserName },
+    })),
+    {
+      name: 'firefox-chat-drag',
+      testMatch: '**/storefront-chat-*.pw.ts',
+      use: {
+        browserName: 'firefox',
+        launchOptions: process.env.CI
+          ? { env: { ...firefoxEnv, HOME: firefoxHome } }
+          : undefined,
+      },
+    },
+  ],
   webServer: {
     command: `pnpm exec next start tests/checkout-browser/harness --hostname 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}/catalog`,

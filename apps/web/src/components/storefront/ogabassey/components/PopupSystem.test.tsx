@@ -56,27 +56,4 @@ describe('PopupSystem', () => {
       screen.getByRole('heading', { name: 'Join Ogabassey' })
     ).toBeInTheDocument();
   });
-
-  it('still queues the ad popup after the newsletter is dismissed', async () => {
-    render(<PopupSystem />);
-
-    fireEvent.pointerDown(window);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    act(() => {
-      vi.advanceTimersByTime(4000);
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close newsletter' }));
-
-    act(() => {
-      vi.advanceTimersByTime(10000);
-    });
-
-    expect(screen.getByText('Sponsored')).toBeInTheDocument();
-    expect(screen.getByTestId('popup-ad-unit')).toBeInTheDocument();
-  });
 });

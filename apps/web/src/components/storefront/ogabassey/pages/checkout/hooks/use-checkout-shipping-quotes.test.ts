@@ -69,15 +69,18 @@ describe('useCheckoutShippingQuotes', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
   it.each([
-    true,
-    false,
-  ])('invalidates door readiness before painting pickup for new-address mode %s', async (isNewAddressMode) => {
+    [true, 'method'],
+    [false, 'method'],
+    [true, 'restored address'],
+    [false, 'restored address'],
+  ] as const)('invalidates readiness before painting pickup in new-address mode %s after changing %s', async (isNewAddressMode, change) => {
     const pending = deferredResponse();
     mockFetch
       .mockResolvedValueOnce(response('door'))
       .mockReturnValueOnce(pending.promise);
-    const input = {
+    const input: CheckoutShippingQuotesOptions = {
       ...options(),
+      deliveryMethod: change === 'method' ? 'door' : 'pickup',
       isNewAddressMode,
       selectedAddressId: 17,
       addresses: [
@@ -104,7 +107,21 @@ describe('useCheckoutShippingQuotes', () => {
     await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
     committedReadiness.length = 0;
 
-    rerender({ ...input, deliveryMethod: 'pickup' });
+    const restoredInput: CheckoutShippingQuotesOptions = {
+      ...input,
+      deliveryMethod: 'pickup',
+      ...(change === 'restored address'
+        ? {
+            newAddressStreet: '8 Sample Road',
+            currentStep: 'payment',
+            addresses: input.addresses.map((address) => ({
+              ...address,
+              address: '8 Sample Road, Ikeja, Lagos',
+            })),
+          }
+        : {}),
+    };
+    rerender(restoredInput);
 
     expect(committedReadiness[0]).toBe(false);
     expect(result.current.hasResolvedQuotes).toBe(false);
@@ -113,7 +130,7 @@ describe('useCheckoutShippingQuotes', () => {
     expect(result.current.hasResolvedQuotes).toBe(true);
     expect(result.current.isLoadingQuotes).toBe(false);
 
-    rerender({ ...input, deliveryMethod: 'pickup_station' });
+    rerender({ ...restoredInput, deliveryMethod: 'pickup_station' });
     expect(result.current.hasResolvedQuotes).toBe(true);
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });

@@ -1,10 +1,11 @@
-import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
 import { isNigeriaRecoveryPin } from '@/lib/shipping/is-nigeria-recovery-pin';
+import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
 import { findQuoteByStableIdentity } from '../find-quote-by-stable-identity';
 import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-ready';
 import { shouldFetchCheckoutShippingQuotes } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
 import { getPreferredDoorQuoteId } from '../utils';
+import { buildCheckoutShippingQuoteRequestKey } from './build-checkout-shipping-quote-request-key';
 
 export const CHECKOUT_QUOTE_TIMEOUT_MS = 15_000;
 
@@ -73,31 +74,6 @@ export function invalidatePendingQuoteRequests(
   return requestSequence.current;
 }
 
-function buildQuoteRequestKey(receiver: QuoteReceiver, cart: QuoteCartItem[]) {
-  return JSON.stringify({
-    address: receiver.address.trim().toLowerCase(),
-    city: receiver.city.trim().toLowerCase(),
-    deliveryPreference: receiver.deliveryPreference,
-    merchantId: receiver.merchantId ?? null,
-    items: cart.map((item) => [
-      item.name,
-      item.quantity,
-      item.negotiatedPrice ?? item.price,
-    ]),
-    state: receiver.state.trim().toLowerCase(),
-    latitude: receiver.latitude,
-    longitude: receiver.longitude,
-    // A catalog-subtotal change (e.g. assurance toggle) can flip merchant
-    // free-over/price-tier rates even when the item list is unchanged, so the
-    // subtotal is part of the request key to force a re-quote.
-    cartSubtotal: receiver.cartSubtotal,
-    // A merchant-country change re-quotes because it drives country-aware zone
-    // matching (non-NG merchants resolve different zones/rates).
-    country: receiver.country,
-    countryCode: receiver.countryCode,
-  });
-}
-
 export async function loadCheckoutShippingQuotes(
   receiver: QuoteReceiver,
   cart: QuoteCartItem[],
@@ -128,7 +104,10 @@ export async function loadCheckoutShippingQuotes(
       ? [receiver.city.trim(), receiver.state.trim()].filter(Boolean).join(', ')
       : receiver.address;
   const requestReceiver = { ...receiver, address: addressForRequest };
-  const requestKey = buildQuoteRequestKey(requestReceiver, cart);
+  const requestKey = buildCheckoutShippingQuoteRequestKey(
+    requestReceiver,
+    cart
+  );
   if (!state.force && requestKey === state.currentRequestKey) return;
   const requestKeyChanged = requestKey !== state.currentRequestKey;
   const requestSequence = invalidatePendingQuoteRequests(

@@ -15,6 +15,7 @@ import worker_release_dependency_consumer as consumer
 import worker_release_dependency_install as install
 from worker_release_dependency_artifacts import payload_manifest, sha256_file
 from worker_release_dependency_fs import write_manifest
+from worker_release_dependency_consumer import BrokerFrozenSourceSnapshot
 from worker_release_lifecycle import AuthenticatedRun
 
 
@@ -55,17 +56,36 @@ def dispatcher_response(archive, run=identity()):
 
 class DependencyConsumerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path.home())
         self.root = Path(self.temp.name)
         self.source_tmp = self.root / "source-inputs"
         self.source_tmp.mkdir(mode=0o700)
-        self.result_root = self.root / "results"
+        self.result_parent = self.root / "build-root"
+        self.result_parent.mkdir(mode=0o700)
+        self.result_root = self.result_parent / "results"
         self.result_root.mkdir(mode=0o700)
         self.release = self.root / "release"
         (self.release / "apps" / "web").mkdir(parents=True, mode=0o700)
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def make_snapshot(self, archive, *, root_lock=b"root lock\n", marker=SHA + "\n"):
+        snapshot = self.source_tmp / "snapshot"
+        (snapshot / "vps-workers").mkdir(parents=True)
+        (snapshot / "pnpm-lock.yaml").write_bytes(root_lock)
+        (snapshot / "vps-workers/pnpm-lock.yaml").write_bytes(b"worker lock\n")
+        (snapshot / ".baci-source-sha").write_text(marker)
+        (snapshot / "source.txt").write_text("frozen source\n")
+        for path in (snapshot / "pnpm-lock.yaml", snapshot / "vps-workers/pnpm-lock.yaml",
+                     snapshot / ".baci-source-sha", snapshot / "source.txt"):
+            path.chmod(0o440)
+        (snapshot / "vps-workers").chmod(0o550)
+        snapshot.chmod(0o550)
+        return BrokerFrozenSourceSnapshot(
+            path=snapshot.resolve(), source_sha=SHA,
+            archive_sha256=hashlib.sha256(archive).hexdigest(),
+        )
 
     def make_builder(self, *, bad_lock_hash=False, bad_worker_lock_hash=False, bad_manifest=False):
         def build(source_arg, expected_sha):
@@ -105,12 +125,13 @@ class DependencyConsumerTests(unittest.TestCase):
             return manifest, result
         return build
 
-    def run_consumer(self, builder):
-        archive = archive_bytes()
+    def run_consumer(self, builder, archive=None, snapshot=None):
+        archive = archive_bytes() if archive is None else archive
+        snapshot = self.make_snapshot(archive) if snapshot is None else snapshot
         return consumer.build_and_install_dependencies(
             dispatcher_response(archive), identity(),
+            source_snapshot=snapshot,
             expected_bundle_sha256=hashlib.sha256(archive).hexdigest(),
-            source_temp_root=self.source_tmp,
             result_root=self.result_root, release_root=self.release,
             builder=builder, owner_uid=os.geteuid(),
         )
@@ -129,7 +150,7 @@ class DependencyConsumerTests(unittest.TestCase):
         self.assertEqual((self.release / "node_modules" / "dotenv" / "index.js").read_text(),
                          "export const config = () => ({});\\n")
         self.assertEqual(list(self.result_root.iterdir()), [])
-        self.assertEqual(list(self.source_tmp.iterdir()), [])
+        self.assertTrue((self.source_tmp / "snapshot").is_dir())
 
     def test_lock_hash_mismatch_fails_before_install_and_cleans_candidate(self):
         with self.assertRaisesRegex(consumer.BuilderRejected, "lockfile hashes"):
@@ -149,24 +170,42 @@ class DependencyConsumerTests(unittest.TestCase):
             self.run_consumer(self.make_builder(bad_manifest=True))
         self.assertFalse((self.release / "node_modules").exists())
 
-    def test_archive_provenance_marker_collision_is_rejected(self):
-        collision = io.BytesIO()
-        with tarfile.open(fileobj=collision, mode="w:gz") as archive:
-            for name, data in (("repo/.baci-source-sha", b"spoof"),
-                               ("repo/pnpm-lock.yaml", b"lock"),
-                               ("repo/vps-workers/pnpm-lock.yaml", b"worker lock")):
-                info = tarfile.TarInfo(name)
-                info.size = len(data)
-                archive.addfile(info, io.BytesIO(data))
-        with self.assertRaisesRegex(consumer.BuilderRejected, "reserved provenance marker"):
-            consumer.build_and_install_dependencies(
-                dispatcher_response(collision.getvalue()), identity(),
-                expected_bundle_sha256=hashlib.sha256(collision.getvalue()).hexdigest(),
-                source_temp_root=self.source_tmp,
-                result_root=self.result_root, release_root=self.release,
-                builder=self.make_builder(), owner_uid=os.geteuid(),
-            )
-        self.assertEqual(list(self.source_tmp.iterdir()), [])
+    def test_snapshot_marker_is_only_a_consistency_check(self):
+        archive = archive_bytes()
+        snapshot = self.make_snapshot(archive, marker="b" * 40 + "\n")
+        with self.assertRaisesRegex(consumer.BuilderRejected, "marker does not match the run"):
+            self.run_consumer(self.make_builder(), archive=archive, snapshot=snapshot)
+        self.assertEqual(list(self.result_root.iterdir()), [])
+
+    def test_snapshot_archive_digest_must_match_authenticated_dispatch_bytes(self):
+        archive = archive_bytes()
+        snapshot = self.make_snapshot(archive)
+        snapshot = BrokerFrozenSourceSnapshot(
+            path=snapshot.path, source_sha=snapshot.source_sha,
+            archive_sha256="0" * 64,
+        )
+        called = []
+        with self.assertRaisesRegex(consumer.BuilderRejected, "does not match the authenticated archive binding"):
+            self.run_consumer(lambda *_args: called.append(True), archive=archive, snapshot=snapshot)
+        self.assertEqual(called, [])
+        self.assertEqual(list(self.result_root.iterdir()), [])
+
+    def test_snapshot_source_sha_must_match_authenticated_run(self):
+        archive = archive_bytes()
+        snapshot = self.make_snapshot(archive)
+        snapshot = BrokerFrozenSourceSnapshot(
+            path=snapshot.path, source_sha="b" * 40,
+            archive_sha256=snapshot.archive_sha256,
+        )
+        called = []
+        with self.assertRaisesRegex(consumer.BuilderRejected, "does not match the authenticated archive binding"):
+            self.run_consumer(lambda *_args: called.append(True), archive=archive, snapshot=snapshot)
+        self.assertEqual(called, [])
+
+    def test_consumer_receipt_does_not_claim_source_provenance_or_runtime_readiness(self):
+        receipt = self.run_consumer(self.make_builder())
+        self.assertNotIn("source_provenance_verified", receipt)
+        self.assertNotIn("runtime_ready", receipt)
 
     def test_forged_archive_cannot_reuse_authenticated_sha_and_bundle_digest(self):
         trusted_archive = archive_bytes()
@@ -176,11 +215,21 @@ class DependencyConsumerTests(unittest.TestCase):
         with self.assertRaisesRegex(consumer.BuilderRejected, "source archive digest"):
             consumer.build_and_install_dependencies(
                 response, identity(), expected_bundle_sha256=hashlib.sha256(trusted_archive).hexdigest(),
-                source_temp_root=self.source_tmp, result_root=self.result_root,
+                source_snapshot=self.make_snapshot(trusted_archive), result_root=self.result_root,
                 release_root=self.release, builder=self.make_builder(), owner_uid=os.geteuid(),
             )
-        self.assertEqual(list(self.source_tmp.iterdir()), [])
+        self.assertTrue((self.source_tmp / "snapshot").is_dir())
         self.assertEqual(list(self.result_root.iterdir()), [])
+
+    def test_oversized_base64_is_rejected_before_decode(self):
+        archive = b"123456789"
+        response = dispatcher_response(archive)
+        with patch.object(consumer, "MAX_ARCHIVE_COMPRESSED_BYTES", 6), \
+                patch.object(consumer.base64, "b64decode", side_effect=AssertionError("decode must not run")):
+            with self.assertRaisesRegex(consumer.BuilderRejected, "encoding exceeds the size limit"):
+                consumer._archive_from_dispatch_response(
+                    response, identity(), hashlib.sha256(archive).hexdigest(),
+                )
 
     def test_existing_release_dependency_target_is_never_overwritten(self):
         target = self.release / "node_modules"
@@ -213,7 +262,7 @@ class DependencyConsumerTests(unittest.TestCase):
         self.assertFalse((self.release / "apps" / "web" / "node_modules").exists())
         self.assertFalse((self.release / "node_modules").exists())
         self.assertEqual(list(self.result_root.iterdir()), [])
-        self.assertEqual(list(self.source_tmp.iterdir()), [])
+        self.assertTrue((self.source_tmp / "snapshot").is_dir())
 
     def test_failed_partial_cleanup_marks_incoming_release_discard_required(self):
         original = install._materialize_directory

@@ -3,6 +3,10 @@ import { rewriteOgabasseyTransformUrlFormat } from '@/lib/ogabassey-cdn-image-ur
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
 import {
+  toOgabasseySameOriginSrcSet,
+  toOgabasseySameOriginTransformUrl,
+} from '@/lib/ogabassey-same-origin-hero-url';
+import {
   capSrcSetWidthRungs,
   MOBILE_HERO_IMAGE_HEIGHT,
   MOBILE_HERO_IMAGE_QUALITY,
@@ -98,17 +102,25 @@ export function getOgabasseyHeroLcpImage(
     src: imageUrl,
     width: MOBILE_HERO_MAX_SRCSET_WIDTH,
   });
-  const fallbackSrc =
+  const rawFallbackSrc =
     getLastSrcSetCandidateUrl(cappedSrcSet) ?? defaultFallbackSrc;
-  const sourceSrcSet = inlineSrc ?? cappedSrcSet ?? fallbackSrc;
+  const rawSourceSrcSet = inlineSrc ?? cappedSrcSet ?? rawFallbackSrc;
   const resolvedSizes = sizes ?? MOBILE_HERO_IMAGE_SIZES;
-  const responsiveSizes = getResponsiveSizes(sourceSrcSet, resolvedSizes);
-  const srcSet =
-    cappedSrcSet || `${fallbackSrc} ${MOBILE_HERO_MAX_SRCSET_WIDTH}w`;
-  const avifSrc = rewriteOgabasseyTransformUrlFormat(fallbackSrc, 'avif');
-  const avifSrcSet = buildOgabasseyAvifSrcSet(
-    inlineSrc ? sourceSrcSet : srcSet
+  const responsiveSizes = getResponsiveSizes(rawSourceSrcSet, resolvedSizes);
+  const rawFullSrcSet =
+    cappedSrcSet || `${rawFallbackSrc} ${MOBILE_HERO_MAX_SRCSET_WIDTH}w`;
+  const rawAvifSrc = rewriteOgabasseyTransformUrlFormat(rawFallbackSrc, 'avif');
+  const rawAvifSrcSet = buildOgabasseyAvifSrcSet(
+    inlineSrc ? rawSourceSrcSet : rawFullSrcSet
   );
+  const fallbackSrc = toOgabasseySameOriginTransformUrl(rawFallbackSrc);
+  const sourceSrcSet =
+    toOgabasseySameOriginSrcSet(rawSourceSrcSet) ?? fallbackSrc;
+  const srcSet = toOgabasseySameOriginSrcSet(rawFullSrcSet) ?? fallbackSrc;
+  const avifSrc = rawAvifSrc
+    ? toOgabasseySameOriginTransformUrl(rawAvifSrc)
+    : null;
+  const avifSrcSet = toOgabasseySameOriginSrcSet(rawAvifSrcSet) ?? null;
 
   return {
     avifSrc,

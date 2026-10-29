@@ -10,6 +10,8 @@ export const MOBILE_HERO_IMAGE_SIZES = '(max-width: 767px) 40vw, 50vw';
 export const MOBILE_HERO_SOURCE_MEDIA = '(max-width: 767px)';
 export const DESKTOP_HERO_SOURCE_MEDIA = '(min-width: 768px)';
 export const MOBILE_HERO_IMAGE_QUALITY = 70;
+export const MOBILE_HERO_LCP_MAX_BYTES = 20_000;
+export const MOBILE_HERO_QUALITY_STEPS = [70, 60, 50] as const;
 export const MOBILE_HERO_MIN_SRCSET_WIDTH = 384;
 export const MOBILE_HERO_MAX_SRCSET_WIDTH = 750;
 export const DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH = 640;
@@ -17,6 +19,26 @@ export const DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH = 1080;
 export const DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH = 384;
 export const TRANSPARENT_PIXEL_SRC =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+/**
+ * Given a list of `{ quality, bytes }` candidates ordered from highest to
+ * lowest quality (`70 -> 60 -> 50`), selects the highest-quality rung whose
+ * byte size is `<= maxBytes` (`MOBILE_HERO_LCP_MAX_BYTES`), falling back to the
+ * lowest rung if every candidate exceeds `maxBytes`.
+ */
+export function selectHeroAvifQualityForByteCap(
+  candidates: ReadonlyArray<{ bytes: number; quality: number }>,
+  maxBytes = MOBILE_HERO_LCP_MAX_BYTES
+): { bytes: number; quality: number } | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+  const ordered = [...candidates].sort((a, b) => b.quality - a.quality);
+  return (
+    ordered.find((candidate) => candidate.bytes <= maxBytes) ??
+    ordered[ordered.length - 1]
+  );
+}
 
 const MAX_INLINE_SOURCE_SRCSET_CHARS = 360;
 

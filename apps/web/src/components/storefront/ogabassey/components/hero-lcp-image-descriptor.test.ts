@@ -12,15 +12,18 @@ import {
 import {
   MOBILE_HERO_IMAGE_QUALITY,
   MOBILE_HERO_IMAGE_SIZES,
+  MOBILE_HERO_LCP_MAX_BYTES,
   MOBILE_HERO_MAX_SRCSET_WIDTH,
+  MOBILE_HERO_QUALITY_STEPS,
   MOBILE_HERO_SOURCE_MEDIA,
+  selectHeroAvifQualityForByteCap,
 } from './hero-mobile-image-config';
 
 const CDN_HERO =
   'https://cdn.ogabassey.com/core-assets/products/tecno-spark-40-pro.avif';
 
 describe('hero-lcp-image-descriptor', () => {
-  it('builds a shared descriptor from either a slide object or raw URL string', () => {
+  it('builds a shared same-origin /cdn-image/ descriptor from either a slide object or raw URL string', () => {
     const fromUrl = getOgabasseyHeroLcpImage(CDN_HERO);
     const fromSlide = getOgabasseyHeroLcpImage({ imageUrl: CDN_HERO });
 
@@ -31,10 +34,36 @@ describe('hero-lcp-image-descriptor', () => {
       quality: MOBILE_HERO_IMAGE_QUALITY,
       sizes: MOBILE_HERO_IMAGE_SIZES,
     });
-    expect(fromUrl?.avifSrc).toContain('format=avif');
-    expect(fromUrl?.avifSrcSet).toContain('format=avif');
-    expect(fromUrl?.src).toContain('format=jpeg');
-    expect(fromUrl?.srcSet).toContain('format=jpeg');
+    expect(fromUrl?.avifSrc).toMatch(/^\/cdn-image\/.*format=avif/);
+    expect(fromUrl?.avifSrcSet).toMatch(/^\/cdn-image\/.*format=avif/);
+    expect(fromUrl?.src).toMatch(/^\/cdn-image\/.*format=jpeg/);
+    expect(fromUrl?.srcSet).toMatch(/^\/cdn-image\/.*format=jpeg/);
+  });
+
+  it('steps mobile hero AVIF quality down 70 -> 60 -> 50 to honor the 20 KB byte cap', () => {
+    expect(MOBILE_HERO_LCP_MAX_BYTES).toBe(20_000);
+    expect(MOBILE_HERO_QUALITY_STEPS).toEqual([70, 60, 50]);
+    expect(
+      selectHeroAvifQualityForByteCap([
+        { quality: 70, bytes: 16_593 },
+        { quality: 60, bytes: 13_200 },
+        { quality: 50, bytes: 10_400 },
+      ])
+    ).toEqual({ quality: 70, bytes: 16_593 });
+    expect(
+      selectHeroAvifQualityForByteCap([
+        { quality: 70, bytes: 24_100 },
+        { quality: 60, bytes: 18_450 },
+        { quality: 50, bytes: 14_100 },
+      ])
+    ).toEqual({ quality: 60, bytes: 18_450 });
+    expect(
+      selectHeroAvifQualityForByteCap([
+        { quality: 70, bytes: 28_000 },
+        { quality: 60, bytes: 22_500 },
+        { quality: 50, bytes: 17_900 },
+      ])
+    ).toEqual({ quality: 50, bytes: 17_900 });
   });
 
   it('caps mobile hero srcSet rungs at <= 750w and at most 2 entries', () => {

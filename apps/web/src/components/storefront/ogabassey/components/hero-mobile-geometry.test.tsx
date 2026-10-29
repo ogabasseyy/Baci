@@ -3,6 +3,8 @@ import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
 import {
+  computeHeroMobileHeadingMaxAreaPx2,
+  computeHeroMobileImageMinAreaPx2,
   HERO_MOBILE_CONTROLS_ROW_CLASSES,
   HERO_MOBILE_PANEL_CLASSES,
   HERO_MOBILE_SLIDE_GRID_CLASSES,
@@ -130,8 +132,19 @@ describe('permanent hero mobile geometry', () => {
     const carousel = render(<HeroMobileCarousel slides={SLIDES} />).container;
 
     const carouselSource = carousel.querySelector('picture source');
-    expect(carouselSource?.getAttribute('srcset')).toContain(SLIDES[0].imageUrl);
+    expect(carouselSource?.getAttribute('srcset')).toContain(
+      '/core-assets/products/tecno.avif'
+    );
     const carouselImg = carousel.querySelector('picture img');
     expect(carouselImg?.getAttribute('alt')).toBe(SLIDES[0].imageAlt);
+  });
+
+  it('guarantees the slide-0 hero image painted area strictly exceeds a 3-line h2 heading at 360px, 390px, and 412px viewports', () => {
+    for (const viewportWidthPx of [360, 390, 412]) {
+      const maxHeadingArea =
+        computeHeroMobileHeadingMaxAreaPx2(viewportWidthPx);
+      const minImageArea = computeHeroMobileImageMinAreaPx2(viewportWidthPx);
+      expect(minImageArea).toBeGreaterThan(maxHeadingArea);
+    }
   });
 });

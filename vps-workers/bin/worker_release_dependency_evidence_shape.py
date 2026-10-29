@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import errno
 
 PREFIX_CATEGORIES = frozenset({"empty", "whitespace", "checkmark", "other"})
 SUFFIX_CATEGORIES = frozenset({
@@ -9,6 +10,20 @@ SUFFIX_CATEGORIES = frozenset({
 })
 LENGTH_BUCKETS = frozenset({"0", "1", "2", "3-8", "9+"})
 POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
+_ERRNO_CATEGORIES = {
+    errno.ENOSPC: "filesystem-no-space",
+    errno.EACCES: "filesystem-permission",
+    errno.EPERM: "filesystem-permission",
+    errno.ENOENT: "filesystem-missing",
+    errno.EROFS: "filesystem-read-only",
+    errno.EMFILE: "filesystem-descriptor-limit",
+    errno.ENFILE: "filesystem-descriptor-limit",
+    errno.ENOMEM: "filesystem-memory",
+    errno.EEXIST: "filesystem-exists",
+    errno.ELOOP: "filesystem-loop",
+    errno.ENOTDIR: "filesystem-not-directory",
+    errno.EIO: "filesystem-io",
+}
 _CHECKMARK_PREFIX = re.compile(r"\s*✓\s+")
 _FRESH_SUFFIX = re.compile(
     r"\s*\(([0-9]{1,9}) entr(?:y|ies) in ((?:[0-9]+(?:\.[0-9]+)?(?:ms|s|m|h|d|y))"
@@ -22,6 +37,11 @@ def _length_bucket(value: str) -> str:
     if length <= 2:
         return str(length)
     return "3-8" if length <= 8 else "9+"
+
+
+def safe_errno_category(error_number: int | None) -> str:
+    """Map OS error numbers to a closed category without echoing path/text."""
+    return _ERRNO_CATEGORIES.get(error_number, "filesystem-error")
 
 
 def summarize_line_shape(prefix: str, suffix: str) -> dict[str, str]:
@@ -92,4 +112,5 @@ def format_policy_line_shapes(evidence: dict[str, object]) -> str:
     )
 
 
-__all__ = ["format_policy_line_shapes", "summarize_line_shape", "validate_evidence_summary"]
+__all__ = ["format_policy_line_shapes", "safe_errno_category", "summarize_line_shape",
+           "validate_evidence_summary"]

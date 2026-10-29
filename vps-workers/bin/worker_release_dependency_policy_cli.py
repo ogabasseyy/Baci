@@ -16,6 +16,7 @@ from worker_release_dependency_diagnostics import (
     policy_rejection_category,
     write_diagnostic,
 )
+from worker_release_dependency_evidence_shape import safe_errno_category
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -50,7 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             stage, category, exit_code = "policy-preverify", "preverify-timeout", None
             evidence = None
         elif isinstance(exc, OSError):
-            stage, category, exit_code = "policy-preverify", "filesystem-error", None
+            stage, category, exit_code = "policy-preverify", safe_errno_category(exc.errno), None
             evidence = None
         else:
             stage, category = policy_rejection_category(str(exc))

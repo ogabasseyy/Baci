@@ -1,4 +1,5 @@
 import importlib.util
+import errno
 import json
 import os
 import sys
@@ -34,6 +35,12 @@ from worker_release_dependency_diagnostics import (
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_filesystem_diagnostic_exposes_errno_category_but_not_exception_text(self):
+        secret = "/private/runner/path"
+        output = failure_diagnostic("policy-preverify", OSError(errno.ENOSPC, secret))
+        self.assertEqual(output, "experiment failure stage=policy-preverify category=filesystem-no-space")
+        self.assertNotIn(secret, output)
+
     def test_failure_diagnostics_are_fixed_and_never_echo_error_text(self):
         secret_like = "private-token /home/runner/private/path"
         output = failure_diagnostic("policy-preverify", RuntimeError(secret_like))
@@ -144,6 +151,29 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             self.assertIn("line_shape=checkmark:2/other:3-8:minutes=0:decimal=0", error_output.getvalue())
             self.assertNotIn("dependency-resolution failed", error_output.getvalue())
             self.assertNotIn("/fixed/pnpm", error_output.getvalue())
+
+    def test_policy_child_classifies_os_error_without_echoing_path(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            diagnostic = root / "child.json"
+            error_output = StringIO()
+            with patch.object(experiment.policy_cli.policy, "preverify",
+                              side_effect=OSError(errno.ENOSPC, "full", "/private/path")), \
+                 redirect_stderr(error_output):
+                result = experiment.policy_cli.main([
+                    "--preverify", "--source", str(root), "--store", str(root),
+                    "--cache", str(root), "--diagnostic-file", str(diagnostic),
+                ])
+            self.assertEqual(result, 1)
+            self.assertEqual(error_output.getvalue(),
+                             "experiment failure stage=policy-preverify category=filesystem-no-space\n")
+            self.assertNotIn("/private/path", error_output.getvalue())
+            self.assertEqual(read_diagnostic(diagnostic, owner_uid=os.geteuid()), {
+                "stage": "policy-preverify", "category": "filesystem-no-space", "exit_code": None,
+            })
 
     def test_supervisor_promotes_child_diagnostic_over_generic_process_exit(self):
         with tempfile.TemporaryDirectory() as temporary:

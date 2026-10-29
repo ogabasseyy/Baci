@@ -12,6 +12,7 @@ from pathlib import Path
 from worker_release_dependency_artifacts import BuilderRejected
 from worker_release_dependency_evidence_shape import (
     format_policy_line_shapes,
+    safe_errno_category,
     summarize_line_shape,
     validate_evidence_summary as _validate_evidence_summary,
 )
@@ -24,6 +25,9 @@ DIAGNOSTIC_CATEGORIES = frozenset({
     "registry-network", "registry-response", "lockfile-policy", "unsupported-pnpm-option",
     "filesystem-access", "dependency-resolution", "pnpm-exit", "policy-rejected",
     "filesystem-error", "preverify-timeout", "operation-error", "policy-pass-marker-missing",
+    "filesystem-no-space", "filesystem-permission", "filesystem-missing", "filesystem-read-only",
+    "filesystem-descriptor-limit", "filesystem-memory", "filesystem-exists", "filesystem-loop",
+    "filesystem-not-directory", "filesystem-io",
     "registry-policy", "source-policy-invalid", "metadata-cache-bound", "metadata-cache-invalid",
     "pnpm-version-mismatch", "source-policy-mutated",
     "policy-cache-not-fresh",

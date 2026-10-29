@@ -10,6 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 from worker_release_dependency_diagnostics import format_policy_line_shapes
+from worker_release_dependency_evidence_shape import safe_errno_category
 
 MAX_TREE_BYTES = 12 * 1024 * 1024 * 1024
 MAX_TREE_ENTRIES = 500_000
@@ -54,7 +55,7 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         elif isinstance(error, subprocess.TimeoutExpired):
             category = "subprocess-timeout"
         elif isinstance(error, OSError):
-            category = "filesystem-error"
+            category = safe_errno_category(error.errno)
         elif isinstance(error, (ValueError, TypeError)):
             category = "invalid-result"
         elif isinstance(error, RuntimeError):

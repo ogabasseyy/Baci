@@ -1,5 +1,6 @@
 import unittest
 import os
+import errno
 import subprocess
 import tempfile
 from pathlib import Path
@@ -18,9 +19,16 @@ from worker_release_dependency_diagnostics import (
     write_diagnostic,
     run_pnpm_checked,
 )
+from worker_release_dependency_evidence_shape import safe_errno_category
 
 
 class PolicyPassEvidenceTests(unittest.TestCase):
+    def test_os_errors_map_to_closed_categories(self):
+        self.assertEqual(safe_errno_category(errno.ENOSPC), "filesystem-no-space")
+        self.assertEqual(safe_errno_category(errno.EACCES), "filesystem-permission")
+        self.assertEqual(safe_errno_category(errno.ENOENT), "filesystem-missing")
+        self.assertEqual(safe_errno_category(-1), "filesystem-error")
+
     def test_fresh_evidence_boundaries_and_output_streams(self):
         at_limit = "✓ Lockfile passes supply-chain policies (3 entries in 240s)\n"
         over_limit = "✓ Lockfile passes supply-chain policies (3 entries in 240.001s)\n"

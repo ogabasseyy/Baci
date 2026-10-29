@@ -59,8 +59,8 @@ def _control_group(unit: str) -> str:
     return f"/system.slice/{unit}"
 
 
-def _open_cgroup(unit: str) -> tuple[int, os.stat_result]:
-    return open_unit_cgroup(CGROUP_ROOT, unit)
+def _open_cgroup(unit: str, *, trusted_root=None) -> tuple[int, os.stat_result]:
+    return open_unit_cgroup(CGROUP_ROOT, unit, trusted_root=trusted_root)
 
 
 def _systemctl(*args: str, timeout: float = 1) -> str:
@@ -88,23 +88,26 @@ def _validate_live_unit(unit: str, cgroup_path: str, uid: int, gid: int,
 
 def _drain_until_proven(unit: str, fd: int, info: os.stat_result,
                         process: subprocess.Popen | None, *, deadline: float,
-                        journal=None) -> None:
+                        journal=None, uid: int | None = None,
+                        trusted_root=None) -> None:
     def bounded_query(*args: str) -> str:
         return bounded_systemctl_query(_systemctl, deadline, BuilderSupervisorRejected, *args)
 
     _drain_cgroup(unit, fd, info, process, systemctl=SYSTEMCTL, query=bounded_query,
                   rejected=BuilderSupervisorRejected, deadline=deadline,
-                  unproven=BuilderQuiescenceUnproven, journal=journal)
+                  unproven=BuilderQuiescenceUnproven, journal=journal,
+                  root=CGROUP_ROOT, uid=uid, trusted_root=trusted_root)
 
 
 def _drain_unpinned_until_proven(unit: str, process: subprocess.Popen, *,
-                                 deadline: float, journal=None) -> None:
+                                 deadline: float, journal=None,
+                                 uid: int | None = None, trusted_root=None) -> None:
     _drain_unpinned(unit, process, root=CGROUP_ROOT, systemctl=SYSTEMCTL,
                     query=lambda *args: bounded_systemctl_query(
                         _systemctl, deadline, BuilderSupervisorRejected, *args),
                     rejected=BuilderSupervisorRejected,
                     deadline=deadline, unproven=BuilderQuiescenceUnproven,
-                    journal=journal)
+                    journal=journal, uid=uid, trusted_root=trusted_root)
 
 
 def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: int,
@@ -149,7 +152,7 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
 
     command = systemd_command(source, scratch, expected_sha, uid, gid, unit)
     try:
-        preflight_cgroup_root(CGROUP_ROOT)
+        trusted_root = preflight_cgroup_root(CGROUP_ROOT)
     except (OSError, CgroupProofRejected, RuntimeError) as error:
         raise BuilderSupervisorRejected("required cgroup v2 system.slice is unavailable") from error
     started = time.monotonic()
@@ -173,7 +176,7 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
                 break
             if cgroup_fd < 0:
                 try:
-                    cgroup_fd, cgroup_info = _open_cgroup(unit)
+                    cgroup_fd, cgroup_info = _open_cgroup(unit, trusted_root=trusted_root)
                 except OSError:
                     pass
                 else:
@@ -196,7 +199,8 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             time.sleep(POLL_SECONDS)
         if cgroup_fd < 0:
             _drain_unpinned_until_proven(unit, process, deadline=cleanup_deadline,
-                                         journal=unit_journal)
+                                         journal=unit_journal, uid=uid,
+                                         trusted_root=trusted_root)
             unit_quiesced = True
             if failure is not None:
                 raise failure
@@ -208,25 +212,22 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             raise BuilderSupervisorRejected("builder cgroup was not pinned before completion")
         if failure is not None:
             _drain_until_proven(unit, cgroup_fd, cgroup_info, process,
-                                deadline=cleanup_deadline)
-            if unit_journal is not None:
-                unit_journal.mark_drained(cgroup_info)
+                                deadline=cleanup_deadline, uid=uid,
+                                journal=unit_journal, trusted_root=trusted_root)
             unit_quiesced = True
             raise failure
         try:
             return_code = process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             _drain_until_proven(unit, cgroup_fd, cgroup_info, process,
-                                deadline=cleanup_deadline)
-            if unit_journal is not None:
-                unit_journal.mark_drained(cgroup_info)
+                                deadline=cleanup_deadline, uid=uid,
+                                journal=unit_journal, trusted_root=trusted_root)
             unit_quiesced = True
             raise BuilderSupervisorRejected("builder systemd-run did not reap its unit") from None
         if return_code != 0:
             _drain_until_proven(unit, cgroup_fd, cgroup_info, process,
-                                deadline=cleanup_deadline)
-            if unit_journal is not None:
-                unit_journal.mark_drained(cgroup_info)
+                                deadline=cleanup_deadline, uid=uid,
+                                journal=unit_journal, trusted_root=trusted_root)
             unit_quiesced = True
             raise BuilderSupervisorRejected("builder systemd unit failed")
         _validate_live_unit(unit, expected_path, uid, gid, source, scratch) if _systemctl(
@@ -241,7 +242,10 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
         if not unit_quiesced:
             postspawn_drain(
                 unit, process, cgroup_fd, cgroup_info, deadline=cleanup_deadline,
-                drain_pinned=_drain_until_proven, drain_unpinned=_drain_unpinned_until_proven,
+                drain_pinned=lambda u, fd, info, child, **kwargs: _drain_until_proven(
+                    u, fd, info, child, uid=uid, trusted_root=trusted_root, **kwargs),
+                drain_unpinned=lambda u, child, **kwargs: _drain_unpinned_until_proven(
+                    u, child, uid=uid, trusted_root=trusted_root, **kwargs),
                 journal=unit_journal, unproven=BuilderQuiescenceUnproven,
             )
         raise

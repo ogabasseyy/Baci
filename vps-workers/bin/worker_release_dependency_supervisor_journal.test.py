@@ -122,15 +122,39 @@ class BuilderUnitJournalTests(unittest.TestCase):
     def test_only_missing_unit_child_with_not_found_load_state_is_recoverable(self):
         with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
             journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            deadlines = []
+            def bounded(_systemctl, deadline, _rejected, *_args):
+                deadlines.append(deadline)
+                return "not-found"
             with patch.object(journal_module, "preflight_cgroup_root"), patch.object(
                 journal_module, "_systemctl", return_value="not-found"), patch.object(
-                journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent("no unit cgroup")
-            ):
+                journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent("no unit cgroup")), patch.object(
+                journal_module, "bounded_systemctl_query", side_effect=bounded), patch.object(
+                journal_module, "prove_collected_unit") as prove:
                 result = recover_recorded_builder(
                     journal, FENCE, terminal_attempt_proven=lambda _fence: True,
                 )
+                prove.assert_called_once()
+                proof_query = prove.call_args.kwargs["query"]
+                proof_deadline = prove.call_args.kwargs["deadline"]
+                for prop in ("ActiveState", "LoadState", "SubState", "MainPID", "ControlGroup"):
+                    proof_query("show", f"--property={prop}", "--value", UNIT)
+                self.assertEqual(deadlines, [proof_deadline] * 6)
             self.assertEqual(result, "drained")
             self.assertEqual(journal.read()["phase"], "drained")
+
+    def test_missing_unit_cgroup_requires_collected_unit_process_proof(self):
+        with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
+            journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            with patch.object(journal_module, "preflight_cgroup_root", return_value=(1, 2, 3, 4)), patch.object(
+                journal_module, "_systemctl", return_value="not-found"), patch.object(
+                journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent("no unit cgroup")), patch.object(
+                journal_module, "prove_collected_unit", side_effect=RuntimeError("UID process remains")):
+                with self.assertRaisesRegex(BuilderJournalRejected, "collected-unit proof failed"):
+                    recover_recorded_builder(
+                        journal, FENCE, terminal_attempt_proven=lambda _fence: True,
+                    )
+            self.assertEqual(journal.read()["phase"], "prepared")
 
 
 if __name__ == "__main__":

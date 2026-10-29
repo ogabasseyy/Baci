@@ -5,22 +5,20 @@ import json
 import grp
 import os
 import re
-import stat
+import stat, time
 from pathlib import Path
 from typing import Any, Callable
-import time
 
 from worker_release_dependency_supervisor import (
     CGROUP_ROOT, BuilderSupervisorRejected, _control_group, _drain_until_proven,
     _open_cgroup, _systemctl, _validate_live_unit, preflight_cgroup_root,
 )
-from worker_release_dependency_supervisor_cgroup import UnitCgroupAbsent
+from worker_release_dependency_supervisor_cgroup import UnitCgroupAbsent, prove_collected_unit, bounded_systemctl_query
 from worker_release_descriptor_cgroup import require_empty_cgroup, require_process_member
 
 JOURNAL = "dependency-builder-unit.json"
 MAX_RECORD_BYTES = 16_384
 FENCE_FIELDS = {"repository", "workflow", "ref", "sha", "run_id", "run_attempt", "job_id"}
-
 
 class BuilderJournalRejected(RuntimeError):
     """The builder unit journal cannot authorize launch, recovery, or cleanup."""
@@ -237,8 +235,7 @@ class BuilderUnitJournal:
         os.fsync(self.fd)
 
 
-def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, object], *,
-                             terminal_attempt_proven: Callable[[dict[str, object]], bool]) -> str:
+def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, object], *, terminal_attempt_proven: Callable[[dict[str, object]], bool]) -> str:
     """Stop the exact recorded unit after terminal proof; leave scratch for journal cleanup."""
     record = journal.read()
     if record is None:
@@ -246,19 +243,26 @@ def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, objec
     if record["fence"] != fence or terminal_attempt_proven(fence) is not True:
         raise BuilderJournalRejected("builder recovery lacks matching terminal-run proof")
     try:
-        preflight_cgroup_root(CGROUP_ROOT)
+        trusted_root = preflight_cgroup_root(CGROUP_ROOT)
     except (OSError, RuntimeError) as error:
         raise BuilderJournalRejected("builder recovery cgroup v2 hierarchy is unavailable") from error
     unit = record["unit"]
+    recovery_deadline = time.monotonic() + 5
+    bounded_query = lambda *args: bounded_systemctl_query(_systemctl, recovery_deadline, BuilderSupervisorRejected, *args)
     try:
-        load_state = _systemctl("show", "--property=LoadState", "--value", unit)
+        load_state = bounded_query("show", "--property=LoadState", "--value", unit)
     except BuilderSupervisorRejected as error:
         raise BuilderJournalRejected("builder recovery cannot query systemd") from error
     try:
-        fd, info = _open_cgroup(unit)
+        fd, info = _open_cgroup(unit, trusted_root=trusted_root)
     except UnitCgroupAbsent:
         if load_state != "not-found":
             raise BuilderJournalRejected("builder recovery cgroup is unavailable") from None
+        try:
+            prove_collected_unit(unit, None, root=CGROUP_ROOT, uid=record["uid"],
+                                 deadline=recovery_deadline, query=bounded_query,
+                                 trusted_root=trusted_root)
+        except (OSError, RuntimeError) as error: raise BuilderJournalRejected("builder recovery collected-unit proof failed") from error
         if record["phase"] != "drained":
             journal.mark_drained(None)
         return "drained"
@@ -283,7 +287,8 @@ def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, objec
             pid = int(_systemctl("show", "--property=MainPID", "--value", unit))
             require_process_member(fd, info.st_dev, info.st_ino, pid)
             _drain_until_proven(unit, fd, info, None,
-                                deadline=time.monotonic() + 30)
+                                deadline=time.monotonic() + 30,
+                                uid=record["uid"], trusted_root=trusted_root)
         else:
             require_empty_cgroup(fd, info.st_dev, info.st_ino)
         journal.mark_drained(info)

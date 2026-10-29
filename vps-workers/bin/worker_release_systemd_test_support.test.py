@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from worker_release_systemd_test_support import _exec_code_category, _exec_status_category
+from worker_release_systemd_contract import expected_properties
 
 
 class SystemdTestSupportTests(unittest.TestCase):
@@ -21,6 +23,13 @@ class SystemdTestSupportTests(unittest.TestCase):
         self.assertEqual(_exec_status_category("226"), "filesystem-namespace-failure")
         self.assertEqual(_exec_status_category("9999"), "application-or-other-failure")
         self.assertEqual(_exec_status_category("secret"), "unavailable")
+
+    def test_production_worker_tree_remains_mandatorily_inaccessible(self):
+        properties = expected_properties(
+            extractor="baci-release-extractor", resource_root=Path("/run/resources"),
+            control_root=Path("/run/control"),
+        )
+        self.assertEqual(properties["InaccessiblePaths"], "/srv/baci-workers /etc /root /home")
 
 
 if __name__ == "__main__":

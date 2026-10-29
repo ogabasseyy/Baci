@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import io
 import os
 import pwd
@@ -13,13 +14,18 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 import worker_release_archive_extract_child as child
 import worker_release_systemd_extractor as supervisor
 import worker_release_systemd_contract as contract
+_provisioner_path = Path(__file__).with_name("provision-worker-source-extractor.py")
+_provisioner_spec = importlib.util.spec_from_file_location("source_extractor_provisioner", _provisioner_path)
+provisioner = importlib.util.module_from_spec(_provisioner_spec)
+sys.modules[_provisioner_spec.name] = provisioner
+_provisioner_spec.loader.exec_module(provisioner)
 from worker_release_stage_journal import StageJournal
 from worker_release_source_snapshot import pin_source_snapshot
 
@@ -42,6 +48,21 @@ def archive_bytes() -> bytes:
 
 
 class ExtractorUnitTests(unittest.TestCase):
+    def test_apply_passes_file_record_to_shared_installer_without_missing_type_import(self):
+        item = provisioner.File("fixture", b"content", 0o440, Path("/tmp/fixture"))
+        runner = Mock()
+        with patch.object(provisioner.os, "geteuid", return_value=0), \
+             patch.object(provisioner.grp, "getgrnam", return_value=object()), \
+             patch.object(provisioner.pwd, "getpwnam", return_value=object()), \
+             patch.object(provisioner, "_identity", return_value=(1234, 1234)), \
+             patch.object(provisioner, "_runtime_paths"), \
+             patch.object(provisioner, "install_files", return_value=(item,)), \
+             patch.object(provisioner, "install_one") as install_one:
+            provisioner.apply(runner=runner)
+        install_one.assert_called_once_with(item)
+        self.assertEqual(runner.call_args_list[0].args[0][0], "systemd-tmpfiles")
+        self.assertEqual(runner.call_args_list[1].args[0], ("systemctl", "daemon-reload"))
+
     def _contract_fixture(self, unit_file, properties=None):
         transaction_id = "d" * 32
         unit = f"{supervisor.UNIT_PREFIX}{transaction_id}.service"

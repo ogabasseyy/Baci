@@ -118,8 +118,9 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     uid, gid = _identity()
     _runtime_paths(uid, gid)
     for item in install_files():
-        from provision_worker_release_install import InstallFile
-        install_one(InstallFile(item.relative, item.content, item.mode, item.destination, item.group))
+        # install_one consumes the small file-record protocol directly. The
+        # shared installer module deliberately exposes no parallel record type.
+        install_one(item)
     runner(("systemd-tmpfiles", "--create", str(TMPFILES)), check=True, stdin=subprocess.DEVNULL)
     runner(("systemctl", "daemon-reload"), check=True, stdin=subprocess.DEVNULL)
 

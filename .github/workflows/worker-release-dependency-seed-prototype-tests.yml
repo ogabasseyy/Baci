@@ -24,9 +24,15 @@ jobs:
         run: |
           set -eu
           test "$(id -u)" -ne 0
-          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
-          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
-          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
-          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
-          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
-          /usr/bin/python3 -m py_compile vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
+          if find vps-workers -type f -path '*/__pycache__/*' -uid 0 -print -quit | grep -q .; then
+            echo 'root-run seed tests left root-owned bytecode in the checkout' >&2
+            exit 1
+          fi
+          pycache_prefix="$(mktemp -d)"
+          trap 'rm -rf -- "$pycache_prefix"' EXIT
+          PYTHONPYCACHEPREFIX="$pycache_prefix" /usr/bin/python3 -m py_compile vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py

@@ -9,12 +9,6 @@ import stat
 import subprocess
 import time
 from pathlib import Path
-from worker_release_dependency_diagnostics import format_policy_line_shapes
-from worker_release_dependency_evidence_shape import (
-    OFFLINE_STORE_SUBTYPES,
-    safe_errno_category,
-    validate_os_error,
-)
 from worker_release_actual_dependency_resources import (
     MAX_TREE_ENTRIES,
     ResourceEntryLimitExceeded,
@@ -26,7 +20,8 @@ STAGES = frozenset({
     "source-extraction", "source-tree-validation", "policy-preverify", "offline-store-validation",
     "build-cache-snapshot",
     "source-lock-validation", "web-deploy", "deploy-graph-validation", "workspace-self-link-cleanup",
-    "worker-install", "receipt-validation", "payload-validation", "payload-materialization",
+    "worker-install", "receipt-validation", "payload-hardlink-normalization",
+    "payload-validation", "payload-materialization",
     "independent-smoke", "materialized-tree-validation", "resource-scan", "experiment",
     "preverify-web-install", "preverify-worker-install", "web-install",
 })
@@ -34,7 +29,7 @@ RESOURCE_CHECKS = frozenset({"unsupported-filesystem-entry"})
 TREE_CHECKS = frozenset({"unsafe-entry-or-entry-limit", "shared-file-inode"})
 PAYLOAD_CHECKS = frozenset({
     "root-invalid", "path-invalid", "symlink-invalid", "symlink-escape",
-    "entry-mode-invalid", "shared-file-inode", "special-file", "size-bound",
+    "entry-mode-invalid", "shared-file-inode", "external-hardlink", "special-file", "size-bound",
     "entry-bound", "entry-read-failed", "entry-changed",
 })
 PAYLOAD_REJECTIONS = {
@@ -48,6 +43,7 @@ PAYLOAD_REJECTIONS = {
     "dependency payload directory has unsafe write or set-id bits": ("entry-mode-invalid", "payload-invalid"),
     "dependency payload file has unsafe write or set-id bits": ("entry-mode-invalid", "payload-invalid"),
     "dependency payload contains a shared hardlinked file": ("shared-file-inode", "payload-invalid"),
+    "candidate contains hardlinks outside its payload": ("external-hardlink", "payload-invalid"),
     "dependency payload contains a special file": ("special-file", "payload-invalid"),
     "dependency payload exceeds size limit": ("size-bound", "payload-invalid"),
     "dependency payload has too many entries": ("entry-bound", "payload-invalid"),
@@ -72,101 +68,10 @@ class MonitorFailure(RuntimeError):
 
 
 def failure_diagnostic(stage: str, error: BaseException) -> str:
-    """Render fixed diagnostics only; never include exception or command text."""
-    entry_metadata = None
-    store_subtype = getattr(error, "safe_subtype", None)
-    if store_subtype not in OFFLINE_STORE_SUBTYPES:
-        store_subtype = None
-    resource_check = None
-    tree_check = None
-    payload_check = None
-    if isinstance(error, MonitorFailure):
-        stage, category, exit_code = error.stage, error.category, error.exit_code
-        os_error = error.os_error
-        entry_metadata = error.entries_seen, error.entry_limit
-        resource_check = error.resource_check
-    else:
-        stage = stage if stage in STAGES else "experiment"
-        exit_code = None
-        os_error = None
-        if isinstance(error, ResourceEntryLimitExceeded):
-            entry_metadata = error.entries_seen, error.limit
-        if isinstance(error, subprocess.CalledProcessError):
-            category, exit_code = "subprocess-exit", error.returncode
-        elif isinstance(error, subprocess.TimeoutExpired):
-            category = "subprocess-timeout"
-        elif isinstance(error, OSError):
-            category = safe_errno_category(error.errno)
-        elif isinstance(error, (ValueError, TypeError)):
-            category = "invalid-result"
-        elif isinstance(error, RuntimeError):
-            message = str(error)
-            payload_rejection = PAYLOAD_REJECTIONS.get(message)
-            if payload_rejection is not None:
-                payload_check, category = payload_rejection
-            tree_checks = {
-                "measured tree contains an unsafe entry or exceeds entry bound": "unsafe-entry-or-entry-limit",
-                "measured tree contains a shared file inode": "shared-file-inode",
-            }
-            tree_check = tree_checks.get(message)
-            categories = (
-                ("launcher is unavailable", "runtime-unavailable"),
-                ("could not identify exactly one", "runtime-pin-invalid"),
-                ("installation exceeds entry bound", "runtime-entry-bound"),
-                ("expected checkout SHA is invalid", "input-invalid"),
-                ("does not match dispatched SHA", "checkout-mismatch"),
-                ("Node 24 runtime is unavailable", "runtime-unavailable"),
-                ("exceeds configured", "configured-bound"),
-                ("unsafe entry", "filesystem-entry-invalid"),
-                ("shared file inode", "filesystem-entry-invalid"),
-                ("unavailable", "expected-output-missing"),
-                ("disk cap", "disk-cap"),
-                ("free-space reserve", "free-space-reserve"),
-                ("free-inode reserve", "free-inode-reserve"),
-                ("entry cap", "entry-cap"),
-                ("tree changed repeatedly", "transient-tree-churn"),
-                ("differs from exact source lock", "lock-graph-drift"),
-                ("source lock does not pin", "lock-graph-invalid"),
-                ("measured tree exceeds", "tree-size-bound"),
-                ("did not produce", "expected-output-missing"),
-                ("receipt metadata cache changed", "policy-receipt-cache-changed"),
-                ("receipt", "policy-receipt"),
-                ("timed out", "deadline"),
-            )
-            if payload_check is None:
-                category = next((label for marker, label in categories if marker in message), "runtime-error")
-            if store_subtype is not None:
-                category = "filesystem-entry-invalid"
-        else:
-            category = "operation-error"
-    suffix = f" exit={exit_code}" if isinstance(exit_code, int) else ""
-    if isinstance(error, MonitorFailure) and error.evidence is not None:
-        evidence = error.evidence
-        suffix += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
-                   f" recognized_lines={evidence['recognized_lines']}")
-        suffix += format_policy_line_shapes(evidence)
-    if os_error is not None:
-        try:
-            os_error = validate_os_error(os_error)
-            number = os_error["errno"]
-            suffix += f" errno={number if number is not None else 'unknown'}"
-            suffix += f" substage={os_error['substage']}"
-        except (TypeError, ValueError):
-            pass
-    if entry_metadata is not None:
-        entries_seen, entry_limit = entry_metadata
-        if (type(entries_seen) is int and 1 <= entries_seen <= MAX_TREE_ENTRIES + 1
-                and type(entry_limit) is int and 1 <= entry_limit <= MAX_TREE_ENTRIES):
-            suffix += f" entries_seen={entries_seen} entry_limit={entry_limit}"
-    if store_subtype is not None:
-        suffix += f" store_check={store_subtype}"
-    if resource_check is not None:
-        suffix += f" resource_check={resource_check}"
-    if tree_check in TREE_CHECKS:
-        suffix += f" tree_check={tree_check}"
-    if payload_check in PAYLOAD_CHECKS:
-        suffix += f" payload_check={payload_check}"
-    return f"experiment failure stage={stage} category={category}{suffix}"
+    """Lazy bridge keeps diagnostic policy separate from process/resource controls."""
+    from worker_release_actual_dependency_failure import failure_diagnostic_impl
+
+    return failure_diagnostic_impl(stage, error)
 
 
 def assert_deployed_package_matches_lock(deploy_root: Path, lockfile: Path, package_name: str) -> str:

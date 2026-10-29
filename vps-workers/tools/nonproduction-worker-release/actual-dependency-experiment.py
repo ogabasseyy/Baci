@@ -23,8 +23,8 @@ EXPERIMENT_CACHE_BYTES = 4 * 1024 * 1024 * 1024
 EXPERIMENT_STORE_BYTES = 4 * 1024 * 1024 * 1024
 sys.path.insert(0, str(BIN))
 
-import worker_release_dependency_artifacts as artifacts
 import worker_release_dependency_install as installer
+import worker_release_dependency_artifacts as artifacts
 import worker_release_dependency_input_cache as input_cache
 import worker_release_dependency_policy_cache as policy
 import worker_release_dependency_policy_cli as policy_cli
@@ -37,6 +37,10 @@ from worker_release_actual_dependency_guard import (
     run_monitored,
     web_deploy_command,
 )
+from worker_release_actual_dependency_limits import (
+    EXPERIMENT_PAYLOAD_BYTES, configure_experiment_payload_limits,
+)
+from worker_release_actual_dependency_runner import run, run_policy_preverify as _run_policy_preverify
 from worker_release_actual_dependency_resources import (
     MAX_TREE_BYTES,
     MAX_TREE_ENTRIES,
@@ -45,47 +49,20 @@ from worker_release_actual_dependency_resources import (
     copy_verified_policy_cache,
     make_policy_cache_seed_read_only,
 )
-from worker_release_dependency_diagnostics import read_diagnostic
 from worker_release_actual_dependency_runtime import (
     independent_smoke,
     load_smoke_module,
     pinned_pnpm,
     tree_size,
 )
-EXPERIMENT_PAYLOAD_BYTES = MAX_TREE_BYTES
-
-
-def run(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
-        stage: str, resource_root: Path) -> None:
-    run_monitored(command, cwd=cwd, env=env, timeout=timeout, stage=stage,
-                  resource_root=resource_root)
+from worker_release_actual_dependency_hardlinks import normalize_internal_hardlinks
 
 
 def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
                          timeout: int, resource_root: Path, diagnostic_path: Path) -> None:
-    try:
-        run(command, cwd=cwd, env=env, timeout=timeout, stage="policy-preverify",
-            resource_root=resource_root)
-    except MonitorFailure as exc:
-        record = read_diagnostic(diagnostic_path, owner_uid=os.geteuid())
-        if record is not None and exc.category == "process-exit":
-            raise MonitorFailure(str(record["stage"]), str(record["category"]),
-                                 record["exit_code"] if isinstance(record["exit_code"], int)
-                                 else exc.exit_code, record.get("evidence"),
-                                 record.get("os_error")) from exc
-        raise
-
-
-def configure_experiment_payload_limits(smoke=None, *, materialization_limit: int | None = None) -> None:
-    """Raise only this disposable experiment's payload limits under the 12 GiB monitor."""
-    artifacts.MAX_PAYLOAD_BYTES = EXPERIMENT_PAYLOAD_BYTES
-    if materialization_limit is not None:
-        if (type(materialization_limit) is not int or materialization_limit < 0
-                or materialization_limit > EXPERIMENT_PAYLOAD_BYTES):
-            raise RuntimeError("experiment materialization headroom is invalid")
-        installer.MAX_MATERIALIZED_BYTES = materialization_limit
-    if smoke is not None:
-        smoke.MAX_BYTES = EXPERIMENT_PAYLOAD_BYTES
+    _run_policy_preverify(command, cwd=cwd, env=env, timeout=timeout,
+                          resource_root=resource_root, diagnostic_path=diagnostic_path,
+                          run_fn=run)
 
 
 def _main() -> int:
@@ -225,6 +202,21 @@ def _main() -> int:
             (output / "root").mkdir()
             shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
             enforce_resource_limits(base)
+            stage = "payload-hardlink-normalization"
+
+            def check_hardlink_copy(file_bytes: int) -> None:
+                capacity = os.statvfs(base)
+                available_bytes = capacity.f_bavail * capacity.f_frsize
+                if available_bytes < MIN_FREE_BYTES + file_bytes:
+                    raise RuntimeError("experiment free-space reserve reached")
+                if capacity.f_favail < MIN_FREE_INODES + 1:
+                    raise RuntimeError("experiment free-inode reserve reached")
+
+            hardlink_normalization = normalize_internal_hardlinks(
+                output, max_bytes=EXPERIMENT_PAYLOAD_BYTES,
+                max_entries=artifacts.MAX_ENTRIES, before_copy=check_hardlink_copy,
+            )
+            enforce_resource_limits(base)
             stage = "payload-validation"
             configure_experiment_payload_limits()
             entries, payload_bytes = artifacts.validate_payload(output)
@@ -255,6 +247,7 @@ def _main() -> int:
                 "pnpm_store_bytes": store_bytes,
                 "payload_entries": len(entries),
                 "payload_expanded_bytes": payload_bytes,
+                "payload_hardlink_normalization": hardlink_normalization,
                 "materialized_entries": materialized_count,
                 "materialized_bytes": materialized_bytes,
                 "smoke_sha256": smoke_hash,

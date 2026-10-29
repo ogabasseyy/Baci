@@ -46,9 +46,28 @@ def pinned_pnpm(node: str) -> str:
     launcher = shutil.which("pnpm")
     if not launcher:
         raise RuntimeError("pinned pnpm launcher is unavailable")
-    search_root = Path(launcher).parent.parent
+    # pnpm/action-setup installs a shell shim in PNPM_HOME and keeps the actual
+    # package below node_modules/.pnpm.  pathlib's recursive glob skips hidden
+    # directories by default, so walk explicitly without following symlinks.
+    search_root = (Path(launcher).parent.parent).resolve(strict=True)
     candidates = []
-    for candidate in search_root.glob("**/pnpm/bin/pnpm.cjs"):
+    seen = 0
+    for current, directories, files in os.walk(search_root, topdown=True, followlinks=False):
+        directories[:] = [name for name in directories
+                          if not (Path(current) / name).is_symlink()]
+        seen += len(directories) + len(files)
+        if seen > 100_000:
+            raise RuntimeError("pnpm installation exceeds entry bound")
+        if not current.endswith("/pnpm/bin") or "pnpm.cjs" not in files:
+            continue
+        candidate = Path(current) / "pnpm.cjs"
+        info = candidate.lstat()
+        if not stat.S_ISREG(info.st_mode) or candidate.is_symlink():
+            continue
+        try:
+            candidate.resolve(strict=True).relative_to(search_root)
+        except (OSError, ValueError):
+            continue
         result = subprocess.run((node, str(candidate), "--version"), stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                 text=True, timeout=15, check=False)

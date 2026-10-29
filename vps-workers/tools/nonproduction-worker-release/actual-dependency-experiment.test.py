@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("actual-dependency-experiment.py")
@@ -13,6 +14,25 @@ SPEC.loader.exec_module(experiment)
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_pinned_pnpm_finds_action_installed_shell_shim_package(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            launcher = root / "node_modules/.bin/pnpm"
+            launcher.parent.mkdir(parents=True)
+            launcher.write_text("#!/bin/sh\nexec node ../pnpm/bin/pnpm.cjs \"$@\"\n", encoding="utf-8")
+            package = root / "node_modules/.pnpm/pnpm@11.7.0/node_modules/pnpm/bin/pnpm.cjs"
+            package.parent.mkdir(parents=True)
+            package.write_text("// synthetic pinned pnpm entrypoint\n", encoding="utf-8")
+            canonical_package = package.resolve()
+
+            def fake_run(command, **kwargs):
+                self.assertEqual(command[1], str(canonical_package))
+                return type("Result", (), {"returncode": 0, "stdout": "11.7.0\n"})()
+
+            with patch.object(experiment.shutil, "which", return_value=str(launcher)), \
+                 patch.object(experiment.subprocess, "run", side_effect=fake_run):
+                self.assertEqual(experiment.pinned_pnpm("/usr/bin/node"), str(canonical_package))
+
     def test_tree_size_measures_regular_content_and_directories(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

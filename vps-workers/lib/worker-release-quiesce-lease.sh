@@ -15,7 +15,8 @@ recovery() {
 
 stop_active() {
   local service failed=0
-  for service in "${active_services[@]}"; do
+  for service in "${active_services[@]-}"; do
+    [ -n "$service" ] || continue
     recovery intent "$service" || failed=1
     /usr/bin/systemctl stop "$service" || failed=1
   done
@@ -25,12 +26,14 @@ stop_active() {
 
 start_active() {
   local service failed=0
-  for service in "${active_services[@]}"; do
+  for service in "${active_services[@]-}"; do
+    [ -n "$service" ] || continue
     /usr/bin/systemctl start "$service" || failed=1
   done
   return "$failed"
 }
 
+# shellcheck disable=SC2329 # invoked indirectly by the EXIT trap
 cleanup() {
   local status=$?
   trap - EXIT
@@ -48,6 +51,16 @@ if [ -n "$active_text" ]; then
 fi
 for service in "${services[@]}"; do
   if /usr/bin/systemctl is-active --quiet "$service"; then
+    # Persist the service in the shell's cleanup set before any stop action.
+    # On a fresh lease the initial latch snapshot is empty, so intent must
+    # update both the durable latch and the in-memory restart protocol.
+    tracked=0
+    for active_service in "${active_services[@]-}"; do
+      if [ "$active_service" = "$service" ]; then tracked=1; break; fi
+    done
+    if [ "$tracked" -eq 0 ]; then
+      active_services+=("$service")
+    fi
     recovery intent "$service"
     /usr/bin/systemctl stop "$service"
   else

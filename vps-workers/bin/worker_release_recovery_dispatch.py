@@ -37,7 +37,7 @@ def _state_is_owned_by_latch(state: dict[str, Any] | None, latch: dict[str, Any]
                 and str(fence.get("job_id")) == str(latch.get("job_id")))
 
 
-def _state_is_pre_promotion(state: dict[str, Any] | None, latch: dict[str, Any], target: dict[str, Any]) -> bool:
+def _state_is_pre_promotion(state: dict[str, Any] | None, latch: dict[str, Any]) -> bool:
     """Recognize a crash after latch fsync but before the promoting state write.
 
     Promotion writes the latch before it writes state, and does not switch the
@@ -49,8 +49,7 @@ def _state_is_pre_promotion(state: dict[str, Any] | None, latch: dict[str, Any],
     previous_sha = latch.get("previous_sha")
     return bool(isinstance(fence, dict) and isinstance(previous_sha, str)
                 and state.get("status") in ("healthy", "rolled_back")
-                and state.get("sha") == previous_sha and fence.get("sha") == previous_sha
-                and previous_sha != target["sha"])
+                and state.get("sha") == previous_sha and fence.get("sha") == previous_sha)
 
 
 def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:
@@ -62,11 +61,11 @@ def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:
         return {"ok": True, "operation": "recovery-status", "sourceSha": source_sha, "pending": False}
     target = recovery_target(latch)
     if (not (_state_matches(state, target) or _state_is_owned_by_latch(state, latch, target)
-             or _state_is_pre_promotion(state, latch, target))
+             or _state_is_pre_promotion(state, latch))
             or state.get("previous_sha") != latch.get("previous_sha")):
         # A pre-promotion state belongs to the prior release and naturally has
         # its own previous_sha; its SHA is the new latch's previous_sha.
-        prior_state = _state_is_pre_promotion(state, latch, target)
+        prior_state = _state_is_pre_promotion(state, latch)
         if not prior_state:
             raise broker.BrokerProtocolError("durable worker recovery state does not match its latch")
     return {
@@ -101,7 +100,7 @@ def recover(*, verified: dict[str, Any], identity, quiescence, current_link: str
                 if recovery_of != target:
                     raise LifecycleRejected("verified terminal attempt does not match the durable recovery owner")
                 takeover_from = latch["fence"]
-            pre_promotion = _state_is_pre_promotion(state, latch, target)
+            pre_promotion = _state_is_pre_promotion(state, latch)
             if (not (_state_matches(state, target) or _state_is_owned_by_latch(state, latch, target)
                      or pre_promotion)
                     or (not pre_promotion and state.get("previous_sha") != latch.get("previous_sha"))

@@ -247,6 +247,8 @@ def cli(argv: list[str]) -> int:
         sys.stdout.write("".join(f"{service}\n" for service in latch["services_to_restore"]))
         return 0
     if argv[0] == "intent" and len(argv) == 2:
+        # Record restore membership before the helper stops the unit. This is
+        # also the recovery snapshot if the supervisor dies during quiescing.
         update_latch(service_active=argv[1], stop_intent=argv[1])
         return 0
     if argv[0] == "phase" and len(argv) == 2:

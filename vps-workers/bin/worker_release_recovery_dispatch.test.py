@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import unittest
+import os
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import worker_release_broker as broker
@@ -47,10 +50,16 @@ class FakeLease:
     def confirm_rollback(self):
         self.confirmed = True
 
+    def require_active(self):
+        return None
+
 
 class FakeIdentity:
+    def __init__(self, run_id="202", sha=SHA_NEW, job_id="9002"):
+        self.value = {"run_id": run_id, "run_attempt": 1, "sha": sha, "job_id": job_id}
+
     def fence(self):
-        return {"run_id": "202", "run_attempt": 1, "sha": SHA_NEW, "job_id": "9002"}
+        return self.value
 
 
 class RecoveryDispatchTests(unittest.TestCase):
@@ -121,6 +130,41 @@ class RecoveryDispatchTests(unittest.TestCase):
         self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
         self.assertEqual(quiescence.acquired[1]["takeover_from"], value["fence"])
         record.assert_called_once()
+
+    def test_same_sha_redeploy_crash_after_latch_is_idempotently_recovered(self):
+        from contextlib import nullcontext
+
+        value = {
+            "fence": {"run_id": "101", "run_attempt": 1, "sha": SHA_PREVIOUS},
+            "job_id": "9001", "previous_sha": SHA_PREVIOUS,
+            "release_sha": SHA_PREVIOUS,
+        }
+        prior_state = {
+            "sha": SHA_PREVIOUS, "previous_sha": "e" * 40, "status": "healthy",
+            "fence": {"run_id": "88", "run_attempt": 1, "sha": SHA_PREVIOUS},
+        }
+        quiescence = FakeQuiescence(value)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            releases = root / "releases"
+            releases.mkdir()
+            (releases / SHA_PREVIOUS).mkdir()
+            current = root / "current"
+            current.symlink_to(f"releases/{SHA_PREVIOUS}")
+            with patch.object(broker, "_load_release_state", return_value=prior_state), \
+                 patch("worker_release_lifecycle.release_lock", return_value=nullcontext()), \
+                 patch.object(broker, "_record_promotion_failure") as record:
+                receipt = recover(
+                    verified={"sourceSha": SHA_PREVIOUS, "runId": "303", "runAttempt": 1,
+                              "jobId": "9003", "recoveryOf": recovery_target(value)},
+                    identity=FakeIdentity("303", SHA_PREVIOUS, "9003"), quiescence=quiescence,
+                    current_link=str(current), releases_root=str(releases),
+                    lock_path="unused/release.lock", state_path="unused/state",
+                )
+            self.assertTrue(receipt["alreadyRestored"])
+            self.assertEqual(os.readlink(current), f"releases/{SHA_PREVIOUS}")
+            self.assertEqual(receipt["rolledBackSha"], SHA_PREVIOUS)
+            record.assert_called_once()
 
     def test_status_fails_closed_when_state_or_latch_disagree(self):
         value = latch()

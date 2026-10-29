@@ -1,4 +1,4 @@
-const PROJECT_ID = 'c6c1897b-cac8-49b0-85f9-3d277aecc379';
+import { STOREFRONT_OTA_CONFIG } from './storefront-ota-constants.mjs';
 
 function present(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -12,17 +12,17 @@ export function validateOtaConfig(config, runtimeVersion) {
     throw new Error('Export iOS build number does not match the runtime.');
   }
   if (
-    config.ios?.bundleIdentifier !== 'com.ogabassey.app' ||
-    config.extra?.eas?.projectId !== PROJECT_ID ||
-    config.updates?.url !== `https://u.expo.dev/${PROJECT_ID}` ||
-    config.updates?.requestHeaders?.['expo-channel-name'] !== 'production'
+    config.ios?.bundleIdentifier !== STOREFRONT_OTA_CONFIG.bundleIdentifier ||
+    config.extra?.eas?.projectId !== STOREFRONT_OTA_CONFIG.projectId ||
+    config.updates?.url !== STOREFRONT_OTA_CONFIG.updatesUrl ||
+    config.updates?.requestHeaders?.['expo-channel-name'] !== STOREFRONT_OTA_CONFIG.channel
   ) {
     throw new Error('Export app, Expo project, or update channel is incorrect.');
   }
   if (
-    config.extra?.merchantId !== '6b5cb8a4-5575-456c-b936-8cdfae30db74' ||
-    config.extra?.merchantSlug !== 'ogabassey' ||
-    config.extra?.merchantDomain !== 'ogabassey.com'
+    config.extra?.merchantId !== STOREFRONT_OTA_CONFIG.merchantId ||
+    config.extra?.merchantSlug !== STOREFRONT_OTA_CONFIG.merchantSlug ||
+    config.extra?.merchantDomain !== STOREFRONT_OTA_CONFIG.merchantDomain
   ) {
     throw new Error('Export merchant configuration is incorrect.');
   }
@@ -33,7 +33,7 @@ export function validateOtaConfig(config, runtimeVersion) {
     throw new Error('Export is missing public Supabase configuration.');
   }
   if (
-    config.extra?.apiUrl !== 'https://usebaci.com' ||
+    config.extra?.apiUrl !== STOREFRONT_OTA_CONFIG.apiUrl ||
     !present(config.extra?.posthogApiKey) ||
     !present(config.extra?.facebookAppId) ||
     !present(config.extra?.facebookClientToken)

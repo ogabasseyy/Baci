@@ -23,6 +23,7 @@ test('OTA export uses the same public values as the iOS native release', async (
   assert.ok(nativeStep?.env, 'Native Fastlane release environment is missing');
   assert.ok(otaStep?.env, 'OTA export environment is missing');
   assert.match(selection?.run ?? '', /git grep -q -F 'process\.env\.EXPO_PUBLIC_BUILD_SHA'/);
+  assert.match(selection?.run ?? '', /cp \.github\/scripts\/storefront-ota-constants\.mjs "\$RUNNER_TEMP\/"/);
   const nativeEnv = nativeStep.env;
   const otaEnv = otaStep.env;
   assert.ok(!Object.hasOwn(otaEnv, 'STOREFRONT_TIKTOK_APP_SECRET'));

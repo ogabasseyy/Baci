@@ -54,3 +54,18 @@ test('rejects a manifest for a different update channel', () => {
   wrongChannel.updates.requestHeaders['expo-channel-name'] = 'preview';
   assert.throws(() => validateOtaConfig(wrongChannel, '2.1.663'), /channel/i);
 });
+
+test('rejects an export for a different app or Expo project', () => {
+  const wrongApp = config();
+  wrongApp.ios.bundleIdentifier = 'com.example.other';
+  assert.throws(() => validateOtaConfig(wrongApp, '2.1.663'), /app/i);
+  const wrongProject = config();
+  wrongProject.extra.eas.projectId = 'another-project';
+  assert.throws(() => validateOtaConfig(wrongProject, '2.1.663'), /project/i);
+});
+
+test('rejects an export configured for a different API', () => {
+  const wrongApi = config();
+  wrongApi.extra.apiUrl = 'https://example.invalid';
+  assert.throws(() => validateOtaConfig(wrongApi, '2.1.663'), /production/i);
+});

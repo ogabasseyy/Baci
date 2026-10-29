@@ -36,6 +36,23 @@ srv_runtime_created=0
 srv_releases_created=0
 srv_locks_created=0
 
+find_pinned_pnpm_entrypoint() {
+  local launcher="$1" bin_dir install_root candidate
+  local -a pnpm_candidates=()
+  bin_dir="$(dirname "$launcher")"
+  install_root="$(cd "$bin_dir/.." && pwd -P)"
+  while IFS= read -r -d '' candidate; do
+    if [ "$(/usr/bin/node "$candidate" --version 2>/dev/null || true)" = '11.7.0' ]; then
+      pnpm_candidates+=("$candidate")
+    fi
+  done < <(find "$install_root" -type f -path '*/pnpm/bin/pnpm.cjs' -print0)
+  if [ "${#pnpm_candidates[@]}" -ne 1 ]; then
+    echo "could not locate one pinned pnpm package under ${install_root}" >&2
+    return 1
+  fi
+  printf '%s\n' "${pnpm_candidates[0]}"
+}
+
 cleanup() {
   local status=$?
   set +e
@@ -79,6 +96,44 @@ groupadd --system baci-worker
 worker_group_created=1
 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin --gid baci-worker --groups baci-locks baci-worker
 worker_user_created=1
+
+if ! command -v node >/dev/null; then
+  echo "Node is unavailable on the disposable runner" >&2
+  exit 1
+fi
+case "$(node --version)" in
+  v24.*) ;;
+  *) echo "fixture requires the workflow-pinned Node 24 runtime" >&2; exit 1 ;;
+esac
+if [ ! -x /usr/bin/node ]; then
+  ln -s "$(command -v node)" /usr/bin/node
+  node_link_created=1
+elif [ "$(/usr/bin/node --version)" != "$(node --version)" ]; then
+  echo "fixed /usr/bin/node does not match the workflow-pinned runtime" >&2
+  exit 1
+fi
+
+# Exercise the action-style shell shim: readlink resolves to the shim itself,
+# while package discovery must select the actual pnpm.cjs entrypoint.
+shim_fixture="$test_root/pnpm-shim-regression"
+install -d "$shim_fixture/node_modules/.bin" "$shim_fixture/node_modules/pnpm/bin"
+cat >"$shim_fixture/node_modules/pnpm/bin/pnpm.cjs" <<'JS'
+#!/usr/bin/env node
+if (process.argv[2] === '--version') process.stdout.write('11.7.0\n');
+JS
+chmod 0755 "$shim_fixture/node_modules/pnpm/bin/pnpm.cjs"
+cat >"$shim_fixture/node_modules/.bin/pnpm" <<'SH'
+#!/bin/sh
+basedir="$(dirname "$0")"
+exec "$basedir/bin/pnpm" "$@"
+SH
+chmod 0755 "$shim_fixture/node_modules/.bin/pnpm"
+shim_resolved="$(readlink -f "$shim_fixture/node_modules/.bin/pnpm")"
+shim_entrypoint="$(find_pinned_pnpm_entrypoint "$shim_fixture/node_modules/.bin/pnpm")"
+if [ "$shim_resolved" = "$shim_entrypoint" ] || [ "$("$shim_entrypoint" --version)" != '11.7.0' ]; then
+  echo "pnpm shell-shim entrypoint regression failed" >&2
+  exit 1
+fi
 
 if [ -e "$build_root" ] || mountpoint -q "$build_root"; then
   echo "refusing pre-existing fixed build root" >&2
@@ -150,33 +205,24 @@ trustLockfile: true
 YAML
 printf '%s\n' "$sha" >"$source_root/.baci-source-sha"
 
-pnpm --version | grep -Fx '11.7.0'
+pnpm_launcher="$(command -v pnpm)"
+pnpm_entrypoint="$(find_pinned_pnpm_entrypoint "$pnpm_launcher")"
+if [ ! -x "$pnpm_entrypoint" ] || [ "$(/usr/bin/node "$pnpm_entrypoint" --version)" != '11.7.0' ]; then
+  echo "pinned pnpm entrypoint is not executable under the workflow Node runtime" >&2
+  exit 1
+fi
+/usr/bin/node "$pnpm_entrypoint" --version | grep -Fx '11.7.0'
 (cd "$source_root" && pnpm install --lockfile-only --ignore-scripts)
 (cd "$source_root/vps-workers" && pnpm install --lockfile-only --ignore-scripts)
 cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
-  --pnpm "$(readlink -f "$(command -v pnpm)")"
+  --pnpm "$pnpm_entrypoint"
 rm -rf -- "$seed_root"
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +
 find "$source_root" -type f -exec chmod 0440 {} +
 
-if ! command -v node >/dev/null; then
-  echo "Node is unavailable on the disposable runner" >&2
-  exit 1
-fi
-case "$(node --version)" in
-  v24.*) ;;
-  *) echo "fixture requires the workflow-pinned Node 24 runtime" >&2; exit 1 ;;
-esac
-if [ ! -x /usr/bin/node ]; then
-  ln -s "$(command -v node)" /usr/bin/node
-  node_link_created=1
-elif [ "$(/usr/bin/node --version)" != "$(node --version)" ]; then
-  echo "fixed /usr/bin/node does not match the workflow-pinned runtime" >&2
-  exit 1
-fi
 chown -R root:root "$store_root"
 chmod -R a-w "$store_root"
 chown -R root:root "$cache_root"
@@ -205,23 +251,8 @@ if [ -e /usr/bin/pnpm ] || [ -L /usr/bin/pnpm ]; then
   echo "refusing pre-existing /usr/bin/pnpm on disposable runner" >&2
   exit 1
 fi
-pnpm_launcher="$(command -v pnpm)"
-pnpm_launcher_resolved="$(readlink -f "$pnpm_launcher")"
-pnpm_bin_dir="$(dirname "$pnpm_launcher")"
-pnpm_install_root="$(cd "$pnpm_bin_dir/.." && pwd -P)"
-pnpm_candidates=()
-while IFS= read -r -d '' candidate; do
-  if [ "$(/usr/bin/node "$candidate" --version 2>/dev/null || true)" = '11.7.0' ]; then
-    pnpm_candidates+=("$candidate")
-  fi
-done < <(find "$pnpm_install_root" -type f -path '*/pnpm/bin/pnpm.cjs' -print0)
-if [ "${#pnpm_candidates[@]}" -ne 1 ]; then
-  echo "could not locate one pinned pnpm package under ${pnpm_install_root}; resolved launcher: ${pnpm_launcher_resolved}" >&2
-  exit 1
-fi
-pnpm_entrypoint="${pnpm_candidates[0]}"
 pnpm_package_root="${pnpm_entrypoint%/bin/pnpm.cjs}"
-if [ ! -d "$pnpm_package_root" ] || [ ! -f "$pnpm_entrypoint" ]; then
+if [ ! -d "$pnpm_package_root" ] || [ ! -x "$pnpm_entrypoint" ]; then
   echo "workflow pnpm package is unavailable" >&2
   exit 1
 fi

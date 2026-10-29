@@ -53,7 +53,7 @@ export async function tryFastCatalogChat(options: {
         previous.content
       ));
   const searchMessages = addFollowUp
-    ? userMessages.slice(-4, -1)
+    ? userMessages.slice(-7, -1)
     : userMessages;
   if (addFollowUp && !interpretFastCatalogIntent(searchMessages, [])) {
     return {

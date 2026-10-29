@@ -1,3 +1,4 @@
+import { resolveCatalogContext } from './fast-catalog-context';
 import * as catalogLanguage from './fast-catalog-language';
 
 export interface FastCatalogCategory {
@@ -28,11 +29,11 @@ const CONTEXTUAL_PRICE =
 const SHOPPING_REQUEST =
   /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
-  /\b(?:under|below|budget|cheaper|less|more|instead|wifi|wi-fi|used|new)\b/i;
+  /\b(?:under|below|budget|within|up\s+to|at\s+most|maximum|max|cheaper|cheapest|less|more|instead|wifi|wi-fi|used|new|gaming|camera|battery)\b/i;
 const BUDGET_WORD =
   /\b(?:under|below|budget|within|less than|up to|at most|maximum|max|between)\b/i;
 const MAX_PRICE =
-  /\b(?:under|below|budget(?:\s+of)?|within|less than|up to|at most|maximum|max)\s*(?:₦|ngn\s*|n(?=\d))?\s*([\d,]+(?:\.\d+)?)\s*(million|thousand|[km])?\b/i;
+  /\b(?:under|below|budget(?:\s+(?:of|is))?|within|less than|up to|at most|maximum|max)\s*(?:₦|ngn\s*|n(?=\d))?\s*([\d,]+(?:\.\d+)?)\s*(million|thousand|[km])?\b/i;
 const PHONE_SIGNAL =
   /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
@@ -101,9 +102,9 @@ function resolveCategory(text: string, categories: FastCatalogCategory[]) {
 function getMaximumPrice(
   text: string
 ): { amount: number; exclusive: boolean } | undefined {
-  const match = [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))].find(
-    (candidate) => isBudgetMatch(text, candidate[0], candidate.index)
-  );
+  const match = [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))]
+    .filter((candidate) => isBudgetMatch(text, candidate[0], candidate.index))
+    .at(-1);
   if (!match) return undefined;
   const amount = Number(match[1].replaceAll(',', ''));
   const multiplier = /^(?:m|million)$/i.test(match[2] ?? '')
@@ -121,7 +122,11 @@ function getMaximumPrice(
 }
 
 function searchText(text: string): string {
-  return normalizeAccessoryNouns(catalogLanguage.normalizeUseCasePhrases(text))
+  return normalizeAccessoryNouns(
+    catalogLanguage.stripRelativePricePhrases(
+      catalogLanguage.normalizeUseCasePhrases(text)
+    )
+  )
     .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
     .replace(
@@ -134,7 +139,7 @@ function searchText(text: string): string {
       ' '
     )
     .replace(
-      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|with|under|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
+      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|with|under|actually|instead|about|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
       ' '
     )
     .replace(/\bbattery\b(?!\s+(?:charger|case)\b)/gi, ' ')
@@ -149,35 +154,38 @@ export function interpretFastCatalogIntent(
   categories: FastCatalogCategory[]
 ): FastCatalogIntent | null {
   const latest = userMessages.at(-1)?.trim() ?? '';
-  const orderAsPurchase =
-    /\border\s+(?:me\s+)?(?:an?\s+)?(?:iphones?|smartphones?|phones?|laptops?|tablets?|chargers?|earbuds?|cases?)\b/i.test(
-      latest
-    );
-  const actionText = orderAsPurchase
-    ? latest.replace(/\border\b/i, 'buy')
-    : latest;
-  if (
-    !latest ||
-    catalogLanguage.actionRequest.test(actionText) ||
-    catalogLanguage.nonCatalogRequest.test(latest) ||
-    catalogLanguage.isBusinessFactRequest(latest)
-  )
-    return null;
-
-  const previous = userMessages.at(-2) ?? '';
   const isShoppingRequest = (value: string) =>
     SHOPPING_REQUEST.test(value) || ACCESSORY_SIGNAL.test(value);
-  const priceFollowUp = CONTEXTUAL_PRICE.test(latest);
-  if (priceFollowUp && !isShoppingRequest(previous)) return null;
-  const text = priceFollowUp
-    ? previous
-    : FOLLOW_UP.test(latest) &&
-        !isShoppingRequest(latest) &&
-        isShoppingRequest(previous)
-      ? `${previous} ${latest}`
-      : latest;
-  if (!isShoppingRequest(text) || catalogLanguage.isBusinessFactRequest(text))
-    return null;
+  const isRefinement = (value: string) =>
+    FOLLOW_UP.test(value) || getMaximumPrice(value) !== undefined;
+  const context = resolveCatalogContext(userMessages, {
+    isShopping: (value) =>
+      isShoppingRequest(value) &&
+      (!isRefinement(value) ||
+        [PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL, ACCESSORY_SIGNAL].some(
+          (signal) => signal.test(value)
+        ) ||
+        Boolean(searchText(value))),
+    isPriceFollowUp: (value) => CONTEXTUAL_PRICE.test(value),
+    isRefinement,
+    isBoundary: catalogLanguage.isCatalogBoundary,
+  });
+  if (!context) return null;
+  const { text, priceFollowUp } = context;
+  if (catalogLanguage.hasNegatedBudget(text))
+    return { kind: 'clarify', reason: 'options' };
+  if (
+    catalogLanguage.isRelativePriceRequest(latest) &&
+    getMaximumPrice(latest) === undefined
+  )
+    return { kind: 'clarify' };
+  if (
+    [...latest.matchAll(new RegExp(BUDGET_WORD.source, 'gi'))].some((match) =>
+      isBudgetMatch(latest, match[0], match.index)
+    ) &&
+    getMaximumPrice(latest) === undefined
+  )
+    return { kind: 'clarify' };
   // Clarify whether Max is a model or a price limit before searching.
   if (
     [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))].some(
@@ -250,19 +258,10 @@ export function interpretFastCatalogIntent(
       /\b(?:not|no|without|avoid|exclude|except|never|don'?t)\b/i.test(text))
   )
     return { kind: 'clarify', reason: 'options' };
-  const wifiOnlyMentioned = /\bwi[\s-]*fi[\s-]*only\b/i.test(text);
-  const wifiOnlyNegated =
-    /\b(?:not|no|without|avoid|exclude|except|never|don'?t)\s+(?:an?\s+)?wi[\s-]*fi[\s-]*only\b/i.test(
-      text
-    );
-  if (
-    wifiOnlyMentioned &&
-    !wifiOnlyNegated &&
-    /\b(?:not|no|without|avoid|exclude|except|never|don'?t)\b/i.test(text)
-  ) {
+  const { wifiOnly, otherNegation } = catalogLanguage.resolveWifiOnly(text);
+  if (wifiOnly && otherNegation) {
     return { kind: 'clarify', reason: 'options' };
   }
-  const wifiOnly = wifiOnlyMentioned && !wifiOnlyNegated;
   if (wifiOnly && !PHONE_SIGNAL.test(text))
     return { kind: 'clarify', reason: 'options' };
   const phoneCategoryIds = categories

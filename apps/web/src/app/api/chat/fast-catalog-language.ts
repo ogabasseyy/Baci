@@ -13,6 +13,56 @@ export function isBusinessFactRequest(text: string): boolean {
   );
 }
 
+export function isCatalogBoundary(text: string): boolean {
+  const purchase =
+    /\border\s+(?:me\s+)?(?:an?\s+)?(?:iphones?|smartphones?|phones?|laptops?|tablets?|chargers?|earbuds?|cases?)\b/i.test(
+      text
+    );
+  const actionText = purchase ? text.replace(/\border\b/i, 'buy') : text;
+  return (
+    actionRequest.test(actionText) ||
+    nonCatalogRequest.test(text) ||
+    isBusinessFactRequest(text)
+  );
+}
+
+export function hasNegatedBudget(text: string): boolean {
+  return /\b(?:not|no|never|without|avoid|don['’]?t)\s+(?:under|below|within|less\s+than|up\s+to|at\s+most|maximum|max)(?=\b|[₦\d])/i.test(
+    text
+  );
+}
+
+export function isRelativePriceRequest(text: string): boolean {
+  return /\b(?:cheaper|cheapest|less\s+expensive|more\s+affordable)\b/i.test(
+    text
+  );
+}
+
+export function stripRelativePricePhrases(text: string): string {
+  return text.replace(
+    /\b(?:(?:anything|something|any)\s+)?(?:cheaper|cheapest|less\s+expensive|more\s+affordable)(?:\s+(?:options?|models?|products?|ones?))?\b/gi,
+    ' '
+  );
+}
+
+export function resolveWifiOnly(text: string): {
+  wifiOnly: boolean;
+  otherNegation: boolean;
+} {
+  const directive =
+    /(?:\b(?:not|no|without|avoid|exclude|except|never|don['’]?t)\s+(?:an?\s+)?)?\bwi[\s-]*fi[\s-]*only\b/gi;
+  const last = [...text.matchAll(directive)].at(-1)?.[0] ?? '';
+  return {
+    wifiOnly:
+      Boolean(last) &&
+      !/^(?:not|no|without|avoid|exclude|except|never|don['’]?t)\b/i.test(last),
+    otherNegation:
+      /\b(?:not|no|without|avoid|exclude|except|never|don['’]?t)\b/i.test(
+        text.replace(directive, ' ')
+      ),
+  };
+}
+
 /** Strip only recognized recommendation phrases; keep model and option terms. */
 export function normalizeUseCasePhrases(text: string): string {
   return text

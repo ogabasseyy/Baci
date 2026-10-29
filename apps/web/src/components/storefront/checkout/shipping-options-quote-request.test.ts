@@ -43,6 +43,29 @@ describe('requestShippingOptions', () => {
     );
   });
 
+  it('forwards the selected destination pin to the courier quote request', async () => {
+    mockApiPost.mockResolvedValue({ quotes: [] });
+    await requestShippingOptions({
+      merchantId: 'merchant-1',
+      receiverCity: 'Ikeja',
+      receiverState: 'Lagos',
+      receiverAddress: '1 Synthetic Road',
+      receiverPhone: '08000000000',
+      receiverName: 'Test Buyer',
+      receiverLatitude: 6.6,
+      receiverLongitude: 3.35,
+      quoteItems: [],
+      cartSubtotal: 5000,
+    });
+    expect(mockApiPost).toHaveBeenCalledWith(
+      '/api/shipping/quotes',
+      expect.objectContaining({
+        receiver: expect.objectContaining({ latitude: 6.6, longitude: 3.35 }),
+      }),
+      expect.any(Object)
+    );
+  });
+
   it('propagates quote request failures without hiding the provider error', async () => {
     const error = new Error('quote request failed');
     mockApiPost.mockRejectedValue(error);

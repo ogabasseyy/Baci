@@ -24,7 +24,10 @@ function quote(id: string, price: number) {
   };
 }
 
-function params(overrides: Record<string, unknown> = {}) {
+type QuoteRefreshParams = Parameters<typeof useShippingQuoteRefresh>[0];
+function params(
+  overrides: Partial<QuoteRefreshParams> = {}
+): QuoteRefreshParams {
   return {
     merchantId: 'merchant-1',
     receiverCity: 'Lagos',
@@ -79,6 +82,46 @@ describe('useShippingQuoteRefresh', () => {
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'q-cheap' }),
       'session-1'
+    );
+  });
+
+  it('invalidates the selected quote when only the destination pin changes', async () => {
+    const onSelect = vi.fn();
+    mockRequest.mockResolvedValue({
+      quotes: [quote('old-pin', 4500)],
+      sessionId: 'old',
+    });
+    const initial = params({
+      onSelect,
+      receiverLatitude: 6.6,
+      receiverLongitude: 3.35,
+    });
+    const { result, rerender } = renderHook(
+      (props) => useShippingQuoteRefresh(props),
+      {
+        initialProps: initial,
+      }
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'old-pin' }),
+      'old'
+    );
+
+    mockRequest.mockResolvedValue({ quotes: [], sessionId: 'new' });
+    rerender({ ...initial, receiverLatitude: 6.61, receiverLongitude: 3.36 });
+    expect(onSelect).toHaveBeenLastCalledWith(null, '');
+    expect(result.current.quotes).toEqual([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(mockRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        receiverLatitude: 6.61,
+        receiverLongitude: 3.36,
+      })
     );
   });
 

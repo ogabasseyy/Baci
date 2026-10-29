@@ -5,6 +5,28 @@ test('focused address clear control removes its quote and disables Continue', as
   page,
 }) => {
   await seedCheckout(page, { startAtContact: true });
+  await page.route('**/api/places/autocomplete?**', (route) =>
+    route.fulfill({
+      json: {
+        predictions: [
+          {
+            provider: 'geoapify',
+            placeId: 'geoapify:address-clear-fixture',
+            mainText: '12 Broad Street',
+            secondaryText: 'Lagos Island, Lagos',
+            fullText: '12 Broad Street, Lagos Island, Lagos',
+            details: {
+              formattedAddress: '12 Broad Street, Lagos Island, Lagos',
+              city: 'Lagos Island',
+              state: 'Lagos',
+              country: 'Nigeria',
+              location: { latitude: 6.454, longitude: 3.393 },
+            },
+          },
+        ],
+      },
+    })
+  );
   const cartValidation = page.waitForResponse('**/api/cart/validate');
   await page.goto('/checkout?qa=manual-address-clear');
   await (await cartValidation).finished();
@@ -15,9 +37,12 @@ test('focused address clear control removes its quote and disables Continue', as
     (response) =>
       response.url().includes('/api/shipping/quotes') &&
       response.request().method() === 'POST' &&
-      response.request().postDataJSON().receiver.address.includes('12 Broad')
+      response.request().postDataJSON().receiver.latitude === 6.454
   );
   await address.fill('12 Broad Street, Lagos Island, Lagos');
+  await page
+    .getByRole('button', { name: /12 Broad Street.*Lagos Island/ })
+    .click();
   expect((await quoteResponse).status()).toBe(200);
   await expect(
     page.getByText('GIG Logistics - Standard', { exact: true })
@@ -41,9 +66,12 @@ test('focused address clear control removes its quote and disables Continue', as
     (response) =>
       response.url().includes('/api/shipping/quotes') &&
       response.request().method() === 'POST' &&
-      response.request().postDataJSON().receiver.address.includes('12 Broad')
+      response.request().postDataJSON().receiver.latitude === 6.454
   );
   await address.fill('12 Broad Street, Lagos Island, Lagos');
+  await page
+    .getByRole('button', { name: /12 Broad Street.*Lagos Island/ })
+    .click();
   expect((await refreshedQuoteResponse).status()).toBe(200);
   await expect(
     page.getByText('GIG Logistics - Standard', { exact: true })

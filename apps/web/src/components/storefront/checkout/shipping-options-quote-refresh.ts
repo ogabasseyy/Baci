@@ -17,6 +17,8 @@ interface UseShippingQuoteRefreshParams {
   receiverAddress: string;
   receiverPhone: string;
   receiverName: string;
+  receiverLatitude?: number;
+  receiverLongitude?: number;
   cartItems: {
     name: string;
     quantity: number;
@@ -42,6 +44,8 @@ export function useShippingQuoteRefresh({
   receiverAddress,
   receiverPhone,
   receiverName,
+  receiverLatitude,
+  receiverLongitude,
   cartItems,
   cartSubtotal,
   onSelect,
@@ -127,6 +131,8 @@ export function useShippingQuoteRefresh({
         receiverAddress,
         receiverPhone,
         receiverName,
+        receiverLatitude,
+        receiverLongitude,
         quoteItems,
         cartSubtotal,
       })
@@ -175,6 +181,8 @@ export function useShippingQuoteRefresh({
     receiverAddress,
     receiverName,
     receiverPhone,
+    receiverLatitude,
+    receiverLongitude,
     serializedCartItems,
     cartSubtotal,
     merchantId,

@@ -14,6 +14,8 @@ interface ShippingOptionsQuoteRequest {
   receiverAddress: string;
   receiverPhone: string;
   receiverName: string;
+  receiverLatitude?: number;
+  receiverLongitude?: number;
   quoteItems: ShippingQuoteItem[];
   /** Canonical checkout subtotal, including assurance fees when selected. */
   cartSubtotal: number;
@@ -26,6 +28,8 @@ export function requestShippingOptions({
   receiverAddress,
   receiverPhone,
   receiverName,
+  receiverLatitude,
+  receiverLongitude,
   quoteItems,
   cartSubtotal,
 }: ShippingOptionsQuoteRequest): Promise<unknown> {
@@ -42,6 +46,9 @@ export function requestShippingOptions({
         // This preview path is gated to Nigerian customers upstream.
         country: 'Nigeria',
         countryCode: 'NG',
+        ...(receiverLatitude !== undefined && receiverLongitude !== undefined
+          ? { latitude: receiverLatitude, longitude: receiverLongitude }
+          : {}),
       },
       items: quoteItems,
       shipmentType: 'domestic',

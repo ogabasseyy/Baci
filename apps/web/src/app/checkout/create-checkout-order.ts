@@ -14,6 +14,8 @@ interface CreateCheckoutOrderInput {
     address: string;
     city: string;
     state: string;
+    latitude?: number | null;
+    longitude?: number | null;
   };
   orderItems: ReturnType<typeof buildCheckoutOrderItems>;
   subtotal: number;
@@ -54,6 +56,9 @@ export function createCheckoutOrder(
         address: input.data.address,
         city: input.data.city,
         state: input.data.state,
+        ...(input.data.latitude != null && input.data.longitude != null
+          ? { latitude: input.data.latitude, longitude: input.data.longitude }
+          : {}),
       },
       source: 'online_store',
       ad_tracking: getAdTrackingData(),

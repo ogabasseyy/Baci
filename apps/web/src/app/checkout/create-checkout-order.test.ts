@@ -75,6 +75,23 @@ it.each([
     { headers: { 'Idempotency-Key': 'stable-key' } }
   );
 });
+it('preserves the selected destination pin on the order address', async () => {
+  await createCheckoutOrder({
+    ...input,
+    data: { ...input.data, latitude: 6.6, longitude: 3.35 },
+  });
+  expect(apiPost).toHaveBeenCalledWith(
+    '/api/orders',
+    expect.objectContaining({
+      shipping_address: expect.objectContaining({
+        latitude: 6.6,
+        longitude: 3.35,
+      }),
+    }),
+    expect.any(Object)
+  );
+});
+
 it('reads consent again for a later submission', async () => {
   localStorage.setItem(
     'baci-cookie-consent',

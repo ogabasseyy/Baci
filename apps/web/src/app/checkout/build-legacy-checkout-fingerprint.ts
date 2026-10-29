@@ -16,6 +16,8 @@ export interface LegacyCheckoutKeyInput {
     address: string;
     city: string;
     state: string;
+    latitude?: number;
+    longitude?: number;
   };
   shippingSelection: CheckoutShippingSelectionPayload;
 }

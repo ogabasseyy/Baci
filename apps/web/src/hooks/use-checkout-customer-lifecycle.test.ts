@@ -60,6 +60,8 @@ describe('useCheckoutCustomerLifecycle', () => {
       address: '12 Broad Street',
       city: 'Lagos',
       state: 'Lagos',
+      latitude: null,
+      longitude: null,
     });
   });
 

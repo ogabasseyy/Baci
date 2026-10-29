@@ -12,6 +12,12 @@ it('permits fixture navigation and Next RSC navigation', () => {
   expect(
     isFixtureAssetRequest({
       ...request,
+      url: 'http://127.0.0.1:3217/checkout-generic',
+    })
+  ).toBe(true);
+  expect(
+    isFixtureAssetRequest({
+      ...request,
       url: 'http://127.0.0.1:3217/cart-navigation-start',
     })
   ).toBe(true);

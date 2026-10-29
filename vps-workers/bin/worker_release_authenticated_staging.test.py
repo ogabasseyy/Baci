@@ -17,6 +17,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent))
 
 import worker_release_candidate_pin
+import worker_release_runtime_acl
+import worker_release_runtime_verifier
 import worker_release_authenticated_staging as staging_module
 from worker_release_authenticated_staging import (
     StagingOrchestrationRejected, _copy_contents, stage_authenticated_archive,
@@ -239,7 +241,17 @@ class AuthenticatedStagingTests(unittest.TestCase):
                         f"{systemd_unit_failure_summary(unit)}"
                     ) from error
 
-            with patch.object(worker_release_candidate_pin, "RELEASES_ROOT", worker_root / "releases"):
+            fixture_releases = worker_root / "releases"
+
+            def grant_fixture_candidate_acl(candidate, **kwargs):
+                # Keep the production ACL validator intact while binding its
+                # explicit releases-root parameter to this test's private tree.
+                return worker_release_runtime_acl.grant_candidate_acl(
+                    candidate, releases_root=fixture_releases, **kwargs)
+
+            with (patch.object(worker_release_candidate_pin, "RELEASES_ROOT", fixture_releases),
+                  patch.object(worker_release_runtime_verifier, "grant_candidate_acl",
+                               side_effect=grant_fixture_candidate_acl)):
                 receipt = stage_authenticated_archive(
                     response(data), identity(), expected_archive_sha256=digest,
                     worker_root=worker_root, lock_path=lock, result_root=results,

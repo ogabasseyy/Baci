@@ -1,14 +1,14 @@
-"""Disconnected, fixed-policy runtime verification for a materialized release.
+"""Fixed-policy runtime verification for a materialized release.
 
-This module is intentionally not wired into staging or promotion. It can only
-issue an in-process receipt after bounded checks run in a secretless systemd
-sandbox against a descriptor-pinned candidate tree.
+Staging calls this before publishing a candidate. It can only issue an
+in-process receipt after bounded checks run in a secretless systemd sandbox
+against a descriptor-pinned candidate tree.
 
 The contract tests are portable; only the required disposable Linux/systemd
 workflow exercises the real sandbox invocation. Pinning assumes the trusted
 root broker holds the release lock and no concurrent privileged actor mutates
-or replaces the candidate; the smoke process itself runs as nobody and cannot
-write the pinned tree.
+or replaces the candidate; the smoke process itself runs under a dedicated,
+non-login verifier UID and cannot write the pinned tree.
 """
 from __future__ import annotations
 
@@ -29,7 +29,9 @@ from worker_release_dependency_supervisor_cgroup import (
 from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
 from worker_release_runtime_diagnostics import BoundedLauncherStderr, MAX_CAPTURE_BYTES
 from worker_release_runtime_smoke import run_fixed_smokes
-from worker_release_runtime_acl import RuntimeAclRejected, grant_candidate_acl, verifier_gid
+from worker_release_runtime_acl import (
+    RuntimeAclRejected, grant_candidate_acl, verifier_gid, verifier_uid,
+)
 from worker_release_runtime_receipt import (
     ACCESS_POLICY, RECEIPT_SEAL as _RECEIPT_SEAL, RuntimeVerificationReceipt,
     VERIFIER_VERSION, validate_runtime_receipt,
@@ -39,7 +41,6 @@ MAX_CHECK_SECONDS = 35
 MAX_LAUNCH_SECONDS = 5
 MAX_CLEANUP_SECONDS = 30
 POLL_SECONDS = 0.05
-RUNTIME_SMOKE_UID = 65534
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -111,7 +112,8 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
         raise RuntimeVerificationRejected("systemd runtime verifier is unavailable")
     if not re.fullmatch(r"baci-worker-runtime-[0-9a-f]{16}-[0-9a-f]{12}-[01]\.service", unit):
         raise RuntimeVerificationRejected("systemd runtime unit name is invalid")
-    if properties.get("User") != str(RUNTIME_SMOKE_UID):
+    runtime_uid = verifier_uid()
+    if properties.get("User") != str(runtime_uid):
         raise RuntimeVerificationRejected("runtime unit identity is outside fixed policy")
     try:
         trusted_root = preflight_cgroup_root(CGROUP_ROOT)
@@ -224,7 +226,7 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     rejected=RuntimeVerificationRejected,
                     deadline=time.monotonic() + MAX_CLEANUP_SECONDS,
                     unproven=RuntimeVerificationQuiescenceUnproven,
-                    uid=RUNTIME_SMOKE_UID, trusted_root=trusted_root,
+                    uid=runtime_uid, trusted_root=trusted_root,
                 )
             except RuntimeVerificationQuiescenceUnproven:
                 raise
@@ -245,6 +247,7 @@ def _run_fixed_smokes(candidate: Path, fence_digest: str,
         candidate, fence_digest, execute_unit=_execute_fixed_unit, unit_name=_unit_name,
         rejected=RuntimeVerificationRejected, max_seconds=MAX_CHECK_SECONDS,
         max_output_bytes=MAX_CAPTURE_BYTES, systemd_run=SYSTEMD_RUN, systemctl=SYSTEMCTL,
+        runtime_uid=verifier_uid(),
         runtime_gid=verifier_gid() if runtime_gid is None else runtime_gid,
     )
 
@@ -284,7 +287,7 @@ def verify_materialized_candidate(candidate: Path, identity: AuthenticatedRun, *
         pin.verify_unchanged()
         return RuntimeVerificationReceipt(fence, archive_sha256, pin.digest,
                                           pin.candidate_identity[0], pin.candidate_identity[1],
-                                          VERIFIER_VERSION, pin.verifier_gid, ACCESS_POLICY,
+                                          verifier_uid(), VERIFIER_VERSION, pin.verifier_gid, ACCESS_POLICY,
                                           checks, _RECEIPT_SEAL)
 
 

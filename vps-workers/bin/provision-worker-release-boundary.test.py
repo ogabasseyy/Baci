@@ -18,10 +18,72 @@ provision = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = provision
 SPEC.loader.exec_module(provision)
 
-from provision_worker_release_install import ensure_root_directory
+from provision_worker_release_install import ensure_root_directory, read_trusted_source
 
 
 class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
+    def test_trusted_source_rejects_final_symlink(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            outside = Path(directory) / "outside.py"
+            outside.write_bytes(b"outside\n")
+            (root / "source.py").symlink_to(outside)
+            with self.assertRaisesRegex(RuntimeError, "symlink"):
+                read_trusted_source(root, "source.py", source_uid=os.getuid())
+            self.assertEqual(outside.read_bytes(), b"outside\n")
+
+    def test_trusted_source_detects_final_path_swap_after_open(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            source = root / "source.py"
+            source.write_bytes(b"pinned source\n")
+            outside = Path(directory) / "outside.py"
+            outside.write_bytes(b"attacker source\n")
+            original_read = os.read
+            swapped = False
+
+            def replace_then_read(fd, size):
+                nonlocal swapped
+                if not swapped:
+                    swapped = True
+                    source.unlink()
+                    source.symlink_to(outside)
+                return original_read(fd, size)
+
+            with patch("provision_worker_release_install.os.read", side_effect=replace_then_read):
+                with self.assertRaisesRegex(RuntimeError, "path changed"):
+                    read_trusted_source(root, "source.py", source_uid=os.getuid())
+            self.assertEqual(outside.read_bytes(), b"attacker source\n")
+
+    def test_trusted_source_detects_ancestor_swap_during_open(self):
+        with tempfile.TemporaryDirectory(dir=Path.home()) as directory:
+            root = Path(directory) / "repo"
+            source_dir = root / "nested"
+            source_dir.mkdir(parents=True)
+            (source_dir / "source.py").write_bytes(b"pinned source\n")
+            outside = Path(directory) / "outside"
+            outside.mkdir()
+            (outside / "source.py").write_bytes(b"attacker source\n")
+            moved = root / "nested-original"
+            original_open = os.open
+            swapped = False
+
+            def replace_ancestor(name, flags, *args, **kwargs):
+                nonlocal swapped
+                if name == "source.py" and not swapped:
+                    swapped = True
+                    source_dir.rename(moved)
+                    source_dir.symlink_to(outside, target_is_directory=True)
+                return original_open(name, flags, *args, **kwargs)
+
+            with patch("provision_worker_release_install.os.open", side_effect=replace_ancestor):
+                with self.assertRaisesRegex(RuntimeError, "ancestor path changed"):
+                    read_trusted_source(root, "nested/source.py", source_uid=os.getuid())
+            self.assertEqual((moved / "source.py").read_bytes(), b"pinned source\n")
+            self.assertEqual((outside / "source.py").read_bytes(), b"attacker source\n")
+
     @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
     def test_install_one_is_idempotent_for_exact_root_owned_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,6 +150,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
 
     def test_root_broker_installs_exact_python_import_closure(self):
         source_root = SCRIPT.parents[2] / "vps-workers" / "bin"
+        seed_source_root = SCRIPT.parents[2] / "vps-workers" / "tools" / "nonproduction-worker-release"
         pending = ["worker_release_broker", "worker_release_broker_dispatch"]
         reachable = set()
         while pending:
@@ -95,6 +158,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             if module in reachable:
                 continue
             path = source_root / f"{module}.py"
+            if module.startswith("dependency_seed_"):
+                path = seed_source_root / f"{module}.py"
             self.assertTrue(path.is_file(), f"local broker import {module} has no source")
             reachable.add(module)
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -108,6 +173,12 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                 name for name in imported
                 if name.startswith("worker_release_")
                 and (source_root / f"{name}.py").is_file()
+                and name not in reachable
+            )
+            pending.extend(
+                name for name in imported
+                if name.startswith("dependency_seed_")
+                and (seed_source_root / f"{name}.py").is_file()
                 and name not in reachable
             )
 
@@ -124,7 +195,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                 expected_mode = 0o550 if module == "worker_release_broker" else 0o440
                 self.assertEqual(item.group, expected_group)
                 self.assertEqual(item.mode, expected_mode)
-                self.assertEqual(item.content, (source_root / f"{module}.py").read_bytes())
+                module_root = seed_source_root if module.startswith("dependency_seed_") else source_root
+                self.assertEqual(item.content, (module_root / f"{module}.py").read_bytes())
 
     def test_runtime_view_root_is_created_exactly_and_idempotently(self):
         with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:

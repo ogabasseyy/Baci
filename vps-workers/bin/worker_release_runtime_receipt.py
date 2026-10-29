@@ -6,9 +6,9 @@ from pathlib import Path
 
 from worker_release_candidate_pin import CandidatePinRejected, pin_candidate
 from worker_release_lifecycle import AuthenticatedRun
-from worker_release_runtime_acl import RuntimeAclRejected, verifier_gid
+from worker_release_runtime_acl import RuntimeAclRejected, verifier_gid, verifier_uid
 
-VERIFIER_VERSION = "materialized-worker-runtime-v2-dedicated-acl"
+VERIFIER_VERSION = "materialized-worker-runtime-v3-dedicated-uid-acl"
 ACCESS_POLICY = "candidate-posix-acl-readonly-v1"
 RECEIPT_SEAL = object()
 EXPECTED_CHECKS = ("web_tsx_version", "worker_production_dependency_imports")
@@ -23,6 +23,7 @@ class RuntimeVerificationReceipt:
     candidate_sha256: str
     candidate_dev: int
     candidate_ino: int
+    verifier_uid: int
     verifier_version: str
     verifier_gid: int
     access_policy: str
@@ -42,6 +43,7 @@ def validate_runtime_receipt(receipt: object, candidate: Path, identity: Authent
             or not isinstance(receipt, RuntimeVerificationReceipt)
             or receipt._seal is not RECEIPT_SEAL
             or receipt.verifier_version != VERIFIER_VERSION
+            or type(receipt.verifier_uid) is not int or receipt.verifier_uid <= 0
             or type(receipt.verifier_gid) is not int or receipt.verifier_gid <= 0
             or receipt.access_policy != ACCESS_POLICY
             or receipt.checks != EXPECTED_CHECKS
@@ -49,7 +51,7 @@ def validate_runtime_receipt(receipt: object, candidate: Path, identity: Authent
             or receipt.fence != tuple(sorted(identity.fence().items()))):
         return False
     try:
-        if verifier_gid() != receipt.verifier_gid:
+        if verifier_gid() != receipt.verifier_gid or verifier_uid() != receipt.verifier_uid:
             return False
         with pin_candidate(candidate, expected_sha=identity.sha, owner_uid=owner_uid,
                            owner_gid=owner_gid, verifier_gid=receipt.verifier_gid) as pin:

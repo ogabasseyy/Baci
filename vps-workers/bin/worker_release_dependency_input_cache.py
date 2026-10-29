@@ -44,28 +44,32 @@ def validate_offline_store(
             entries += 1
             if entries > max_entries:
                 raise OfflineStoreRejected("offline pnpm store has too many entries", "entry-count-limit")
-            if child.st_uid != owner_uid or child.st_mode & 0o022:
-                raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
+            if stat.S_ISLNK(child.st_mode):
+                raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", "entry-symlink")
             if stat.S_ISDIR(child.st_mode):
+                if child.st_uid != owner_uid or child.st_mode & 0o022:
+                    raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
                 relative = "/".join((*relative_parent, name))
                 if (len(relative_parent) == 1 and re.fullmatch(r"v[0-9]+", relative_parent[0])
                         and name == "projects"):
                     excluded_project_indexes.add(relative)
                     directories.remove(name)
                 continue
-            subtype = "entry-symlink" if stat.S_ISLNK(child.st_mode) else "entry-special"
-            raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", subtype)
+            raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", "entry-special")
         for name in files:
             path = Path(current) / name
             child = path.lstat()
             entries += 1
             if entries > max_entries:
                 raise OfflineStoreRejected("offline pnpm store has too many entries", "entry-count-limit")
+            if stat.S_ISLNK(child.st_mode):
+                raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", "entry-symlink")
+            if not stat.S_ISREG(child.st_mode):
+                raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", "entry-special")
             if child.st_uid != owner_uid or child.st_mode & 0o022:
                 raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
-            if not stat.S_ISREG(child.st_mode) or child.st_nlink < 1:
-                subtype = "entry-symlink" if stat.S_ISLNK(child.st_mode) else "entry-special"
-                raise OfflineStoreRejected("offline pnpm store contains a symlink or special file", subtype)
+            if child.st_nlink < 1:
+                raise OfflineStoreRejected("offline pnpm store contains an untrusted entry", "entry-owner-mode")
             total_bytes += child.st_size
             if total_bytes > max_bytes:
                 raise OfflineStoreRejected("offline pnpm store exceeds the private-copy size limit",

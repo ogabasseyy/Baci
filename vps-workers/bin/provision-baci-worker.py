@@ -21,12 +21,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
+from worker_release_runtime_identity import (
+    NOLOGIN as NOLOGIN, RuntimeIdentityRejected, VERIFY_GROUP as RUNTIME_VERIFY_GROUP,
+    VERIFY_USER as RUNTIME_VERIFY_USER, validate_runtime_verifier_provisioning,
+)
+
 
 WORKER = "baci-worker"
 LOCK_GROUP = "baci-locks"
 RUNTIME_VERIFY_GROUP = "baci-worker-runtime-verify"
+RUNTIME_VERIFY_USER = "baci-worker-runtime-verify"
 DEFAULT_ROOT = "/srv/baci-workers"
-NOLOGIN = "/usr/sbin/nologin"
 CACHE_LOCK = "cache-invalidations.lock"
 
 
@@ -66,6 +71,9 @@ def provisioning_plan(root: str = DEFAULT_ROOT) -> tuple[Action, ...]:
         Action(("groupadd", "--system", WORKER)),
         Action(("groupadd", "--system", LOCK_GROUP)),
         Action(("groupadd", "--system", RUNTIME_VERIFY_GROUP)),
+        Action(("useradd", "--system", "--gid", RUNTIME_VERIFY_GROUP,
+                "--home-dir", "/nonexistent", "--no-create-home", "--shell", NOLOGIN,
+                RUNTIME_VERIFY_USER)),
         Action(("useradd", "--system", "--gid", WORKER, "--home-dir", str(root_path / "home"),
                 "--no-create-home", "--shell", NOLOGIN, WORKER)),
         Action(("usermod", "--append", "--groups", LOCK_GROUP, WORKER)),
@@ -138,19 +146,12 @@ def _identity_preflight(root: str = DEFAULT_ROOT) -> None:
     except KeyError:
         lock_group = None
     try:
-        verify_group = grp.getgrnam(RUNTIME_VERIFY_GROUP)
-    except KeyError:
-        verify_group = None
+        validate_runtime_verifier_provisioning()
+    except RuntimeIdentityRejected as error:
+        raise RuntimeError("runtime verifier group is not uniquely isolated") from error
 
     if lock_group is not None and set(lock_group.gr_mem) - {"bassey", WORKER}:
         raise RuntimeError("baci-locks group has unexpected members")
-
-    if verify_group is not None:
-        aliases = [entry for entry in grp.getgrall() if entry.gr_gid == verify_group.gr_gid]
-        primary_users = [entry for entry in pwd.getpwall() if entry.pw_gid == verify_group.gr_gid]
-        if (verify_group.gr_gid <= 0 or verify_group.gr_mem or primary_users or len(aliases) != 1
-                or aliases[0].gr_name != RUNTIME_VERIFY_GROUP):
-            raise RuntimeError("runtime verifier group is not uniquely isolated")
 
     if group is not None:
         primary_members = sorted(entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == group.gr_gid)
@@ -229,8 +230,6 @@ def apply_plan(
 ) -> None:
     """Apply an idempotent plan, skipping already-created identity objects."""
     identity_check()
-    group_exists = _has_group(WORKER)
-    user_exists = _has_user(WORKER)
     for action in actions:
         if action.argv[0] == "ensure-lock":
             lock_provisioner(
@@ -241,7 +240,7 @@ def apply_plan(
             continue
         if action.argv[0] == "groupadd" and _has_group(action.argv[-1]):
             continue
-        if action.argv[0] == "useradd" and user_exists:
+        if action.argv[0] == "useradd" and _has_user(action.argv[-1]):
             continue
         runner(action.argv, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 

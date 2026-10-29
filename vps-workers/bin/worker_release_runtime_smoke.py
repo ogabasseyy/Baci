@@ -13,12 +13,13 @@ from worker_release_runtime_view import create_runtime_view
 def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callable,
                      unit_name: Callable, rejected: type[Exception], max_seconds: int,
                      max_output_bytes: int, systemd_run: str, systemctl: str,
-                     runtime_gid: int) -> tuple[str, ...]:
+                     runtime_uid: int, runtime_gid: int) -> tuple[str, ...]:
     if not sys.platform.startswith("linux") or os.geteuid() != 0:
         raise rejected("runtime verifier requires Linux root broker")
     if not Path(systemd_run).is_file() or not Path(systemctl).is_file():
         raise rejected("systemd runtime verifier is unavailable")
-    if type(runtime_gid) is not int or runtime_gid <= 0:
+    if (type(runtime_uid) is not int or runtime_uid <= 0
+            or type(runtime_gid) is not int or runtime_gid <= 0):
         raise rejected("candidate runtime group is invalid")
     try:
         candidate_info = candidate.lstat()
@@ -37,7 +38,7 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
     if (not modules.is_dir() or any(not package.is_file() for package in required_packages)):
         raise rejected("candidate is missing fixed runtime smoke targets")
     properties = {
-        "User": "65534", "Group": str(runtime_gid), "SupplementaryGroups": "",
+        "User": str(runtime_uid), "Group": str(runtime_gid), "SupplementaryGroups": "",
         "NoNewPrivileges": "yes", "PrivateNetwork": "yes", "ProtectSystem": "strict",
         "ProtectHome": "yes", "PrivateTmp": "no", "PrivateDevices": "yes",
         "PrivateUsers": "yes", "ProtectControlGroups": "yes",
@@ -73,6 +74,7 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         candidate_identity = candidate.lstat()
         view = create_runtime_view(
             unit, candidate_path=candidate, fence_digest=fence_digest,
+            runtime_uid=runtime_uid,
             candidate_identity=(candidate_identity.st_dev, candidate_identity.st_ino))
         view_properties = dict(properties)
         view_properties["BindReadOnlyPaths"] = f"{candidate}:{view.candidate_path}"

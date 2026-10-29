@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -24,6 +25,16 @@ from worker_release_runtime_view_recovery import (
 @unittest.skipUnless(os.geteuid() == 0, "requires root-owned runtime-view fixture")
 class RuntimeViewRecoveryTests(unittest.TestCase):
     def setUp(self):
+        from worker_release_runtime_acl import verifier_uid
+        self.runtime_uid = (verifier_uid() if os.environ.get(
+            "WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1" else 61000)
+        self.identity_patch = patch("worker_release_runtime_view.runtime_verifier_identity",
+                                     return_value=(self.runtime_uid, 61000))
+        self.identity_patch.start()
+        self.recovery_identity_patch = patch(
+            "worker_release_runtime_view_recovery.runtime_verifier_identity",
+            return_value=(self.runtime_uid, 61000))
+        self.recovery_identity_patch.start()
         self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
         self.base = Path(self.temporary.name)
         self.views = self.base / "views"
@@ -36,6 +47,7 @@ class RuntimeViewRecoveryTests(unittest.TestCase):
         self.identity = (info.st_dev, info.st_ino)
         self.view = create_runtime_view(
             self.unit, candidate_path=self.candidate, fence_digest=self.fence,
+            runtime_uid=self.runtime_uid,
             candidate_identity=self.identity, view_root=self.views)
         self.view.abandon()
         records = list_runtime_view_records_for_candidate(
@@ -44,6 +56,8 @@ class RuntimeViewRecoveryTests(unittest.TestCase):
         self.record = records[0]
 
     def tearDown(self):
+        self.recovery_identity_patch.stop()
+        self.identity_patch.stop()
         for current, directories, _files in os.walk(self.base, topdown=True, followlinks=False):
             os.chmod(current, 0o700)
             for name in directories:
@@ -61,7 +75,7 @@ class RuntimeViewRecoveryTests(unittest.TestCase):
     def test_recovery_removes_only_the_recorded_empty_view_after_unit_proof(self):
         with patch("worker_release_runtime_view_recovery._prove_unit_gone") as proof:
             recover_runtime_view(self.record, view_root=self.views)
-        proof.assert_called_once_with(self.unit)
+        proof.assert_called_once_with(self.unit, self.runtime_uid)
         self.assertEqual(list_all_runtime_view_records(self.views), ())
         self.assertFalse((self.views / self.unit).exists())
         with self.assertRaises(RuntimeViewRecoveryRejected):
@@ -71,7 +85,7 @@ class RuntimeViewRecoveryTests(unittest.TestCase):
         (self.views / self.unit / "candidate").rmdir()
         with patch("worker_release_runtime_view_recovery._prove_unit_gone") as proof:
             recover_runtime_view(self.record, view_root=self.views)
-        proof.assert_called_once_with(self.unit)
+        proof.assert_called_once_with(self.unit, self.runtime_uid)
         self.assertEqual(list_all_runtime_view_records(self.views), ())
         self.assertFalse((self.views / self.unit).exists())
 

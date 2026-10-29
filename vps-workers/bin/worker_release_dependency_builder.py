@@ -57,6 +57,13 @@ from worker_release_dependency_input_cache import (
 )
 from worker_release_dependency_diagnostics import PnpmStepRejected, write_diagnostic
 from worker_release_dependency_source import safe_source as _safe_source
+# In a source checkout the authenticated seed support modules remain in their
+# disconnected prototype directory; production installs them flat into the
+# fixed root-owned helper closure.
+_SEED_SOURCE_MODULES = Path(__file__).resolve().parents[1] / "tools" / "nonproduction-worker-release"
+if _SEED_SOURCE_MODULES.is_dir():
+    sys.path.insert(0, str(_SEED_SOURCE_MODULES))
+from worker_release_dependency_seed_consumer import SEED_ROOT, consume_seed as _consume_seed
 
 
 BUILDER_USER = "baci-release-build"
@@ -119,6 +126,18 @@ def _copy_private_policy_cache(seed: Path, scratch: Path, uid: int, gid: int) ->
     """Copy the immutable verified seed into pnpm's writable private cache."""
     return _copy_policy_cache(seed, scratch, uid, gid,
                               max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES)
+
+
+def _consume_authenticated_seed(source: Path, expected_sha: str, scratch: Path,
+                                input_copy: Path, uid: int, gid: int) -> Path:
+    """Use only the root-published seed for the exact SHA selected by staging."""
+    return _consume_seed(
+        source, expected_sha, seed_root=SEED_ROOT, scratch=scratch, input_root=input_copy,
+        builder_uid=uid, builder_gid=gid,
+        max_store_bytes=MAX_BUILD_SCRATCH_BYTES,
+        max_store_entries=MAX_BUILD_SCRATCH_ENTRIES,
+        max_cache_bytes=MAX_CACHE_BYTES, max_cache_entries=MAX_CACHE_ENTRIES,
+    )
 
 
 def _validate_build_roots(gid: int) -> None:
@@ -199,8 +218,6 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         raise BuilderRejected("sandbox orchestration must run as root")
     source = _safe_source(Path(source_arg), expected_sha)
     uid, gid = _builder_identity()
-    validate_receipt(source, PNPM_CACHE, PNPM_STORE / RECEIPT_NAME, expected_sha=expected_sha)
-    _validate_offline_store()
     _validate_build_roots(gid)
     lock_fd = _acquire_build_lock()
     scratch = input_copy = result_dir = None
@@ -216,13 +233,9 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         source_copy = input_copy / "source"
         copy_source_tree(source, source_copy, max_bytes=MAX_SOURCE_BYTES)
         make_read_only_input(source_copy)
-        seed_cache = _copy_policy_cache_seed(
-            PNPM_CACHE, PNPM_STORE / RECEIPT_NAME, input_copy,
-            max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES,
-        )
+        seed_cache = _consume_authenticated_seed(source_copy, expected_sha, scratch,
+                                                input_copy, uid, gid)
         input_copy.chmod(0o555)
-        _copy_private_offline_store(scratch, uid, gid)
-        _copy_private_policy_cache(seed_cache, scratch, uid, gid)
         validate_receipt(source_copy, seed_cache, input_copy / RECEIPT_NAME,
                          owner_uid=0, cache_owner_uid=0, expected_sha=expected_sha)
         directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)

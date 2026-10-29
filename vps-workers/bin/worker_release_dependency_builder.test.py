@@ -4,6 +4,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,6 +32,7 @@ def _bounded_run_adapter_mock(results):
 
 
 SCRIPT = Path(__file__).with_name("worker_release_dependency_builder.py")
+sys.path.insert(0, str(SCRIPT.parents[1] / "tools" / "nonproduction-worker-release"))
 SPEC = importlib.util.spec_from_file_location("worker_release_dependency_builder", SCRIPT)
 assert SPEC and SPEC.loader
 builder = importlib.util.module_from_spec(SPEC)
@@ -192,6 +194,11 @@ class DependencyBuilderTests(unittest.TestCase):
             receipt_path = root / policy_cache.RECEIPT_NAME
             receipt_path.write_text("synthetic receipt", encoding="utf-8")
             receipt_path.chmod(0o400)
+            sandbox_uid = os.geteuid() if os.geteuid() != 0 else 1234
+            sandbox_gid = os.getgid() if os.geteuid() != 0 else 1234
+            if os.geteuid() == 0:
+                os.chown(scratch / "pnpm-store", sandbox_uid, sandbox_gid)
+                os.chown(scratch / "pnpm-cache", sandbox_uid, sandbox_gid)
             calls = []
             injection_settings = []
             receipt_validations = []
@@ -224,6 +231,8 @@ class DependencyBuilderTests(unittest.TestCase):
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "SEED_OWNER_UID", os.geteuid()), \
+                 patch.object(sandbox.os, "geteuid", return_value=sandbox_uid), \
+                 patch.object(sandbox.os, "getgid", return_value=sandbox_gid), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
                  patch.object(sandbox, "run_bounded_capture", side_effect=_bounded_run_adapter(run)), \
                  patch.object(sandbox, "validate_receipt", side_effect=lambda *args, **kwargs: receipt_validations.append((args, kwargs))), \
@@ -1086,10 +1095,12 @@ class DependencyBuilderTests(unittest.TestCase):
             build_root.mkdir(mode=0o710)
             results = build_root / "results"
             results.mkdir(mode=0o700)
-            fake_user = type("User", (), {"pw_gid": os.getgid(), "pw_uid": os.getuid()})()
-            fake_worker = type("User", (), {"pw_gid": os.getgid(), "pw_uid": os.getuid() + 1})()
-            fake_group = type("Group", (), {"gr_gid": os.getgid()})()
-            lock_group = type("Group", (), {"gr_gid": os.getgid() + 1})()
+            fake_gid = os.getgid() if os.geteuid() != 0 else 1234
+            fake_uid = os.getuid() if os.geteuid() != 0 else 1234
+            fake_user = type("User", (), {"pw_gid": fake_gid, "pw_uid": fake_uid})()
+            fake_worker = type("User", (), {"pw_gid": fake_gid, "pw_uid": fake_uid + 1})()
+            fake_group = type("Group", (), {"gr_gid": fake_gid})()
+            lock_group = type("Group", (), {"gr_gid": fake_gid + 1})()
             calls = []
             scratch_paths = []
 
@@ -1102,9 +1113,11 @@ class DependencyBuilderTests(unittest.TestCase):
                 (payload / "root" / "node_modules").mkdir(parents=True)
                 fs.write_smoke_evidence(scratch, {"web_tsx": "passed", "worker_dotenv": "passed"})
 
-            def make_seed(_cache, _receipt, input_copy, **_kwargs):
+            def make_seed(_source, _sha, scratch, input_copy, uid, gid):
                 seed = input_copy / "pnpm-cache-seed"
                 seed.mkdir(mode=0o500)
+                (scratch / "pnpm-store").mkdir(mode=0o700)
+                (scratch / "pnpm-cache").mkdir(mode=0o700)
                 return seed
 
             lock_path = root / "test-lock"
@@ -1118,14 +1131,13 @@ class DependencyBuilderTests(unittest.TestCase):
             ), patch.object(builder, "PNPM_STORE", store
             ), patch.object(builder, "PNPM_CACHE", root / "policy-cache"
             ), patch.object(builder, "validate_receipt"
-            ), patch.object(builder, "_copy_policy_cache_seed", side_effect=make_seed
-            ), patch.object(builder, "_copy_private_policy_cache", side_effect=lambda _seed, scratch, *_: (scratch / "pnpm-cache").mkdir(mode=0o700)
+            ), patch.object(builder, "_consume_authenticated_seed", side_effect=make_seed
             ), patch.object(builder, "_is_root", return_value=True), patch.object(
                 builder, "_acquire_build_lock", side_effect=lambda: os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
             ), patch.object(
                 builder.pwd, "getpwnam", side_effect=[fake_user, fake_worker]
             ), patch.object(builder.grp, "getgrnam", side_effect=[fake_group, lock_group]), patch.object(
-                builder.os, "getgrouplist", return_value=[os.getgid()]
+                builder.os, "getgrouplist", return_value=[fake_gid]
             ):
                 manifest, result_dir = builder.build(str(source), SHA, runner=runner)
             self.assertEqual(len(calls), 1)

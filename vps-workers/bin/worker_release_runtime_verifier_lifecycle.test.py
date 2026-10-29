@@ -70,9 +70,12 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
             "export function config() { return {}; }\n")
         freeze(self.candidate, os.getgid())
         self.acl_gid = 60000 if os.getgid() != 60000 else 60001
+        self.real_systemd = (os.geteuid() == 0 and sys.platform.startswith("linux")
+                             and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1")
+        from worker_release_runtime_acl import verifier_uid
+        self.runtime_uid = verifier_uid() if self.real_systemd else 61000
         self.acl_patches = []
-        if not (os.geteuid() == 0 and sys.platform.startswith("linux")
-                and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1"):
+        if not self.real_systemd:
             from worker_release_runtime_acl import expected_access_acl
             def fake_getxattr(target, attribute, *args, **kwargs):
                 if attribute == "system.posix_acl_access":
@@ -85,6 +88,9 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 ("worker_release_runtime_acl.verifier_gid", patch("worker_release_runtime_acl.verifier_gid", return_value=self.acl_gid)),
                 ("worker_release_runtime_verifier.verifier_gid", patch("worker_release_runtime_verifier.verifier_gid", return_value=self.acl_gid)),
                 ("worker_release_runtime_receipt.verifier_gid", patch("worker_release_runtime_receipt.verifier_gid", return_value=self.acl_gid)),
+                ("worker_release_runtime_acl.verifier_uid", patch("worker_release_runtime_acl.verifier_uid", return_value=self.runtime_uid)),
+                ("worker_release_runtime_verifier.verifier_uid", patch("worker_release_runtime_verifier.verifier_uid", return_value=self.runtime_uid)),
+                ("worker_release_runtime_receipt.verifier_uid", patch("worker_release_runtime_receipt.verifier_uid", return_value=self.runtime_uid)),
                 ("worker_release_runtime_verifier.grant_candidate_acl", patch(
                     "worker_release_runtime_verifier.grant_candidate_acl",
                     side_effect=lambda *_a, **kwargs: kwargs["gid"])),
@@ -143,7 +149,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
-                                {"User": "65534", "PrivateNetwork": "yes"}, 1)
+                                {"User": str(self.runtime_uid), "PrivateNetwork": "yes"}, 1)
         launch_args = spawn.call_args.args[0]
         self.assertIn("--no-block", launch_args)
         self.assertNotIn("--collect", launch_args)
@@ -151,7 +157,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         self.assertIn("--property=StandardOutput=null", launch_args)
         self.assertIn("--property=StandardError=null", launch_args)
         drain.assert_called_once()
-        self.assertEqual(drain.call_args.kwargs["uid"], 65534)
+        self.assertEqual(drain.call_args.kwargs["uid"], self.runtime_uid)
         self.assertEqual(drain.call_args.kwargs["trusted_root"], (1, 2, 3, 4))
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
@@ -210,7 +216,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=21"):
                 _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",),
-                                    {"User": "65534"}, 1)
+                                    {"User": str(self.runtime_uid)}, 1)
         reset_index = next(i for i, call in enumerate(systemctl.call_args_list)
                            if call.args[:2] == ("reset-failed", unit))
         failed_state_index = next(i for i, call in enumerate(systemctl.call_args_list)
@@ -235,7 +241,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
             preflight.return_value = None
             with self.assertRaisesRegex(RuntimeVerificationRejected, "trusted cgroup.*invalid"):
                 _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
-                                    {"User": "65534"}, 1)
+                                    {"User": str(self.runtime_uid)}, 1)
         spawn.assert_not_called()
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
@@ -269,7 +275,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                       side_effect=lambda process: setattr(process, "returncode", -9)):
             with self.assertRaisesRegex(RuntimeVerificationRejected, "launch timed out"):
                 _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
-                                    {"User": "65534"}, 1)
+                                    {"User": str(self.runtime_uid)}, 1)
         drain.assert_called_once()
         self.assertEqual(drain.call_args.args[0], unit)
 
@@ -309,7 +315,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
             with self.assertRaises(RuntimeVerificationQuiescenceUnproven) as raised:
                 _execute_fixed_unit(
                     "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service",
-                    self.candidate, ("/usr/bin/true",), {"User": "65534"}, 1)
+                    self.candidate, ("/usr/bin/true",), {"User": str(self.runtime_uid)}, 1)
         self.assertTrue(raised.exception.preserve_candidate_required)
         drain.assert_called_once()
 
@@ -348,7 +354,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                         unit, candidate / "apps" / "web",
                         ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
                          str(tsx), "--version"),
-                        {"User": "65534", "Group": "65534", "PrivateNetwork": "yes",
+                        {"User": str(self.runtime_uid), "Group": str(self.acl_gid), "PrivateNetwork": "yes",
                          "ProtectSystem": "strict", "PrivateTmp": "no",
                          "InaccessiblePaths": "/tmp /var/tmp /dev/shm",
                          "ReadOnlyPaths": str(candidate), "RuntimeMaxSec": "2",
@@ -378,7 +384,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         with patch("worker_release_runtime_verifier.MAX_CLEANUP_SECONDS", 10):
             with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=1"):
                 _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",),
-                                    {"User": "65534", "Group": "65534",
+                                    {"User": str(self.runtime_uid), "Group": str(self.acl_gid),
                                      "PrivateNetwork": "yes", "ProtectSystem": "strict",
                                      "ReadOnlyPaths": str(self.candidate),
                                      "TasksMax": "16"}, 1)

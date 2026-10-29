@@ -24,7 +24,10 @@ class ProvisionBaciWorkerTests(unittest.TestCase):
         self.assertEqual(commands[0], ("groupadd", "--system", "baci-worker"))
         self.assertEqual(commands[1], ("groupadd", "--system", "baci-locks"))
         self.assertEqual(commands[2], ("groupadd", "--system", "baci-worker-runtime-verify"))
-        self.assertEqual(commands[3][-2:], ("/usr/sbin/nologin", "baci-worker"))
+        self.assertEqual(commands[3], ("useradd", "--system", "--gid", "baci-worker-runtime-verify",
+                                       "--home-dir", "/nonexistent", "--no-create-home",
+                                       "--shell", "/usr/sbin/nologin", "baci-worker-runtime-verify"))
+        self.assertEqual(commands[4][-2:], ("/usr/sbin/nologin", "baci-worker"))
         self.assertIn(("usermod", "--append", "--groups", "baci-locks", "baci-worker"), commands)
         self.assertIn(("usermod", "--append", "--groups", "baci-locks", "bassey"), commands)
         self.assertIn(("install", "-d", "-o", "baci-worker", "-g", "baci-worker", "-m", "0700", "/srv/baci-workers/runtime"), commands)
@@ -112,7 +115,7 @@ class ProvisionBaciWorkerTests(unittest.TestCase):
                 lock_provisioner=lambda root, **kwargs: lock_actions.append((root, kwargs)),
             )
 
-        self.assertEqual(len(executed), len(actions) - 5)
+        self.assertEqual(len(executed), len(actions) - 6)
         self.assertTrue(all(call[0][0] in {"install", "usermod"} for call in executed))
         self.assertTrue(all(call[1]["check"] is True for call in executed))
         self.assertTrue(all(call[1]["stdin"] == subprocess.DEVNULL for call in executed))
@@ -137,7 +140,11 @@ class ProvisionBaciWorkerTests(unittest.TestCase):
             if name not in groups:
                 raise KeyError(name)
             return groups[name]
-        with patch.object(provision.pwd, "getpwnam", return_value=worker), patch.object(
+        def get_user(name):
+            if name == "baci-worker":
+                return worker
+            raise KeyError(name)
+        with patch.object(provision.pwd, "getpwnam", side_effect=get_user), patch.object(
             provision.pwd, "getpwall", return_value=[worker, other]
         ), patch.object(provision.grp, "getgrnam", side_effect=get_group):
             with self.assertRaisesRegex(RuntimeError, "unexpected primary members"):
@@ -151,7 +158,11 @@ class ProvisionBaciWorkerTests(unittest.TestCase):
             if name != "baci-worker":
                 raise KeyError(name)
             return group
-        with patch.object(provision.pwd, "getpwnam", return_value=worker), patch.object(
+        def get_user(name):
+            if name == "baci-worker":
+                return worker
+            raise KeyError(name)
+        with patch.object(provision.pwd, "getpwnam", side_effect=get_user), patch.object(
             provision.pwd, "getpwall", return_value=[worker, duplicate]
         ), patch.object(provision.grp, "getgrnam", side_effect=get_group):
             with self.assertRaisesRegex(RuntimeError, "UID is shared"):
@@ -160,16 +171,24 @@ class ProvisionBaciWorkerTests(unittest.TestCase):
     def test_identity_preflight_rejects_shared_runtime_verifier_gid(self):
         worker = provision.pwd.struct_passwd(("baci-worker", "x", 710, 710, "", "/srv/baci-workers/home", provision.NOLOGIN))
         other = provision.pwd.struct_passwd(("unexpected", "x", 711, 720, "", "/home/unexpected", "/bin/bash"))
+        verifier = provision.pwd.struct_passwd(("baci-worker-runtime-verify", "x", 712, 720,
+                                                "", "/nonexistent", "/usr/sbin/nologin"))
         worker_group = provision.grp.struct_group(("baci-worker", "x", 710, []))
         verify_group = provision.grp.struct_group(("baci-worker-runtime-verify", "x", 720, []))
         lock_group = provision.grp.struct_group(("baci-locks", "x", 721, ["bassey", "baci-worker"]))
         groups = {"baci-worker": worker_group, "baci-worker-runtime-verify": verify_group,
                   "baci-locks": lock_group}
-        with patch.object(provision.pwd, "getpwnam", return_value=worker), patch.object(
-            provision.pwd, "getpwall", return_value=[worker, other]
+        with patch.object(provision.pwd, "getpwnam", side_effect=lambda name: {
+            "baci-worker": worker, "baci-worker-runtime-verify": verifier,
+        }[name]), patch.object(
+            provision.pwd, "getpwall", return_value=[worker, other, verifier]
         ), patch.object(provision.grp, "getgrnam", side_effect=lambda name: groups[name]), patch.object(
             provision.grp, "getgrall", return_value=[worker_group, verify_group, lock_group]
-        ), patch.object(provision.os, "getgrouplist", return_value=[710, 721]):
+        ), patch.object(provision.os, "getgrouplist", side_effect=lambda _user, gid: [gid]), patch.object(
+            provision.grp, "getgrgid", side_effect=lambda gid: groups[
+                "baci-worker-runtime-verify" if gid == 720 else "baci-worker"
+            ]
+        ):
             with self.assertRaisesRegex(RuntimeError, "runtime verifier group is not uniquely isolated"):
                 provision._identity_preflight()
 

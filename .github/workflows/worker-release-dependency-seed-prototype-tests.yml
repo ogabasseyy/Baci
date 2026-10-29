@@ -25,6 +25,7 @@ jobs:
           set -eu
           test "$(id -u)" -ne 0
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-consumer.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q

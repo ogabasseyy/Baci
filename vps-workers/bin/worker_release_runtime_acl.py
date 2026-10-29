@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import errno
-import grp
 import os
-import pwd
 import re
 import stat
 import struct
 from pathlib import Path
+from worker_release_runtime_identity import RuntimeIdentityRejected, runtime_verifier_identity
 
 VERIFY_GROUP = "baci-worker-runtime-verify"
+VERIFY_USER = "baci-worker-runtime-verify"
 RELEASES_ROOT = Path("/srv/baci-workers/releases")
 MAX_ENTRIES = 500_000
 MAX_BYTES = 2 * 1024 * 1024 * 1024
@@ -28,17 +28,19 @@ class RuntimeAclRejected(RuntimeError):
     """The isolated verifier ACL could not be established exactly."""
 
 
-def verifier_gid() -> int:
+def verifier_identity() -> tuple[int, int]:
     try:
-        group = grp.getgrnam(VERIFY_GROUP)
-        aliases = [entry for entry in grp.getgrall() if entry.gr_gid == group.gr_gid]
-        primary = [entry for entry in pwd.getpwall() if entry.pw_gid == group.gr_gid]
-    except KeyError as error:
-        raise RuntimeAclRejected("dedicated verifier group is not provisioned") from error
-    if (group.gr_gid <= 0 or len(aliases) != 1 or aliases[0].gr_name != VERIFY_GROUP
-            or group.gr_mem or primary):
-        raise RuntimeAclRejected("dedicated verifier group identity is not isolated")
-    return group.gr_gid
+        return runtime_verifier_identity()
+    except RuntimeIdentityRejected as error:
+        raise RuntimeAclRejected("dedicated verifier user and group are not isolated") from error
+
+
+def verifier_gid() -> int:
+    return verifier_identity()[1]
+
+
+def verifier_uid() -> int:
+    return verifier_identity()[0]
 
 
 def expected_access_acl(mode: int, gid: int) -> bytes:
@@ -222,5 +224,6 @@ def sys_platform_linux() -> bool:
     return os.name == "posix" and Path("/proc/self").is_dir()
 
 
-__all__ = ["RELEASES_ROOT", "RuntimeAclRejected", "VERIFY_GROUP", "grant_candidate_acl",
-           "expected_access_acl", "verifier_gid"]
+__all__ = ["RELEASES_ROOT", "RuntimeAclRejected", "VERIFY_GROUP", "VERIFY_USER",
+           "grant_candidate_acl", "expected_access_acl", "verifier_gid", "verifier_uid",
+           "verifier_identity"]

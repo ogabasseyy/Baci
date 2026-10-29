@@ -17,10 +17,10 @@ from worker_release_runtime_view_journal import (
     RuntimeViewJournalRejected, RuntimeViewRecord, list_all_runtime_view_records,
     remove_runtime_view_record, verify_runtime_view_record,
 )
+from worker_release_runtime_identity import RuntimeIdentityRejected, runtime_verifier_identity
 
 SYSTEMCTL = "/usr/bin/systemctl"
 CGROUP_ROOT = Path("/sys/fs/cgroup")
-RUNTIME_UID = 65534
 RECOVERY_SECONDS = 30
 
 
@@ -45,7 +45,9 @@ def _query(deadline: float, *args: str) -> str:
     return value
 
 
-def _prove_unit_gone(unit: str) -> None:
+def _prove_unit_gone(unit: str, runtime_uid: int) -> None:
+    if type(runtime_uid) is not int or runtime_uid <= 0:
+        raise RuntimeViewRecoveryRejected("runtime-view identity is invalid")
     if os.geteuid() != 0:
         raise RuntimeViewRecoveryRejected("runtime-view recovery requires root")
     try:
@@ -67,7 +69,7 @@ def _prove_unit_gone(unit: str) -> None:
                                env={"PATH": "/usr/bin:/bin"})
             except (OSError, subprocess.SubprocessError):
                 pass
-        prove_collected_unit(unit, None, root=CGROUP_ROOT, uid=RUNTIME_UID,
+        prove_collected_unit(unit, None, root=CGROUP_ROOT, uid=runtime_uid,
                              deadline=deadline, query=query, trusted_root=trusted_root)
     except Exception as error:
         raise RuntimeViewRecoveryRejected(
@@ -86,10 +88,16 @@ def recover_runtime_view(record: RuntimeViewRecord, *,
     if not isinstance(record, RuntimeViewRecord):
         raise RuntimeViewRecoveryRejected("runtime-view recovery record is invalid")
     try:
+        expected_uid, _gid = runtime_verifier_identity()
+    except RuntimeIdentityRejected as error:
+        raise RuntimeViewRecoveryRejected("runtime verifier identity is unavailable") from error
+    if record.runtime_uid != expected_uid:
+        raise RuntimeViewRecoveryRejected("runtime-view record UID is outside fixed policy")
+    try:
         current = list_all_runtime_view_records(view_root)
         if record not in current:
             raise RuntimeViewRecoveryRejected("runtime-view journal record is no longer present")
-        _prove_unit_gone(record.unit)
+        _prove_unit_gone(record.unit, record.runtime_uid)
         root_fd = _open_view_root(view_root)
         try:
             root = os.fstat(root_fd)

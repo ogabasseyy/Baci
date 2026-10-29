@@ -13,6 +13,8 @@ on:
       - 'vps-workers/bin/worker_release_runtime_verifier.py'
       - 'vps-workers/bin/worker_release_runtime_receipt.py'
       - 'vps-workers/bin/worker_release_runtime_acl.py'
+      - 'vps-workers/bin/worker_release_runtime_identity.py'
+      - 'vps-workers/bin/worker_release_runtime_identity.test.py'
       - 'vps-workers/bin/worker_release_runtime_diagnostics.py'
       - 'vps-workers/bin/worker_release_runtime_smoke.py'
       - 'vps-workers/bin/worker_release_runtime_view.py'
@@ -81,8 +83,11 @@ jobs:
           fixture=/srv/baci-workers
           view_fixture=/var/lib/baci-worker-runtime-views
           verify_group=baci-worker-runtime-verify
+          verify_user=baci-worker-runtime-verify
           verify_group_created=0
+          verify_user_created=0
           verify_group_gid=''
+          verify_user_uid=''
           if [[ ! -d /srv || -L /srv || "$(stat -c '%u:%g' /srv)" != "0:0" ]]; then
             echo 'unsafe /srv parent for disposable worker-root fixture' >&2
             exit 1
@@ -135,6 +140,15 @@ jobs:
                 status=1
               fi
               if [[ "$verify_group_created" == 1 ]]; then
+                user_record="$(getent passwd "$verify_user" || true)"
+                if [[ "$verify_user_created" == 1 \
+                      && "$user_record" == "$verify_user:x:$verify_user_uid:$verify_group_gid::/nonexistent:/usr/sbin/nologin" \
+                      && "$(awk -F: -v uid="$verify_user_uid" '$3 == uid { count++ } END { print count+0 }' /etc/passwd)" == 1 ]]; then
+                  userdel "$verify_user"
+                elif [[ "$verify_user_created" == 1 ]]; then
+                  echo 'disposable runtime verifier user changed unexpectedly' >&2
+                  status=1
+                fi
                 group_record="$(getent group "$verify_group" || true)"
                 if [[ "$group_record" == "$verify_group:x:$verify_group_gid:" \
                       && -z "$(awk -F: -v gid="$verify_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]; then
@@ -148,8 +162,8 @@ jobs:
             exit "$status"
           }
           trap cleanup EXIT
-          if getent group "$verify_group" >/dev/null; then
-            echo 'refusing pre-existing runtime verifier group' >&2
+          if getent group "$verify_group" >/dev/null || getent passwd "$verify_user" >/dev/null; then
+            echo 'refusing pre-existing runtime verifier identity' >&2
             exit 1
           fi
           groupadd --system "$verify_group"
@@ -157,6 +171,12 @@ jobs:
           verify_group_gid="$(getent group "$verify_group" | cut -d: -f3)"
           [[ "$(getent group "$verify_group")" == "$verify_group:x:$verify_group_gid:" ]]
           [[ -z "$(awk -F: -v gid="$verify_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]
+          useradd --system --gid "$verify_group" --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin "$verify_user"
+          verify_user_created=1
+          verify_user_uid="$(getent passwd "$verify_user" | cut -d: -f3)"
+          [[ "$(getent passwd "$verify_user")" == "$verify_user:x:$verify_user_uid:$verify_group_gid::/nonexistent:/usr/sbin/nologin" ]]
+          [[ "$(awk -F: -v uid="$verify_user_uid" '$3 == uid { count++ } END { print count+0 }' /etc/passwd)" == 1 ]]
+          [[ "$(id -G "$verify_user")" == "$verify_group_gid" ]]
           [[ "$fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$fixture")" ]]
           [[ -z "$(find "$fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           [[ "$view_fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$view_fixture")" ]]

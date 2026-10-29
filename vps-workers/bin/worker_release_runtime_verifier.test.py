@@ -83,9 +83,12 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             "export class Expo {}\n")
         freeze(self.candidate, os.getgid())
         self.acl_gid = 60000 if os.getgid() != 60000 else 60001
+        self.real_systemd = (os.geteuid() == 0 and sys.platform.startswith("linux")
+                             and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1")
+        from worker_release_runtime_acl import verifier_uid
+        self.runtime_uid = verifier_uid() if self.real_systemd else 61000
         self.acl_patches = []
-        if not (os.geteuid() == 0 and sys.platform.startswith("linux")
-                and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1"):
+        if not self.real_systemd:
             from worker_release_runtime_acl import expected_access_acl
             def fake_getxattr(target, attribute, *args, **kwargs):
                 if attribute == "system.posix_acl_access":
@@ -98,6 +101,12 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                            "worker_release_runtime_verifier.verifier_gid",
                            "worker_release_runtime_receipt.verifier_gid"):
                 item = patch(target, return_value=self.acl_gid)
+                item.start()
+                self.acl_patches.append(item)
+            for target in ("worker_release_runtime_acl.verifier_uid",
+                           "worker_release_runtime_verifier.verifier_uid",
+                           "worker_release_runtime_receipt.verifier_uid"):
+                item = patch(target, return_value=self.runtime_uid)
                 item.start()
                 self.acl_patches.append(item)
             item = patch("worker_release_runtime_verifier.grant_candidate_acl",
@@ -130,9 +139,10 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         receipt = verify_materialized_candidate(
             self.candidate, identity(), archive_sha256=ARCHIVE,
             owner_uid=os.geteuid(), owner_gid=os.getgid())
-        self.assertEqual(receipt.verifier_version, "materialized-worker-runtime-v2-dedicated-acl")
+        self.assertEqual(receipt.verifier_version, "materialized-worker-runtime-v3-dedicated-uid-acl")
         self.assertEqual(receipt.access_policy, "candidate-posix-acl-readonly-v1")
         self.assertEqual(receipt.verifier_gid, self.acl_gid)
+        self.assertEqual(receipt.verifier_uid, self.runtime_uid)
         self.assertTrue(validate_runtime_receipt(
             receipt, self.candidate, identity(), ARCHIVE,
             owner_uid=os.geteuid(), owner_gid=os.getgid()))

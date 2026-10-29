@@ -104,10 +104,16 @@ class InstallFile:
 
 
 def _source(relative: str) -> bytes:
-    path = REPO_ROOT / relative
-    if not path.is_file() or path.is_symlink():
-        raise RuntimeError(f"required trusted source is missing or not regular: {relative}")
-    return path.read_bytes()
+    source_uid = os.getuid()
+    if os.geteuid() == 0 and "SUDO_UID" in os.environ:
+        value = os.environ["SUDO_UID"]
+        if not value.isdecimal():
+            raise RuntimeError("trusted source checkout owner identity is malformed")
+        source_uid = int(value)
+    try:
+        return read_trusted_source(REPO_ROOT, relative, source_uid=source_uid)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise RuntimeError(f"required trusted source could not be read safely: {relative}") from error
 
 
 def install_files() -> tuple[InstallFile, ...]:
@@ -146,8 +152,13 @@ def install_files() -> tuple[InstallFile, ...]:
     for module in BROKER_RUNTIME_MODULES:
         filename = f"{module}.py"
         if filename not in installed_names:
+            source_relative = (
+                f"vps-workers/tools/nonproduction-worker-release/{filename}"
+                if module.startswith("dependency_seed_")
+                else f"vps-workers/bin/{filename}"
+            )
             files.append(InstallFile(f"broker-runtime-{module}",
-                                     _source(f"vps-workers/bin/{filename}"),
+                                     _source(source_relative),
                                      0o440, HELPER_ROOT / filename))
     return tuple(files)
 
@@ -235,7 +246,9 @@ def _check_release_home(*, account_exists: bool) -> bool:
     return True
 
 
-from provision_worker_release_install import read_existing as _read_existing, install_one as _install_one, ensure_runtime_view_root, RUNTIME_VIEW_ROOT
+from provision_worker_release_install import (ensure_runtime_view_root, read_existing as _read_existing,
+                                              read_trusted_source, install_one as _install_one,
+                                              RUNTIME_VIEW_ROOT)
 
 
 def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:

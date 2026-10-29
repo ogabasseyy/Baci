@@ -6,6 +6,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -19,6 +20,9 @@ UNIT = "baci-worker-runtime-aaaaaaaaaaaaaaaa-bbbbbbbbbbbb-0.service"
 @unittest.skipUnless(os.geteuid() == 0, "requires root-owned mountpoint fixture")
 class RuntimeViewTests(unittest.TestCase):
     def setUp(self):
+        self.identity_patch = patch("worker_release_runtime_view.runtime_verifier_identity",
+                                     return_value=(61000, 61000))
+        self.identity_patch.start()
         self.temp = tempfile.TemporaryDirectory(dir=Path.home())
         self.root = Path(self.temp.name) / "views"
         self.root.mkdir(mode=0o711)
@@ -30,9 +34,11 @@ class RuntimeViewTests(unittest.TestCase):
         info = self.candidate.lstat()
         return create_runtime_view(
             unit, candidate_path=self.candidate, fence_digest="a" * 64,
+            runtime_uid=61000,
             candidate_identity=(info.st_dev, info.st_ino), view_root=self.root)
 
     def tearDown(self):
+        self.identity_patch.stop()
         self.temp.cleanup()
 
     def test_view_is_root_owned_exact_and_removed_after_proven_unit_cleanup(self):
@@ -57,13 +63,18 @@ class RuntimeViewTests(unittest.TestCase):
             info = self.candidate.lstat()
             create_runtime_view(other, candidate_path=self.candidate,
                                 fence_digest="c" * 64,
+                                runtime_uid=61000,
                                 candidate_identity=(info.st_dev, info.st_ino),
                                 view_root=self.root)
 
     def test_cleanup_rejects_replaced_mountpoint_without_removing_replacement(self):
         view = self.make_view()
+        pinned = os.fstat(view.mountpoint_fd)
         view.candidate_path.rmdir()
         view.candidate_path.mkdir(mode=0o700)
+        replacement = view.candidate_path.stat()
+        self.assertNotEqual((replacement.st_dev, replacement.st_ino),
+                            (pinned.st_dev, pinned.st_ino))
         with self.assertRaisesRegex(RuntimeViewRejected, "mountpoint changed"):
             view.cleanup()
         self.assertTrue(view.candidate_path.is_dir())
@@ -88,6 +99,14 @@ class RuntimeViewTests(unittest.TestCase):
     def test_unit_name_is_fixed_and_transaction_bound(self):
         with self.assertRaisesRegex(RuntimeViewRejected, "transaction-bound"):
             self.make_view("../runtime.service")
+
+    def test_view_requires_the_configured_dedicated_uid(self):
+        info = self.candidate.lstat()
+        with self.assertRaisesRegex(RuntimeViewRejected, "UID is outside fixed"):
+            create_runtime_view(UNIT, candidate_path=self.candidate,
+                                fence_digest="a" * 64, runtime_uid=61001,
+                                candidate_identity=(info.st_dev, info.st_ino),
+                                view_root=self.root)
 
 
 if __name__ == "__main__":

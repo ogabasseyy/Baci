@@ -23,6 +23,7 @@ class RuntimeViewJournalRejected(RuntimeError):
 class RuntimeViewRecord:
     unit: str
     fence_digest: str
+    runtime_uid: int
     candidate_path: Path
     candidate_identity: tuple[int, int]
     view_root_identity: tuple[int, int]
@@ -39,7 +40,7 @@ def _identity(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
             info.st_nlink, info.st_size)
 
 
-def _document(unit: str, fence_digest: str, candidate_path: Path,
+def _document(unit: str, fence_digest: str, runtime_uid: int, candidate_path: Path,
               candidate_identity: tuple[int, int],
               view_root_identity: tuple[int, int]) -> dict[str, object]:
     match = UNIT_RE.fullmatch(unit)
@@ -48,12 +49,14 @@ def _document(unit: str, fence_digest: str, candidate_path: Path,
             or not re.fullmatch(r"[0-9a-f]{64}", fence_digest)
             or candidate_path != Path(os.path.normpath(str(candidate_path)))
             or not candidate_path.is_absolute() or candidate_match.group(1) == ""
+            or type(runtime_uid) is not int or runtime_uid <= 0
             or len(candidate_identity) != 2 or len(view_root_identity) != 2
             or any(type(item) is not int or item <= 0
                    for item in (*candidate_identity, *view_root_identity))):
         raise RuntimeViewJournalRejected("runtime-view candidate binding is invalid")
     return {
-        "version": 1, "unit": unit, "fence_digest": fence_digest,
+        "version": 2, "unit": unit, "fence_digest": fence_digest,
+        "runtime_uid": runtime_uid,
         "candidate_path": str(candidate_path), "candidate_dev": candidate_identity[0],
         "candidate_ino": candidate_identity[1], "view_root_dev": view_root_identity[0],
         "view_root_ino": view_root_identity[1],
@@ -68,12 +71,13 @@ def _record_from_bytes(name: str, raw: bytes, *, root_identity: tuple[int, int],
     except (UnicodeError, ValueError) as error:
         raise RuntimeViewJournalRejected("runtime-view journal encoding is invalid") from error
     if (not isinstance(value, dict) or set(value) != {
-            "version", "unit", "fence_digest", "candidate_path", "candidate_dev",
+            "version", "unit", "fence_digest", "runtime_uid", "candidate_path", "candidate_dev",
             "candidate_ino", "view_root_dev", "view_root_ino"}
-            or type(value["version"]) is not int or value["version"] != 1
+            or type(value["version"]) is not int or value["version"] != 2
             or not isinstance(value["unit"], str)
             or name != f"{value['unit']}.json"
             or not isinstance(value["fence_digest"], str)
+            or type(value["runtime_uid"]) is not int
             or not isinstance(value["candidate_path"], str)
             or type(value["candidate_dev"]) is not int or type(value["candidate_ino"]) is not int
             or type(value["view_root_dev"]) is not int or type(value["view_root_ino"]) is not int):
@@ -81,13 +85,14 @@ def _record_from_bytes(name: str, raw: bytes, *, root_identity: tuple[int, int],
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
     if raw != canonical:
         raise RuntimeViewJournalRejected("runtime-view journal is not canonical")
-    expected = _document(value["unit"], value["fence_digest"], Path(value["candidate_path"]),
+    expected = _document(value["unit"], value["fence_digest"], value["runtime_uid"],
+                          Path(value["candidate_path"]),
                           (value["candidate_dev"], value["candidate_ino"]),
                           (value["view_root_dev"], value["view_root_ino"]))
     if (value != expected or (value["view_root_dev"], value["view_root_ino"]) != root_identity):
         raise RuntimeViewJournalRejected("runtime-view journal identity does not match its root")
     return RuntimeViewRecord(
-        unit=value["unit"], fence_digest=value["fence_digest"],
+        unit=value["unit"], fence_digest=value["fence_digest"], runtime_uid=value["runtime_uid"],
         candidate_path=Path(value["candidate_path"]),
         candidate_identity=(value["candidate_dev"], value["candidate_ino"]),
         view_root_identity=root_identity, record_identity=record_identity, record_bytes=raw,
@@ -115,9 +120,10 @@ def _read_record(root_fd: int, name: str, root_identity: tuple[int, int]) -> Run
 
 
 def write_runtime_view_record(root_fd: int, *, unit: str, fence_digest: str,
+                              runtime_uid: int,
                               candidate_path: Path, candidate_identity: tuple[int, int],
                               view_root_identity: tuple[int, int]) -> RuntimeViewRecord:
-    value = _document(unit, fence_digest, candidate_path, candidate_identity,
+    value = _document(unit, fence_digest, runtime_uid, candidate_path, candidate_identity,
                       view_root_identity)
     raw = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("ascii")
     if len(raw) > MAX_BYTES:
@@ -135,7 +141,7 @@ def write_runtime_view_record(root_fd: int, *, unit: str, fence_digest: str,
     finally:
         os.close(fd)
     os.fsync(root_fd)
-    return RuntimeViewRecord(unit, fence_digest, candidate_path, candidate_identity,
+    return RuntimeViewRecord(unit, fence_digest, runtime_uid, candidate_path, candidate_identity,
                              view_root_identity, identity, raw)
 
 

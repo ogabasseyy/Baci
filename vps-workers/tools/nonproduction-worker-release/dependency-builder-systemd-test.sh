@@ -302,6 +302,7 @@ import os, re, subprocess, sys, time
 from pathlib import Path
 from types import SimpleNamespace
 import worker_release_dependency_builder as dependency_builder
+import worker_release_dependency_sandbox as dependency_sandbox
 from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
 
@@ -326,7 +327,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None):
     if usage_root is None or Path(usage_root) != dependency_builder.BUILD_ROOT:
         raise RuntimeError("dependency builder did not forward the fixed build usage root")
     bounded_root = Path(usage_root)
-    deadline = time.monotonic() + dependency_builder.MAX_BUILD_SECONDS + 15
+    deadline = time.monotonic() + dependency_sandbox.MAX_BUILD_SECONDS + 15
     process = subprocess.Popen(
         fixture_command,
         stdin=subprocess.DEVNULL,
@@ -347,7 +348,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None):
                 subprocess.run(("/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=SIGKILL", unit),
                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL, timeout=10, check=False)
-                raise subprocess.TimeoutExpired(fixture_command, dependency_builder.MAX_BUILD_SECONDS + 15)
+                raise subprocess.TimeoutExpired(fixture_command, dependency_sandbox.MAX_BUILD_SECONDS + 15)
             time.sleep(0.25)
         stdout, stderr = process.communicate()
     except BaseException:

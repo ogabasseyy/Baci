@@ -23,6 +23,8 @@ def latch(*, recovered: bool = False):
         "job_id": "9002" if recovered else "9001",
         "previous_sha": SHA_PREVIOUS,
         "release_sha": SHA_OLD,
+        "service_snapshot_complete": True,
+        "services_to_restore": ["baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"],
     }
     if recovered:
         value["recovered_from"] = original
@@ -138,6 +140,8 @@ class RecoveryDispatchTests(unittest.TestCase):
             "fence": {"run_id": "101", "run_attempt": 1, "sha": SHA_PREVIOUS},
             "job_id": "9001", "previous_sha": SHA_PREVIOUS,
             "release_sha": SHA_PREVIOUS,
+            "service_snapshot_complete": True,
+            "services_to_restore": ["baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"],
         }
         prior_state = {
             "sha": SHA_PREVIOUS, "previous_sha": "e" * 40, "status": "healthy",
@@ -174,6 +178,16 @@ class RecoveryDispatchTests(unittest.TestCase):
         }
         with patch.object(broker, "_load_release_state", return_value=mismatched):
             with self.assertRaises(broker.BrokerProtocolError):
+                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+
+    def test_incomplete_legacy_snapshot_blocks_automatic_recovery(self):
+        value = latch()
+        value["service_snapshot_complete"] = False
+        with patch.object(broker, "_load_release_state", return_value={
+            "sha": SHA_OLD, "previous_sha": SHA_PREVIOUS,
+            "fence": {"run_id": "101", "run_attempt": 1, "sha": SHA_OLD, "job_id": "9001"},
+        }):
+            with self.assertRaisesRegex(broker.BrokerProtocolError, "complete service restoration snapshot"):
                 status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
 
     def test_missing_latch_with_unresolved_state_fails_closed(self):

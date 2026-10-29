@@ -46,30 +46,19 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 active_text="$(recovery services)" || exit 1
-if [ -n "$active_text" ]; then
-  mapfile -t active_services <<< "$active_text"
+while IFS= read -r service; do
+  [ -n "$service" ] && active_services+=("$service")
+done <<< "$active_text"
+expected_services="$(printf '%s\n' "${services[@]}")"
+if [[ "$active_text" != "$expected_services" ]]; then
+  echo "quiesce lease: complete active-service snapshot is required" >&2
+  exit 1
 fi
 for service in "${services[@]}"; do
-  if /usr/bin/systemctl is-active --quiet "$service"; then
-    # Persist the service in the shell's cleanup set before any stop action.
-    # On a fresh lease the initial latch snapshot is empty, so intent must
-    # update both the durable latch and the in-memory restart protocol.
-    tracked=0
-    for active_service in "${active_services[@]-}"; do
-      if [ "$active_service" = "$service" ]; then tracked=1; break; fi
-    done
-    if [ "$tracked" -eq 0 ]; then
-      active_services+=("$service")
-    fi
-    recovery intent "$service"
-    /usr/bin/systemctl stop "$service"
-  else
-    status=$?
-    if [ "$status" -ne 3 ]; then
-      echo "quiesce lease: systemd query failed for $service" >&2
-      exit 1
-    fi
-  fi
+  # The complete restore snapshot was fsynced before this helper started.
+  # Record each stop intent before stopping units that might be active.
+  recovery intent "$service"
+  /usr/bin/systemctl stop "$service"
 done
 
 printf 'READY\n'

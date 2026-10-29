@@ -10,19 +10,22 @@ import unittest
 
 
 HELPER = Path(__file__).parents[1] / "lib" / "worker-release-quiesce-lease.sh"
-SERVICE = "baci-domain-event-router"
+SERVICES = (
+    "baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"
+)
 
 
 class QuiesceLeaseHelperTests(unittest.TestCase):
-    def test_fresh_empty_latch_stops_and_restarts_discovered_active_service(self):
+    def test_complete_snapshot_stops_and_restarts_every_required_service(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             state = root / "latch.json"
             state.write_text(json.dumps({
-                "phase": "quiescing", "services_to_restore": [], "stop_intent": []
+                "phase": "quiescing", "service_snapshot_complete": True,
+                "services_to_restore": list(SERVICES), "stop_intent": []
             }), encoding="utf-8")
             active = root / "active"
-            active.write_text(SERVICE, encoding="utf-8")
+            active.write_text("\n".join(SERVICES) + "\n", encoding="utf-8")
             log = root / "systemctl.log"
             fake_python = root / "python3"
             fake_systemctl = root / "systemctl"
@@ -36,10 +39,10 @@ if len(args) < 3 or args[0:2] != ['-m', 'worker_release_recovery_latch']:
 command = args[2:]
 data = json.loads(open(path, encoding='utf-8').read())
 if command == ['services']:
+    if not data.get('service_snapshot_complete'): raise SystemExit(93)
     print('\\n'.join(data['services_to_restore']))
 elif len(command) == 2 and command[0] == 'intent':
-    for key in ('services_to_restore', 'stop_intent'):
-        if command[1] not in data[key]: data[key].append(command[1])
+    if command[1] not in data['stop_intent']: data['stop_intent'].append(command[1])
     open(path, 'w', encoding='utf-8').write(json.dumps(data))
 elif command == ['recovery']:
     data['phase'] = 'recovery_required'
@@ -53,15 +56,12 @@ else:
 import os, sys
 args = sys.argv[1:]
 active, log = os.environ['TEST_ACTIVE'], os.environ['TEST_LOG']
-if args[:2] == ['is-active', '--quiet']:
-    raise SystemExit(0 if os.path.exists(active) else 3)
 if len(args) == 2 and args[0] in ('stop', 'start'):
     with open(log, 'a', encoding='utf-8') as stream: stream.write(args[0] + ' ' + args[1] + '\\n')
-    if args[0] == 'stop':
-        try: os.unlink(active)
-        except FileNotFoundError: pass
-    else:
-        open(active, 'w').close()
+    current = set(open(active, encoding='utf-8').read().splitlines()) if os.path.exists(active) else set()
+    if args[0] == 'stop': current.discard(args[1])
+    else: current.add(args[1])
+    open(active, 'w', encoding='utf-8').write('\\n'.join(sorted(current)) + '\\n')
     raise SystemExit(0)
 raise SystemExit(92)
 """, encoding="utf-8")
@@ -85,12 +85,14 @@ raise SystemExit(92)
                 ready = process.stdout.readline()
                 if ready != "READY\n":
                     self.fail(f"helper failed before READY: {process.stderr.read()}")
-                self.assertEqual(json.loads(state.read_text())["services_to_restore"], [SERVICE])
+                self.assertEqual(json.loads(state.read_text())["services_to_restore"], list(SERVICES))
                 process.stdin.write("START_HEALTH\n")
                 process.stdin.flush()
                 self.assertEqual(process.stdout.readline(), "STARTED\n")
                 self.assertTrue(active.exists())
-                self.assertEqual(log.read_text().splitlines(), [f"stop {SERVICE}", f"start {SERVICE}"])
+                self.assertEqual(log.read_text().splitlines(),
+                                 [*(f"stop {service}" for service in SERVICES),
+                                  *(f"start {service}" for service in SERVICES)])
                 process.stdin.write("HEALTHY\n")
                 process.stdin.flush()
                 self.assertEqual(process.stdout.readline(), "DONE\n")

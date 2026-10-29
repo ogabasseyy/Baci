@@ -59,6 +59,8 @@ def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:
         if state is not None and state.get("status") not in ("healthy", "rolled_back"):
             raise broker.BrokerProtocolError("release state is unresolved without its recovery latch")
         return {"ok": True, "operation": "recovery-status", "sourceSha": source_sha, "pending": False}
+    if not latch.get("service_snapshot_complete"):
+        raise broker.BrokerProtocolError("durable recovery lacks a complete service restoration snapshot")
     target = recovery_target(latch)
     if (not (_state_matches(state, target) or _state_is_owned_by_latch(state, latch, target)
              or _state_is_pre_promotion(state, latch))
@@ -91,6 +93,8 @@ def recover(*, verified: dict[str, Any], identity, quiescence, current_link: str
             state = broker._load_release_state(state_path)
             if latch is None:
                 raise LifecycleRejected("worker recovery latch is no longer present")
+            if not latch.get("service_snapshot_complete"):
+                raise LifecycleRejected("worker recovery lacks a complete service restoration snapshot")
             target = recovery_target(latch)
             recovery_of = verified.get("recoveryOf")
             same_owner = (latch["fence"] == current_fence and latch.get("job_id") == str(verified["jobId"]))

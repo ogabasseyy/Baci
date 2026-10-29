@@ -10,6 +10,12 @@ from pathlib import Path
 import worker_release_quiesce_lease as config
 from worker_release_quiesce_lease_core import WorkerQuiesceLease
 
+REQUIRED_SERVICES = (
+    "baci-domain-event-router",
+    "baci-event-delivery-worker",
+    "baci-quiz-finalization",
+)
+
 
 class WorkerQuiesceLeaseManager:
     def __init__(self, *, worker_uid=None, worker_gid=None, lock_gid=None,
@@ -56,6 +62,22 @@ class WorkerQuiesceLeaseManager:
                 raise config.QuiesceLeaseRejected(str(error)) from None
             self._phase = phase
 
+    def _snapshot_active_services(self):
+        """Require a complete pre-mutation snapshot of the fixed core units."""
+        for service in REQUIRED_SERVICES:
+            try:
+                result = subprocess.run(
+                    ["/usr/bin/systemctl", "is-active", "--quiet", service],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, check=False, close_fds=True,
+                    cwd="/", env={"PATH": "/usr/bin:/bin", "HOME": "/root"}, timeout=5,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                raise config.QuiesceLeaseRejected("required worker service snapshot failed") from None
+            if result.returncode != 0:
+                raise config.QuiesceLeaseRejected("all fixed worker services must be active before quiescing")
+        return list(REQUIRED_SERVICES)
+
     def acquire(self, identity, *, previous_sha=None, recovery=False, takeover_from=None):
         key = config._identity_key(identity)
         with self._guard:
@@ -70,14 +92,26 @@ class WorkerQuiesceLeaseManager:
             config._verify_installed_helper()
             fence = {"run_id": key[0], "run_attempt": key[1], "sha": key[2]}
             try:
+                existing = config.load_latch(self.latch_path, uid=os.geteuid(), gid=self.lock_gid)
+                if existing is not None:
+                    if not recovery or not existing.get("service_snapshot_complete"):
+                        raise config.QuiesceLeaseRejected("worker recovery snapshot is incomplete")
+                    active_services = existing["services_to_restore"]
+                else:
+                    if recovery:
+                        raise config.QuiesceLeaseRejected("worker recovery latch is missing")
+                    active_services = self._snapshot_active_services()
                 config.create_latch(fence, previous_sha, path=self.latch_path, recovery=recovery,
                                     takeover_from=takeover_from,
                                     job_id=str(identity.get("job_id", "")) or None,
+                                    active_services=active_services,
                                     uid=os.geteuid(), gid=self.lock_gid)
                 self._fence, self._phase = fence, "quiescing"
                 self._gate.start()
             except (config.LatchError, OSError, PermissionError):
                 raise config.QuiesceLeaseRejected("worker recovery latch could not be established") from None
+            except config.QuiesceLeaseRejected:
+                raise
             deadline = time.monotonic() + min(config.LEASE_READY_SECONDS, config.LEASE_LOCK_SECONDS)
             try:
                 process = subprocess.Popen(

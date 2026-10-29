@@ -42,7 +42,8 @@ class RecoveryLatchTests(unittest.TestCase):
         self.state.chmod(0o600)
 
     def make_latch(self):
-        return create_latch(FENCE, PRIOR, path=self.latch, uid=self.uid, gid=self.gid)
+        return create_latch(FENCE, PRIOR, path=self.latch, active_services=list(SERVICES),
+                            uid=self.uid, gid=self.gid)
 
     def test_latch_blocks_scheduled_and_unit_starts_without_live_broker(self):
         self.make_latch()
@@ -53,6 +54,7 @@ class RecoveryLatchTests(unittest.TestCase):
 
     def test_repeated_terminal_takeovers_preserve_original_candidate_and_owner(self):
         original = create_latch(FENCE, PRIOR, path=self.latch, job_id="7001",
+                                active_services=list(SERVICES),
                                 uid=self.uid, gid=self.gid)
         first_fence = {"run_id": "2234", "run_attempt": 1, "sha": "c" * 40}
         first = create_latch(first_fence, PRIOR, path=self.latch, recovery=True,
@@ -66,6 +68,14 @@ class RecoveryLatchTests(unittest.TestCase):
         self.assertEqual(second["recovered_from"], FENCE)
         self.assertEqual(second["recovered_from_job_id"], "7001")
         self.assertEqual(second["fence"], second_fence)
+
+    def test_fresh_latch_requires_complete_service_snapshot(self):
+        with self.assertRaisesRegex(LatchError, "complete active worker service snapshot"):
+            create_latch(FENCE, PRIOR, path=self.latch, active_services=[SERVICES[0]],
+                         uid=self.uid, gid=self.gid)
+        with self.assertRaisesRegex(LatchError, "complete active worker service snapshot"):
+            create_latch(FENCE, PRIOR, path=self.latch, uid=self.uid, gid=self.gid)
+        self.assertIsNone(load_latch(self.latch, uid=self.uid, gid=self.gid))
 
     def test_post_swap_health_phase_requires_live_same_process_gate(self):
         self.make_latch()

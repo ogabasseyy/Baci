@@ -37,7 +37,23 @@ created_worker=0
 created_bassey=0
 
 cleanup() {
+  local exit_status=$?
   set +e
+  if [ "$exit_status" -ne 0 ]; then
+    echo "systemd fault harness diagnostics (${suffix})" >&2
+    for unit in "${units[@]}"; do
+      systemctl show "$unit" -p LoadState -p ActiveState -p SubState -p Result \
+        -p ExecCondition -p ExecConditionExits -p ExecMainStatus -p After -p BindsTo >&2
+      systemctl status --no-pager --full "$unit" >&2
+      journalctl --no-pager -n 40 -u "$unit" >&2
+    done
+    id baci-worker >&2
+    id bassey >&2
+    stat -c '%A %U:%G %n' "$permission_root" "$helper_dir" \
+      "$helper_dir/worker_release_recovery_latch.py" \
+      "$helper_dir/worker_release_quiesce_gate.py" \
+      "$helper_dir/worker-release-launch-gate" "$latch_dir" "$latch" >&2
+  fi
   systemctl stop "${units[@]}" >/dev/null 2>&1
   rm -f "${units[@]/#/${unit_dir}/}"
   systemctl daemon-reload >/dev/null 2>&1
@@ -75,6 +91,11 @@ install -o root -g baci-locks -m 0440 \
 install -o root -g baci-locks -m 0550 \
   "$(dirname "$0")/../bin/worker-release-launch-gate" \
   "$helper_dir/worker-release-launch-gate"
+for module in worker_release_quiesce_lease.py worker_release_quiesce_lease_identity.py \
+  worker_release_quiesce_locks.py worker_release_quiesce_lease_runtime.py \
+  worker_release_quiesce_lease_core.py worker_release_quiesce_lease_manager.py; do
+  install -o root -g root -m 0444 "$(dirname "$0")/../bin/$module" "$helper_dir/$module"
+done
 install -d -o root -g baci-locks -m 0710 "$latch_dir"
 install -d -o root -g baci-worker -m 0710 "$runtime_dir"
 install -d -o root -g baci-worker -m 0770 "$data_dir"
@@ -87,12 +108,12 @@ from worker_release_recovery_latch import load_latch, service_allowed
 from types import SimpleNamespace
 mode, latch, sock, auth, challenged, slow, started, lock, lock_gid, worker_uid, worker_gid = sys.argv[1:]
 if mode == "broker":
-    from worker_release_quiesce_lease_manager import WorkerQuiesceLeaseManager
+    from worker_release_quiesce_lease import WorkerQuiesceLeaseManager
     from worker_release_quiesce_gate import HealthGateServer
     manager = object.__new__(WorkerQuiesceLeaseManager)
     manager._guard = threading.Lock()
     manager._lease = SimpleNamespace(_state="active")
-    manager._phase = "health_probe"
+    manager._phase = "quiescing"
     manager._fence = load_latch(Path(latch), uid=0, gid=int(lock_gid))["fence"]
     manager.latch_path = Path(latch)
     manager.lock_gid = int(lock_gid)
@@ -100,8 +121,12 @@ if mode == "broker":
         os.unlink(auth)
     except FileNotFoundError:
         pass
+    def authorize(unit):
+        if os.path.exists(auth) and manager._phase != "health_probe":
+            manager._set_phase(manager._lease, "health_probe")
+        return manager._authorize_unit(unit)
     gate = HealthGateServer(worker_uid=int(worker_uid), worker_gid=int(worker_gid),
-                            authorize=manager._authorize_unit, path=Path(sock))
+                            authorize=authorize, path=Path(sock))
     gate.start()
     signal.pause()
 elif mode == "core":
@@ -139,9 +164,14 @@ unit_relations() {
   grep -E '^(After|Wants|BindsTo)=' "$1" | sed "s/baci-worker-release-broker.service/${broker}/g"
 }
 
-printf '%s\n' '{"version":1,"phase":"health_probe","fence":{"run_id":"1","run_attempt":1,"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"previous_sha":null,"services_to_restore":[],"stop_intent":[]}' >"$latch"
-chown root:baci-locks "$latch"
-chmod 0640 "$latch"
+PYTHONPATH="$helper_dir" /usr/bin/python3 - "$latch" "$lock_gid" <<'PY'
+import sys
+from pathlib import Path
+from worker_release_recovery_latch import SERVICES, create_latch
+path, gid = Path(sys.argv[1]), int(sys.argv[2])
+fence = {"run_id": "1", "run_attempt": 1, "sha": "a" * 40}
+create_latch(fence, None, path=path, job_id="2", active_services=list(SERVICES), uid=0, gid=gid)
+PY
 cat >"${unit_dir}/${broker}" <<EOF
 [Unit]
 Description=Disposable broker ${suffix}
@@ -224,6 +254,7 @@ if systemctl is-active --quiet "$timer"; then
 fi
 
 # Broker restart retains the latch, reactivates its timer, and keeps worker gated.
+rm -f "$auth"
 systemctl start "$broker"
 systemctl is-active --quiet "$timer"
 systemctl start "$scheduled" || true
@@ -246,9 +277,15 @@ systemctl stop "$core"
 # Rehearse the actual cron and ExecCondition identities against installed-file
 # permissions and the root-owned lock-group latch layout.
 install -d -o root -g baci-locks -m 0710 "$permission_root/locks"
-printf '%s\n' '{"version":1,"phase":"health_probe","fence":{"run_id":"1","run_attempt":1,"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"previous_sha":null,"services_to_restore":[],"stop_intent":[]}' >"$permission_root/locks/release-recovery-latch.json"
-chown root:baci-locks "$permission_root/locks/release-recovery-latch.json"
-chmod 0640 "$permission_root/locks/release-recovery-latch.json"
+PYTHONPATH="$helper_dir" /usr/bin/python3 - "$permission_root/locks/release-recovery-latch.json" "$lock_gid" <<'PY'
+import sys
+from pathlib import Path
+from worker_release_recovery_latch import SERVICES, create_latch, update_latch
+path, gid = Path(sys.argv[1]), int(sys.argv[2])
+fence = {"run_id": "1", "run_attempt": 1, "sha": "a" * 40}
+create_latch(fence, None, path=path, job_id="2", active_services=list(SERVICES), uid=0, gid=gid)
+update_latch(path=path, phase="health_probe", fence=fence, uid=0, gid=gid)
+PY
 for account in baci-worker bassey; do
   runuser -u "$account" -- env \
     PYTHONPATH="$helper_dir" \

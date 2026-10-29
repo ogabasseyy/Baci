@@ -6,10 +6,13 @@ import sys
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import fcntl
 
 import worker_release_quiesce_lease as lease_module
+import worker_release_recovery_latch as recovery_latch
+import worker_release_quiesce_lease_manager as lease_manager_module
 from worker_release_quiesce_lease import QuiesceLeaseRejected, WorkerQuiesceLeaseManager
 
 
@@ -44,7 +47,7 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
             patch.object(lease_module, "acquire_production_lock_fds", side_effect=self.acquire_test_lock),
             patch.object(lease_module, "create_latch", return_value={"version": 1}),
             patch.object(lease_module, "update_latch", return_value={"version": 1}),
-            patch.object(lease_module, "load_latch", return_value={"fence": FENCE, "phase": "quiescing"}),
+            patch.object(lease_module, "load_latch", return_value=None),
         ]
         for item in self.patches:
             item.start()
@@ -68,6 +71,9 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
             latch_path=self.lock_dir / "release-recovery-latch.json",
             gate_socket_path=self.root / "health.sock", owner_uid=os.geteuid(),
         )
+        manager._snapshot_active_services = lambda: [
+            "baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"
+        ]
         self.managers.append(manager)
         return manager
 
@@ -181,6 +187,7 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
             "  return [fd]\n"
             "module.acquire_production_lock_fds = acquire_lock\n"
             f"manager = module.WorkerQuiesceLeaseManager(worker_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid(), latch_path={str(self.lock_dir / 'latch')!r}, gate_socket_path={str(self.root / 'gate')!r}, owner_uid=os.geteuid())\n"
+            "manager._snapshot_active_services = lambda: ['baci-domain-event-router', 'baci-event-delivery-worker', 'baci-quiz-finalization']\n"
             f"manager.acquire({FENCE!r})\n"
             f"open({str(broker_ready)!r}, 'w').close()\n"
             "time.sleep(10)\n",
@@ -214,6 +221,49 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
         with self.assertRaisesRegex(QuiesceLeaseRejected, "fence is invalid"):
             manager.acquire({**FENCE, "run_attempt": True})
         self.assertFalse(self.marker.exists())
+
+    def test_incomplete_active_snapshot_fails_before_latch_or_helper_creation(self):
+        manager = self.manager()
+        manager._snapshot_active_services = lambda: (_ for _ in ()).throw(
+            QuiesceLeaseRejected("all fixed worker services must be active before quiescing")
+        )
+        with patch.object(lease_module, "create_latch") as create:
+            with self.assertRaisesRegex(QuiesceLeaseRejected, "all fixed worker services"):
+                manager.acquire(FENCE)
+        create.assert_not_called()
+        self.assertFalse(self.marker.exists())
+
+    def test_helper_start_failure_leaves_complete_durable_restore_snapshot(self):
+        manager = self.manager()
+        real_create = recovery_latch.create_latch
+        with patch.object(lease_module, "create_latch", side_effect=real_create) as create, \
+             patch.object(lease_manager_module.subprocess, "Popen", side_effect=OSError("injected helper crash")):
+            with self.assertRaisesRegex(QuiesceLeaseRejected, "could not start"):
+                manager.acquire(FENCE)
+        create.assert_called_once()
+        persisted = recovery_latch.load_latch(
+            self.lock_dir / "release-recovery-latch.json", uid=os.geteuid(), gid=os.getegid()
+        )
+        self.assertTrue(persisted["service_snapshot_complete"])
+        self.assertEqual(persisted["services_to_restore"], [
+            "baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"
+        ])
+        self.assertEqual(persisted["stop_intent"], [])
+        self.assertFalse(self.marker.exists())
+
+    def test_snapshot_queries_every_fixed_service_and_fails_on_one_inactive(self):
+        manager = self.manager()
+        del manager._snapshot_active_services
+        expected = ["baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"]
+        with patch("worker_release_quiesce_lease_manager.subprocess.run",
+                   return_value=SimpleNamespace(returncode=0)) as run:
+            self.assertEqual(manager._snapshot_active_services(), expected)
+        self.assertEqual([call.args[0][-1] for call in run.call_args_list], expected)
+        with patch("worker_release_quiesce_lease_manager.subprocess.run",
+                   side_effect=[SimpleNamespace(returncode=0), SimpleNamespace(returncode=3)]) as run:
+            with self.assertRaisesRegex(QuiesceLeaseRejected, "all fixed worker services"):
+                manager._snapshot_active_services()
+        self.assertEqual(run.call_count, 2)
 
     def test_partial_ready_frame_times_out_and_closes_the_helper(self):
         # The production helper gets a fixed minimal environment. This fixture
@@ -253,6 +303,10 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
             self.assertEqual(manager._orphan.wait(timeout=3), 0)
 
         self.write_protocol_helper()
+        lease_module.load_latch.return_value = {
+            "fence": FENCE, "phase": "recovery_required", "service_snapshot_complete": True,
+            "services_to_restore": ["baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization"],
+        }
         lease = manager.acquire(FENCE, recovery=True)
         lease.confirm_healthy()
 

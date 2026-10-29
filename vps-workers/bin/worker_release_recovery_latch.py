@@ -65,6 +65,7 @@ def _validate_latch(value: dict[str, Any]) -> dict[str, Any]:
     recovered_job_id = value.get("recovered_from_job_id")
     release_sha = value.get("release_sha", fence.get("sha") if isinstance(fence, dict) else None)
     recovered_from = value.get("recovered_from")
+    snapshot_complete = value.get("service_snapshot_complete", False)
     if (value.get("version") != 1 or value.get("phase") not in PHASES
             or not isinstance(fence, dict)
             or not ID_RE.fullmatch(str(fence.get("run_id", "")))
@@ -79,9 +80,15 @@ def _validate_latch(value: dict[str, Any]) -> dict[str, Any]:
                 or not SHA_RE.fullmatch(str(recovered_from.get("sha", "")))))
             or (previous is not None and not SHA_RE.fullmatch(str(previous)))
             or not isinstance(services, list) or not isinstance(intents, list)
+            or not isinstance(snapshot_complete, bool)
+            or any(not isinstance(item, str) for item in services + intents)
+            or len(services) != len(set(services))
             or any(item not in SERVICES for item in services + intents)):
         raise LatchError("worker recovery latch contract is invalid")
+    if snapshot_complete and set(services) != set(SERVICES):
+        raise LatchError("worker recovery service snapshot is incomplete")
     value.setdefault("release_sha", release_sha)
+    value.setdefault("service_snapshot_complete", snapshot_complete)
     return value
 
 
@@ -134,7 +141,7 @@ def _write_latch(value: dict[str, Any], path: Path, *, uid: int, gid: int) -> No
 
 def create_latch(fence: dict[str, Any], previous_sha: str | None, *, path: Path = LATCH_PATH,
                  recovery: bool = False, takeover_from: dict[str, Any] | None = None,
-                 job_id: str | None = None,
+                 job_id: str | None = None, active_services: list[str] | None = None,
                  uid: int = 0, gid: int | None = None) -> dict[str, Any]:
     path = Path(path)
     if gid is None:
@@ -144,6 +151,8 @@ def create_latch(fence: dict[str, Any], previous_sha: str | None, *, path: Path 
     if existing is not None:
         if not recovery:
             raise LatchError("unresolved worker recovery latch blocks release")
+        if not existing.get("service_snapshot_complete"):
+            raise LatchError("worker recovery service snapshot is incomplete")
         if takeover_from is not None:
             if existing["fence"] != takeover_from or existing["previous_sha"] != previous_sha:
                 raise LatchError("worker recovery takeover does not match the recorded release owner")
@@ -160,10 +169,15 @@ def create_latch(fence: dict[str, Any], previous_sha: str | None, *, path: Path 
         existing["phase"] = "recovery_required"
         _write_latch(existing, path, uid=uid, gid=gid)
         return existing
+    if (not isinstance(active_services, list) or any(not isinstance(item, str) for item in active_services)
+            or len(active_services) != len(SERVICES)
+            or set(active_services) != set(SERVICES) or len(set(active_services)) != len(active_services)):
+        raise LatchError("complete active worker service snapshot is required")
     value = {"version": 1, "phase": "quiescing", "fence": fence,
              "previous_sha": previous_sha, "release_sha": fence["sha"],
              "job_id": job_id,
-             "services_to_restore": [], "stop_intent": []}
+             "services_to_restore": list(active_services), "stop_intent": [],
+             "service_snapshot_complete": True}
     _write_latch(value, path, uid=uid, gid=gid)
     return value
 
@@ -242,7 +256,7 @@ def cli(argv: list[str]) -> int:
         return 64
     if argv[0] == "services":
         latch = load_latch()
-        if latch is None:
+        if latch is None or not latch.get("service_snapshot_complete"):
             return 1
         sys.stdout.write("".join(f"{service}\n" for service in latch["services_to_restore"]))
         return 0

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-29T16:11:54+00:00",
-  "source_revision": "737c8ab90f0f58d22d230b1fb573369be9b138a3",
-  "evidence_digest": "65b53fd6acff5147369e73d7d861da08a71204fd78ee50d7c49182997feccf25",
-  "claims_digest": "034bfe63db3a8bd36f7e25f3bf2c1fe0a19d388fb9b600927c5c60408e751d7d",
-  "review_scope": "Source evidence only. Re-reviewed the support-chat health source and tests on the synchronized base: catalog and conversation probes run concurrently, and the Ogabassey probe checks tenant and catalog markers. All cited source evidence remains unchanged after the latest main sync. OAuth connected discovery excludes legacy link tools; anonymous compatibility, PKCE/encrypted grants, resource-specific transport and refresh receipts remain as previously reviewed. Existing claims include merchant onboarding email suppression, preferences, event permissions and worker isolation. No production capability promotion; deployment and transaction readiness require separate verification. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-29T18:11:03+00:00",
+  "source_revision": "e86225c149e18e045c8726e5d6a8c258b91cff83",
+  "evidence_digest": "e4337d5c6b1f3881f63283cf1cf630298e5e92042e51afe086f0af6cef96c51f",
+  "claims_digest": "05cd3f62a6730d6f8fb5f2ac4a5040183ed8883fb6d62689fd51078004d8bf00",
+  "review_scope": "Source evidence only. Re-reviewed the support-chat health probe: catalog and conversation checks run concurrently, and Ogabassey checks tenant and catalog markers. All cited capability and access-map source paths remain unchanged across the main sync. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending; the original MCP is unchanged. No production capability promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

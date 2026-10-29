@@ -104,6 +104,19 @@ def main() -> int:
                        cwd=release_root, env=environment, stdin=subprocess.DEVNULL,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        check=True, timeout=30)
+        stage = "worker-sdk-resolution"
+        worker_sdk_smoke = (
+            "import { createClient } from '@supabase/supabase-js';"
+            "import { Expo } from 'expo-server-sdk';"
+            "const client = createClient('https://example.invalid', 'synthetic-smoke-key');"
+            "const expo = new Expo({ accessToken: 'synthetic-smoke-token' });"
+            "if (typeof client.from !== 'function' ||"
+            " typeof expo.sendPushNotificationsAsync !== 'function') process.exit(2);"
+        )
+        subprocess.run(("/usr/bin/node", "--input-type=module", "-e", worker_sdk_smoke),
+                       cwd=release_root, env=environment, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       check=True, timeout=30)
         stage = "snapshot-after"
         after = materialized_snapshot_digest(release_root, "after")
         if before != after:
@@ -124,7 +137,8 @@ def main() -> int:
     except RuntimeError:
         sys.stderr.write(f"dependency-smoke-failure category={stage}-runtime-error\n")
         return 1
-    sys.stdout.write(json.dumps({"snapshot_sha256": before, "tsx": "passed", "dotenv": "passed"},
+    sys.stdout.write(json.dumps({"snapshot_sha256": before, "tsx": "passed", "dotenv": "passed",
+                                 "worker_sdks": "passed"},
                                 sort_keys=True) + "\n")
     return 0
 

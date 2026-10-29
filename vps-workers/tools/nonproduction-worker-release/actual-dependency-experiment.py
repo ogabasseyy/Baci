@@ -28,6 +28,7 @@ import worker_release_dependency_artifacts as artifacts
 import worker_release_dependency_input_cache as input_cache
 import worker_release_dependency_policy_cache as policy
 import worker_release_dependency_policy_cli as policy_cli
+import worker_release_dependency_fs as dependency_fs
 import worker_release_dependency_sandbox as sandbox
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
@@ -41,21 +42,15 @@ from worker_release_actual_dependency_limits import (
     EXPERIMENT_PAYLOAD_BYTES, configure_experiment_payload_limits,
 )
 from worker_release_actual_dependency_runner import run, run_policy_preverify as _run_policy_preverify
-from worker_release_actual_dependency_resources import (
-    MAX_TREE_BYTES,
-    MAX_TREE_ENTRIES,
-    MIN_FREE_BYTES,
-    MIN_FREE_INODES,
-    copy_verified_policy_cache,
-    make_policy_cache_seed_read_only,
-)
+from worker_release_actual_dependency_resources import (MAX_TREE_BYTES, MAX_TREE_ENTRIES, MIN_FREE_BYTES,
+                                                        MIN_FREE_INODES, copy_verified_policy_cache,
+                                                        make_policy_cache_seed_read_only)
 from worker_release_actual_dependency_runtime import (
     independent_smoke,
     load_smoke_module,
     pinned_pnpm,
     tree_size,
 )
-from worker_release_actual_dependency_hardlinks import normalize_internal_hardlinks
 
 
 def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
@@ -202,24 +197,36 @@ def _main() -> int:
             (output / "root").mkdir()
             shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
             enforce_resource_limits(base)
-            stage = "payload-hardlink-normalization"
+            stage = "payload-export"
+            export_root = base / "payload-export"
+            export_root.mkdir(mode=0o700)
+            current_entries, current_bytes = enforce_resource_limits(base)
+            export_entries = 0
+            export_bytes = 0
 
-            def check_hardlink_copy(file_bytes: int) -> None:
+            def check_export_budget(_relative: str, _kind: str, entry_bytes: int) -> None:
+                nonlocal export_entries, export_bytes
+                if current_entries + export_entries + 1 > MAX_TREE_ENTRIES:
+                    raise RuntimeError("experiment entry cap reached during isolated payload export")
+                if current_bytes + export_bytes + entry_bytes > MAX_TREE_BYTES:
+                    raise RuntimeError("experiment disk cap reached during isolated payload export")
                 capacity = os.statvfs(base)
                 available_bytes = capacity.f_bavail * capacity.f_frsize
-                if available_bytes < MIN_FREE_BYTES + file_bytes:
+                if available_bytes < MIN_FREE_BYTES + entry_bytes:
                     raise RuntimeError("experiment free-space reserve reached")
                 if capacity.f_favail < MIN_FREE_INODES + 1:
                     raise RuntimeError("experiment free-inode reserve reached")
+                export_entries += 1
+                export_bytes += entry_bytes
 
-            hardlink_normalization = normalize_internal_hardlinks(
-                output, max_bytes=EXPERIMENT_PAYLOAD_BYTES,
-                max_entries=artifacts.MAX_ENTRIES, before_copy=check_hardlink_copy,
+            configure_experiment_payload_limits()
+            exported_output = dependency_fs.snapshot_payload(
+                base, export_root, os.geteuid(), before_entry=check_export_budget,
             )
             enforce_resource_limits(base)
             stage = "payload-validation"
             configure_experiment_payload_limits()
-            entries, payload_bytes = artifacts.validate_payload(output)
+            entries, payload_bytes = artifacts.validate_payload(exported_output)
             release = base / "release"
             (release / "apps" / "web").mkdir(parents=True, mode=0o700)
             stage = "payload-materialization"
@@ -228,7 +235,7 @@ def _main() -> int:
             if materialization_headroom <= 0:
                 raise RuntimeError("experiment disk cap leaves no materialization headroom")
             configure_experiment_payload_limits(materialization_limit=materialization_headroom)
-            installer.install_payload(output, release, owner_uid=os.geteuid())
+            installer.install_payload(exported_output, release, owner_uid=os.geteuid())
             enforce_resource_limits(base)
             stage = "independent-smoke"
             smoke = load_smoke_module(ROOT)
@@ -247,7 +254,8 @@ def _main() -> int:
                 "pnpm_store_bytes": store_bytes,
                 "payload_entries": len(entries),
                 "payload_expanded_bytes": payload_bytes,
-                "payload_hardlink_normalization": hardlink_normalization,
+                "payload_export": {"entries_copied": export_entries, "expanded_bytes_copied": export_bytes,
+                                   "source_hardlink_aliases_preserved": False},
                 "materialized_entries": materialized_count,
                 "materialized_bytes": materialized_bytes,
                 "smoke_sha256": smoke_hash,

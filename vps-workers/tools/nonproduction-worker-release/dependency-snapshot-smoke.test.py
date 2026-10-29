@@ -26,19 +26,48 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
             (web / "tsx").write_text("synthetic", encoding="utf-8")
             (root / "node_modules/dotenv").mkdir(parents=True)
             argv = [str(SCRIPT), str(root), "1001", "1002", "1003"]
-            run_results = [type("Result", (), {"stdout": "tsx v1.0.0\n"})(), object()]
+            run_results = [type("Result", (), {"stdout": "tsx v1.0.0\n"})(), object(), object()]
             output = StringIO()
             with patch.object(smoke.sys, "argv", argv), patch.object(smoke.os, "geteuid", return_value=1001), \
                  patch.object(smoke.os, "getegid", return_value=1002), patch.object(smoke.os, "getgroups", return_value=[]), \
                  patch.object(smoke.os.path, "isfile", return_value=True), patch.object(smoke.os, "access", return_value=True), \
                  patch.object(smoke, "snapshot_digest", side_effect=["a" * 64, "b" * 64, "a" * 64, "b" * 64]), \
-                 patch.object(smoke.subprocess, "run", side_effect=run_results), redirect_stdout(output):
+                 patch.object(smoke.subprocess, "run", side_effect=run_results) as run_mock, redirect_stdout(output):
                 self.assertEqual(smoke.main(), 0)
             evidence = json.loads(output.getvalue())
-            self.assertEqual(set(evidence), {"snapshot_sha256", "tsx", "dotenv"})
+            self.assertEqual(set(evidence), {"snapshot_sha256", "tsx", "dotenv", "worker_sdks"})
             self.assertEqual(evidence["tsx"], "passed")
             self.assertEqual(evidence["dotenv"], "passed")
+            self.assertEqual(evidence["worker_sdks"], "passed")
             self.assertEqual(len(evidence["snapshot_sha256"]), 64)
+            self.assertEqual(run_mock.call_count, 3)
+            worker_sdk_command = run_mock.call_args_list[2].args[0][-1]
+            self.assertIn("@supabase/supabase-js", worker_sdk_command)
+            self.assertIn("expo-server-sdk", worker_sdk_command)
+            self.assertIn("example.invalid", worker_sdk_command)
+
+    def test_worker_sdk_resolution_failure_is_categorized_without_command_output(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            web = root / "apps/web/node_modules/.bin"
+            web.mkdir(parents=True)
+            (web / "tsx").write_text("synthetic", encoding="utf-8")
+            (root / "node_modules/dotenv").mkdir(parents=True)
+            argv = [str(SCRIPT), str(root), "1001", "1002", "1003"]
+            output = StringIO()
+            commands = [type("Result", (), {"stdout": "tsx v1.0.0\n"})(), object(),
+                        subprocess.CalledProcessError(17, ["synthetic-secret-command"])]
+            with patch.object(smoke.sys, "argv", argv), patch.object(smoke.os, "geteuid", return_value=1001), \
+                 patch.object(smoke.os, "getegid", return_value=1002), patch.object(smoke.os, "getgroups", return_value=[]), \
+                 patch.object(smoke.os.path, "isfile", return_value=True), patch.object(smoke.os, "access", return_value=True), \
+                 patch.object(smoke, "snapshot_digest", side_effect=["a" * 64, "b" * 64, "a" * 64, "b" * 64]), \
+                 patch.object(smoke.subprocess, "run", side_effect=commands), redirect_stderr(output):
+                self.assertEqual(smoke.main(), 1)
+            self.assertEqual(output.getvalue(),
+                             "dependency-smoke-failure category=worker-sdk-resolution-exit-17\n")
 
     def test_combined_snapshot_evidence_is_one_sha256_digest(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -65,6 +94,8 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
             fixture.count("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only"),
             2,
         )
+        self.assertIn('"@supabase/supabase-js":"2.104.0"', fixture)
+        self.assertIn('"expo-server-sdk":"6.1.0"', fixture)
 
     def test_linux_fixture_callback_validates_exact_sandbox_owner_uid(self):
         fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
@@ -128,6 +159,43 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(output.getvalue(), "dependency-smoke-failure category=identity-or-group-boundary\n")
         run.assert_not_called()
+
+    def test_production_independent_smoke_checks_worker_sdk_exports(self):
+        import importlib.util
+        import sys
+        from types import SimpleNamespace
+
+        bin_dir = SCRIPT.parents[3] / "vps-workers/bin"
+        sys.path.insert(0, str(bin_dir))
+        runtime_path = SCRIPT.with_name("worker_release_actual_dependency_runtime.py")
+        spec = importlib.util.spec_from_file_location("worker_release_actual_dependency_runtime_test", runtime_path)
+        assert spec and spec.loader
+        runtime = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runtime)
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                web = root / "apps/web/node_modules/.bin"
+                web.mkdir(parents=True)
+                (web / "tsx").write_text("synthetic", encoding="utf-8")
+                (root / "node_modules/dotenv").mkdir(parents=True)
+                commands = []
+
+                def monitored(command, **kwargs):
+                    commands.append(command)
+
+                with patch.object(runtime, "run_monitored", side_effect=monitored), \
+                     patch.object(runtime.os, "access", return_value=True):
+                    runtime.independent_smoke(
+                        root, "/usr/bin/node", SimpleNamespace(snapshot_digest=lambda *_: "a" * 64), root,
+                    )
+                self.assertEqual(len(commands), 3)
+                sdk_code = commands[2][-1]
+                self.assertIn("@supabase/supabase-js", sdk_code)
+                self.assertIn("expo-server-sdk", sdk_code)
+                self.assertIn("example.invalid", sdk_code)
+        finally:
+            sys.path.remove(str(bin_dir))
 
 
 if __name__ == "__main__":

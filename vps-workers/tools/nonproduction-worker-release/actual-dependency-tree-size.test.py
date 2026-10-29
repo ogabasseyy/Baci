@@ -5,13 +5,17 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from worker_release_actual_dependency_hardlinks import HardlinkBoundaryError
+from unittest.mock import patch
+from worker_release_actual_dependency_hardlinks import (
+    HardlinkBoundaryError, normalize_internal_hardlinks,
+)
 
 SCRIPT = Path(__file__).with_name("actual-dependency-experiment.py")
 SPEC = importlib.util.spec_from_file_location("actual_dependency_experiment", SCRIPT)
 assert SPEC and SPEC.loader
 experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
+import worker_release_dependency_fs as dependency_fs
 
 
 class ActualDependencyTreeSizeTests(unittest.TestCase):
@@ -105,7 +109,7 @@ class ExperimentPayloadHardlinkTests(unittest.TestCase):
             link = root / "web/alias"
             link.symlink_to("a")
             copied_sizes = []
-            result = experiment.normalize_internal_hardlinks(
+            result = normalize_internal_hardlinks(
                 root, max_bytes=1024, max_entries=100,
                 before_copy=copied_sizes.append,
             )
@@ -134,7 +138,7 @@ class ExperimentPayloadHardlinkTests(unittest.TestCase):
             before = (external.stat().st_dev, external.stat().st_ino,
                       external.stat().st_nlink, external.read_bytes())
             with self.assertRaises(HardlinkBoundaryError):
-                experiment.normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
+                normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
             self.assertEqual((external.stat().st_dev, external.stat().st_ino,
                               external.stat().st_nlink, external.read_bytes()), before)
             self.assertEqual((inside.stat().st_dev, inside.stat().st_ino), before[:2])
@@ -152,7 +156,7 @@ class ExperimentPayloadHardlinkTests(unittest.TestCase):
             os.link(external, root / "external-link")
             inode_before = (inside_a.stat().st_dev, inside_a.stat().st_ino)
             with self.assertRaises(HardlinkBoundaryError):
-                experiment.normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
+                normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
             self.assertEqual((inside_a.stat().st_dev, inside_a.stat().st_ino), inode_before)
             self.assertEqual((inside_b.stat().st_dev, inside_b.stat().st_ino), inode_before)
 
@@ -166,9 +170,66 @@ class ExperimentPayloadHardlinkTests(unittest.TestCase):
             sentinel = outside / "sentinel"
             sentinel.write_bytes(b"unchanged")
             (root / "alias-dir").symlink_to(outside, target_is_directory=True)
-            result = experiment.normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
+            result = normalize_internal_hardlinks(root, max_bytes=1024, max_entries=100)
             self.assertEqual(result["hardlink_files_copied"], 0)
             self.assertEqual(sentinel.read_bytes(), b"unchanged")
+
+
+class IsolatedPayloadExportTests(unittest.TestCase):
+    def test_export_copies_external_hardlink_without_mutating_its_alias(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            scratch = base / "scratch"
+            scratch.mkdir(mode=0o700)
+            payload = scratch / "payload"
+            (payload / "web").mkdir(parents=True, mode=0o700)
+            external = base / "store-alias"
+            external.write_bytes(b"package bytes")
+            os.link(external, payload / "web" / "package.js")
+            original = (external.stat().st_ino, external.stat().st_nlink,
+                        external.stat().st_mode, external.read_bytes())
+            result_root = base / "result"
+            result_root.mkdir(mode=0o700)
+            output = dependency_fs.snapshot_payload(scratch, result_root, os.getuid())
+            copied = output / "web" / "package.js"
+            self.assertEqual(copied.read_bytes(), original[3])
+            self.assertEqual(copied.stat().st_nlink, 1)
+            self.assertEqual((external.stat().st_ino, external.stat().st_nlink,
+                              external.stat().st_mode, external.read_bytes()), original)
+            copied.chmod(0o600)
+            copied.write_bytes(b"independent output")
+            self.assertEqual(external.read_bytes(), original[3])
+
+    def test_export_rejects_source_mutation_during_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            scratch = base / "scratch"
+            scratch.mkdir(mode=0o700)
+            payload = scratch / "payload"
+            payload.mkdir(mode=0o700)
+            external = base / "store-alias"
+            external.write_bytes(b"original")
+            candidate = payload / "package.js"
+            os.link(external, candidate)
+            source_inode = candidate.stat().st_ino
+            result_root = base / "result"
+            result_root.mkdir(mode=0o700)
+            read = os.read
+            changed = False
+
+            def mutate_after_read(fd, size):
+                nonlocal changed
+                block = read(fd, size)
+                if block and not changed and os.fstat(fd).st_ino == source_inode:
+                    changed = True
+                    external.write_bytes(b"changed!")
+                return block
+
+            with patch.object(dependency_fs.os, "read", side_effect=mutate_after_read):
+                with self.assertRaisesRegex(dependency_fs.BuilderRejected, "changed while snapshotting"):
+                    dependency_fs.snapshot_payload(scratch, result_root, os.getuid())
+            self.assertTrue(changed)
+            self.assertEqual(candidate.stat().st_nlink, 2)
 
 
 if __name__ == "__main__":

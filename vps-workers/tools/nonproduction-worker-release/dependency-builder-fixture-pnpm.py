@@ -42,9 +42,28 @@ _TRUST_HEADLINE = re.compile(
     r'((?:@[a-z0-9._-]+/)?[a-z0-9._-]+@[0-9][a-z0-9.+-]{0,63})'
     r'(?:\\?") \(possible package takeover\)'
 )
+_FIXTURE_STAGES = {
+    "version-check", "web-install", "web-deploy", "worker-install", "unknown",
+}
 
 
-def summarize_failure(output: str) -> dict[str, object]:
+def _fixture_stage(pnpm_args: Sequence[str], cwd: Path) -> str:
+    """Classify only the fixed synthetic pnpm command shapes."""
+    args = tuple(pnpm_args)
+    if args == ("--version",):
+        return "version-check"
+    if "deploy" in args and "@baci/web" in args:
+        return "web-deploy"
+    if "install" in args:
+        if "@baci/web..." in args:
+            return "web-install"
+        if cwd.name == "vps-workers":
+            return "worker-install"
+    return "unknown"
+
+
+def summarize_failure(output: str, *, pnpm_args: Sequence[str] = (),
+                      cwd: Path | None = None) -> dict[str, object]:
     """Return only a bounded, non-sensitive classification of fixture output."""
     sample = _ANSI.sub("", output[:1_048_576]).lower()
     trust_failure = "err_pnpm_trust_downgrade" in sample
@@ -74,6 +93,7 @@ def summarize_failure(output: str) -> dict[str, object]:
     )
     return {
         "schema": 1,
+        "fixture_stage": _fixture_stage(pnpm_args, Path.cwd() if cwd is None else cwd),
         "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
         "fixture_package": fixture_package,
         "package_coordinate_sha256": coordinate_hash,
@@ -192,9 +212,10 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
             return None
         value = json.loads(os.read(fd, 513))
         if (not isinstance(value, dict) or set(value) != {
-                "schema", "error_code", "fixture_package", "package_coordinate_sha256",
+                "schema", "fixture_stage", "error_code", "fixture_package", "package_coordinate_sha256",
                 "trust_evidence_transition", "trust_headline_state", "trust_hint_state"}
                 or value["schema"] != 1
+                or value["fixture_stage"] not in _FIXTURE_STAGES
                 or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
                 or value["fixture_package"] not in {
                     "tsx", "dotenv", "esbuild", "fsevents", "esbuild-platform-binary",
@@ -284,7 +305,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if output:
             print(output)
         return 0
-    summary = summarize_failure(f"{result.stdout}\n{result.stderr}")
+    summary = summarize_failure(f"{result.stdout}\n{result.stderr}",
+                                pnpm_args=pnpm_args, cwd=Path.cwd())
     _write_diagnostic(_diagnostic_path(pnpm_args), summary)
     if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
         print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)

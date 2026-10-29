@@ -205,7 +205,7 @@ cat >"$source_root/apps/web/package.json" <<'JSON'
 {"name":"@baci/web","version":"1.0.0","dependencies":{"tsx":"4.22.4"}}
 JSON
 cat >"$source_root/vps-workers/package.json" <<'JSON'
-{"name":"baci-vps-workers-fixture","version":"1.0.0","private":true,"packageManager":"pnpm@11.7.0","dependencies":{"dotenv":"16.6.1"}}
+{"name":"baci-vps-workers-fixture","version":"1.0.0","private":true,"packageManager":"pnpm@11.7.0","dependencies":{"@supabase/supabase-js":"2.104.0","dotenv":"16.6.1","expo-server-sdk":"6.1.0"}}
 JSON
 cat >"$source_root/vps-workers/pnpm-workspace.yaml" <<'YAML'
 packages:
@@ -405,6 +405,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
         owner_uid=expected_owner_uid,
     )
+    fixture_stage = fixture_detail["fixture_stage"] if fixture_detail else "diagnostic-unavailable"
     error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
     fixture_package = fixture_detail["fixture_package"] if fixture_detail else "diagnostic-unavailable"
     package_coordinate_hash = (fixture_detail["package_coordinate_sha256"]
@@ -416,7 +417,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     hint_state = (fixture_detail["trust_hint_state"]
                   if fixture_detail else "diagnostic-unavailable")
     print(f"dependency fixture transient unit failed exit={process.returncode} "
-          f"fixture_error={error_code} fixture_package={fixture_package} "
+          f"fixture_stage={fixture_stage} fixture_error={error_code} fixture_package={fixture_package} "
           f"package_coordinate_sha256={package_coordinate_hash} "
           f"trust_evidence_transition={evidence_transition} "
           f"trust_headline_state={headline_state} trust_hint_state={hint_state}",
@@ -482,8 +483,9 @@ except (OSError, UnicodeError, json.JSONDecodeError):
 if not isinstance(result, dict):
     raise SystemExit("independent smoke returned non-object synthetic evidence")
 hash_value = result.get("snapshot_sha256")
-valid = (set(result) == {"snapshot_sha256", "tsx", "dotenv"}
+valid = (set(result) == {"snapshot_sha256", "tsx", "dotenv", "worker_sdks"}
         and result.get("tsx") == "passed" and result.get("dotenv") == "passed"
+        and result.get("worker_sdks") == "passed"
         and isinstance(hash_value, str)
         and len(hash_value) == 64
         and all(char in "0123456789abcdef" for char in hash_value))
@@ -491,7 +493,8 @@ if not valid:
     keys = sorted(str(key)[:64] for key in result.keys())[:20]
     hash_length = len(hash_value) if isinstance(hash_value, str) else -1
     print(f"smoke-evidence-invalid keys={keys} sha256_length={hash_length} "
-          f"tsx_pass={result.get('tsx') == 'passed'} dotenv_pass={result.get('dotenv') == 'passed'}",
+          f"tsx_pass={result.get('tsx') == 'passed'} dotenv_pass={result.get('dotenv') == 'passed'} "
+          f"worker_sdks_pass={result.get('worker_sdks') == 'passed'}",
           file=sys.stderr)
     raise SystemExit("independent smoke returned malformed or incomplete synthetic evidence")
 print("independent materialized-snapshot smoke passed")

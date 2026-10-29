@@ -111,7 +111,13 @@ def write_smoke_evidence(scratch: Path, evidence: dict[str, str]) -> None:
         os.close(root_fd)
 
 
-def snapshot_payload(scratch: Path, result_dir: Path, builder_uid: int) -> Path:
+def snapshot_payload(scratch: Path, result_dir: Path, builder_uid: int, *, before_entry=None) -> Path:
+    """Export a quiesced sandbox tree into fresh result inodes.
+
+    Source files may be hardlinked to the private pnpm store. Only bytes and
+    symlink text cross this boundary; result validation still requires nlink=1.
+    The caller must prove the builder cgroup has terminated before exporting.
+    """
     scratch_fd = -1
     result_fd = -1
     try:
@@ -131,11 +137,13 @@ def snapshot_payload(scratch: Path, result_dir: Path, builder_uid: int) -> Path:
             raise BuilderRejected("result directory ownership or mode is invalid")
         source_payload_fd = _open_dir_at(scratch_fd, "payload")
         try:
+            if before_entry is not None:
+                before_entry("", "directory", 0)
             os.mkdir("payload", 0o700, dir_fd=result_fd)
             target_payload_fd = _open_dir_at(result_fd, "payload")
             try:
                 counters = {"bytes": 0, "entries": 0}
-                _snapshot_dir(source_payload_fd, target_payload_fd, "", counters)
+                _snapshot_dir(source_payload_fd, target_payload_fd, "", counters, before_entry)
             finally:
                 os.close(target_payload_fd)
         finally:
@@ -148,7 +156,8 @@ def snapshot_payload(scratch: Path, result_dir: Path, builder_uid: int) -> Path:
     return target
 
 
-def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[str, int]) -> None:
+def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[str, int],
+                  before_entry=None) -> None:
     before_dir = os.fstat(source_fd)
     for name in sorted(os.listdir(source_fd)):
         if name in ("", ".", "..") or "/" in name or "\\" in name:
@@ -166,17 +175,19 @@ def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[st
             try:
                 if not _same_inode(before, os.fstat(child_source)):
                     raise BuilderRejected("dependency candidate directory changed while snapshotting")
+                if before_entry is not None:
+                    before_entry(relative, "directory", 0)
                 os.mkdir(name, 0o700, dir_fd=target_fd)
                 child_target = _open_dir_at(target_fd, name)
                 try:
-                    _snapshot_dir(child_source, child_target, relative, counters)
+                    _snapshot_dir(child_source, child_target, relative, counters, before_entry)
                 finally:
                     os.close(child_target)
             finally:
                 os.close(child_source)
         elif stat.S_ISREG(before.st_mode):
-            if before.st_nlink != 1 or before.st_size < 0:
-                raise BuilderRejected("dependency candidate has a shared or invalid file")
+            if before.st_nlink < 1 or before.st_size < 0:
+                raise BuilderRejected("dependency candidate has an invalid file")
             if before.st_mode & 0o6022:
                 raise BuilderRejected("dependency candidate file has unsafe write or set-id bits")
             counters["bytes"] += before.st_size
@@ -186,8 +197,14 @@ def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[st
             target_file = -1
             try:
                 opened = os.fstat(source_file)
-                if not _same_inode(before, opened) or not stat.S_ISREG(opened.st_mode):
+                if (not _same_inode(before, opened) or not stat.S_ISREG(opened.st_mode)
+                        or (before.st_size, before.st_mode, before.st_uid, before.st_gid, before.st_nlink,
+                            before.st_mtime_ns, before.st_ctime_ns) !=
+                        (opened.st_size, opened.st_mode, opened.st_uid, opened.st_gid, opened.st_nlink,
+                         opened.st_mtime_ns, opened.st_ctime_ns)):
                     raise BuilderRejected("dependency candidate file changed while snapshotting")
+                if before_entry is not None:
+                    before_entry(relative, "file", before.st_size)
                 target_file = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=target_fd)
                 copied = 0
                 while True:
@@ -204,7 +221,15 @@ def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[st
                             raise BuilderRejected("dependency snapshot write failed")
                         view = view[written:]
                 after = os.fstat(source_file)
-                if copied != before.st_size or before.st_mtime_ns != after.st_mtime_ns or before.st_ctime_ns != after.st_ctime_ns:
+                named = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+                if (copied != before.st_size or
+                        (before.st_dev, before.st_ino, before.st_size, before.st_mode,
+                         before.st_uid, before.st_gid,
+                         before.st_nlink, before.st_mtime_ns, before.st_ctime_ns) !=
+                        (after.st_dev, after.st_ino, after.st_size, after.st_mode,
+                         after.st_uid, after.st_gid,
+                         after.st_nlink, after.st_mtime_ns, after.st_ctime_ns) or
+                        (named.st_dev, named.st_ino) != (before.st_dev, before.st_ino)):
                     raise BuilderRejected("dependency candidate file changed while snapshotting")
                 os.fchmod(target_file, 0o550 if before.st_mode & 0o111 else 0o440)
             finally:
@@ -227,6 +252,8 @@ def _snapshot_dir(source_fd: int, target_fd: int, prefix: str, counters: dict[st
                     expanded.pop()
                 else:
                     expanded.append(part)
+            if before_entry is not None:
+                before_entry(relative, "symlink", len(target.encode("utf-8")))
             counters["bytes"] += len(target.encode("utf-8"))
             if counters["bytes"] > MAX_PAYLOAD_BYTES:
                 raise BuilderRejected("dependency payload exceeds size limit")

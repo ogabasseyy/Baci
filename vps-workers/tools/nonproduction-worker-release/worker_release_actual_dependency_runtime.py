@@ -174,6 +174,17 @@ def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> s
                    "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"),
                   cwd=release, env=environment, timeout=30, stage="independent-smoke",
                   resource_root=resource_root)
+    worker_sdk_smoke = (
+        "import { createClient } from '@supabase/supabase-js';"
+        "import { Expo } from 'expo-server-sdk';"
+        "const client = createClient('https://example.invalid', 'synthetic-smoke-key');"
+        "const expo = new Expo({ accessToken: 'synthetic-smoke-token' });"
+        "if (typeof client.from !== 'function' ||"
+        " typeof expo.sendPushNotificationsAsync !== 'function') process.exit(2);"
+    )
+    run_monitored((node, "--input-type=module", "-e", worker_sdk_smoke), cwd=release,
+                  env=environment, timeout=30, stage="independent-smoke",
+                  resource_root=resource_root)
     after = hashlib.sha256()
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web-after")))
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "node_modules", "worker-after")))

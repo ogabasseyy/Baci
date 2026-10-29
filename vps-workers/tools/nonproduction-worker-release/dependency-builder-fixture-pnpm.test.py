@@ -26,6 +26,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         summary = fixture.summarize_failure(output)
         self.assertEqual(summary, {
             "schema": 1,
+            "fixture_stage": "unknown",
             "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
             "fixture_package": "tsx",
             "package_coordinate_sha256": hashlib.sha256(b"tsx@4.22.4").hexdigest(),
@@ -52,6 +53,38 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 self.assertEqual(len(result["package_coordinate_sha256"]), 64)
                 self.assertEqual(result["trust_evidence_transition"], "unreported")
                 self.assertEqual(result["trust_headline_state"], "recognized")
+
+    def test_fixture_stage_uses_only_fixed_command_shapes(self):
+        cases = (
+            (("--version",), Path("/tmp/source"), "version-check"),
+            (("--filter", "@baci/web...", "install", "--offline"),
+             Path("/tmp/source"), "web-install"),
+            (("--filter", "@baci/web", "deploy", "--offline"),
+             Path("/tmp/source"), "web-deploy"),
+            (("install", "--offline"), Path("/tmp/source/vps-workers"), "worker-install"),
+            (("install", "--offline"), Path("/tmp/untrusted/path"), "unknown"),
+        )
+        for args, cwd, expected in cases:
+            with self.subTest(expected=expected):
+                result = fixture.summarize_failure(
+                    "ERR_PNPM_TRUST_DOWNGRADE token=must-not-leak",
+                    pnpm_args=args, cwd=cwd,
+                )
+                self.assertEqual(result["fixture_stage"], expected)
+                self.assertNotIn("untrusted", repr(result))
+                self.assertNotIn("must-not-leak", repr(result))
+
+    def test_unparsed_trust_failure_records_worker_install_stage(self):
+        # Reproduces CI's code-only trust error and identifies only which
+        # fixed pnpm phase failed, without copying pnpm output or its paths.
+        summary = fixture.summarize_failure(
+            "ERR_PNPM_TRUST_DOWNGRADE",
+            pnpm_args=("install", "--prod", "--frozen-lockfile", "--offline"),
+            cwd=Path("/run/build/source/vps-workers"),
+        )
+        self.assertEqual(summary["fixture_stage"], "worker-install")
+        self.assertEqual(summary["trust_headline_state"], "absent")
+        self.assertEqual(summary["package_coordinate_sha256"], "unreported")
 
     def test_json_escaped_pnpm_headline_produces_coordinate_hash_only(self):
         summary = fixture.summarize_failure(
@@ -111,6 +144,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             path = Path(temporary) / "diagnostic"
             invalid = {
                 "schema": 1,
+                "fixture_stage": "worker-install",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -183,6 +217,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             accepted = root / "accepted"
             fixture._write_diagnostic(accepted, {
                 "schema": 1,
+                "fixture_stage": "web-install",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -192,6 +227,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             })
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
+                "fixture_stage": "web-install",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -223,6 +259,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             self.assertEqual(candidate, scratch / fixture.FIXTURE_ERROR_NAME)
             fixture._write_diagnostic(candidate, {
                 "schema": 1,
+                "fixture_stage": "worker-install",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -258,6 +295,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
     def test_harness_reads_diagnostic_from_builder_scratch_not_outer_command_args(self):
         harness = MODULE_PATH.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
         self.assertIn("read_scratch_diagnostic(", harness)
+        self.assertIn('fixture_detail["fixture_stage"]', harness)
+        self.assertIn("fixture_stage={fixture_stage}", harness)
         self.assertIn("scratch, build_root=dependency_builder.BUILD_ROOT", harness)
         self.assertNotIn('store_argument = next((index for index, value in enumerate(command)', harness)
         self.assertIn("stdout=subprocess.DEVNULL", harness)

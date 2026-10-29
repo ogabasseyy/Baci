@@ -1,4 +1,5 @@
 import {
+  act,
   addressAutocompleteMock,
   CheckoutPage,
   expect,
@@ -6,7 +7,6 @@ import {
   it,
   render,
   screen,
-  toast,
   useCart,
   useMerchantSafe,
   usePersistedForm,
@@ -63,16 +63,21 @@ it('blocks order creation when door delivery has no selected quote', async () =>
     clear: vi.fn(),
   } as unknown as ReturnType<typeof usePersistedForm>);
 
+  let finishQuote: (() => void) | undefined;
+  const quoteResponse = new Promise<Response>((resolve) => {
+    finishQuote = () =>
+      resolve({
+        ok: true,
+        json: async () => ({ quotes: { all: [] } }),
+        text: async () => '',
+      } as Response);
+  });
   const fetchMock = vi
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async (input) => {
       const url = String(input);
       if (url.startsWith('/api/shipping/quotes')) {
-        return {
-          ok: true,
-          json: async () => ({ quotes: { all: [] } }),
-          text: async () => '',
-        } as Response;
+        return quoteResponse;
       }
 
       return {
@@ -85,19 +90,18 @@ it('blocks order creation when door delivery has no selected quote', async () =>
   render(<CheckoutPage />);
 
   fireEvent.click(screen.getByText(/pay on delivery/i));
-  const placeOrderButton = screen
-    .getAllByRole('button', { name: /place order/i })
-    .find((button) => !button.hasAttribute('disabled'));
-  expect(placeOrderButton).toBeDefined();
-  fireEvent.click(placeOrderButton as HTMLButtonElement);
-
-  await waitFor(() => {
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Select Delivery Option',
-      })
-    );
+  const placeOrderButtons = screen.getAllByRole('button', {
+    name: /place order/i,
   });
+  for (const button of placeOrderButtons) expect(button).toBeDisabled();
+  await act(async () => {
+    finishQuote?.();
+    await quoteResponse;
+  });
+  for (const button of placeOrderButtons) {
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+  }
   expect(
     fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')
   ).toBe(false);

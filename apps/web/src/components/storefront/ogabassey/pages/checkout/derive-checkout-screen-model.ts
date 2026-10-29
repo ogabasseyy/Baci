@@ -8,6 +8,7 @@ import type { useCheckoutDeliverySession } from './hooks/use-checkout-delivery-s
 import type { useCheckoutFinancialSession } from './hooks/use-checkout-financial-session';
 import type { useCheckoutFormSession } from './hooks/use-checkout-form-session';
 import type { useCheckoutPaymentExecution } from './hooks/use-checkout-payment-execution';
+import { isResumedDirectPayment } from './is-resumed-direct-payment';
 
 type CheckoutFormSession = ReturnType<typeof useCheckoutFormSession>;
 type CheckoutAttemptSession = ReturnType<typeof useCheckoutAttemptSession>;
@@ -20,7 +21,7 @@ export interface CheckoutScreenModelInput {
     form: CheckoutFormSession;
     attempt: Pick<
       CheckoutAttemptSession,
-      'resumeOrderId' | 'resumedOrder' | 'isProcessing'
+      'resumeOrderId' | 'resumedOrder' | 'preferredGateway' | 'isProcessing'
     >;
     delivery: CheckoutDeliverySession;
     financial: Pick<
@@ -69,6 +70,13 @@ export function deriveCheckoutScreenModel({
   const { merchant, user } = identity;
   const { handlePlaceOrder } = execution;
   const isPayForMeValid = paymentSession.payForMe.isValid;
+  const isDeliveryValid =
+    delivery.validation.isValid ||
+    isResumedDirectPayment({
+      resumedOrder: attempt.resumedOrder,
+      preferredGateway: attempt.preferredGateway,
+      checkoutItemCount: display.checkoutCart.length,
+    });
   const productIds = display.checkoutCart.map((item) => item.id);
 
   const presentation = deriveCheckoutOrderSummaryPresentation({
@@ -96,6 +104,7 @@ export function deriveCheckoutScreenModel({
     handlePlaceOrder,
     isProcessing: attempt.isProcessing,
     isPayForMeValid,
+    isDeliveryValid,
     merchantId: merchant?.id || '',
     merchantCountry: merchant?.country ?? 'NG',
     payoutCurrency: merchant?.payout_currency ?? null,
@@ -127,6 +136,7 @@ export function deriveCheckoutScreenModel({
       session: paymentSession,
       isProcessing: attempt.isProcessing,
       isPayForMeValid,
+      isDeliveryValid,
       isInitializingDva: execution.dva.isInitializingDva,
       newsletterOptIn: values.newsletterOptIn,
       setNewsletterOptIn: form.form.setNewsletterOptIn,

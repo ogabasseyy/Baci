@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -111,12 +111,10 @@ it('records payment_failed when the initial Juicyway check reports failed', asyn
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const juicywayRadio = (
       await screen.findAllByRole('radio', { name: /juicyway/i })
     ).find((radio) => radio.getAttribute('value') === 'juicyway');

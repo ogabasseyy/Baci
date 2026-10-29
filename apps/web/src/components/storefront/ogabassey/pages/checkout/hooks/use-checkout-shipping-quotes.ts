@@ -203,7 +203,10 @@ export function useCheckoutShippingQuotes({
                 firstName,
                 lastName,
                 customerEmail,
-                deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
+                deliveryMethod === 'pickup' ||
+                  deliveryMethod === 'pickup_station'
+                  ? 'pickup_station'
+                  : 'door',
                 false
               );
             }

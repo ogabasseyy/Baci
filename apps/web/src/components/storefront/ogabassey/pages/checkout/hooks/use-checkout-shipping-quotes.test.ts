@@ -67,6 +67,39 @@ describe('useCheckoutShippingQuotes', () => {
     vi.stubGlobal('fetch', mockFetch);
   });
   afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    ['pickup', 'pickup_station'],
+    ['pickup_station', 'pickup_station'],
+    ['door', 'door'],
+  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference) => {
+    mockFetch.mockImplementation(async () => response('saved-address'));
+    const input = options();
+    input.isNewAddressMode = false;
+    input.deliveryMethod = deliveryMethod;
+    input.deliveryCoordinates = { latitude: 6.6, longitude: 3.3 };
+    input.selectedAddressId = 17;
+    input.addresses = [
+      {
+        id: 17,
+        label: 'Home',
+        address: '12 Allen Avenue, Ikeja, Lagos',
+        phone: '+2348000000000',
+        isDefault: true,
+      },
+    ];
+
+    const { result } = renderHook(() => useCheckoutShippingQuotes(input));
+
+    await waitFor(() =>
+      expect(result.current.shippingQuotes[0]?.id).toBe('saved-address')
+    );
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({
+      deliveryPreference,
+      merchant_rates_only: false,
+      receiver: { latitude: 6.6, longitude: 3.3 },
+    });
+  });
+
   it('waits for hydration before requesting quotes', async () => {
     mockFetch.mockResolvedValue(response('ready'));
     const input = options();

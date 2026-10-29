@@ -1,5 +1,6 @@
 import { toast } from '@/hooks/use-toast';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
+import { isResumedDirectPayment } from '../is-resumed-direct-payment';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 
 /** Enter fresh submission only after identity, resumed-payment and delivery checks. */
@@ -48,9 +49,11 @@ export async function beginCheckoutOrderSubmission(
   }
 
   if (
-    resumed.order &&
-    resumed.preferredGateway &&
-    cart.checkoutCart.length === 0
+    isResumedDirectPayment({
+      resumedOrder: resumed.order,
+      preferredGateway: resumed.preferredGateway,
+      checkoutItemCount: cart.checkoutCart.length,
+    })
   ) {
     processing.setIsProcessing(true);
     await executeResumedDirectPayment({

@@ -8,6 +8,7 @@ import type { useCheckoutDeliverySession } from './hooks/use-checkout-delivery-s
 import type { useCheckoutFinancialSession } from './hooks/use-checkout-financial-session';
 import type { useCheckoutFormSession } from './hooks/use-checkout-form-session';
 import type { useCheckoutPaymentExecution } from './hooks/use-checkout-payment-execution';
+import { isResumedDirectPayment } from './is-resumed-direct-payment';
 
 type CheckoutFormSession = ReturnType<typeof useCheckoutFormSession>;
 type CheckoutAttemptSession = ReturnType<typeof useCheckoutAttemptSession>;
@@ -69,15 +70,13 @@ export function deriveCheckoutScreenModel({
   const { merchant, user } = identity;
   const { handlePlaceOrder } = execution;
   const isPayForMeValid = paymentSession.payForMe.isValid;
-  // Direct payment for an already-created order has no fresh shipment to quote.
-  // Keep this exception identical to the submission hook's direct-payment path.
   const isDeliveryValid =
     delivery.validation.isValid ||
-    Boolean(
-      attempt.resumedOrder &&
-        attempt.preferredGateway &&
-        display.checkoutCart.length === 0
-    );
+    isResumedDirectPayment({
+      resumedOrder: attempt.resumedOrder,
+      preferredGateway: attempt.preferredGateway,
+      checkoutItemCount: display.checkoutCart.length,
+    });
   const productIds = display.checkoutCart.map((item) => item.id);
 
   const presentation = deriveCheckoutOrderSummaryPresentation({

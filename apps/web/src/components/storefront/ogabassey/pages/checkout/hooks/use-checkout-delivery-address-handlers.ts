@@ -44,10 +44,10 @@ export function useCheckoutDeliveryAddressHandlers({
   shippingStates,
 }: UseCheckoutDeliveryAddressHandlersOptions) {
   const manualLocality = useRef(false);
-  const inferredLocality = useRef(false);
+  const replaceableLocality = useRef(false);
   const onSelectAddress = (address: SavedCheckoutAddress) => {
     manualLocality.current = false;
-    inferredLocality.current = false;
+    replaceableLocality.current = true;
     setSelectedAddressId(address.id);
     setIsNewAddressMode(false);
     clearInferredLocationDebounce();
@@ -66,7 +66,7 @@ export function useCheckoutDeliveryAddressHandlers({
     if (
       street.trim() &&
       (manualLocality.current ||
-        (!inferredLocality.current &&
+        (!replaceableLocality.current &&
           (newAddressCity.trim() || newAddressState.trim())))
     ) {
       clearInferredLocationDebounce();
@@ -75,7 +75,7 @@ export function useCheckoutDeliveryAddressHandlers({
       return;
     }
     manualLocality.current = false;
-    inferredLocality.current = false;
+    replaceableLocality.current = false;
     setFields({
       newAddressStreet: street,
       newAddressCity: '',
@@ -97,7 +97,7 @@ export function useCheckoutDeliveryAddressHandlers({
       merchantCountry
     );
     if (inferred) {
-      inferredLocality.current = true;
+      replaceableLocality.current = true;
       resetQuotesForAddressChange();
       scheduleInferredLocationUpdate(inferred);
       return;
@@ -110,7 +110,7 @@ export function useCheckoutDeliveryAddressHandlers({
 
   const onSelectPlace = (place: PlaceDetails) => {
     manualLocality.current = false;
-    inferredLocality.current = false;
+    replaceableLocality.current = true;
     clearInferredLocationDebounce();
     resetQuotesForAddressChange();
     setFields({
@@ -130,14 +130,14 @@ export function useCheckoutDeliveryAddressHandlers({
 
   const onCityChange = (city: string) => {
     manualLocality.current = true;
-    inferredLocality.current = false;
+    replaceableLocality.current = false;
     clearInferredLocationDebounce();
     resetQuotesForAddressChange();
     setFields({ newAddressCity: city, deliveryCoordinates: null });
   };
   const onStateChange = (state: string) => {
     manualLocality.current = true;
-    inferredLocality.current = false;
+    replaceableLocality.current = false;
     clearInferredLocationDebounce();
     resetQuotesForAddressChange();
     setFields({ newAddressState: state, deliveryCoordinates: null });

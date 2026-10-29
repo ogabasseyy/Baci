@@ -10,11 +10,13 @@ import worker_release_broker as broker
 def recovery_target(latch: dict[str, Any]) -> dict[str, Any]:
     fence = latch.get("recovered_from") or latch.get("fence")
     job_id = latch.get("recovered_from_job_id") if latch.get("recovered_from") else latch.get("job_id")
+    run_attempt = fence.get("run_attempt") if isinstance(fence, dict) else None
     if (not isinstance(fence, dict) or not re.fullmatch(r"[1-9][0-9]{0,19}", str(job_id or ""))
             or not re.fullmatch(r"[1-9][0-9]{0,19}", str(fence.get("run_id", "")))
+            or not isinstance(run_attempt, int) or isinstance(run_attempt, bool) or run_attempt < 1
             or not re.fullmatch(r"[0-9a-f]{40}", str(fence.get("sha", "")))):
         raise broker.BrokerProtocolError("durable recovery lacks an exact coordinator job identity")
-    return {"run_id": fence["run_id"], "run_attempt": int(fence["run_attempt"]),
+    return {"run_id": fence["run_id"], "run_attempt": run_attempt,
             "sha": latch.get("release_sha", fence["sha"]), "job_id": str(job_id)}
 
 
@@ -41,15 +43,22 @@ def _state_is_pre_promotion(state: dict[str, Any] | None, latch: dict[str, Any])
     """Recognize a crash after latch fsync but before the promoting state write.
 
     Promotion writes the latch before it writes state, and does not switch the
-    pointer until after that state write. Therefore only the exact healthy
-    state for the root-recorded prior SHA is a valid pre-promotion journal.
-    The recovery pointer helper separately enforces prior-or-candidate.
+    pointer until after that state write. The prior journal may be healthy
+    (its SHA is the prior pointer), or rolled back (its previous_sha is the
+    prior pointer while its sha/fence still identify the failed candidate).
+    The recovery pointer helper separately enforces prior-or-new-candidate.
     """
     fence = state.get("fence") if state else None
     previous_sha = latch.get("previous_sha")
-    return bool(isinstance(fence, dict) and isinstance(previous_sha, str)
-                and state.get("status") in ("healthy", "rolled_back")
-                and state.get("sha") == previous_sha and fence.get("sha") == previous_sha)
+    if not isinstance(fence, dict) or not isinstance(previous_sha, str):
+        return False
+    if state.get("status") == "healthy":
+        return state.get("sha") == previous_sha and fence.get("sha") == previous_sha
+    if state.get("status") == "rolled_back":
+        return (state.get("previous_sha") == previous_sha
+                and isinstance(state.get("sha"), str)
+                and fence.get("sha") == state.get("sha"))
+    return False
 
 
 def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:

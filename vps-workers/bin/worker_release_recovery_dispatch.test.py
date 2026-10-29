@@ -73,6 +73,14 @@ class RecoveryDispatchTests(unittest.TestCase):
         })
         self.assertEqual(recovered, original)
 
+    def test_recovery_target_rejects_invalid_run_attempt_before_conversion(self):
+        for attempt in (None, "1", True, False, 0, -1, 1.5):
+            with self.subTest(attempt=attempt):
+                value = latch()
+                value["fence"]["run_attempt"] = attempt
+                with self.assertRaises(broker.BrokerProtocolError):
+                    recovery_target(value)
+
     def test_status_returns_exact_candidate_and_recovery_owner(self):
         value = latch(recovered=True)
         state = {
@@ -104,6 +112,54 @@ class RecoveryDispatchTests(unittest.TestCase):
         self.assertTrue(receipt["pending"])
         self.assertEqual(receipt["recoveryOf"]["sha"], SHA_OLD)
         self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
+
+    def test_rolled_back_prior_state_uses_restored_sha_when_new_promotion_latch_precedes_state(self):
+        value = {
+            "fence": {"run_id": "202", "run_attempt": 1, "sha": SHA_NEW},
+            "job_id": "9002", "previous_sha": SHA_PREVIOUS,
+            "release_sha": SHA_NEW, "service_snapshot_complete": True,
+            "services_to_restore": ["baci-domain-event-router", "baci-event-delivery-worker",
+                                    "baci-quiz-finalization"],
+        }
+        old_fence = {"run_id": "101", "run_attempt": 1, "sha": SHA_OLD, "job_id": "9001"}
+        persisted = {}
+        with patch.object(broker, "_write_release_state",
+                          side_effect=lambda _path, state: persisted.update(state)):
+            broker._record_promotion_failure("unused", SHA_OLD, SHA_PREVIOUS, old_fence, restored=True)
+        prior_state = dict(persisted)
+        self.assertEqual(prior_state["status"], "rolled_back")
+        self.assertEqual(prior_state["sha"], SHA_OLD)
+        self.assertEqual(prior_state["previous_sha"], SHA_PREVIOUS)
+
+        with patch.object(broker, "_load_release_state", return_value=prior_state):
+            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+        self.assertTrue(receipt["pending"])
+        self.assertEqual(receipt["recoveryOf"]["sha"], SHA_NEW)
+        self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
+
+        from contextlib import nullcontext
+        quiescence = FakeQuiescence(value)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            releases = root / "releases"
+            releases.mkdir()
+            (releases / SHA_PREVIOUS).mkdir()
+            current = root / "current"
+            current.symlink_to(f"releases/{SHA_PREVIOUS}")
+            with patch.object(broker, "_load_release_state", return_value=prior_state), \
+                 patch("worker_release_lifecycle.release_lock", return_value=nullcontext()), \
+                 patch.object(broker, "_record_promotion_failure") as record:
+                recovered = recover(
+                    verified={"sourceSha": SHA_NEW, "runId": "303", "runAttempt": 1,
+                              "jobId": "9003", "recoveryOf": recovery_target(value)},
+                    identity=FakeIdentity("303", SHA_NEW, "9003"), quiescence=quiescence,
+                    current_link=str(current), releases_root=str(releases),
+                    lock_path="unused/release.lock", state_path="unused/state",
+                )
+            self.assertEqual(os.readlink(current), f"releases/{SHA_PREVIOUS}")
+        self.assertTrue(recovered["alreadyRestored"])
+        self.assertEqual(recovered["previousSha"], SHA_PREVIOUS)
+        record.assert_called_once()
 
     def test_recovery_recovers_pre_promotion_state_after_terminal_proof(self):
         from contextlib import nullcontext
